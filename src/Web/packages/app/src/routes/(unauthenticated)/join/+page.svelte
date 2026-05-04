@@ -83,7 +83,7 @@
     const params = new URLSearchParams();
     params.set("provider", providerId);
     params.set("returnUrl", `/join?token=${encodeURIComponent(token)}`);
-    window.location.href = `/api/v4/oidc/login?${params.toString()}`;
+    window.location.href = `/api/auth/oidc/login?${params.toString()}`;
   }
 
   // ── Passkey registration ─────────────────────────────────────────

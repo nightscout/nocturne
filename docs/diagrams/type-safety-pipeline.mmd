@@ -1,0 +1,66 @@
+flowchart TD
+    subgraph backend ["Backend (.NET)"]
+        DM["Domain Models<br/><code>Core.Models/*.cs</code><br/>[JsonPropertyName] attributes"]
+        CTRL["API Controllers<br/><code>Controllers/**/*.cs</code><br/>[RemoteQuery] [RemoteCommand] [RemoteFormData]"]
+        META["MetadataController<br/>Exposes types to NSwag<br/>that have no endpoint"]
+        DM --> CTRL
+        DM --> META
+    end
+
+    subgraph msbuild ["MSBuild Post-Build Targets"]
+        direction TB
+        T1["<b>Target 1: GenerateClient</b><br/>NSwag (ASP.NET Core → OpenAPI 3.0)<br/><code>nswag.json</code>"]
+        T2["<b>Target 2: GenerateZodSchemas</b><br/><code>pnpm run generate-zod-schemas</code><br/>OpenAPI JSON Schema → Zod validators"]
+        T3["<b>Target 3: GenerateRemoteFunctions</b><br/><code>npx openapi-remote-codegen</code><br/>Reads [Remote*] annotations from spec"]
+        T1 --> T2 --> T3
+    end
+
+    subgraph generated ["Generated Output"]
+        subgraph gendir ["<code>lib/api/generated/</code>"]
+            OAS["<b>openapi.json</b><br/>OpenAPI 3.0 spec<br/>(schemas + operations)"]
+            CLIENT["<b>nocturne-api-client.ts</b><br/>Typed TS classes per controller<br/>(NSwag)"]
+            ZOD["<b>schemas.ts</b><br/>Zod validators per DTO<br/><code>z.fromJSONSchema()</code>"]
+            REMOTE["<b>*.generated.remote.ts</b><br/>query() / command() wrappers<br/>per [Remote*] endpoint"]
+        end
+        APICLIENT["<b>api-client.generated.ts</b><br/><code>lib/api/</code><br/>Barrel re-export importing from<br/><code>./generated/nocturne-api-client</code>"]
+    end
+
+    subgraph frontend ["SvelteKit Frontend"]
+        HOOKS["hooks.server.ts<br/><code>apiClientHandle</code><br/>Creates typed ApiClient on<br/><code>event.locals.apiClient</code>"]
+        LOAD["+page.server.ts<br/><code>locals.apiClient.*</code><br/>Typed via NSwag client"]
+        REMOTEFN["data.remote.ts <i>or</i> *.generated.remote.ts<br/>query() / command() wrappers<br/><code>getRequestEvent().locals.apiClient</code>"]
+        PAGE["+page.svelte<br/>Fully typed <code>data</code> prop<br/>via PageData inference"]
+        HOOKS --> LOAD
+        HOOKS --> REMOTEFN
+        LOAD --> PAGE
+        REMOTEFN --> PAGE
+    end
+
+    CTRL --> T1
+    META --> T1
+
+    T1 --> OAS
+    T1 --> CLIENT
+    T2 --> ZOD
+    T3 --> REMOTE
+    T3 --> APICLIENT
+
+    OAS -.->|"input"| T2
+    OAS -.->|"input"| T3
+    CLIENT -.->|"types imported by"| REMOTE
+    CLIENT -.->|"re-exported by"| APICLIENT
+    ZOD -.->|"validates input in"| REMOTE
+
+    APICLIENT -->|"ApiClient class"| HOOKS
+    REMOTE -->|"imported by"| REMOTEFN
+    ZOD -->|"validates input in"| REMOTEFN
+
+    classDef backendNode fill:#1a1a2e,stroke:#6366f1,color:#c0c0c0
+    classDef buildNode fill:#1a1a2e,stroke:#f59e0b,color:#c0c0c0
+    classDef genNode fill:#1a1a2e,stroke:#10b981,color:#c0c0c0
+    classDef feNode fill:#1a1a2e,stroke:#ef4444,color:#c0c0c0
+
+    class DM,CTRL,META backendNode
+    class T1,T2,T3 buildNode
+    class OAS,CLIENT,ZOD,REMOTE,APICLIENT genNode
+    class HOOKS,LOAD,REMOTEFN,PAGE feNode

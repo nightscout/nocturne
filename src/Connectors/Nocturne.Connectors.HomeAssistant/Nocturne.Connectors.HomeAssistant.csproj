@@ -3,7 +3,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <Description>Home Assistant bidirectional connector service</Description>
+        <Description>Home Assistant connector metadata for OAuth discovery</Description>
         <Company>Nocturne</Company>
         <Product>Nocturne Connectors</Product>
     </PropertyGroup>

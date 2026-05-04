@@ -14,7 +14,8 @@ public class AidMetricsServiceTests
     {
         var metrics = new AidSystemMetrics
         {
-            CgmUsePercent = 95.0,
+            CgmDeviceNames = "Dexcom G7",
+            PumpDeviceNames = "Omnipod 5",
             PumpUsePercent = 88.0,
             AidActivePercent = 82.0,
             CgmActivePercent = 93.0,
@@ -24,7 +25,8 @@ public class AidMetricsServiceTests
             Segments = []
         };
 
-        metrics.CgmUsePercent.Should().Be(95.0);
+        metrics.CgmDeviceNames.Should().Be("Dexcom G7");
+        metrics.PumpDeviceNames.Should().Be("Omnipod 5");
         metrics.PumpUsePercent.Should().Be(88.0);
         metrics.AidActivePercent.Should().Be(82.0);
         metrics.CgmActivePercent.Should().Be(93.0);
@@ -271,11 +273,12 @@ public class AidMetricsServiceTests
             AidAlgorithm = AidAlgorithm.Trio
         }).ToList();
 
-        var result = service.Calculate(segments, snapshots, [], 3, 95.0, 93.0, 70, 180, start, end);
+        var result = service.Calculate(segments, snapshots, [], 3, "Dexcom G7", "Omnipod 5", 93.0, 70, 180, start, end);
 
         result.AidActivePercent.Should().Be(100.0);
         result.PumpUsePercent.Should().Be(100.0);
-        result.CgmUsePercent.Should().Be(95.0);
+        result.CgmDeviceNames.Should().Be("Dexcom G7");
+        result.PumpDeviceNames.Should().Be("Omnipod 5");
         result.CgmActivePercent.Should().Be(93.0);
         result.TargetLow.Should().Be(70);
         result.TargetHigh.Should().Be(180);
@@ -305,7 +308,7 @@ public class AidMetricsServiceTests
             AidAlgorithm = AidAlgorithm.Trio
         }).ToList();
 
-        var result = service.Calculate(segments, snapshots, [], 0, null, null, null, null, start, end);
+        var result = service.Calculate(segments, snapshots, [], 0, null, null, null, null, null, start, end);
 
         // Trio: 12h at 100% AID, NoAid: 12h at null AID
         // Time-weighted: 100 * 12 / 12 = 100 (only counted segments with data)
@@ -321,11 +324,12 @@ public class AidMetricsServiceTests
         var start = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var end = new DateTime(2024, 1, 2, 0, 0, 0, DateTimeKind.Utc);
 
-        var result = service.Calculate([], [], [], 2, 95.0, 93.0, 70, 180, start, end);
+        var result = service.Calculate([], [], [], 2, "Dexcom G7", "Omnipod 5", 93.0, 70, 180, start, end);
 
         result.AidActivePercent.Should().BeNull();
         result.PumpUsePercent.Should().BeNull();
-        result.CgmUsePercent.Should().Be(95.0);
+        result.CgmDeviceNames.Should().Be("Dexcom G7");
+        result.PumpDeviceNames.Should().Be("Omnipod 5");
         result.CgmActivePercent.Should().Be(93.0);
         result.TargetLow.Should().Be(70);
         result.TargetHigh.Should().Be(180);
@@ -359,7 +363,7 @@ public class AidMetricsServiceTests
             AidAlgorithm = AidAlgorithm.Trio
         }).ToList();
 
-        var result = service.Calculate(segments, snapshots, [], 0, null, null, null, null, start, end);
+        var result = service.Calculate(segments, snapshots, [], 0, null, null, null, null, null, start, end);
 
         // Segment should be clamped to report bounds
         result.Segments.Should().HaveCount(1);

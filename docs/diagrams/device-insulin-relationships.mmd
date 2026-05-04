@@ -1,0 +1,89 @@
+---
+title: "Device & Insulin Relationships"
+---
+flowchart LR
+    subgraph catalogs["Static Catalogs (compile-time reference data)"]
+        direction TB
+        DeviceCatalog["<b>DeviceCatalog</b><br/>known pump / CGM models id, name, manufacturer, category CGM: sensor duration, warmup, transmitter info"]
+        InsulinCatalog["<b>InsulinCatalog</b><br/>known insulin formulations id, name, category defaultDia, defaultPeak curve, concentration"]
+    end
+
+    subgraph patient["Patient-Curated Records (what this patient uses)"]
+        direction TB
+        PatientDevice["<b>PatientDevice</b><br/>category, manufacturer, model catalogId, serialNumber aidAlgorithm, startDate, endDate isCurrent, notes"]
+        PatientInsulin["<b>PatientInsulin</b><br/>name, insulinCategory, role formulationId dia, peak, curve, concentration isCurrent, isPrimary"]
+    end
+
+    subgraph discovered["Auto-Discovered (from upload data)"]
+        direction TB
+        Device["<b>Device</b><br/>category, type, serial firstSeen / lastSeen upserted by ingest pipeline"]
+    end
+
+    subgraph enums["Discriminators"]
+        direction TB
+        DeviceCategory["<b>DeviceCategory</b><br/>InsulinPump, CGM, GlucoseMeter, InsulinPen, SmartPen, Uploader"]
+        AidAlgorithm["<b>AidAlgorithm</b><br/>OpenAPS, AAPS, Loop, Trio, iAPS, ControlIQ, CamAPSFX, Omnipod5, SmartGuard, None"]
+        InsulinCategory["<b>InsulinCategory</b><br/>Rapid, Short, Intermediate, Long, UltraLong, Premixed"]
+        InsulinRole["<b>InsulinRole</b><br/>Bolus, Basal, Both"]
+    end
+
+    subgraph records["Time-Series Records (reference Device + Insulin)"]
+        direction TB
+        Bolus["<b>Bolus</b><br/>DeviceId (FK) InsulinContext (snapshot)"]
+        TempBasal["<b>TempBasal</b><br/>DeviceId (FK)"]
+        PumpSnapshot["<b>PumpSnapshot</b><br/>DeviceId (FK) reservoir, battery"]
+        UploaderSnapshot["<b>UploaderSnapshot</b><br/>DeviceId (FK) phone / bridge state"]
+        ApsSnapshot["<b>ApsSnapshot</b><br/>aidAlgorithm IOB / COB / suggestions"]
+        SensorGlucose["<b>SensorGlucose</b><br/>PatientDeviceId (FK) CGM reading"]
+        MeterGlucose["<b>MeterGlucose</b><br/>finger-stick reading"]
+        DeviceEvent["<b>DeviceEvent</b><br/>site change, sensor start, battery change, etc."]
+    end
+
+    TreatmentInsulinContext["<b>TreatmentInsulinContext</b><br/>(immutable snapshot in Bolus) patientInsulinId name, dia, peak, curve, concentration at delivery time"]
+
+    %% Catalog -> Patient curation
+    DeviceCatalog -- "catalogId lookup" --> PatientDevice
+    InsulinCatalog -- "formulationId lookup (seeds defaults)" --> PatientInsulin
+
+    %% Discriminators classify catalog + patient records
+    DeviceCategory --- DeviceCatalog
+    DeviceCategory --- PatientDevice
+    DeviceCategory --- Device
+    InsulinCategory --- InsulinCatalog
+    InsulinCategory --- PatientInsulin
+    InsulinRole --- PatientInsulin
+    AidAlgorithm --- PatientDevice
+    AidAlgorithm --- ApsSnapshot
+
+    %% Patient curation -> Auto-discovered
+    PatientDevice -- "DeviceId match (serial / model)" --> Device
+
+    %% Records reference auto-discovered device
+    Device --> Bolus
+    Device --> TempBasal
+    Device --> PumpSnapshot
+    Device --> UploaderSnapshot
+    Device --> ApsSnapshot
+    Device --> DeviceEvent
+    Device --> MeterGlucose
+
+    %% SensorGlucose links to PatientDevice (CGM-specific)
+    PatientDevice --> SensorGlucose
+
+    %% Insulin context snapshotted into Bolus
+    PatientInsulin -- "captured at delivery time" --> TreatmentInsulinContext
+    TreatmentInsulinContext -. embedded in .-> Bolus
+
+    classDef catalog fill:#e8f4f8,stroke:#0369a1,color:#0c4a6e
+    classDef patient fill:#fef3c7,stroke:#b45309,color:#7c2d12
+    classDef discovered fill:#ecfccb,stroke:#4d7c0f,color:#365314
+    classDef enum fill:#f3e8ff,stroke:#7e22ce,color:#581c87
+    classDef record fill:#fff,stroke:#475569,color:#0f172a
+    classDef snapshot fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d
+
+    class DeviceCatalog,InsulinCatalog catalog
+    class PatientDevice,PatientInsulin patient
+    class Device discovered
+    class DeviceCategory,AidAlgorithm,InsulinCategory,InsulinRole enum
+    class Bolus,TempBasal,PumpSnapshot,UploaderSnapshot,ApsSnapshot,SensorGlucose,MeterGlucose,DeviceEvent record
+    class TreatmentInsulinContext snapshot

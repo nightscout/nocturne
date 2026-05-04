@@ -78,4 +78,15 @@ public interface IActivityService
         string? find = null,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Count <see cref="Activity"/> records across all decomposed sources (StateSpans, HeartRate, StepCount).
+    /// </summary>
+    /// <param name="find">Optional MongoDB-style query filter string.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Total number of activity records matching the filter.</returns>
+    Task<long> CountActivitiesAsync(
+        string? find = null,
+        CancellationToken cancellationToken = default
+    );
 }

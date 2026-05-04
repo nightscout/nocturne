@@ -11,11 +11,11 @@
   } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import { onMount } from "svelte";
-  import { remove as removeClockFace } from "$api/clockfaces.remote";
   import {
     list as listClockFaces,
     create as createClockFace,
     getById as getClockFaceById,
+    remove as removeClockFace,
   } from "$api/generated/clockFaces.generated.remote";
   import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";
   import type { ClockFaceListItem, ClockFaceConfig } from "$lib/api";

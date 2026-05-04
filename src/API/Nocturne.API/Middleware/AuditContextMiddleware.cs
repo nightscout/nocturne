@@ -24,6 +24,7 @@ public class AuditContextMiddleware
             var authContext = httpContext.GetAuthContext();
 
             mutableContext.SubjectId = authContext?.SubjectId;
+            mutableContext.SubjectName = authContext?.SubjectName;
             mutableContext.AuthType = authContext?.AuthType.ToString();
             mutableContext.TokenId = authContext?.TokenId;
             mutableContext.IpAddress = httpContext.Connection.RemoteIpAddress?.ToString();

@@ -1,8 +1,10 @@
 using System.Text.Json;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Platform;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.API.Services.Devices;
 
 namespace Nocturne.API.Services.Platform;
 
@@ -15,16 +17,18 @@ namespace Nocturne.API.Services.Platform;
 /// <seealso cref="IBraceExpansionService"/>
 public class TimeQueryService : ITimeQueryService
 {
-    private readonly IEntryRepository _entries;
-    private readonly ITreatmentRepository _treatments;
-    private readonly IDeviceStatusRepository _deviceStatuses;
+    private static readonly string[] OperatorSuffixes = ["_gte", "_lte", "_gt", "_lt", "_ne", "_regex", "_in", "_nin"];
+
+    private readonly IEntryService _entries;
+    private readonly ITreatmentService _treatments;
+    private readonly DeviceStatusProjectionService _deviceStatuses;
     private readonly IBraceExpansionService _braceExpansionService;
     private readonly ILogger<TimeQueryService> _logger;
 
     public TimeQueryService(
-        IEntryRepository entries,
-        ITreatmentRepository treatments,
-        IDeviceStatusRepository deviceStatuses,
+        IEntryService entries,
+        ITreatmentService treatments,
+        DeviceStatusProjectionService deviceStatuses,
         IBraceExpansionService braceExpansionService,
         ILogger<TimeQueryService> logger
     )
@@ -157,9 +161,9 @@ public class TimeQueryService : ITimeQueryService
         return storage.ToLowerInvariant() switch
         {
             "entries" => await _entries.GetEntriesWithAdvancedFilterAsync(
-                count: 1000, // Default limit
+                findQuery ?? "{}",
+                count: 1000,
                 skip: 0,
-                findQuery: findQuery,
                 cancellationToken: cancellationToken
             ),
             "treatments" => (
@@ -167,15 +171,16 @@ public class TimeQueryService : ITimeQueryService
                     count: 1000,
                     skip: 0,
                     findQuery: findQuery,
+                    reverseResults: false,
                     cancellationToken: cancellationToken
                 )
             ).Select(t => ConvertTreatmentToEntry(t)),
             "devicestatus" => (
-                await _deviceStatuses.GetDeviceStatusWithAdvancedFilterAsync(
+                await _deviceStatuses.GetAsync(
                     count: 1000,
                     skip: 0,
-                    findQuery: findQuery,
-                    cancellationToken: cancellationToken
+                    find: findQuery,
+                    ct: cancellationToken
                 )
             ).Select(ds => ConvertDeviceStatusToEntry(ds)),
             _ => throw new ArgumentException($"Unsupported storage type: {storage}"),
@@ -246,9 +251,9 @@ public class TimeQueryService : ITimeQueryService
         return storage.ToLowerInvariant() switch
         {
             "entries" => await _entries.GetEntriesWithAdvancedFilterAsync(
-                count: 1000, // Default limit
+                findQuery ?? "{}",
+                count: 1000,
                 skip: 0,
-                findQuery: findQuery,
                 cancellationToken: cancellationToken
             ),
             "treatments" => (
@@ -256,15 +261,16 @@ public class TimeQueryService : ITimeQueryService
                     count: 1000,
                     skip: 0,
                     findQuery: findQuery,
+                    reverseResults: false,
                     cancellationToken: cancellationToken
                 )
             ).Select(t => ConvertTreatmentToEntry(t)),
             "devicestatus" => (
-                await _deviceStatuses.GetDeviceStatusWithAdvancedFilterAsync(
+                await _deviceStatuses.GetAsync(
                     count: 1000,
                     skip: 0,
-                    findQuery: findQuery,
-                    cancellationToken: cancellationToken
+                    find: findQuery,
+                    ct: cancellationToken
                 )
             ).Select(ds => ConvertDeviceStatusToEntry(ds)),
             _ => throw new ArgumentException($"Unsupported storage type: {storage}"),
@@ -399,7 +405,9 @@ public class TimeQueryService : ITimeQueryService
     }
 
     /// <summary>
-    /// Convert query parameters dictionary to PostgreSQL find query string
+    /// Convert query parameters dictionary to standard MongoDB JSON format.
+    /// Translates field_operator keys (e.g. dateString_regex) into
+    /// <c>{"field": {"$operator": value}}</c> for downstream find-query parsing.
     /// </summary>
     private string? ConvertQueryParamsToFindQuery(Dictionary<string, object> queryParams)
     {
@@ -408,9 +416,36 @@ public class TimeQueryService : ITimeQueryService
             return null;
         }
 
-        // For now, convert to a simple JSON representation
-        // In a full implementation, this would translate to proper SQL WHERE clauses
-        return JsonSerializer.Serialize(queryParams);
+        // Convert field_operator format to MongoDB JSON: {"field": {"$operator": value}}
+        var mongoDoc = new Dictionary<string, object>();
+
+        foreach (var kvp in queryParams)
+        {
+            var key = kvp.Key;
+            var value = kvp.Value;
+
+            // Check for operator suffix pattern: field_gte, field_lte, field_regex, etc.
+            var matchedSuffix = OperatorSuffixes.FirstOrDefault(s => key.EndsWith(s));
+
+            if (matchedSuffix != null)
+            {
+                var fieldName = key[..^matchedSuffix.Length];
+                var mongoOp = "$" + matchedSuffix[1..]; // _gte → $gte
+
+                if (!mongoDoc.TryGetValue(fieldName, out var existing) || existing is not Dictionary<string, object> ops)
+                {
+                    ops = new Dictionary<string, object>();
+                    mongoDoc[fieldName] = ops;
+                }
+                ops[mongoOp] = value;
+            }
+            else
+            {
+                mongoDoc[key] = value;
+            }
+        }
+
+        return JsonSerializer.Serialize(mongoDoc);
     }
 
     /// <summary>

@@ -676,6 +676,79 @@ public class StatisticsServiceTests
 
     #endregion
 
+    #region CGM Active Percent Tests
+
+    [Fact]
+    public void AnalyzeGlucoseData_HalfCoverage_Returns50PercentCgmActive()
+    {
+        // 144 readings over 24 hours with 5-min interval = 50% (expected 288)
+        var start = DateTime.UtcNow.AddDays(-1);
+        var entries = Enumerable.Range(0, 144).Select(i => new SensorGlucose
+        {
+            Mgdl = 120,
+            Timestamp = start.AddMinutes(i * 10),
+        });
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            startDate: start, endDate: start.AddDays(1), updateIntervalMinutes: 5);
+
+        result.DataQuality.CgmActivePercent.Should().BeApproximately(50.0, 1.0);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_FullCoverage_Returns100PercentCgmActive()
+    {
+        var start = DateTime.UtcNow.AddDays(-1);
+        var entries = Enumerable.Range(0, 288).Select(i => new SensorGlucose
+        {
+            Mgdl = 120,
+            Timestamp = start.AddMinutes(i * 5),
+        });
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            startDate: start, endDate: start.AddDays(1), updateIntervalMinutes: 5);
+
+        result.DataQuality.CgmActivePercent.Should().Be(100.0);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_Libre1MinInterval_CalculatesCorrectly()
+    {
+        // 720 readings over 24 hours with 1-min interval = 50% (expected 1440)
+        var start = DateTime.UtcNow.AddDays(-1);
+        var entries = Enumerable.Range(0, 720).Select(i => new SensorGlucose
+        {
+            Mgdl = 120,
+            Timestamp = start.AddMinutes(i * 2),
+        });
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>(),
+            startDate: start, endDate: start.AddDays(1), updateIntervalMinutes: 1);
+
+        result.DataQuality.CgmActivePercent.Should().BeApproximately(50.0, 1.0);
+    }
+
+    [Fact]
+    public void AnalyzeGlucoseData_NoReportPeriod_InfersFromEntries()
+    {
+        var start = DateTime.UtcNow.AddHours(-12);
+        var entries = Enumerable.Range(0, 144).Select(i => new SensorGlucose
+        {
+            Mgdl = 120,
+            Timestamp = start.AddMinutes(i * 5),
+        });
+
+        var result = _statisticsService.AnalyzeGlucoseData(
+            entries, Array.Empty<Bolus>(), Array.Empty<CarbIntake>());
+
+        result.DataQuality.CgmActivePercent.Should().BeApproximately(100.0, 2.0);
+    }
+
+    #endregion
+
     #region Comprehensive Analytics Tests
 
     [Fact]

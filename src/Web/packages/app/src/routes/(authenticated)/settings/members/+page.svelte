@@ -26,6 +26,7 @@
   import CreateInviteCard from "$lib/components/members/CreateInviteCard.svelte";
   import PendingInvitesList from "$lib/components/members/PendingInvitesList.svelte";
   import MemberCard from "$lib/components/members/MemberCard.svelte";
+  import GuestLinksSection from "$lib/components/members/GuestLinksSection.svelte";
 
   const effectivePermissions: string[] = $derived(
     (page.data as any).effectivePermissions ?? [],
@@ -117,12 +118,17 @@
   <title>Members - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-4xl p-6 space-y-6" {@attach coachmark({ key: "onboarding.sharing", title: "Sharing & Privacy", description: "Control who can see your data", completedWhen: () => sharingConfigured })}>
-  <div class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight">Members</h1>
-    <p class="text-muted-foreground">
-      Manage members, invites, and access to your data
-    </p>
+<div class="container mx-auto max-w-4xl p-6 space-y-6" {@attach coachmark({ key: "onboarding.sharing", title: "Share with a caretaker", description: "Create an invite link to give a parent, partner, or clinician read-only access to your glucose data.", completedWhen: () => sharingConfigured })}>
+  <div class="flex items-center gap-3">
+    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+      <Users class="h-6 w-6 text-primary" />
+    </div>
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Members</h1>
+      <p class="text-muted-foreground">
+        Manage members, invites, and access to your data
+      </p>
+    </div>
   </div>
 
   {#if errorMessage}
@@ -160,6 +166,11 @@
             variant="outline"
             size="sm"
             onclick={() => (showCreateInvite = true)}
+            {@attach coachmark({
+              key: "setup-invite.create-link",
+              title: "Start here",
+              description: "Create a shareable link to invite a caretaker, partner, or clinician.",
+            })}
           >
             <Link class="mr-1.5 h-3.5 w-3.5" />
             Create Invite Link
@@ -235,6 +246,7 @@
             roles={allRoles}
             canEditRoles={canEditMemberRoles}
             canManage={true}
+            currentSubjectId={page.data.user?.subjectId}
             isExpanded={expandedMember === member.subjectId}
             isSaving={isSavingMember}
             onToggleExpand={() => toggleExpandMember(member.subjectId!)}
@@ -257,6 +269,9 @@
       {/if}
     </div>
   {/if}
+
+  <!-- Temporary Guest Links -->
+  <GuestLinksSection />
 
   {#if !canInvite && !canManageMembers}
     <Card.Root>

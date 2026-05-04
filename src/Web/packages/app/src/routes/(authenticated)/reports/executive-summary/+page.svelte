@@ -123,7 +123,7 @@
 </svelte:head>
 
 {#if reportsResource.current}
-  <div class="container mx-auto px-4 py-6 space-y-8 max-w-6xl">
+  <div class="@container container mx-auto px-4 py-6 space-y-8 max-w-6xl">
     <!-- Print-Friendly Header -->
     <div class="print:block hidden text-center mb-8">
       <h1 class="text-2xl font-bold">Diabetes Management Report</h1>
@@ -150,7 +150,7 @@
         class="border-2 border-primary/20 bg-linear-to-br from-background to-muted/30"
       >
         <CardContent class="pt-6">
-          <div class="flex flex-col md:flex-row items-center gap-6">
+          <div class="flex flex-col @3xl:flex-row items-center gap-6">
             <!-- Grade Circle -->
             <div class="relative">
               <div
@@ -166,9 +166,9 @@
             </div>
 
             <!-- Assessment Details -->
-            <div class="flex-1 text-center md:text-left space-y-2">
+            <div class="flex-1 text-center @3xl:text-left space-y-2">
               <div
-                class="flex items-center justify-center md:justify-start gap-2"
+                class="flex items-center justify-center @3xl:justify-start gap-2 flex-wrap"
               >
                 <Badge
                   class="{assessment.color
@@ -189,7 +189,7 @@
             </div>
 
             <!-- Quick Stats -->
-            <div class="grid grid-cols-3 gap-4 text-center">
+            <div class="grid grid-cols-3 gap-2 @sm:gap-4 text-center shrink-0">
               <div>
                 <div
                   class="text-2xl font-bold {(tir?.target ?? 0) >= 70
@@ -234,9 +234,9 @@
       </Card>
 
       <!-- Primary Metrics Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="grid grid-cols-1 @2xl:grid-cols-2 @4xl:grid-cols-3 gap-6">
         <!-- Time in Range - Featured -->
-        <Card class="border-2 md:row-span-2">
+        <Card class="border-2 @2xl:col-span-2 @4xl:col-span-1 @4xl:row-span-2">
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <Target class="w-5 h-5 text-green-600" />
@@ -411,7 +411,7 @@
       </div>
 
       <!-- Safety Metrics Row -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
         <!-- Hypoglycemia -->
         <Card
           class="border-2 {totalLows > 4
@@ -558,7 +558,7 @@
       <ClinicalInsights {analysis} showClinicalNotes={true} maxInsights={3} />
 
       <!-- Data Quality & Statistics -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
         <!-- Glucose Statistics -->
         <Card class="border-2">
           <CardHeader>
@@ -696,7 +696,7 @@
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="grid grid-cols-2 @3xl:grid-cols-4 gap-3">
             <Button
               href="/reports/agp"
               variant="outline"

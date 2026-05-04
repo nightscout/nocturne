@@ -10,9 +10,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "is_default",
-                table: "tenants");
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE tenants DROP COLUMN IF EXISTS is_default;
+                """);
         }
 
         /// <inheritdoc />

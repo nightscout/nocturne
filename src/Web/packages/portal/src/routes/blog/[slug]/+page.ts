@@ -8,7 +8,7 @@ export function entries() {
 }
 
 export const load: PageLoad = async ({ params }) => {
-  const modules = import.meta.glob<{ default: unknown; metadata: Record<string, unknown> }>(
+  const modules = import.meta.glob<{ default: typeof import('svelte').SvelteComponent; metadata: Record<string, unknown> }>(
     '../../../content/blog/*.svx',
   );
 

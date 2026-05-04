@@ -1,4 +1,4 @@
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
@@ -34,7 +34,7 @@ public class DemoServiceConfiguration
 /// Background service that periodically polls the demo service health endpoint.
 /// When the service becomes unhealthy and the consecutive failure count reaches
 /// <see cref="DemoServiceConfiguration.FailureThreshold"/>, all demo data is automatically
-/// removed from the database via <see cref="IEntryRepository"/> and <see cref="ITreatmentRepository"/>.
+/// removed from the database via <see cref="IDataSourceService"/>.
 /// </summary>
 /// <remarks>
 /// Cleanup is performed only once per failure run; it resets when the service recovers.
@@ -185,24 +185,15 @@ public class DemoServiceHealthMonitor : BackgroundService
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var entryRepository = scope.ServiceProvider.GetRequiredService<IEntryRepository>();
-            var treatmentRepository = scope.ServiceProvider.GetRequiredService<ITreatmentRepository>();
+            var dataSourceService = scope.ServiceProvider.GetRequiredService<IDataSourceService>();
 
             _logger.LogInformation("Cleaning up demo data...");
 
-            var entriesDeleted = await entryRepository.DeleteEntriesByDataSourceAsync(
-                Core.Constants.DataSources.DemoService,
-                cancellationToken
-            );
-            var treatmentsDeleted = await treatmentRepository.DeleteTreatmentsByDataSourceAsync(
-                Core.Constants.DataSources.DemoService,
-                cancellationToken
-            );
+            var result = await dataSourceService.DeleteDemoDataAsync(cancellationToken);
 
             _logger.LogInformation(
-                "Demo data cleanup complete: {Entries} entries and {Treatments} treatments deleted",
-                entriesDeleted,
-                treatmentsDeleted
+                "Demo data cleanup complete: {DeletedCounts}",
+                string.Join(", ", result.DeletedCounts.Select(kv => $"{kv.Value} {kv.Key}"))
             );
         }
         catch (Exception ex)

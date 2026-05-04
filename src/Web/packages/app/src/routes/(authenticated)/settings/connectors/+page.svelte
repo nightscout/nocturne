@@ -37,9 +37,9 @@
     Check,
     Link2,
     Wrench,
-    MessageSquare,
     ChevronRight,
     Loader2,
+    KeyRound,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
@@ -47,7 +47,7 @@
   import ConnectedApps from "$lib/components/settings/ConnectedApps.svelte";
   import ApiTokens from "$lib/components/settings/ApiTokens.svelte";
   import DeduplicationDialog from "$lib/components/connectors/DeduplicationDialog.svelte";
-  import ApiSecretSection from "$lib/components/connectors/ApiSecretSection.svelte";
+  import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import UploaderSetupDialog from "$lib/components/connectors/UploaderSetupDialog.svelte";
   import ConnectorDetailsDialog from "$lib/components/connectors/ConnectorDetailsDialog.svelte";
   import ManualSyncDialog, { type BatchSyncResult } from "$lib/components/connectors/ManualSyncDialog.svelte";
@@ -92,6 +92,10 @@
   // Realtime sync progress from WebSocket
   const realtimeStore = getRealtimeStore();
   let syncProgressByConnector = $derived(realtimeStore.syncProgressByConnector);
+  let activeSyncProgress = $derived.by(() => {
+    const entries = Object.values(syncProgressByConnector);
+    return entries.find((p) => p.phase === "Syncing") ?? entries.at(-1) ?? null;
+  });
 
   $effect(() => {
     const progress = syncProgressByConnector;
@@ -102,6 +106,11 @@
       loadConnectorStatuses();
     }
   });
+
+  // API token create dialog (triggered from uploader setup)
+  let apiTokenCreateOpen = $state(false);
+  let apiTokenPrefillLabel = $state("");
+  let apiTokenPrefillScopes = $state<string[]>([]);
 
   // Deduplication state
   let showDeduplicationDialog = $state(false);
@@ -368,14 +377,19 @@
   <title>Connectors & Apps - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-4xl p-6 space-y-6" {@attach coachmark({ key: "power-user.connectors", title: "Data sources", description: "Connect data sources to pull glucose, insulin, and pump data automatically." })}>
+<div class="container mx-auto max-w-4xl p-6 space-y-6">
   <!-- Header -->
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="text-2xl font-bold tracking-tight">Connectors & Connected Apps</h1>
-      <p class="text-muted-foreground">
-        Manage data sources, set up new connections, and control app access
-      </p>
+  <div class="flex items-start justify-between">
+    <div class="flex items-center gap-3">
+      <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+        <Wifi class="h-6 w-6 text-primary" />
+      </div>
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">Connectors & Connected Apps</h1>
+        <p class="text-muted-foreground">
+          Manage data sources, set up new connections, and control app access
+        </p>
+      </div>
     </div>
     <Button variant="outline" size="sm" onclick={refreshAll} class="gap-2">
       <RefreshCw
@@ -402,7 +416,11 @@
     </Card>
   {:else if servicesOverview}
     <!-- Active Data Sources -->
-    <Card>
+    <Card {@attach coachmark({
+      key: "setup-connectors.sources",
+      title: "Waiting for data",
+      description: "Once you set up an uploader app or cloud connector below, your data source will appear here automatically.",
+    })}>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Wifi class="h-5 w-5" />
@@ -466,24 +484,30 @@
     />
 
     <!-- Server-Side Connectors -->
-    <ServerConnectorsCard
-      availableConnectors={servicesOverview.availableConnectors ?? []}
-      {connectorStatuses}
-      {connectorCapabilitiesById}
-      {syncProgressByConnector}
-      activeDataSources={servicesOverview.activeDataSources ?? []}
-      {isLoadingConnectorStatuses}
-      {isManualSyncing}
-      {quickSyncingById}
-      onRefreshStatuses={loadConnectorStatuses}
-      onManualSync={triggerManualSync}
-      onQuickSync={triggerQuickSync}
-      onConnectorClick={async (connector, connectorId) => {
-        selectedConnector = connector;
-        await loadConnectorCapabilitiesFor(connectorId);
-        showConnectorDialog = true;
-      }}
-    />
+    <div {@attach coachmark({
+      key: "setup-connectors.server-connectors",
+      title: "Cloud connectors",
+      description: "Pull data directly from Dexcom, LibreLink, or Glooko \u2014 no uploader app needed.",
+    })}>
+      <ServerConnectorsCard
+        availableConnectors={servicesOverview.availableConnectors ?? []}
+        {connectorStatuses}
+        {connectorCapabilitiesById}
+        {syncProgressByConnector}
+        activeDataSources={servicesOverview.activeDataSources ?? []}
+        {isLoadingConnectorStatuses}
+        {isManualSyncing}
+        {quickSyncingById}
+        onRefreshStatuses={loadConnectorStatuses}
+        onManualSync={triggerManualSync}
+        onQuickSync={triggerQuickSync}
+        onConnectorClick={async (connector, connectorId) => {
+          selectedConnector = connector;
+          await loadConnectorCapabilitiesFor(connectorId);
+          showConnectorDialog = true;
+        }}
+      />
+    </div>
 
     <!-- API Info -->
     {#if servicesOverview.apiEndpoint}
@@ -498,61 +522,47 @@
           </CardDescription>
         </CardHeader>
         <CardContent class="space-y-4">
-          <div class="grid gap-4 sm:grid-cols-2">
-            <div class="space-y-2">
-              <span class="text-sm font-medium">Base URL</span>
-              <div class="flex gap-2">
-                <code
-                  class="flex-1 px-3 py-2 rounded-md bg-muted text-sm font-mono truncate"
-                >
-                  {window.location.origin}
-                </code>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onclick={() => copyToClipboard(window.location.origin, "baseUrl")}
-                >
-                  {#if copiedField === "baseUrl"}
-                    <Check class="h-4 w-4 text-green-500" />
-                  {:else}
-                    <Copy class="h-4 w-4" />
-                  {/if}
-                </Button>
-              </div>
-            </div>
-            <div class="space-y-2">
-              <span class="text-sm font-medium">Entries Endpoint</span>
-              <div class="flex gap-2">
-                <code
-                  class="flex-1 px-3 py-2 rounded-md bg-muted text-sm font-mono truncate"
-                >
-                  {`${window.location.origin}/api/v1/entries`}
-                </code>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onclick={() => copyToClipboard(`${window.location.origin}/api/v1/entries`, "entries")}
-                >
-                  {#if copiedField === "entries"}
-                    <Check class="h-4 w-4 text-green-500" />
-                  {:else}
-                    <Copy class="h-4 w-4" />
-                  {/if}
-                </Button>
-              </div>
+          <div class="space-y-2">
+            <span class="text-sm font-medium">Base URL</span>
+            <div class="flex gap-2">
+              <code
+                class="flex-1 px-3 py-2 rounded-md bg-muted text-sm font-mono truncate"
+              >
+                {window.location.origin}
+              </code>
+              <Button
+                variant="outline"
+                size="icon"
+                onclick={() => copyToClipboard(window.location.origin, "baseUrl")}
+              >
+                {#if copiedField === "baseUrl"}
+                  <Check class="h-4 w-4 text-green-500" />
+                {:else}
+                  <Copy class="h-4 w-4" />
+                {/if}
+              </Button>
             </div>
           </div>
           <Separator />
           <p class="text-sm text-muted-foreground">
-            Most uploaders use the Nightscout API format. Use your API secret
-            for authentication via the <code class="text-xs">api-secret</code>
-            header or embed it in the URL.
+            Create an API key below to authenticate uploaders. Each key is
+            scoped to specific permissions and can be revoked independently.
           </p>
+          <Button
+            variant="outline"
+            onclick={() => {
+              apiTokenPrefillLabel = "";
+              apiTokenPrefillScopes = ["health.readwrite"];
+              apiTokenCreateOpen = true;
+              document.getElementById("api-tokens-section")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            <KeyRound class="mr-1.5 h-4 w-4" />
+            Create API key
+          </Button>
         </CardContent>
       </Card>
     {/if}
-
-    <ApiSecretSection />
 
     <!-- Data Maintenance -->
     <Card>
@@ -615,8 +625,8 @@
           class="flex items-center justify-between rounded-lg border p-4 hover:bg-accent transition-colors"
         >
           <div class="flex items-center gap-3">
-            <div class="flex h-10 w-10 items-center justify-center rounded-md bg-muted">
-              <MessageSquare class="h-5 w-5" />
+            <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md bg-muted">
+              <AppLogo icon="discord" />
             </div>
             <div>
               <p class="font-medium">Discord</p>
@@ -634,12 +644,26 @@
     <ConnectedApps />
 
     <!-- API Tokens Section -->
-    <ApiTokens />
+    <div id="api-tokens-section">
+      <ApiTokens
+        bind:createOpen={apiTokenCreateOpen}
+        prefillLabel={apiTokenPrefillLabel}
+        prefillScopes={apiTokenPrefillScopes}
+      />
+    </div>
   {/if}
 </div>
 
 <!-- Setup Instructions Dialog -->
-<UploaderSetupDialog bind:open={showSetupDialog} {selectedUploader} />
+<UploaderSetupDialog
+  bind:open={showSetupDialog}
+  {selectedUploader}
+  onRequestApiKey={(label, scopes) => {
+    apiTokenPrefillLabel = label;
+    apiTokenPrefillScopes = scopes;
+    apiTokenCreateOpen = true;
+  }}
+/>
 
 <!-- Demo Data Management Dialog -->
 <DemoDataSection bind:open={showDemoDataDialog} onDeleteComplete={loadServices} />
@@ -651,7 +675,7 @@
   onDeleteComplete={loadServices}
 />
 
-<ManualSyncDialog bind:open={showManualSyncDialog} {isManualSyncing} {manualSyncResult} />
+<ManualSyncDialog bind:open={showManualSyncDialog} {isManualSyncing} {manualSyncResult} syncProgress={isManualSyncing ? activeSyncProgress : null} />
 
 <!-- Connector Details Dialog -->
 <ConnectorDetailsDialog bind:open={showConnectorDialog} {selectedConnector} {selectedConnectorCapabilities} onSyncComplete={loadConnectorStatuses} />

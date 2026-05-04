@@ -4,7 +4,7 @@ import { wuchale } from '@wuchale/vite-plugin';
 import lingo from 'vite-plugin-lingo';
 import { blogManifest } from '@nocturne/cms/blog/vite-plugin';
 import { resolve } from 'node:path';
-import { defineConfig } from 'vite';
+import { defineConfig, type PluginOption } from 'vite';
 
 
 export default defineConfig({
@@ -12,7 +12,7 @@ export default defineConfig({
     lingo({
       route: '/_translations',  // Route where editor UI is served
       localesDir: '../../locales',  // Path to .po files
-    }), blogManifest({ contentDir: resolve(__dirname, 'src/content/blog') }), sveltekit()],
+    }) as PluginOption, blogManifest({ contentDir: resolve(__dirname, 'src/content/blog') }), sveltekit()],
   server: {
     host: "0.0.0.0",
     port: parseInt(process.env.PORT || "5173", 10),

@@ -31,13 +31,6 @@ public class TenantEntity
     public string DisplayName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Per-tenant API secret hash (SHA1, Nightscout-compatible)
-    /// </summary>
-    [Column("api_secret_hash")]
-    [MaxLength(128)]
-    public string? ApiSecretHash { get; set; }
-
-    /// <summary>
     /// Whether this tenant is active. Inactive tenants return 403.
     /// </summary>
     [Column("is_active")]
@@ -71,6 +64,12 @@ public class TenantEntity
     /// </summary>
     [Column("allow_access_requests")]
     public bool AllowAccessRequests { get; set; } = true;
+
+    /// <summary>
+    /// When the onboarding wizard was completed or skipped. Null = not yet onboarded.
+    /// </summary>
+    [Column("onboarding_completed_at")]
+    public DateTime? OnboardingCompletedAt { get; set; }
 
     /// <summary>
     /// When the tenant record was created

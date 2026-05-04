@@ -1,6 +1,8 @@
 using Nocturne.API.Controllers.V4;
 using Nocturne.API.Controllers.V4.Analytics;
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Oref;
 using OrefModels = Nocturne.Core.Oref.Models;
@@ -16,22 +18,34 @@ namespace Nocturne.API.Services.Glucose;
 /// <seealso cref="IOrefService"/>
 public class PredictionService : IPredictionService
 {
-    private readonly IEntryRepository _entries;
-    private readonly ITreatmentRepository _treatments;
-    private readonly IProfileRepository _profiles;
+    private readonly IEntryStore _store;
+    private readonly ITreatmentService _treatments;
+    private readonly IBasalRateResolver _basalRate;
+    private readonly ISensitivityResolver _sensitivity;
+    private readonly ICarbRatioResolver _carbRatio;
+    private readonly ITargetRangeResolver _targetRange;
+    private readonly ITherapySettingsResolver _therapySettings;
     private readonly IPatientInsulinRepository _insulins;
     private readonly ILogger<PredictionService> _logger;
 
     public PredictionService(
-        IEntryRepository entries,
-        ITreatmentRepository treatments,
-        IProfileRepository profiles,
+        IEntryStore store,
+        ITreatmentService treatments,
+        IBasalRateResolver basalRate,
+        ISensitivityResolver sensitivity,
+        ICarbRatioResolver carbRatio,
+        ITargetRangeResolver targetRange,
+        ITherapySettingsResolver therapySettings,
         IPatientInsulinRepository insulins,
         ILogger<PredictionService> logger)
     {
-        _entries = entries;
+        _store = store;
         _treatments = treatments;
-        _profiles = profiles;
+        _basalRate = basalRate;
+        _sensitivity = sensitivity;
+        _carbRatio = carbRatio;
+        _targetRange = targetRange;
+        _therapySettings = therapySettings;
         _insulins = insulins;
         _logger = logger;
     }
@@ -39,9 +53,11 @@ public class PredictionService : IPredictionService
     /// <inheritdoc />
     public async Task<GlucosePredictionResponse> GetPredictionsAsync(
         string? profileId = null,
+        DateTimeOffset? asOf = null,
         CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = asOf ?? DateTimeOffset.UtcNow;
+        var nowMills = now.ToUnixTimeMilliseconds();
 
         // Check if oref library is available
         var orefAvailable = OrefService.IsAvailable();
@@ -54,11 +70,11 @@ public class PredictionService : IPredictionService
             return await GetFallbackPredictionsAsync(now, cancellationToken);
         }
 
-        // Fetch recent glucose readings (last 10 entries for delta calculation)
-        var glucoseEntries = await _entries.GetEntriesAsync(
-            type: "sgv",
-            count: 10,
-            skip: 0,
+        // Fetch recent glucose readings (last 10 entries at-or-before the anchor for delta
+        // calculation). ToMills bounds the query at the anchor so an as-of replay sees only
+        // readings the user would have had at that moment.
+        var glucoseEntries = await _store.QueryAsync(
+            new EntryQuery { Type = "sgv", Count = 10, ToMills = nowMills },
             cancellationToken);
 
         if (!glucoseEntries.Any())
@@ -93,10 +109,13 @@ public class PredictionService : IPredictionService
             return await GetFallbackPredictionsAsync(now, cancellationToken);
         }
 
-        // Fetch recent treatments (last 100 for IOB calculation)
-        var treatments = await _treatments.GetTreatmentsAsync(
-            count: 100,
-            skip: 0,
+        // Fetch treatments in the 24h window ending at the anchor. 24h matches what
+        // SensorContextEnricher uses; oref discards entries beyond the insulin/carb tails
+        // internally, so the wider window is safe and keeps the as-of and live paths
+        // identically scoped.
+        var treatments = await _treatments.GetTreatmentsByRangeAsync(
+            fromMills: now.AddHours(-24).ToUnixTimeMilliseconds(),
+            toMills: nowMills,
             cancellationToken);
 
         // Convert to oref treatments
@@ -113,13 +132,13 @@ public class PredictionService : IPredictionService
             .ToList();
 
         // Get or create default profile
-        var profile = await GetProfileAsync(profileId, cancellationToken);
+        var profile = await GetProfileAsync(profileId, nowMills, cancellationToken);
 
         // Calculate IOB
         var iobData = OrefService.CalculateIob(profile, orefTreatments, now);
         if (iobData == null)
         {
-            iobData = new OrefModels.IobData { Iob = 0, Activity = 0, Time = now.ToUnixTimeMilliseconds() };
+            iobData = new OrefModels.IobData { Iob = 0, Activity = 0, Time = nowMills };
         }
 
         // Calculate COB
@@ -129,12 +148,14 @@ public class PredictionService : IPredictionService
         // Current temp basal (simplified - no active temp)
         var currentTemp = new OrefModels.CurrentTemp { Rate = profile.CurrentBasal, Duration = 0 };
 
-        // Get predictions
+        // Get predictions — `now` anchors oref's determine-basal time reference so an
+        // as-of replay produces the forecast the user would have seen at that tick.
         var predictions = OrefService.GetPredictions(
             profile,
             glucoseStatus,
             iobData,
             currentTemp,
+            currentTime: now,
             autosensRatio: 1.0,
             cob: cob);
 
@@ -169,59 +190,59 @@ public class PredictionService : IPredictionService
     }
 
     /// <summary>
-    /// Get or create a default oref profile.
+    /// Build an oref profile from V4 resolvers, anchored at <paramref name="nowMills"/> so
+    /// schedule-driven settings (basal, sensitivity, carb ratio, target) reflect the
+    /// active segment at that instant rather than at wall-clock now.
     /// </summary>
-    private async Task<OrefModels.OrefProfile> GetProfileAsync(string? profileId, CancellationToken cancellationToken)
+    private async Task<OrefModels.OrefProfile> GetProfileAsync(
+        string? profileId, long nowMills, CancellationToken cancellationToken)
     {
         // Resolve insulin pharmacokinetics from active bolus insulin
         var bolusInsulin = await ResolveBolusInsulinAsync();
-        var dia = bolusInsulin?.Dia ?? 3.0;
         var peak = bolusInsulin?.Peak;
         var curve = bolusInsulin?.Curve;
 
-        // Try to fetch profile from database
         try
         {
-            var profiles = await _profiles.GetProfilesAsync(1, 0, cancellationToken);
-            var dbProfile = profiles.FirstOrDefault();
-
-            if (dbProfile?.Store != null && dbProfile.Store.Count > 0)
+            var hasData = await _therapySettings.HasDataAsync(cancellationToken);
+            if (hasData)
             {
-                var activeStore = dbProfile.Store.Values.FirstOrDefault();
-                if (activeStore != null)
+                var dia = await _therapySettings.GetDIAAsync(nowMills, profileId, cancellationToken);
+                var basal = await _basalRate.GetBasalRateAsync(nowMills, profileId, cancellationToken);
+                var sens = await _sensitivity.GetSensitivityAsync(nowMills, profileId, cancellationToken);
+                var carbs = await _carbRatio.GetCarbRatioAsync(nowMills, profileId, cancellationToken);
+                var minBg = await _targetRange.GetLowBGTargetAsync(nowMills, profileId, cancellationToken);
+                var maxBg = await _targetRange.GetHighBGTargetAsync(nowMills, profileId, cancellationToken);
+
+                var orefProfile = new OrefModels.OrefProfile
                 {
-                    // Use insulin-derived DIA unless profile is externally managed
-                    var profileDia = dbProfile.IsExternallyManaged ? activeStore.Dia : dia;
+                    Dia = dia,
+                    CurrentBasal = basal,
+                    Sens = sens,
+                    CarbRatio = carbs,
+                    MinBg = minBg,
+                    MaxBg = maxBg,
+                    MaxIob = 10.0,
+                    MaxBasal = 4.0,
+                    MaxDailyBasal = 2.0
+                };
 
-                    var orefProfile = new OrefModels.OrefProfile
-                    {
-                        Dia = profileDia,
-                        CurrentBasal = activeStore.Basal?.FirstOrDefault()?.Value ?? 1.0,
-                        Sens = activeStore.Sens?.FirstOrDefault()?.Value ?? 50.0,
-                        CarbRatio = activeStore.CarbRatio?.FirstOrDefault()?.Value ?? 10.0,
-                        MinBg = activeStore.TargetLow?.FirstOrDefault()?.Value ?? 100.0,
-                        MaxBg = activeStore.TargetHigh?.FirstOrDefault()?.Value ?? 120.0,
-                        MaxIob = 10.0,
-                        MaxBasal = 4.0,
-                        MaxDailyBasal = 2.0
-                    };
+                if (curve != null) orefProfile.Curve = curve;
+                if (peak.HasValue) orefProfile.Peak = peak.Value;
 
-                    if (curve != null) orefProfile.Curve = curve;
-                    if (peak.HasValue) orefProfile.Peak = peak.Value;
-
-                    return orefProfile;
-                }
+                return orefProfile;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch profile, using defaults");
+            _logger.LogWarning(ex, "Failed to resolve profile from V4 resolvers, using defaults");
         }
 
-        // Return default profile
+        // Return default profile (DIA falls back through resolver chain already, but we have no data)
+        var defaultDia = bolusInsulin?.Dia ?? 3.0;
         return new OrefModels.OrefProfile
         {
-            Dia = dia,
+            Dia = defaultDia,
             CurrentBasal = 1.0,
             Sens = 50.0,
             CarbRatio = 10.0,
@@ -256,7 +277,7 @@ public class PredictionService : IPredictionService
         CancellationToken cancellationToken)
     {
         // Get current entry
-        var currentEntry = await _entries.GetCurrentEntryAsync(cancellationToken);
+        var currentEntry = await _store.GetCurrentAsync(cancellationToken);
 
         if (currentEntry?.Sgv == null)
         {

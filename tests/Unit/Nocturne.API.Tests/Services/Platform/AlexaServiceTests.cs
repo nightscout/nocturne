@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Platform;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
-using Nocturne.Core.Contracts.Repositories;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Platform;
@@ -15,15 +15,15 @@ namespace Nocturne.API.Tests.Services.Platform;
 [Parity("api.alexa.test.js")]
 public class AlexaServiceTests
 {
-    private readonly Mock<IEntryRepository> _mockEntryRepository;
+    private readonly Mock<IEntryStore> _mockEntryStore;
     private readonly Mock<ILogger<AlexaService>> _mockLogger;
     private readonly AlexaService _alexaService;
 
     public AlexaServiceTests()
     {
-        _mockEntryRepository = new Mock<IEntryRepository>();
+        _mockEntryStore = new Mock<IEntryStore>();
         _mockLogger = new Mock<ILogger<AlexaService>>();
-        _alexaService = new AlexaService(_mockEntryRepository.Object, _mockLogger.Object);
+        _alexaService = new AlexaService(_mockEntryStore.Object, _mockLogger.Object);
     }
 
     [Fact]
@@ -100,8 +100,8 @@ public class AlexaServiceTests
             Mills = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeMilliseconds(),
         };
 
-        _mockEntryRepository
-            .Setup(x => x.GetEntriesAsync("sgv", 1, 0, It.IsAny<CancellationToken>()))
+        _mockEntryStore
+            .Setup(x => x.QueryAsync(It.Is<EntryQuery>(q => q.Type == "sgv" && q.Count == 1), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { mockEntry });
 
         var request = new AlexaRequest
@@ -130,8 +130,8 @@ public class AlexaServiceTests
     public async Task ProcessRequestAsync_IntentRequest_NSBg_NoData_ReturnsNoDataMessage()
     {
         // Arrange
-        _mockEntryRepository
-            .Setup(x => x.GetEntriesAsync("sgv", 1, 0, It.IsAny<CancellationToken>()))
+        _mockEntryStore
+            .Setup(x => x.QueryAsync(It.Is<EntryQuery>(q => q.Type == "sgv" && q.Count == 1), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<Entry>());
 
         var request = new AlexaRequest

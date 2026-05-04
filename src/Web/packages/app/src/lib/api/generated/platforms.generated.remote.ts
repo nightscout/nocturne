@@ -17,12 +17,15 @@ export const getTenants = query(async () => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in platform.getTenants:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get tenants');
   }
 });
 
 /** Creates a new tenant with the authenticated subject as owner.
-Requires MultitenancyConfiguration.AllowSelfServiceCreation to be enabled. */
+Requires OperatorConfiguration.AllowSelfServiceCreation to be enabled. */
 export const createTenant = command(CreatePlatformTenantRequestSchema, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
@@ -36,6 +39,9 @@ export const createTenant = command(CreatePlatformTenantRequestSchema, async (re
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in platform.createTenant:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to create tenant');
   }
 });
@@ -51,6 +57,9 @@ export const getTransitionStatus = query(async () => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in platform.getTransitionStatus:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get transition status');
   }
 });

@@ -186,7 +186,7 @@
     </div>
 
     <!-- Scatter Plot -->
-    <div class="w-full max-w-[250px] @md:flex-1">
+    <div class="w-full @md:max-w-[250px] @md:flex-1">
       <div class="aspect-square w-full">
         <Chart
           xScale={scaleLinear()}

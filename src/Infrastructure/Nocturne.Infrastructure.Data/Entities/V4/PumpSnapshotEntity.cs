@@ -44,6 +44,12 @@ public class PumpSnapshotEntity : ITenantScoped
     public string? Device { get; set; }
 
     /// <summary>
+    /// Links records that were decomposed from the same legacy DeviceStatus
+    /// </summary>
+    [Column("correlation_id")]
+    public Guid? CorrelationId { get; set; }
+
+    /// <summary>
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     [Column("legacy_id")]
@@ -132,6 +138,18 @@ public class PumpSnapshotEntity : ITenantScoped
     /// </summary>
     [Column("device_id")]
     public Guid? DeviceId { get; set; }
+
+    /// <summary>
+    /// Pump-reported total IOB (when no APS algorithm is running)
+    /// </summary>
+    [Column("iob")]
+    public double? Iob { get; set; }
+
+    /// <summary>
+    /// Pump-reported bolus IOB
+    /// </summary>
+    [Column("bolus_iob")]
+    public double? BolusIob { get; set; }
 
     /// <summary>
     /// Catch-all JSONB column for fields not mapped to dedicated columns

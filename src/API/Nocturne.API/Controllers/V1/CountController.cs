@@ -1,6 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -8,50 +13,50 @@ namespace Nocturne.API.Controllers.V1;
 /// Count controller that provides 1:1 compatibility with Nightscout count endpoints.
 /// Implements the /api/v1/count/* endpoints from the legacy JavaScript implementation.
 /// </summary>
-/// <seealso cref="IEntryRepository"/>
-/// <seealso cref="ITreatmentRepository"/>
-/// <seealso cref="IDeviceStatusRepository"/>
-/// <seealso cref="IProfileRepository"/>
+/// <seealso cref="IEntryStore"/>
+/// <seealso cref="ITreatmentStore"/>
+/// <seealso cref="IApsSnapshotRepository"/>
+/// <seealso cref="IProfileProjectionService"/>
 /// <seealso cref="IFoodRepository"/>
-/// <seealso cref="IActivityRepository"/>
+/// <seealso cref="IActivityService"/>
 [ApiController]
 [Route("api/v1/[controller]")]
 public class CountController : ControllerBase
 {
-    private readonly IEntryRepository _entryRepository;
-    private readonly ITreatmentRepository _treatmentRepository;
-    private readonly IDeviceStatusRepository _deviceStatusRepository;
-    private readonly IProfileRepository _profileRepository;
+    private readonly IEntryStore _entryStore;
+    private readonly ITreatmentStore _treatmentStore;
+    private readonly IApsSnapshotRepository _apsSnapshotRepository;
+    private readonly IProfileProjectionService _profileProjectionService;
     private readonly IFoodRepository _foodRepository;
-    private readonly IActivityRepository _activityRepository;
+    private readonly IActivityService _activityService;
     private readonly ILogger<CountController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="CountController"/>.
     /// </summary>
-    /// <param name="entryRepository">Repository for glucose entry records.</param>
-    /// <param name="treatmentRepository">Repository for treatment records.</param>
-    /// <param name="deviceStatusRepository">Repository for device status records.</param>
-    /// <param name="profileRepository">Repository for profile records.</param>
+    /// <param name="entryStore">Store for glucose entry records.</param>
+    /// <param name="treatmentStore">Store for treatment records.</param>
+    /// <param name="apsSnapshotRepository">Repository for APS snapshot records (V4 replacement for device status).</param>
+    /// <param name="profileProjectionService">Service for profile projection and counting.</param>
     /// <param name="foodRepository">Repository for food records.</param>
-    /// <param name="activityRepository">Repository for activity records.</param>
+    /// <param name="activityService">Service for activity operations.</param>
     /// <param name="logger">Logger instance.</param>
     public CountController(
-        IEntryRepository entryRepository,
-        ITreatmentRepository treatmentRepository,
-        IDeviceStatusRepository deviceStatusRepository,
-        IProfileRepository profileRepository,
+        IEntryStore entryStore,
+        ITreatmentStore treatmentStore,
+        IApsSnapshotRepository apsSnapshotRepository,
+        IProfileProjectionService profileProjectionService,
         IFoodRepository foodRepository,
-        IActivityRepository activityRepository,
+        IActivityService activityService,
         ILogger<CountController> logger
     )
     {
-        _entryRepository = entryRepository;
-        _treatmentRepository = treatmentRepository;
-        _deviceStatusRepository = deviceStatusRepository;
-        _profileRepository = profileRepository;
+        _entryStore = entryStore;
+        _treatmentStore = treatmentStore;
+        _apsSnapshotRepository = apsSnapshotRepository;
+        _profileProjectionService = profileProjectionService;
         _foodRepository = foodRepository;
-        _activityRepository = activityRepository;
+        _activityService = activityService;
         _logger = logger;
     }
 
@@ -80,7 +85,7 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _entryRepository.CountEntriesAsync(find, type, cancellationToken);
+            var count = await _entryStore.CountAsync(find, type, cancellationToken);
 
             _logger.LogDebug("Found {Count} entries matching criteria", count);
             return Ok(new CountResponse { Count = count });
@@ -127,7 +132,7 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _treatmentRepository.CountTreatmentsAsync(find, cancellationToken);
+            var count = await _treatmentStore.CountAsync(find, cancellationToken);
 
             _logger.LogDebug("Found {Count} treatments matching criteria", count);
             return Ok(new CountResponse { Count = count });
@@ -169,7 +174,7 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _deviceStatusRepository.CountDeviceStatusAsync(find, cancellationToken);
+            var count = await _apsSnapshotRepository.CountAsync(null, null, cancellationToken);
 
             _logger.LogDebug("Found {Count} device status entries matching criteria", count);
             return Ok(new CountResponse { Count = count });
@@ -211,7 +216,7 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _activityRepository.CountActivitiesAsync(find, cancellationToken);
+            var count = await _activityService.CountActivitiesAsync(find, cancellationToken);
 
             _logger.LogDebug("Found {Count} activity entries matching criteria", count);
             return Ok(new CountResponse { Count = count });
@@ -287,29 +292,26 @@ public class CountController : ControllerBase
             switch (storage.ToLowerInvariant())
             {
                 case "entries":
-                    count = await _entryRepository.CountEntriesAsync(
+                    count = await _entryStore.CountAsync(
                         find,
                         type,
                         cancellationToken
                     );
                     break;
                 case "treatments":
-                    count = await _treatmentRepository.CountTreatmentsAsync(find, cancellationToken);
+                    count = await _treatmentStore.CountAsync(find, cancellationToken);
                     break;
                 case "devicestatus":
-                    count = await _deviceStatusRepository.CountDeviceStatusAsync(
-                        find,
-                        cancellationToken
-                    );
+                    count = await _apsSnapshotRepository.CountAsync(null, null, cancellationToken);
                     break;
                 case "profile":
-                    count = await _profileRepository.CountProfilesAsync(find, cancellationToken);
+                    count = await _profileProjectionService.CountProfilesAsync(find, cancellationToken);
                     break;
                 case "food":
                     count = await _foodRepository.CountFoodAsync(find, type, cancellationToken);
                     break;
                 case "activity":
-                    count = await _activityRepository.CountActivitiesAsync(find, cancellationToken);
+                    count = await _activityService.CountActivitiesAsync(find, cancellationToken);
                     break;
                 default:
                     // This shouldn't happen due to validation above, but just in case

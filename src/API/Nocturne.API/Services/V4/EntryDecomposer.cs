@@ -24,24 +24,28 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
     private readonly ICalibrationRepository _calibrationRepository;
+    private readonly IGlucoseProcessingResolver _glucoseResolver;
     private readonly ILogger<EntryDecomposer> _logger;
 
     /// <param name="dbContext">EF Core context used to persist <see cref="DecompositionBatchEntity"/> records.</param>
     /// <param name="sensorGlucoseRepository">Repository for <see cref="SensorGlucose"/> records.</param>
     /// <param name="meterGlucoseRepository">Repository for <see cref="MeterGlucose"/> records.</param>
     /// <param name="calibrationRepository">Repository for <see cref="Calibration"/> records.</param>
+    /// <param name="glucoseResolver">Resolves glucose processing type and smoothed/unsmoothed values from v1/v3 hints or source defaults.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public EntryDecomposer(
         NocturneDbContext dbContext,
         ISensorGlucoseRepository sensorGlucoseRepository,
         IMeterGlucoseRepository meterGlucoseRepository,
         ICalibrationRepository calibrationRepository,
+        IGlucoseProcessingResolver glucoseResolver,
         ILogger<EntryDecomposer> logger)
     {
         _dbContext = dbContext;
         _sensorGlucoseRepository = sensorGlucoseRepository;
         _meterGlucoseRepository = meterGlucoseRepository;
         _calibrationRepository = calibrationRepository;
+        _glucoseResolver = glucoseResolver;
         _logger = logger;
     }
 
@@ -91,6 +95,23 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
             : null;
 
         var model = MapToSensorGlucose(entry, result.CorrelationId);
+
+        // Extract glucose processing hints from v1/v3 additional properties
+        string? gpHint = null;
+        double? smoothedHint = null;
+        double? unsmoothedHint = null;
+
+        if (entry.AdditionalProperties is { } props)
+        {
+            if (TryGetString(props, "glucoseProcessing", out var gpStr))
+                gpHint = gpStr;
+            if (TryGetDouble(props, "smoothedMgdl", out var sm))
+                smoothedHint = sm;
+            if (TryGetDouble(props, "unsmoothedMgdl", out var um))
+                unsmoothedHint = um;
+        }
+
+        await _glucoseResolver.ResolveAsync(model, gpHint, smoothedHint, unsmoothedHint, ct);
 
         if (existing != null)
         {
@@ -167,6 +188,52 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         return deleted;
     }
 
+    /// <inheritdoc />
+    public async Task<long> BulkDeleteAsync(string? find, CancellationToken ct = default)
+    {
+        var (fromMills, toMills) = Core.Models.Entries.EntryDomainLogic.ParseTimeRangeFromFind(find);
+
+        // ParseTimeRangeFromFind extracts $gte/$lte from any field, not just
+        // time fields. A query like {"sgv":{"$gte":180}} would parse from=180 (nonsensical as a
+        // timestamp). Reject values below year 2000 in millis as clearly not time bounds.
+        const long MinPlausibleMills = 946684800000L; // 2000-01-01T00:00:00Z
+        if (fromMills.HasValue && fromMills.Value < MinPlausibleMills)
+            fromMills = null;
+        if (toMills.HasValue && toMills.Value < MinPlausibleMills)
+            toMills = null;
+
+        // NIGHTSCOUT-COMPAT: Legacy Nightscout allowed arbitrary MongoDB find queries for
+        // bulk delete (e.g. {"sgv":{"$gte":180}}). After V4 migration we only support
+        // time-range filters. If the caller passed a non-empty find query but we couldn't
+        // extract any time bounds, refuse to delete — otherwise we'd wipe all records.
+        // Null/empty find intentionally deletes everything (matches "delete all" semantics).
+        var hasFind = !string.IsNullOrEmpty(find) && find != "{}";
+        var hasTimeBounds = fromMills.HasValue || toMills.HasValue;
+
+        if (hasFind && !hasTimeBounds)
+        {
+            _logger.LogWarning("BulkDelete refused: find query has no parseable time range, would delete all records. find={Find}", find);
+            return 0;
+        }
+
+        DateTime? from = fromMills.HasValue
+            ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime
+            : null;
+        DateTime? to = toMills.HasValue
+            ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
+            : null;
+
+        var sgDeleted = await _sensorGlucoseRepository.DeleteByTimeRangeAsync(from, to, ct);
+        var mgDeleted = await _meterGlucoseRepository.DeleteByTimeRangeAsync(from, to, ct);
+        var calDeleted = await _calibrationRepository.DeleteByTimeRangeAsync(from, to, ct);
+
+        var total = (long)sgDeleted + mgDeleted + calDeleted;
+        _logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) for find={Find}",
+            total, sgDeleted, mgDeleted, calDeleted, find);
+
+        return total;
+    }
+
     /// <summary>Maps a legacy <see cref="Entry"/> of type <c>sgv</c> to a <see cref="SensorGlucose"/> model.</summary>
     /// <param name="entry">The legacy entry to map.</param>
     /// <param name="correlationId">Optional correlation identifier linking records created in the same decomposition pass.</param>
@@ -227,6 +294,32 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
             UtcOffset = entry.UtcOffset,
             CorrelationId = correlationId
         };
+    }
+
+    private static bool TryGetString(Dictionary<string, object> props, string key, out string value)
+    {
+        value = default!;
+        if (!props.TryGetValue(key, out var obj))
+            return false;
+
+        if (obj is string s) { value = s; return true; }
+        if (obj is System.Text.Json.JsonElement el && el.ValueKind == System.Text.Json.JsonValueKind.String)
+        { value = el.GetString()!; return true; }
+
+        return false;
+    }
+
+    private static bool TryGetDouble(Dictionary<string, object> props, string key, out double value)
+    {
+        value = default;
+        if (!props.TryGetValue(key, out var obj))
+            return false;
+
+        if (obj is double d) { value = d; return true; }
+        if (obj is System.Text.Json.JsonElement el && el.TryGetDouble(out var elVal))
+        { value = elVal; return true; }
+
+        return false;
     }
 
     /// <summary>

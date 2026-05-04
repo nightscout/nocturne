@@ -1,6 +1,7 @@
 using Nocturne.Connectors.MyLife.Mappers.Constants;
 using Nocturne.Connectors.MyLife.Mappers.Helpers;
 using Nocturne.Connectors.MyLife.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.MyLife.Mappers;
 
@@ -30,6 +31,7 @@ internal sealed class MyLifeContext
         EnableTempBasalConsolidation = enableTempBasalConsolidation;
     }
 
+    internal List<DecompositionBatch> DecompositionBatches { get; } = [];
     internal Dictionary<string, double> BolusCarbMatches { get; }
     internal HashSet<long> SuppressedCarbTimes { get; }
     internal HashSet<long> TempBasalTimes { get; }

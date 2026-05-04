@@ -13,7 +13,7 @@ namespace Nocturne.API.Attributes;
 /// <remarks>
 /// Checks the <see cref="AuthContext.AuthType"/> set by <see cref="Middleware.AuthenticationMiddleware"/>
 /// and only allows <see cref="AuthType.InstanceKey"/>. All other auth types (including
-/// <see cref="AuthType.ApiSecret"/>, <see cref="AuthType.SessionCookie"/>, etc.) are rejected.
+/// <see cref="AuthType.ApiKey"/>, <see cref="AuthType.SessionCookie"/>, etc.) are rejected.
 /// </remarks>
 /// <seealso cref="Middleware.AuthenticationMiddleware"/>
 /// <seealso cref="AuthContext"/>

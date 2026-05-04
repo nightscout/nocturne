@@ -1,7 +1,7 @@
 using Nocturne.Core.Contracts.Monitoring;
-using Nocturne.Core.Contracts.Profiles;
-using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Monitoring;
 
@@ -23,11 +23,16 @@ public class PumpAlertService : IPumpAlertService
     ];
 
     private readonly IOpenApsService _openApsService;
+    private readonly ITherapySettingsResolver _therapySettings;
     private readonly ILogger<PumpAlertService> _logger;
 
-    public PumpAlertService(IOpenApsService openApsService, ILogger<PumpAlertService> logger)
+    public PumpAlertService(
+        IOpenApsService openApsService,
+        ITherapySettingsResolver therapySettings,
+        ILogger<PumpAlertService> logger)
     {
         _openApsService = openApsService;
+        _therapySettings = therapySettings;
         _logger = logger;
     }
 
@@ -84,39 +89,13 @@ public class PumpAlertService : IPumpAlertService
 
     /// <inheritdoc />
     public PumpStatusResult BuildPumpStatus(
-        IEnumerable<DeviceStatus> deviceStatuses,
+        PumpSnapshot? pumpSnapshot,
         long currentTime,
         PumpPreferences preferences,
-        IProfileService profileService,
         IEnumerable<Treatment>? treatments = null
     )
     {
-        var recentMills = currentTime - (preferences.UrgentClock * 2 * 60 * 1000);
-
-        // Filter to recent device statuses with pump data
-        var filtered = deviceStatuses
-            .Where(status => status.Pump is not null)
-            .Where(status => status.Mills <= currentTime && status.Mills >= recentMills)
-            .ToList();
-
-        // Find most recent by pump clock time
-        DeviceStatus? pumpStatus = null;
-        long bestClockMills = 0;
-
-        foreach (var status in filtered)
-        {
-            var clockMills = status.Pump?.Clock is not null
-                ? ParseDateTime(status.Pump.Clock)?.ToUnixTimeMilliseconds() ?? status.Mills
-                : status.Mills;
-
-            if (pumpStatus is null || clockMills > bestClockMills)
-            {
-                pumpStatus = status;
-                bestClockMills = clockMills;
-            }
-        }
-
-        return PrepareData(pumpStatus, preferences, currentTime, profileService, treatments);
+        return PrepareData(pumpSnapshot, preferences, currentTime, treatments);
     }
 
     /// <inheritdoc />
@@ -124,7 +103,6 @@ public class PumpAlertService : IPumpAlertService
         PumpStatusResult status,
         PumpPreferences preferences,
         long currentTime,
-        IProfileService profileService,
         IEnumerable<Treatment>? treatments = null
     )
     {
@@ -154,7 +132,6 @@ public class PumpAlertService : IPumpAlertService
         PumpPreferences preferences,
         bool isRetroMode,
         long currentTime,
-        IProfileService profileService,
         IEnumerable<Treatment>? treatments = null
     )
     {
@@ -230,30 +207,28 @@ public class PumpAlertService : IPumpAlertService
     #region Private Methods
 
     private PumpStatusResult PrepareData(
-        DeviceStatus? prop,
+        PumpSnapshot? snapshot,
         PumpPreferences preferences,
         long currentTime,
-        IProfileService profileService,
         IEnumerable<Treatment>? treatments
     )
     {
-        var pump = prop?.Pump;
-        var batteryWarn = ShouldWarnBattery(preferences, currentTime, profileService);
+        var batteryWarn = ShouldWarnBattery(preferences, currentTime);
 
         var result = new PumpStatusResult
         {
             Level = PumpAlertLevel.None,
             Title = "Pump Status",
-            Manufacturer = pump?.Manufacturer,
-            Model = pump?.Model,
-            Extended = pump?.Extended,
-            SourceDeviceStatus = prop,
+            Manufacturer = snapshot?.Manufacturer,
+            Model = snapshot?.Model,
+            Extended = snapshot?.AdditionalProperties,
+            SourcePumpSnapshot = snapshot,
         };
 
         // Clock
-        if (pump?.Clock is not null)
+        if (snapshot?.Clock is not null)
         {
-            var clockTime = ParseDateTime(pump.Clock);
+            var clockTime = ParseDateTime(snapshot.Clock);
             if (clockTime.HasValue)
             {
                 result.Clock = new PumpFieldStatus
@@ -267,12 +242,12 @@ public class PumpAlertService : IPumpAlertService
         }
 
         // Reservoir
-        if (pump?.Reservoir is not null || pump?.Reservoir == 0)
+        if (snapshot?.Reservoir is not null)
         {
-            result.Reservoir = new PumpFieldStatus { Value = pump.Reservoir, Label = "Reservoir" };
-            UpdateReservoirLevel(result.Reservoir, preferences, pump);
+            result.Reservoir = new PumpFieldStatus { Value = snapshot.Reservoir, Label = "Reservoir" };
+            UpdateReservoirLevel(result.Reservoir, preferences, snapshot);
         }
-        else if (pump?.Manufacturer == "Insulet")
+        else if (snapshot?.Manufacturer == "Insulet")
         {
             // Omnipod default display
             result.Reservoir = new PumpFieldStatus
@@ -284,21 +259,21 @@ public class PumpAlertService : IPumpAlertService
         }
 
         // Battery
-        if (pump?.Battery?.Percent is not null)
+        if (snapshot?.BatteryPercent is not null)
         {
             result.Battery = new PumpFieldStatus
             {
-                Value = pump.Battery.Percent,
+                Value = snapshot.BatteryPercent,
                 Unit = "percent",
                 Label = "Battery",
             };
             UpdateBatteryLevel(result.Battery, "%", preferences, batteryWarn);
         }
-        else if (pump?.Battery?.Voltage is not null)
+        else if (snapshot?.BatteryVoltage is not null)
         {
             result.Battery = new PumpFieldStatus
             {
-                Value = pump.Battery.Voltage,
+                Value = snapshot.BatteryVoltage,
                 Unit = "volts",
                 Label = "Battery",
             };
@@ -306,14 +281,14 @@ public class PumpAlertService : IPumpAlertService
         }
 
         // Status
-        if (pump?.Status is not null)
+        if (snapshot?.PumpStatus is not null || snapshot?.Bolusing is not null || snapshot?.Suspended is not null)
         {
-            var statusValue = pump.Status.Status ?? "normal";
-            if (pump.Status.Bolusing == true)
+            var statusValue = snapshot.PumpStatus ?? "normal";
+            if (snapshot.Bolusing == true)
             {
                 statusValue = "bolusing";
             }
-            else if (pump.Status.Suspended == true)
+            else if (snapshot.Suspended == true)
             {
                 statusValue = "suspended";
             }
@@ -326,7 +301,7 @@ public class PumpAlertService : IPumpAlertService
                 Level = PumpAlertLevel.None,
             };
 
-            if (preferences.WarnOnSuspend && pump.Status.Suspended == true)
+            if (preferences.WarnOnSuspend && snapshot.Suspended == true)
             {
                 result.Status.Level = PumpAlertLevel.Warn;
                 result.Status.Message = "Pump Suspended";
@@ -334,12 +309,12 @@ public class PumpAlertService : IPumpAlertService
         }
 
         // Device
-        if (prop?.Device is not null)
+        if (snapshot?.Device is not null)
         {
             result.Device = new PumpFieldStatus
             {
-                Value = prop.Device,
-                Display = prop.Device,
+                Value = snapshot.Device,
+                Display = snapshot.Device,
                 Label = "Device",
             };
         }
@@ -410,10 +385,10 @@ public class PumpAlertService : IPumpAlertService
     private static void UpdateReservoirLevel(
         PumpFieldStatus reservoir,
         PumpPreferences preferences,
-        PumpStatus pump
+        PumpSnapshot snapshot
     )
     {
-        var value = pump.Reservoir ?? 0;
+        var value = snapshot.Reservoir ?? 0;
         reservoir.Display = $"{value:F1}U";
 
         if (value < preferences.UrgentRes)
@@ -431,15 +406,10 @@ public class PumpAlertService : IPumpAlertService
             reservoir.Level = PumpAlertLevel.None;
         }
 
-        // Apply overrides
-        if (!string.IsNullOrEmpty(pump.ReservoirDisplayOverride))
+        // Apply display override
+        if (!string.IsNullOrEmpty(snapshot.ReservoirDisplay))
         {
-            reservoir.Display = pump.ReservoirDisplayOverride;
-        }
-
-        if (pump.ReservoirLevelOverride.HasValue)
-        {
-            reservoir.Level = pump.ReservoirLevelOverride.Value;
+            reservoir.Display = snapshot.ReservoirDisplay;
         }
     }
 
@@ -494,8 +464,7 @@ public class PumpAlertService : IPumpAlertService
 
     private bool ShouldWarnBattery(
         PumpPreferences preferences,
-        long currentTime,
-        IProfileService profileService
+        long currentTime
     )
     {
         if (!preferences.WarnBattQuietNight)
@@ -503,7 +472,7 @@ public class PumpAlertService : IPumpAlertService
 
         try
         {
-            var timezone = profileService.GetTimezone();
+            var timezone = _therapySettings.GetTimezoneAsync().GetAwaiter().GetResult();
             if (string.IsNullOrEmpty(timezone))
                 return true;
 

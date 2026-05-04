@@ -130,4 +130,16 @@ public class CoachMarkService : ICoachMarkService
             throw;
         }
     }
+
+    /// <inheritdoc />
+    public async Task DeleteAllAsync(CancellationToken cancellationToken = default)
+    {
+        var subjectId = SubjectId;
+
+        _logger.LogDebug("Deleting all coach mark states for subject {SubjectId}", subjectId);
+
+        await _dbContext.CoachMarkStates
+            .Where(e => e.SubjectId == subjectId)
+            .ExecuteDeleteAsync(cancellationToken);
+    }
 }

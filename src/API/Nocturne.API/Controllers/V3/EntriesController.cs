@@ -9,8 +9,6 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Extensions;
-using Nocturne.Core.Contracts.Repositories;
-
 namespace Nocturne.API.Controllers.V3;
 
 /// <summary>
@@ -18,7 +16,6 @@ namespace Nocturne.API.Controllers.V3;
 /// Implements the /api/v3/entries endpoints with pagination, field selection, sorting, and advanced filtering.
 /// </summary>
 /// <seealso cref="IEntryService"/>
-/// <seealso cref="IEntryRepository"/>
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="Entry"/>
 /// <seealso cref="BaseV3Controller{T}"/>
@@ -27,12 +24,10 @@ namespace Nocturne.API.Controllers.V3;
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class EntriesController : BaseV3Controller<Entry>
 {
-    private readonly IEntryRepository _entries;
     private readonly IEntryService _entryService;
     private readonly IAlertOrchestrator _alertOrchestrator;
 
     public EntriesController(
-        IEntryRepository entries,
         IDocumentProcessingService documentProcessingService,
         IEntryService entryService,
         IAlertOrchestrator alertOrchestrator,
@@ -40,7 +35,6 @@ public class EntriesController : BaseV3Controller<Entry>
     )
         : base(documentProcessingService, logger)
     {
-        _entries = entries;
         _entryService = entryService;
         _alertOrchestrator = alertOrchestrator;
     }
@@ -94,8 +88,8 @@ public class EntriesController : BaseV3Controller<Entry>
             var hasSortDesc = HttpContext?.Request.Query.ContainsKey("sort$desc") ?? false;
             var reverseResults = !hasSortDesc && ExtractSortDirection(parameters.Sort);
 
-            // Get entries using existing V1 backend with V3 parameters
-            var entries = await _entries.GetEntriesWithAdvancedFilterAsync(
+            // Get entries using service layer with V3 parameters
+            var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
                 type: type,
                 count: parameters.Limit,
                 skip: parameters.Offset,
@@ -159,7 +153,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
         try
         {
-            var entry = await _entries.GetEntryByIdAsync(id, cancellationToken);
+            var entry = await _entryService.GetEntryByIdAsync(id, cancellationToken);
 
             if (entry == null)
             {
@@ -406,7 +400,7 @@ public class EntriesController : BaseV3Controller<Entry>
             var processedEntry = _documentProcessingService.ProcessEntry(entry);
 
             // Update in database
-            var updatedEntry = await _entries.UpdateEntryAsync(
+            var updatedEntry = await _entryService.UpdateEntryAsync(
                 id,
                 processedEntry,
                 cancellationToken
@@ -458,7 +452,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
         try
         {
-            var deleted = await _entries.DeleteEntryAsync(id, cancellationToken);
+            var deleted = await _entryService.DeleteEntryAsync(id, cancellationToken);
 
             if (!deleted)
             {
@@ -509,10 +503,16 @@ public class EntriesController : BaseV3Controller<Entry>
         {
             limit = Math.Min(Math.Max(limit, 1), 1000);
 
-            var entries = await _entries.GetEntriesModifiedSinceAsync(
-                lastModified,
-                limit,
-                cancellationToken
+            // Build a find query for entries since the given timestamp
+            var findQuery = $"{{\"date\":{{\"$gte\":{lastModified}}}}}";
+            var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
+                type: null,
+                count: limit,
+                skip: 0,
+                findQuery: findQuery,
+                dateString: null,
+                reverseResults: false,
+                cancellationToken: cancellationToken
             );
             var v3Entries = entries.ToV3Responses().ToList();
             return CreateV3SuccessResponse(v3Entries);
@@ -635,25 +635,6 @@ public class EntriesController : BaseV3Controller<Entry>
             return null;
 
         return JsonSerializer.Serialize(conditions);
-    }
-
-    private async Task<long> GetTotalCountAsync(
-        string? type,
-        string? findQuery,
-        CancellationToken cancellationToken
-    )
-    {
-        try
-        {
-            // Use the count endpoint to get total
-            return await _entries.CountEntriesAsync(findQuery, type, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get total count for V3 entries, using estimate");
-            // Return a reasonable estimate if count fails
-            return 1000;
-        }
     }
 
     private DateTimeOffset GetLastModified(List<Entry> entries)

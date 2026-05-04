@@ -2,6 +2,7 @@ import type { CoachMarkAdapter, MarkState, MarkStatus } from "@nocturne/coach";
 import {
   getAll,
   updateStatus,
+  deleteAll as deleteAllRemote,
 } from "$lib/api/generated/coachMarks.generated.remote";
 
 /**
@@ -23,6 +24,10 @@ export function createCoachMarkAdapter(): CoachMarkAdapter {
 
     async update(key: string, status: MarkStatus): Promise<void> {
       await updateStatus({ key, request: { status } });
+    },
+
+    async deleteAll(): Promise<void> {
+      await deleteAllRemote();
     },
   };
 }

@@ -6,6 +6,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Models.OAuth;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
+using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.Authentication;
 
@@ -542,6 +543,7 @@ public class OAuthController : ControllerBase
     /// <param name="request">Contains the <c>user_code</c> and the user's approval decision.</param>
     /// <returns><c>200 OK</c> with <c>approved: true/false</c>, or <c>400</c> if the code is invalid or already processed.</returns>
     [HttpPost("device-approve")]
+    [RemoteCommand]
     [EnableRateLimiting("oauth-device-approve")]
     [Consumes("application/x-www-form-urlencoded")]
     [ProducesResponseType(StatusCodes.Status200OK)]

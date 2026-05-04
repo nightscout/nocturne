@@ -62,6 +62,14 @@ declare global {
 			 * Whether the current user is a platform administrator
 			 */
 			isPlatformAdmin: boolean;
+			/**
+			 * Whether the current session is a guest link session (read-only, no subjectId)
+			 */
+			isGuestSession?: boolean;
+			/**
+			 * ISO datetime when the guest session expires (only set for guest sessions)
+			 */
+			guestExpiresAt?: string;
 		}
 
 		// Base page data interface for the main app

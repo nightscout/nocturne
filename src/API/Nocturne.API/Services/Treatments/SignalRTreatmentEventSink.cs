@@ -13,7 +13,7 @@ namespace Nocturne.API.Services.Treatments;
 /// <remarks>
 /// Unlike <see cref="SignalREntryEventSink"/>, this sink does not perform cache invalidation or
 /// V4 decomposition — those responsibilities belong to <see cref="TreatmentService"/> and
-/// <see cref="DualPathTreatmentStore"/> respectively.
+/// <see cref="TreatmentReadService"/> respectively.
 /// Broadcast failures are caught and logged without propagating.
 /// </remarks>
 /// <seealso cref="IDataEventSink{T}"/>

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace Nocturne.API.Tests.GoldenFiles.Infrastructure;
@@ -66,40 +67,29 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
     }
 
     /// <summary>
-    /// Seed entry entities directly into the SQLite database.
+    /// Seed sensor glucose entities directly into the SQLite database.
     /// </summary>
-    protected async Task SeedEntries(params EntryEntity[] entries)
+    protected async Task SeedSensorGlucose(params SensorGlucoseEntity[] entities)
     {
         using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        db.Entries.AddRange(entries);
+        db.SensorGlucose.AddRange(entities);
         await db.SaveChangesAsync();
     }
 
     /// <summary>
-    /// Seed treatment entities directly into the SQLite database.
+    /// Seed meter glucose entities directly into the SQLite database.
     /// </summary>
-    protected async Task SeedTreatments(params TreatmentEntity[] treatments)
+    protected async Task SeedMeterGlucose(params MeterGlucoseEntity[] entities)
     {
         using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        db.Treatments.AddRange(treatments);
+        db.MeterGlucose.AddRange(entities);
         await db.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Seed device status entities directly into the SQLite database.
-    /// </summary>
-    protected async Task SeedDeviceStatuses(params DeviceStatusEntity[] statuses)
-    {
-        using var scope = Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        db.DeviceStatuses.AddRange(statuses);
-        await db.SaveChangesAsync();
-    }
 
     /// <summary>
     /// Seed food entities directly into the SQLite database.
@@ -110,18 +100,6 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
         var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
         db.Foods.AddRange(foods);
-        await db.SaveChangesAsync();
-    }
-
-    /// <summary>
-    /// Seed profile entities directly into the SQLite database.
-    /// </summary>
-    protected async Task SeedProfiles(params ProfileEntity[] profiles)
-    {
-        using var scope = Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        db.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        db.Profiles.AddRange(profiles);
         await db.SaveChangesAsync();
     }
 
@@ -150,7 +128,7 @@ public abstract class GoldenFileTestBase : IClassFixture<GoldenFileWebAppFactory
         // Use raw SQLite connection directly (same shared connection used by all DbContexts)
         // to delete all data, bypassing EF query filters and change tracking.
         using var cmd = Factory.Connection.CreateCommand();
-        cmd.CommandText = "DELETE FROM entries; DELETE FROM treatments; DELETE FROM devicestatus; DELETE FROM foods; DELETE FROM profiles;";
+        cmd.CommandText = "DELETE FROM aps_snapshots; DELETE FROM pump_snapshots; DELETE FROM uploader_snapshots; DELETE FROM device_status_extras; DELETE FROM foods; DELETE FROM sensor_glucose; DELETE FROM meter_glucose; DELETE FROM calibrations;";
         cmd.ExecuteNonQuery();
         return Task.CompletedTask;
     }

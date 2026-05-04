@@ -2,8 +2,8 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 
 /// <summary>
 /// Core service for tenant lifecycle management: provisioning, configuration,
-/// membership administration, and API secret rotation. Tenants are the
-/// top-level isolation boundary enforced via PostgreSQL Row Level Security.
+/// and membership administration. Tenants are the top-level isolation
+/// boundary enforced via PostgreSQL Row Level Security.
 /// </summary>
 /// <seealso cref="ITenantAccessor"/>
 /// <seealso cref="TenantContext"/>
@@ -12,10 +12,10 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 public interface ITenantService
 {
     /// <summary>Creates a new tenant with the specified subject as its owner.</summary>
-    Task<TenantCreatedDto> CreateAsync(string slug, string displayName, Guid creatorSubjectId, string? apiSecret = null, CancellationToken ct = default);
+    Task<TenantCreatedDto> CreateAsync(string slug, string displayName, Guid creatorSubjectId, CancellationToken ct = default);
 
     /// <summary>Creates a new tenant without assigning an owner.</summary>
-    Task<TenantCreatedDto> CreateWithoutOwnerAsync(string slug, string displayName, string? apiSecret = null, CancellationToken ct = default);
+    Task<TenantCreatedDto> CreateWithoutOwnerAsync(string slug, string displayName, CancellationToken ct = default);
 
     /// <summary>Re-seeds roles, public membership, and OAuth clients for an existing tenant after a data purge.</summary>
     Task SeedAfterResetAsync(Guid tenantId, CancellationToken ct = default);
@@ -44,15 +44,6 @@ public interface ITenantService
     /// <summary>Checks whether a slug is valid and available for use.</summary>
     Task<SlugValidationResult> ValidateSlugAsync(string slug, CancellationToken ct = default);
 
-    /// <summary>Replaces the tenant's API secret with the provided value.</summary>
-    Task<string> UpdateApiSecretAsync(Guid tenantId, string newApiSecret, CancellationToken ct = default);
-
-    /// <summary>Generates and stores a new random API secret for the tenant.</summary>
-    Task<string> RegenerateApiSecretAsync(Guid tenantId, CancellationToken ct = default);
-
-    /// <summary>Returns whether the tenant has an API secret configured.</summary>
-    Task<bool> HasApiSecretAsync(Guid tenantId, CancellationToken ct = default);
-
     /// <summary>Creates a new tenant and its owner subject in a single operation, using either a passkey credential or an OIDC identity.</summary>
     Task<ProvisionResult> ProvisionWithOwnerAsync(
         string slug, string displayName, string ownerUsername, string ownerEmail,
@@ -62,7 +53,7 @@ public interface ITenantService
 
 public record TenantDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt);
 
-public record TenantCreatedDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt, string ApiSecret);
+public record TenantCreatedDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt);
 
 public record TenantDetailDto(Guid Id, string Slug, string DisplayName, bool IsActive, DateTime SysCreatedAt, List<TenantMemberDto> Members);
 

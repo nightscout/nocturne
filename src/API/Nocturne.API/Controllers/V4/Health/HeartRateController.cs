@@ -10,11 +10,10 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Health;
 
 /// <summary>
-/// Controller for heart rate data recorded by xDrip and compatible apps.
+/// Controller for heart rate data from diabetes apps and wearables.
 /// </summary>
 /// <remarks>
-/// Heart rate readings are ingested from xDrip's heart rate logging feature
-/// and stored as time-series observations. All operations delegate to
+/// Heart rate readings are stored as time-series observations. All operations delegate to
 /// <see cref="IHeartRateService"/>. Callers must hold the <c>read:health</c>
 /// or <c>write:health</c> scope as appropriate.
 /// </remarks>
@@ -35,12 +34,14 @@ public class HeartRateController : ControllerBase
     }
 
     /// <summary>
-    /// Get heart rate records with optional pagination
+    /// Get heart rate records with optional pagination and date filtering
     /// </summary>
-    /// <param name="count">Maximum number of records to return (default: 10)</param>
-    /// <param name="skip">Number of records to skip for pagination (default: 0)</param>
+    /// <param name="count">Maximum number of records to return (default: 10, ignored when from/to are specified)</param>
+    /// <param name="skip">Number of records to skip for pagination (default: 0, ignored when from/to are specified)</param>
+    /// <param name="from">Start of date range (inclusive). When specified with 'to', returns all records in range.</param>
+    /// <param name="to">End of date range (exclusive). When specified with 'from', returns all records in range.</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>List of heart rate records ordered by most recent first</returns>
+    /// <returns>List of heart rate records</returns>
     [HttpGet]
     [RemoteQuery]
     [RequireScope(OAuthScopes.HeartRateRead)]
@@ -49,12 +50,19 @@ public class HeartRateController : ControllerBase
     public async Task<ActionResult<IEnumerable<HeartRate>>> GetHeartRates(
         [FromQuery] int count = 10,
         [FromQuery] int skip = 0,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
         CancellationToken cancellationToken = default
     )
     {
         try
         {
-            var records = await _heartRateService.GetHeartRatesAsync(count, skip, cancellationToken);
+            IEnumerable<HeartRate> records;
+            if (from.HasValue && to.HasValue)
+                records = await _heartRateService.GetHeartRatesByDateRangeAsync(from.Value, to.Value, cancellationToken);
+            else
+                records = await _heartRateService.GetHeartRatesAsync(count, skip, cancellationToken);
+
             return Ok(records);
         }
         catch (Exception ex)

@@ -1,109 +1,46 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-  } from "$lib/components/ui/card";
-  import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-  } from "$lib/components/ui/table";
-  import { Edit, Trash2 } from "lucide-svelte";
-  import { getFoodState } from "./food-context.js";
-  import FoodFilters from "./FoodFilters.svelte";
-  import type { FoodRecord } from "./types";
-  import { getGiLabel } from "$lib/components/food";
+  import { getFoodState } from './food-context';
+  import FoodRow from './FoodRow.svelte';
+  import FoodListHeader from './FoodListHeader.svelte';
+  import InlineEditor from './InlineEditor.svelte';
+  import type { Food } from '$api';
 
-  interface Props {
-    handleFoodDragStart: (event: DragEvent, food: FoodRecord) => void;
-    handleFoodDragEnd: (event: DragEvent) => void;
-    onDeleteRequest: (food: FoodRecord) => void;
+  const state = getFoodState();
+  const PAGE_SIZE = 60;
+
+  function handleToggle(foodId: string | undefined) {
+    if (!foodId) return;
+    state.expandedId = state.expandedId === foodId ? null : foodId;
   }
 
-  let { handleFoodDragStart, handleFoodDragEnd, onDeleteRequest }: Props = $props();
-
-  const foodStore = getFoodState();
+  async function handleSave(draft: Food) {
+    await state.saveFood(draft);
+  }
 </script>
 
-<Card>
-  <CardHeader>
-    <CardTitle>Your database</CardTitle>
-  </CardHeader>
-  <CardContent class="space-y-4">
-    <!-- Filters -->
-    <FoodFilters />
-    <!-- Food List -->
-    <div class="border rounded-lg max-h-64 overflow-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead class="w-20">Actions</TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead class="text-center font-semibold">Carbs</TableHead>
-            <TableHead class="text-center font-semibold">GI</TableHead>
-            <TableHead class="text-center">Portion</TableHead>
-            <TableHead>Category</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {#each foodStore.filteredFoodList as food}
-            <TableRow
-              class="draggable-food cursor-grab"
-              role="button"
-              tabindex={0}
-              draggable="true"
-              ondragstart={(e) => handleFoodDragStart(e, food)}
-              ondragend={handleFoodDragEnd}
-            >
-              <TableCell>
-                <div class="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onclick={() => foodStore.editFood(food)}
-                    title="Edit food"
-                  >
-                    <Edit class="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onclick={() => onDeleteRequest(food)}
-                    title="Delete food"
-                  >
-                    <Trash2 class="h-3 w-3" />
-                  </Button>
-                </div>
-              </TableCell>
-              <TableCell class="truncate max-w-[200px]" title={food.name}>
-                {food.name}
-              </TableCell>
-              <TableCell class="text-center font-medium">
-                {food.carbs}g
-              </TableCell>
-              <TableCell class="text-center">{getGiLabel(food.gi)}</TableCell>
-              <TableCell class="text-center text-muted-foreground">
-                {food.portion}
-                {food.unit}
-              </TableCell>
-              <TableCell class="truncate max-w-[150px] text-muted-foreground">
-                {#if food.category}
-                  {food.category}{#if food.subcategory}
-                    / {food.subcategory}{/if}
-                {:else}
-                  —
-                {/if}
-              </TableCell>
-            </TableRow>
-          {/each}
-        </TableBody>
-      </Table>
+<FoodListHeader sort={state.sort} onsort={(s) => (state.sort = s)} />
+
+<div>
+  {#each state.filteredFoods.slice(0, PAGE_SIZE) as food (food._id)}
+    <FoodRow
+      {food}
+      expanded={state.expandedId === food._id}
+      favorite={state.isFavorite(food._id)}
+      ontoggle={() => handleToggle(food._id)}
+      onfavorite={() => state.toggleFavorite(food._id)}
+    />
+    {#if state.expandedId === food._id}
+      <InlineEditor
+        {food}
+        onsave={handleSave}
+        oncancel={() => (state.expandedId = null)}
+      />
+    {/if}
+  {/each}
+
+  {#if state.filteredFoods.length > PAGE_SIZE}
+    <div class="border-t border-border py-3.5 text-center text-xs text-muted-foreground/60">
+      Showing {PAGE_SIZE} of {state.filteredFoods.length} — scroll or refine search to see more
     </div>
-  </CardContent>
-</Card>
+  {/if}
+</div>

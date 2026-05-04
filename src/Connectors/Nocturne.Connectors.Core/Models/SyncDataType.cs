@@ -7,8 +7,10 @@ public enum SyncDataType
 {
     Glucose,
     ManualBG,
+    Calibrations,
     Boluses,
     CarbIntake,
+    BGChecks,
     BolusCalculations,
     Notes,
     DeviceEvents,

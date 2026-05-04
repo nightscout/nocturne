@@ -16,11 +16,6 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// <seealso cref="IConditionEvaluator"/>
 public class ThresholdEvaluator : IConditionEvaluator
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true
-    };
 
     /// <inheritdoc/>
     public AlertConditionType ConditionType => AlertConditionType.Threshold;
@@ -28,24 +23,26 @@ public class ThresholdEvaluator : IConditionEvaluator
     /// <inheritdoc/>
     /// <param name="conditionParamsJson">JSON representation of a <see cref="ThresholdCondition"/>.</param>
     /// <param name="context">Current sensor context containing <see cref="SensorContext.LatestValue"/>.</param>
+    /// <param name="ct">Cancellation token (unused; this evaluator performs no I/O).</param>
     /// <returns>
     /// <see langword="true"/> when the latest glucose value satisfies the configured
     /// direction (<c>above</c> or <c>below</c>) and threshold value.
     /// </returns>
-    public bool Evaluate(string conditionParamsJson, SensorContext context)
+    public Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
         if (context.LatestValue is null)
-            return false;
+            return Task.FromResult(false);
 
-        var condition = JsonSerializer.Deserialize<ThresholdCondition>(conditionParamsJson, JsonOptions);
+        var condition = JsonSerializer.Deserialize<ThresholdCondition>(conditionParamsJson, EvaluatorJson.Options);
         if (condition is null)
-            return false;
+            return Task.FromResult(false);
 
-        return condition.Direction.ToLowerInvariant() switch
+        var result = condition.Direction.ToLowerInvariant() switch
         {
             "below" => context.LatestValue.Value < condition.Value,
             "above" => context.LatestValue.Value > condition.Value,
             _ => false
         };
+        return Task.FromResult(result);
     }
 }

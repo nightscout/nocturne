@@ -14,7 +14,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Cache.Configuration;
 using Nocturne.Infrastructure.Data;
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using Xunit;
@@ -27,7 +27,7 @@ namespace Nocturne.API.Tests.Services;
 public class CacheIntegrationTests
 {
     private readonly Mock<IEntryStore> _mockEntryStore;
-    private readonly Mock<IEntryRepository> _mockEntryRepository;
+    private readonly Mock<IEntryDecomposer> _mockEntryDecomposer;
     private readonly Mock<IEntryCache> _mockEntryCache;
     private readonly Mock<IDataEventSink<Entry>> _mockEntryEvents;
     private readonly Mock<ICacheService> _mockCacheService;
@@ -39,7 +39,7 @@ public class CacheIntegrationTests
     public CacheIntegrationTests()
     {
         _mockEntryStore = new Mock<IEntryStore>();
-        _mockEntryRepository = new Mock<IEntryRepository>();
+        _mockEntryDecomposer = new Mock<IEntryDecomposer>();
         _mockEntryCache = new Mock<IEntryCache>();
         _mockEntryEvents = new Mock<IDataEventSink<Entry>>();
         _mockCacheService = new Mock<ICacheService>();
@@ -73,7 +73,7 @@ public class CacheIntegrationTests
 
         var entryService = new EntryService(
             _mockEntryStore.Object,
-            _mockEntryRepository.Object,
+            _mockEntryDecomposer.Object,
             _mockEntryCache.Object,
             _mockEntryEvents.Object,
             _mockEntryLogger.Object
@@ -129,7 +129,7 @@ public class CacheIntegrationTests
 
         var entryService = new EntryService(
             _mockEntryStore.Object,
-            _mockEntryRepository.Object,
+            _mockEntryDecomposer.Object,
             _mockEntryCache.Object,
             _mockEntryEvents.Object,
             _mockEntryLogger.Object
@@ -153,7 +153,7 @@ public class CacheIntegrationTests
     [Fact]
     [Trait("Category", "Integration")]
     [Trait("Category", "Cache")]
-    public async Task CreateEntriesAsync_InvalidatesCache()
+    public async Task CreateEntriesAsync_DecomposesToV4AndFiresEvents()
     {
         // Arrange
         var newEntries = new List<Entry>
@@ -167,13 +167,13 @@ public class CacheIntegrationTests
             },
         };
 
-        _mockEntryRepository
-            .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(newEntries);
+        _mockEntryDecomposer
+            .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Core.Models.V4.DecompositionResult());
 
         var entryService = new EntryService(
             _mockEntryStore.Object,
-            _mockEntryRepository.Object,
+            _mockEntryDecomposer.Object,
             _mockEntryCache.Object,
             _mockEntryEvents.Object,
             _mockEntryLogger.Object
@@ -186,9 +186,9 @@ public class CacheIntegrationTests
         Assert.NotNull(result);
         Assert.Single(result);
 
-        // Verify cache was invalidated and events fired
-        _mockEntryCache.Verify(
-            x => x.InvalidateAsync(It.IsAny<CancellationToken>()),
+        // Verify decomposition happened and events fired (cache invalidation is handled by the event sink)
+        _mockEntryDecomposer.Verify(
+            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
         _mockEntryEvents.Verify(

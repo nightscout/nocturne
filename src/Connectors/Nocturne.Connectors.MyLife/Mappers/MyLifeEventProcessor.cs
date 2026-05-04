@@ -67,6 +67,7 @@ public class MyLifeEventProcessor
             }
         }
 
+        result.DecompositionBatches.AddRange(context.DecompositionBatches);
         return result;
     }
 }
@@ -76,6 +77,7 @@ public class MyLifeEventProcessor
 /// </summary>
 public class MyLifeResult
 {
+    public List<DecompositionBatch> DecompositionBatches { get; } = [];
     public List<Bolus> Boluses { get; } = [];
     public List<CarbIntake> CarbIntakes { get; } = [];
     public List<BGCheck> BGChecks { get; } = [];

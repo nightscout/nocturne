@@ -40,7 +40,6 @@ public class TenantResolutionMiddleware
     private static readonly string[] TenantlessAllowedPaths =
     [
         "/api/v4/me/tenants/validate-slug",
-        "/api/admin/tenants/validate-slug",
         "/api/v4/admin/tenants/validate-slug",
         "/api/metadata",
         "/api/v4/chat-identity/directory/resolve",
@@ -55,8 +54,9 @@ public class TenantResolutionMiddleware
     /// </summary>
     private static readonly string[] TenantlessAllowedPrefixes =
     [
-        "/api/admin/tenants",
+        "/api/auth/passkey/setup/",
         "/api/v4/admin/tenants",
+        "/api/v4/dev-only/",
         "/api/v4/platform/",
         "/api/v4/setup/",
     ];
@@ -83,23 +83,35 @@ public class TenantResolutionMiddleware
         // Apex domain (no subdomain) with a non-tenantless path.
         // If no tenants exist yet, return 503 setup_required so the
         // frontend redirects to /setup instead of showing a 404.
+        // If exactly one tenant exists, auto-resolve to it (single-tenant mode).
         if (slug == null)
         {
-            var anyTenantExists = await AnyTenantExistsAsync(context.RequestServices);
-            if (!anyTenantExists)
+            var soleTenant = await GetSoleTenantAsync(context.RequestServices);
+            if (soleTenant == null)
             {
-                _logger.LogInformation("No tenants exist — returning 503 setup_required");
-                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-                context.Response.ContentType = "application/json";
-                await context.Response.WriteAsJsonAsync(new
+                var anyTenantExists = await AnyTenantExistsAsync(context.RequestServices);
+                if (!anyTenantExists)
                 {
-                    error = "setup_required",
-                    setupRequired = true,
-                });
+                    _logger.LogInformation("No tenants exist — returning 503 setup_required");
+                    context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                    context.Response.ContentType = "application/json";
+                    await context.Response.WriteAsJsonAsync(new
+                    {
+                        error = "setup_required",
+                        setupRequired = true,
+                    });
+                    return;
+                }
+
+                // Multiple tenants but no subdomain — can't determine which one.
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
                 return;
             }
 
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            // Single tenant: auto-resolve from the apex domain.
+            tenantAccessor.SetTenant(soleTenant);
+            context.Items["TenantContext"] = soleTenant;
+            await _next(context);
             return;
         }
 
@@ -178,5 +190,34 @@ public class TenantResolutionMiddleware
         var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
         await using var context = await factory.CreateDbContextAsync();
         return await context.Tenants.AsNoTracking().AnyAsync();
+    }
+
+    /// <summary>
+    /// Returns the sole active tenant if exactly one exists, enabling single-tenant
+    /// mode where the apex domain auto-resolves without a subdomain.
+    /// Returns null when zero or multiple tenants exist.
+    /// </summary>
+    private async Task<TenantContext?> GetSoleTenantAsync(IServiceProvider services)
+    {
+        var cacheKey = "tenant:__sole__";
+
+        if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
+            return cached;
+
+        var factory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+        await using var context = await factory.CreateDbContextAsync();
+
+        var tenants = await context.Tenants.AsNoTracking()
+            .Where(t => t.IsActive)
+            .Take(2)
+            .ToListAsync();
+
+        if (tenants.Count != 1)
+            return null;
+
+        var tenant = tenants[0];
+        var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive);
+        _cache.Set(cacheKey, tenantContext, CacheDuration);
+        return tenantContext;
     }
 }

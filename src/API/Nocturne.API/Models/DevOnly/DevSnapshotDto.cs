@@ -73,7 +73,6 @@ public class TenantEntityDto
     public Guid Id { get; set; }
     public string Slug { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
-    public string? ApiSecretHash { get; set; }
     public bool IsActive { get; set; }
     public DateTime? LastReadingAt { get; set; }
     public string Timezone { get; set; } = "UTC";

@@ -22,6 +22,7 @@ public static class UploaderSnapshotMapper
             Timestamp = model.Timestamp,
             UtcOffset = model.UtcOffset,
             Device = model.Device,
+            CorrelationId = model.CorrelationId,
             LegacyId = model.LegacyId,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
@@ -51,6 +52,7 @@ public static class UploaderSnapshotMapper
             Timestamp = entity.Timestamp,
             UtcOffset = entity.UtcOffset,
             Device = entity.Device,
+            CorrelationId = entity.CorrelationId,
             LegacyId = entity.LegacyId,
             CreatedAt = entity.SysCreatedAt,
             ModifiedAt = entity.SysUpdatedAt,
@@ -77,6 +79,7 @@ public static class UploaderSnapshotMapper
         entity.Timestamp = model.Timestamp;
         entity.UtcOffset = model.UtcOffset;
         entity.Device = model.Device;
+        entity.CorrelationId = model.CorrelationId;
         entity.LegacyId = model.LegacyId;
         entity.SysUpdatedAt = DateTime.UtcNow;
         entity.Name = model.Name;

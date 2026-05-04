@@ -22,7 +22,8 @@ public static class ModuleMap
         ],
         ["glucose-readings"] = [
             "EntryEntity", "SensorGlucoseEntity", "MeterGlucoseEntity",
-            "CalibrationEntity", "DeviceStatusEntity",
+            "CalibrationEntity", "ApsSnapshotEntity", "PumpSnapshotEntity",
+            "UploaderSnapshotEntity", "DeviceStatusExtrasEntity",
         ],
         ["treatments-events"] = [
             "TreatmentEntity", "TreatmentFoodEntity", "DecompositionBatchEntity",
@@ -36,7 +37,7 @@ public static class ModuleMap
         ["patient-food-activity"] = [
             "PatientRecordEntity", "PatientDeviceEntity", "PatientInsulinEntity",
             "FoodEntity", "UserFoodFavoriteEntity", "ConnectorFoodEntryEntity",
-            "ActivityEntity", "StepCountEntity", "HeartRateEntity", "BodyWeightEntity",
+            "StepCountEntity", "HeartRateEntity", "BodyWeightEntity",
         ],
         ["alerts-trackers"] = [
             "AlertRuleEntity", "AlertScheduleEntity", "AlertEscalationStepEntity",

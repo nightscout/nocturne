@@ -4,7 +4,7 @@
 
   // Redirect from legacy alarms page to new alerts page
   onMount(() => {
-    goto("/settings/alerts", { replaceState: true });
+    goto("/alerts", { replaceState: true });
   });
 </script>
 

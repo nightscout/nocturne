@@ -216,6 +216,20 @@ public class DeviceEventRepository : IDeviceEventRepository
     }
 
     /// <summary>
+    /// Deletes device event records matching the given data source and sync identifier.
+    /// </summary>
+    /// <param name="dataSource">The external data source name.</param>
+    /// <param name="syncIdentifier">The external sync identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The number of deleted records.</returns>
+    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default)
+    {
+        return await _context.AuditedExecuteDeleteAsync(
+            _context.DeviceEvents.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
+            _auditContext, ct);
+    }
+
+    /// <summary>
     /// Performs a bulk creation of device event records, handling deduplication.
     /// </summary>
     /// <param name="records">The collection of records to create.</param>
@@ -304,14 +318,19 @@ public class DeviceEventRepository : IDeviceEventRepository
     /// Gets the latest device event of a specific type.
     /// </summary>
     /// <param name="eventType">The type of device event.</param>
+    /// <param name="asOf">Optional upper bound on event timestamp; <c>null</c> means latest.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The latest device event, or null if none found.</returns>
-    public async Task<DeviceEvent?> GetLatestByEventTypeAsync(DeviceEventType eventType, CancellationToken ct = default)
+    public async Task<DeviceEvent?> GetLatestByEventTypeAsync(DeviceEventType eventType, DateTime? asOf, CancellationToken ct = default)
     {
         var eventTypeString = eventType.ToString();
-        var entity = await _context.DeviceEvents
+        var query = _context.DeviceEvents
             .AsNoTracking()
-            .Where(e => e.EventType == eventTypeString)
+            .Where(e => e.EventType == eventTypeString);
+        if (asOf is { } cutoff)
+            query = query.Where(e => e.Timestamp <= cutoff);
+
+        var entity = await query
             .OrderByDescending(e => e.Timestamp)
             .FirstOrDefaultAsync(ct);
 

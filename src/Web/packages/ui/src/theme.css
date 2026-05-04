@@ -2,10 +2,12 @@
 @plugin "@tailwindcss/typography";
 @import "tw-animate-css";
 
-/* Theme Imports - Both themes are loaded for runtime switching */
-/* Nocturne theme is default, Trio theme activates when .trio-theme class is on document */
+/* Theme Imports - All themes are loaded for runtime switching */
+/* Nocturne theme is default; others activate via class on document root */
 @import "./styles/nocturne-theme.css";
 @import "./styles/trio-theme.css";
+@import "./styles/aaps-theme.css";
+@import "./styles/classic-theme.css";
 
 @custom-variant dark (&:is(.dark *));
 

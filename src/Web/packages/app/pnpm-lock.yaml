@@ -1,0 +1,43 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@nocturne/bot':
+        specifier: workspace:*
+        version: link:../bot
+      '@nocturne/bridge':
+        specifier: workspace:*
+        version: link:../bridge
+      '@nocturne/coach':
+        specifier: workspace:*
+        version: link:../coach
+      '@nocturne/ui':
+        specifier: workspace:*
+        version: link:../ui
+    devDependencies:
+      openapi-remote-codegen:
+        specifier: 0.1.2
+        version: 0.1.2
+
+packages:
+
+  openapi-remote-codegen@0.1.2:
+    resolution: {integrity: sha512-7BA0yqSjMgZwi6HXczy4kO5uY5RzQJR1qmkOdVX+SoMvARXOOC3uGLhe5RDCPPm+3b8J57TgTPn+jtk4dgYgMw==}
+    hasBin: true
+
+  openapi-types@12.1.3:
+    resolution: {integrity: sha512-N4YtSYJqghVu4iek2ZUvcN/0aqH1kRDuNqzcycDxhOUpg7GdvLa2F3DgS6yBNhInhv2r/6I0Flkn7CqL8+nIcw==}
+
+snapshots:
+
+  openapi-remote-codegen@0.1.2:
+    dependencies:
+      openapi-types: 12.1.3
+
+  openapi-types@12.1.3: {}

@@ -41,6 +41,17 @@ public interface IV4ToLegacyProjectionService
         long? fromMills,
         long? toMills,
         int limit,
+        bool nativeOnly = true,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// Returns legacy <see cref="Treatment"/> objects synthesised from V4 records
+    /// whose <c>ModifiedAt</c> is at or after the given threshold. Used for v3 incremental sync.
+    /// </summary>
+    Task<IEnumerable<Treatment>> GetProjectedTreatmentsModifiedSinceAsync(
+        long lastModifiedMills,
+        int limit,
         CancellationToken ct = default
     );
 }

@@ -4,14 +4,13 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Columns3, Trash2 } from "lucide-svelte";
   import type { Table } from "@tanstack/table-core";
-  import type { EntryRecord } from "$lib/constants/entry-categories";
 
   interface Props {
     globalFilter: string;
-    table: Table<EntryRecord>;
+    table: Table<any>;
     selectedCount: number;
     onClearSelection: () => void;
-    onBulkDelete: () => void;
+    onBulkDelete?: () => void;
   }
 
   let { globalFilter = $bindable(), table, selectedCount, onClearSelection, onBulkDelete }: Props = $props();
@@ -77,10 +76,12 @@
         <Button variant="outline" size="sm" onclick={onClearSelection}>
           Clear
         </Button>
-        <Button variant="destructive" size="sm" onclick={onBulkDelete}>
-          <Trash2 class="mr-2 h-4 w-4" />
-          Delete Selected
-        </Button>
+        {#if onBulkDelete}
+          <Button variant="destructive" size="sm" onclick={onBulkDelete}>
+            <Trash2 class="mr-2 h-4 w-4" />
+            Delete Selected
+          </Button>
+        {/if}
       </div>
     </div>
   {/if}

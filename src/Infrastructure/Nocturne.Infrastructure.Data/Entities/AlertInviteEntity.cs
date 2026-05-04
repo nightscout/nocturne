@@ -5,7 +5,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 
 /// <summary>
 /// A shareable invite token that grants a follower permission to receive alerts
-/// and optionally acknowledge them. Scoped to a specific escalation step.
+/// and optionally acknowledge them. Scoped to a single rule channel.
 /// </summary>
 [Table("alert_invites")]
 public class AlertInviteEntity : ITenantScoped
@@ -36,10 +36,10 @@ public class AlertInviteEntity : ITenantScoped
     public string Token { get; set; } = string.Empty;
 
     /// <summary>
-    /// Identifier of the escalation step this invite grants access to
+    /// Identifier of the rule channel this invite grants access to.
     /// </summary>
-    [Column("escalation_step_id")]
-    public Guid EscalationStepId { get; set; }
+    [Column("alert_rule_channel_id")]
+    public Guid AlertRuleChannelId { get; set; }
 
     /// <summary>
     /// Permission scope: "view_acknowledge" | "view_only"
@@ -75,7 +75,7 @@ public class AlertInviteEntity : ITenantScoped
     // Navigation
 
     /// <summary>
-    /// Navigation property to the associated escalation step
+    /// Navigation property to the associated rule channel.
     /// </summary>
-    public AlertEscalationStepEntity? EscalationStep { get; set; }
+    public AlertRuleChannelEntity? AlertRuleChannel { get; set; }
 }

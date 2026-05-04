@@ -231,19 +231,15 @@
 
 <div class="container mx-auto max-w-4xl p-6 space-y-6">
   <!-- Header -->
-  <div class="mb-8">
-    <div class="flex items-center gap-3 mb-2">
-      <div
-        class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"
-      >
-        <Import class="h-5 w-5 text-primary" />
-      </div>
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight">Data Migration</h1>
-        <p class="text-muted-foreground">
-          Import your data from Nightscout or MongoDB
-        </p>
-      </div>
+  <div class="flex items-center gap-3">
+    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+      <Import class="h-6 w-6 text-primary" />
+    </div>
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Data Migration</h1>
+      <p class="text-muted-foreground">
+        Import your data from Nightscout or MongoDB
+      </p>
     </div>
   </div>
 

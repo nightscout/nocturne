@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
@@ -24,6 +25,7 @@ public class TreatmentDecomposerTests : IDisposable
     private readonly Mock<ITreatmentFoodService> _treatmentFoodServiceMock;
     private readonly Mock<ITempBasalRepository> _tempBasalRepoMock;
     private readonly Mock<IDeviceService> _deviceServiceMock;
+    private readonly Mock<IProfileDecomposer> _profileDecomposerMock;
     private readonly TreatmentDecomposer _decomposer;
 
     public TreatmentDecomposerTests()
@@ -42,6 +44,7 @@ public class TreatmentDecomposerTests : IDisposable
         _treatmentFoodServiceMock = new Mock<ITreatmentFoodService>();
         _tempBasalRepoMock = new Mock<ITempBasalRepository>();
         _deviceServiceMock = new Mock<IDeviceService>();
+        _profileDecomposerMock = new Mock<IProfileDecomposer>();
 
         // Default: DeviceService returns null (no device resolved)
         _deviceServiceMock
@@ -55,6 +58,7 @@ public class TreatmentDecomposerTests : IDisposable
             _stateSpanServiceMock.Object,
             _treatmentFoodServiceMock.Object,
             _deviceServiceMock.Object,
+            _profileDecomposerMock.Object,
             NullLogger<TreatmentDecomposer>.Instance);
     }
 
@@ -1800,9 +1804,9 @@ public class TreatmentDecomposerTests : IDisposable
         // Act
         var result = await _decomposer.DecomposeAsync(treatment);
 
-        // Assert
-        result.CreatedRecords.Should().HaveCount(1);
-        var deviceEvent = result.CreatedRecords[0].Should().BeOfType<V4Models.DeviceEvent>().Subject;
+        // Assert — DeviceEvent + Note (because Notes is non-empty)
+        result.CreatedRecords.Should().HaveCount(2);
+        var deviceEvent = result.CreatedRecords.OfType<V4Models.DeviceEvent>().Single();
         deviceEvent.LegacyId.Should().Be(treatment.Id);
         deviceEvent.Mills.Should().Be(1700000000000);
         deviceEvent.EventType.Should().Be(expectedType);
@@ -1811,6 +1815,10 @@ public class TreatmentDecomposerTests : IDisposable
         deviceEvent.DataSource.Should().Be("manual");
         deviceEvent.UtcOffset.Should().Be(-300);
         deviceEvent.CorrelationId.Should().Be(result.CorrelationId);
+
+        var note = result.CreatedRecords.OfType<V4Models.Note>().Single();
+        note.Text.Should().Be("Test device event");
+        note.CorrelationId.Should().Be(result.CorrelationId);
     }
 
     [Fact]
@@ -1825,22 +1833,24 @@ public class TreatmentDecomposerTests : IDisposable
             Notes = "Right arm"
         };
 
-        // Act - first call creates
+        // Act - first call creates DeviceEvent + Note (because Notes is non-empty)
         var firstResult = await _decomposer.DecomposeAsync(treatment);
-        firstResult.CreatedRecords.Should().HaveCount(1);
+        firstResult.CreatedRecords.Should().HaveCount(2);
+        firstResult.CreatedRecords.OfType<V4Models.DeviceEvent>().Should().HaveCount(1);
+        firstResult.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
         firstResult.UpdatedRecords.Should().BeEmpty();
 
         // Modify notes
         treatment.Notes = "Left arm";
 
-        // Act - second call should update
+        // Act - second call should update both
         var secondResult = await _decomposer.DecomposeAsync(treatment);
 
-        // Assert
+        // Assert — both DeviceEvent and Note updated
         secondResult.CreatedRecords.Should().BeEmpty();
-        secondResult.UpdatedRecords.Should().HaveCount(1);
+        secondResult.UpdatedRecords.Should().HaveCount(2);
 
-        var updated = secondResult.UpdatedRecords[0].Should().BeOfType<V4Models.DeviceEvent>().Subject;
+        var updated = secondResult.UpdatedRecords.OfType<V4Models.DeviceEvent>().Single();
         updated.LegacyId.Should().Be("idempotent-site-change");
         updated.Notes.Should().Be("Left arm");
     }
@@ -2067,6 +2077,104 @@ public class TreatmentDecomposerTests : IDisposable
         var bolus = result.CreatedRecords[0].Should().BeOfType<V4Models.Bolus>().Subject;
         bolus.Kind.Should().Be(V4Models.BolusKind.Manual);
         bolus.Automatic.Should().BeFalse();
+    }
+
+    #endregion
+
+    #region Profile Switch with Inline ProfileJson
+
+    [Fact]
+    public async Task DecomposeAsync_ProfileSwitchWithProfileJson_CreatesStateSpanAndCallsProfileDecomposer()
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = "profile-switch-json-1",
+            EventType = "Profile Switch",
+            Mills = 1700000000000,
+            Profile = "Day Profile",
+            ProfileJson = """{"dia":4,"carbs_hr":20,"delay":20,"basal":[{"time":"00:00","value":0.8}],"carbratio":[{"time":"00:00","value":10}],"sens":[{"time":"00:00","value":40}],"target_low":[{"time":"00:00","value":80}],"target_high":[{"time":"00:00","value":120}]}""",
+            EnteredBy = "AAPS"
+        };
+
+        var expectedStateSpan = new StateSpan
+        {
+            Id = "state-span-pj-1",
+            Category = StateSpanCategory.Profile,
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedStateSpan);
+
+        var profileDecompResult = new V4Models.DecompositionResult();
+        profileDecompResult.CreatedRecords.Add(new V4Models.TherapySettings { ProfileName = "Day Profile@@@@@1700000000000" });
+
+        _profileDecomposerMock
+            .Setup(d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(profileDecompResult);
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert -- StateSpan + TherapySettings from profile decomposer
+        result.CreatedRecords.Should().HaveCount(2);
+        result.CreatedRecords[0].Should().BeOfType<StateSpan>();
+        result.CreatedRecords[1].Should().BeOfType<V4Models.TherapySettings>();
+
+        // Verify state span was created
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss =>
+                    ss.Category == StateSpanCategory.Profile
+                    && ss.OriginalId == "profile-switch-json-1"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        // Verify profile decomposer was called with the synthetic profile
+        _profileDecomposerMock.Verify(
+            d => d.DecomposeAsync(
+                It.Is<Profile>(p =>
+                    p.Id == "profile-switch-json-1"
+                    && p.Mills == 1700000000000
+                    && p.Store.Count == 1
+                    && p.Store.ContainsKey("Day Profile@@@@@1700000000000")),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ProfileSwitchWithoutProfileJson_DoesNotCallProfileDecomposer()
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = "profile-switch-no-json",
+            EventType = "Profile Switch",
+            Mills = 1700000000000,
+            Profile = "Default",
+            EnteredBy = "AAPS"
+        };
+
+        var expectedStateSpan = new StateSpan
+        {
+            Id = "state-span-no-pj",
+            Category = StateSpanCategory.Profile,
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedStateSpan);
+
+        // Act
+        await _decomposer.DecomposeAsync(treatment);
+
+        // Assert -- profile decomposer should NOT be called
+        _profileDecomposerMock.Verify(
+            d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     #endregion

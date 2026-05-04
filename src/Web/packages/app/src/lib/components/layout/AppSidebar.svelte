@@ -7,6 +7,7 @@
   import * as Select from "$lib/components/ui/select";
   import SidebarGlucoseWidget from "./SidebarGlucoseWidget.svelte";
   import SidebarNotifications from "./SidebarNotifications.svelte";
+  import SidebarDndToggle from "$lib/components/alerts/SidebarDndToggle.svelte";
   import UserMenu from "./UserMenu.svelte";
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
   import { updateLanguagePreference } from "$api/user-preferences.remote";
@@ -15,26 +16,20 @@
   import {
     Home,
     BarChart3,
-    FileText,
+    PieChart,
     Settings,
     Activity,
     Clock,
     User,
     ChevronDown,
     Syringe,
-    LineChart,
-    PieChart,
-    TrendingUp,
-    Droplets,
     Apple,
     Utensils,
     Bell,
+    BellOff,
     HeartHandshake,
     Plug,
     Calendar,
-    CalendarDays,
-    BatteryFull,
-    Sunrise,
     CheckCircle,
     Terminal,
     TestTube,
@@ -47,9 +42,14 @@
     HeartPulse,
     ListChecks,
     Shield,
+    ScrollText,
     Eye,
     Users,
+    PlayCircle,
+    History as HistoryIcon,
+    SlidersHorizontal,
   } from "lucide-svelte";
+  import { getSidebarReportItems } from "$lib/navigation/report-navigation";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
 
   interface Props {
@@ -61,12 +61,19 @@
     effectivePermissions?: string[];
     /** Whether the current user is a platform administrator */
     isPlatformAdmin?: boolean;
+    /** Whether the current session is a guest link session (read-only) */
+    isGuestSession?: boolean;
   }
 
-  const { user = null, tenantCount = 0, effectivePermissions = [], isPlatformAdmin = false }: Props = $props();
+  const { user = null, tenantCount = 0, effectivePermissions = [], isPlatformAdmin = false, isGuestSession = false }: Props = $props();
 
   const canManageRoles = $derived(
     effectivePermissions.includes("roles.manage") ||
+      effectivePermissions.includes("*"),
+  );
+  const canViewAudit = $derived(
+    effectivePermissions.includes("audit.read") ||
+      effectivePermissions.includes("audit.manage") ||
       effectivePermissions.includes("*"),
   );
   const sidebar = Sidebar.useSidebar();
@@ -78,6 +85,7 @@
     displayName: string | null;
   }
   let tenantTargets = $state<TenantTarget[]>([]);
+  let totalTenantCount = $state(0);
   let selectedTenantSlug = $state<string | null>(null);
   let defaultTenantSlug = $state<string | null>(null);
   let baseDomain = $state<string | null>(null);
@@ -101,6 +109,7 @@
     if (!baseDomain) return;
     try {
       const tenants = await getMyTenants();
+      totalTenantCount = (tenants ?? []).length;
       defaultTenantSlug = (tenants ?? [])[0]?.slug ?? null;
 
       tenantTargets = (tenants ?? [])
@@ -157,11 +166,15 @@
   type NavItem = {
     title: string;
     href?: string;
-    icon: typeof Home;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    icon: any;
     strict?: boolean;
     isActive?: boolean;
     children?: NavItem[];
   };
+
+  /** Read-only navigation items shown to guest sessions. */
+  const guestNavTitles = new Set(["Dashboard", "Calendar", "Time Spans", "Reports", "Clock"]);
 
   const navigation: NavItem[] = $derived.by(() => {
     const items: NavItem[] = [
@@ -186,65 +199,7 @@
       icon: BarChart3,
       children: [
         { title: "Overview", href: "/reports", icon: PieChart, strict: true },
-        { title: "AGP", href: "/reports/agp", icon: LineChart },
-        { title: "IDP", href: "/reports/idp", icon: Droplets },
-        {
-          title: "Executive Summary",
-          href: "/reports/executive-summary",
-          icon: FileText,
-        },
-        {
-          title: "Day in Review",
-          href: "/reports/day-in-review",
-          icon: Clock,
-        },
-        {
-          title: "Week to Week",
-          href: "/reports/week-to-week",
-          icon: Sunrise,
-        },
-        {
-          title: "Month to Month",
-          href: "/calendar",
-          icon: Calendar,
-        },
-        {
-          title: "Year Overview",
-          href: "/reports/year-overview",
-          icon: CalendarDays,
-        },
-        { title: "Readings", href: "/reports/readings", icon: Activity },
-        { title: "Treatments", href: "/reports/treatments", icon: Syringe },
-        {
-          title: "Insulin Delivery",
-          href: "/reports/insulin-delivery",
-          icon: Droplets,
-        },
-        {
-          title: "Basal Analysis",
-          href: "/reports/basal-analysis",
-          icon: TrendingUp,
-        },
-        {
-          title: "Battery",
-          href: "/reports/battery",
-          icon: BatteryFull,
-        },
-        {
-          title: "Glucose Distribution",
-          href: "/reports/glucose-distribution",
-          icon: PieChart,
-        },
-        {
-          title: "Site Change Impact",
-          href: "/reports/site-change-impact",
-          icon: Syringe,
-        },
-        {
-          title: "Data Quality",
-          href: "/reports/data-quality",
-          icon: ShieldCheck,
-        },
+        ...getSidebarReportItems(),
       ],
     },
     {
@@ -252,6 +207,14 @@
       href: "/clock",
       icon: Clock,
     },
+    ];
+
+    // Guest sessions only see read-only navigation
+    if (isGuestSession) {
+      return items.filter((i) => guestNavTitles.has(i.title));
+    }
+
+    items.push(
     {
       title: "Food",
       href: "/food",
@@ -269,7 +232,7 @@
         { title: "Packing", href: "/tools/packing", icon: Wrench },
       ],
     },
-    ];
+    );
 
     if (tenantCount >= 2) {
       items.push({
@@ -280,6 +243,16 @@
     }
 
     items.push(
+    {
+      title: "Alerts",
+      icon: Bell,
+      children: [
+        { title: "Rules", href: "/alerts", icon: Bell, strict: true },
+        { title: "Simulator", href: "/alerts/simulator", icon: PlayCircle },
+        { title: "Do Not Disturb", href: "/alerts/dnd", icon: BellOff },
+        { title: "History", href: "/alerts/history", icon: HistoryIcon },
+      ],
+    },
     {
       title: "Dev Tools",
       icon: Terminal,
@@ -315,7 +288,6 @@
           href: "/settings/data-quality",
           icon: ShieldCheck,
         },
-        { title: "Alerts", href: "/settings/alerts", icon: Bell },
         {
           title: "Notifications & Trackers",
           href: "/settings/trackers",
@@ -325,6 +297,9 @@
         { title: "Members", href: "/settings/members", icon: Users },
         ...(canManageRoles
           ? [{ title: "Roles", href: "/settings/roles", icon: Shield }]
+          : []),
+        ...(canViewAudit
+          ? [{ title: "Audit Log", href: "/settings/audit", icon: ScrollText }]
           : []),
         {
           title: "Support & Community",
@@ -411,8 +386,8 @@
 
   <Sidebar.Separator />
 
-  <!-- Tenant switcher (only visible when multiple tenants are available) -->
-  {#if tenantTargets.length > 0}
+  <!-- Tenant switcher (only visible when multiple tenants are available, hidden for guests) -->
+  {#if totalTenantCount > 1 && tenantTargets.length > 0 && !isGuestSession}
     <div class="border-b px-3 py-2 group-data-[collapsible=icon]:hidden">
       <p
         class="mb-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5"
@@ -486,13 +461,17 @@
                   <Sidebar.MenuSub>
                     {#each item.children as child}
                       <Sidebar.MenuSubItem>
-                        <Sidebar.MenuSubButton
-                          href={child.href}
-                          isActive={isActive(child)}
-                        >
-                          <child.icon class="h-4 w-4" />
-                          <span>{child.title}</span>
-                        </Sidebar.MenuSubButton>
+                        {#if child.href === "/alerts/dnd"}
+                          <SidebarDndToggle />
+                        {:else}
+                          <Sidebar.MenuSubButton
+                            href={child.href}
+                            isActive={isActive(child)}
+                          >
+                            <child.icon class="h-4 w-4" />
+                            <span>{child.title}</span>
+                          </Sidebar.MenuSubButton>
+                        {/if}
                       </Sidebar.MenuSubItem>
                     {/each}
                   </Sidebar.MenuSub>
@@ -534,7 +513,7 @@
       <Sidebar.MenuItem
         class="flex items-center gap-2 min-w-0 group-data-[collapsible=icon]:flex-col"
       >
-        {#if user}
+        {#if user && !isGuestSession}
           <SidebarNotifications />
         {/if}
         <UserMenu

@@ -426,4 +426,244 @@ public class TenantSetupMiddlewareTests : IDisposable
         nextCalled.Should().BeTrue();
         ctx.Response.StatusCode.Should().NotBe(503);
     }
+
+    private Guid SeedOidcProvider(string name = "Google")
+    {
+        var providerId = Guid.CreateVersion7();
+        _dbContext.Set<OidcProviderEntity>().Add(new OidcProviderEntity
+        {
+            Id = providerId,
+            Name = name,
+            IssuerUrl = $"https://accounts.{name.ToLowerInvariant()}.com",
+            ClientId = "test-client-id",
+        });
+        _dbContext.SaveChanges();
+        return providerId;
+    }
+
+    [Fact]
+    public async Task WhenTenantMemberHasOnlyOidcIdentity_CallsNext()
+    {
+        // Arrange — subject has OIDC identity but no passkey; should still satisfy setup check
+        var subjectId = Guid.CreateVersion7();
+        var providerId = SeedOidcProvider();
+
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = "OIDC-Only User",
+            IsActive = true,
+            IsSystemSubject = false,
+        });
+        _dbContext.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = subjectId,
+            ProviderId = providerId,
+            OidcSubjectId = "google-123",
+            Issuer = "https://accounts.google.com",
+            Email = "user@example.com",
+            LinkedAt = DateTime.UtcNow,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = subjectId,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var nextCalled = false;
+        var (mw, ctx) = Build(onNext: () => nextCalled = true);
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+
+        // Assert
+        nextCalled.Should().BeTrue("OIDC identity alone should satisfy the setup check");
+        ctx.Response.StatusCode.Should().NotBe(503);
+    }
+
+    [Fact]
+    public async Task WhenSubjectSharedAcrossTenants_OidcFromFirstTenant_SecondTenantPassesSetup()
+    {
+        // Arrange — reproduces Nocturne Cloud scenario: subject created an OIDC identity
+        // while provisioning tenant A, then the same subject was added to tenant B.
+        // Tenant B's setup check must find the OIDC identity (which is not tenant-scoped).
+        var sharedSubjectId = Guid.CreateVersion7();
+        var tenantA = Guid.CreateVersion7();
+        var tenantB = _tenantId; // the tenant under test
+        var providerId = SeedOidcProvider();
+
+        // Seed tenant A
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantA,
+            Slug = "tenant-a",
+            DisplayName = "First Tenant",
+        });
+
+        // Shared subject with OIDC identity
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = sharedSubjectId,
+            Name = "Shared User",
+            Email = "user@example.com",
+            IsActive = true,
+            IsSystemSubject = false,
+        });
+        _dbContext.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = sharedSubjectId,
+            ProviderId = providerId,
+            OidcSubjectId = "google-456",
+            Issuer = "https://accounts.google.com",
+            Email = "user@example.com",
+            LinkedAt = DateTime.UtcNow.AddHours(-10), // created earlier with tenant A
+        });
+
+        // Subject is a member of both tenants
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantA,
+            SubjectId = sharedSubjectId,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantB,
+            SubjectId = sharedSubjectId,
+        });
+
+        // Tenant B also has a system subject (Public Access) with no credentials — typical
+        var publicSubjectId = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = publicSubjectId,
+            Name = "Public",
+            IsActive = true,
+            IsSystemSubject = true,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantB,
+            SubjectId = publicSubjectId,
+        });
+
+        await _dbContext.SaveChangesAsync();
+
+        var nextCalled = false;
+        var (mw, ctx) = Build(onNext: () => nextCalled = true);
+
+        // Act — middleware checks tenant B
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+
+        // Assert
+        nextCalled.Should().BeTrue(
+            "OIDC identity is subject-scoped, not tenant-scoped — " +
+            "a shared subject's OIDC identity from tenant A should satisfy tenant B's setup check");
+        ctx.Response.StatusCode.Should().NotBe(503);
+    }
+
+    [Fact]
+    public async Task WhenSubjectSharedAcrossTenants_NoOrphanedSubjectOnSecondTenant()
+    {
+        // Arrange — same cross-tenant scenario, but also verifies the orphaned subject
+        // check (check 2) doesn't false-positive. The shared subject has an OIDC identity,
+        // so it should NOT be considered orphaned on tenant B.
+        var sharedSubjectId = Guid.CreateVersion7();
+        var tenantA = Guid.CreateVersion7();
+        var tenantB = _tenantId;
+        var providerId = SeedOidcProvider();
+
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantA,
+            Slug = "tenant-a",
+            DisplayName = "First Tenant",
+        });
+
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = sharedSubjectId,
+            Name = "Shared User",
+            Email = "user@example.com",
+            IsActive = true,
+            IsSystemSubject = false,
+        });
+        _dbContext.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = sharedSubjectId,
+            ProviderId = providerId,
+            OidcSubjectId = "google-789",
+            Issuer = "https://accounts.google.com",
+            Email = "user@example.com",
+            LinkedAt = DateTime.UtcNow.AddHours(-10),
+        });
+
+        // Member of both tenants
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantA,
+            SubjectId = sharedSubjectId,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantB,
+            SubjectId = sharedSubjectId,
+        });
+
+        await _dbContext.SaveChangesAsync();
+
+        var nextCalled = false;
+        var (mw, ctx) = Build(onNext: () => nextCalled = true);
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+
+        // Assert — should pass through cleanly, no 503, no recovery mode
+        nextCalled.Should().BeTrue();
+        ctx.Response.StatusCode.Should().NotBe(503,
+            "subject with OIDC identity should not trigger recovery mode on the second tenant");
+    }
+
+    [Fact]
+    public async Task WhenOnlyPublicSystemSubjectExists_Returns503()
+    {
+        // Arrange — tenant has only the system "Public Access" subject, no human members.
+        // This is a partially provisioned tenant (provisioner created tenant + public subject
+        // but failed before creating the owner).
+        var publicSubjectId = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = publicSubjectId,
+            Name = "Public",
+            IsActive = true,
+            IsSystemSubject = true,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = publicSubjectId,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var (mw, ctx) = Build();
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+
+        // Assert
+        ctx.Response.StatusCode.Should().Be(503);
+        ctx.Response.Body.Seek(0, SeekOrigin.Begin);
+        var body = await new StreamReader(ctx.Response.Body).ReadToEndAsync();
+        body.Should().Contain("setup_required");
+    }
 }

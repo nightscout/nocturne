@@ -41,6 +41,8 @@ public static class KnownOAuthClients
                 OAuthScopes.EntriesReadWrite,
                 OAuthScopes.TreatmentsReadWrite,
                 OAuthScopes.DeviceStatusReadWrite,
+                OAuthScopes.HeartRateReadWrite,
+                OAuthScopes.StepCountReadWrite,
             ],
         },
         new()
@@ -147,6 +149,23 @@ public static class KnownOAuthClients
                 OAuthScopes.TreatmentsRead,
                 OAuthScopes.DeviceStatusRead,
                 OAuthScopes.ProfileRead,
+            ],
+        },
+        new()
+        {
+            SoftwareId = "io.home-assistant.nocturne",
+            DisplayName = "Home Assistant",
+            Homepage = "https://www.home-assistant.io/",
+            LogoUri = "/logos/home-assistant.svg",
+            RedirectUris = [],
+            TypicalScopes =
+            [
+                OAuthScopes.EntriesReadWrite,
+                OAuthScopes.TreatmentsReadWrite,
+                OAuthScopes.DeviceStatusRead,
+                OAuthScopes.ProfileRead,
+                OAuthScopes.HeartRateReadWrite,
+                OAuthScopes.StepCountReadWrite,
             ],
         },
     };

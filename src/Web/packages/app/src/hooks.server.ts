@@ -1,4 +1,4 @@
-import { error as httpError, type Handle } from "@sveltejs/kit";
+import { type Handle } from "@sveltejs/kit";
 import { randomUUID } from "$lib/utils";
 import type { HandleServerError } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
@@ -32,8 +32,27 @@ function getOriginalHost(request: Request): string | null {
   return request.headers.get("x-forwarded-host") ?? request.headers.get("host");
 }
 
+/**
+ * Cookie set during setup to carry the tenant slug while the user is still
+ * on the apex domain. httpOnly, 1-hour TTL, cleaned up by markSetupComplete.
+ * Read by hooks that create API clients so they can prepend the slug to
+ * X-Forwarded-Host for correct tenant resolution.
+ */
+const SETUP_TENANT_COOKIE = "nocturne-setup-tenant";
+
+/**
+ * Returns the effective host for API calls, prepending the setup tenant slug
+ * when available so the apex domain resolves to the correct tenant.
+ */
+function getEffectiveHost(request: Request, cookies: { get(name: string): string | undefined }): string | null {
+  const host = getOriginalHost(request);
+  const slug = cookies.get(SETUP_TENANT_COOKIE);
+  if (slug && host && !host.startsWith(`${slug}.`)) return `${slug}.${host}`;
+  return host;
+}
+
 /** Route prefixes that bypass requireAuthentication enforcement. */
-const PUBLIC_PREFIXES = ["/auth", "/api", "/setup", "/clock", "/invite", "/terms", "/privacy"] as const;
+const PUBLIC_PREFIXES = ["/auth", "/api", "/setup", "/clock", "/invite", "/terms", "/privacy", "/guest"] as const;
 
 function isPublicRoute(pathname: string): boolean {
   return (
@@ -72,7 +91,39 @@ const authHandle: Handle = async ({ event, resolve }) => {
   const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
 
   if (!authCookie && !accessToken) {
-    // No auth cookies, user is not authenticated
+    // Check for guest session cookie before giving up
+    const guestSessionCookie = event.cookies.get("nocturne-guest-session");
+    if (guestSessionCookie) {
+      try {
+        const forwardedHost = getEffectiveHost(event.request, event.cookies);
+        const headers: Record<string, string> = {
+          Cookie: `nocturne-guest-session=${guestSessionCookie}`,
+        };
+        if (forwardedHost) headers["X-Forwarded-Host"] = forwardedHost;
+
+        const hashedKey = getHashedInstanceKey();
+        if (hashedKey) headers["X-Instance-Key"] = hashedKey;
+
+        const sessionRes = await fetch(`${apiBaseUrl}/api/auth/oidc/session`, { headers });
+        const session = await sessionRes.json();
+
+        if (session?.isAuthenticated) {
+          event.locals.user = {
+            subjectId: session.subjectId ?? "guest",
+            name: "Guest",
+            email: undefined,
+            roles: [],
+            permissions: session.permissions ?? [],
+            expiresAt: session.expiresAt,
+          };
+          event.locals.isAuthenticated = true;
+          event.locals.isGuestSession = true;
+          event.locals.guestExpiresAt = session.expiresAt;
+        }
+      } catch (error) {
+        console.error("Failed to validate guest session:", error);
+      }
+    }
     return resolve(event);
   }
 
@@ -82,12 +133,12 @@ const authHandle: Handle = async ({ event, resolve }) => {
     // performed by the API (via SessionCookieHandler auto-refresh) back to
     // the browser, so rotated refresh tokens don't silently disappear.
     const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
-    const hostHeader = getOriginalHost(event.request);
+    const forwardedHost = getEffectiveHost(event.request, event.cookies);
     const apiClient = createServerApiClient(apiBaseUrl, fetch, {
       accessToken,
       refreshToken,
       hashedInstanceKey: getHashedInstanceKey(),
-      extraHeaders: hostHeader ? { "X-Forwarded-Host": hostHeader } : undefined,
+      extraHeaders: forwardedHost ? { "X-Forwarded-Host": forwardedHost } : undefined,
       responseCookies: event.cookies,
     });
 
@@ -157,10 +208,10 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
   // Probe the API for setup/recovery mode and site-level requireAuthentication.
   try {
     if (!event.locals.siteSecurityChecked) {
-      const hostHeader = getOriginalHost(event.request);
+      const probeHost = getEffectiveHost(event.request, event.cookies);
       const apiClient = createServerApiClient(apiBaseUrl, fetch, {
         hashedInstanceKey: getHashedInstanceKey(),
-        extraHeaders: hostHeader ? { "X-Forwarded-Host": hostHeader } : undefined,
+        extraHeaders: probeHost ? { "X-Forwarded-Host": probeHost } : undefined,
       });
 
       const status = await apiClient.status.getStatus();
@@ -184,8 +235,33 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
     if (error && typeof error === "object" && "status" in error) {
       const status = (error as any).status;
 
-      // Tenant not found — redirect to marketing site or show error page
+      if (status === 503) {
+        let body: any = {};
+        try {
+          body = JSON.parse((error as any).response ?? "{}");
+        } catch {
+          // Couldn't parse — treat as setup required (API isn't ready)
+        }
+
+        if (body.recoveryMode) {
+          return new Response(null, {
+            status: 303,
+            headers: { Location: "/auth/recovery" },
+          });
+        }
+
+        // Any 503 from the API (setup_required, no tenants, or unparseable)
+        // means the instance isn't ready — redirect to setup
+        return new Response(null, {
+          status: 303,
+          headers: { Location: "/setup" },
+        });
+      }
+
+      // Tenant not found (404) — either no tenant for this subdomain,
+      // or apex domain with no tenants set up yet.
       if (status === 404) {
+        // If a marketing site is configured, redirect there (SaaS apex landing)
         const marketingUrl = env.MARKETING_URL;
         if (marketingUrl) {
           return new Response(null, {
@@ -193,27 +269,14 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
             headers: { Location: marketingUrl },
           });
         }
-        throw httpError(404, "This site doesn't exist. Check the URL and try again.");
-      }
 
-      if (status === 503) {
-        try {
-          const body = JSON.parse((error as any).response ?? "{}");
-          if (body.setupRequired) {
-            return new Response(null, {
-              status: 303,
-              headers: { Location: "/setup" },
-            });
-          }
-          if (body.recoveryMode) {
-            return new Response(null, {
-              status: 303,
-              headers: { Location: "/auth/recovery" },
-            });
-          }
-        } catch {
-          // Couldn't parse, fall through
-        }
+        // No marketing site — this is likely a self-hosted install.
+        // Check if this is an apex domain request (no tenant subdomain).
+        // If so, redirect to setup so the user can create their first tenant.
+        return new Response(null, {
+          status: 303,
+          headers: { Location: "/setup" },
+        });
       }
     }
     console.error("Failed to check site security settings:", error);
@@ -242,23 +305,27 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
     // Forward the request to the backend API
     const headers = new Headers(event.request.headers);
     // Forward original Host for tenant resolution behind reverse proxies
-    const originalHost = getOriginalHost(event.request);
-    if (originalHost) {
-      headers.set("X-Forwarded-Host", originalHost);
+    const effectiveHost = getEffectiveHost(event.request, event.cookies);
+    if (effectiveHost) {
+      headers.set("X-Forwarded-Host", effectiveHost);
     }
     if (hashedInstanceKey) {
       headers.set("X-Instance-Key", hashedInstanceKey);
     }
 
-    // Forward both access and refresh tokens for authentication and token refresh
+    // Forward auth and guest session cookies for authentication
     const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
     const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
+    const guestSession = event.cookies.get("nocturne-guest-session");
     const cookies: string[] = [];
     if (accessToken) {
       cookies.push(`${AUTH_COOKIE_NAMES.accessToken}=${accessToken}`);
     }
     if (refreshToken) {
       cookies.push(`${AUTH_COOKIE_NAMES.refreshToken}=${refreshToken}`);
+    }
+    if (guestSession) {
+      cookies.push(`nocturne-guest-session=${guestSession}`);
     }
     if (cookies.length > 0) {
       headers.set("Cookie", cookies.join("; "));
@@ -270,6 +337,7 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
       body: event.request.method !== "GET" && event.request.method !== "HEAD"
         ? await event.request.arrayBuffer()
         : undefined,
+      redirect: "manual",
     });
 
 
@@ -295,13 +363,14 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   // Get auth tokens from cookies to forward to the backend
   const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
   const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
+  const guestSessionToken = event.cookies.get("nocturne-guest-session");
 
   const extraHeaders: Record<string, string> = {};
 
-  // Forward the original Host for tenant resolution behind reverse proxies
-  const originalHost = getOriginalHost(event.request);
-  if (originalHost) {
-    extraHeaders["X-Forwarded-Host"] = originalHost;
+  // Forward the original Host for tenant resolution behind reverse proxies.
+  const effectiveHost = getEffectiveHost(event.request, event.cookies);
+  if (effectiveHost) {
+    extraHeaders["X-Forwarded-Host"] = effectiveHost;
   }
 
   // Create API client with SvelteKit's fetch, auth headers, and both tokens.
@@ -311,6 +380,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   event.locals.apiClient = createServerApiClient(apiBaseUrl, event.fetch, {
     accessToken,
     refreshToken,
+    guestSessionToken,
     hashedInstanceKey: getHashedInstanceKey(),
     extraHeaders,
     responseCookies: event.cookies,

@@ -1,0 +1,88 @@
+---
+title: Sign in with Google
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Sign in with Google
+
+Let your users sign in to Nocturne with their Google account. This guide walks through
+creating OAuth credentials in Google Cloud Console and registering them in Nocturne.
+
+## 1. Create a Google Cloud project
+
+If you don't already have a Google Cloud project:
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com/)
+2. Click the project dropdown at the top and select **New Project**
+3. Name it something like `Nocturne` and click **Create**
+
+## 2. Configure the OAuth consent screen
+
+1. In the sidebar, go to **APIs & Services > OAuth consent screen**
+2. Click **Get started**
+3. Fill in the required fields:
+   - **App name**: `Nocturne` (or your instance name)
+   - **User support email**: your email address
+   - **Audience**: External
+4. Add the scopes: `openid`, `email`, and `profile`
+5. Add your email as a **test user** (required while the app is in "Testing" status)
+6. Review and **Create**
+
+<Callout type="info" title="Testing vs Production">
+  While the consent screen is in **Testing** status, only users you've explicitly
+  added as test users can sign in. Once you're ready, click **Publish App** to
+  allow any Google account. Publishing requires a brief review by Google.
+</Callout>
+
+## 3. Create OAuth credentials
+
+1. Go to **APIs & Services > Credentials**
+2. Click **Create Credentials > OAuth client ID**
+3. Select **Web application** as the application type
+4. Name it `Nocturne`
+5. Under **Authorized redirect URIs**, add:
+
+```
+https://your-instance.com/api/auth/oidc/callback
+```
+
+Replace `your-instance.com` with your actual Nocturne domain (e.g. `rhys.nocturne.run`).
+
+6. Click **Create**
+7. Copy the **Client ID** and **Client secret** — you'll need both in the next step
+
+## 4. Add the provider in Nocturne
+
+1. Sign in to your Nocturne instance as an admin
+2. Go to **Settings > Admin > OIDC Providers**
+3. Click **Add Provider** and fill in:
+
+| Field | Value |
+|-------|-------|
+| **Name** | `Google` |
+| **Issuer URL** | `https://accounts.google.com` |
+| **Client ID** | The client ID from step 3 |
+| **Client Secret** | The client secret from step 3 |
+| **Icon** | `google` |
+| **Button Color** | `#4285F4` |
+
+4. Click **Save**
+
+The Google sign-in button will appear on your login page immediately.
+
+## 5. Test it
+
+1. Open your Nocturne login page in a private/incognito window
+2. Click **Sign in with Google**
+3. Sign in with a Google account that's in your test users list (or any account, if you've published the app)
+4. You should be redirected back to Nocturne and signed in
+
+<Callout type="tip" title="Multiple tenants">
+  The OIDC provider configuration is per-tenant. If you run multiple tenants
+  on the same Nocturne instance, each tenant can have its own Google credentials,
+  or you can reuse the same Client ID across tenants by adding each tenant's
+  callback URL to the authorized redirect URIs in Google Cloud Console.
+</Callout>

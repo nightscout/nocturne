@@ -104,4 +104,19 @@ public interface ITempBasalRepository
         DateTime to,
         CancellationToken ct = default
     );
+
+    /// <summary>
+    /// Returns the <see cref="TempBasal"/> active at <paramref name="at"/>
+    /// (<c>StartTimestamp &lt;= at &lt; EndTimestamp</c>), or <c>null</c> if no
+    /// temp is active. When multiple records overlap the instant, the one with
+    /// the most recent <c>StartTimestamp</c> wins.
+    /// </summary>
+    /// <remarks>
+    /// A <c>null</c> <see cref="TempBasal.EndTimestamp"/> represents an open-ended
+    /// temp basal (still running) and is treated as active for any <paramref name="at"/>
+    /// at or after its start.
+    /// </remarks>
+    /// <param name="at">The instant to evaluate.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<TempBasal?> GetActiveAtAsync(DateTime at, CancellationToken ct = default);
 }

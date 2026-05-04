@@ -72,6 +72,10 @@
   /* Data Exclusion - semi-transparent overlays for excluded data regions */
   --data-exclusion-compression-low: rgba(255, 165, 0, 0.15); /* Orange tint for compression lows */
   --data-exclusion-sensor-error: rgba(255, 0, 0, 0.1); /* Red tint for sensor errors */
+
+  /* Health Overlays */
+  --heart-rate: oklch(0.6 0.2 25);
+  --steps: oklch(0.6 0.15 300);
 }
 
 .dark {

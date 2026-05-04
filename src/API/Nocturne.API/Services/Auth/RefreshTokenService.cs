@@ -1,10 +1,19 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Infrastructure.Data;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Auth;
+
+/// <summary>
+/// Thrown when a revoked refresh token is reused within the grace period,
+/// indicating a harmless race condition between concurrent requests rather
+/// than token theft. Handlers should skip cookie clearing when catching this.
+/// </summary>
+public class TokenRotationRaceException : Exception
+{
+    public TokenRotationRaceException()
+        : base("Refresh token reuse within grace period — concurrent request race condition.") { }
+}
 
 /// <summary>
 /// Service for creating, validating, rotating, and revoking refresh tokens stored in the database.
@@ -16,7 +25,7 @@ namespace Nocturne.API.Services.Auth;
 /// <seealso cref="OAuthTokenService"/>
 public class RefreshTokenService : IRefreshTokenService
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly IFirstPartyTokenRepository _repository;
     private readonly IJwtService _jwtService;
     private readonly JwtOptions _options;
     private readonly ILogger<RefreshTokenService> _logger;
@@ -24,17 +33,17 @@ public class RefreshTokenService : IRefreshTokenService
     /// <summary>
     /// Initializes a new instance of <see cref="RefreshTokenService"/>.
     /// </summary>
-    /// <param name="dbContext">The EF Core database context for refresh token entity persistence.</param>
+    /// <param name="repository">Repository for refresh token persistence.</param>
     /// <param name="jwtService">Service for generating crypto-random tokens and computing token hashes.</param>
     /// <param name="options">JWT configuration options including refresh token lifetime settings.</param>
     /// <param name="logger">The logger instance.</param>
     public RefreshTokenService(
-        NocturneDbContext dbContext,
+        IFirstPartyTokenRepository repository,
         IJwtService jwtService,
         IOptions<JwtOptions> options,
         ILogger<RefreshTokenService> logger)
     {
-        _dbContext = dbContext;
+        _repository = repository;
         _jwtService = jwtService;
         _options = options.Value;
         _logger = logger;
@@ -51,23 +60,22 @@ public class RefreshTokenService : IRefreshTokenService
         var refreshToken = _jwtService.GenerateRefreshToken();
         var tokenHash = _jwtService.HashRefreshToken(refreshToken);
 
-        var entity = new RefreshTokenEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TokenHash = tokenHash,
-            SubjectId = subjectId,
-            OidcSessionId = oidcSessionId,
-            DeviceDescription = deviceDescription,
-            IpAddress = ipAddress,
-            UserAgent = userAgent,
-            IssuedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(_options.RefreshTokenLifetimeDays),
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+        var record = new RefreshTokenRecord(
+            Id: Guid.CreateVersion7(),
+            TokenHash: tokenHash,
+            SubjectId: subjectId,
+            OidcSessionId: oidcSessionId,
+            DeviceDescription: deviceDescription,
+            IpAddress: ipAddress,
+            UserAgent: userAgent,
+            IssuedAt: DateTime.UtcNow,
+            ExpiresAt: DateTime.UtcNow.AddDays(_options.RefreshTokenLifetimeDays),
+            RevokedAt: null,
+            RevokedReason: null,
+            ReplacedByTokenId: null,
+            LastUsedAt: null);
 
-        _dbContext.RefreshTokens.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        await _repository.CreateAsync(record);
 
         _logger.LogDebug("Created refresh token for subject {SubjectId}", subjectId);
 
@@ -79,32 +87,29 @@ public class RefreshTokenService : IRefreshTokenService
     {
         var tokenHash = _jwtService.HashRefreshToken(refreshToken);
 
-        var entity = await _dbContext.RefreshTokens
-            .AsNoTracking()
-            .Where(t => t.TokenHash == tokenHash)
-            .FirstOrDefaultAsync();
+        var record = await _repository.FindByHashAsync(tokenHash);
 
-        if (entity == null)
+        if (record == null)
         {
             _logger.LogDebug("Refresh token not found");
             return null;
         }
 
-        if (entity.IsRevoked)
+        if (record.RevokedAt != null)
         {
             _logger.LogWarning(
                 "Attempt to use revoked refresh token {TokenId} for subject {SubjectId}",
-                entity.Id, entity.SubjectId);
+                record.Id, record.SubjectId);
             return null;
         }
 
-        if (entity.IsExpired)
+        if (record.ExpiresAt < DateTime.UtcNow)
         {
-            _logger.LogDebug("Refresh token {TokenId} has expired", entity.Id);
+            _logger.LogDebug("Refresh token {TokenId} has expired", record.Id);
             return null;
         }
 
-        return entity.SubjectId;
+        return record.SubjectId;
     }
 
     /// <inheritdoc />
@@ -115,21 +120,33 @@ public class RefreshTokenService : IRefreshTokenService
     {
         var tokenHash = _jwtService.HashRefreshToken(oldRefreshToken);
 
-        var oldEntity = await _dbContext.RefreshTokens
-            .Where(t => t.TokenHash == tokenHash)
-            .FirstOrDefaultAsync();
+        var oldRecord = await _repository.FindByHashAsync(tokenHash);
 
-        if (oldEntity == null || !oldEntity.IsValid)
+        if (oldRecord == null || oldRecord.RevokedAt != null || oldRecord.ExpiresAt < DateTime.UtcNow)
         {
-            if (oldEntity != null && oldEntity.IsRevoked && oldEntity.ReplacedByTokenId.HasValue)
+            if (oldRecord != null && oldRecord.RevokedAt != null && oldRecord.ReplacedByTokenId.HasValue)
             {
-                // Token reuse detected - this could be a token theft attempt
-                // Revoke all tokens in the family
+                // Check if this is a race condition (concurrent requests using the
+                // same token shortly after rotation) vs actual token theft.
+                // A 30-second grace period prevents nuking all tokens when parallel
+                // requests (SSR + preload, two tabs, page load + API call) both
+                // attempt to refresh with the same token.
+                var timeSinceRevocation = DateTime.UtcNow - oldRecord.RevokedAt.Value;
+                if (timeSinceRevocation < TimeSpan.FromSeconds(30))
+                {
+                    _logger.LogDebug(
+                        "Refresh token reuse within grace period ({Elapsed:F1}s) for subject {SubjectId}. " +
+                        "Likely a concurrent request — skipping family revocation.",
+                        timeSinceRevocation.TotalSeconds, oldRecord.SubjectId);
+                    throw new TokenRotationRaceException();
+                }
+
+                // Outside grace period — this looks like actual token theft
                 _logger.LogWarning(
                     "Refresh token reuse detected for subject {SubjectId}. Revoking all tokens in the family.",
-                    oldEntity.SubjectId);
+                    oldRecord.SubjectId);
 
-                await RevokeTokenFamilyAsync(oldEntity.SubjectId, "Token reuse detected");
+                await _repository.RevokeAllForSubjectAsync(oldRecord.SubjectId, "Token reuse detected");
             }
             return null;
         }
@@ -138,33 +155,29 @@ public class RefreshTokenService : IRefreshTokenService
         var newRefreshToken = _jwtService.GenerateRefreshToken();
         var newTokenHash = _jwtService.HashRefreshToken(newRefreshToken);
 
-        var newEntity = new RefreshTokenEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TokenHash = newTokenHash,
-            SubjectId = oldEntity.SubjectId,
-            OidcSessionId = oldEntity.OidcSessionId,
-            DeviceDescription = oldEntity.DeviceDescription,
-            IpAddress = ipAddress ?? oldEntity.IpAddress,
-            UserAgent = userAgent ?? oldEntity.UserAgent,
-            IssuedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(_options.RefreshTokenLifetimeDays),
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+        var newRecord = new RefreshTokenRecord(
+            Id: Guid.CreateVersion7(),
+            TokenHash: newTokenHash,
+            SubjectId: oldRecord.SubjectId,
+            OidcSessionId: oldRecord.OidcSessionId,
+            DeviceDescription: oldRecord.DeviceDescription,
+            IpAddress: ipAddress ?? oldRecord.IpAddress,
+            UserAgent: userAgent ?? oldRecord.UserAgent,
+            IssuedAt: DateTime.UtcNow,
+            ExpiresAt: DateTime.UtcNow.AddDays(_options.RefreshTokenLifetimeDays),
+            RevokedAt: null,
+            RevokedReason: null,
+            ReplacedByTokenId: null,
+            LastUsedAt: null);
 
         // Revoke old token and link to new one
-        oldEntity.RevokedAt = DateTime.UtcNow;
-        oldEntity.RevokedReason = "Rotated";
-        oldEntity.ReplacedByTokenId = newEntity.Id;
-        oldEntity.UpdatedAt = DateTime.UtcNow;
+        await _repository.RevokeAsync(oldRecord.Id, "Rotated", newRecord.Id);
 
-        _dbContext.RefreshTokens.Add(newEntity);
-        await _dbContext.SaveChangesAsync();
+        await _repository.CreateAsync(newRecord);
 
         _logger.LogDebug(
             "Rotated refresh token for subject {SubjectId}. Old: {OldTokenId}, New: {NewTokenId}",
-            oldEntity.SubjectId, oldEntity.Id, newEntity.Id);
+            oldRecord.SubjectId, oldRecord.Id, newRecord.Id);
 
         return newRefreshToken;
     }
@@ -174,29 +187,23 @@ public class RefreshTokenService : IRefreshTokenService
     {
         var tokenHash = _jwtService.HashRefreshToken(refreshToken);
 
-        var entity = await _dbContext.RefreshTokens
-            .Where(t => t.TokenHash == tokenHash)
-            .FirstOrDefaultAsync();
+        var record = await _repository.FindByHashAsync(tokenHash);
 
-        if (entity == null)
+        if (record == null)
         {
             return false;
         }
 
-        if (entity.IsRevoked)
+        if (record.RevokedAt != null)
         {
             return true; // Already revoked
         }
 
-        entity.RevokedAt = DateTime.UtcNow;
-        entity.RevokedReason = reason;
-        entity.UpdatedAt = DateTime.UtcNow;
-
-        await _dbContext.SaveChangesAsync();
+        await _repository.RevokeAsync(record.Id, reason);
 
         _logger.LogInformation(
             "Revoked refresh token {TokenId} for subject {SubjectId}. Reason: {Reason}",
-            entity.Id, entity.SubjectId, reason);
+            record.Id, record.SubjectId, reason);
 
         return true;
     }
@@ -204,71 +211,31 @@ public class RefreshTokenService : IRefreshTokenService
     /// <inheritdoc />
     public async Task<int> RevokeAllRefreshTokensForSubjectAsync(Guid subjectId, string reason)
     {
-        var tokens = await _dbContext.RefreshTokens
-            .Where(t => t.SubjectId == subjectId && t.RevokedAt == null)
-            .ToListAsync();
-
-        var now = DateTime.UtcNow;
-        foreach (var token in tokens)
-        {
-            token.RevokedAt = now;
-            token.RevokedReason = reason;
-            token.UpdatedAt = now;
-        }
-
-        await _dbContext.SaveChangesAsync();
+        var count = await _repository.RevokeAllForSubjectAsync(subjectId, reason);
 
         _logger.LogInformation(
             "Revoked {Count} refresh tokens for subject {SubjectId}. Reason: {Reason}",
-            tokens.Count, subjectId, reason);
+            count, subjectId, reason);
 
-        return tokens.Count;
+        return count;
     }
 
     /// <inheritdoc />
     public async Task<int> RevokeRefreshTokensByOidcSessionAsync(string oidcSessionId, string reason)
     {
-        var tokens = await _dbContext.RefreshTokens
-            .Where(t => t.OidcSessionId == oidcSessionId && t.RevokedAt == null)
-            .ToListAsync();
-
-        var now = DateTime.UtcNow;
-        foreach (var token in tokens)
-        {
-            token.RevokedAt = now;
-            token.RevokedReason = reason;
-            token.UpdatedAt = now;
-        }
-
-        await _dbContext.SaveChangesAsync();
+        var count = await _repository.RevokeByOidcSessionAsync(oidcSessionId, reason);
 
         _logger.LogInformation(
             "Revoked {Count} refresh tokens for OIDC session {SessionId}. Reason: {Reason}",
-            tokens.Count, oidcSessionId, reason);
+            count, oidcSessionId, reason);
 
-        return tokens.Count;
+        return count;
     }
 
     /// <inheritdoc />
     public async Task<List<RefreshTokenInfo>> GetActiveSessionsForSubjectAsync(Guid subjectId)
     {
-        var tokens = await _dbContext.RefreshTokens
-            .AsNoTracking()
-            .Where(t => t.SubjectId == subjectId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
-            .OrderByDescending(t => t.LastUsedAt ?? t.IssuedAt)
-            .Select(t => new RefreshTokenInfo
-            {
-                Id = t.Id,
-                DeviceDescription = t.DeviceDescription,
-                IpAddress = t.IpAddress,
-                IssuedAt = t.IssuedAt,
-                LastUsedAt = t.LastUsedAt,
-                ExpiresAt = t.ExpiresAt,
-                IsCurrent = false // Will be set by caller
-            })
-            .ToListAsync();
-
-        return tokens;
+        return await _repository.GetActiveSessionsAsync(subjectId);
     }
 
     /// <inheritdoc />
@@ -276,21 +243,15 @@ public class RefreshTokenService : IRefreshTokenService
     {
         var tokenHash = _jwtService.HashRefreshToken(refreshToken);
 
-        await _dbContext.RefreshTokens
-            .Where(t => t.TokenHash == tokenHash)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(t => t.LastUsedAt, DateTime.UtcNow)
-                .SetProperty(t => t.UpdatedAt, DateTime.UtcNow));
+        await _repository.UpdateLastUsedAsync(tokenHash);
     }
 
     /// <inheritdoc />
     public async Task<int> PruneExpiredRefreshTokensAsync(DateTime? olderThan = null)
     {
-        var cutoffDate = olderThan ?? DateTime.UtcNow.AddDays(-30); // Keep revoked tokens for 30 days by default
+        var cutoffDate = olderThan ?? DateTime.UtcNow.AddDays(-30);
 
-        var count = await _dbContext.RefreshTokens
-            .Where(t => t.ExpiresAt < cutoffDate || (t.RevokedAt != null && t.RevokedAt < cutoffDate))
-            .ExecuteDeleteAsync();
+        var count = await _repository.PruneExpiredAsync(cutoffDate);
 
         if (count > 0)
         {
@@ -298,14 +259,5 @@ public class RefreshTokenService : IRefreshTokenService
         }
 
         return count;
-    }
-
-    /// <summary>
-    /// Revoke all tokens in a token family (all tokens for a subject)
-    /// Used when token reuse is detected
-    /// </summary>
-    private async Task RevokeTokenFamilyAsync(Guid subjectId, string reason)
-    {
-        await RevokeAllRefreshTokensForSubjectAsync(subjectId, reason);
     }
 }

@@ -1,0 +1,65 @@
+---
+title: "Glucose Source Taxonomy"
+---
+flowchart LR
+    subgraph sources["Where glucose values come from"]
+        direction TB
+        cgm["<b>CGM stream</b><br/>(Dexcom, Libre, Guardian, etc.)"]
+        meterAuto["<b>Connected meter</b><br/>(auto-uploaded via connector / xDrip)"]
+        meterManual["<b>User-typed BG</b><br/>(treatment context: 'I just checked, 6.2')"]
+        oldCgm["<b>Legacy CGM</b><br/>(Dexcom G4/G5 via xDrip, self-calibrated transmitter)"]
+    end
+
+    cgm --> SensorGlucose
+    meterAuto --> MeterGlucose
+    meterManual --> BGCheck
+    oldCgm --> SensorGlucose
+    oldCgm -. produces .-> Calibration
+
+    subgraph models["V4 records (one per source)"]
+        direction TB
+
+        SensorGlucose["<b>SensorGlucose</b> : IV4Record<br/><br/>mgdl (source of truth) mmol (computed) direction, trend, trendRate, delta noise, filtered, unfiltered glucoseProcessing smoothedMgdl / unsmoothedMgdl patientDeviceId (FK)"]
+
+        MeterGlucose["<b>MeterGlucose</b> : IV4Record<br/><br/>mgdl (source of truth) mmol (computed) device, dataSource, app<br/><br/><i>(thinnest record: just a value + provenance)</i>"]
+
+        BGCheck["<b>BGCheck</b> : IV4Record<br/><br/>glucose (source of truth, in user's units) units (Mgdl / Mmol) glucoseType (Finger / Sensor) mgdl, mmol (both computed from glucose + units)"]
+
+        Calibration["<b>Calibration</b> : IV4Record<br/><br/>slope, intercept, scale<br/><br/><i>(no glucose value -- parameters for converting raw sensor → mg/dL)</i>"]
+    end
+
+    subgraph reasons["Why four tables, not one?"]
+        direction TB
+
+        r1["<b>Different source-of-truth units</b><br/>SensorGlucose stores mg/dL (CGMs report mg/dL natively, mmol/L is computed). BGCheck stores whatever the user typed (mg/dL OR mmol/L) + a units flag, because round-tripping the user's input matters for audits."]
+
+        r2["<b>Different fidelity needs</b><br/>SensorGlucose carries trend, noise, raw filtered/unfiltered ADC, smoothed vs unsmoothed. MeterGlucose carries just a value -- finger sticks have none of those concepts."]
+
+        r3["<b>Manual vs. automatic provenance</b><br/>BGCheck is in the treatment stream (user-entered, often tied to a correction or meal). MeterGlucose is in the entry stream (auto-uploaded, no treatment context). Same number, different epistemic weight."]
+
+        r4["<b>Calibration ≠ glucose</b><br/>Calibrations encode the math (slope/intercept/scale) used to convert raw sensor signal into mg/dL. Modern factory- calibrated CGMs (G6/G7/Libre) don't produce these. Mixing them with readings would corrupt every COUNT(*)."]
+
+        r5["<b>Independent retention / TTL</b><br/>SensorGlucose has the highest row count by far (1 per 1-5 min per patient). Splitting lets us downsample / archive sensor data aggressively without touching low-volume BGChecks or one-off calibrations."]
+
+        r6["<b>Device linkage differs</b><br/>SensorGlucose FKs to PatientDevice (the curated CGM in use). MeterGlucose carries a device string but no FK (meters churn; the value matters more than the unit). BGCheck has neither."]
+    end
+
+    SensorGlucose -.- r1
+    SensorGlucose -.- r2
+    BGCheck -.- r3
+    Calibration -.- r4
+    SensorGlucose -.- r5
+    SensorGlucose -.- r6
+
+    classDef source fill:#fef3c7,stroke:#b45309,color:#7c2d12
+    classDef record fill:#fff,stroke:#475569,color:#0f172a
+    classDef rich fill:#ecfccb,stroke:#4d7c0f,color:#365314
+    classDef thin fill:#e8f4f8,stroke:#0369a1,color:#0c4a6e
+    classDef calib fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d
+    classDef why fill:#f3e8ff,stroke:#7e22ce,color:#581c87,font-style:italic
+
+    class cgm,meterAuto,meterManual,oldCgm source
+    class SensorGlucose rich
+    class MeterGlucose,BGCheck thin
+    class Calibration calib
+    class r1,r2,r3,r4,r5,r6 why

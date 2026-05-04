@@ -23,6 +23,9 @@ export class CoachMarkContext {
   private _settleTimer: ReturnType<typeof setTimeout> | null = null;
   private _initialized = $state(false);
 
+  private _forcedSequence = $state<string | null>(null);
+  private _quietUntilNavigation = $state(false);
+
   activeKey = $derived(this._activeSelection?.key ?? null);
   activeStep = $derived(this._activeSelection?.step ?? null);
 
@@ -60,6 +63,15 @@ export class CoachMarkContext {
   register(registration: MarkRegistration): () => void {
     this._registrations = untrack(() => [...this._registrations, registration]);
     this.scheduleSelection();
+
+    // If a forced sequence is active and this key belongs to it, try advancing
+    if (this._forcedSequence) {
+      const seq = this.sequences[this._forcedSequence];
+      if (seq && seq.steps.includes(registration.key) && !this._activeSelection) {
+        this.activateNextForcedStep();
+      }
+    }
+
     return () => {
       this._registrations = untrack(() =>
         this._registrations.filter(
@@ -83,6 +95,22 @@ export class CoachMarkContext {
   }
 
   dismiss(key: string): void {
+    if (this._forcedSequence) {
+      // Dismissing any step in a forced sequence dismisses ALL remaining unseen/seen steps
+      const seq = this.sequences[this._forcedSequence];
+      if (seq) {
+        for (const stepKey of seq.steps) {
+          const status = this.getStatus(stepKey);
+          if (status === "unseen" || status === "seen") {
+            this.updateStatus(stepKey, "dismissed");
+          }
+        }
+      }
+      this._activeSelection = null;
+      this.onForcedSequenceComplete();
+      return;
+    }
+
     this.updateStatus(key, "dismissed");
     this._activeSelection = null;
     this.scheduleSelection();
@@ -93,7 +121,12 @@ export class CoachMarkContext {
     if (this._activeSelection?.key === key) {
       this._activeSelection = null;
     }
-    this.scheduleSelection();
+
+    if (this._forcedSequence) {
+      this.activateNextForcedStep();
+    } else {
+      this.scheduleSelection();
+    }
   }
 
   markSeen(key: string): void {
@@ -133,6 +166,91 @@ export class CoachMarkContext {
     return this.seenDwellMs;
   }
 
+  /** Force-activate a named sequence, overriding quiet mode if set. */
+  startSequence(name: string): void {
+    const seq = this.sequences[name];
+    if (!seq) {
+      console.warn(`[coach] Sequence "${name}" not found.`);
+      return;
+    }
+
+    this._forcedSequence = name;
+    // Intentionally overrides quiet mode — a new forced sequence always wins
+    this._quietUntilNavigation = false;
+    this._activeSelection = null;
+    this.activateNextForcedStep();
+  }
+
+  clearQuiet(): void {
+    this._quietUntilNavigation = false;
+    this._forcedSequence = null;
+    this.scheduleSelection();
+  }
+
+  async resetAll(): Promise<void> {
+    if (this.adapter.deleteAll) {
+      await this.adapter.deleteAll();
+    }
+    this._states = new Map();
+    this._activeSelection = null;
+    this._forcedSequence = null;
+    this._quietUntilNavigation = false;
+    this.scheduleSelection();
+  }
+
+  private activateNextForcedStep(): void {
+    if (!this._forcedSequence) return;
+
+    const seq = this.sequences[this._forcedSequence];
+    if (!seq) return;
+
+    const mountedKeys = new Set(this._registrations.map((r) => r.key));
+
+    for (const stepKey of seq.steps) {
+      const status = this.getStatus(stepKey);
+      if (status === "completed" || status === "dismissed") continue;
+
+      // Found the first unseen/seen step
+      if (!mountedKeys.has(stepKey)) {
+        // Not mounted yet — wait for lazy registration to trigger
+        return;
+      }
+
+      // Mounted and eligible: activate it
+      const stepRegistrations = this._registrations
+        .filter((r) => r.key === stepKey)
+        .sort((a, b) => a.step - b.step);
+
+      if (stepRegistrations.length > 0) {
+        this._activeSelection = { key: stepKey, step: stepRegistrations[0].step };
+        return;
+      }
+    }
+
+    // All steps done
+    this.onForcedSequenceComplete();
+  }
+
+  private onForcedSequenceComplete(): void {
+    if (!this._forcedSequence) return;
+
+    const seq = this.sequences[this._forcedSequence];
+
+    // Cross-complete keys from completesKeys
+    if (seq?.completesKeys) {
+      for (const key of seq.completesKeys) {
+        const status = this.getStatus(key);
+        if (status !== "completed" && status !== "dismissed") {
+          this.updateStatus(key, "completed");
+        }
+      }
+    }
+
+    this._quietUntilNavigation = true;
+    this._forcedSequence = null;
+    this._activeSelection = null;
+  }
+
   private updateStatus(key: string, status: MarkStatus): void {
     const existing = this._states.get(key);
     const now = new Date().toISOString();
@@ -159,6 +277,8 @@ export class CoachMarkContext {
 
   private scheduleSelection(): void {
     if (!this._initialized) return;
+    if (this._quietUntilNavigation) return;
+    if (this._forcedSequence) return;
     if (this._settleTimer) clearTimeout(this._settleTimer);
     this._settleTimer = setTimeout(() => {
       if (this._activeSelection) return;

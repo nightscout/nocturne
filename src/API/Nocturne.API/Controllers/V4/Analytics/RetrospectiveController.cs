@@ -1,12 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Profiles;
-using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
-using Nocturne.Core.Contracts.Repositories;
 namespace Nocturne.API.Controllers.V4.Analytics;
 /// <summary>
 /// Controller providing retrospective (day-in-review) diabetes data.
@@ -21,14 +20,14 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// </list>
 /// Glucose values are linearly interpolated from surrounding <see cref="Entry"/> records.
 /// IOB is calculated via <see cref="IIobService"/> and COB via <see cref="ICobService"/>.
-/// Scheduled basal falls back to <see cref="IProfileService.GetBasalRate"/> when no temp basal
+/// Scheduled basal falls back to <see cref="IBasalRateResolver.GetBasalRateAsync"/> when no temp basal
 /// treatment is active.
 /// </remarks>
 /// <seealso cref="IIobService"/>
 /// <seealso cref="ICobService"/>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="ITreatmentService"/>
-/// <seealso cref="IProfileService"/>
+/// <seealso cref="IBasalRateResolver"/>
 [ApiController]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
@@ -38,18 +37,18 @@ public class RetrospectiveController : ControllerBase
     private readonly ICobService _cobService;
     private readonly IEntryService _entryService;
     private readonly ITreatmentService _treatmentService;
-    private readonly IDeviceStatusService _deviceStatusService;
-    private readonly IProfileService _profileService;
-    private readonly IEntryRepository _entryRepository;
+    private readonly DeviceStatusProjectionService _projectionService;
+    private readonly IBasalRateResolver _basalRateResolver;
+    private readonly ITherapyTimelineResolver _therapyTimelineResolver;
     private readonly ILogger<RetrospectiveController> _logger;
     public RetrospectiveController(
         IIobService iobService,
         ICobService cobService,
         IEntryService entryService,
         ITreatmentService treatmentService,
-        IDeviceStatusService deviceStatusService,
-        IProfileService profileService,
-        IEntryRepository entryRepository,
+        DeviceStatusProjectionService projectionService,
+        IBasalRateResolver basalRateResolver,
+        ITherapyTimelineResolver therapyTimelineResolver,
         ILogger<RetrospectiveController> logger
     )
     {
@@ -57,9 +56,9 @@ public class RetrospectiveController : ControllerBase
         _cobService = cobService;
         _entryService = entryService;
         _treatmentService = treatmentService;
-        _deviceStatusService = deviceStatusService;
-        _profileService = profileService;
-        _entryRepository = entryRepository;
+        _projectionService = projectionService;
+        _basalRateResolver = basalRateResolver;
+        _therapyTimelineResolver = therapyTimelineResolver;
         _logger = logger;
     }
     /// <summary>
@@ -93,11 +92,13 @@ public class RetrospectiveController : ControllerBase
             var fromMills = time - (30 * 60 * 1000); // 30 minutes before
             var toMills = time + (5 * 60 * 1000);    // 5 minutes after
             var findQuery = $"{{\"mills\":{{\"$gte\":{fromMills},\"$lte\":{toMills}}}}}";
-            var entries = await _entryRepository.GetEntriesWithAdvancedFilterAsync(
+            var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
                 type: "sgv",
                 count: 50,
                 skip: 0,
                 findQuery: findQuery,
+                dateString: null,
+                reverseResults: false,
                 cancellationToken: cancellationToken
             );
             var entryList = entries?.ToList() ?? new List<Entry>();
@@ -113,31 +114,21 @@ public class RetrospectiveController : ControllerBase
             var treatmentList = treatments?
                 .Where(t => t.Mills >= treatmentStartTime && t.Mills <= time)
                 .ToList() ?? new List<Treatment>();
-            // Get device status for enhanced IOB/COB data
-            var deviceStatus = await _deviceStatusService.GetDeviceStatusAsync(
-                count: 50,
-                skip: 0,
-                cancellationToken: cancellationToken
-            );
-            var deviceStatusList = deviceStatus?.ToList() ?? new List<DeviceStatus>();
             // Calculate IOB at the specified time
-            var iobResult = _iobService.CalculateTotal(
+            var iobResult = await _iobService.CalculateTotalAsync(
                 treatmentList,
-                deviceStatusList,
-                _profileService,
-                time
+                time,
+                ct: cancellationToken
             );
-            // Calculate COB at the specified time
-            var cobResult = _cobService.CobTotal(
-                treatmentList,
-                deviceStatusList,
-                _profileService,
-                time
-            );
+            // Calculate COB at the specified time via the snapshot path.
+            var snapshot = await _therapyTimelineResolver.GetSnapshotAtAsync(time, ct: cancellationToken);
+            var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var deviceCob = await _cobService.GetDeviceCobAsync(time, cancellationToken);
+            var cobResult = _cobService.CobTotal(treatmentList, time, snapshot, deviceCob, nowMills);
             // Get glucose at the specified time (interpolated)
             var glucoseData = GetGlucoseAtTime(entryList, time);
             // Get basal rate at the specified time
-            var basalData = GetBasalRateAtTime(treatmentList, time);
+            var basalData = await GetBasalRateAtTimeAsync(treatmentList, time);
             // Get recent treatments (within 30 minutes before the target time)
             var recentTreatments = treatmentList
                 .Where(t => t.Mills >= time - 30 * 60 * 1000 && t.Mills <= time)
@@ -243,42 +234,52 @@ public class RetrospectiveController : ControllerBase
                 .Where(t => t.Mills >= fetchStartMills && t.Mills <= endMills)
                 .ToList() ?? new List<Treatment>();
             // Get device status
-            var deviceStatus = await _deviceStatusService.GetDeviceStatusAsync(
+            var deviceStatus = await _projectionService.GetAsync(
                 count: 500,
                 skip: 0,
-                cancellationToken: cancellationToken
+                find: null,
+                ct: cancellationToken
             );
             var deviceStatusList = deviceStatus?
                 .Where(d => d.Mills >= startMills && d.Mills <= endMills)
                 .ToList() ?? new List<DeviceStatus>();
+            // Resolve once for the day window; segment lookup is in-memory per tick.
+            var timeline = await _therapyTimelineResolver.BuildAsync(startMills, endMills + 1, ct: cancellationToken);
+            var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
             // Calculate data points at each interval
             var dataPoints = new List<RetrospectiveDataPoint>();
             var totalIntervals = (24 * 60) / intervalMinutes;
             for (int i = 0; i < totalIntervals; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var pointTime = startMills + (i * intervalMinutes * 60 * 1000);
                 var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(pointTime);
                 // Filter treatments relevant to this time point (for IOB calculation)
                 var relevantTreatments = treatmentList
                     .Where(t => t.Mills <= pointTime)
                     .ToList();
+                var snapshot = timeline.SnapshotAt(pointTime);
                 // Calculate IOB
                 var iobResult = _iobService.FromTreatments(
                     relevantTreatments,
-                    _profileService,
-                    pointTime
+                    pointTime,
+                    snapshot
                 );
-                // Calculate COB
-                var cobResult = _cobService.FromTreatments(
+                // Calculate COB — pass deviceCob:null so historical ticks use treatment-only COB
+                // (the legacy FromTreatmentsAsync path skipped device priority for the same reason).
+                var cobResult = _cobService.CobTotal(
                     relevantTreatments,
-                    deviceStatusList,
-                    _profileService,
-                    pointTime
+                    pointTime,
+                    snapshot,
+                    deviceCob: null,
+                    nowMills
                 );
                 // Get glucose at this time
                 var glucose = GetGlucoseAtTime(entryList, pointTime);
                 // Get basal rate
-                var basal = GetBasalRateAtTime(relevantTreatments, pointTime);
+                var basal = await GetBasalRateAtTimeAsync(relevantTreatments, pointTime);
                 dataPoints.Add(new RetrospectiveDataPoint
                 {
                     Time = pointTime,
@@ -358,14 +359,14 @@ public class RetrospectiveController : ControllerBase
             {
                 var pointTime = startMills + (i * intervalMinutes * 60 * 1000);
                 var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(pointTime);
-                var basal = GetBasalRateAtTime(treatmentList, pointTime);
+                var basal = await GetBasalRateAtTimeAsync(treatmentList, pointTime);
                 dataPoints.Add(new BasalDataPoint
                 {
                     Time = pointTime,
                     Hour = timestamp.Hour,
                     Minute = timestamp.Minute,
                     TimeLabel = timestamp.ToString("HH:mm"),
-                    Rate = basal?.Rate ?? GetScheduledBasalRate(pointTime),
+                    Rate = basal?.Rate ?? await GetScheduledBasalRateAsync(pointTime),
                     IsTemp = basal?.IsTemp ?? false
                 });
             }
@@ -479,7 +480,7 @@ public class RetrospectiveController : ControllerBase
     /// <summary>
     /// Get basal rate at a specific time (checking for active temp basals)
     /// </summary>
-    private BasalData? GetBasalRateAtTime(List<Treatment> treatments, long targetTime)
+    private async Task<BasalData?> GetBasalRateAtTimeAsync(List<Treatment> treatments, long targetTime)
     {
         // Look for active temp basal at target time
         foreach (var treatment in treatments)
@@ -502,18 +503,18 @@ public class RetrospectiveController : ControllerBase
         // Return scheduled basal rate
         return new BasalData
         {
-            Rate = GetScheduledBasalRate(targetTime),
+            Rate = await GetScheduledBasalRateAsync(targetTime),
             IsTemp = false
         };
     }
     /// <summary>
     /// Get scheduled basal rate from profile
     /// </summary>
-    private double GetScheduledBasalRate(long time)
+    private async Task<double> GetScheduledBasalRateAsync(long time)
     {
         try
         {
-            return _profileService.GetBasalRate(time);
+            return await _basalRateResolver.GetBasalRateAsync(time);
         }
         catch
         {

@@ -387,19 +387,15 @@
 
 <div class="container mx-auto p-6 max-w-5xl">
   <!-- Header -->
-  <div class="mb-8">
-    <div class="flex items-center gap-3 mb-2">
-      <div
-        class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"
-      >
-        <Shield class="h-5 w-5 text-primary" />
-      </div>
-      <div>
-        <h1 class="text-3xl font-bold tracking-tight">Administration</h1>
-        <p class="text-muted-foreground">
-          Manage users, connected devices, and access control
-        </p>
-      </div>
+  <div class="flex items-center gap-3">
+    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+      <Shield class="h-6 w-6 text-primary" />
+    </div>
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Administration</h1>
+      <p class="text-muted-foreground">
+        Manage users, connected devices, and access control
+      </p>
     </div>
   </div>
 

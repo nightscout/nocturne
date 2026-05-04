@@ -106,6 +106,25 @@ public class SensitivityScheduleRepository : ISensitivityScheduleRepository
     }
 
     /// <summary>
+    /// Gets the most recent sensitivity schedule for a profile that was active at-or-before the given timestamp.
+    /// </summary>
+    /// <param name="profileName">The name of the profile.</param>
+    /// <param name="timestamp">The point-in-time to query against.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The matching sensitivity schedule, or null if none found.</returns>
+    public async Task<SensitivitySchedule?> GetActiveAtAsync(
+        string profileName, DateTime timestamp, CancellationToken ct = default)
+    {
+        var entity = await _context.SensitivitySchedules
+            .AsNoTracking()
+            .Where(e => e.ProfileName == profileName && e.Timestamp <= timestamp)
+            .OrderByDescending(e => e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+
+        return entity is null ? null : SensitivityScheduleMapper.ToDomainModel(entity);
+    }
+
+    /// <summary>
     /// Creates a new insulin sensitivity schedule record.
     /// </summary>
     /// <param name="model">The insulin sensitivity schedule to create.</param>

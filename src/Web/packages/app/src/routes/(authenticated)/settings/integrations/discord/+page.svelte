@@ -101,12 +101,14 @@
 		actionError = null;
 		try {
 			const result = await initiateDiscordLink(undefined);
-			// If we get here (no redirect thrown), check for error
 			if (result && "error" in result) {
 				actionError = result.error;
+			} else if (result && "redirectUrl" in result) {
+				window.location.href = result.redirectUrl;
+				return;
 			}
 		} catch {
-			// The command throws a redirect on success — this is expected
+			actionError = "Failed to start Discord link flow.";
 		} finally {
 			isLinking = false;
 		}

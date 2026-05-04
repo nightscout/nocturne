@@ -43,11 +43,9 @@ public interface IConnectorFoodEntryRepository
     /// </summary>
     /// <param name="id">The food entry ID to update.</param>
     /// <param name="status">The new <see cref="ConnectorFoodEntryStatus"/>.</param>
-    /// <param name="matchedTreatmentId">The treatment ID this entry was matched to, or null.</param>
     /// <param name="ct">Cancellation token.</param>
     Task UpdateStatusAsync(
         Guid id,
         ConnectorFoodEntryStatus status,
-        Guid? matchedTreatmentId,
         CancellationToken ct = default);
 }

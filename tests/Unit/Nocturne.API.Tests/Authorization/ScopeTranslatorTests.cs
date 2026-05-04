@@ -131,4 +131,62 @@ public class ScopeTranslatorTests
         Assert.Contains("*", permissions);
         Assert.Single(permissions); // * covers everything, no need for individual permissions
     }
+
+    [Fact]
+    public void FromPermissions_FoodRead_MapsToFoodRead()
+    {
+        var permissions = new[] { "api:food:read" };
+        var scopes = ScopeTranslator.FromPermissions(permissions);
+
+        Assert.Contains(OAuthScopes.FoodRead, scopes);
+        Assert.DoesNotContain(OAuthScopes.FoodReadWrite, scopes);
+    }
+
+    [Fact]
+    public void FromPermissions_FoodCreate_MapsToFoodReadWrite()
+    {
+        var permissions = new[] { "api:food:create" };
+        var scopes = ScopeTranslator.FromPermissions(permissions);
+
+        Assert.Contains(OAuthScopes.FoodReadWrite, scopes);
+    }
+
+    [Fact]
+    public void ToPermissions_FoodRead_MapsBack()
+    {
+        var scopes = new[] { OAuthScopes.FoodRead };
+        var permissions = ScopeTranslator.ToPermissions(scopes);
+
+        Assert.Contains("api:food:read", permissions);
+    }
+
+    [Fact]
+    public void ToPermissions_FoodReadWrite_IncludesReadCreateUpdate()
+    {
+        var scopes = new[] { OAuthScopes.FoodReadWrite };
+        var permissions = ScopeTranslator.ToPermissions(scopes);
+
+        Assert.Contains("api:food:read", permissions);
+        Assert.Contains("api:food:create", permissions);
+        Assert.Contains("api:food:update", permissions);
+        Assert.DoesNotContain("api:food:delete", permissions);
+    }
+
+    [Fact]
+    public void FromPermissions_WildcardRead_IncludesFood()
+    {
+        var permissions = new[] { "api:*:read" };
+        var scopes = ScopeTranslator.FromPermissions(permissions);
+
+        Assert.Contains(OAuthScopes.FoodRead, scopes);
+    }
+
+    [Fact]
+    public void FromPermissions_WildcardCreate_IncludesFood()
+    {
+        var permissions = new[] { "api:*:create" };
+        var scopes = ScopeTranslator.FromPermissions(permissions);
+
+        Assert.Contains(OAuthScopes.FoodReadWrite, scopes);
+    }
 }

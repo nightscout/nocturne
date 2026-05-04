@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.V4;
@@ -29,6 +30,8 @@ public class V4ToLegacyProjectionServiceTests
     private readonly Mock<IBGCheckRepository> _bgCheckRepo = new();
     private readonly Mock<INoteRepository> _noteRepo = new();
     private readonly Mock<IDeviceEventRepository> _deviceEventRepo = new();
+    private readonly Mock<ITempBasalRepository> _tempBasalRepo = new();
+    private readonly Mock<IBolusCalculationRepository> _bolusCalcRepo = new();
     private readonly Mock<ITreatmentFoodService> _treatmentFoodService = new();
     private readonly V4ToLegacyProjectionService _service;
 
@@ -66,6 +69,26 @@ public class V4ToLegacyProjectionServiceTests
             .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<TreatmentFood>());
 
+        _tempBasalRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<TempBasal>());
+
+        _bolusCalcRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<BolusCalculation>());
+
+        var dbContext = TestDbContextFactory.CreateInMemoryContext();
+
         _service = new V4ToLegacyProjectionService(
             _sensorGlucoseRepo.Object,
             _bolusRepo.Object,
@@ -73,7 +96,10 @@ public class V4ToLegacyProjectionServiceTests
             _bgCheckRepo.Object,
             _noteRepo.Object,
             _deviceEventRepo.Object,
+            _tempBasalRepo.Object,
+            _bolusCalcRepo.Object,
             _treatmentFoodService.Object,
+            dbContext,
             NullLogger<V4ToLegacyProjectionService>.Instance
         );
     }

@@ -22,6 +22,7 @@ public static class ApsSnapshotMapper
             Timestamp = model.Timestamp,
             UtcOffset = model.UtcOffset,
             Device = model.Device,
+            CorrelationId = model.CorrelationId,
             LegacyId = model.LegacyId,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
@@ -47,6 +48,8 @@ public static class ApsSnapshotMapper
             PredictedCobJson = model.PredictedCobJson,
             PredictedUamJson = model.PredictedUamJson,
             PredictedStartTimestamp = model.PredictedStartTimestamp,
+            LoopJson = model.LoopJson,
+            AidVersion = model.AidVersion,
             AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
                 ? JsonSerializer.Serialize(model.AdditionalProperties)
                 : null,
@@ -66,6 +69,7 @@ public static class ApsSnapshotMapper
             Timestamp = entity.Timestamp,
             UtcOffset = entity.UtcOffset,
             Device = entity.Device,
+            CorrelationId = entity.CorrelationId,
             LegacyId = entity.LegacyId,
             CreatedAt = entity.SysCreatedAt,
             ModifiedAt = entity.SysUpdatedAt,
@@ -91,6 +95,8 @@ public static class ApsSnapshotMapper
             PredictedCobJson = entity.PredictedCobJson,
             PredictedUamJson = entity.PredictedUamJson,
             PredictedStartTimestamp = entity.PredictedStartTimestamp,
+            LoopJson = entity.LoopJson,
+            AidVersion = entity.AidVersion,
             AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
                 ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
                 : null,
@@ -107,6 +113,7 @@ public static class ApsSnapshotMapper
         entity.Timestamp = model.Timestamp;
         entity.UtcOffset = model.UtcOffset;
         entity.Device = model.Device;
+        entity.CorrelationId = model.CorrelationId;
         entity.LegacyId = model.LegacyId;
         entity.SysUpdatedAt = DateTime.UtcNow;
         entity.AidAlgorithm = model.AidAlgorithm.ToString();
@@ -131,6 +138,8 @@ public static class ApsSnapshotMapper
         entity.PredictedCobJson = model.PredictedCobJson;
         entity.PredictedUamJson = model.PredictedUamJson;
         entity.PredictedStartTimestamp = model.PredictedStartTimestamp;
+        entity.LoopJson = model.LoopJson;
+        entity.AidVersion = model.AidVersion;
         entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
             ? JsonSerializer.Serialize(model.AdditionalProperties)
             : null;

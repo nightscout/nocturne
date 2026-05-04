@@ -16,21 +16,40 @@ export const getSounds = query(async () => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertCustomSounds.getSounds:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get sounds');
   }
 });
 
 /** Upload a custom alert sound file. */
-export const uploadSound = command(async () => {
+export const uploadSound = command(async (file: File) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
-    const result = await apiClient.alertCustomSounds.uploadSound();
+    const formData = new FormData();
+    formData.append('file', file);
+    const url = apiClient.baseUrl + '/api/v4/alert-sounds';
+    const response = await (apiClient as any).http.fetch(url, {
+      body: formData,
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!response.ok) {
+      const err: any = new Error(`Upload failed (${response.status})`);
+      err.status = response.status;
+      throw err;
+    }
+    const result = await response.json();
     return result;
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertCustomSounds.uploadSound:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to upload sound');
   }
 });
@@ -49,6 +68,9 @@ export const deleteSound = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertCustomSounds.deleteSound:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to delete sound');
   }
 });

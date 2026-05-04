@@ -72,6 +72,7 @@
   --status-warning: rgb(255, 193, 69);
   --status-critical: rgb(235, 87, 87);
   --status-normal: rgb(111, 207, 151);
+  --status-info: rgb(0, 122, 255);
   --status-aging: rgb(255, 193, 69);
   --status-stale: rgb(235, 87, 87);
 
@@ -86,6 +87,10 @@
   --gri-zone-c: rgb(255, 235, 59);    /* Yellow */
   --gri-zone-d: rgb(255, 152, 0);     /* Orange */
   --gri-zone-e: rgb(244, 67, 54);     /* Red - worst glycemia */
+
+  /* Health Overlays */
+  --heart-rate: rgb(220, 80, 80);
+  --steps: rgb(160, 100, 200);
 
   /* Chart Colors - Trio themed */
   --chart-1: rgb(30, 150, 252); /* Insulin blue */

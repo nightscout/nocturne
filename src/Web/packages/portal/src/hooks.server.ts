@@ -1,4 +1,5 @@
 import type { Handle } from '@sveltejs/kit';
+import { building } from '$app/environment';
 import { env as publicEnv } from '$env/dynamic/public';
 import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
 import * as main from '../../../locales/main.loader.server.svelte.js'
@@ -79,6 +80,9 @@ function resolveLocale(event: Parameters<Handle>[0]['event']): string {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
+	if (building) {
+		return resolve(event);
+	}
 	const locale = resolveLocale(event);
 	return await runWithLocale(locale, () => resolve(event));
 };

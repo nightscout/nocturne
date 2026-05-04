@@ -6,12 +6,17 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
-  import PermissionPicker from "$lib/components/rbac/PermissionPicker.svelte";
+  import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
+  import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
+  import * as Collapsible from "$lib/components/ui/collapsible";
+  import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     Trash2,
     Clock,
     Loader2,
     Settings2,
+    ChevronDown,
+    ChevronUp,
   } from "lucide-svelte";
   import { formatDate } from "$lib/utils/formatting";
   import type { TenantMemberDto, TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
@@ -23,6 +28,7 @@
     canManage: boolean;
     isExpanded: boolean;
     isSaving: boolean;
+    currentSubjectId?: string;
     onToggleExpand: () => void;
     onSaveRoles: (roleIds: string[], permissions: string[]) => void;
     onRemove: () => void;
@@ -35,6 +41,7 @@
     canManage = false,
     isExpanded = false,
     isSaving = false,
+    currentSubjectId,
     onToggleExpand,
     onSaveRoles,
     onRemove,
@@ -42,11 +49,32 @@
 
   let editingRoleIds = $state<string[]>([]);
   let editingPermissions = $state<string[]>([]);
+  let showDirectPermissions = $state(false);
+
+  /** Union of all permissions from the currently selected roles */
+  const rolePermissions = $derived(
+    editingRoleIds.flatMap((rid) => {
+      const role = roles.find((r) => r.id === rid);
+      return role?.permissions ?? [];
+    })
+  );
+
+  /** Original values for dirty checking */
+  const originalRoleIds = $derived(
+    (member.roles ?? []).map((r: any) => r.roleId as string)
+  );
+  const originalPermissions = $derived([...(member.directPermissions ?? [])]);
+
+  const isDirty = $derived(
+    JSON.stringify([...editingRoleIds].sort()) !== JSON.stringify([...originalRoleIds].sort()) ||
+    JSON.stringify([...editingPermissions].sort()) !== JSON.stringify([...originalPermissions].sort())
+  );
 
   function toggleExpand() {
     if (!isExpanded) {
       editingRoleIds = (member.roles ?? []).map((r: any) => r.roleId as string);
       editingPermissions = [...(member.directPermissions ?? [])];
+      showDirectPermissions = false;
     }
     onToggleExpand();
   }
@@ -76,7 +104,7 @@
           <span class="truncate">
             {member.name ?? "Unknown"}
           </span>
-          {#each member.roles ?? [] as role}
+          {#each member.roles ?? [] as role (role.slug)}
             <Badge variant="secondary" class="text-xs">
               {role.name ?? role.slug ?? "Unknown"}
             </Badge>
@@ -152,15 +180,36 @@
         <Label>Roles</Label>
         <div class="grid gap-2 sm:grid-cols-2">
           {#each roles as role (role.id)}
+            {@const isOwnerSelf = role.slug === "owner" && member.subjectId === currentSubjectId}
+            {@const isOwnerRole = editingRoleIds.includes(role.id ?? '')}
             <div class="flex items-center gap-2">
-              <Checkbox
-                id="member-role-{member.subjectId}-{role.id}"
-                checked={editingRoleIds.includes(role.id ?? '')}
-                onCheckedChange={() => toggleRole(role.id ?? '')}
-              />
+              {#if isOwnerSelf}
+                <Tooltip.Provider>
+                  <Tooltip.Root>
+                    <Tooltip.Trigger>
+                      <Checkbox
+                        id="member-role-{member.subjectId}-{role.id}"
+                        checked={isOwnerRole}
+                        disabled
+                      />
+                    </Tooltip.Trigger>
+                    <Tooltip.Content>
+                      The owner role cannot be removed from yourself
+                    </Tooltip.Content>
+                  </Tooltip.Root>
+                </Tooltip.Provider>
+              {:else}
+                <Checkbox
+                  id="member-role-{member.subjectId}-{role.id}"
+                  checked={editingRoleIds.includes(role.id ?? '')}
+                  onCheckedChange={() => toggleRole(role.id ?? '')}
+                />
+              {/if}
               <label
                 for="member-role-{member.subjectId}-{role.id}"
-                class="text-sm text-foreground cursor-pointer select-none"
+                class="text-sm text-foreground select-none"
+                class:cursor-pointer={!isOwnerSelf}
+                class:opacity-60={isOwnerSelf}
               >
                 {role.name}
               </label>
@@ -171,31 +220,61 @@
 
       <Separator />
 
-      <!-- Direct permissions -->
+      <!-- Permission summary from roles -->
       <div class="space-y-2">
-        <Label>Direct Permissions</Label>
-        <PermissionPicker bind:selected={editingPermissions} />
+        <Label>Permissions from roles</Label>
+        <div class="rounded-lg border p-3 bg-muted/30">
+          <PermissionSummary permissions={rolePermissions} />
+        </div>
       </div>
 
-      <div class="flex gap-3">
-        <Button
-          variant="outline"
-          class="flex-1"
-          onclick={handleCancel}
-        >
-          Cancel
-        </Button>
-        <Button
-          class="flex-1"
-          disabled={isSaving}
-          onclick={handleSave}
-        >
-          {#if isSaving}
-            <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
+      <Separator />
+
+      <!-- Direct permissions (collapsible) -->
+      <Collapsible.Root
+        open={showDirectPermissions}
+        onOpenChange={(open) => (showDirectPermissions = open)}
+      >
+        <Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
+          {#if showDirectPermissions}
+            <ChevronUp class="h-4 w-4" />
+          {:else}
+            <ChevronDown class="h-4 w-4" />
           {/if}
-          Save Changes
-        </Button>
-      </div>
+          Direct permissions (advanced)
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <div class="mt-3">
+            <PermissionCategorySelector
+              bind:selected={editingPermissions}
+              grantedByRoles={rolePermissions}
+            />
+          </div>
+        </Collapsible.Content>
+      </Collapsible.Root>
+
+      <!-- Cancel / Save - only when dirty -->
+      {#if isDirty}
+        <div class="flex gap-3">
+          <Button
+            variant="outline"
+            class="flex-1"
+            onclick={handleCancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            class="flex-1"
+            disabled={isSaving}
+            onclick={handleSave}
+          >
+            {#if isSaving}
+              <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
+            {/if}
+            Save Changes
+          </Button>
+        </div>
+      {/if}
     </Card.Content>
   {:else}
     <Card.Content>

@@ -90,6 +90,14 @@ public class DashboardChartData
 
     /// <summary>Tracker markers (consumable ages, appointments) for chart overlay.</summary>
     public List<TrackerMarkerDto> TrackerMarkers { get; set; } = new();
+
+    // === Health data ===
+
+    /// <summary>Heart rate time series for background chart overlay.</summary>
+    public List<HeartRatePointDto> HeartRateSeries { get; set; } = new();
+
+    /// <summary>Step count series for background chart bubble overlay.</summary>
+    public List<StepBubbleDto> StepSeries { get; set; } = new();
 }
 
 /// <summary>
@@ -255,6 +263,24 @@ public class TrackerMarkerDto
     public long Time { get; set; }
     public string? Icon { get; set; }
     public ChartColor Color { get; set; }
+}
+
+/// <summary>
+/// Heart rate data point for chart rendering.
+/// </summary>
+public class HeartRatePointDto
+{
+    public long Time { get; set; }
+    public int Bpm { get; set; }
+}
+
+/// <summary>
+/// Step count data point for chart rendering as a sized bubble.
+/// </summary>
+public class StepBubbleDto
+{
+    public long Time { get; set; }
+    public int Steps { get; set; }
 }
 
 /// <summary>

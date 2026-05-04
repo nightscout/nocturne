@@ -28,6 +28,16 @@ public class GlookoTimeMapper
         return corrected;
     }
 
+    /// <summary>
+    ///     Converts a real UTC timestamp back to Glooko's fake-UTC format
+    ///     (local time with Z suffix) for use in API request parameters.
+    ///     This is the reverse of <see cref="GetCorrectedGlookoTime(DateTime)"/>.
+    /// </summary>
+    public DateTime ToGlookoTime(DateTime utcTime)
+    {
+        return utcTime.AddHours(_config.TimezoneOffset);
+    }
+
     public DateTime GetCorrectedGlookoTime(long unixSeconds)
     {
         var rawUtc = DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime;

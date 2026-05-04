@@ -1,5 +1,5 @@
 using Nocturne.API.Tests.GoldenFiles.Infrastructure;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.API.Tests.GoldenFiles.V3;
 
@@ -14,23 +14,20 @@ public class EntriesGoldenTests : GoldenFileTestBase
 
     #region Helper Methods
 
-    private static EntryEntity CreateSgvEntry(
+    private static SensorGlucoseEntity CreateSgvEntry(
         int index,
         double sgv = 120,
         string direction = "Flat",
-        string? originalId = null)
+        string? legacyId = null)
     {
         var mills = BaseMillis - (index * 300_000); // 5 min apart, descending
-        return new EntryEntity
+        return new SensorGlucoseEntity
         {
             Id = Guid.Parse($"00000000-0000-0000-0000-{(index + 1):D12}"),
             TenantId = TestTenantId,
-            OriginalId = originalId ?? $"aaaaaaaaaaaaaaaaaaaaa{(index + 1):D3}",
-            Type = "sgv",
-            Sgv = sgv,
+            LegacyId = legacyId ?? $"aaaaaaaaaaaaaaaaaaaaa{(index + 1):D3}",
             Mgdl = sgv,
-            Mills = mills,
-            DateString = DateTimeOffset.FromUnixTimeMilliseconds(mills).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime,
             Direction = direction,
             Device = "xDrip-DexcomG6",
             SysCreatedAt = DateTime.UtcNow,
@@ -59,7 +56,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
     public async Task GetEntries_WithSeededData_ReturnsV3WrappedResult()
     {
         var entries = Enumerable.Range(0, 3).Select(i => CreateSgvEntry(i, sgv: 100 + i * 10)).ToArray();
-        await SeedEntries(entries);
+        await SeedSensorGlucose(entries);
 
         var response = await Client.GetAsync("/api/v3/entries");
         var captured = await CaptureResponse(response);
@@ -76,7 +73,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
     public async Task GetEntries_WithLimit3_RespectsLimit()
     {
         var entries = Enumerable.Range(0, 10).Select(i => CreateSgvEntry(i)).ToArray();
-        await SeedEntries(entries);
+        await SeedSensorGlucose(entries);
 
         var response = await Client.GetAsync("/api/v3/entries?limit=3");
         var captured = await CaptureResponse(response);
@@ -129,7 +126,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
     [Fact]
     public async Task GetEntries_ResponseIncludesV3Fields()
     {
-        await SeedEntries(CreateSgvEntry(0, sgv: 145, direction: "FortyFiveUp"));
+        await SeedSensorGlucose(CreateSgvEntry(0, sgv: 145, direction: "FortyFiveUp"));
 
         var response = await Client.GetAsync("/api/v3/entries");
         var captured = await CaptureResponse(response);

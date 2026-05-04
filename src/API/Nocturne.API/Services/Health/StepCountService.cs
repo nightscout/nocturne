@@ -66,6 +66,20 @@ public class StepCountService
         CancellationToken cancellationToken = default
     ) => GetAllAsync(count, skip, cancellationToken);
 
+    public async Task<IEnumerable<StepCount>> GetStepCountsByDateRangeAsync(
+        DateTime from,
+        DateTime to,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var entities = await EntitySet
+            .Where(s => s.Timestamp >= from && s.Timestamp < to)
+            .OrderBy(s => s.Timestamp)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(ToDomainModel);
+    }
+
     public Task<StepCount?> GetStepCountByIdAsync(
         string id,
         CancellationToken cancellationToken = default

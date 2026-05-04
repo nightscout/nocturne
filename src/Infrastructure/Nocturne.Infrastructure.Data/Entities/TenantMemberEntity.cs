@@ -56,6 +56,13 @@ public class TenantMemberEntity
     public string? Label { get; set; }
 
     /// <summary>
+    /// Per-tenant display username for this member
+    /// </summary>
+    [Column("username")]
+    [MaxLength(50)]
+    public string? Username { get; set; }
+
+    /// <summary>
     /// Whether this membership was limited to 24 hours (e.g. temporary guest access)
     /// </summary>
     [Column("limit_to_24_hours")]

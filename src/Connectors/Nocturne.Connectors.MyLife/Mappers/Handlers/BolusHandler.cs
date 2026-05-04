@@ -49,8 +49,20 @@ internal sealed class BolusHandler : IMyLifeHandler
         var hasCarbs = carbs is > 0;
         var hasInsulin = insulin > 0;
 
-        // Generate a correlation ID to link related records
-        Guid? correlationId = (hasCarbs || isCalculated) ? Guid.CreateVersion7() : null;
+        // Generate a correlation ID to link related records, with a DecompositionBatch for FK
+        Guid? correlationId = null;
+        if (hasCarbs || isCalculated)
+        {
+            var batch = new DecompositionBatch
+            {
+                Id = Guid.CreateVersion7(),
+                Source = "mylife",
+                SourceRecordId = MyLifeMapperHelpers.BuildEventKey(ev),
+                CreatedAt = DateTime.UtcNow,
+            };
+            correlationId = batch.Id;
+            context.DecompositionBatches.Add(batch);
+        }
 
         var bolusType = ev.EventTypeId switch
         {

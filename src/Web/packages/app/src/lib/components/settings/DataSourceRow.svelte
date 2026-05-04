@@ -11,6 +11,8 @@
   } from "lucide-svelte";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
+  import { formatSyncMessage } from "$lib/utils/sync-messages";
+  import type { SyncMessageType } from "$lib/websocket/types";
 
   export type DataSourceStatus =
     | "active"
@@ -42,6 +44,8 @@
       completedDataTypes: string[];
       totalDataTypes: number;
       itemsSyncedSoFar: Record<string, number>;
+      messageType: SyncMessageType | null;
+      messageParams: Record<string, string> | null;
     } | null;
     badges?: Snippet;
     actions?: Snippet;
@@ -264,6 +268,11 @@
         </div>
 
         <!-- Metrics line -->
+        {#if (syncProgress?.phase === "Syncing") && syncProgress.messageType}
+        <p class="text-sm text-blue-600 dark:text-blue-400">
+          {formatSyncMessage(syncProgress.messageType, syncProgress.messageParams)}
+        </p>
+        {:else}
         <p class="text-sm text-muted-foreground">
           {#if totalBreakdown && Object.keys(totalBreakdown).length > 0}
             <Tooltip.Root>
@@ -340,6 +349,7 @@
           <Clock class="inline h-3 w-3" />
           {formatLastSeen(lastSeen)}
         </p>
+        {/if}
         {#if syncProgress?.phase === "Syncing" && Object.keys(syncProgress.itemsSyncedSoFar).length > 0}
           <p class="text-xs text-blue-600 dark:text-blue-400">
             {Object.entries(syncProgress.itemsSyncedSoFar)

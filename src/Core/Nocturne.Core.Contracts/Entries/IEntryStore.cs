@@ -9,7 +9,6 @@ namespace Nocturne.Core.Contracts.Entries;
 /// </summary>
 /// <seealso cref="IEntryCache"/>
 /// <seealso cref="EntryQuery"/>
-/// <seealso cref="Nocturne.Core.Contracts.Repositories.IEntryRepository"/>
 public interface IEntryStore
 {
     /// <summary>
@@ -49,4 +48,13 @@ public interface IEntryStore
     /// <returns>The existing <see cref="Entry"/> if a duplicate is found, or <c>null</c>.</returns>
     Task<Entry?> CheckDuplicateAsync(string? device, string type, double? sgv, long mills,
         int windowMinutes = 5, CancellationToken ct = default);
+
+    /// <summary>
+    /// Counts entries matching the optional filter and type.
+    /// </summary>
+    /// <param name="find">Optional MongoDB-style find query for time-range extraction.</param>
+    /// <param name="type">Optional entry type filter ("sgv", "mbg", "cal").</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Total count of matching entries across all V4 repositories.</returns>
+    Task<long> CountAsync(string? find = null, string? type = null, CancellationToken ct = default);
 }

@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Analytics;
-using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -36,12 +36,12 @@ public class DataOverviewServiceTests : IDisposable
     {
         _dbContext = TestDbContextFactory.CreateInMemoryContext();
         _dbContext.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        var mockProfileService = new Mock<IProfileService>();
-        mockProfileService.Setup(p => p.HasData()).Returns(false);
+        var mockTherapySettingsResolver = new Mock<ITherapySettingsResolver>();
+        mockTherapySettingsResolver.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         var mockStatisticsService = new Mock<IStatisticsService>();
         _service = new DataOverviewService(
             _dbContext,
-            mockProfileService.Object,
+            mockTherapySettingsResolver.Object,
             mockStatisticsService.Object,
             NullLogger<DataOverviewService>.Instance
         );
@@ -160,11 +160,6 @@ public class DataOverviewServiceTests : IDisposable
             Mgdl = 120.0,
             DataSource = null
         });
-        _dbContext.Activities.Add(new ActivityEntity
-        {
-            Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon
-        });
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.GetAvailableYearsAsync();
@@ -197,11 +192,10 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetAvailableYearsAsync_LegacyEntriesIncluded()
     {
-        _dbContext.Entries.Add(new EntryEntity
+        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2023_Noon,
-            Type = "sgv",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2023_Noon).UtcDateTime,
             Mgdl = 150.0,
             DataSource = "nightscout"
         });
@@ -215,24 +209,22 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetAvailableYearsAsync_ActivitiesAndDeviceStatusesIncludedInYears()
+    public async Task GetAvailableYearsAsync_ApsSnapshotsIncludedInYears()
     {
-        _dbContext.Activities.Add(new ActivityEntity
+        _dbContext.ApsSnapshots.Add(new ApsSnapshotEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2023_Noon
-        });
-        _dbContext.DeviceStatuses.Add(new DeviceStatusEntity
-        {
-            Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon,
-            Device = "test-device"
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Device = "test-device",
+            AidAlgorithm = "OpenAPS",
+            SysCreatedAt = DateTime.UtcNow,
+            SysUpdatedAt = DateTime.UtcNow,
         });
         await _dbContext.SaveChangesAsync();
 
         var result = await _service.GetAvailableYearsAsync();
 
-        result.Years.Should().BeEquivalentTo([2023, 2024]);
+        result.Years.Should().ContainSingle().Which.Should().Be(2024);
         result.AvailableDataSources.Should().BeEmpty();
     }
 
@@ -462,40 +454,16 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetDailySummaryAsync_ActivitiesExcludedWhenDataSourceFilterActive()
+    public async Task GetDailySummaryAsync_ApsSnapshotsExcludedWhenDataSourceFilterActive()
     {
-        _dbContext.Activities.Add(new ActivityEntity
+        _dbContext.ApsSnapshots.Add(new ApsSnapshotEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon
-        });
-        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 1000).UtcDateTime,
-            Mgdl = 100.0,
-            DataSource = "dexcom"
-        });
-        await _dbContext.SaveChangesAsync();
-
-        var result = await _service.GetDailySummaryAsync(2024, ["dexcom"]);
-
-        result.Days.Should().ContainSingle();
-        var day = result.Days[0];
-        day.Counts.Should().NotContainKey("Activity");
-        day.Counts.Should().ContainKey("Glucose");
-        day.TotalCount.Should().Be(1);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task GetDailySummaryAsync_DeviceStatusesExcludedWhenDataSourceFilterActive()
-    {
-        _dbContext.DeviceStatuses.Add(new DeviceStatusEntity
-        {
-            Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon,
-            Device = "test-device"
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Device = "test-device",
+            AidAlgorithm = "OpenAPS",
+            SysCreatedAt = DateTime.UtcNow,
+            SysUpdatedAt = DateTime.UtcNow,
         });
         _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
         {
@@ -516,18 +484,16 @@ public class DataOverviewServiceTests : IDisposable
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task GetDailySummaryAsync_ActivitiesAndDeviceStatusesIncludedWithoutFilter()
+    public async Task GetDailySummaryAsync_ApsSnapshotsIncludedWithoutFilter()
     {
-        _dbContext.Activities.Add(new ActivityEntity
+        _dbContext.ApsSnapshots.Add(new ApsSnapshotEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon
-        });
-        _dbContext.DeviceStatuses.Add(new DeviceStatusEntity
-        {
-            Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon + 1000,
-            Device = "test-device"
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Device = "test-device",
+            AidAlgorithm = "OpenAPS",
+            SysCreatedAt = DateTime.UtcNow,
+            SysUpdatedAt = DateTime.UtcNow,
         });
         await _dbContext.SaveChangesAsync();
 
@@ -535,20 +501,18 @@ public class DataOverviewServiceTests : IDisposable
 
         result.Days.Should().ContainSingle();
         var day = result.Days[0];
-        day.Counts["Activity"].Should().Be(1);
         day.Counts["DeviceStatus"].Should().Be(1);
-        day.TotalCount.Should().Be(2);
+        day.TotalCount.Should().Be(1);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     public async Task GetDailySummaryAsync_LegacyEntrySgv_CountedAsGlucose()
     {
-        _dbContext.Entries.Add(new EntryEntity
+        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon,
-            Type = "sgv",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
             Mgdl = 140.0,
             DataSource = "nightscout"
         });
@@ -566,11 +530,10 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetDailySummaryAsync_LegacyEntryMbg_CountedAsManualBGAndContributesToAverage()
     {
-        _dbContext.Entries.Add(new EntryEntity
+        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon,
-            Type = "mbg",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
             Mgdl = 160.0,
             DataSource = "nightscout"
         });
@@ -580,8 +543,8 @@ public class DataOverviewServiceTests : IDisposable
 
         result.Days.Should().ContainSingle();
         var day = result.Days[0];
-        day.Counts["ManualBG"].Should().Be(1);
-        // mbg entries contribute to glucose average
+        // Former mbg entries now come through as SensorGlucose
+        day.Counts["Glucose"].Should().Be(1);
         day.AverageGlucoseMgdl.Should().Be(160.0);
     }
 
@@ -596,11 +559,10 @@ public class DataOverviewServiceTests : IDisposable
             Mgdl = 100.0,
             DataSource = "dexcom"
         });
-        _dbContext.Entries.Add(new EntryEntity
+        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon + 300000,
-            Type = "sgv",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 300000).UtcDateTime,
             Mgdl = 200.0,
             DataSource = "nightscout"
         });
@@ -806,19 +768,17 @@ public class DataOverviewServiceTests : IDisposable
     [Trait("Category", "Unit")]
     public async Task GetDailySummaryAsync_LegacyEntriesFilteredByDataSource()
     {
-        _dbContext.Entries.Add(new EntryEntity
+        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon,
-            Type = "sgv",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
             Mgdl = 120.0,
             DataSource = "nightscout"
         });
-        _dbContext.Entries.Add(new EntryEntity
+        _dbContext.SensorGlucose.Add(new SensorGlucoseEntity
         {
             Id = Guid.NewGuid(),
-            Mills = June15_2024_Noon + 300000,
-            Type = "sgv",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 300000).UtcDateTime,
             Mgdl = 180.0,
             DataSource = "dexcom"
         });

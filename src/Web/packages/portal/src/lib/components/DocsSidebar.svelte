@@ -1,6 +1,6 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, ChevronRight, ChevronDown } from "@lucide/svelte";
+    import { Rocket, Download, Settings, Shield, ChevronRight, ChevronDown } from "@lucide/svelte";
 
     const navSections = [
         {
@@ -18,6 +18,14 @@
                 { href: "/docs/installation", label: "Overview" },
                 { href: "/docs/installation/docker-compose", label: "Docker Compose" },
                 { href: "/docs/installation/portainer", label: "Portainer" },
+            ],
+        },
+        {
+            title: "Authentication",
+            icon: Shield,
+            items: [
+                { href: "/docs/authentication/google", label: "Sign in with Google" },
+                { href: "/docs/authentication/github", label: "Sign in with GitHub" },
             ],
         },
         {

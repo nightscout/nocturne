@@ -21,6 +21,19 @@ public interface IStepCountService
     );
 
     /// <summary>
+    /// Get step count records within a date range
+    /// </summary>
+    /// <param name="from">Start of date range (inclusive)</param>
+    /// <param name="to">End of date range (exclusive)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Collection of step count records ordered by timestamp ascending</returns>
+    Task<IEnumerable<StepCount>> GetStepCountsByDateRangeAsync(
+        DateTime from,
+        DateTime to,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Get a specific step count record by ID
     /// </summary>
     /// <param name="id">Record ID</param>

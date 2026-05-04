@@ -17,6 +17,6 @@
       <p class="text-sm text-muted-foreground mt-1">By {data.meta?.author}</p>
     </div>
 
-    <svelte:component this={data.content} />
+    <data.content />
   </article>
 </div>

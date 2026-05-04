@@ -12,14 +12,8 @@ namespace Nocturne.Connectors.HomeAssistant.Configurations;
     "home-assistant-connector",
     "home-assistant",
     ConnectorCategory.Sync,
-    "Bidirectional sync with Home Assistant",
-    "Home Assistant",
-    SupportsHistoricalSync = false,
-    SupportsManualSync = true,
-    SupportedDataTypes = [
-        SyncDataType.Glucose, SyncDataType.Boluses,
-        SyncDataType.CarbIntake, SyncDataType.Activity, SyncDataType.ManualBG
-    ]
+    "Connect via the Home Assistant integration (HACS)",
+    "Home Assistant"
 )]
 public class HomeAssistantConnectorConfiguration : BaseConnectorConfiguration
 {
@@ -27,23 +21,4 @@ public class HomeAssistantConnectorConfiguration : BaseConnectorConfiguration
     {
         ConnectSource = ConnectSource.HomeAssistant;
     }
-
-    [ConnectorProperty(ConnectorPropertyKey.Url, Required = true)]
-    public string Url { get; set; } = string.Empty;
-
-    [ConnectorProperty(ConnectorPropertyKey.AccessToken, Required = true, Secret = true)]
-    public string AccessToken { get; set; } = string.Empty;
-
-    public Dictionary<SyncDataType, string> EntityMappings { get; set; } = new();
-
-    [ConnectorProperty(ConnectorPropertyKey.WriteBackEnabled)]
-    public bool WriteBackEnabled { get; set; } = false;
-
-    public HashSet<WriteBackDataType> WriteBackTypes { get; set; } = [];
-
-    [ConnectorProperty(ConnectorPropertyKey.WebhookEnabled)]
-    public bool WebhookEnabled { get; set; } = false;
-
-    [ConnectorProperty(ConnectorPropertyKey.WebhookSecret, Secret = true)]
-    public string WebhookSecret { get; set; } = string.Empty;
 }

@@ -116,12 +116,6 @@ public class ConnectorFoodEntryEntity : ITenantScoped
     public ConnectorFoodEntryStatus Status { get; set; } = ConnectorFoodEntryStatus.Pending;
 
     /// <summary>
-    /// Treatment matched to this entry (when resolved)
-    /// </summary>
-    [Column("matched_treatment_id")]
-    public Guid? MatchedTreatmentId { get; set; }
-
-    /// <summary>
     /// When the entry status was resolved
     /// </summary>
     [Column("resolved_at")]
@@ -144,8 +138,4 @@ public class ConnectorFoodEntryEntity : ITenantScoped
     /// </summary>
     public FoodEntity? Food { get; set; }
 
-    /// <summary>
-    /// Navigation property to matched treatment
-    /// </summary>
-    public TreatmentEntity? MatchedTreatment { get; set; }
 }

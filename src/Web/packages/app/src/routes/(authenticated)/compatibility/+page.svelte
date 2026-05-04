@@ -1,7 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
-  import { coachmark } from "@nocturne/coach";
   import { onMount, onDestroy } from "svelte";
   import {
     getCompatibilityData,
@@ -221,7 +220,7 @@
   }
 </script>
 
-<div class="container mx-auto p-6 space-y-6" {@attach coachmark({ key: "power-user.compatibility", title: "API compatibility", description: "Compare Nocturne responses against Nightscout to verify API compatibility." })}>
+<div class="container mx-auto p-6 space-y-6">
   <!-- Header -->
   <div class="flex justify-between items-center">
     <h1 class="text-3xl font-bold">Compatibility Testing</h1>

@@ -148,13 +148,6 @@ public class AccessTokenHandler : IAuthHandler
             return queryToken;
         }
 
-        // Also check for 'secret' query parameter (legacy compatibility)
-        var querySecret = context.Request.Query["secret"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(querySecret))
-        {
-            return querySecret;
-        }
-
         // 3. Check request body for JSON (only for POST/PUT/PATCH)
         // Note: Reading body is expensive and can only be done once unless buffering is enabled
         // We skip body parsing here and expect middleware to have buffered if needed

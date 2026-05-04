@@ -14,6 +14,7 @@ using Nocturne.Tests.Shared.Mocks;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.API.Tests.Services.Platform;
@@ -320,15 +321,12 @@ public class StatusServiceTests
         result.DeviceStatus.Should().NotBeNull();
         result.Food.Should().NotBeNull();
         result.Settings.Should().NotBeNull();
-        result.Activity.Should().NotBeNull();
-
         result.Entries.Should().BeOnOrBefore(result.ServerTime);
         result.Treatments.Should().BeOnOrBefore(result.ServerTime);
         result.Profile.Should().BeOnOrBefore(result.ServerTime);
         result.DeviceStatus.Should().BeOnOrBefore(result.ServerTime);
         result.Food.Should().BeOnOrBefore(result.ServerTime);
         result.Settings.Should().BeOnOrBefore(result.ServerTime);
-        result.Activity.Should().BeOnOrBefore(result.ServerTime);
 
         // Additional timestamps
         result.Additional.Should().NotBeNull();
@@ -734,44 +732,44 @@ public class StatusServiceTests
 
         var baseMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        context.Entries.Add(
-            new EntryEntity
+        context.SensorGlucose.Add(
+            new Nocturne.Infrastructure.Data.Entities.V4.SensorGlucoseEntity
             {
                 Id = Guid.CreateVersion7(),
-                Mills = baseMills,
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(baseMills).UtcDateTime,
                 Mgdl = 100,
-                Type = "sgv",
                 SysUpdatedAt = now.AddMinutes(-5),
             }
         );
 
-        context.Treatments.Add(
-            new TreatmentEntity
+        context.Boluses.Add(
+            new Nocturne.Infrastructure.Data.Entities.V4.BolusEntity
             {
                 Id = Guid.CreateVersion7(),
-                Mills = baseMills,
-                EventType = "bolus",
-                Insulin = 1.5,
-                SysUpdatedAt = now.AddMinutes(-10),
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(baseMills).UtcDateTime,
+                Insulin = 2.5,
+                SysUpdatedAt = now.AddMinutes(-3),
             }
         );
 
-        context.Profiles.Add(
-            new ProfileEntity
+        context.TherapySettings.Add(
+            new Nocturne.Infrastructure.Data.Entities.V4.TherapySettingsEntity
             {
                 Id = Guid.CreateVersion7(),
-                Mills = baseMills,
-                DefaultProfile = "Default",
-                Units = "mg/dl",
-                UpdatedAtPg = now.AddHours(-1),
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(baseMills).UtcDateTime,
+                ProfileName = "Default",
+                SysUpdatedAt = now.AddHours(-1),
             }
         );
 
-        context.DeviceStatuses.Add(
-            new DeviceStatusEntity
+        context.ApsSnapshots.Add(
+            new ApsSnapshotEntity
             {
                 Id = Guid.CreateVersion7(),
                 Device = "dexcom",
+                AidAlgorithm = "OpenAPS",
+                Timestamp = now.AddMinutes(-2),
+                SysCreatedAt = now.AddMinutes(-2),
                 SysUpdatedAt = now.AddMinutes(-2),
             }
         );
@@ -793,15 +791,6 @@ public class StatusServiceTests
                 Value = "{}",
                 SysUpdatedAt = now.AddHours(-6),
                 SrvModified = now.AddHours(-6),
-            }
-        );
-
-        context.Activities.Add(
-            new ActivityEntity
-            {
-                Id = Guid.CreateVersion7(),
-                Type = "exercise",
-                SysUpdatedAt = now.AddMinutes(-30),
             }
         );
 

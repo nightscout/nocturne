@@ -28,7 +28,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [Route("api/v4/insulin/boluses")]
 [Authorize]
 [Produces("application/json")]
-public class BolusController(IBolusRepository repo)
+public class BolusController(IBolusRepository repo, IPatientInsulinRepository insulinRepo)
     : V4CrudControllerBase<Bolus, CreateBolusRequest, UpdateBolusRequest, IBolusRepository>(repo)
 {
     /// <inheritdoc/>
@@ -41,6 +41,46 @@ public class BolusController(IBolusRepository repo)
         [FromQuery] string? device = null, [FromQuery] string? source = null,
         CancellationToken ct = default)
         => base.GetAll(from, to, limit, offset, sort, device, source, ct);
+
+    /// <inheritdoc/>
+    public override async Task<ActionResult<Bolus>> Create([FromBody] CreateBolusRequest request, CancellationToken ct = default)
+    {
+        var model = MapCreateToModel(request);
+
+        if (model.Timestamp == default)
+            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+
+        await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
+
+        var created = await Repository.CreateAsync(model, ct);
+        created = await OnAfterCreateAsync(created, ct);
+        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+    }
+
+    /// <inheritdoc/>
+    public override async Task<ActionResult<Bolus>> Update(Guid id, [FromBody] UpdateBolusRequest request, CancellationToken ct = default)
+    {
+        var existing = await Repository.GetByIdAsync(id, ct);
+        if (existing is null)
+            return NotFound();
+
+        var model = MapUpdateToModel(id, request, existing);
+
+        if (model.Timestamp == default)
+            return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
+
+        await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
+
+        try
+        {
+            var updated = await Repository.UpdateAsync(id, model, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
 
     /// <summary>Maps a <see cref="CreateBolusRequest"/> to a new <see cref="Bolus"/> domain model.</summary>
     /// <param name="request">The inbound create request.</param>
@@ -99,4 +139,44 @@ public class BolusController(IBolusRepository repo)
         DeviceId = existing.DeviceId,
         AdditionalProperties = existing.AdditionalProperties,
     };
+
+    /// <summary>
+    /// Delete a bolus by its external sync identifier (dataSource + syncIdentifier pair).
+    /// </summary>
+    [HttpDelete("by-sync-id")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult> DeleteBySyncIdentifier(
+        [FromQuery] string dataSource,
+        [FromQuery] string syncIdentifier,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(dataSource) || string.IsNullOrEmpty(syncIdentifier))
+            return BadRequest("dataSource and syncIdentifier are required");
+
+        var deleted = await ((IBolusRepository)Repository).DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, ct);
+        return deleted > 0 ? NoContent() : NotFound();
+    }
+
+    private async Task EnrichInsulinContextAsync(Bolus model, Guid? patientInsulinId, CancellationToken ct)
+    {
+        if (patientInsulinId is null)
+            return;
+
+        var insulin = await insulinRepo.GetByIdAsync(patientInsulinId.Value, ct);
+        if (insulin is null)
+            return;
+
+        model.InsulinContext = new TreatmentInsulinContext
+        {
+            PatientInsulinId = insulin.Id,
+            InsulinName = insulin.Name,
+            Dia = insulin.Dia,
+            Peak = insulin.Peak,
+            Curve = insulin.Curve,
+            Concentration = insulin.Concentration,
+        };
+        model.InsulinType = insulin.Name;
+    }
 }

@@ -7,10 +7,9 @@
     ChevronsRight,
   } from "lucide-svelte";
   import type { Table } from "@tanstack/table-core";
-  import type { EntryRecord } from "$lib/constants/entry-categories";
 
   interface Props {
-    table: Table<EntryRecord>;
+    table: Table<any>;
     selectedCount: number;
     totalCount: number;
   }

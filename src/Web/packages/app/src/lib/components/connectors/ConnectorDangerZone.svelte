@@ -40,6 +40,24 @@
     onDataDeleted,
   }: Props = $props();
 
+  const recordCountLabels: Record<string, string> = {
+    Glucose: "glucose readings",
+    ManualBG: "manual BG readings",
+    Calibrations: "calibrations",
+    Boluses: "boluses",
+    CarbIntake: "carb intakes",
+    BGChecks: "BG checks",
+    BolusCalculations: "bolus calculations",
+    Notes: "notes",
+    DeviceEvents: "device events",
+    StateSpans: "state spans",
+    DeviceStatus: "device statuses",
+  };
+
+  function formatCountLabel(key: string): string {
+    return recordCountLabels[key] ?? key;
+  }
+
   let showDeleteConfigDialog = $state(false);
   let deleteConfigResult = $state<{
     success: boolean;
@@ -138,19 +156,15 @@
             </p>
             {#if dataSummary}
               <div
-                class="flex items-center gap-4 mt-2 text-xs text-muted-foreground"
+                class="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap"
               >
-                <span class="flex items-center gap-1">
-                  <Database class="h-3 w-3" />
-                  {(dataSummary.recordCounts?.['entries'] ?? 0).toLocaleString()} entries
-                </span>
-                <span>
-                  {(dataSummary.recordCounts?.['treatments'] ?? 0).toLocaleString()} treatments
-                </span>
-                <span>
-                  {(dataSummary.recordCounts?.['deviceStatuses'] ?? 0).toLocaleString()} device
-                  statuses
-                </span>
+                {#each Object.entries(dataSummary.recordCounts ?? {}) as [key, count], i (key)}
+                  <span class="flex items-center gap-1">
+                    {#if i === 0}<Database class="h-3 w-3" />{/if}
+                    {count.toLocaleString()}
+                    {formatCountLabel(key)}
+                  </span>
+                {/each}
               </div>
             {/if}
           </div>
@@ -226,13 +240,9 @@
         <div class="mt-4 rounded-lg border bg-muted/50 p-4">
           <p class="text-sm font-medium mb-2">Data to be deleted:</p>
           <ul class="text-sm text-muted-foreground space-y-1">
-            <li>{(dataSummary.recordCounts?.['entries'] ?? 0).toLocaleString()} glucose entries</li>
-            <li>
-              {(dataSummary.recordCounts?.['treatments'] ?? 0).toLocaleString()} treatments
-            </li>
-            <li>
-              {(dataSummary.recordCounts?.['deviceStatuses'] ?? 0).toLocaleString()} device status records
-            </li>
+            {#each Object.entries(dataSummary.recordCounts ?? {}) as [key, count] (key)}
+              <li>{count.toLocaleString()} {formatCountLabel(key)}</li>
+            {/each}
           </ul>
           <p class="text-sm font-medium mt-2">
             Total: {dataSummary.total?.toLocaleString() ?? 0} records
@@ -256,16 +266,9 @@
             <ul
               class="text-sm text-green-700 dark:text-green-300 mt-2 space-y-1"
             >
-              <li>
-                {(deleteDataResult.deletedCounts?.['entries'] ?? 0).toLocaleString()} entries
-              </li>
-              <li>
-                {(deleteDataResult.deletedCounts?.['treatments'] ?? 0).toLocaleString()} treatments
-              </li>
-              <li>
-                {(deleteDataResult.deletedCounts?.['deviceStatuses'] ?? 0).toLocaleString()} device
-                statuses
-              </li>
+              {#each Object.entries(deleteDataResult.deletedCounts ?? {}) as [key, count] (key)}
+                <li>{count.toLocaleString()} {formatCountLabel(key)}</li>
+              {/each}
             </ul>
             <p
               class="text-sm font-medium text-green-700 dark:text-green-300 mt-2"

@@ -16,6 +16,10 @@ public enum ChannelType
     [EnumMember(Value = "web_push"), JsonStringEnumMemberName("web_push")]
     WebPush,
 
+    /// <summary>In-app notification rendered inside the Nocturne UI.</summary>
+    [EnumMember(Value = "in_app"), JsonStringEnumMemberName("in_app")]
+    InApp,
+
     /// <summary>HTTP webhook POST to a user-configured URL.</summary>
     [EnumMember(Value = "webhook"), JsonStringEnumMemberName("webhook")]
     Webhook,

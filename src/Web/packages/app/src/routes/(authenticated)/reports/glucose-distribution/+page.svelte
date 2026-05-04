@@ -97,7 +97,7 @@
 
 {#if reportsResource.current}
   {@const report = reportsResource.current}
-  <div class="space-y-6 p-4">
+  <div class="@container space-y-6 p-4">
     <Card.Root>
       <Card.Header>
         <Card.Title class="flex items-center gap-2">
@@ -109,7 +109,7 @@
       </Card.Header>
     </Card.Root>
 
-    <div class="grid gap-6 lg:grid-cols-2">
+    <div class="grid gap-6 @3xl:grid-cols-2">
       <Card.Root>
         <Card.Header>
           <div class="flex items-center justify-between">
@@ -212,7 +212,7 @@
       </Card.Content>
     </Card.Root>
 
-    <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    <div class="grid gap-6 @2xl:grid-cols-2 @4xl:grid-cols-3">
       <Card.Root>
         <Card.Header>
           <Card.Title class="text-lg">A1c Estimation</Card.Title>
@@ -289,7 +289,7 @@
         <Card.Title class="text-lg">Overall Summary</Card.Title>
       </Card.Header>
       <Card.Content>
-        <div class="grid gap-4 md:grid-cols-4">
+        <div class="grid gap-4 grid-cols-2 @4xl:grid-cols-4">
           <div class="text-center">
             <div class="text-3xl font-bold">
               {overallStats.mean.toFixed(0)}

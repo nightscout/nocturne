@@ -351,7 +351,10 @@ public interface IStatisticsService
         IEnumerable<SensorGlucose> entries,
         IEnumerable<Bolus> boluses,
         IEnumerable<CarbIntake> carbIntakes,
-        ExtendedAnalysisConfig? config = null
+        ExtendedAnalysisConfig? config = null,
+        DateTime? startDate = null,
+        DateTime? endDate = null,
+        int updateIntervalMinutes = 5
     );
 
     // Site Change Analysis

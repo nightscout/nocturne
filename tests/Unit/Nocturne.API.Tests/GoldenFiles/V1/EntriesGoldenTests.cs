@@ -1,5 +1,5 @@
 using Nocturne.API.Tests.GoldenFiles.Infrastructure;
-using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.API.Tests.GoldenFiles.V1;
 
@@ -15,23 +15,20 @@ public class EntriesGoldenTests : GoldenFileTestBase
 
     #region Helper Methods
 
-    private static EntryEntity CreateSgvEntry(
+    private static SensorGlucoseEntity CreateSgvEntry(
         int index,
         double sgv = 120,
         string direction = "Flat",
-        string? originalId = null)
+        string? legacyId = null)
     {
         var mills = BaseMillis - (index * 300_000); // 5 min apart, descending
-        return new EntryEntity
+        return new SensorGlucoseEntity
         {
             Id = Guid.Parse($"00000000-0000-0000-0000-{(index + 1):D12}"),
             TenantId = TestTenantId,
-            OriginalId = originalId ?? $"aaaaaaaaaaaaaaaaaaaaa{(index + 1):D3}",
-            Type = "sgv",
-            Sgv = sgv,
+            LegacyId = legacyId ?? $"aaaaaaaaaaaaaaaaaaaaa{(index + 1):D3}",
             Mgdl = sgv,
-            Mills = mills,
-            DateString = DateTimeOffset.FromUnixTimeMilliseconds(mills).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime,
             Direction = direction,
             Device = "xDrip-DexcomG6",
             SysCreatedAt = new DateTime(2024, 3, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -39,66 +36,54 @@ public class EntriesGoldenTests : GoldenFileTestBase
         };
     }
 
-    private static EntryEntity CreateFullSgvEntry()
+    private static SensorGlucoseEntity CreateFullSgvEntry()
     {
-        return new EntryEntity
+        return new SensorGlucoseEntity
         {
             Id = Guid.Parse("00000000-0000-0000-0000-000000000099"),
             TenantId = TestTenantId,
-            OriginalId = "aaaaaaaaaaaaaaaaaaaaa099",
-            Type = "sgv",
-            Sgv = 145,
+            LegacyId = "aaaaaaaaaaaaaaaaaaaaa099",
             Mgdl = 145,
-            Mills = BaseMillis,
-            DateString = "2024-03-26T12:00:00.000Z",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(BaseMillis).UtcDateTime,
             Direction = "FortyFiveUp",
             Device = "xDrip-DexcomG6",
             Noise = 1,
             Filtered = 162000,
             Unfiltered = 163000,
-            Rssi = -75,
             Delta = 3.5,
-            Trend = 3,
             TrendRate = 1.5,
             UtcOffset = 0,
-            SysTime = "2024-03-26T12:00:00.000Z",
             SysCreatedAt = new DateTime(2024, 3, 26, 12, 0, 0, DateTimeKind.Utc),
             SysUpdatedAt = new DateTime(2024, 3, 26, 12, 0, 0, DateTimeKind.Utc),
         };
     }
 
-    private static EntryEntity CreateMinimalSgvEntry()
+    private static SensorGlucoseEntity CreateMinimalSgvEntry()
     {
-        return new EntryEntity
+        return new SensorGlucoseEntity
         {
             Id = Guid.Parse("00000000-0000-0000-0000-000000000088"),
             TenantId = TestTenantId,
-            OriginalId = "aaaaaaaaaaaaaaaaaaaaa088",
-            Type = "sgv",
-            Sgv = 100,
+            LegacyId = "aaaaaaaaaaaaaaaaaaaaa088",
             Mgdl = 100,
-            Mills = BaseMillis,
-            DateString = "2024-03-26T12:00:00.000Z",
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(BaseMillis).UtcDateTime,
             Device = "xDrip-DexcomG6",
             SysCreatedAt = new DateTime(2024, 3, 26, 12, 0, 0, DateTimeKind.Utc),
             SysUpdatedAt = new DateTime(2024, 3, 26, 12, 0, 0, DateTimeKind.Utc),
-            // All optional fields left null: Noise, Filtered, Unfiltered, Rssi, Delta, Direction, Trend, TrendRate
+            // All optional fields left null: Noise, Filtered, Unfiltered, Delta, Direction, TrendRate
         };
     }
 
-    private static EntryEntity CreateMbgEntry(int index)
+    private static MeterGlucoseEntity CreateMbgEntry(int index)
     {
         var mills = BaseMillis - (index * 300_000);
-        return new EntryEntity
+        return new MeterGlucoseEntity
         {
             Id = Guid.Parse($"00000000-0000-0000-0001-{(index + 1):D12}"),
             TenantId = TestTenantId,
-            OriginalId = $"bbbbbbbbbbbbbbbbbbbbb{(index + 1):D3}",
-            Type = "mbg",
-            Sgv = null,
+            LegacyId = $"bbbbbbbbbbbbbbbbbbbbb{(index + 1):D3}",
             Mgdl = 130,
-            Mills = mills,
-            DateString = DateTimeOffset.FromUnixTimeMilliseconds(mills).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime,
             Device = "Contour Next",
             SysCreatedAt = new DateTime(2024, 3, 26, 12, 0, 0, DateTimeKind.Utc),
             SysUpdatedAt = new DateTime(2024, 3, 26, 12, 0, 0, DateTimeKind.Utc),
@@ -112,7 +97,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
     [Fact]
     public async Task Current_WithOneSgvEntry_ReturnsArrayWrappedSingleEntry()
     {
-        await SeedEntries(CreateSgvEntry(0, sgv: 120, direction: "Flat"));
+        await SeedSensorGlucose(CreateSgvEntry(0, sgv: 120, direction: "Flat"));
 
         var response = await Client.GetAsync("/api/v1/entries/current");
         var captured = await CaptureResponse(response);
@@ -134,7 +119,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
     [Fact]
     public async Task Current_WithAllOptionalFields_ReturnsAllFields()
     {
-        await SeedEntries(CreateFullSgvEntry());
+        await SeedSensorGlucose(CreateFullSgvEntry());
 
         var response = await Client.GetAsync("/api/v1/entries/current");
         var captured = await CaptureResponse(response);
@@ -145,7 +130,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
     [Fact]
     public async Task Current_WithMinimalEntry_OmitsNullOptionalFields()
     {
-        await SeedEntries(CreateMinimalSgvEntry());
+        await SeedSensorGlucose(CreateMinimalSgvEntry());
 
         var response = await Client.GetAsync("/api/v1/entries/current");
         var captured = await CaptureResponse(response);
@@ -161,7 +146,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
     public async Task GetEntries_With15Entries_ReturnsOnly10DefaultCount()
     {
         var entries = Enumerable.Range(0, 15).Select(i => CreateSgvEntry(i)).ToArray();
-        await SeedEntries(entries);
+        await SeedSensorGlucose(entries);
 
         var response = await Client.GetAsync("/api/v1/entries");
         var captured = await CaptureResponse(response);
@@ -173,7 +158,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
     public async Task GetEntries_WithCount3_RespectsLimit()
     {
         var entries = Enumerable.Range(0, 10).Select(i => CreateSgvEntry(i)).ToArray();
-        await SeedEntries(entries);
+        await SeedSensorGlucose(entries);
 
         var response = await Client.GetAsync("/api/v1/entries?count=3");
         var captured = await CaptureResponse(response);
@@ -195,7 +180,7 @@ public class EntriesGoldenTests : GoldenFileTestBase
     {
         // Seed entries with different timestamps; index 0 = newest, index 4 = oldest
         var entries = Enumerable.Range(0, 5).Select(i => CreateSgvEntry(i, sgv: 100 + i * 10)).ToArray();
-        await SeedEntries(entries);
+        await SeedSensorGlucose(entries);
 
         var response = await Client.GetAsync("/api/v1/entries");
         var captured = await CaptureResponse(response);
@@ -213,7 +198,8 @@ public class EntriesGoldenTests : GoldenFileTestBase
         // Seed mix of SGV and MBG entries
         var sgvEntries = Enumerable.Range(0, 3).Select(i => CreateSgvEntry(i)).ToArray();
         var mbgEntries = Enumerable.Range(0, 2).Select(i => CreateMbgEntry(i + 10)).ToArray();
-        await SeedEntries(sgvEntries.Concat(mbgEntries).ToArray());
+        await SeedSensorGlucose(sgvEntries);
+        await SeedMeterGlucose(mbgEntries);
 
         var response = await Client.GetAsync("/api/v1/entries/sgv");
         var captured = await CaptureResponse(response);

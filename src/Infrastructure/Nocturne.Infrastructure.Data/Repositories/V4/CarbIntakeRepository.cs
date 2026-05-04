@@ -235,6 +235,20 @@ public class CarbIntakeRepository : ICarbIntakeRepository
     }
 
     /// <summary>
+    /// Deletes carbohydrate intake records matching the given data source and sync identifier.
+    /// </summary>
+    /// <param name="dataSource">The external data source name.</param>
+    /// <param name="syncIdentifier">The external sync identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The number of deleted records.</returns>
+    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default)
+    {
+        return await _context.AuditedExecuteDeleteAsync(
+            _context.CarbIntakes.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
+            _auditContext, ct);
+    }
+
+    /// <summary>
     /// Performs a bulk creation of carbohydrate intake records, handling deduplication.
     /// </summary>
     /// <param name="records">The collection of records to create.</param>

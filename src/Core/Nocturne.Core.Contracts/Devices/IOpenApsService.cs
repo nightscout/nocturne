@@ -1,4 +1,5 @@
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Contracts.Devices;
 
@@ -18,15 +19,15 @@ public interface IOpenApsService
     OpenApsPreferences GetPreferences(Dictionary<string, object?> extendedSettings);
 
     /// <summary>
-    /// Analyzes device status data to determine OpenAPS loop status
-    /// Implements the legacy analyzeData() functionality with 1:1 compatibility
+    /// Analyzes APS snapshot data to determine OpenAPS loop status.
+    /// Implements the legacy analyzeData() functionality with 1:1 compatibility.
     /// </summary>
-    /// <param name="deviceStatuses">Recent device status entries</param>
-    /// <param name="currentTime">Current timestamp for analysis</param>
-    /// <param name="preferences">OpenAPS preferences</param>
-    /// <returns>OpenAPS analysis result</returns>
+    /// <param name="snapshots">Recent APS snapshots.</param>
+    /// <param name="currentTime">Current timestamp for analysis.</param>
+    /// <param name="preferences">OpenAPS preferences.</param>
+    /// <returns>OpenAPS analysis result.</returns>
     OpenApsAnalysisResult AnalyzeData(
-        IEnumerable<DeviceStatus> deviceStatuses,
+        IEnumerable<ApsSnapshot> snapshots,
         DateTime currentTime,
         OpenApsPreferences preferences
     );

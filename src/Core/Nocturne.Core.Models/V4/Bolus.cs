@@ -128,6 +128,11 @@ public class Bolus : IV4Record
     public string? InsulinType { get; set; }
 
     /// <summary>
+    /// Snapshot of the patient's insulin pharmacokinetic settings at delivery time.
+    /// </summary>
+    public TreatmentInsulinContext? InsulinContext { get; set; }
+
+    /// <summary>
     /// Unabsorbed insulin from previous boluses at time of delivery
     /// </summary>
     public double? Unabsorbed { get; set; }

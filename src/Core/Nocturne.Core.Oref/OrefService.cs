@@ -135,6 +135,7 @@ public class OrefService
         GlucoseStatus glucoseStatus,
         IobData iobData,
         CurrentTemp currentTemp,
+        DateTimeOffset currentTime,
         double autosensRatio = 1.0,
         double cob = 0.0)
     {
@@ -147,7 +148,7 @@ public class OrefService
             AutosensData = new AutosensData { Ratio = autosensRatio },
             MealData = new MealData { Cob = cob },
             MicroBolusAllowed = false,
-            CurrentTimeMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            CurrentTimeMillis = currentTime.ToUnixTimeMilliseconds()
         };
 
         var result = DetermineBasal(inputs);

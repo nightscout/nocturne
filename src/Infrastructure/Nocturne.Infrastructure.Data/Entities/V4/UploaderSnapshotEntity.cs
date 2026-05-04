@@ -44,6 +44,12 @@ public class UploaderSnapshotEntity : ITenantScoped
     public string? Device { get; set; }
 
     /// <summary>
+    /// Links records that were decomposed from the same legacy DeviceStatus
+    /// </summary>
+    [Column("correlation_id")]
+    public Guid? CorrelationId { get; set; }
+
+    /// <summary>
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     [Column("legacy_id")]

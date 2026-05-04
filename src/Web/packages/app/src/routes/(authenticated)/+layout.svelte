@@ -2,6 +2,7 @@
   import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { createSettingsStore } from "$lib/stores/settings-store.svelte";
   import { createAuthStore } from "$lib/stores/auth-store.svelte";
+  import { authInterceptorState } from "$lib/api/auth-interceptor";
   import { onMount, onDestroy } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { AppSidebar, MobileHeader } from "$lib/components/layout";
@@ -13,11 +14,15 @@
   import { browser } from "$app/environment";
   import * as Card from "$lib/components/ui/card";
   import AlertBanner from "$lib/components/alerts/AlertBanner.svelte";
+  import FiringToast from "$lib/components/alerts/FiringToast.svelte";
+  import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
+  import { CommandPalette } from "$lib/components/command-palette";
   import { CoachMarkProvider } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
   import "../../styles/coach-theme-overrides.css";
   import { createCoachMarkAdapter } from "$lib/coach-marks/adapter";
   import { sequences } from "$lib/coach-marks/sequences";
+  import CoachParamHandler from "$lib/coach-marks/CoachParamHandler.svelte";
 
   // LocalStorage key for title/favicon settings
   const SETTINGS_STORAGE_KEY = "nocturne-title-favicon-settings";
@@ -37,9 +42,17 @@
   const realtimeStore = createRealtimeStore(config);
   createAuthStore(); // Initialize auth store in context
 
+  // Suppress the auth interceptor's login redirect for guest and public
+  // sessions — these have limited scopes so some endpoints return 401/403.
+  $effect(() => {
+    authInterceptorState.setGuestSession(data.isGuestSession || !data.isAuthenticated);
+  });
+
   // Create settings store in context for the entire app
   // This makes feature settings available on all pages including the main dashboard
   createSettingsStore();
+
+  let commandPaletteOpen = $state(false);
 
   const coachMarkAdapter = createCoachMarkAdapter();
 
@@ -66,6 +79,13 @@
     loadTitleFaviconSettings()
   );
 
+  function handleCommandPaletteKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      e.preventDefault();
+      commandPaletteOpen = !commandPaletteOpen;
+    }
+  }
+
   // Listen for storage changes to update settings in real-time
   function handleStorageChange(e: StorageEvent) {
     if (e.key === SETTINGS_STORAGE_KEY) {
@@ -88,6 +108,7 @@
     // Listen for localStorage changes (from settings page)
     if (browser) {
       window.addEventListener("storage", handleStorageChange);
+      window.addEventListener("keydown", handleCommandPaletteKeydown);
     }
   });
 
@@ -96,6 +117,7 @@
     titleFaviconService.destroy();
     if (browser) {
       window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("keydown", handleCommandPaletteKeydown);
     }
   });
 
@@ -173,11 +195,16 @@
 </script>
 
 <CoachMarkProvider adapter={coachMarkAdapter} {sequences}>
+  <CoachParamHandler />
   <Sidebar.Provider>
-    <AppSidebar user={data.user} tenantCount={data.tenantCount} effectivePermissions={data.effectivePermissions} isPlatformAdmin={data.isPlatformAdmin} />
+    <AppSidebar user={data.user} tenantCount={data.tenantCount} effectivePermissions={data.effectivePermissions} isPlatformAdmin={data.isPlatformAdmin} isGuestSession={data.isGuestSession} />
     <MobileHeader />
     <Sidebar.Inset>
+      {#if data.isGuestSession && data.guestExpiresAt}
+        <GuestBanner expiresAt={data.guestExpiresAt} />
+      {/if}
       <AlertBanner />
+      <FiringToast />
       <main class="flex-1 overflow-auto">
         <svelte:boundary>
           {@render children()}
@@ -198,4 +225,5 @@
       </main>
     </Sidebar.Inset>
   </Sidebar.Provider>
+  <CommandPalette bind:open={commandPaletteOpen} />
 </CoachMarkProvider>

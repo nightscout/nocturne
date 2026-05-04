@@ -4,8 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
-using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Controllers.V3;
 
@@ -13,7 +13,8 @@ namespace Nocturne.API.Controllers.V3;
 /// V3 Profile controller that provides full V3 API compatibility with Nightscout profile endpoints.
 /// Implements the /api/v3/profile endpoints with pagination, field selection, sorting, and advanced filtering.
 /// </summary>
-/// <seealso cref="IProfileRepository"/>
+/// <seealso cref="IProfileProjectionService"/>
+/// <seealso cref="IProfileWriteService"/>
 /// <seealso cref="Profile"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -21,16 +22,19 @@ namespace Nocturne.API.Controllers.V3;
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class ProfileController : BaseV3Controller<Profile>
 {
-    private readonly IProfileRepository _profiles;
+    private readonly IProfileProjectionService _projectionService;
+    private readonly IProfileWriteService _writeService;
 
     public ProfileController(
-        IProfileRepository profiles,
+        IProfileProjectionService projectionService,
+        IProfileWriteService writeService,
         IDocumentProcessingService documentProcessingService,
         ILogger<ProfileController> logger
     )
         : base(documentProcessingService, logger)
     {
-        _profiles = profiles;
+        _projectionService = projectionService;
+        _writeService = writeService;
     }
 
     /// <summary>
@@ -54,27 +58,18 @@ public class ProfileController : BaseV3Controller<Profile>
         {
             var parameters = ParseV3QueryParameters();
 
-            // Convert V3 parameters to backend query for compatibility
-            var findQuery = ConvertV3FilterToV1Find(parameters.Filter);
-            var reverseResults = ExtractSortDirection(parameters.Sort);
-
-            // Get profiles using existing backend with V3 parameters
-            var profiles = await _profiles.GetProfilesWithAdvancedFilterAsync(
+            // Get profiles from projection service
+            var profiles = await _projectionService.GetProfilesAsync(
                 count: parameters.Limit,
                 skip: parameters.Offset,
-                findQuery: findQuery,
-                reverseResults: reverseResults,
-                cancellationToken: cancellationToken
+                ct: cancellationToken
             );
 
             var profilesList = profiles.ToList();
 
-            // Get total count for pagination (approximation for performance)
-            var totalCount = await GetTotalCountAsync(
-                null,
-                findQuery,
-                cancellationToken,
-                "profile"
+            // Get total count for pagination
+            var totalCount = await _projectionService.CountProfilesAsync(
+                ct: cancellationToken
             ); // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(profilesList.Cast<object>());
             var etag = GenerateETag(profilesList);
@@ -130,7 +125,7 @@ public class ProfileController : BaseV3Controller<Profile>
 
         try
         {
-            var profile = await _profiles.GetProfileByIdAsync(id, cancellationToken);
+            var profile = await _projectionService.GetProfileByIdAsync(id, cancellationToken);
 
             if (profile == null)
             {
@@ -196,7 +191,7 @@ public class ProfileController : BaseV3Controller<Profile>
             }
 
             // Create profiles with deduplication support
-            var createdProfiles = await _profiles.CreateProfilesAsync(
+            var createdProfiles = await _writeService.CreateProfilesAsync(
                 profiles,
                 cancellationToken
             );
@@ -256,7 +251,7 @@ public class ProfileController : BaseV3Controller<Profile>
 
             ProcessProfileForCreation(profile);
 
-            var updatedProfile = await _profiles.UpdateProfileAsync(
+            var updatedProfile = await _writeService.UpdateProfileAsync(
                 id,
                 profile,
                 cancellationToken
@@ -312,7 +307,7 @@ public class ProfileController : BaseV3Controller<Profile>
 
         try
         {
-            var deleted = await _profiles.DeleteProfileAsync(id, cancellationToken);
+            var deleted = await _writeService.DeleteProfileAsync(id, cancellationToken);
 
             if (!deleted)
             {
@@ -442,28 +437,4 @@ public class ProfileController : BaseV3Controller<Profile>
         return profileRecords;
     }
 
-    /// <summary>
-    /// Get total count for pagination support
-    /// </summary>
-    private async Task<long> GetTotalCountAsync(
-        string? type,
-        string? findQuery,
-        CancellationToken cancellationToken,
-        string collection = "profile"
-    )
-    {
-        try
-        {
-            return await _profiles.CountProfilesAsync(findQuery, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Could not get total count for {Collection}, using approximation",
-                collection
-            );
-            return 0; // Return 0 for count errors to maintain API functionality
-        }
-    }
 }

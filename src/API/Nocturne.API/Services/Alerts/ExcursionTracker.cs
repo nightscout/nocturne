@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -202,11 +203,54 @@ public class ExcursionTracker(
 
             return new ExcursionTransition(
                 ExcursionTransitionType.ExcursionClosed,
-                excursionId);
+                excursionId,
+                ExcursionCloseReason.Hysteresis);
         }
 
         // Still in hysteresis, no transition
         return new ExcursionTransition(ExcursionTransitionType.None);
+    }
+
+    /// <inheritdoc/>
+    public async Task<ExcursionTransition> ForceCloseAsync(
+        Guid alertRuleId,
+        ExcursionCloseReason reason,
+        CancellationToken ct)
+    {
+        var state = await repository.GetTrackerStateAsync(alertRuleId, ct);
+        if (state?.ActiveExcursionId is null)
+        {
+            return new ExcursionTransition(ExcursionTransitionType.None);
+        }
+
+        var excursionId = state.ActiveExcursionId.Value;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+
+        await repository.CloseExcursionAsync(excursionId, now, ct);
+
+        state.State = StateIdle;
+        state.ConfirmationCount = 0;
+        state.ActiveExcursionId = null;
+        state.UpdatedAt = now;
+        await repository.UpsertTrackerStateAsync(state, ct);
+
+        logger.LogInformation(
+            "Excursion {ExcursionId} force-closed for alert rule {AlertRuleId}, reason={Reason}",
+            excursionId, alertRuleId, reason);
+
+        return new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed,
+            excursionId,
+            reason);
+    }
+
+    /// <inheritdoc/>
+    public async Task<Guid?> GetActiveExcursionIdAsync(Guid alertRuleId, CancellationToken ct)
+    {
+        var state = await repository.GetTrackerStateAsync(alertRuleId, ct);
+        if (state is null) return null;
+        if (state.State != StateActive && state.State != StateHysteresis) return null;
+        return state.ActiveExcursionId;
     }
 
     private async Task<ExcursionTransition> OpenExcursion(

@@ -188,7 +188,7 @@ export default (menuList: Component<any, any, ''>): Extension =>
 											}
 										});
 
-										props.editor.storage[extensionName].rect = rect;
+										(props.editor.storage as any)[extensionName].rect = rect;
 									}
 								}
 							},

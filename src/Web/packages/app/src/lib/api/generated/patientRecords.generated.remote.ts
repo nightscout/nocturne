@@ -5,6 +5,7 @@
 import { getRequestEvent, query, command, form } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
+import { formCoerce } from './form-utils.generated.js';
 import { PatientRecordSchema, PatientDeviceSchema, PatientInsulinSchema } from '$lib/api/generated/schemas';
 import { type PatientRecord, type PatientDevice, type PatientInsulin } from '$api';
 
@@ -18,6 +19,9 @@ export const getPatientRecord = query(async () => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.getPatientRecord:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get patient record');
   }
 });
@@ -36,6 +40,9 @@ export const updatePatientRecord = command(PatientRecordSchema, async (request) 
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.updatePatientRecord:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to update patient record');
   }
 });
@@ -50,12 +57,15 @@ export const getDevices = query(async () => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.getDevices:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get devices');
   }
 });
 
 /** Create a new patient device */
-export const createDevice = form(PatientDeviceSchema as any, async (request) => {
+export const createDevice = form(formCoerce(PatientDeviceSchema) as any, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const result = await apiClient.patientRecord.createDevice(request as PatientDevice);
@@ -68,12 +78,15 @@ export const createDevice = form(PatientDeviceSchema as any, async (request) => 
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.createDevice:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to create device');
   }
 });
 
 /** Update a patient device */
-export const updateDevice = form(z.object({ id: z.string(), request: PatientDeviceSchema }) as any, async ({ id, request }) => {
+export const updateDevice = form(formCoerce(z.object({ id: z.string(), request: PatientDeviceSchema })) as any, async ({ id, request }) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const result = await apiClient.patientRecord.updateDevice(id, request as PatientDevice);
@@ -86,6 +99,9 @@ export const updateDevice = form(z.object({ id: z.string(), request: PatientDevi
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.updateDevice:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to update device');
   }
 });
@@ -104,6 +120,9 @@ export const deleteDevice = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.deleteDevice:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to delete device');
   }
 });
@@ -118,12 +137,15 @@ export const getInsulins = query(async () => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.getInsulins:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get insulins');
   }
 });
 
 /** Create a new patient insulin */
-export const createInsulin = form(PatientInsulinSchema as any, async (request) => {
+export const createInsulin = form(formCoerce(PatientInsulinSchema) as any, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const result = await apiClient.patientRecord.createInsulin(request as PatientInsulin);
@@ -136,12 +158,15 @@ export const createInsulin = form(PatientInsulinSchema as any, async (request) =
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.createInsulin:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to create insulin');
   }
 });
 
 /** Update a patient insulin */
-export const updateInsulin = form(z.object({ id: z.string(), request: PatientInsulinSchema }) as any, async ({ id, request }) => {
+export const updateInsulin = form(formCoerce(z.object({ id: z.string(), request: PatientInsulinSchema })) as any, async ({ id, request }) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const result = await apiClient.patientRecord.updateInsulin(id, request as PatientInsulin);
@@ -154,6 +179,9 @@ export const updateInsulin = form(z.object({ id: z.string(), request: PatientIns
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.updateInsulin:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to update insulin');
   }
 });
@@ -172,6 +200,9 @@ export const deleteInsulin = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.deleteInsulin:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to delete insulin');
   }
 });

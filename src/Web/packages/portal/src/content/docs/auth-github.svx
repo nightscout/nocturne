@@ -1,0 +1,83 @@
+---
+title: Sign in with GitHub
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Sign in with GitHub
+
+Let your users sign in to Nocturne with their GitHub account. This guide walks through
+creating an OAuth App on GitHub and registering it in Nocturne.
+
+## 1. Create a GitHub OAuth App
+
+1. Go to [github.com/settings/developers](https://github.com/settings/developers)
+   (or for an organization: **Settings > Developer settings > OAuth Apps**)
+2. Click **New OAuth App**
+3. Fill in the fields:
+
+| Field | Value |
+|-------|-------|
+| **Application name** | `Nocturne` |
+| **Homepage URL** | `https://your-instance.com` |
+| **Authorization callback URL** | `https://your-instance.com/api/auth/oidc/callback` |
+
+Replace `your-instance.com` with your actual Nocturne domain.
+
+4. Click **Register application**
+
+## 2. Generate a client secret
+
+1. On the app page, click **Generate a new client secret**
+2. Copy the **Client ID** and the **Client secret** immediately — the secret is only shown once
+
+<Callout type="warning" title="Save the secret now">
+  GitHub only displays the client secret once. If you lose it, you'll need to
+  generate a new one.
+</Callout>
+
+## 3. Add the provider in Nocturne
+
+1. Sign in to your Nocturne instance as an admin
+2. Go to **Settings > Admin > OIDC Providers**
+3. Click **Add Provider** and fill in:
+
+| Field | Value |
+|-------|-------|
+| **Name** | `GitHub` |
+| **Issuer URL** | `https://github.com` |
+| **Client ID** | The client ID from step 2 |
+| **Client Secret** | The client secret from step 2 |
+| **Scopes** | `openid, user:email` |
+| **Icon** | `github` |
+| **Button Color** | `#24292f` |
+
+4. Click **Save**
+
+The GitHub sign-in button will appear on your login page immediately.
+
+<Callout type="info" title="GitHub as an OIDC provider">
+  GitHub doesn't natively implement OpenID Connect discovery, but Nocturne
+  handles this automatically. Just use <code>https://github.com</code> as
+  the issuer URL — Nocturne knows how to map GitHub's OAuth endpoints and
+  retrieve user profile information.
+</Callout>
+
+## 4. Test it
+
+1. Open your Nocturne login page in a private/incognito window
+2. Click **Sign in with GitHub**
+3. Authorize the Nocturne app when prompted by GitHub
+4. You should be redirected back to Nocturne and signed in
+
+## GitHub Enterprise
+
+For GitHub Enterprise Server, use your instance's URL as the issuer:
+
+```
+https://github.your-company.com
+```
+
+The callback URL should still point to your Nocturne instance.

@@ -193,6 +193,7 @@
           settings:write: false,
           admin: false
         },
+        uptimeMs: {Scrubbed},
         collections: [
           entries,
           treatments,

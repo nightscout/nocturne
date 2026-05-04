@@ -252,9 +252,9 @@ public enum AuthType
     LegacyAccessToken,
 
     /// <summary>
-    /// API secret (SHA1 hash)
+    /// API key (resolved via DirectGrant lookup by SHA-256 or legacy SHA-1 hash)
     /// </summary>
-    ApiSecret,
+    ApiKey,
 
     /// <summary>
     /// Session cookie
@@ -274,5 +274,10 @@ public enum AuthType
     /// <summary>
     /// Instance key (infrastructure service authentication)
     /// </summary>
-    InstanceKey
+    InstanceKey,
+
+    /// <summary>
+    /// Guest session (temporary read-only access via guest code)
+    /// </summary>
+    Guest
 }

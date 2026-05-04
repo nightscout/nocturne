@@ -7,7 +7,9 @@
   } from "$lib/api/generated/nocturne-api-client";
   import { getUploaderName, getUploaderDescription } from "$lib/utils/uploader-labels";
   import { getActiveDataSources } from "$api/generated/services.generated.remote";
-  import { getDeviceInfo, approveDevice, denyDevice } from "$routes/(authenticated)/oauth/oauth.remote";
+  import { create as createGrant } from "$lib/api/generated/directGrants.generated.remote";
+  import { getDeviceInfo } from "$routes/(authenticated)/oauth/oauth.remote";
+  import { deviceApprove } from "$api/generated/oAuths.generated.remote";
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
@@ -16,6 +18,7 @@
     CheckCircle,
     ChevronLeft,
     Check,
+    Copy,
     Loader2,
     Clock,
     AlertTriangle,
@@ -57,6 +60,38 @@
   let deviceApproveLoading = $state(false);
   let deviceApproved = $state(false);
   let deviceDenied = $state(false);
+
+  // ── API key generation (for apps without OAuth connectUrl) ────
+
+  let apiToken = $state<string | null>(null);
+  let apiTokenLoading = $state(false);
+  let apiTokenError = $state<string | null>(null);
+  let copiedField = $state<string | null>(null);
+
+  async function generateApiToken() {
+    if (!app || apiToken || apiTokenLoading) return;
+    apiTokenLoading = true;
+    apiTokenError = null;
+    try {
+      const result = await createGrant({
+        label: getUploaderName(app),
+        scopes: ["health.readwrite"],
+      });
+      apiToken = result.token ?? null;
+    } catch {
+      apiTokenError = "Failed to generate API key. You can create one manually in Settings.";
+    } finally {
+      apiTokenLoading = false;
+    }
+  }
+
+  async function copyToClipboard(text: string, field: string) {
+    await navigator.clipboard.writeText(text);
+    copiedField = field;
+    setTimeout(() => {
+      copiedField = null;
+    }, 2000);
+  }
 
   // ── Connection polling ────────────────────────────────────────
 
@@ -110,7 +145,7 @@
     if (!deviceInfo) return;
     deviceApproveLoading = true;
     try {
-      await approveDevice({ userCode: deviceInfo.userCode });
+      await deviceApprove({ user_code: deviceInfo.userCode, approved: true });
       deviceApproved = true;
       startPolling();
     } catch {
@@ -124,7 +159,7 @@
     if (!deviceInfo) return;
     deviceApproveLoading = true;
     try {
-      await denyDevice({ userCode: deviceInfo.userCode });
+      await deviceApprove({ user_code: deviceInfo.userCode, approved: false });
       deviceDenied = true;
     } catch {
       deviceLookupError = "Failed to deny the request.";
@@ -171,10 +206,19 @@
     }
   }
 
-  // Initialize QR code when component mounts with setupResponse
+  // Initialize QR code or generate API key when setupResponse arrives
   $effect(() => {
     if (setupResponse?.connectUrl) {
       generateQrCode(setupResponse.connectUrl);
+    } else if (setupResponse && !setupResponse.connectUrl) {
+      generateApiToken();
+    }
+  });
+
+  // Start polling for data once the API key has been generated
+  $effect(() => {
+    if (apiToken) {
+      startPolling();
     }
   });
 </script>
@@ -416,6 +460,107 @@
         </Card.Root>
       {/if}
 
+    {:else}
+      <!-- ── Manual setup (API key + Base URL) ── -->
+      <Card.Root>
+        <Card.Header class="pb-3">
+          <Card.Title class="text-sm">Connection Details</Card.Title>
+          <Card.Description>
+            Enter these values in {app ? getUploaderName(app) : 'your app'}'s Nightscout settings.
+          </Card.Description>
+        </Card.Header>
+        <Card.Content class="space-y-4">
+          <!-- Base URL -->
+          <div class="space-y-1.5">
+            <p class="text-xs font-medium text-muted-foreground">Nocturne URL</p>
+            <div class="flex gap-2">
+              <code class="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono break-all">
+                {setupResponse.baseUrl ?? ''}
+              </code>
+              <Button
+                variant="outline"
+                size="icon"
+                onclick={() => setupResponse?.baseUrl && copyToClipboard(setupResponse.baseUrl, 'url')}
+              >
+                {#if copiedField === 'url'}
+                  <Check class="h-4 w-4 text-green-500" />
+                {:else}
+                  <Copy class="h-4 w-4" />
+                {/if}
+              </Button>
+            </div>
+          </div>
+
+          <!-- API Key -->
+          <div class="space-y-1.5">
+            <p class="text-xs font-medium text-muted-foreground">API Key</p>
+            {#if apiTokenLoading}
+              <div class="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                <Loader2 class="h-4 w-4 animate-spin" />
+                Generating API key...
+              </div>
+            {:else if apiToken}
+              <div class="flex gap-2">
+                <code class="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono break-all">
+                  {apiToken}
+                </code>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onclick={() => apiToken && copyToClipboard(apiToken, 'token')}
+                >
+                  {#if copiedField === 'token'}
+                    <Check class="h-4 w-4 text-green-500" />
+                  {:else}
+                    <Copy class="h-4 w-4" />
+                  {/if}
+                </Button>
+              </div>
+              <p class="text-xs text-muted-foreground">
+                Copy this now. It cannot be shown again.
+              </p>
+            {:else if apiTokenError}
+              <div class="flex items-start gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-3">
+                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <p class="text-sm text-destructive">{apiTokenError}</p>
+              </div>
+            {/if}
+          </div>
+        </Card.Content>
+      </Card.Root>
+
+      <!-- Polling for connection -->
+      {@const detected = isDetected(app?.id)}
+      {@const ds = getDataSource(app?.id)}
+      {#if detected && ds}
+        <Card.Root class="border-green-500/30">
+          <Card.Content class="flex items-center gap-3 pt-6">
+            <CheckCircle class="h-5 w-5 text-green-500" />
+            <div>
+              <p class="font-medium text-green-600">Receiving Data</p>
+              <p class="text-sm text-muted-foreground">
+                {app ? getUploaderName(app) : ''} is sending data. {ds.entriesLast24h ?? 0} entries in the last 24 hours.
+              </p>
+            </div>
+          </Card.Content>
+        </Card.Root>
+
+        <div class="flex justify-end">
+          <Button onclick={onConnected}>Continue to Dashboard</Button>
+        </div>
+      {:else}
+        <Card.Root class="border-muted">
+          <Card.Content class="flex items-center gap-3 pt-6">
+            <Clock class="h-5 w-5 text-muted-foreground" />
+            <div>
+              <p class="font-medium">Waiting for data</p>
+              <p class="text-sm text-muted-foreground">
+                Configure {app ? getUploaderName(app) : 'your app'} with the details above, then this page will update when data arrives.
+              </p>
+            </div>
+          </Card.Content>
+        </Card.Root>
+      {/if}
     {/if}
   {:else}
     <Card.Root class="border-destructive">

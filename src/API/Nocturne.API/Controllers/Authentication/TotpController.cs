@@ -8,9 +8,9 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data.Entities;
-using SameSiteMode = Nocturne.Core.Models.Configuration.SameSiteMode;
 
 namespace Nocturne.API.Controllers.Authentication;
 
@@ -24,8 +24,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// as their only authentication method.
 /// </remarks>
 /// <seealso cref="ITotpService"/>
-/// <seealso cref="IJwtService"/>
-/// <seealso cref="IRefreshTokenService"/>
+/// <seealso cref="ISessionService"/>
 /// <seealso cref="ISubjectService"/>
 /// <seealso cref="IAuthAuditService"/>
 [ApiController]
@@ -35,8 +34,7 @@ namespace Nocturne.API.Controllers.Authentication;
 public class TotpController : ControllerBase
 {
     private readonly ITotpService _totpService;
-    private readonly IJwtService _jwtService;
-    private readonly IRefreshTokenService _refreshTokenService;
+    private readonly ISessionService _sessionService;
     private readonly ISubjectService _subjectService;
     private readonly IAuthAuditService _auditService;
     private readonly OidcOptions _oidcOptions;
@@ -47,16 +45,14 @@ public class TotpController : ControllerBase
     /// </summary>
     public TotpController(
         ITotpService totpService,
-        IJwtService jwtService,
-        IRefreshTokenService refreshTokenService,
+        ISessionService sessionService,
         ISubjectService subjectService,
         IAuthAuditService auditService,
         IOptions<OidcOptions> oidcOptions,
         ILogger<TotpController> logger)
     {
         _totpService = totpService;
-        _jwtService = jwtService;
-        _refreshTokenService = refreshTokenService;
+        _sessionService = sessionService;
         _subjectService = subjectService;
         _auditService = auditService;
         _oidcOptions = oidcOptions.Value;
@@ -235,31 +231,14 @@ public class TotpController : ControllerBase
             return Problem(detail: "Invalid username or code", statusCode: 400, title: "Bad Request");
         }
 
-        var subject = await _subjectService.GetSubjectByIdAsync(result.SubjectId);
-        if (subject == null)
-        {
-            return Problem(detail: "User account not found", statusCode: 400, title: "Bad Request");
-        }
-
-        var roles = await _subjectService.GetSubjectRolesAsync(result.SubjectId);
-        var permissions = await _subjectService.GetSubjectPermissionsAsync(result.SubjectId);
-
-        var subjectInfo = new SubjectInfo
-        {
-            Id = subject.Id,
-            Name = result.DisplayName ?? result.Username,
-            Email = subject.Email,
-        };
-
-        var accessToken = _jwtService.GenerateAccessToken(subjectInfo, permissions, roles);
-        var refreshToken = await _refreshTokenService.CreateRefreshTokenAsync(
+        var session = await _sessionService.IssueSessionAsync(
             result.SubjectId,
-            oidcSessionId: null,
-            deviceDescription: "TOTP",
-            ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
-            userAgent: Request.Headers.UserAgent.ToString());
+            new SessionContext(
+                DeviceDescription: "TOTP",
+                IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
+                UserAgent: Request.Headers.UserAgent.ToString()));
 
-        SetSessionCookies(accessToken, refreshToken);
+        Response.SetSessionCookies(session, _oidcOptions);
 
         await _subjectService.UpdateLastLoginAsync(result.SubjectId);
 
@@ -270,56 +249,11 @@ public class TotpController : ControllerBase
         return Ok(new TotpLoginResponse
         {
             Success = true,
-            AccessToken = accessToken,
-            ExpiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds,
+            AccessToken = session.AccessToken,
+            ExpiresIn = session.ExpiresInSeconds,
         });
     }
 
-    #region Private Helpers
-
-    private void SetSessionCookies(string accessToken, string refreshToken)
-    {
-        var cookieSameSite = _oidcOptions.Cookie.SameSite switch
-        {
-            SameSiteMode.Strict => Microsoft.AspNetCore.Http.SameSiteMode.Strict,
-            SameSiteMode.Lax => Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-            SameSiteMode.None => Microsoft.AspNetCore.Http.SameSiteMode.None,
-            _ => Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-        };
-
-        Response.Cookies.Append(_oidcOptions.Cookie.AccessTokenName, accessToken, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = _oidcOptions.Cookie.Secure,
-            SameSite = cookieSameSite,
-            Path = "/",
-            IsEssential = true,
-            MaxAge = _jwtService.GetAccessTokenLifetime(),
-        });
-
-        Response.Cookies.Append(_oidcOptions.Cookie.RefreshTokenName, refreshToken, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = _oidcOptions.Cookie.Secure,
-            SameSite = cookieSameSite,
-            Path = "/",
-            IsEssential = true,
-            MaxAge = TimeSpan.FromDays(7),
-        });
-
-        // IsAuthenticated is intentionally not HttpOnly — the frontend reads it to detect auth state.
-        // The actual tokens (access + refresh) are HttpOnly above. This cookie contains no secrets.
-        Response.Cookies.Append("IsAuthenticated", "true", new CookieOptions // lgtm[cs/web/cookie-httponly-not-set]
-        {
-            HttpOnly = false,
-            Secure = _oidcOptions.Cookie.Secure,
-            SameSite = cookieSameSite,
-            Path = "/",
-            MaxAge = TimeSpan.FromDays(7),
-        });
-    }
-
-    #endregion
 }
 
 #region DTOs

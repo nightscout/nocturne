@@ -80,6 +80,13 @@ public interface IDeviceEventRepository : IV4Repository<DeviceEvent>
     /// <returns>Number of records deleted (0 or 1).</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
 
+    /// <summary>Delete <see cref="DeviceEvent"/> records matching the given data source and sync identifier.</summary>
+    /// <param name="dataSource">The external data source name.</param>
+    /// <param name="syncIdentifier">The external sync identifier (e.g., UUID from the uploading system).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Number of records deleted.</returns>
+    Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default);
+
     /// <summary>Count <see cref="DeviceEvent"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
@@ -104,12 +111,20 @@ public interface IDeviceEventRepository : IV4Repository<DeviceEvent>
     );
 
     /// <summary>
-    /// Retrieve the most recent <see cref="DeviceEvent"/> of the specified <see cref="DeviceEventType"/>.
+    /// Retrieve the most recent <see cref="DeviceEvent"/> of the specified <see cref="DeviceEventType"/>,
+    /// optionally pinned to a historical instant.
     /// </summary>
     /// <param name="eventType">The <see cref="DeviceEventType"/> to search for (e.g., site change).</param>
+    /// <param name="asOf">When non-null, restricts to events with <c>Timestamp &lt;= asOf</c>; powers
+    /// replay's <c>site_age</c> / <c>sensor_age</c> reconstruction. <c>null</c> returns the
+    /// absolute latest.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The most recent matching event, or <c>null</c> if none exists.</returns>
-    Task<DeviceEvent?> GetLatestByEventTypeAsync(DeviceEventType eventType, CancellationToken ct = default);
+    Task<DeviceEvent?> GetLatestByEventTypeAsync(DeviceEventType eventType, DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>Convenience overload returning the absolute latest event of the given type.</summary>
+    Task<DeviceEvent?> GetLatestByEventTypeAsync(DeviceEventType eventType, CancellationToken ct = default)
+        => GetLatestByEventTypeAsync(eventType, asOf: null, ct);
 
     /// <summary>
     /// Retrieve the most recent <see cref="DeviceEvent"/> matching any of the specified <see cref="DeviceEventType"/> values.

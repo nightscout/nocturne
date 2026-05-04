@@ -1,6 +1,6 @@
 ﻿{
   StatusCode: 200,
-  ContentType: application/json; charset=utf-8,
+  ContentType: application/json,
   Body: {
     status: ok,
     name: nightscout,
@@ -160,6 +160,6 @@
     boluscalcEnabled: false,
     authorized: null,
     runtimeState: loaded,
-    head: 66baa0fec321aba2165c5533c2f5f2c44e350b2c
+    head: {Scrubbed}
   }
 }

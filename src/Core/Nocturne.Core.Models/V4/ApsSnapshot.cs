@@ -135,6 +135,12 @@ public class ApsSnapshot : IV4Record
     /// </summary>
     public long? PredictedStartMills => PredictedStartTimestamp.HasValue ? new DateTimeOffset(PredictedStartTimestamp.Value, TimeSpan.Zero).ToUnixTimeMilliseconds() : null;
 
+    /// <summary>Full serialized Loop status object for round-trip fidelity.</summary>
+    public string? LoopJson { get; set; }
+
+    /// <summary>Algorithm version string (e.g. Trio app version).</summary>
+    public string? AidVersion { get; set; }
+
     /// <summary>
     /// Catch-all for fields not mapped to dedicated columns
     /// </summary>

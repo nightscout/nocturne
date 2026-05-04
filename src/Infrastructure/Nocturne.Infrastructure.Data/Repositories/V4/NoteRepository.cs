@@ -199,6 +199,19 @@ public class NoteRepository : INoteRepository
     }
 
     /// <summary>
+    /// Deletes note records matching the given data source and sync identifier.
+    /// </summary>
+    /// <param name="dataSource">The external data source name.</param>
+    /// <param name="syncIdentifier">The external sync identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The number of deleted records.</returns>
+    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default)
+    {
+        return await _context.Notes.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier)
+            .ExecuteDeleteAsync(ct);
+    }
+
+    /// <summary>
     /// Performs a bulk creation of note records, handling deduplication.
     /// </summary>
     /// <param name="records">The collection of records to create.</param>

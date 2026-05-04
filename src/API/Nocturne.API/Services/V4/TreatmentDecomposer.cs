@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Constants;
@@ -44,6 +45,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     private readonly IStateSpanService _stateSpanService;
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IDeviceService _deviceService;
+    private readonly IProfileDecomposer _profileDecomposer;
     private readonly ILogger<TreatmentDecomposer> _logger;
 
     /// <summary>
@@ -67,6 +69,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     /// <param name="stateSpanService">Service used to upsert state spans for TempBasal, ProfileSwitch, Override, and TemporaryTarget treatments.</param>
     /// <param name="treatmentFoodService">Service for preserving legacy <see cref="Treatment.FoodType"/> as a <see cref="TreatmentFood"/> entry.</param>
     /// <param name="deviceService">Service that resolves or creates canonical device references.</param>
+    /// <param name="profileDecomposer">Decomposes inline profile JSON from profile switch treatments into V4 schedule records.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public TreatmentDecomposer(
         NocturneDbContext dbContext,
@@ -80,6 +83,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         IStateSpanService stateSpanService,
         ITreatmentFoodService treatmentFoodService,
         IDeviceService deviceService,
+        IProfileDecomposer profileDecomposer,
         ILogger<TreatmentDecomposer> logger)
     {
         _dbContext = dbContext;
@@ -93,30 +97,18 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         _stateSpanService = stateSpanService;
         _treatmentFoodService = treatmentFoodService;
         _deviceService = deviceService;
+        _profileDecomposer = profileDecomposer;
         _logger = logger;
     }
 
     /// <inheritdoc />
     public async Task<V4Models.DecompositionResult> DecomposeAsync(Treatment treatment, CancellationToken ct = default)
     {
-        // Look up the Treatment entity's Guid PK via OriginalId for the cascade chain
-        Guid? sourceTreatmentId = null;
-        if (treatment.Id != null)
-        {
-            sourceTreatmentId = await _dbContext.Treatments
-                .Where(t => t.OriginalId == treatment.Id)
-                .Select(t => t.Id)
-                .FirstOrDefaultAsync(ct);
-            if (sourceTreatmentId == Guid.Empty)
-                sourceTreatmentId = null;
-        }
-
         var batch = new DecompositionBatchEntity
         {
             TenantId = _dbContext.TenantId,
             Source = "treatment_decomposer",
             SourceRecordId = treatment.Id,
-            SourceTreatmentId = sourceTreatmentId,
             CreatedAt = DateTime.UtcNow,
         };
         _dbContext.DecompositionBatches.Add(batch);
@@ -212,6 +204,13 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         {
             produceBolus = true;
             produceCarbIntake = true;
+        }
+
+        // Produce a Note record for any treatment with non-empty Notes,
+        // unless we're already producing a Note (avoids duplicate).
+        if (!produceNote && !string.IsNullOrWhiteSpace(treatment.Notes))
+        {
+            produceNote = true;
         }
 
         // Handle StateSpan delegation
@@ -530,6 +529,42 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         var upserted = await _stateSpanService.UpsertStateSpanAsync(stateSpan, ct);
         result.CreatedRecords.Add(upserted);
         _logger.LogDebug("Delegated ProfileSwitch treatment {LegacyId} to IStateSpanService", treatment.Id);
+
+        // If the treatment carries inline profile JSON, decompose it into V4 schedule records
+        if (!string.IsNullOrEmpty(treatment.ProfileJson))
+        {
+            try
+            {
+                var profileData = JsonSerializer.Deserialize<ProfileData>(treatment.ProfileJson);
+                if (profileData != null)
+                {
+                    var syntheticStoreName = $"{treatment.Profile ?? "Default"}@@@@@{treatment.Mills}";
+                    var syntheticProfile = new Profile
+                    {
+                        Id = treatment.Id,
+                        Mills = treatment.Mills,
+                        DefaultProfile = syntheticStoreName,
+                        EnteredBy = treatment.EnteredBy,
+                        Store = { [syntheticStoreName] = profileData }
+                    };
+
+                    var profileResult = await _profileDecomposer.DecomposeAsync(syntheticProfile, ct);
+                    result.CreatedRecords.AddRange(profileResult.CreatedRecords);
+                    result.UpdatedRecords.AddRange(profileResult.UpdatedRecords);
+
+                    _logger.LogDebug(
+                        "Decomposed inline ProfileJson from treatment {LegacyId} into {Count} V4 records",
+                        treatment.Id,
+                        profileResult.CreatedRecords.Count + profileResult.UpdatedRecords.Count);
+                }
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to deserialize ProfileJson from treatment {LegacyId}, skipping profile decomposition",
+                    treatment.Id);
+            }
+        }
     }
 
     private async Task DecomposeOverrideAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
@@ -911,5 +946,104 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             _logger.LogDebug("Deleted {Count} v4 records for legacy treatment {LegacyId}", deleted, legacyId);
 
         return deleted;
+    }
+
+    /// <inheritdoc />
+    public async Task<long> BulkDeleteAsync(string? find, CancellationToken ct = default)
+    {
+        var (fromMills, toMills) = Core.Models.Entries.EntryDomainLogic.ParseTimeRangeFromFind(find);
+
+        // Reject implausible timestamps that clearly aren't time bounds
+        // (e.g. {"carbs":{"$gte":45}} would parse from=45)
+        const long MinPlausibleMills = 946684800000L; // 2000-01-01T00:00:00Z
+        if (fromMills.HasValue && fromMills.Value < MinPlausibleMills)
+            fromMills = null;
+        if (toMills.HasValue && toMills.Value < MinPlausibleMills)
+            toMills = null;
+
+        var hasFind = !string.IsNullOrEmpty(find) && find != "{}";
+        var hasTimeBounds = fromMills.HasValue || toMills.HasValue;
+
+        if (hasFind && !hasTimeBounds)
+        {
+            _logger.LogWarning("BulkDelete refused: find query has no parseable time range. find={Find}", find);
+            return 0;
+        }
+
+        DateTime? from = fromMills.HasValue
+            ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime
+            : null;
+        DateTime? to = toMills.HasValue
+            ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime
+            : null;
+
+        long total = 0;
+        total += await DeleteEntitiesByTimeRange(_dbContext.Boluses, from, to, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.CarbIntakes, from, to, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.BGChecks, from, to, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.Notes, from, to, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.DeviceEvents, from, to, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.BolusCalculations, from, to, ct);
+        total += await DeleteEntitiesByTimeRange(_dbContext.TempBasals, from, to, ct);
+
+        _logger.LogInformation("BulkDelete: removed {Total} v4 treatment records for find={Find}", total, find);
+        return total;
+    }
+
+    private static async Task<int> DeleteEntitiesByTimeRange<T>(
+        Microsoft.EntityFrameworkCore.DbSet<T> dbSet, DateTime? from, DateTime? to, CancellationToken ct)
+        where T : class
+    {
+        var query = dbSet.AsQueryable();
+
+        // All V4 entity types have a Timestamp column (point-in-time) or StartTimestamp (span-based).
+        // Use the dynamic interface approach: filter via the entity's timestamp property.
+        if (from.HasValue || to.HasValue)
+        {
+            // Use ExecuteDeleteAsync with raw filtering — entities all have Timestamp or StartTimestamp
+            // mapped as the primary time column. We filter through the queryable.
+            if (typeof(T).GetProperty("Timestamp") != null)
+            {
+                var param = System.Linq.Expressions.Expression.Parameter(typeof(T), "e");
+                var timestampProp = System.Linq.Expressions.Expression.Property(param, "Timestamp");
+
+                if (from.HasValue)
+                {
+                    var fromExpr = System.Linq.Expressions.Expression.Constant(from.Value, typeof(DateTime));
+                    var gte = System.Linq.Expressions.Expression.GreaterThanOrEqual(timestampProp, fromExpr);
+                    var lambda = System.Linq.Expressions.Expression.Lambda<Func<T, bool>>(gte, param);
+                    query = query.Where(lambda);
+                }
+                if (to.HasValue)
+                {
+                    var toExpr = System.Linq.Expressions.Expression.Constant(to.Value, typeof(DateTime));
+                    var lte = System.Linq.Expressions.Expression.LessThanOrEqual(timestampProp, toExpr);
+                    var lambda = System.Linq.Expressions.Expression.Lambda<Func<T, bool>>(lte, param);
+                    query = query.Where(lambda);
+                }
+            }
+            else if (typeof(T).GetProperty("StartTimestamp") != null)
+            {
+                var param = System.Linq.Expressions.Expression.Parameter(typeof(T), "e");
+                var timestampProp = System.Linq.Expressions.Expression.Property(param, "StartTimestamp");
+
+                if (from.HasValue)
+                {
+                    var fromExpr = System.Linq.Expressions.Expression.Constant(from.Value, typeof(DateTime));
+                    var gte = System.Linq.Expressions.Expression.GreaterThanOrEqual(timestampProp, fromExpr);
+                    var lambda = System.Linq.Expressions.Expression.Lambda<Func<T, bool>>(gte, param);
+                    query = query.Where(lambda);
+                }
+                if (to.HasValue)
+                {
+                    var toExpr = System.Linq.Expressions.Expression.Constant(to.Value, typeof(DateTime));
+                    var lte = System.Linq.Expressions.Expression.LessThanOrEqual(timestampProp, toExpr);
+                    var lambda = System.Linq.Expressions.Expression.Lambda<Func<T, bool>>(lte, param);
+                    query = query.Where(lambda);
+                }
+            }
+        }
+
+        return await query.ExecuteDeleteAsync(ct);
     }
 }

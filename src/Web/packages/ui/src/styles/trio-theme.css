@@ -87,6 +87,20 @@
   --gri-zone-d: rgb(255, 152, 0);     /* Orange */
   --gri-zone-e: rgb(244, 67, 54);     /* Red - worst glycemia */
 
+  /* Health Overlays */
+  --heart-rate: rgb(220, 80, 80);
+  --steps: rgb(160, 100, 200);
+
+  /* Sidebar - Trio iOS Style */
+  --sidebar: oklch(0.97 0.006 264);
+  --sidebar-foreground: oklch(0.2 0.02 264);
+  --sidebar-primary: oklch(0.55 0.15 264);
+  --sidebar-primary-foreground: oklch(0.98 0.005 264);
+  --sidebar-accent: oklch(0.95 0.01 264);
+  --sidebar-accent-foreground: oklch(0.2 0.02 264);
+  --sidebar-border: oklch(0.9 0.005 264);
+  --sidebar-ring: oklch(0.55 0.15 264);
+
   /* Chart Colors - Trio themed */
   --chart-1: rgb(30, 150, 252); /* Insulin blue */
   --chart-2: rgb(111, 207, 151); /* LoopGreen */
@@ -121,6 +135,16 @@
   --border: oklch(0.3 0.02 264);
   --input: oklch(0.3 0.02 264);
   --ring: oklch(0.65 0.15 264);
+
+  /* Sidebar - Trio Dark Mode */
+  --sidebar: oklch(0.18 0.02 264);
+  --sidebar-foreground: oklch(0.98 0.005 264);
+  --sidebar-primary: oklch(0.65 0.15 264);
+  --sidebar-primary-foreground: oklch(0.15 0.02 264);
+  --sidebar-accent: oklch(0.25 0.02 264);
+  --sidebar-accent-foreground: oklch(0.98 0.005 264);
+  --sidebar-border: oklch(0.3 0.02 264);
+  --sidebar-ring: oklch(0.65 0.15 264);
 
   /* Insulin Types - Dark Mode adjustments */
   --insulin-temp-basal: rgba(30, 150, 252, 1.0);

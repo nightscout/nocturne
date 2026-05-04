@@ -21,6 +21,19 @@ public interface IHeartRateService
     );
 
     /// <summary>
+    /// Get heart rate records within a date range
+    /// </summary>
+    /// <param name="from">Start of date range (inclusive)</param>
+    /// <param name="to">End of date range (exclusive)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Collection of heart rate records ordered by timestamp ascending</returns>
+    Task<IEnumerable<HeartRate>> GetHeartRatesByDateRangeAsync(
+        DateTime from,
+        DateTime to,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Get a specific heart rate record by ID
     /// </summary>
     /// <param name="id">Record ID</param>

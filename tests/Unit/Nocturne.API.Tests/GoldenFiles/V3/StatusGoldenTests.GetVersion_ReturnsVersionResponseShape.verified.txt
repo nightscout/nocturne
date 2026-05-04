@@ -5,7 +5,7 @@
     version: 0.0.0.0,
     name: Nocturne.API,
     serverTime: {Scrubbed},
-    head: unknown,
+    head: {Scrubbed},
     build: {Scrubbed},
     apiCompatibility: Nightscout v15.0
   }

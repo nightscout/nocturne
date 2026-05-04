@@ -1,7 +1,7 @@
 using System.Text.Json;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -11,7 +11,7 @@ namespace Nocturne.API.Services.Treatments;
 /// <summary>
 /// Domain service implementation for <see cref="Treatment"/> operations using Store/Cache/EventSink ports.
 /// Reads are served through <see cref="ITreatmentCache"/> with fallback to <see cref="ITreatmentStore"/>,
-/// writes go through <see cref="ITreatmentStore"/> or <see cref="ITreatmentRepository"/> with event
+/// writes go through <see cref="ITreatmentStore"/> or <see cref="ITreatmentDecomposer"/> with event
 /// notification via <see cref="IDataEventSink{T}"/>.
 /// </summary>
 /// <remarks>
@@ -21,13 +21,13 @@ namespace Nocturne.API.Services.Treatments;
 /// </remarks>
 /// <seealso cref="ITreatmentService"/>
 /// <seealso cref="ITreatmentStore"/>
-/// <seealso cref="ITreatmentRepository"/>
+/// <seealso cref="ITreatmentDecomposer"/>
 /// <seealso cref="IobService"/>
 /// <seealso cref="CobService"/>
 public class TreatmentService : ITreatmentService
 {
     private readonly ITreatmentStore _store;
-    private readonly ITreatmentRepository _repository;
+    private readonly ITreatmentDecomposer _decomposer;
     private readonly ITreatmentCache _cache;
     private readonly IDataEventSink<Treatment> _events;
     private readonly IPatientInsulinRepository _insulinRepo;
@@ -57,21 +57,21 @@ public class TreatmentService : ITreatmentService
     /// Initializes a new instance of <see cref="TreatmentService"/>.
     /// </summary>
     /// <param name="store">The treatment store for query and write operations.</param>
-    /// <param name="repository">The treatment repository for patch and bulk operations.</param>
+    /// <param name="decomposer">The treatment decomposer for patch and bulk delete operations.</param>
     /// <param name="cache">The treatment cache for read-through caching.</param>
     /// <param name="events">The event sink for broadcasting create/update/delete events.</param>
     /// <param name="insulinRepo">The patient insulin repository for enriching treatments with insulin context.</param>
     /// <param name="logger">The logger instance.</param>
     public TreatmentService(
         ITreatmentStore store,
-        ITreatmentRepository repository,
+        ITreatmentDecomposer decomposer,
         ITreatmentCache cache,
         IDataEventSink<Treatment> events,
         IPatientInsulinRepository insulinRepo,
         ILogger<TreatmentService> logger)
     {
         _store = store;
-        _repository = repository;
+        _decomposer = decomposer;
         _cache = cache;
         _events = events;
         _insulinRepo = insulinRepo;
@@ -129,6 +129,13 @@ public class TreatmentService : ITreatmentService
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Treatment>> GetTreatmentsByRangeAsync(
+        long fromMills, long toMills, CancellationToken cancellationToken = default)
+    {
+        return await _store.GetByRangeAsync(fromMills, toMills, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<IEnumerable<Treatment>> GetTreatmentsModifiedSinceAsync(
         long lastModifiedMills, int limit = 500, CancellationToken cancellationToken = default)
     {
@@ -177,13 +184,48 @@ public class TreatmentService : ITreatmentService
     public async Task<Treatment?> PatchTreatmentAsync(
         string id, JsonElement patchData, CancellationToken cancellationToken = default)
     {
-        var patched = await _repository.PatchTreatmentAsync(id, patchData, cancellationToken);
-        if (patched is null) return null;
+        var existing = await _store.GetByIdAsync(id, cancellationToken);
+        if (existing is null) return null;
+
+        // Apply patch fields to existing treatment
+        ApplyJsonPatch(existing, patchData);
+
+        // Re-decompose (idempotent upsert via LegacyId matching)
+        await _decomposer.DecomposeAsync(existing, cancellationToken);
 
         await _cache.InvalidateAsync(cancellationToken);
-        await _events.OnUpdatedAsync(patched, cancellationToken);
+        await _events.OnUpdatedAsync(existing, cancellationToken);
 
-        return patched;
+        return existing;
+    }
+
+    private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)
+    {
+        // JSON merge-patch: serialize existing, overlay patch properties, deserialize back
+        var existingJson = JsonSerializer.Serialize(treatment);
+        using var existingDoc = JsonDocument.Parse(existingJson);
+
+        var merged = new Dictionary<string, object?>();
+        foreach (var prop in existingDoc.RootElement.EnumerateObject())
+            merged[prop.Name] = prop.Value.Clone();
+        foreach (var prop in patchData.EnumerateObject())
+            merged[prop.Name] = prop.Value.Clone();
+
+        var mergedJson = JsonSerializer.Serialize(merged);
+        var patched = JsonSerializer.Deserialize<Treatment>(mergedJson);
+        if (patched == null) return;
+
+        // Copy patched values back to the existing treatment in-place
+        var props = typeof(Treatment).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+        foreach (var prop in props)
+        {
+            if (!prop.CanWrite) continue;
+            try
+            {
+                prop.SetValue(treatment, prop.GetValue(patched));
+            }
+            catch { /* skip computed properties that throw on set */ }
+        }
     }
 
     /// <inheritdoc />
@@ -208,7 +250,7 @@ public class TreatmentService : ITreatmentService
     public async Task<long> DeleteTreatmentsAsync(
         string? find = null, CancellationToken cancellationToken = default)
     {
-        var count = await _repository.BulkDeleteTreatmentsAsync(find ?? "{}", cancellationToken);
+        var count = await _decomposer.BulkDeleteAsync(find, cancellationToken);
         if (count > 0)
             await _cache.InvalidateAsync(cancellationToken);
         return count;

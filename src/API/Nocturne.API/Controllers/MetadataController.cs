@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Configuration;
 using Nocturne.API.Models.OAuth;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Extensions;
@@ -188,6 +189,7 @@ public class MetadataController : ControllerBase
     [ProducesResponseType(typeof(MultitenancyInfo), 200)]
     public ActionResult<MultitenancyInfo> GetMultitenancyInfo(
         [FromServices] IOptions<MultitenancyConfiguration> config,
+        [FromServices] IOptions<OperatorConfiguration> operatorConfig,
         [FromServices] ITenantAccessor tenantAccessor)
     {
         var tenantContext = tenantAccessor.Context;
@@ -196,7 +198,7 @@ public class MetadataController : ControllerBase
         {
             BaseDomain = config.Value.BaseDomain,
             SubdomainResolution = true,
-            AllowSelfServiceCreation = config.Value.AllowSelfServiceCreation,
+            AllowSelfServiceCreation = operatorConfig.Value.AllowSelfServiceCreation,
             CurrentTenantSlug = tenantContext?.Slug,
             CurrentTenantId = tenantContext?.TenantId,
             CurrentTenantDisplayName = tenantContext?.DisplayName,
@@ -220,6 +222,26 @@ public class MetadataController : ControllerBase
                 Description = "Available data source categories",
             }
         );
+    }
+
+    /// <summary>
+    /// Get the alert condition tree shape. Exists solely so NSwag generates TypeScript
+    /// interfaces for <see cref="ConditionNode"/> and every condition payload record
+    /// — they're stored as opaque JSON on the rule entity and not otherwise reachable
+    /// through a controller signature.
+    /// </summary>
+    [HttpGet("alert-condition-types")]
+    [RemoteQuery]
+    [ApiExplorerSettings(IgnoreApi = false)]
+    [ProducesResponseType(typeof(AlertConditionTypesMetadata), 200)]
+    public ActionResult<AlertConditionTypesMetadata> GetAlertConditionTypes()
+    {
+        return Ok(new AlertConditionTypesMetadata
+        {
+            Sample = new ConditionNode("threshold"),
+            TempBasalMetrics = Enum.GetValues<TempBasalMetric>(),
+            Description = "Polymorphic ConditionNode shape used by alert rules.",
+        });
     }
 
     /// <summary>
@@ -609,6 +631,22 @@ public class DataSourceCategoriesMetadata
     /// <summary>
     /// Description of the data source categories
     /// </summary>
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Forces NSwag to emit TypeScript interfaces for <see cref="ConditionNode"/> and
+/// every condition payload record — they're stored as opaque JSON on the rule entity
+/// and otherwise never appear in a controller signature.
+/// </summary>
+public class AlertConditionTypesMetadata
+{
+    /// <summary>A sample <see cref="ConditionNode"/>; pulls every sub-record into the OpenAPI schema.</summary>
+    public ConditionNode? Sample { get; set; }
+
+    /// <summary>All <see cref="TempBasalMetric"/> values.</summary>
+    public TempBasalMetric[] TempBasalMetrics { get; set; } = [];
+
     public string Description { get; set; } = string.Empty;
 }
 

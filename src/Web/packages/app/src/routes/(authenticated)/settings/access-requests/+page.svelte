@@ -5,7 +5,7 @@
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
-  import PermissionPicker from "$lib/components/rbac/PermissionPicker.svelte";
+  import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import {
     Loader2,
     CheckCircle2,
@@ -126,11 +126,16 @@
 </svelte:head>
 
 <div class="w-full py-6 space-y-6">
-  <div class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight">Access Requests</h1>
-    <p class="text-muted-foreground">
-      Review and manage pending requests to access your data
-    </p>
+  <div class="flex items-center gap-3">
+    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+      <UserPlus class="h-6 w-6 text-primary" />
+    </div>
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Access Requests</h1>
+      <p class="text-muted-foreground">
+        Review and manage pending requests to access your data
+      </p>
+    </div>
   </div>
 
   {#if errorMessage}
@@ -238,7 +243,7 @@
               </Collapsible.Trigger>
               <Collapsible.Content>
                 <div class="mt-3">
-                  <PermissionPicker
+                  <PermissionCategorySelector
                     bind:selected={
                       () => getPermissions(subjectId),
                       (v) => setPermissions(subjectId, v)

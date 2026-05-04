@@ -125,6 +125,13 @@ public enum ChartColor
     [EnumMember(Value = "tracker-custom"), JsonStringEnumMemberName("tracker-custom")]
     TrackerCustom,
 
+    // Health
+    [EnumMember(Value = "heart-rate"), JsonStringEnumMemberName("heart-rate")]
+    HeartRate,
+
+    [EnumMember(Value = "steps"), JsonStringEnumMemberName("steps")]
+    Steps,
+
     // Generic
     [EnumMember(Value = "chart-1"), JsonStringEnumMemberName("chart-1")]
     Profile,

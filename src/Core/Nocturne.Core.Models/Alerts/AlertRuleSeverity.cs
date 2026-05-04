@@ -10,9 +10,12 @@ namespace Nocturne.Core.Models.Alerts;
 [JsonConverter(typeof(JsonStringEnumConverter<AlertRuleSeverity>))]
 public enum AlertRuleSeverity
 {
-    [EnumMember(Value = "normal"), JsonStringEnumMemberName("normal")]
-    Normal,
-
     [EnumMember(Value = "critical"), JsonStringEnumMemberName("critical")]
     Critical,
+
+    [EnumMember(Value = "warning"), JsonStringEnumMemberName("warning")]
+    Warning,
+
+    [EnumMember(Value = "info"), JsonStringEnumMemberName("info")]
+    Info,
 }

@@ -119,6 +119,26 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
     }
 
     /// <summary>
+    /// Gets uploader snapshots by correlation IDs.
+    /// </summary>
+    /// <param name="correlationIds">The correlation IDs to match.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Matching uploader snapshots.</returns>
+    public async Task<IEnumerable<UploaderSnapshot>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
+    {
+        var ids = correlationIds.ToList();
+        if (ids.Count == 0) return [];
+
+        var entities = await _context.UploaderSnapshots
+            .AsNoTracking()
+            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+
+        return entities.Select(UploaderSnapshotMapper.ToDomainModel);
+    }
+
+    /// <summary>
     /// Counts uploader snapshot records within a timestamp range.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>
@@ -144,5 +164,18 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
         return await _context.UploaderSnapshots
             .Where(e => e.LegacyId == legacyId)
             .ExecuteDeleteAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<UploaderSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default)
+    {
+        var query = _context.UploaderSnapshots.AsNoTracking();
+        if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
+        var entity = await query
+            .OrderBy(e => e.Battery == null)        // false (has battery) before true (null) — nulls last
+            .ThenBy(e => e.Battery)                 // lowest battery first
+            .ThenByDescending(e => e.Timestamp)     // tie-break: most recent
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
     }
 }

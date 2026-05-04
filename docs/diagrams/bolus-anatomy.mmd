@@ -1,0 +1,61 @@
+---
+title: "Anatomy of a Bolus"
+---
+flowchart LR
+    Bolus["<b>Bolus</b><br/> insulin, programmed, delivered bolusType, kind, automatic duration, unabsorbed timestamp, deviceId<br/><br/><i>FKs:</i> bolusCalculationId? apsSnapshotId? deviceId? correlationId?<br/><br/><i>embedded:</i> insulinContext?"]
+
+    subgraph recommendation["1. Recommendation (what was suggested)"]
+        direction TB
+        BolusCalculation["<b>BolusCalculation</b><br/> bgInput, carbInput, IOB insulinRecommendation carbRatio, calculationType splitNow / splitExt, preBolus"]
+        rWhy["<b>Why separate?</b><br/>A wizard run can produce 0, 1, or N boluses (user adjusts and splits). The inputs and the delivered dose have independent lifecycles -- you might keep the calculation for audit even if no bolus was delivered."]
+    end
+
+    subgraph snapshot["2. Pharmacokinetic Snapshot (what was true at delivery)"]
+        direction TB
+        TreatmentInsulinContext["<b>TreatmentInsulinContext</b><br/>(embedded value object)<br/><br/>patientInsulinId insulinName dia, peak, curve concentration"]
+        PatientInsulin["<b>PatientInsulin</b><br/>(live, mutable)<br/><br/>name, role, formulationId dia, peak, curve, concentration isCurrent, isPrimary"]
+        sWhy["<b>Why snapshot, not FK?</b><br/>If we only stored a FK to PatientInsulin, editing today's DIA would silently rewrite every historical IOB curve. Freezing the parameters at delivery keeps history stable and audits honest."]
+    end
+
+    subgraph trigger["3. Algorithm Trigger (who decided)"]
+        direction TB
+        ApsSnapshot["<b>ApsSnapshot</b><br/> aidAlgorithm iob, cob, currentBg, eventualBg recommendedBolus, enacted predictedDefaultJson, ..."]
+        tWhy["<b>Why FK, not duplicate?</b><br/>A single APS cycle can enact a temp basal AND an SMB. Both the Bolus and the TempBasal point back to the same ApsSnapshot, so 'what was the algorithm thinking?' has one answer per cycle, not N copies."]
+    end
+
+    subgraph hardware["4. Physical Delivery (what actually delivered)"]
+        direction TB
+        Device["<b>Device</b><br/>(auto-discovered)<br/><br/>category, type, serial firstSeen / lastSeen"]
+        hWhy["<b>Why FK to Device?</b><br/>The pump that delivered this dose may not be the patient's current pump. Pinning the physical unit lets us trace 'which Omnipod pod was that?' even after the patient swaps hardware."]
+    end
+
+    subgraph sibling["5. Legacy Sibling Link (carbs that came with it)"]
+        direction TB
+        CarbIntake["<b>CarbIntake</b><br/> carbs, carbTime absorptionTime"]
+        cWhy["<b>Why correlationId, not FK?</b><br/>A legacy v1 'Meal Bolus' treatment carries both insulin and carbs in one row. We split them so each can be queried, edited, and aggregated alone -- but a shared correlationId still says 'these belong together' (see MealEvent)."]
+    end
+
+    BolusCalculation -- "bolusCalculationId" --> Bolus
+    PatientInsulin -- "captured at delivery time" --> TreatmentInsulinContext
+    TreatmentInsulinContext -. embedded in .-> Bolus
+    ApsSnapshot -- "apsSnapshotId" --> Bolus
+    Device -- "deviceId" --> Bolus
+    CarbIntake -. correlationId .- Bolus
+
+    BolusCalculation -.- rWhy
+    TreatmentInsulinContext -.- sWhy
+    ApsSnapshot -.- tWhy
+    Device -.- hWhy
+    CarbIntake -.- cWhy
+
+    classDef center fill:#fef3c7,stroke:#b45309,color:#7c2d12,stroke-width:3px
+    classDef record fill:#fff,stroke:#475569,color:#0f172a
+    classDef live fill:#ecfccb,stroke:#4d7c0f,color:#365314
+    classDef snap fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d
+    classDef why fill:#f3e8ff,stroke:#7e22ce,color:#581c87,font-style:italic
+
+    class Bolus center
+    class BolusCalculation,ApsSnapshot,Device,CarbIntake record
+    class PatientInsulin live
+    class TreatmentInsulinContext snap
+    class rWhy,sWhy,tWhy,hWhy,cWhy why

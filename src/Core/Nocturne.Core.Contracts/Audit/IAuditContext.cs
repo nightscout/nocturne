@@ -7,6 +7,7 @@ namespace Nocturne.Core.Contracts.Audit;
 public interface IAuditContext
 {
     Guid? SubjectId { get; }
+    string? SubjectName { get; }
     string? AuthType { get; }
     string? IpAddress { get; }
     Guid? TokenId { get; }

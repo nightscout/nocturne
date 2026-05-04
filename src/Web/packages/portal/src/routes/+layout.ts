@@ -10,11 +10,12 @@ import {
 import '../../../../locales/main.loader.svelte.js'
 import '../../../../locales/js.loader.js'
 
+import { building } from '$app/environment'
 import type { Load } from '@sveltejs/kit'
 
 export const load: Load = async ({ url }) => {
-    // Query param takes highest priority
-    const queryLocale = url.searchParams.get('locale')
+    // Query param takes highest priority (not available during prerendering)
+    const queryLocale = building ? null : url.searchParams.get('locale')
 
     // Determine the locale to use
     let locale: SupportedLocale = 'en'

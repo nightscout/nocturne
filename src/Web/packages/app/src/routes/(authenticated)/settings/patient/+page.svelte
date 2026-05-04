@@ -46,15 +46,20 @@
 </svelte:head>
 
 <div class="container mx-auto max-w-4xl p-6 space-y-6">
-  <div class="space-y-1">
-    <h1 class="text-2xl font-bold tracking-tight">Patient Record</h1>
-    <p class="text-muted-foreground">
-      Manage your clinical information, devices, and insulins
-    </p>
+  <div class="flex items-center gap-3">
+    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+      <HeartPulse class="h-6 w-6 text-primary" />
+    </div>
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Patient Record</h1>
+      <p class="text-muted-foreground">
+        Manage your clinical information, devices, and insulins
+      </p>
+    </div>
   </div>
 
   <!-- Clinical Information -->
-  <Card.Root {@attach coachmark({ key: "onboarding.patient-details", title: "Patient details", description: "Clinical info so Nocturne can tailor readings", completedWhen: () => patientConfigured })}>
+  <Card.Root {@attach coachmark({ key: "onboarding.patient-details", title: "Why this matters", description: "Your diabetes type determines how Nocturne calculates bolus suggestions and categorizes treatments. Select your type and save.", completedWhen: () => patientConfigured })}>
     <Card.Header>
       <div class="flex items-center gap-2">
         <HeartPulse class="h-5 w-5 text-muted-foreground" />
@@ -80,7 +85,7 @@
   </Card.Root>
 
   <!-- Devices -->
-  <Card.Root {@attach coachmark({ key: "onboarding.devices", title: "Devices", description: "Your CGM, pump, and meter", completedWhen: () => devicesConfigured })}>
+  <Card.Root {@attach coachmark({ key: "onboarding.devices", title: "Add your current device", description: "Add the CGM, pump, or meter you use right now and mark it as current. Historical devices can be added later.", completedWhen: () => devicesConfigured })}>
     <Card.Header>
       <div class="flex items-center gap-2">
         <Cpu class="h-5 w-5 text-muted-foreground" />
@@ -96,7 +101,7 @@
   </Card.Root>
 
   <!-- Insulins -->
-  <Card.Root {@attach coachmark({ key: "onboarding.insulins", title: "Insulins", description: "Current insulin types and regimen", completedWhen: () => insulinsConfigured })}>
+  <Card.Root {@attach coachmark({ key: "onboarding.insulins", title: "Add your current insulin", description: "Add at least one insulin and mark it as current. The brand and type help Nocturne estimate active insulin curves.", completedWhen: () => insulinsConfigured })}>
     <Card.Header>
       <div class="flex items-center gap-2">
         <Syringe class="h-5 w-5 text-muted-foreground" />

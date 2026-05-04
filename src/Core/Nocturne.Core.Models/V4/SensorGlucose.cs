@@ -63,6 +63,11 @@ public class SensorGlucose : IV4Record
     public Guid? CorrelationId { get; set; }
 
     /// <summary>
+    /// FK to the patient's registered CGM device (null if not yet resolved)
+    /// </summary>
+    public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     public string? LegacyId { get; set; }
@@ -131,6 +136,32 @@ public class SensorGlucose : IV4Record
     /// Glucose delta in mg/dL over the last 5 minutes
     /// </summary>
     public double? Delta { get; set; }
+
+    /// <summary>
+    /// Whether this glucose value has been algorithmically smoothed or is raw sensor output.
+    /// <c>null</c> when the uploader did not declare.
+    /// </summary>
+    public GlucoseProcessing? GlucoseProcessing { get; set; }
+
+    /// <summary>
+    /// Smoothed glucose value in mg/dL, when known.
+    /// </summary>
+    public double? SmoothedMgdl { get; set; }
+
+    /// <summary>
+    /// Smoothed glucose value in mmol/L (computed from <see cref="SmoothedMgdl"/>).
+    /// </summary>
+    public double? SmoothedMmol => SmoothedMgdl.HasValue ? SmoothedMgdl.Value / 18.0182 : null;
+
+    /// <summary>
+    /// Unsmoothed (raw) glucose value in mg/dL, when known.
+    /// </summary>
+    public double? UnsmoothedMgdl { get; set; }
+
+    /// <summary>
+    /// Unsmoothed glucose value in mmol/L (computed from <see cref="UnsmoothedMgdl"/>).
+    /// </summary>
+    public double? UnsmoothedMmol => UnsmoothedMgdl.HasValue ? UnsmoothedMgdl.Value / 18.0182 : null;
 
     /// <summary>
     /// Catch-all for fields not mapped to dedicated columns

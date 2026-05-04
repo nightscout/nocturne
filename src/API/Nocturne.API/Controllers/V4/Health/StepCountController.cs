@@ -10,10 +10,10 @@ using OpenApi.Remote.Attributes;
 namespace Nocturne.API.Controllers.V4.Health;
 
 /// <summary>
-/// Controller for step count data recorded by xDrip via the PebbleMovement protocol.
+/// Controller for step count data from diabetes apps and wearables.
 /// </summary>
 /// <remarks>
-/// Step count readings are ingested from xDrip and stored as time-series observations.
+/// Step count readings are stored as time-series observations.
 /// All operations delegate to <see cref="IStepCountService"/>. Callers must hold the
 /// appropriate scope (<c>read:health</c> or <c>write:health</c>).
 /// </remarks>
@@ -34,12 +34,14 @@ public class StepCountController : ControllerBase
     }
 
     /// <summary>
-    /// Get step count records with optional pagination
+    /// Get step count records with optional pagination and date filtering
     /// </summary>
-    /// <param name="count">Maximum number of records to return (default: 10)</param>
-    /// <param name="skip">Number of records to skip for pagination (default: 0)</param>
+    /// <param name="count">Maximum number of records to return (default: 10, ignored when from/to are specified)</param>
+    /// <param name="skip">Number of records to skip for pagination (default: 0, ignored when from/to are specified)</param>
+    /// <param name="from">Start of date range (inclusive). When specified with 'to', returns all records in range.</param>
+    /// <param name="to">End of date range (exclusive). When specified with 'from', returns all records in range.</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>List of step count records ordered by most recent first</returns>
+    /// <returns>List of step count records</returns>
     [HttpGet]
     [RemoteQuery]
     [RequireScope(OAuthScopes.StepCountRead)]
@@ -48,12 +50,19 @@ public class StepCountController : ControllerBase
     public async Task<ActionResult<IEnumerable<StepCount>>> GetStepCounts(
         [FromQuery] int count = 10,
         [FromQuery] int skip = 0,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
         CancellationToken cancellationToken = default
     )
     {
         try
         {
-            var records = await _stepCountService.GetStepCountsAsync(count, skip, cancellationToken);
+            IEnumerable<StepCount> records;
+            if (from.HasValue && to.HasValue)
+                records = await _stepCountService.GetStepCountsByDateRangeAsync(from.Value, to.Value, cancellationToken);
+            else
+                records = await _stepCountService.GetStepCountsAsync(count, skip, cancellationToken);
+
             return Ok(records);
         }
         catch (Exception ex)

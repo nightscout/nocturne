@@ -10,8 +10,8 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Pipeline order (position 8 of 8 custom middleware -- last before ASP.NET authorization):
-/// <see cref="JsonExtensionMiddleware"/>, <see cref="RecoveryModeMiddleware"/>,
+/// Pipeline order (position 7 of 7 custom middleware -- last before ASP.NET authorization):
+/// <see cref="JsonExtensionMiddleware"/>,
 /// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
 /// <see cref="TenantSetupMiddleware"/>, <see cref="AuthenticationMiddleware"/>,
 /// <see cref="MemberScopeMiddleware"/>, <b>SiteSecurityMiddleware</b>.
@@ -105,9 +105,16 @@ public class SiteSecurityMiddleware
     {
         // Authentication and authorization endpoints must remain accessible
         if (path.StartsWith("/api/v4/auth/") ||
-            path.StartsWith("/api/v4/oidc/") ||
+            path.StartsWith("/api/auth/oidc/") ||
+            path.StartsWith("/api/oauth/") ||
             path.StartsWith("/api/v4/oauth/") ||
             path.StartsWith("/api/v4/local/"))
+        {
+            return true;
+        }
+
+        // Well-known discovery endpoints (OIDC, OAuth metadata)
+        if (path.StartsWith("/.well-known/"))
         {
             return true;
         }

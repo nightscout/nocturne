@@ -9,7 +9,10 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -28,6 +31,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     private readonly NocturneDbContext _context;
     private readonly ISecretEncryptionService _encryptionService;
     private readonly ISignalRBroadcastService _broadcastService;
+    private readonly IAuditContext _auditContext;
     private readonly IConfiguration _configuration;
     private readonly IHostEnvironment _environment;
     private readonly ILogger<ConnectorConfigurationService> _logger;
@@ -58,6 +62,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         NocturneDbContext context,
         ISecretEncryptionService encryptionService,
         ISignalRBroadcastService broadcastService,
+        IAuditContext auditContext,
         IConfiguration configuration,
         IHostEnvironment environment,
         ILogger<ConnectorConfigurationService> logger)
@@ -65,6 +70,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         _context = context;
         _encryptionService = encryptionService;
         _broadcastService = broadcastService;
+        _auditContext = auditContext;
         _configuration = configuration;
         _environment = environment;
         _logger = logger;
@@ -205,6 +211,10 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
         await _context.SaveChangesAsync(ct);
 
+        // When saving Nightscout connector secrets that include an API secret,
+        // create a DirectGrant with the SHA-1 hash so existing uploaders keep working.
+        await TryCreateLegacyGrantAsync(connectorName, secrets, ct);
+
         // Broadcast secrets update (note: doesn't reveal actual secrets)
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
         {
@@ -212,6 +222,72 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             ChangeType = "secrets_updated",
             ModifiedBy = modifiedBy
         });
+    }
+
+    /// <summary>
+    /// When a Nightscout connector's API secret is saved, creates a DirectGrant with the
+    /// SHA-1 hash of the secret so that legacy uploaders authenticated via the old
+    /// <c>api-secret</c> header continue to work without reconfiguration.
+    /// </summary>
+    private async Task TryCreateLegacyGrantAsync(
+        string connectorName,
+        Dictionary<string, string> secrets,
+        CancellationToken ct)
+    {
+        // Only applies to the Nightscout connector
+        if (!connectorName.Equals("nightscout", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        // The secret key is "ApiSecret" (ConnectorPropertyKey enum name)
+        if (!secrets.TryGetValue("ApiSecret", out var apiSecret)
+            && !secrets.TryGetValue("apiSecret", out apiSecret))
+            return;
+
+        if (string.IsNullOrWhiteSpace(apiSecret))
+            return;
+
+        var subjectId = _auditContext.SubjectId;
+        if (subjectId == null)
+        {
+            _logger.LogWarning("Cannot create legacy grant: no authenticated subject in audit context");
+            return;
+        }
+
+        var sha1Hash = HashUtils.Sha1Hex(apiSecret);
+
+        var alreadyExists = await _context.OAuthGrants
+            .AnyAsync(g => g.TenantId == _context.TenantId
+                        && g.LegacySecretHash == sha1Hash
+                        && g.GrantType == OAuthGrantTypes.Direct
+                        && g.RevokedAt == null, ct);
+
+        if (alreadyExists)
+        {
+            _logger.LogDebug("Legacy grant for Nightscout API secret already exists, skipping creation");
+            return;
+        }
+
+        var normalizedScopes = OAuthScopes.Normalize([OAuthScopes.HealthReadWrite]).ToList();
+
+        var grant = new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            ClientEntityId = null,
+            SubjectId = subjectId.Value,
+            GrantType = OAuthGrantTypes.Direct,
+            Scopes = normalizedScopes,
+            Label = "Nightscout (migrated)",
+            TokenHash = null,
+            LegacySecretHash = sha1Hash,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        _context.OAuthGrants.Add(grant);
+        await _context.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Created legacy DirectGrant {GrantId} for Nightscout migration (tenant {TenantId})",
+            grant.Id, _context.TenantId);
     }
 
     /// <inheritdoc />
@@ -284,7 +360,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
 
             var status = new ConnectorStatusInfo
             {
-                ConnectorName = connector.ConnectorName,
+                ConnectorName = connector.ConnectorName.ToLowerInvariant(),
                 IsEnabled = isEnabled,
                 HasDatabaseConfig = hasDbConfig,
                 HasSecrets = hasDbConfig && !string.IsNullOrEmpty(dbConfig!.SecretsJson) && dbConfig.SecretsJson != "{}",

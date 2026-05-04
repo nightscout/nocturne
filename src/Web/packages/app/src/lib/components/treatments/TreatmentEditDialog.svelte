@@ -9,7 +9,11 @@
     GlucoseType,
     GlucoseUnit,
     DeviceEventType,
+    PatientInsulin,
+    InsulinFormulation,
+    InsulinCategory,
   } from "$lib/api";
+  import { InsulinCategory as InsulinCategoryEnum } from "$lib/api";
   import type { EntryRecord } from "$lib/constants/entry-categories";
   import {
     ENTRY_CATEGORIES,
@@ -31,12 +35,16 @@
     Trash2,
   } from "lucide-svelte";
   import { formatDateForInput, formatDateTimeCompact } from "$lib/utils/formatting";
+  import * as patientRemote from "$api/generated/patientRecords.generated.remote";
+  import { getCatalog } from "$api/generated/insulinCatalogs.generated.remote";
   import BolusFormFields from "./edit-dialog/BolusFormFields.svelte";
   import CarbsFormFields from "./edit-dialog/CarbsFormFields.svelte";
   import BGCheckFormFields from "./edit-dialog/BGCheckFormFields.svelte";
   import NoteFormFields from "./edit-dialog/NoteFormFields.svelte";
   import DeviceEventFormFields from "./edit-dialog/DeviceEventFormFields.svelte";
   import LinkedRecordsPanel from "./edit-dialog/LinkedRecordsPanel.svelte";
+  import InsulinFormFields from "$lib/components/patient/InsulinFormFields.svelte";
+  import { insulinCategoryLabels } from "$lib/components/patient/labels";
 
   interface Props {
     open: boolean;
@@ -79,6 +87,7 @@
     duration: undefined as number | undefined,
     automatic: false,
     insulinType: "",
+    patientInsulinId: undefined as string | undefined,
     isBasalInsulin: false,
   });
 
@@ -105,6 +114,67 @@
     notes: "",
   });
 
+  // Load patient insulins for the dropdown
+  const insulinsResource = patientRemote.getInsulins();
+  let patientInsulins = $derived((insulinsResource.current ?? []) as PatientInsulin[]);
+
+  // Load insulin catalog for "add new" form
+  const catalogResource = getCatalog(undefined);
+  let catalog = $derived((catalogResource.current ?? []) as InsulinFormulation[]);
+
+  // Inline "add new insulin" state
+  let showAddInsulin = $state(false);
+  let addCategory = $state("");
+  let addFormulationId = $state("");
+  let addName = $state("");
+  let addRole = $state("");
+  let addDia = $state<number | null>(4.0);
+  let addPeak = $state<number | null>(75);
+  let addCurve = $state("rapid-acting");
+  let addConcentration = $state<number | null>(100);
+
+  let addFormulations = $derived(
+    addCategory ? catalog.filter((f) => f.category === addCategory) : []
+  );
+
+  function onAddCategoryChange() {
+    addFormulationId = "";
+    addName = "";
+    const isLongActing = addCategory === InsulinCategoryEnum.LongActing
+      || addCategory === InsulinCategoryEnum.UltraLongActing;
+    addRole = isLongActing ? "Basal" : "Bolus";
+    addDia = isLongActing ? 24.0 : 4.0;
+    addPeak = isLongActing ? 0 : 75;
+    addCurve = isLongActing ? "bilinear" : "rapid-acting";
+    addConcentration = 100;
+  }
+
+  function onAddFormulationChange() {
+    const formulation = catalog.find((f) => f.id === addFormulationId);
+    if (formulation) {
+      addName = formulation.name ?? "";
+      addDia = formulation.defaultDia ?? 4.0;
+      addPeak = formulation.defaultPeak ?? 75;
+      addCurve = formulation.curve ?? "rapid-acting";
+      addConcentration = formulation.concentration ?? 100;
+    }
+  }
+
+  function resetAddForm() {
+    showAddInsulin = false;
+    addCategory = "";
+    addFormulationId = "";
+    addName = "";
+    addRole = "";
+    addDia = 4.0;
+    addPeak = 75;
+    addCurve = "rapid-acting";
+    addConcentration = 100;
+  }
+
+  const addInsulinForm = patientRemote.createInsulin;
+  let addSaving = $derived(!!addInsulinForm.pending);
+
   // Common timestamp field (mills)
   let editMills = $state<number>(Date.now());
 
@@ -124,6 +194,7 @@
           duration: d.duration ?? undefined,
           automatic: d.automatic ?? false,
           insulinType: d.insulinType ?? "",
+          patientInsulinId: d.insulinContext?.patientInsulinId ?? undefined,
           isBasalInsulin: (d.additionalProperties?.["isBasalInsulin"] as boolean) ?? false,
         };
         break;
@@ -338,7 +409,11 @@
 
         <!-- Kind-specific form fields -->
         {#if activeRecord.kind === "bolus"}
-          <BolusFormFields bind:form={bolusForm} />
+          <BolusFormFields
+            bind:form={bolusForm}
+            {patientInsulins}
+            onAddInsulin={() => showAddInsulin = !showAddInsulin}
+          />
         {:else if activeRecord.kind === "carbs"}
           <CarbsFormFields bind:form={carbsForm} />
         {:else if activeRecord.kind === "bgCheck"}
@@ -382,6 +457,65 @@
           </Button>
         </Dialog.Footer>
       </form>
+
+      {#if activeRecord?.kind === "bolus" && showAddInsulin}
+        <form
+          class="border rounded-lg p-4 space-y-4 bg-muted/30 mt-4"
+          {...addInsulinForm.enhance(async ({ submit }) => {
+            await submit();
+            if (addInsulinForm.result) {
+              const created = addInsulinForm.result as PatientInsulin;
+              if (created?.id) {
+                bolusForm.patientInsulinId = created.id;
+                bolusForm.insulinType = created.name ?? "";
+                if (created.role === "Basal" || created.role === "Both") {
+                  bolusForm.isBasalInsulin = true;
+                }
+              }
+              resetAddForm();
+            }
+          })}
+        >
+          <div class="flex items-center justify-between">
+            <h4 class="text-sm font-medium">Add New Insulin</h4>
+          </div>
+          <div class="space-y-4">
+            <InsulinFormFields
+              bind:category={addCategory}
+              bind:formulationId={addFormulationId}
+              bind:name={addName}
+              bind:role={addRole}
+              formulations={addFormulations}
+              {catalog}
+              onCategoryChange={onAddCategoryChange}
+              onFormulationChange={onAddFormulationChange}
+            />
+
+            <!-- Hidden fields for form submission -->
+            <input type="hidden" name="b:isCurrent" value="on" />
+            <input type="hidden" name="n:dia" value={addDia} />
+            <input type="hidden" name="n:peak" value={addPeak} />
+            <input type="hidden" name="curve" value={addCurve} />
+            <input type="hidden" name="n:concentration" value={addConcentration} />
+            {#if addFormulationId}
+              <input type="hidden" name="formulationId" value={addFormulationId} />
+            {/if}
+          </div>
+
+          <div class="flex gap-2 justify-end mt-4">
+            <Button type="button" variant="ghost" size="sm" onclick={resetAddForm}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!addCategory || !addName.trim() || addSaving}
+            >
+              {addSaving ? "Adding..." : "Add Insulin"}
+            </Button>
+          </div>
+        </form>
+      {/if}
     {:else}
       <Dialog.Header>
         <Dialog.Title>No Record Selected</Dialog.Title>

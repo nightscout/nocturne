@@ -3,13 +3,15 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Xunit;
+
+using V4Models = Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Tests.Services.Treatments;
 
@@ -17,7 +19,7 @@ namespace Nocturne.API.Tests.Services.Treatments;
 public class TreatmentServiceTests
 {
     private readonly Mock<ITreatmentStore> _mockStore;
-    private readonly Mock<ITreatmentRepository> _mockRepo;
+    private readonly Mock<ITreatmentDecomposer> _mockDecomposer;
     private readonly Mock<ITreatmentCache> _mockCache;
     private readonly Mock<IDataEventSink<Treatment>> _mockEvents;
     private readonly Mock<IPatientInsulinRepository> _mockInsulinRepo;
@@ -27,13 +29,13 @@ public class TreatmentServiceTests
     public TreatmentServiceTests()
     {
         _mockStore = new Mock<ITreatmentStore>();
-        _mockRepo = new Mock<ITreatmentRepository>();
+        _mockDecomposer = new Mock<ITreatmentDecomposer>();
         _mockCache = new Mock<ITreatmentCache>();
         _mockEvents = new Mock<IDataEventSink<Treatment>>();
         _mockInsulinRepo = new Mock<IPatientInsulinRepository>();
         _mockLogger = new Mock<ILogger<TreatmentService>>();
         _treatmentService = new TreatmentService(
-            _mockStore.Object, _mockRepo.Object, _mockCache.Object, _mockEvents.Object,
+            _mockStore.Object, _mockDecomposer.Object, _mockCache.Object, _mockEvents.Object,
             _mockInsulinRepo.Object, _mockLogger.Object);
     }
 
@@ -46,6 +48,35 @@ public class TreatmentServiceTests
         _mockStore.Setup(x => x.QueryAsync(It.IsAny<TreatmentQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync(expected.AsReadOnly());
         var result = await _treatmentService.GetTreatmentsAsync(count: 10, skip: 0, cancellationToken: CancellationToken.None);
         result.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task GetTreatmentsByRangeAsync_DelegatesToStoreWithBounds()
+    {
+        var expected = new List<Treatment>
+        {
+            new() { Id = "1", Mills = 1_700_000_500_000L, EventType = "Meal Bolus" },
+            new() { Id = "2", Mills = 1_700_000_100_000L, EventType = "Carb Correction" },
+        };
+        _mockStore.Setup(x => x.GetByRangeAsync(1_700_000_000_000L, 1_700_000_999_000L, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected.AsReadOnly());
+
+        var result = await _treatmentService.GetTreatmentsByRangeAsync(
+            1_700_000_000_000L, 1_700_000_999_000L, CancellationToken.None);
+
+        result.Should().HaveCount(2);
+        _mockStore.Verify(x => x.GetByRangeAsync(1_700_000_000_000L, 1_700_000_999_000L, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetTreatmentsByRangeAsync_EmptyRange_ReturnsEmpty()
+    {
+        _mockStore.Setup(x => x.GetByRangeAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Treatment>());
+
+        var result = await _treatmentService.GetTreatmentsByRangeAsync(0L, 0L, CancellationToken.None);
+
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -104,7 +135,7 @@ public class TreatmentServiceTests
     [Fact]
     public async Task DeleteTreatmentsAsync_ShouldInvalidateCacheWhenDeleted()
     {
-        _mockRepo.Setup(x => x.BulkDeleteTreatmentsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(5);
+        _mockDecomposer.Setup(x => x.BulkDeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(5);
         var result = await _treatmentService.DeleteTreatmentsAsync("q", CancellationToken.None);
         result.Should().Be(5);
         _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -113,10 +144,40 @@ public class TreatmentServiceTests
     [Fact]
     public async Task DeleteTreatmentsAsync_WhenNoneDeleted_ShouldNotInvalidateCache()
     {
-        _mockRepo.Setup(x => x.BulkDeleteTreatmentsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        _mockDecomposer.Setup(x => x.BulkDeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
         var result = await _treatmentService.DeleteTreatmentsAsync("q", CancellationToken.None);
         result.Should().Be(0);
         _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PatchTreatmentAsync_WhenExists_AppliesPatchAndDecomposes()
+    {
+        var existing = new Treatment { Id = "t1", Mills = 1000, EventType = "Note", Notes = "old" };
+        _mockStore.Setup(x => x.GetByIdAsync("t1", It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult());
+
+        var patchJson = JsonSerializer.Deserialize<JsonElement>("{\"notes\":\"updated\"}");
+        var result = await _treatmentService.PatchTreatmentAsync("t1", patchJson, CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Notes.Should().Be("updated");
+        _mockDecomposer.Verify(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PatchTreatmentAsync_WhenNotFound_ReturnsNull()
+    {
+        _mockStore.Setup(x => x.GetByIdAsync("x", It.IsAny<CancellationToken>())).ReturnsAsync((Treatment?)null);
+
+        var patchJson = JsonSerializer.Deserialize<JsonElement>("{\"notes\":\"updated\"}");
+        var result = await _treatmentService.PatchTreatmentAsync("x", patchJson, CancellationToken.None);
+
+        result.Should().BeNull();
+        _mockDecomposer.Verify(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     #region Insulin Context Auto-Population

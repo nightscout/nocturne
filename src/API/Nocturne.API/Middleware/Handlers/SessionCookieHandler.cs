@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Options;
+using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
-using SameSiteMode = Nocturne.Core.Models.Configuration.SameSiteMode;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -151,6 +152,15 @@ public class SessionCookieHandler : IAuthHandler
                 );
             }
         }
+        catch (TokenRotationRaceException)
+        {
+            // Concurrent request tried to use a refresh token that was just
+            // rotated by another request. Don't clear cookies — the other
+            // request's response will set the new tokens. Just skip auth
+            // for this request.
+            _logger.LogDebug("Skipping auth for concurrent request during token rotation grace period");
+            return AuthResult.Skip();
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error refreshing session");
@@ -192,7 +202,7 @@ public class SessionCookieHandler : IAuthHandler
             {
                 HttpOnly = _options.Cookie.HttpOnly,
                 Secure = _options.Cookie.Secure,
-                SameSite = MapSameSiteMode(_options.Cookie.SameSite),
+                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
                 Path = _options.Cookie.Path,
                 Domain = _options.Cookie.Domain,
                 Expires = tokens.ExpiresAt,
@@ -207,7 +217,7 @@ public class SessionCookieHandler : IAuthHandler
             {
                 HttpOnly = true, // Always HttpOnly for refresh tokens
                 Secure = _options.Cookie.Secure,
-                SameSite = MapSameSiteMode(_options.Cookie.SameSite),
+                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
                 Path = _options.Cookie.Path,
                 Domain = _options.Cookie.Domain,
                 Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
@@ -222,7 +232,7 @@ public class SessionCookieHandler : IAuthHandler
             {
                 HttpOnly = false,
                 Secure = _options.Cookie.Secure,
-                SameSite = MapSameSiteMode(_options.Cookie.SameSite),
+                SameSite = SessionCookieExtensions.MapSameSiteMode(_options.Cookie.SameSite),
                 Path = "/",
                 Domain = _options.Cookie.Domain,
                 Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
@@ -259,17 +269,4 @@ public class SessionCookieHandler : IAuthHandler
         return context.Connection.RemoteIpAddress?.ToString();
     }
 
-    /// <summary>
-    /// Map SameSite mode
-    /// </summary>
-    private static Microsoft.AspNetCore.Http.SameSiteMode MapSameSiteMode(SameSiteMode mode)
-    {
-        return mode switch
-        {
-            SameSiteMode.None => Microsoft.AspNetCore.Http.SameSiteMode.None,
-            SameSiteMode.Lax => Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-            SameSiteMode.Strict => Microsoft.AspNetCore.Http.SameSiteMode.Strict,
-            _ => Microsoft.AspNetCore.Http.SameSiteMode.Lax,
-        };
-    }
 }

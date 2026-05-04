@@ -3,20 +3,17 @@ using Nocturne.Core.Models;
 namespace Nocturne.Core.Contracts.Treatments;
 
 /// <summary>
-/// Driven port for treatment persistence. Abstracts dual-path storage
-/// (legacy treatments table + V4 granular tables) behind a single interface.
-/// The adapter handles write routing for operations that need dual-path awareness
-/// (create, update, delete), plus read-time merging, decomposition, and projection.
-/// Pure pass-through writes (patch, bulk delete) go directly to <see cref="Nocturne.Core.Contracts.Repositories.ITreatmentRepository"/>.
+/// Driven port for treatment persistence backed by V4 granular tables.
+/// Reads are projected from V4 repositories into the legacy Treatment shape.
+/// Writes are routed through the decomposition pipeline.
 /// </summary>
 /// <seealso cref="ITreatmentCache"/>
 /// <seealso cref="TreatmentQuery"/>
-/// <seealso cref="Nocturne.Core.Contracts.Repositories.ITreatmentRepository"/>
 public interface ITreatmentStore
 {
     /// <summary>
     /// Queries treatments using the specified <see cref="TreatmentQuery"/> parameters,
-    /// merging legacy and V4-projected treatments behind the scenes.
+    /// projecting V4 records into the legacy Treatment shape.
     /// </summary>
     /// <param name="query">The <see cref="TreatmentQuery"/> filter and pagination parameters.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -30,6 +27,16 @@ public interface ITreatmentStore
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The <see cref="Treatment"/> if found, or <c>null</c>.</returns>
     Task<Treatment?> GetByIdAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns treatments whose <see cref="Treatment.Mills"/> falls within
+    /// <c>[fromMills, toMills]</c>, for the current tenant. Stable window read used by
+    /// replay/point-in-time evaluation; not bounded by an arbitrary "newest N" page size.
+    /// </summary>
+    /// <param name="fromMills">Inclusive lower bound of the time window (Unix ms).</param>
+    /// <param name="toMills">Inclusive upper bound of the time window (Unix ms).</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<Treatment>> GetByRangeAsync(long fromMills, long toMills, CancellationToken ct = default);
 
     /// <summary>
     /// Returns treatments modified after the given timestamp, for incremental sync (v3 API).
@@ -65,4 +72,11 @@ public interface ITreatmentStore
     /// <param name="ct">Cancellation token.</param>
     /// <returns><c>true</c> if the treatment was deleted; <c>false</c> if not found.</returns>
     Task<bool> DeleteAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Counts treatments matching the optional find filter, summing across all V4 treatment repositories.
+    /// </summary>
+    /// <param name="find">Optional Nightscout-compatible find query for time range filtering.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<long> CountAsync(string? find = null, CancellationToken ct = default);
 }

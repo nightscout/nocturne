@@ -44,7 +44,8 @@ public class AidMetricsService : IAidMetricsService
         IReadOnlyList<ApsSnapshot> apsSnapshots,
         IReadOnlyList<TempBasal> tempBasals,
         int siteChangeCount,
-        double? cgmUsePercent,
+        string? cgmDeviceNames,
+        string? pumpDeviceNames,
         double? cgmActivePercent,
         double? targetLow,
         double? targetHigh,
@@ -53,7 +54,8 @@ public class AidMetricsService : IAidMetricsService
     {
         var result = new AidSystemMetrics
         {
-            CgmUsePercent = cgmUsePercent,
+            CgmDeviceNames = cgmDeviceNames,
+            PumpDeviceNames = pumpDeviceNames,
             CgmActivePercent = cgmActivePercent,
             TargetLow = targetLow,
             TargetHigh = targetHigh,

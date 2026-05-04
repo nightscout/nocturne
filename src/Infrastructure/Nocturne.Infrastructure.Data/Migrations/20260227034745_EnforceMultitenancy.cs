@@ -33,20 +33,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Step 0: Create a default tenant and backfill any NULL tenant_id values
-            // so existing data doesn't violate the NOT NULL constraint we're about to add.
-            migrationBuilder.Sql(
-                """
-                INSERT INTO tenants ("Id", slug, display_name, is_active, is_default, sys_created_at, sys_updated_at)
-                SELECT gen_random_uuid(), 'default', 'Default', true, true, now(), now()
-                WHERE NOT EXISTS (SELECT 1 FROM tenants LIMIT 1);
-                """);
-
-            foreach (var table in TenantScopedTables)
-            {
-                migrationBuilder.Sql(
-                    $"UPDATE {table} SET tenant_id = (SELECT \"Id\" FROM tenants WHERE is_default = true LIMIT 1) WHERE tenant_id IS NULL;");
-            }
+            // Step 0 (no-op): The original migration seeded a 'default' tenant and
+            // backfilled NULL tenant_id values for pre-existing single-tenant data.
+            // Nocturne has always been multitenant — there is no legacy data to backfill,
+            // so the seed and backfill are removed. Tenants are created through /setup.
 
             // Step 1: Make tenant_id NOT NULL and add FK on all tenant-scoped tables
             foreach (var table in TenantScopedTables)

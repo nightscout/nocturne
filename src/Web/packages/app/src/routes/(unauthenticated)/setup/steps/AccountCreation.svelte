@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlertTriangle, Fingerprint, Loader2, UserPlus } from "lucide-svelte";
+  import { AlertTriangle, Check, Fingerprint, Loader2, UserPlus } from "lucide-svelte";
   import { startRegistration } from "@simplewebauthn/browser";
   import {
     setupOptions,
@@ -10,7 +10,7 @@
     getOidcProviders,
     setAuthCookies,
   } from "$routes/(unauthenticated)/auth/auth.remote";
-  import { setupOwnerOidc } from "../setup.remote";
+  import { setupOwnerOidc, validateSetupUsername } from "../setup.remote";
   import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
   import OidcProviderButtons from "$lib/components/auth/OidcProviderButtons.svelte";
   import { Button } from "$lib/components/ui/button";
@@ -44,8 +44,45 @@
   let displayName = $state("");
   let username = $state("");
 
+  // ── Username validation ─────────────────────────────────────────────
+  let usernameError = $state<string | null>(null);
+  let usernameValid = $state(false);
+  let validatingUsername = $state(false);
+  let validationTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function onUsernameInput() {
+    usernameError = null;
+    usernameValid = false;
+
+    if (validationTimeout) clearTimeout(validationTimeout);
+
+    const value = username.trim().toLowerCase();
+    if (!value || value.length < 3) {
+      if (value.length > 0) usernameError = "Username must be at least 3 characters";
+      return;
+    }
+
+    validatingUsername = true;
+    validationTimeout = setTimeout(async () => {
+      try {
+        const result = await validateSetupUsername({ username: value });
+        if (result?.isValid) {
+          usernameValid = true;
+          usernameError = null;
+        } else {
+          usernameValid = false;
+          usernameError = result?.message ?? "Invalid username";
+        }
+      } catch {
+        usernameError = "Could not validate username";
+      } finally {
+        validatingUsername = false;
+      }
+    }, 400);
+  }
+
   const canSubmit = $derived(
-    displayName.trim().length > 0 && username.trim().length > 0,
+    displayName.trim().length > 0 && usernameValid,
   );
 
   // ── OIDC login ───────────────────────────────────────────────────
@@ -61,7 +98,7 @@
 
     try {
       const result = await setupOwnerOidc({
-        username: username.trim(),
+        username: username.trim().toLowerCase(),
         displayName: displayName.trim(),
         providerId,
       });
@@ -86,7 +123,7 @@
 
     try {
       const response = await setupOptions({
-        username: username.trim(),
+        username: username.trim().toLowerCase(),
         displayName: displayName.trim(),
       });
       const options = JSON.parse(response.options ?? "");
@@ -138,11 +175,7 @@
 
   <!-- Form area -->
   <div class="w-full max-w-md">
-    {#if authStateQuery.loading}
-      <div class="flex items-center justify-center py-12">
-        <Loader2 class="h-8 w-8 animate-spin text-white/40" />
-      </div>
-    {:else if registrationComplete}
+    {#if registrationComplete}
       <div class="space-y-4">
         <div class="flex flex-col items-center gap-2 text-center">
           <div
@@ -162,6 +195,10 @@
           onContinue={onComplete}
           continueLabel="Continue Setup"
         />
+      </div>
+    {:else if authStateQuery.loading}
+      <div class="flex items-center justify-center py-12">
+        <Loader2 class="h-8 w-8 animate-spin text-white/40" />
       </div>
     {:else if !isAuthenticated}
       <div class="space-y-4">
@@ -196,11 +233,23 @@
             type="text"
             placeholder="your-username"
             bind:value={username}
+            oninput={onUsernameInput}
             disabled={isRedirecting || isRegistering}
           />
-          <p class="text-xs text-muted-foreground">
-            A unique identifier for your account.
-          </p>
+          {#if validatingUsername}
+            <p class="text-xs text-white/40">Checking availability...</p>
+          {:else if usernameError}
+            <p class="text-xs text-red-400">{usernameError}</p>
+          {:else if usernameValid}
+            <p class="flex items-center gap-1.5 text-xs text-green-400">
+              <Check class="h-3 w-3" />
+              Available
+            </p>
+          {:else}
+            <p class="text-xs text-muted-foreground">
+              3-32 characters: letters, numbers, dots, underscores, and hyphens.
+            </p>
+          {/if}
         </div>
 
         <!-- Auth method buttons -->

@@ -4,7 +4,6 @@ using Nocturne.API.Models;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Services;
-using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Controllers.V4.Platform;
 
@@ -22,8 +21,6 @@ namespace Nocturne.API.Controllers.V4.Platform;
 public class ServicesController : ControllerBase
 {
     private readonly IDataSourceService _dataSourceService;
-    private readonly IEntryRepository _entryRepository;
-    private readonly ITreatmentRepository _treatmentRepository;
     private readonly IConnectorHealthService _connectorHealthService;
     private readonly IConnectorSyncService _connectorSyncService;
     private readonly ILogger<ServicesController> _logger;
@@ -33,16 +30,12 @@ public class ServicesController : ControllerBase
     /// Initializes a new instance of <see cref="ServicesController"/>.
     /// </summary>
     /// <param name="dataSourceService">Service for querying active data sources and their status.</param>
-    /// <param name="entryRepository">Repository used to compute last-entry timestamps.</param>
-    /// <param name="treatmentRepository">Repository used to compute last-treatment timestamps.</param>
     /// <param name="connectorHealthService">Service for connector health state queries.</param>
     /// <param name="connectorSyncService">Service for triggering on-demand connector syncs.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="configuration">Application configuration for base URL resolution.</param>
     public ServicesController(
         IDataSourceService dataSourceService,
-        IEntryRepository entryRepository,
-        ITreatmentRepository treatmentRepository,
         IConnectorHealthService connectorHealthService,
         IConnectorSyncService connectorSyncService,
         ILogger<ServicesController> logger,
@@ -50,8 +43,6 @@ public class ServicesController : ControllerBase
     )
     {
         _dataSourceService = dataSourceService;
-        _entryRepository = entryRepository;
-        _treatmentRepository = treatmentRepository;
         _connectorHealthService = connectorHealthService;
         _connectorSyncService = connectorSyncService;
         _logger = logger;
@@ -473,29 +464,22 @@ public class ServicesController : ControllerBase
             // Map connector ID to data source name used in database
             var dataSource = MapConnectorIdToDataSource(id);
 
-            // Get latest timestamps from database
-            var entryTimestamp = await _entryRepository.GetLatestEntryTimestampBySourceAsync(
+            // Get latest timestamps from V4 glucose tables
+            var entryTimestamp = await _dataSourceService.GetLatestGlucoseTimestampBySourceAsync(
                 dataSource,
                 cancellationToken
             );
 
             var oldestEntryTimestamp =
-                await _entryRepository.GetOldestEntryTimestampBySourceAsync(
+                await _dataSourceService.GetOldestGlucoseTimestampBySourceAsync(
                     dataSource,
                     cancellationToken
                 );
 
-            var treatmentTimestamp =
-                await _treatmentRepository.GetLatestTreatmentTimestampBySourceAsync(
-                    dataSource,
-                    cancellationToken
-                );
-
-            var oldestTreatmentTimestamp =
-                await _treatmentRepository.GetOldestTreatmentTimestampBySourceAsync(
-                    dataSource,
-                    cancellationToken
-                );
+            var treatmentTimestamp = await _dataSourceService.GetLatestTreatmentTimestampBySourceAsync(
+                dataSource, cancellationToken);
+            var oldestTreatmentTimestamp = await _dataSourceService.GetOldestTreatmentTimestampBySourceAsync(
+                dataSource, cancellationToken);
 
             // Get connector health/state
             var connectorStatuses = await _connectorHealthService.GetConnectorStatusesAsync(

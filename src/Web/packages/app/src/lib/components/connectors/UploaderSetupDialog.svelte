@@ -19,22 +19,33 @@
     UploaderSetupResponse,
   } from "$lib/api/generated/nocturne-api-client";
   import { getUploaderSetup } from "$api/generated/services.generated.remote";
+  import { KeyRound } from "lucide-svelte";
+  import { getUploaderName } from "$lib/utils/uploader-labels";
 
-  let { open = $bindable(false), selectedUploader = null } = $props<{
+  let {
+    open = $bindable(false),
+    selectedUploader = null,
+    onRequestApiKey,
+  }: {
     open: boolean;
     selectedUploader: UploaderApp | null;
-  }>();
+    onRequestApiKey?: (label: string, scopes: string[]) => void;
+  } = $props();
 
   let uploaderSetup = $state<UploaderSetupResponse | null>(null);
   let copiedField = $state<string | null>(null);
+  let lastUploaderId = $state<string | null>(null);
 
   // Watch for changes and fetch setup info
   $effect(() => {
     if (open && selectedUploader?.id) {
+      lastUploaderId = selectedUploader.id;
       uploaderSetup = null;
       loadSetup(selectedUploader.id);
     }
   });
+
+  const hasOAuthFlow = $derived(selectedUploader?.id === "xdrip");
 
   async function loadSetup(uploaderId: string) {
     try {
@@ -42,6 +53,11 @@
     } catch (e) {
       console.error("Failed to load setup instructions", e);
     }
+  }
+
+  function handleRequestApiKey() {
+    if (!selectedUploader) return;
+    onRequestApiKey?.(getUploaderName(selectedUploader), ["health.readwrite"]);
   }
 
   async function copyToClipboard(text: string, field: string) {
@@ -116,6 +132,21 @@
               </Button>
             </div>
           </div>
+
+          {#if !hasOAuthFlow}
+          <div class="space-y-2">
+            <span class="text-sm text-muted-foreground">API Key</span>
+            <div>
+              <Button variant="outline" size="sm" onclick={handleRequestApiKey}>
+                <KeyRound class="mr-1.5 h-4 w-4" />
+                Generate API key
+              </Button>
+              <p class="text-xs text-muted-foreground mt-1.5">
+                Creates an API token pre-configured for {selectedUploader?.name ?? "this app"}
+              </p>
+            </div>
+          </div>
+          {/if}
 
         <Separator />
 

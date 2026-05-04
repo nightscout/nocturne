@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -66,8 +67,8 @@ public class TenantController : ControllerBase
     {
         var authContext = HttpContext.Items["AuthContext"] as AuthContext;
         var tenant = authContext?.SubjectId is { } creatorId
-            ? await _tenantService.CreateAsync(request.Slug, request.DisplayName, creatorId, request.ApiSecret, ct)
-            : await _tenantService.CreateWithoutOwnerAsync(request.Slug, request.DisplayName, request.ApiSecret, ct);
+            ? await _tenantService.CreateAsync(request.Slug, request.DisplayName, creatorId, ct)
+            : await _tenantService.CreateWithoutOwnerAsync(request.Slug, request.DisplayName, ct);
         return CreatedAtAction(nameof(GetById), new { id = tenant.Id }, tenant);
     }
 
@@ -214,6 +215,89 @@ public class TenantController : ControllerBase
         return StatusCode(StatusCodes.Status201Created, result);
     }
 
+    // ── Credential management (admin proxy for account portal) ──────────
+
+    /// <summary>Lists passkey credentials and OIDC identities for a member subject.</summary>
+    [HttpGet("{id:guid}/members/{subjectId:guid}/credentials")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(SubjectCredentialsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetMemberCredentials(
+        Guid id, Guid subjectId,
+        [FromServices] IPasskeyService passkeyService,
+        [FromServices] ISubjectService subjectService,
+        CancellationToken ct)
+    {
+        if (!await IsCallerTenantOwnerAsync(id, ct))
+            return Forbid();
+
+        var passkeys = await passkeyService.GetCredentialsAsync(subjectId, id);
+        var oidcIdentities = await subjectService.GetLinkedOidcIdentitiesAsync(subjectId);
+
+        return Ok(new SubjectCredentialsDto(
+            passkeys.Select(p => new PasskeyCredentialDto(p.Id, p.Label, p.CreatedAt)).ToList(),
+            oidcIdentities.Select(i => new OidcIdentityDto(i.Id, i.ProviderName, i.Email)).ToList()));
+    }
+
+    /// <summary>Attaches an OIDC identity to a member subject.</summary>
+    [HttpPost("{id:guid}/members/{subjectId:guid}/credentials/oidc")]
+    [RemoteCommand(Invalidates = ["GetMemberCredentials"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> AttachOidcIdentity(
+        Guid id, Guid subjectId,
+        [FromBody] AdminAttachOidcRequest request,
+        [FromServices] ISubjectService subjectService,
+        CancellationToken ct)
+    {
+        if (!await IsCallerTenantOwnerAsync(id, ct))
+            return Forbid();
+
+        var (outcome, _) = await subjectService.AttachOidcIdentityAsync(
+            subjectId, request.ProviderId, request.OidcSubjectId, request.Issuer, request.Email);
+
+        return outcome switch
+        {
+            OidcLinkOutcome.Created => NoContent(),
+            OidcLinkOutcome.AlreadyLinkedToSelf => NoContent(),
+            _ => BadRequest(new { error = outcome.ToString() })
+        };
+    }
+
+    /// <summary>Removes a passkey credential from a member subject.</summary>
+    [HttpDelete("{id:guid}/members/{subjectId:guid}/credentials/passkey/{credentialId:guid}")]
+    [RemoteCommand(Invalidates = ["GetMemberCredentials"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RemovePasskeyCredential(
+        Guid id, Guid subjectId, Guid credentialId,
+        [FromServices] ISubjectService subjectService,
+        CancellationToken ct)
+    {
+        if (!await IsCallerTenantOwnerAsync(id, ct))
+            return Forbid();
+
+        var result = await subjectService.TryRemovePasskeyCredentialAsync(subjectId, credentialId);
+        return result == FactorRemovalResult.Removed ? NoContent() : BadRequest(new { error = result.ToString() });
+    }
+
+    /// <summary>Removes an OIDC identity from a member subject.</summary>
+    [HttpDelete("{id:guid}/members/{subjectId:guid}/credentials/oidc/{identityId:guid}")]
+    [RemoteCommand(Invalidates = ["GetMemberCredentials"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RemoveOidcIdentity(
+        Guid id, Guid subjectId, Guid identityId,
+        [FromServices] ISubjectService subjectService,
+        CancellationToken ct)
+    {
+        if (!await IsCallerTenantOwnerAsync(id, ct))
+            return Forbid();
+
+        var result = await subjectService.TryRemoveOidcIdentityAsync(subjectId, identityId);
+        return result == FactorRemovalResult.Removed ? NoContent() : BadRequest(new { error = result.ToString() });
+    }
+
     /// <summary>
     /// Verifies the authenticated caller is a member of the specified tenant
     /// with the Owner role (has superuser permission).
@@ -221,6 +305,13 @@ public class TenantController : ControllerBase
     private async Task<bool> IsCallerTenantOwnerAsync(Guid tenantId, CancellationToken ct)
     {
         var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+
+        // Instance-key / platform-admin callers bypass ownership checks —
+        // they already passed [Authorize(Roles = "platform_admin")] and have
+        // full admin permissions.
+        if (authContext is { IsPlatformAdmin: true, AuthType: AuthType.InstanceKey })
+            return true;
+
         if (authContext?.SubjectId is not { } subjectId)
             return false;
 
@@ -234,7 +325,7 @@ public class TenantController : ControllerBase
     }
 }
 
-public record CreateTenantRequest(string Slug, string DisplayName, string? ApiSecret = null);
+public record CreateTenantRequest(string Slug, string DisplayName);
 public record UpdateTenantRequest(string DisplayName, bool IsActive, bool? AllowAccessRequests = null);
 public record AddMemberRequest(Guid SubjectId, List<Guid> RoleIds, List<string>? DirectPermissions = null);
 
@@ -255,3 +346,8 @@ public class CreateMemberInviteRequest
     public int? MaxUses { get; set; }
     public bool LimitTo24Hours { get; set; }
 }
+
+public record SubjectCredentialsDto(List<PasskeyCredentialDto> Passkeys, List<OidcIdentityDto> OidcIdentities);
+public record PasskeyCredentialDto(Guid Id, string? DisplayName, DateTime CreatedAt);
+public record OidcIdentityDto(Guid Id, string Provider, string? Email);
+public record AdminAttachOidcRequest(Guid ProviderId, string OidcSubjectId, string Issuer, string? Email);

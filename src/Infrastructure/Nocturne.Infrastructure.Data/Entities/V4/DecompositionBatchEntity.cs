@@ -35,13 +35,6 @@ public class DecompositionBatchEntity : ITenantScoped
     public string? SourceRecordId { get; set; }
 
     /// <summary>
-    /// FK to the Treatment entity that was decomposed. Null for non-treatment batches.
-    /// ON DELETE CASCADE: deleting the Treatment cascades through this batch to all V4 siblings.
-    /// </summary>
-    [Column("source_treatment_id")]
-    public Guid? SourceTreatmentId { get; set; }
-
-    /// <summary>
     /// When the decomposition occurred
     /// </summary>
     [Column("created_at")]

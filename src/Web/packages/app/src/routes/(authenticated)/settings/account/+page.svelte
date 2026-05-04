@@ -314,11 +314,16 @@
 
 <div class="container mx-auto max-w-4xl p-6 space-y-6">
   {#if user}
-    <div class="space-y-1">
-      <h1 class="text-2xl font-bold tracking-tight">Account</h1>
-      <p class="text-muted-foreground">
-        Manage your account and security settings
-      </p>
+    <div class="flex items-center gap-3">
+      <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+        <User class="h-6 w-6 text-primary" />
+      </div>
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">Account</h1>
+        <p class="text-muted-foreground">
+          Manage your account and security settings
+        </p>
+      </div>
     </div>
 
     <!-- User Profile Card -->

@@ -319,9 +319,68 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         var query = _context.SensorGlucose.AsNoTracking().AsQueryable();
         if (source != null)
             query = query.Where(e => e.DataSource == source);
-        var latest = await query.OrderByDescending(e => e.Timestamp).FirstOrDefaultAsync(ct);
-        return latest is null
-            ? null
-            : latest.Timestamp;
+        return await query.MaxAsync(e => (DateTime?)e.Timestamp, ct);
+    }
+
+    /// <summary>
+    /// Gets the timestamp of the oldest sensor glucose record.
+    /// </summary>
+    /// <param name="source">Optional data source filter.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The oldest timestamp, or null if no records found.</returns>
+    public async Task<DateTime?> GetOldestTimestampAsync(
+        string? source = null,
+        CancellationToken ct = default
+    )
+    {
+        var query = _context.SensorGlucose.AsNoTracking().AsQueryable();
+        if (source != null)
+            query = query.Where(e => e.DataSource == source);
+        return await query.MinAsync(e => (DateTime?)e.Timestamp, ct);
+    }
+
+    /// <summary>
+    /// Counts sensor glucose records for the given data source.
+    /// </summary>
+    /// <param name="source">Data source identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Number of matching records.</returns>
+    public async Task<int> CountBySourceAsync(string source, CancellationToken ct = default)
+    {
+        return await _context.SensorGlucose
+            .AsNoTracking()
+            .Where(e => e.DataSource == source)
+            .CountAsync(ct);
+    }
+
+    /// <summary>
+    /// Deletes all sensor glucose records for the given data source.
+    /// </summary>
+    /// <param name="source">Data source identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Number of records deleted.</returns>
+    public async Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default)
+    {
+        return await _context.AuditedExecuteDeleteAsync(
+            _context.SensorGlucose.Where(e => e.DataSource == source), _auditContext, ct);
+    }
+
+    /// <summary>
+    /// Deletes all sensor glucose records within the given time range.
+    /// </summary>
+    /// <param name="from">Inclusive start, or null for no lower bound.</param>
+    /// <param name="to">Exclusive end, or null for no upper bound.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Number of records deleted.</returns>
+    public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
+    {
+        var query = _context.SensorGlucose.AsQueryable();
+
+        if (from.HasValue)
+            query = query.Where(e => e.Timestamp >= from.Value);
+        if (to.HasValue)
+            query = query.Where(e => e.Timestamp < to.Value);
+
+        return await _context.AuditedExecuteDeleteAsync(query, _auditContext, ct);
     }
 }

@@ -16,4 +16,9 @@ public interface ICoachMarkService
     /// Create or update a coach mark's status, setting timestamp fields as appropriate.
     /// </summary>
     Task<CoachMarkState> UpsertAsync(string markKey, string status, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Delete all coach mark states for the current user, resetting tutorials.
+    /// </summary>
+    Task DeleteAllAsync(CancellationToken cancellationToken = default);
 }

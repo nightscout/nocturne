@@ -115,7 +115,7 @@
   {@const sensitivity = selectedProfileName ? getSensitivityForProfile(data, selectedProfileName) : null}
   {@const targetRange = selectedProfileName ? getTargetRangeForProfile(data, selectedProfileName) : null}
   {@const profileConfigured = (data?.basalSchedules ?? []).length > 0}
-  <div class="container mx-auto max-w-4xl p-6 space-y-6" {@attach coachmark({ key: "onboarding.therapy-profile", title: "Therapy profile", description: "Imported from your data source", completedWhen: () => profileConfigured })}>
+  <div class="container mx-auto max-w-4xl p-6 space-y-6" {@attach coachmark({ key: "onboarding.therapy-profile", title: "Automatically synced", description: "Your basal rates, carb ratios, and sensitivity factors are imported from your uploader (AAPS, Loop, xDrip+). No manual entry needed.", completedWhen: () => profileConfigured })}>
     <!-- Header -->
     <div class="flex items-start justify-between">
       <div class="flex items-center gap-3">

@@ -5,6 +5,7 @@
 import { getRequestEvent, query, command, form } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
+import { formCoerce } from './form-utils.generated.js';
 import { UpsertBolusCalculationRequestSchema } from '$lib/api/generated/schemas';
 import { type UpsertBolusCalculationRequest } from '$api';
 
@@ -18,12 +19,15 @@ export const getAll = query(z.object({ from: z.coerce.date().optional(), to: z.c
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in bolusCalculation.getAll:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get all');
   }
 });
 
 /** Creates a new record and returns it with a `Location` header pointing to the created resource. */
-export const create = form(UpsertBolusCalculationRequestSchema as any, async (request) => {
+export const create = form(formCoerce(UpsertBolusCalculationRequestSchema) as any, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const result = await apiClient.bolusCalculation.create(request as UpsertBolusCalculationRequest);
@@ -33,6 +37,9 @@ export const create = form(UpsertBolusCalculationRequestSchema as any, async (re
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in bolusCalculation.create:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to create');
   }
 });
@@ -47,12 +54,15 @@ export const getById = query(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in bolusCalculation.getById:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get by id');
   }
 });
 
 /** Updates an existing record by ID and returns the updated record. */
-export const update = form(z.object({ id: z.string(), request: UpsertBolusCalculationRequestSchema }) as any, async ({ id, request }) => {
+export const update = form(formCoerce(z.object({ id: z.string(), request: UpsertBolusCalculationRequestSchema })) as any, async ({ id, request }) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const result = await apiClient.bolusCalculation.update(id, request as UpsertBolusCalculationRequest);
@@ -62,6 +72,9 @@ export const update = form(z.object({ id: z.string(), request: UpsertBolusCalcul
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in bolusCalculation.update:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to update');
   }
 });
@@ -77,6 +90,9 @@ export const remove = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in bolusCalculation.delete:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to remove');
   }
 });

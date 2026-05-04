@@ -36,6 +36,14 @@
                     </li>
                     <li>
                         <a
+                            href="/changelog"
+                            class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            Changelog
+                        </a>
+                    </li>
+                    <li>
+                        <a
                             href="/setup"
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >

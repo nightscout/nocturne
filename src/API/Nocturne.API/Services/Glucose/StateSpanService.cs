@@ -45,6 +45,7 @@ public class StateSpanService : IStateSpanService
         bool? active = null,
         int count = 100,
         int skip = 0,
+        bool descending = true,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -52,7 +53,21 @@ public class StateSpanService : IStateSpanService
             category, state, from, to, source, active, count, skip);
 
         return await _repository.GetStateSpansAsync(
-            category, state, from, to, source, active, count, skip, cancellationToken);
+            category, state, from, to, source, active, count, skip, descending, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountStateSpansAsync(
+        StateSpanCategory? category = null,
+        string? state = null,
+        DateTime? from = null,
+        DateTime? to = null,
+        string? source = null,
+        bool? active = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await _repository.CountStateSpansAsync(
+            category, state, from, to, source, active, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -98,6 +113,16 @@ public class StateSpanService : IStateSpanService
             id, stateSpan.Category);
 
         return await _repository.UpdateStateSpanAsync(id, stateSpan, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<StateSpan?> GetActiveAtAsync(
+        StateSpanCategory category,
+        string? state,
+        DateTime at,
+        CancellationToken cancellationToken = default)
+    {
+        return await _repository.GetActiveAtAsync(category, state, at, cancellationToken);
     }
 
     #region Activity Compatibility Methods

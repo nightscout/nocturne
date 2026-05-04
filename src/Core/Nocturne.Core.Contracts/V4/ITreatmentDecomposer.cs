@@ -34,4 +34,12 @@ public interface ITreatmentDecomposer
     /// <param name="ct">Cancellation token</param>
     /// <returns>Total number of v4 records deleted across all tables</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk-deletes V4 treatment records matching the optional find filter (time range).
+    /// </summary>
+    /// <param name="find">Optional Nightscout-compatible find query for time range filtering.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Total number of V4 records deleted across all treatment tables.</returns>
+    Task<long> BulkDeleteAsync(string? find, CancellationToken ct = default);
 }

@@ -44,6 +44,12 @@ public class ApsSnapshotEntity : ITenantScoped
     public string? Device { get; set; }
 
     /// <summary>
+    /// Links records that were decomposed from the same legacy DeviceStatus
+    /// </summary>
+    [Column("correlation_id")]
+    public Guid? CorrelationId { get; set; }
+
+    /// <summary>
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     [Column("legacy_id")]
@@ -194,6 +200,19 @@ public class ApsSnapshotEntity : ITenantScoped
     /// </summary>
     [Column("predicted_start_timestamp")]
     public DateTime? PredictedStartTimestamp { get; set; }
+
+    /// <summary>
+    /// Full serialized Loop status object for round-trip fidelity
+    /// </summary>
+    [Column("loop_json", TypeName = "jsonb")]
+    public string? LoopJson { get; set; }
+
+    /// <summary>
+    /// Algorithm version string (e.g. Trio app version)
+    /// </summary>
+    [Column("aid_version")]
+    [MaxLength(64)]
+    public string? AidVersion { get; set; }
 
     /// <summary>
     /// Catch-all JSONB column for fields not mapped to dedicated columns

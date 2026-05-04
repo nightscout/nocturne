@@ -8,6 +8,9 @@ namespace Nocturne.Infrastructure.Data.Mappers;
 /// </summary>
 public static class CoachMarkStateMapper
 {
+    /// <summary>
+    /// Convert database entity to domain model
+    /// </summary>
     public static CoachMarkState ToDomainModel(CoachMarkStateEntity entity)
     {
         return new CoachMarkState
@@ -21,6 +24,9 @@ public static class CoachMarkStateMapper
         };
     }
 
+    /// <summary>
+    /// Convert domain model to database entity
+    /// </summary>
     public static CoachMarkStateEntity ToEntity(CoachMarkState model, Guid tenantId)
     {
         return new CoachMarkStateEntity

@@ -10,6 +10,7 @@
       sysTime: DateTimeOffset_1,
       mgdl: 100,
       sgv: 100,
+      mmol: 5.54994394556615,
       type: sgv,
       device: xDrip-DexcomG6,
       isValid: true

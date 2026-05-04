@@ -4,8 +4,9 @@ using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Glucose;
@@ -17,16 +18,20 @@ namespace Nocturne.API.Tests.Services.Glucose;
 public class EntryServiceTests
 {
     private readonly Mock<IEntryStore> _store = new();
-    private readonly Mock<IEntryRepository> _repository = new();
+    private readonly Mock<IEntryDecomposer> _decomposer = new();
     private readonly Mock<IEntryCache> _cache = new();
     private readonly Mock<IDataEventSink<Entry>> _events = new();
     private readonly EntryService _sut;
 
     public EntryServiceTests()
     {
+        _decomposer
+            .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult());
+
         _sut = new EntryService(
             _store.Object,
-            _repository.Object,
+            _decomposer.Object,
             _cache.Object,
             _events.Object,
             Mock.Of<ILogger<EntryService>>());
@@ -335,31 +340,23 @@ public class EntryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task CreateEntriesAsync_CallsStoreAndFiresEvent()
+    public async Task CreateEntriesAsync_DecomposesEachEntryToV4AndFiresEvent()
     {
         // Arrange
         var entries = new List<Entry>
         {
-            new() { Type = "sgv", Sgv = 120, Mills = 1234567890 },
-            new() { Type = "sgv", Sgv = 110, Mills = 1234567880 },
+            new() { Id = "abc123", Type = "sgv", Sgv = 120, Mills = 1234567890 },
+            new() { Id = "def456", Type = "sgv", Sgv = 110, Mills = 1234567880 },
         };
-        var createdEntries = entries.Select(e => new Entry
-        {
-            Id = Guid.NewGuid().ToString(), Type = e.Type, Sgv = e.Sgv, Mills = e.Mills
-        }).ToList();
-
-        _repository
-            .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(createdEntries);
 
         // Act
         var result = await _sut.CreateEntriesAsync(entries, CancellationToken.None);
 
         // Assert
         Assert.Equal(2, result.Count());
-        _repository.Verify(
-            x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+        _decomposer.Verify(
+            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
         // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
         _events.Verify(
@@ -370,16 +367,16 @@ public class EntryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task CreateEntriesAsync_WhenStoreThrows_DoesNotInvalidateOrFireEvent()
+    public async Task CreateEntriesAsync_WhenDecomposerThrows_DoesNotFireEvent()
     {
         // Arrange
         var entries = new List<Entry>
         {
-            new() { Type = "sgv", Sgv = 120, Mills = 1234567890 },
+            new() { Id = "abc123", Type = "sgv", Sgv = 120, Mills = 1234567890 },
         };
 
-        _repository
-            .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()))
+        _decomposer
+            .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Database error"));
 
         // Act & Assert
@@ -392,6 +389,74 @@ public class EntryServiceTests
             Times.Never);
     }
 
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("sgv")]
+    [InlineData("mbg")]
+    [InlineData("cal")]
+    public async Task CreateEntriesAsync_AcceptsValidEntryTypes(string type)
+    {
+        // Arrange
+        var entries = new List<Entry>
+        {
+            new() { Id = "abc123", Type = type, Sgv = 120, Mills = 1234567890 },
+        };
+
+        // Act
+        var result = await _sut.CreateEntriesAsync(entries, CancellationToken.None);
+
+        // Assert
+        Assert.Single(result);
+        _decomposer.Verify(
+            x => x.DecomposeAsync(It.Is<Entry>(e => e.Type == type), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("unknown")]
+    [InlineData("foo")]
+    [InlineData("")]
+    public async Task CreateEntriesAsync_RejectsUnknownEntryTypes(string type)
+    {
+        // Arrange
+        var entries = new List<Entry>
+        {
+            new() { Id = "abc123", Type = type, Sgv = 120, Mills = 1234567890 },
+        };
+
+        // Act
+        var result = await _sut.CreateEntriesAsync(entries, CancellationToken.None);
+
+        // Assert — unknown types are silently filtered out
+        Assert.Empty(result);
+        _decomposer.Verify(
+            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CreateEntriesAsync_MixedValidAndInvalid_OnlyDecomposesValid()
+    {
+        // Arrange
+        var entries = new List<Entry>
+        {
+            new() { Id = "abc123", Type = "sgv", Sgv = 120, Mills = 1234567890 },
+            new() { Id = "def456", Type = "unknown", Sgv = 110, Mills = 1234567880 },
+            new() { Id = "ghi789", Type = "mbg", Mbg = 100, Mills = 1234567870 },
+        };
+
+        // Act
+        var result = await _sut.CreateEntriesAsync(entries, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, result.Count());
+        _decomposer.Verify(
+            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+    }
+
     #endregion
 
     #region Update
@@ -399,23 +464,27 @@ public class EntryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task UpdateEntryAsync_WhenSuccessful_FiresEvent()
+    public async Task UpdateEntryAsync_WhenSuccessful_DecomposesAndFiresEvent()
     {
         // Arrange
         var entryId = "60a1b2c3d4e5f6789012345";
-        var entry = new Entry { Id = entryId, Type = "sgv", Sgv = 120, Mills = 1234567890 };
+        var existingEntry = new Entry { Id = entryId, Type = "sgv", Sgv = 120, Mills = 1234567890 };
         var updatedEntry = new Entry { Id = entryId, Type = "sgv", Sgv = 125, Mills = 1234567890 };
 
-        _repository
-            .Setup(x => x.UpdateEntryAsync(entryId, entry, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(updatedEntry);
+        _store
+            .Setup(x => x.GetByIdAsync(entryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingEntry);
 
         // Act
-        var result = await _sut.UpdateEntryAsync(entryId, entry, CancellationToken.None);
+        var result = await _sut.UpdateEntryAsync(entryId, updatedEntry, CancellationToken.None);
 
         // Assert
         Assert.NotNull(result);
         Assert.Equal(125, result.Sgv);
+        // Decomposer performs idempotent upsert via LegacyId
+        _decomposer.Verify(
+            x => x.DecomposeAsync(It.Is<Entry>(e => e.Id == entryId && e.Sgv == 125), It.IsAny<CancellationToken>()),
+            Times.Once);
         // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
         _events.Verify(
@@ -426,13 +495,13 @@ public class EntryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task UpdateEntryAsync_WhenNotFound_DoesNotInvalidateOrFireEvent()
+    public async Task UpdateEntryAsync_WhenNotFound_DoesNotDecomposeOrFireEvent()
     {
         // Arrange
         var entry = new Entry { Type = "sgv", Sgv = 120, Mills = 1234567890 };
 
-        _repository
-            .Setup(x => x.UpdateEntryAsync("invalidid", entry, It.IsAny<CancellationToken>()))
+        _store
+            .Setup(x => x.GetByIdAsync("invalidid", It.IsAny<CancellationToken>()))
             .ReturnsAsync((Entry?)null);
 
         // Act
@@ -440,6 +509,9 @@ public class EntryServiceTests
 
         // Assert
         Assert.Null(result);
+        _decomposer.Verify(
+            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
+            Times.Never);
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
         _events.Verify(
             x => x.OnUpdatedAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
@@ -453,7 +525,7 @@ public class EntryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task DeleteEntryAsync_WhenSuccessful_FullLifecycle()
+    public async Task DeleteEntryAsync_WhenSuccessful_DeletesFromV4AndFiresEvent()
     {
         // Arrange
         var entryId = "60a1b2c3d4e5f6789012345";
@@ -462,45 +534,47 @@ public class EntryServiceTests
         _store
             .Setup(x => x.GetByIdAsync(entryId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(entryToDelete);
-        _repository
-            .Setup(x => x.DeleteEntryAsync(entryId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+        _decomposer
+            .Setup(x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
 
         // Act
         var result = await _sut.DeleteEntryAsync(entryId, CancellationToken.None);
 
         // Assert
         Assert.True(result);
-        _events.Verify(
-            x => x.BeforeDeleteAsync(entryId, It.IsAny<CancellationToken>()),
+        _decomposer.Verify(
+            x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<CancellationToken>()),
             Times.Once);
-        _repository.Verify(x => x.DeleteEntryAsync(entryId, It.IsAny<CancellationToken>()), Times.Once);
         // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
         _events.Verify(
-            x => x.OnDeletedAsync(It.IsAny<Entry?>(), It.IsAny<CancellationToken>()),
+            x => x.OnDeletedAsync(It.Is<Entry?>(e => e != null && e.Id == entryId), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task DeleteEntryAsync_WhenNotFound_DoesNotInvalidateOrFireDeletedEvent()
+    public async Task DeleteEntryAsync_WhenNotFound_DoesNotFireDeletedEvent()
     {
         // Arrange
         var entryId = "invalidid";
 
-        _repository
-            .Setup(x => x.DeleteEntryAsync(entryId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+        _store
+            .Setup(x => x.GetByIdAsync(entryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Entry?)null);
+        _decomposer
+            .Setup(x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
 
         // Act
         var result = await _sut.DeleteEntryAsync(entryId, CancellationToken.None);
 
         // Assert
         Assert.False(result);
-        _events.Verify(
-            x => x.BeforeDeleteAsync(entryId, It.IsAny<CancellationToken>()),
+        _decomposer.Verify(
+            x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<CancellationToken>()),
             Times.Once);
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
         _events.Verify(
@@ -520,8 +594,8 @@ public class EntryServiceTests
         // Arrange
         var find = "{\"type\":\"sgv\"}";
 
-        _repository
-            .Setup(x => x.BulkDeleteEntriesAsync(find, It.IsAny<CancellationToken>()))
+        _decomposer
+            .Setup(x => x.BulkDeleteAsync(find, It.IsAny<CancellationToken>()))
             .ReturnsAsync(5L);
 
         // Act
@@ -529,7 +603,7 @@ public class EntryServiceTests
 
         // Assert
         Assert.Equal(5, result);
-        _repository.Verify(x => x.BulkDeleteEntriesAsync(find, It.IsAny<CancellationToken>()), Times.Once);
+        _decomposer.Verify(x => x.BulkDeleteAsync(find, It.IsAny<CancellationToken>()), Times.Once);
         // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
         _events.Verify(
@@ -545,8 +619,8 @@ public class EntryServiceTests
         // Arrange
         var find = "{\"type\":\"nonexistent\"}";
 
-        _repository
-            .Setup(x => x.BulkDeleteEntriesAsync(find, It.IsAny<CancellationToken>()))
+        _decomposer
+            .Setup(x => x.BulkDeleteAsync(find, It.IsAny<CancellationToken>()))
             .ReturnsAsync(0L);
 
         // Act
@@ -563,11 +637,11 @@ public class EntryServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task DeleteEntriesAsync_WithNullFind_DefaultsToEmptyQuery()
+    public async Task DeleteEntriesAsync_WithNullFind_PassesNullToDecomposer()
     {
         // Arrange
-        _repository
-            .Setup(x => x.BulkDeleteEntriesAsync("{}", It.IsAny<CancellationToken>()))
+        _decomposer
+            .Setup(x => x.BulkDeleteAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(3L);
 
         // Act
@@ -575,7 +649,7 @@ public class EntryServiceTests
 
         // Assert
         Assert.Equal(3, result);
-        _repository.Verify(x => x.BulkDeleteEntriesAsync("{}", It.IsAny<CancellationToken>()), Times.Once);
+        _decomposer.Verify(x => x.BulkDeleteAsync(null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     #endregion

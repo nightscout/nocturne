@@ -2,6 +2,9 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Loader2, Download, CheckCircle, AlertCircle } from "lucide-svelte";
+  import type { SyncProgressEvent } from "$lib/websocket/types";
+  import { formatSyncMessage } from "$lib/utils/sync-messages";
+  import { tick } from "svelte";
 
   export interface BatchSyncResult {
     success: boolean;
@@ -19,15 +22,45 @@
     }[];
   }
 
+  interface LogEntry {
+    time: string;
+    message: string;
+  }
+
   let {
     open = $bindable(false),
     isManualSyncing = false,
     manualSyncResult = null,
+    syncProgress = null,
   } = $props<{
     open: boolean;
     isManualSyncing: boolean;
     manualSyncResult: BatchSyncResult | null;
+    syncProgress: SyncProgressEvent | null;
   }>();
+
+  let logEntries = $state<LogEntry[]>([]);
+  let logContainer: HTMLDivElement | undefined = $state();
+
+  $effect(() => {
+    if (syncProgress?.messageType) {
+      const entry: LogEntry = {
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        message: formatSyncMessage(syncProgress.messageType, syncProgress.messageParams),
+      };
+      logEntries = [...logEntries, entry];
+      tick().then(() => {
+        logContainer?.scrollTo({ top: logContainer.scrollHeight, behavior: "smooth" });
+      });
+    }
+  });
+
+  // Clear log when dialog closes
+  $effect(() => {
+    if (!open) {
+      logEntries = [];
+    }
+  });
 </script>
 
 <Dialog.Root bind:open>
@@ -45,11 +78,26 @@
 
     <div class="space-y-4 py-4">
       {#if isManualSyncing}
-        <div class="flex flex-col items-center justify-center py-8 gap-4">
-          <Loader2 class="h-12 w-12 animate-spin text-primary" />
-          <p class="text-sm text-muted-foreground">
-            Syncing all enabled connectors...
-          </p>
+        <div class="space-y-3">
+          <div class="flex items-center gap-2">
+            <Loader2 class="h-4 w-4 animate-spin text-primary" />
+            <p class="text-sm text-muted-foreground">
+              {syncProgress?.connectorName ?? "Connector"} is syncing...
+            </p>
+          </div>
+          {#if logEntries.length > 0}
+            <div
+              bind:this={logContainer}
+              class="max-h-48 overflow-y-auto rounded-md border bg-muted/30 p-3 font-mono text-xs space-y-1"
+            >
+              {#each logEntries as entry, i (i)}
+                <div class="flex gap-2">
+                  <span class="text-muted-foreground shrink-0">{entry.time}</span>
+                  <span>{entry.message}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
       {:else if manualSyncResult}
         {#if manualSyncResult.success}
@@ -83,7 +131,7 @@
           <div class="space-y-3">
             <h4 class="font-medium text-sm">Connector Results</h4>
             <div class="space-y-2">
-              {#each manualSyncResult.connectorResults as result}
+              {#each manualSyncResult.connectorResults as result (result.connectorName)}
                 <div class="flex items-center justify-between p-3 rounded-lg border {result.success ? 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/10' : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/10'}">
                   <div class="flex items-center gap-3">
                     {#if result.success}

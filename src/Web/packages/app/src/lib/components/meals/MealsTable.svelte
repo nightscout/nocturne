@@ -41,6 +41,7 @@
     onAddFood: (meal: MealEvent) => void;
     onEditFood: (meal: MealEvent, food: TreatmentFood) => void;
     onUnlinkFood: (meal: MealEvent, food: TreatmentFood) => void;
+    onEditInsulin: (meal: MealEvent) => void;
     onAcceptSuggestion: (suggestion: SuggestedMealMatch) => void;
     onDismissSuggestion: (suggestion: SuggestedMealMatch) => void;
     onReviewSuggestion: (suggestion: SuggestedMealMatch) => void;
@@ -62,6 +63,7 @@
     onAddFood,
     onEditFood,
     onUnlinkFood,
+    onEditInsulin,
     onAcceptSuggestion,
     onDismissSuggestion,
     onReviewSuggestion,
@@ -279,13 +281,22 @@
                     </div>
                   </Table.Cell>
                   <Table.Cell class="py-3 text-right">
-                    {#if meal.totalInsulin}
-                      <span class="font-medium tabular-nums">
-                        {meal.totalInsulin.toFixed(1)}U
-                      </span>
-                    {:else}
-                      <span class="text-muted-foreground">—</span>
-                    {/if}
+                    <button
+                      type="button"
+                      class="cursor-pointer hover:opacity-80 transition-opacity"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        onEditInsulin(meal);
+                      }}
+                    >
+                      {#if meal.totalInsulin}
+                        <span class="font-medium tabular-nums">
+                          {meal.totalInsulin.toFixed(1)}U
+                        </span>
+                      {:else}
+                        <span class="text-muted-foreground">—</span>
+                      {/if}
+                    </button>
                   </Table.Cell>
                   <Table.Cell class="py-3">
                     <Badge

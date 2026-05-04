@@ -8,6 +8,5 @@ public class DecompositionBatch
     public Guid Id { get; set; }
     public string Source { get; set; } = string.Empty;
     public string? SourceRecordId { get; set; }
-    public Guid? SourceTreatmentId { get; set; }
     public DateTime CreatedAt { get; set; }
 }

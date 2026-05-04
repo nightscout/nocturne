@@ -266,42 +266,43 @@ export const SearchAndReplace = Extension.create<SearchAndReplaceOptions, Search
 			setSearchTerm:
 				(searchTerm: string) =>
 				({ editor }) => {
-					editor.storage.searchAndReplace.searchTerm = searchTerm;
+					((editor.storage as Record<string, any>).searchAndReplace as SearchAndReplaceStorage).searchTerm = searchTerm;
 
 					return false;
 				},
 			setReplaceTerm:
 				(replaceTerm: string) =>
 				({ editor }) => {
-					editor.storage.searchAndReplace.replaceTerm = replaceTerm;
+					((editor.storage as Record<string, any>).searchAndReplace as SearchAndReplaceStorage).replaceTerm = replaceTerm;
 
 					return false;
 				},
 			setCaseSensitive:
 				(caseSensitive: boolean) =>
 				({ editor }) => {
-					editor.storage.searchAndReplace.caseSensitive = caseSensitive;
+					((editor.storage as Record<string, any>).searchAndReplace as SearchAndReplaceStorage).caseSensitive = caseSensitive;
 
 					return false;
 				},
 			resetIndex:
 				() =>
 				({ editor }) => {
-					editor.storage.searchAndReplace.resultIndex = 0;
+					((editor.storage as Record<string, any>).searchAndReplace as SearchAndReplaceStorage).resultIndex = 0;
 
 					return false;
 				},
 			nextSearchResult:
 				() =>
 				({ editor }) => {
-					const { results, resultIndex } = editor.storage.searchAndReplace;
+					const storage = (editor.storage as Record<string, any>).searchAndReplace as SearchAndReplaceStorage;
+					const { results, resultIndex } = storage;
 
 					const nextIndex = resultIndex + 1;
 
 					if (results[nextIndex]) {
-						editor.storage.searchAndReplace.resultIndex = nextIndex;
+						storage.resultIndex = nextIndex;
 					} else {
-						editor.storage.searchAndReplace.resultIndex = 0;
+						storage.resultIndex = 0;
 					}
 
 					return false;
@@ -309,14 +310,15 @@ export const SearchAndReplace = Extension.create<SearchAndReplaceOptions, Search
 			previousSearchResult:
 				() =>
 				({ editor }) => {
-					const { results, resultIndex } = editor.storage.searchAndReplace;
+					const storage = (editor.storage as Record<string, any>).searchAndReplace as SearchAndReplaceStorage;
+					const { results, resultIndex } = storage;
 
 					const prevIndex = resultIndex - 1;
 
 					if (results[prevIndex]) {
-						editor.storage.searchAndReplace.resultIndex = prevIndex;
+						storage.resultIndex = prevIndex;
 					} else {
-						editor.storage.searchAndReplace.resultIndex = results.length - 1;
+						storage.resultIndex = results.length - 1;
 					}
 
 					return false;
@@ -324,7 +326,7 @@ export const SearchAndReplace = Extension.create<SearchAndReplaceOptions, Search
 			replace:
 				() =>
 				({ editor, state, dispatch }) => {
-					const { replaceTerm, results } = editor.storage.searchAndReplace;
+					const { replaceTerm, results } = (editor.storage as Record<string, any>).searchAndReplace as SearchAndReplaceStorage;
 
 					replace(replaceTerm, results, { state, dispatch });
 
@@ -333,7 +335,7 @@ export const SearchAndReplace = Extension.create<SearchAndReplaceOptions, Search
 			replaceAll:
 				() =>
 				({ editor, tr, dispatch }) => {
-					const { replaceTerm, results } = editor.storage.searchAndReplace;
+					const { replaceTerm, results } = (editor.storage as Record<string, any>).searchAndReplace as SearchAndReplaceStorage;
 
 					replaceAll(replaceTerm, results, { tr, dispatch });
 
@@ -345,11 +347,12 @@ export const SearchAndReplace = Extension.create<SearchAndReplaceOptions, Search
 	addProseMirrorPlugins() {
 		const editor = this.editor;
 		const { searchResultClass, disableRegex } = this.options;
+		const getStorage = () => (editor.storage as Record<string, any>).searchAndReplace as SearchAndReplaceStorage;
 
-		const setLastSearchTerm = (t: string) => (editor.storage.searchAndReplace.lastSearchTerm = t);
+		const setLastSearchTerm = (t: string) => (getStorage().lastSearchTerm = t);
 		const setLastCaseSensitive = (t: boolean) =>
-			(editor.storage.searchAndReplace.lastCaseSensitive = t);
-		const setLastResultIndex = (t: number) => (editor.storage.searchAndReplace.lastResultIndex = t);
+			(getStorage().lastCaseSensitive = t);
+		const setLastResultIndex = (t: number) => (getStorage().lastResultIndex = t);
 
 		return [
 			new Plugin({
@@ -364,7 +367,7 @@ export const SearchAndReplace = Extension.create<SearchAndReplaceOptions, Search
 							lastCaseSensitive,
 							resultIndex,
 							lastResultIndex
-						} = editor.storage.searchAndReplace;
+						} = getStorage();
 
 						if (
 							!docChanged &&
@@ -379,7 +382,7 @@ export const SearchAndReplace = Extension.create<SearchAndReplaceOptions, Search
 						setLastResultIndex(resultIndex);
 
 						if (!searchTerm) {
-							editor.storage.searchAndReplace.results = [];
+							getStorage().results = [];
 							return DecorationSet.empty;
 						}
 
@@ -390,7 +393,7 @@ export const SearchAndReplace = Extension.create<SearchAndReplaceOptions, Search
 							resultIndex
 						);
 
-						editor.storage.searchAndReplace.results = results;
+						getStorage().results = results;
 
 						return decorationsToReturn;
 					}

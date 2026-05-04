@@ -20,7 +20,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
 {
     private const string DefaultUserId = "default";
 
-    private readonly IProfileDataService _profileDataService;
+    private readonly IProfileWriteService _profileWriteService;
     private readonly IFoodService _foodService;
     private readonly IConnectorFoodEntryService _connectorFoodEntryService;
     private readonly IActivityService _activityService;
@@ -30,7 +30,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     private readonly ILogger<MetadataPublisher> _logger;
 
     public MetadataPublisher(
-        IProfileDataService profileDataService,
+        IProfileWriteService profileWriteService,
         IFoodService foodService,
         IConnectorFoodEntryService connectorFoodEntryService,
         IActivityService activityService,
@@ -39,7 +39,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         INoteRepository noteRepository,
         ILogger<MetadataPublisher> logger)
     {
-        _profileDataService = profileDataService ?? throw new ArgumentNullException(nameof(profileDataService));
+        _profileWriteService = profileWriteService ?? throw new ArgumentNullException(nameof(profileWriteService));
         _foodService = foodService ?? throw new ArgumentNullException(nameof(foodService));
         _connectorFoodEntryService = connectorFoodEntryService ?? throw new ArgumentNullException(nameof(connectorFoodEntryService));
         _activityService = activityService ?? throw new ArgumentNullException(nameof(activityService));
@@ -56,7 +56,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     {
         try
         {
-            await _profileDataService.CreateProfilesAsync(profiles, cancellationToken);
+            await _profileWriteService.CreateProfilesAsync(profiles, cancellationToken);
             return true;
         }
         catch (OperationCanceledException) { throw; }
@@ -85,24 +85,23 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         }
     }
 
-    public async Task<bool> PublishConnectorFoodEntriesAsync(
+    public async Task<IReadOnlyList<ConnectorFoodEntry>?> PublishConnectorFoodEntriesAsync(
         IEnumerable<ConnectorFoodEntryImport> entries,
         string source,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            await _connectorFoodEntryService.ImportAsync(
+            return await _connectorFoodEntryService.ImportAsync(
                 DefaultUserId,
                 entries,
                 cancellationToken);
-            return true;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to publish connector food entries for {Source}", source);
-            return false;
+            return null;
         }
     }
 

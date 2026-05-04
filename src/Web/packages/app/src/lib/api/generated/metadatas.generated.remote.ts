@@ -5,6 +5,26 @@
 import { getRequestEvent, query } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
 
+/** Get the alert condition tree shape. Exists solely so NSwag generates TypeScript
+interfaces for ConditionNode and every condition payload record
+— they're stored as opaque JSON on the rule entity and not otherwise reachable
+through a controller signature. */
+export const getAlertConditionTypes = query(async () => {
+  const apiClient = getRequestEvent().locals.apiClient;
+  try {
+    return await apiClient.metadata.getAlertConditionTypes();
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
+    console.error('Error in metadata.getAlertConditionTypes:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
+    throw error(500, 'Failed to get alert condition types');
+  }
+});
+
 /** Get authentication error codes metadata
 This endpoint ensures NSwag generates TypeScript types for AuthErrorCode */
 export const getAuthErrorCodes = query(async () => {
@@ -16,6 +36,9 @@ export const getAuthErrorCodes = query(async () => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in metadata.getAuthErrorCodes:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get auth error codes');
   }
 });

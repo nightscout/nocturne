@@ -59,8 +59,8 @@ public class WellKnownController : ControllerBase
             new OpenIdConfiguration
             {
                 Issuer = _jwtOptions.Issuer,
-                AuthorizationEndpoint = $"{baseUrl}/auth/local/login",
-                TokenEndpoint = $"{baseUrl}/auth/local/token",
+                AuthorizationEndpoint = $"{baseUrl}/api/oauth/authorize",
+                TokenEndpoint = $"{baseUrl}/api/oauth/token",
                 UserinfoEndpoint = $"{baseUrl}/auth/userinfo",
                 JwksUri = $"{baseUrl}/.well-known/jwks.json",
                 RegistrationEndpoint = null,

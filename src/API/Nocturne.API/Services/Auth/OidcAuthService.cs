@@ -16,11 +16,13 @@ namespace Nocturne.API.Services.Auth;
 /// </summary>
 /// <seealso cref="IOidcAuthService"/>
 /// <seealso cref="IOidcProviderService"/>
+/// <seealso cref="ISessionService"/>
 /// <seealso cref="ISubjectService"/>
 public class OidcAuthService : IOidcAuthService
 {
     private readonly IOidcProviderService _providerService;
     private readonly ISubjectService _subjectService;
+    private readonly ISessionService _sessionService;
     private readonly IJwtService _jwtService;
     private readonly IRefreshTokenService _refreshTokenService;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -33,8 +35,9 @@ public class OidcAuthService : IOidcAuthService
     /// </summary>
     /// <param name="providerService">Service for resolving and caching OIDC provider configurations.</param>
     /// <param name="subjectService">Service for finding or creating subjects from OIDC identities.</param>
-    /// <param name="jwtService">Service for generating Nocturne access tokens.</param>
-    /// <param name="refreshTokenService">Service for issuing and rotating refresh tokens.</param>
+    /// <param name="sessionService">Service for issuing and rotating first-party sessions.</param>
+    /// <param name="jwtService">Service for generating Nocturne access tokens (non-rotation refresh path only).</param>
+    /// <param name="refreshTokenService">Service for validating refresh tokens (non-rotation refresh path only).</param>
     /// <param name="httpClientFactory">Factory for the <c>OidcProvider</c> named HTTP client.</param>
     /// <param name="options">OIDC session and state configuration options.</param>
     /// <param name="configuration">Application configuration for reading the base URL.</param>
@@ -42,6 +45,7 @@ public class OidcAuthService : IOidcAuthService
     public OidcAuthService(
         IOidcProviderService providerService,
         ISubjectService subjectService,
+        ISessionService sessionService,
         IJwtService jwtService,
         IRefreshTokenService refreshTokenService,
         IHttpClientFactory httpClientFactory,
@@ -52,6 +56,7 @@ public class OidcAuthService : IOidcAuthService
     {
         _providerService = providerService;
         _subjectService = subjectService;
+        _sessionService = sessionService;
         _jwtService = jwtService;
         _refreshTokenService = refreshTokenService;
         _httpClientFactory = httpClientFactory;
@@ -269,42 +274,28 @@ public class OidcAuthService : IOidcAuthService
         // Update last login
         await _subjectService.UpdateLastLoginAsync(subject.Id);
 
-        // Get permissions and roles
-        var permissions = await _subjectService.GetSubjectPermissionsAsync(subject.Id);
-        var roles = await _subjectService.GetSubjectRolesAsync(subject.Id);
-
-        // Generate our session tokens
-        var accessTokenLifetime = _options.Session.AccessTokenLifetime;
-        var accessToken = _jwtService.GenerateAccessToken(
-            new SubjectInfo
-            {
-                Id = subject.Id,
-                Name = subject.Name,
-                Email = subject.Email,
-            },
-            permissions,
-            roles,
-            accessTokenLifetime
-        );
-
-        var refreshToken = await _refreshTokenService.CreateRefreshTokenAsync(
+        // Issue session via SessionService
+        var session = await _sessionService.IssueSessionAsync(
             subject.Id,
-            oidcSessionId: idTokenClaims.SessionId,
-            deviceDescription: ParseUserAgentShort(userAgent),
-            ipAddress: ipAddress,
-            userAgent: userAgent
-        );
+            new SessionContext(
+                OidcSessionId: idTokenClaims.SessionId,
+                DeviceDescription: ParseUserAgentShort(userAgent),
+                IpAddress: ipAddress,
+                UserAgent: userAgent));
 
         var tokens = new OidcTokenResponse
         {
-            AccessToken = accessToken,
-            RefreshToken = refreshToken,
+            AccessToken = session.AccessToken,
+            RefreshToken = session.RefreshToken,
             TokenType = "Bearer",
-            ExpiresIn = (int)accessTokenLifetime.TotalSeconds,
+            ExpiresIn = session.ExpiresInSeconds,
             RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
-            ExpiresAt = DateTimeOffset.UtcNow.Add(accessTokenLifetime),
+            ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
             SubjectId = subject.Id,
         };
+
+        var permissions = await _subjectService.GetSubjectPermissionsAsync(subject.Id);
+        var roles = await _subjectService.GetSubjectRolesAsync(subject.Id);
 
         var userInfo = new OidcUserInfo
         {
@@ -336,58 +327,50 @@ public class OidcAuthService : IOidcAuthService
         string? userAgent = null
     )
     {
-        // Validate and rotate the refresh token
-        string? newRefreshToken;
-
+        // Rotation path: delegate entirely to SessionService
         if (_options.Session.RotateRefreshTokens)
         {
-            newRefreshToken = await _refreshTokenService.RotateRefreshTokenAsync(
+            var session = await _sessionService.RotateSessionAsync(
                 refreshToken,
-                ipAddress,
-                userAgent
-            );
-        }
-        else
-        {
-            var subjectId = await _refreshTokenService.ValidateRefreshTokenAsync(refreshToken);
-            if (!subjectId.HasValue)
-            {
+                new SessionContext(IpAddress: ipAddress, UserAgent: userAgent));
+
+            if (session is null)
                 return null;
-            }
 
-            // Update last used timestamp
-            await _refreshTokenService.UpdateLastUsedAsync(refreshToken);
-            newRefreshToken = refreshToken;
+            // Resolve subject ID from the new refresh token for the response
+            var rotatedSubjectId = await _refreshTokenService.ValidateRefreshTokenAsync(session.RefreshToken);
+            if (!rotatedSubjectId.HasValue)
+                return null;
+
+            return new OidcTokenResponse
+            {
+                AccessToken = session.AccessToken,
+                RefreshToken = session.RefreshToken,
+                TokenType = "Bearer",
+                ExpiresIn = session.ExpiresInSeconds,
+                RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
+                ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
+                SubjectId = rotatedSubjectId.Value,
+            };
         }
 
-        if (string.IsNullOrEmpty(newRefreshToken))
-        {
+        // Non-rotation path: validate and re-mint access token without creating a new refresh token
+        var subjectId = await _refreshTokenService.ValidateRefreshTokenAsync(refreshToken);
+        if (!subjectId.HasValue)
             return null;
-        }
 
-        // Get subject ID from the new refresh token
-        var subjectIdResult = await _refreshTokenService.ValidateRefreshTokenAsync(newRefreshToken);
-        if (!subjectIdResult.HasValue)
-        {
-            return null;
-        }
+        await _refreshTokenService.UpdateLastUsedAsync(refreshToken);
 
-        var subjectId2 = subjectIdResult.Value;
-
-        // Get subject details
-        var subject = await _subjectService.GetSubjectByIdAsync(subjectId2);
+        var subject = await _subjectService.GetSubjectByIdAsync(subjectId.Value);
         if (subject == null || !subject.IsActive)
         {
-            // Revoke the token if subject is inactive
-            await _refreshTokenService.RevokeRefreshTokenAsync(newRefreshToken, "Subject inactive");
+            await _refreshTokenService.RevokeRefreshTokenAsync(refreshToken, "Subject inactive");
             return null;
         }
 
-        // Get permissions and roles
-        var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId2);
-        var roles = await _subjectService.GetSubjectRolesAsync(subjectId2);
+        var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId.Value);
+        var roles = await _subjectService.GetSubjectRolesAsync(subjectId.Value);
 
-        // Generate new access token
         var accessTokenLifetime = _options.Session.AccessTokenLifetime;
         var accessToken = _jwtService.GenerateAccessToken(
             new SubjectInfo
@@ -404,12 +387,12 @@ public class OidcAuthService : IOidcAuthService
         return new OidcTokenResponse
         {
             AccessToken = accessToken,
-            RefreshToken = newRefreshToken,
+            RefreshToken = refreshToken,
             TokenType = "Bearer",
             ExpiresIn = (int)accessTokenLifetime.TotalSeconds,
             RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
             ExpiresAt = DateTimeOffset.UtcNow.Add(accessTokenLifetime),
-            SubjectId = subjectId2,
+            SubjectId = subjectId.Value,
         };
     }
 
@@ -607,35 +590,23 @@ public class OidcAuthService : IOidcAuthService
 
         await _subjectService.UpdateLastLoginAsync(subjectId);
 
-        // Issue session tokens
-        var permissions = await _subjectService.GetSubjectPermissionsAsync(subjectId);
-        var roles = await _subjectService.GetSubjectRolesAsync(subjectId);
-
-        var accessToken = _jwtService.GenerateAccessToken(
-            new SubjectInfo
-            {
-                Id = subject.Id,
-                Name = subject.Name,
-                Email = subject.Email ?? claims.Email,
-            },
-            permissions,
-            roles);
-
-        var refreshToken = await _refreshTokenService.CreateRefreshTokenAsync(
+        // Issue session via SessionService
+        var session = await _sessionService.IssueSessionAsync(
             subjectId,
-            oidcSessionId: claims.SessionId,
-            deviceDescription: "Setup OIDC",
-            ipAddress: ipAddress,
-            userAgent: userAgent);
+            new SessionContext(
+                OidcSessionId: claims.SessionId,
+                DeviceDescription: "Setup OIDC",
+                IpAddress: ipAddress,
+                UserAgent: userAgent));
 
         var tokens = new OidcTokenResponse
         {
-            AccessToken = accessToken,
-            RefreshToken = refreshToken,
+            AccessToken = session.AccessToken,
+            RefreshToken = session.RefreshToken,
             TokenType = "Bearer",
-            ExpiresIn = (int)_options.Session.AccessTokenLifetime.TotalSeconds,
+            ExpiresIn = session.ExpiresInSeconds,
             RefreshExpiresIn = (int)_options.Session.RefreshTokenLifetime.TotalSeconds,
-            ExpiresAt = DateTimeOffset.UtcNow.Add(_options.Session.AccessTokenLifetime),
+            ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(session.ExpiresInSeconds),
             SubjectId = subjectId,
         };
 
@@ -692,8 +663,8 @@ public class OidcAuthService : IOidcAuthService
 
     #region Private Helper Methods
 
-    private const string LoginCallbackPath = "/api/v4/oidc/callback";
-    private const string LinkCallbackPath = "/api/v4/oidc/link/callback";
+    private const string LoginCallbackPath = "/api/auth/oidc/callback";
+    private const string LinkCallbackPath = "/api/auth/oidc/link/callback";
     private const string SetupCallbackPath = "/api/v4/setup/oidc/callback";
 
     /// <summary>

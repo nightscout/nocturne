@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
@@ -22,6 +23,7 @@ public class PropertiesService : IPropertiesService
     private readonly IIobService _iobService;
     private readonly ICobService _cobService;
     private readonly IAr2Service _ar2Service;
+    private readonly ITherapyTimelineResolver _therapyTimelineResolver;
 
     // Properties that should be filtered out for security
     private static readonly string[] SecureProperties =
@@ -40,7 +42,8 @@ public class PropertiesService : IPropertiesService
         ILogger<PropertiesService> logger,
         IIobService iobService,
         ICobService cobService,
-        IAr2Service ar2Service
+        IAr2Service ar2Service,
+        ITherapyTimelineResolver therapyTimelineResolver
     )
     {
         _ddataService = ddataService;
@@ -48,6 +51,7 @@ public class PropertiesService : IPropertiesService
         _iobService = iobService;
         _cobService = cobService;
         _ar2Service = ar2Service;
+        _therapyTimelineResolver = therapyTimelineResolver;
     }
 
     /// <inheritdoc />
@@ -159,10 +163,10 @@ public class PropertiesService : IPropertiesService
             SetDirectionProperties(properties, ddata);
 
             // IOB properties (Insulin on Board) - requires treatments and profile data
-            SetIobProperties(properties, ddata);
+            await SetIobPropertiesAsync(properties, ddata);
 
             // COB properties (Carbs on Board) - requires treatments and profile data
-            SetCobProperties(properties, ddata);
+            await SetCobPropertiesAsync(properties, ddata);
 
             // Device status properties
             SetDeviceStatusProperties(properties, ddata);
@@ -272,22 +276,19 @@ public class PropertiesService : IPropertiesService
     /// <summary>
     /// Set IOB (Insulin on Board) properties using full legacy algorithm
     /// </summary>
-    private void SetIobProperties(Dictionary<string, object> properties, DData ddata)
+    private async Task SetIobPropertiesAsync(Dictionary<string, object> properties, DData ddata)
     {
         try
         {
             var treatments = ddata.Treatments?.ToList() ?? new List<Treatment>();
-            var deviceStatus = ddata.DeviceStatus?.ToList() ?? new List<DeviceStatus>();
 
-            if (!treatments.Any() && !deviceStatus.Any())
+            if (!treatments.Any())
                 return;
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-            var iobResult = _iobService.CalculateTotal(
+            var iobResult = await _iobService.CalculateTotalAsync(
                 treatments,
-                deviceStatus,
-                profile: null,
                 now
             );
 
@@ -316,17 +317,16 @@ public class PropertiesService : IPropertiesService
     /// <summary>
     /// Set COB (Carbs on Board) properties using full legacy algorithm
     /// </summary>
-    private void SetCobProperties(Dictionary<string, object> properties, DData ddata)
+    private async Task SetCobPropertiesAsync(Dictionary<string, object> properties, DData ddata)
     {
         try
         {
             _logger.LogDebug("SetCobProperties: Starting");
             var treatments = ddata.Treatments?.ToList() ?? new List<Treatment>();
-            var deviceStatus = ddata.DeviceStatus?.ToList() ?? new List<DeviceStatus>();
 
-            if (!treatments.Any() && !deviceStatus.Any())
+            if (!treatments.Any())
             {
-                _logger.LogDebug("SetCobProperties: No treatments or device status, returning");
+                _logger.LogDebug("SetCobProperties: No treatments, returning");
                 return;
             }
 
@@ -334,7 +334,9 @@ public class PropertiesService : IPropertiesService
 
             // Use full COB calculation service - NO SIMPLIFICATIONS
             _logger.LogDebug("SetCobProperties: Calling COB service");
-            var cobResult = _cobService.CobTotal(treatments, deviceStatus, null, now);
+            var snapshot = await _therapyTimelineResolver.GetSnapshotAtAsync(now);
+            var deviceCob = await _cobService.GetDeviceCobAsync(now);
+            var cobResult = _cobService.CobTotal(treatments, now, snapshot, deviceCob, now);
             _logger.LogDebug("SetCobProperties: COB service returned result, is null: {IsNull}", cobResult == null);
 
             if (cobResult == null)

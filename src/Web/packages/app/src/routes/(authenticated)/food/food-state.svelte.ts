@@ -1,308 +1,179 @@
-// Food state using Svelte 5 runes with class-based approach
-import type { FoodRecord, QuickPickRecord, FoodFilter } from './types.js';
 import { toast } from 'svelte-sonner';
+import type { Food } from '$api';
+import type { GiLevel, SortMode } from './types.js';
+import { giFromInt } from './types.js';
 import {
-	createFood,
-	updateFood,
-	deleteFood as deleteFoodRemote,
-	createQuickPick as createQuickPickRemote,
-	saveQuickPicks as saveQuickPicksRemote,
-} from './data.remote';
-import { scaleMacro } from '$lib/components/food';
-
-const createEmptyFood = (): FoodRecord => ({
-	type: 'food',
-	category: '',
-	subcategory: '',
-	name: '',
-	portion: 0,
-	carbs: 0,
-	fat: 0,
-	protein: 0,
-	energy: 0,
-	gi: 2,
-	unit: 'g'
-});
+  getFoods,
+  createFood as createFoodRemote,
+  updateFood as updateFoodRemote,
+  getFavorites,
+  addFavorite as addFavoriteRemote,
+  removeFavorite as removeFavoriteRemote,
+  getFoodAttributionCount,
+} from '$api/generated/foods.generated.remote';
+import { deleteFood as deleteFoodRemote } from './data.remote';
 
 export class FoodState {
-	// Reactive state using Svelte 5 runes
-	foodList = $state<FoodRecord[]>([]);
-	quickPickList = $state<QuickPickRecord[]>([]);
-	categories = $state<Record<string, Record<string, boolean>>>({});
-	filter = $state<FoodFilter>({
-		categories: [],
-		subcategories: [],
-		name: ''
-	});
-	currentFood = $state<FoodRecord>(createEmptyFood());
-	showHidden = $state(false);
-	loading = $state(false);
-	status = $state('');
+  foods = $state<Food[]>([]);
+  favorites = $state<Set<string>>(new Set());
+  query = $state('');
+  categoryFilter = $state<string | null>(null);
+  giFilter = $state<GiLevel | null>(null);
+  favoritesOnly = $state(false);
+  sort = $state<SortMode>('name');
+  expandedId = $state<string | null>(null);
+  composerOpen = $state(false);
+  loading = $state(false);
 
-	private quickPicksToDelete = $state<string[]>([]);
+  /** Unique category names derived from the food list */
+  categories = $derived.by(() => {
+    const cats = new Set<string>();
+    for (const f of this.foods) {
+      if (f.category) cats.add(f.category);
+    }
+    return [...cats].sort();
+  });
 
-	// Derived state
-	filteredFoodList = $derived.by(() => {
-		return this.foodList.filter((food) => {
-			// Filter by categories
-			if (this.filter.categories && this.filter.categories.length > 0) {
-				if (!this.filter.categories.includes(food.category)) return false;
-			}
+  /** Filtered + sorted food list */
+  filteredFoods = $derived.by(() => {
+    let list = this.foods;
 
-			// Filter by subcategories
-			if (this.filter.subcategories && this.filter.subcategories.length > 0) {
-				if (!this.filter.subcategories.includes(food.subcategory)) return false;
-			}
+    if (this.query) {
+      const q = this.query.toLowerCase();
+      list = list.filter(
+        (f) =>
+          f.name?.toLowerCase().includes(q) ||
+          f.subcategory?.toLowerCase().includes(q) ||
+          f.category?.toLowerCase().includes(q)
+      );
+    }
 
-			// Filter by name
-			if (
-				this.filter.name &&
-				!food.name.toLowerCase().includes(this.filter.name.toLowerCase())
-			) {
-				return false;
-			}
+    if (this.categoryFilter) {
+      list = list.filter((f) => f.category === this.categoryFilter);
+    }
 
-			return true;
-		});
-	});
+    if (this.giFilter) {
+      list = list.filter((f) => giFromInt(f.gi) === this.giFilter);
+    }
 
-	visibleQuickPicks = $derived.by(() => {
-		return this.showHidden
-			? this.quickPickList
-			: this.quickPickList.filter((qp) => !qp.hidden);
-	});
+    if (this.favoritesOnly) {
+      list = list.filter((f) => f._id && this.favorites.has(f._id));
+    }
 
-	hiddenQuickPickCount = $derived.by(() => {
-		return this.quickPickList.filter((qp) => qp.hidden).length;
-	});
+    list = [...list];
+    if (this.sort === 'name') {
+      list.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+    } else if (this.sort === 'carbs') {
+      list.sort((a, b) => (b.carbs ?? 0) - (a.carbs ?? 0));
+    } else if (this.sort === 'recent') {
+      list.sort((a, b) => {
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return tb - ta;
+      });
+    }
 
-	constructor(initialData: {
-		foodList: FoodRecord[];
-		quickPickList: QuickPickRecord[];
-		categories: Record<string, Record<string, boolean>>;
-		error?: string;
-	}) {
-		this.foodList = [...initialData.foodList];
-		this.quickPickList = [...initialData.quickPickList];
-		this.categories = { ...initialData.categories };
-		this.status = initialData.error || (initialData.foodList.length > 0 ? 'Database loaded' : '');
-	}
+    return list;
+  });
 
-	// Private helper methods
-	/**
-	 * Calculate total carbs for a quick pick based on scaled portions.
-	 *
-	 * Each food has:
-	 * - portion: the base serving size (e.g., 4 servings)
-	 * - carbs: total carbs for the base portion (e.g., 269g for 4 servings)
-	 * - portions: how many servings the user wants (e.g., 1)
-	 *
-	 * The calculation: (carbs / portion) * portions
-	 * Example: (269 / 4) * 1 = 67.25g for 1 serving
-	 */
-	private calculateQuickPickCarbs(quickPick: QuickPickRecord) {
-		quickPick.carbs = 0;
-		if (quickPick.foods) {
-			quickPick.foods.forEach((food) => {
-				const selectedPortions = food.portions || 1;
-				const basePortion = food.portion || 1;
-				// Calculate per-unit carbs and multiply by selected portions
-				const scaledCarbs = scaleMacro(basePortion, selectedPortions, food.carbs);
-				quickPick.carbs += scaledCarbs;
-			});
-		} else {
-			quickPick.foods = [];
-		}
-	}
+  async load() {
+    this.loading = true;
+    try {
+      const [foods, favs] = await Promise.all([
+        getFoods(undefined),
+        getFavorites(undefined),
+      ]);
+      this.foods = foods ?? [];
+      this.favorites = new Set(
+        (favs ?? []).map((f: Food) => f._id).filter(Boolean) as string[]
+      );
+    } catch (err) {
+      console.error('Failed to load food data:', err);
+      toast.error('Failed to load food database');
+    } finally {
+      this.loading = false;
+    }
+  }
 
-	// Food operations
-	async saveFood() {
-		try {
-			const isNew = !this.currentFood._id;
+  isFavorite(foodId: string | undefined): boolean {
+    return !!foodId && this.favorites.has(foodId);
+  }
 
-			if (isNew) {
-				const foodToSave = { ...this.currentFood };
-				delete foodToSave._id;
+  async toggleFavorite(foodId: string | undefined) {
+    if (!foodId) return;
+    try {
+      if (this.favorites.has(foodId)) {
+        this.favorites.delete(foodId);
+        this.favorites = new Set(this.favorites);
+        await removeFavoriteRemote(foodId);
+      } else {
+        this.favorites.add(foodId);
+        this.favorites = new Set(this.favorites);
+        await addFavoriteRemote(foodId);
+      }
+    } catch {
+      toast.error('Failed to update favorite');
+      const favs = await getFavorites(undefined);
+      this.favorites = new Set(
+        (favs ?? []).map((f: Food) => f._id).filter(Boolean) as string[]
+      );
+    }
+  }
 
-				const result = await createFood(foodToSave);
+  async addFood(food: Food) {
+    try {
+      const result = await createFoodRemote(food);
+      if (result?._id) {
+        this.foods = [result, ...this.foods];
+        toast.success('Food created');
+      }
+      return result;
+    } catch {
+      toast.error('Failed to create food');
+      return null;
+    }
+  }
 
-				if (result.success) {
-					this.foodList.push({ ...this.currentFood });
+  async saveFood(food: Food) {
+    if (!food._id) return;
+    try {
+      const result = await updateFoodRemote({ foodId: food._id, request: food });
+      if (result) {
+        this.foods = this.foods.map((f) => (f._id === food._id ? result : f));
+        this.expandedId = null;
+        toast.success('Food updated');
+      }
+    } catch {
+      toast.error('Failed to update food');
+    }
+  }
 
-					// Update categories
-					if (this.currentFood.category && !this.categories[this.currentFood.category]) {
-						this.categories[this.currentFood.category] = {};
-					}
-					if (this.currentFood.category && this.currentFood.subcategory) {
-						this.categories[this.currentFood.category][this.currentFood.subcategory] = true;
-					}
+  async getAttributionCount(foodId: string): Promise<number> {
+    try {
+      const result = await getFoodAttributionCount(foodId);
+      return result?.count ?? 0;
+    } catch {
+      return 0;
+    }
+  }
 
-					this.clearForm();
-					toast.success('Food created successfully');
-					this.status = 'OK';
-				} else {
-					throw new Error(result.error || 'Failed to create food');
-				}
-			} else {
-				const result = await updateFood(this.currentFood);
+  async deleteFood(foodId: string, attributionMode: 'clear' | 'remove' = 'clear') {
+    try {
+      await deleteFoodRemote({ foodId, attributionMode });
+      this.foods = this.foods.filter((f) => f._id !== foodId);
+      this.favorites.delete(foodId);
+      this.favorites = new Set(this.favorites);
+      this.expandedId = null;
+      toast.success('Food deleted');
+    } catch {
+      toast.error('Failed to delete food');
+    }
+  }
 
-				if (result.success) {
-					// Update existing record in list
-					const index = this.foodList.findIndex((f) => f._id === this.currentFood._id);
-					if (index !== -1) {
-						this.foodList[index] = { ...this.currentFood };
-					}
-
-					this.clearForm();
-					toast.success('Food updated successfully');
-					this.status = 'OK';
-				} else {
-					throw new Error(result.error || 'Failed to update food');
-				}
-			}
-		} catch (error) {
-			toast.error('Failed to save food');
-			this.status = 'Error';
-		}
-	}
-
-	async deleteFood(food: FoodRecord, attributionMode: 'clear' | 'remove' = 'clear') {
-		try {
-			const result = await deleteFoodRemote({ id: food._id!, attributionMode });
-
-			if (result.success) {
-				this.foodList = this.foodList.filter((f) => f._id !== food._id);
-				toast.success('Food deleted successfully');
-				this.status = 'OK';
-			} else {
-				throw new Error(result.error || 'Failed to delete food');
-			}
-		} catch (error) {
-			toast.error('Failed to delete food');
-			this.status = 'Error';
-		}
-	}
-
-	editFood(food: FoodRecord) {
-		this.currentFood = { ...food };
-	}
-
-	clearForm() {
-		this.currentFood = createEmptyFood();
-	}
-
-	// Quick pick operations
-	async createQuickPick() {
-		try {
-			const newQuickPick: QuickPickRecord = {
-				type: 'quickpick',
-				name: '',
-				foods: [],
-				carbs: 0,
-				hideafteruse: true,
-				hidden: false,
-				position: 99999
-			};
-
-			const result = await createQuickPickRemote(newQuickPick);
-
-			if (result.success) {
-				this.quickPickList.unshift(newQuickPick);
-				toast.success('Quick pick created');
-				this.status = 'OK';
-			} else {
-				throw new Error(result.error || 'Failed to create quick pick');
-			}
-		} catch (error) {
-			toast.error('Failed to create quick pick');
-			this.status = 'Error';
-		}
-	}
-
-	async saveQuickPicks() {
-		try {
-			// Prepare quickpicks with updated positions
-			const toUpdate = this.quickPickList.map((qp, i) => ({
-				...qp,
-				position: qp.hidden ? 99999 : i,
-			}));
-
-			const result = await saveQuickPicksRemote({
-				toDelete: this.quickPicksToDelete,
-				toUpdate,
-			});
-
-			if (result.success) {
-				this.quickPicksToDelete = [];
-				toast.success('Quick picks saved successfully');
-				this.status = 'OK';
-			} else {
-				throw new Error(result.error || 'Failed to save quick picks');
-			}
-		} catch (error) {
-			toast.error('Failed to save quick picks');
-			this.status = 'Error';
-		}
-	}
-
-	deleteQuickPick(index: number) {
-		const quickPick = this.quickPickList[index];
-		if (quickPick._id) {
-			this.quickPicksToDelete.push(quickPick._id);
-		}
-		this.quickPickList.splice(index, 1);
-	}
-
-	moveQuickPickToTop(index: number) {
-		const quickPick = this.quickPickList.splice(index, 1)[0];
-		this.quickPickList.unshift(quickPick);
-	}
-
-	updateQuickPickName(index: number, name: string) {
-		this.quickPickList[index].name = name;
-	}
-
-	updateQuickPickHidden(index: number, hidden: boolean) {
-		const quickPick = this.quickPickList[index];
-		quickPick.hidden = hidden;
-
-		// Move to top if unhidden
-		if (!hidden) {
-			this.quickPickList.splice(index, 1);
-			this.quickPickList.unshift(quickPick);
-		}
-	}
-
-	updateQuickPickHideAfterUse(index: number, hideAfterUse: boolean) {
-		this.quickPickList[index].hideafteruse = hideAfterUse;
-	}
-
-	deleteQuickPickFood(quickPickIndex: number, foodIndex: number) {
-		const quickPick = this.quickPickList[quickPickIndex];
-		quickPick.foods.splice(foodIndex, 1);
-		this.calculateQuickPickCarbs(quickPick);
-	}
-
-	updateQuickPickPortions(quickPickIndex: number, foodIndex: number, portions: number) {
-		const quickPick = this.quickPickList[quickPickIndex];
-		quickPick.foods[foodIndex].portions = portions;
-		this.calculateQuickPickCarbs(quickPick);
-	}
-
-	addFoodToQuickPick(quickPickIndex: number, food: FoodRecord) {
-		const quickPick = this.quickPickList[quickPickIndex];
-		const quickPickFood = { ...food, portions: 1 };
-		quickPick.foods.push(quickPickFood);
-		this.calculateQuickPickCarbs(quickPick);
-	}
-
-	// Filter operations
-	updateFilter(newFilter: Partial<FoodFilter>) {
-		Object.assign(this.filter, newFilter);
-	}
-
-	// Legacy compatibility methods
-	setShowHidden(show: boolean) {
-		this.showHidden = show;
-	}
+  clearFilters() {
+    this.query = '';
+    this.categoryFilter = null;
+    this.giFilter = null;
+    this.favoritesOnly = false;
+  }
 }

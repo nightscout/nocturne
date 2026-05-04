@@ -4,7 +4,6 @@ using System.Text.RegularExpressions;
 using System.Web;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Infrastructure;
-using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.Infrastructure.Data.Services;
 
@@ -27,23 +26,6 @@ public class QueryParser : IQueryParser
     }
 
     private const int MaxQueryDepth = 10;
-
-    private static readonly Dictionary<string, Func<string, object>> DefaultEntryConverters = new()
-    {
-        ["date"] = ParseIsoDateToMills,
-        ["mills"] = ParseIsoDateToMills,
-        ["sgv"] = s => int.Parse(s),
-        ["filtered"] = s => int.Parse(s),
-        ["unfiltered"] = s => int.Parse(s),
-        ["rssi"] = s => int.Parse(s),
-        ["noise"] = s => int.Parse(s),
-        ["mgdl"] = s => int.Parse(s),
-        ["mbg"] = s => int.Parse(s),
-        ["type"] = s => s.Trim('\'', '"'), // Handle quoted strings
-        ["direction"] = s => s.Trim('\'', '"'),
-        ["device"] = s => s.Trim('\'', '"'),
-        ["data_source"] = s => s.Trim('\'', '"'),
-    };
 
     private static readonly Dictionary<string, Func<string, object>> DefaultTreatmentConverters =
         new()
@@ -664,10 +646,7 @@ public class QueryParser : IQueryParser
             return options.TypeConverters;
         }
 
-        // Return appropriate converters based on entity type
-        return typeof(T) == typeof(EntryEntity)
-            ? DefaultEntryConverters
-            : DefaultTreatmentConverters;
+        return DefaultTreatmentConverters;
     }
 
     private static object ConvertValue(

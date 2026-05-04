@@ -28,6 +28,7 @@
     <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
     <PackageReference Include="Microsoft.Extensions.Http.Polly" />
     <PackageReference Include="NSwag.AspNetCore" />
     <PackageReference Include="OpenApiRemoteCodegen.Attributes" />
@@ -71,6 +72,7 @@
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.MyFitnessPal\Nocturne.Connectors.MyFitnessPal.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Nightscout\Nocturne.Connectors.Nightscout.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.HomeAssistant\Nocturne.Connectors.HomeAssistant.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.NocturneRemote\Nocturne.Connectors.NocturneRemote.csproj" />
   </ItemGroup>
   <!-- NSwag TypeScript Client Generation -->
   <!-- Runs automatically after build in development mode -->
@@ -81,19 +83,7 @@
     <!-- Skip NSwag generation during publish to avoid issues with runtime dependencies -->
     <GenerateNSwagClient Condition="'$(PublishDir)' != ''">false</GenerateNSwagClient>
   </PropertyGroup>
-  <!-- Mermaid Diagram SVG Generation — renders .mmd files to SVGs for Scalar docs -->
-  <Target Name="GenerateDiagramSvgs" BeforeTargets="Build">
-    <PropertyGroup>
-      <DiagramsSourceDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../../docs/diagrams'))</DiagramsSourceDir>
-      <DiagramsOutputDir>$(MSBuildProjectDirectory)/wwwroot/diagrams</DiagramsOutputDir>
-    </PropertyGroup>
-    <ItemGroup>
-      <MermaidFiles Include="$(DiagramsSourceDir)/*.mmd" />
-    </ItemGroup>
-    <MakeDir Directories="$(DiagramsOutputDir)" />
-    <Exec Command="npx @mermaid-js/mermaid-cli -i &quot;%(MermaidFiles.Identity)&quot; -o &quot;$(DiagramsOutputDir)/%(MermaidFiles.Filename).svg&quot; -b transparent -c &quot;$(DiagramsSourceDir)/mermaid-config.json&quot;" Condition="'@(MermaidFiles)' != ''" ContinueOnError="true" />
-  </Target>
-  <Target Name="GenerateClient" AfterTargets="Build" Condition="'$(GenerateNSwagClient)' == 'true'">
+  <Target Name="GenerateClient" AfterTargets="PostBuildEvent" Condition="'$(GenerateNSwagClient)' == 'true'">
     <Message Importance="high" Text="Generating TypeScript API client with NSwag..." />
     <Exec Command="$(NSwagExe_Net100) run nswag.json /variables:Configuration=$(Configuration)" WorkingDirectory="$(MSBuildProjectDirectory)" ContinueOnError="false" />
     <Message Importance="high" Text="TypeScript API client generation complete." />

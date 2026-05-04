@@ -3,12 +3,12 @@
   import { Label } from "$lib/components/ui/label";
   import { Button } from "$lib/components/ui/button";
   import { Check, Loader2, AlertTriangle, ArrowRight } from "lucide-svelte";
-  import { setupTenant, validateSetupSlug } from "../setup.remote";
+  import { setupTenant, validateSetupSlug, setSetupTenantSlug } from "../setup.remote";
 
   let {
     onComplete,
   }: {
-    onComplete: () => void;
+    onComplete: (slug: string) => void;
   } = $props();
 
   let slug = $state("");
@@ -59,11 +59,13 @@
     submitError = null;
 
     try {
+      const normalizedSlug = slug.trim().toLowerCase();
       await setupTenant({
-        slug: slug.trim().toLowerCase(),
+        slug: normalizedSlug,
         displayName: displayName.trim(),
       });
-      onComplete();
+      await setSetupTenantSlug(normalizedSlug);
+      onComplete(normalizedSlug);
     } catch (err) {
       submitError =
         err instanceof Error ? err.message : "Failed to create tenant.";
@@ -72,7 +74,9 @@
     }
   }
 
-  const canSubmit = $derived(slugValid && displayName.trim().length > 0 && !submitting);
+  const canSubmit = $derived(
+    slugValid && displayName.trim().length > 0 && !submitting
+  );
 </script>
 
 <div class="flex flex-col items-center gap-10 px-4 py-8">
@@ -82,7 +86,13 @@
       class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
       style="font-size: clamp(32px, 4vw, 48px);"
     >
-      Name your <em class="not-italic font-light" style="color: var(--onb-teal);">instance</em>.
+      Name your <em
+        class="not-italic font-light"
+        style="color: var(--onb-teal);"
+      >
+        instance
+      </em>
+      .
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-white/50">
       Choose a slug and display name for your Nocturne instance. The slug is a
@@ -131,7 +141,9 @@
     </div>
 
     <div class="space-y-2">
-      <Label for="setup-display-name" class="text-white/70">Display name</Label>
+      <Label for="setup-display-name" class="text-white/70">
+        Instance name
+      </Label>
       <Input
         id="setup-display-name"
         bind:value={displayName}
@@ -143,11 +155,7 @@
       </p>
     </div>
 
-    <Button
-      class="w-full"
-      onclick={handleSubmit}
-      disabled={!canSubmit}
-    >
+    <Button class="w-full" onclick={handleSubmit} disabled={!canSubmit}>
       {#if submitting}
         <Loader2 class="mr-2 h-4 w-4 animate-spin" />
         Creating instance...

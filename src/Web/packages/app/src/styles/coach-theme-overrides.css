@@ -6,6 +6,7 @@
   --coach-text-muted: var(--muted-foreground);
   --coach-primary: var(--primary);
   --coach-primary-hover: var(--primary);
+  --coach-primary-text: var(--primary-foreground);
   --coach-radius: var(--radius);
   --coach-hotspot-color: var(--primary);
   --coach-shadow: 0 4px 16px oklch(0 0 0 / 0.08);

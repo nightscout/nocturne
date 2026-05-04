@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
-using Nocturne.API.Multitenancy;
+using Nocturne.API.Configuration;
 using Nocturne.API.Services.Auth;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -30,7 +30,7 @@ public partial class TenantService : ITenantService
 {
     private readonly IDbContextFactory<NocturneDbContext> _factory;
     private readonly IMemoryCache _cache;
-    private readonly MultitenancyConfiguration _config;
+    private readonly OperatorConfiguration _config;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantRoleService _roleService;
     private readonly ILogger<TenantService> _logger;
@@ -68,14 +68,14 @@ public partial class TenantService : ITenantService
     /// </summary>
     /// <param name="factory">Factory for creating short-lived <see cref="NocturneDbContext"/> instances.</param>
     /// <param name="cache">In-memory cache for caching resolved tenant contexts by slug.</param>
-    /// <param name="config">Multitenancy configuration (mode, base domain, etc.).</param>
+    /// <param name="config">Operator configuration (self-service creation, webhooks, etc.).</param>
     /// <param name="httpClientFactory">HTTP client factory for external tenant validation calls if needed.</param>
     /// <param name="roleService">Role service for seeding default roles on new tenant creation.</param>
     /// <param name="logger">The logger instance.</param>
     public TenantService(
         IDbContextFactory<NocturneDbContext> factory,
         IMemoryCache cache,
-        IOptions<MultitenancyConfiguration> config,
+        IOptions<OperatorConfiguration> config,
         IHttpClientFactory httpClientFactory,
         ITenantRoleService roleService,
         ILogger<TenantService> logger)
@@ -89,16 +89,14 @@ public partial class TenantService : ITenantService
     }
 
     public async Task<TenantCreatedDto> CreateAsync(
-        string slug, string displayName, Guid creatorSubjectId, string? apiSecret = null, CancellationToken ct = default)
+        string slug, string displayName, Guid creatorSubjectId, CancellationToken ct = default)
     {
         await using var context = await _factory.CreateDbContextAsync(ct);
 
-        var plaintextSecret = apiSecret ?? GenerateApiSecret();
         var tenant = new TenantEntity
         {
             Slug = slug.ToLowerInvariant(),
             DisplayName = displayName,
-            ApiSecretHash = HashUtils.Sha1Hex(plaintextSecret),
             IsActive = true,
         };
 
@@ -125,20 +123,19 @@ public partial class TenantService : ITenantService
             .FirstAsync(r => r.TenantId == tenant.Id && r.Slug == "owner", ct);
         await AddMemberAsync(tenant.Id, creatorSubjectId, [ownerRole.Id], ct: ct);
 
-        return ToCreatedDto(tenant, plaintextSecret);
+        _cache.Remove("tenant:__sole__");
+        return ToCreatedDto(tenant);
     }
 
     public async Task<TenantCreatedDto> CreateWithoutOwnerAsync(
-        string slug, string displayName, string? apiSecret = null, CancellationToken ct = default)
+        string slug, string displayName, CancellationToken ct = default)
     {
         await using var context = await _factory.CreateDbContextAsync(ct);
 
-        var plaintextSecret = apiSecret ?? GenerateApiSecret();
         var tenant = new TenantEntity
         {
             Slug = slug.ToLowerInvariant(),
             DisplayName = displayName,
-            ApiSecretHash = HashUtils.Sha1Hex(plaintextSecret),
             IsActive = true,
         };
 
@@ -158,7 +155,8 @@ public partial class TenantService : ITenantService
         // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
         await SeedKnownOAuthClientsAsync(context, tenant.Id, ct);
 
-        return ToCreatedDto(tenant, plaintextSecret);
+        _cache.Remove("tenant:__sole__");
+        return ToCreatedDto(tenant);
     }
 
     /// <summary>
@@ -229,6 +227,7 @@ public partial class TenantService : ITenantService
 
         // Invalidate cached tenant context
         _cache.Remove($"tenant:{tenant.Slug}");
+        _cache.Remove("tenant:__sole__");
 
         return ToDto(tenant);
     }
@@ -244,6 +243,7 @@ public partial class TenantService : ITenantService
 
         // Invalidate cached tenant context
         _cache.Remove($"tenant:{tenant.Slug}");
+        _cache.Remove("tenant:__sole__");
     }
 
     public async Task AddMemberAsync(
@@ -366,36 +366,6 @@ public partial class TenantService : ITenantService
         return new SlugValidationResult(true);
     }
 
-    public async Task<string> UpdateApiSecretAsync(Guid tenantId, string newApiSecret, CancellationToken ct = default)
-    {
-        await using var context = await _factory.CreateDbContextAsync(ct);
-        var tenant = await context.Tenants.FindAsync([tenantId], ct)
-            ?? throw new KeyNotFoundException($"Tenant {tenantId} not found");
-
-        tenant.ApiSecretHash = HashUtils.Sha1Hex(newApiSecret);
-        await context.SaveChangesAsync(ct);
-
-        _cache.Remove($"tenant:{tenant.Slug}");
-
-        return newApiSecret;
-    }
-
-    public async Task<string> RegenerateApiSecretAsync(Guid tenantId, CancellationToken ct = default)
-    {
-        var newSecret = GenerateApiSecret();
-        await UpdateApiSecretAsync(tenantId, newSecret, ct);
-        return newSecret;
-    }
-
-    public async Task<bool> HasApiSecretAsync(Guid tenantId, CancellationToken ct = default)
-    {
-        await using var context = await _factory.CreateDbContextAsync(ct);
-        return await context.Tenants.AsNoTracking()
-            .Where(t => t.Id == tenantId)
-            .Select(t => t.ApiSecretHash != null)
-            .FirstOrDefaultAsync(ct);
-    }
-
     public async Task<ProvisionResult> ProvisionWithOwnerAsync(
         string slug, string displayName, string ownerUsername, string ownerEmail,
         ProvisionCredentialData? credential, ProvisionOidcIdentityData? oidcIdentity,
@@ -411,12 +381,10 @@ public partial class TenantService : ITenantService
             try
             {
                 // 1. Create tenant
-                var plaintextSecret = GenerateApiSecret();
                 var tenant = new TenantEntity
                 {
                     Slug = slug.ToLowerInvariant(),
                     DisplayName = displayName,
-                    ApiSecretHash = HashUtils.Sha1Hex(plaintextSecret),
                     IsActive = true,
                 };
 
@@ -532,16 +500,31 @@ public partial class TenantService : ITenantService
                         await context.SaveChangesAsync(ct);
                     }
 
-                    context.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
+                    // Re-use existing OIDC identity if one already exists for this
+                    // (oidc_subject_id, issuer) pair — the subject may have signed up
+                    // for a previous tenant with the same OAuth account.
+                    var existingIdentity = await context.SubjectOidcIdentities
+                        .FirstOrDefaultAsync(x =>
+                            x.OidcSubjectId == oidcIdentity.OidcSubjectId
+                            && x.Issuer == normalizedIssuer, ct);
+
+                    if (existingIdentity is null)
                     {
-                        Id = Guid.CreateVersion7(),
-                        SubjectId = subject.Id,
-                        ProviderId = provider.Id,
-                        OidcSubjectId = oidcIdentity.OidcSubjectId,
-                        Issuer = normalizedIssuer,
-                        Email = oidcIdentity.Email,
-                        LinkedAt = DateTime.UtcNow,
-                    });
+                        context.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
+                        {
+                            Id = Guid.CreateVersion7(),
+                            SubjectId = subject.Id,
+                            ProviderId = provider.Id,
+                            OidcSubjectId = oidcIdentity.OidcSubjectId,
+                            Issuer = normalizedIssuer,
+                            Email = oidcIdentity.Email,
+                            LinkedAt = DateTime.UtcNow,
+                        });
+                    }
+                    else
+                    {
+                        existingIdentity.LastUsedAt = DateTime.UtcNow;
+                    }
                 }
                 await context.SaveChangesAsync(ct);
 
@@ -606,13 +589,6 @@ public partial class TenantService : ITenantService
     }
 
 
-    private static string GenerateApiSecret()
-    {
-        var bytes = new byte[24];
-        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
-        return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
-    }
-
     /// <summary>
     /// Sets the RLS tenant context on a factory-created DbContext. Sets both
     /// the context's TenantId (so the connection interceptor fires on new
@@ -629,8 +605,8 @@ public partial class TenantService : ITenantService
     private static TenantDto ToDto(TenantEntity t) =>
         new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt);
 
-    private static TenantCreatedDto ToCreatedDto(TenantEntity t, string plaintextSecret) =>
-        new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt, plaintextSecret);
+    private static TenantCreatedDto ToCreatedDto(TenantEntity t) =>
+        new(t.Id, t.Slug, t.DisplayName, t.IsActive, t.SysCreatedAt);
 
     /// <summary>
     /// Seed the bundled known-app directory into a tenant's oauth_clients.

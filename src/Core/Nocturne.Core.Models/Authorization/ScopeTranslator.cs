@@ -37,6 +37,12 @@ public static class ScopeTranslator
         ["api:devicestatus:update"] = [OAuthScopes.DeviceStatusReadWrite],
         ["api:devicestatus:delete"] = [OAuthScopes.FullAccess],
 
+        // Food
+        ["api:food:read"] = [OAuthScopes.FoodRead],
+        ["api:food:create"] = [OAuthScopes.FoodReadWrite],
+        ["api:food:update"] = [OAuthScopes.FoodReadWrite],
+        ["api:food:delete"] = [OAuthScopes.FullAccess],
+
         // Profile
         ["api:profile:read"] = [OAuthScopes.ProfileRead],
         ["api:profile:create"] = [OAuthScopes.ProfileReadWrite],
@@ -49,6 +55,7 @@ public static class ScopeTranslator
             OAuthScopes.TreatmentsRead,
             OAuthScopes.DeviceStatusRead,
             OAuthScopes.ProfileRead,
+            OAuthScopes.FoodRead,
             OAuthScopes.NotificationsRead,
             OAuthScopes.ReportsRead,
             OAuthScopes.IdentityRead,
@@ -60,6 +67,7 @@ public static class ScopeTranslator
             OAuthScopes.TreatmentsReadWrite,
             OAuthScopes.DeviceStatusReadWrite,
             OAuthScopes.ProfileReadWrite,
+            OAuthScopes.FoodReadWrite,
             OAuthScopes.NotificationsReadWrite,
             OAuthScopes.SharingReadWrite,
         ],
@@ -68,6 +76,7 @@ public static class ScopeTranslator
             OAuthScopes.TreatmentsReadWrite,
             OAuthScopes.DeviceStatusReadWrite,
             OAuthScopes.ProfileReadWrite,
+            OAuthScopes.FoodReadWrite,
             OAuthScopes.NotificationsReadWrite,
             OAuthScopes.SharingReadWrite,
         ],
@@ -84,6 +93,7 @@ public static class ScopeTranslator
             OAuthScopes.TreatmentsRead,
             OAuthScopes.DeviceStatusRead,
             OAuthScopes.ProfileRead,
+            OAuthScopes.FoodRead,
             OAuthScopes.NotificationsRead,
             OAuthScopes.ReportsRead,
             OAuthScopes.IdentityRead,
@@ -156,6 +166,15 @@ public static class ScopeTranslator
                     permissions.Add("api:devicestatus:read");
                     permissions.Add("api:devicestatus:create");
                     permissions.Add("api:devicestatus:update");
+                    break;
+
+                case OAuthScopes.FoodRead:
+                    permissions.Add("api:food:read");
+                    break;
+                case OAuthScopes.FoodReadWrite:
+                    permissions.Add("api:food:read");
+                    permissions.Add("api:food:create");
+                    permissions.Add("api:food:update");
                     break;
 
                 case OAuthScopes.ProfileRead:

@@ -10,6 +10,7 @@
       sysTime: DateTimeOffset_1,
       mgdl: 145,
       sgv: 145,
+      mmol: 8.047418721070917,
       direction: FortyFiveUp,
       trend: 3,
       trendRate: 1.5,
@@ -20,7 +21,6 @@
       noise: 1,
       filtered: 162000,
       unfiltered: 163000,
-      rssi: -75,
       isValid: true
     }
   ]

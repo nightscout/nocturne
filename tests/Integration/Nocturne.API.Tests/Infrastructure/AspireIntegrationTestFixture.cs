@@ -105,13 +105,33 @@ public class AspireIntegrationTestFixture : IAsyncLifetime
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             TRUNCATE TABLE
+                alert_deliveries,
+                alert_instances,
+                alert_excursions,
+                alert_invites,
+                alert_step_channels,
+                alert_escalation_steps,
+                alert_schedules,
+                alert_rules,
+                tracker_instances,
+                tracker_presets,
+                tracker_definitions,
                 in_app_notifications,
                 profiles,
                 settings,
                 foods,
-                device_statuses,
+                aps_snapshots,
+                pump_snapshots,
+                uploader_snapshots,
+                device_status_extras,
                 treatments,
-                entries
+                entries,
+                oauth_refresh_tokens,
+                oauth_authorization_codes,
+                oauth_device_codes,
+                oauth_grants,
+                oauth_clients,
+                auth_audit_logs
             CASCADE;
             """;
         await cmd.ExecuteNonQueryAsync();

@@ -41,6 +41,7 @@ export function createServerApiClient(
   options?: {
     accessToken?: string;
     refreshToken?: string;
+    guestSessionToken?: string;
     hashedInstanceKey?: string | null;
     extraHeaders?: Record<string, string>;
     responseCookies?: CookieSetter;
@@ -66,6 +67,9 @@ export function createServerApiClient(
       }
       if (options?.refreshToken) {
         cookies.push(`${AUTH_COOKIE_NAMES.refreshToken}=${options.refreshToken}`);
+      }
+      if (options?.guestSessionToken) {
+        cookies.push(`nocturne-guest-session=${options.guestSessionToken}`);
       }
       if (cookies.length > 0) {
         headers.set("Cookie", cookies.join("; "));

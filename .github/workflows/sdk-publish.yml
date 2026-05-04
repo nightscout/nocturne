@@ -275,17 +275,54 @@ jobs:
             -i /sdk/openapi-v4.json \
             -c /sdk/swift/config.yaml \
             -o /sdk/swift/out \
+            --ignore-file-override /sdk/swift/.openapi-generator-ignore \
             --additional-properties=podVersion=${{ needs.generate-spec.outputs.sdk_version }}
 
       - name: Build
         working-directory: sdk/swift/out
         run: swift build
 
+      - name: Publish to nocturne-swift repo
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          SDK_DEPLOY_KEY: ${{ secrets.SWIFT_SDK_DEPLOY_KEY }}
+          SDK_VERSION: ${{ needs.generate-spec.outputs.sdk_version }}
+        run: |
+          # Configure SSH for the deploy key
+          mkdir -p ~/.ssh
+          echo "$SDK_DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new"
+
+          # Clone the target repo
+          git clone git@github.com:nightscout/nocturne-swift.git /tmp/nocturne-swift
+
+          # Replace contents with generated SDK (preserve .git)
+          find /tmp/nocturne-swift -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          cp -r sdk/swift/out/Package.swift /tmp/nocturne-swift/
+          cp -r sdk/swift/out/Sources /tmp/nocturne-swift/
+          cp -r sdk/swift/out/README.md /tmp/nocturne-swift/
+
+          # Commit and tag
+          cd /tmp/nocturne-swift
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes" || git commit -m "Update SDK to v${SDK_VERSION}"
+          git tag -f "${SDK_VERSION}"
+          git push origin main
+          git push origin "${SDK_VERSION}"
+
+          # Cleanup
+          rm -f ~/.ssh/deploy_key
+
   publish-python:
     needs: generate-spec
     runs-on: ubuntu-latest
+    environment: pypi
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -309,6 +346,9 @@ jobs:
       - name: Fix file permissions
         run: sudo chown -R $USER:$USER sdk/python/out
 
+      - name: Fix package name
+        run: sed -i 's/^name = "nocturne_sdk"/name = "nocturne-py"/' sdk/python/out/pyproject.toml
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -322,13 +362,9 @@ jobs:
 
       - name: Publish to PyPI
         if: startsWith(github.ref, 'refs/tags/v')
-        working-directory: sdk/python/out
-        run: |
-          pip install twine
-          twine upload dist/*
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/python/out/dist/
 
   publish-java:
     needs: generate-spec

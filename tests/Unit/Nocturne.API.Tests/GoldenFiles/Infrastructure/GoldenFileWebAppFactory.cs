@@ -16,8 +16,10 @@ using Moq;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Tests.GoldenFiles.Infrastructure;
 
@@ -112,6 +114,9 @@ public class GoldenFileWebAppFactory : WebApplicationFactory<Program>
                 .Returns(Task.CompletedTask);
             RemoveService<ICacheService>(services);
             services.AddSingleton(mockCache.Object);
+
+            // Register audit config cache (missed when bypassing AddPostgreSqlInfrastructure)
+            services.AddSingleton<ITenantAuditConfigCache, TenantAuditConfigCache>();
 
             // Register test auth handler (middleware-based, not ASP.NET Core auth-based)
             // This will authenticate all requests with admin permissions for golden file tests

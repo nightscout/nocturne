@@ -710,4 +710,66 @@ public class ActivityServiceTests
             )
         );
     }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CountActivitiesAsync_SumsAllDecomposedSources()
+    {
+        // Arrange
+        var stateSpanActivities = new List<Activity>
+        {
+            new() { Id = "1", Mills = 1000 },
+            new() { Id = "2", Mills = 2000 },
+        };
+        var heartRates = new List<HeartRate>
+        {
+            new() { Id = Guid.NewGuid().ToString() },
+        };
+        var stepCounts = new List<StepCount>
+        {
+            new() { Id = Guid.NewGuid().ToString() },
+            new() { Id = Guid.NewGuid().ToString() },
+            new() { Id = Guid.NewGuid().ToString() },
+        };
+
+        _mockStateSpanService
+            .Setup(s => s.GetActivitiesAsync(
+                It.IsAny<string?>(), int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(stateSpanActivities);
+        _mockHeartRateService
+            .Setup(s => s.GetHeartRatesAsync(int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(heartRates);
+        _mockStepCountService
+            .Setup(s => s.GetStepCountsAsync(int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(stepCounts);
+
+        // Act
+        var count = await _activityService.CountActivitiesAsync(cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(6, count);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CountActivitiesAsync_WithEmptySources_ReturnsZero()
+    {
+        // Arrange
+        _mockStateSpanService
+            .Setup(s => s.GetActivitiesAsync(
+                It.IsAny<string?>(), int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<Activity>());
+        _mockHeartRateService
+            .Setup(s => s.GetHeartRatesAsync(int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<HeartRate>());
+        _mockStepCountService
+            .Setup(s => s.GetStepCountsAsync(int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<StepCount>());
+
+        // Act
+        var count = await _activityService.CountActivitiesAsync(cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, count);
+    }
 }

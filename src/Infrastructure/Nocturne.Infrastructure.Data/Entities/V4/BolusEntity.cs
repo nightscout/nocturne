@@ -143,6 +143,12 @@ public class BolusEntity : ITenantScoped, IAuditable
     public string? InsulinType { get; set; }
 
     /// <summary>
+    /// Snapshot of insulin pharmacokinetic settings at delivery time (JSONB).
+    /// </summary>
+    [Column("insulin_context", TypeName = "jsonb")]
+    public string? InsulinContextJson { get; set; }
+
+    /// <summary>
     /// Estimated unabsorbed insulin.
     /// </summary>
     [Column("unabsorbed")]

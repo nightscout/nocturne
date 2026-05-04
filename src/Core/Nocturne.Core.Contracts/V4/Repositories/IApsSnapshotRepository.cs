@@ -64,9 +64,45 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <returns>Number of records deleted (0 or 1).</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
 
+    /// <summary>Retrieve <see cref="ApsSnapshot"/> records matching any of the given correlation IDs.</summary>
+    /// <param name="correlationIds">Correlation IDs to match.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IEnumerable<ApsSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
+
+    /// <summary>Retrieve <see cref="ApsSnapshot"/> records modified since the given timestamp, ordered oldest-first.</summary>
+    /// <param name="lastModifiedMills">Unix millisecond timestamp; records with <c>SysUpdatedAt</c> at or after this value are returned.</param>
+    /// <param name="limit">Maximum number of records to return (default 1000).</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IEnumerable<ApsSnapshot>> GetModifiedSinceAsync(long lastModifiedMills, int limit = 1000, CancellationToken ct = default);
+
     /// <summary>Count <see cref="ApsSnapshot"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
     /// <param name="ct">Cancellation token.</param>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant,
+    /// or <c>null</c> if none exist. When <paramref name="asOf"/> is non-null, restricts to
+    /// snapshots with <c>Timestamp &lt;= asOf</c>.
+    /// </summary>
+    /// <param name="asOf">Optional inclusive upper bound on Timestamp.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> with <c>Enacted = true</c>
+    /// for the current tenant, or <c>null</c> if none exist.
+    /// </summary>
+    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestEnactedTimestampAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the most recent non-null <see cref="ApsSnapshot.SensitivityRatio"/> for the current
+    /// tenant, or <c>null</c> if no snapshot has recorded one.
+    /// </summary>
+    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<decimal?> GetLatestSensitivityRatioAsync(DateTime? asOf, CancellationToken ct = default);
 }

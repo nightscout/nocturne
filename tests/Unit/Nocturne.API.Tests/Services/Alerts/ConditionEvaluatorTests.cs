@@ -1,6 +1,5 @@
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
@@ -24,75 +23,75 @@ public class ThresholdEvaluatorTests
     }
 
     [Fact]
-    public void Below_TriggersWhenValueBelowThreshold()
+    public async Task Below_TriggersWhenValueBelowThreshold()
     {
         var json = """{"direction": "below", "value": 70}""";
         var context = MakeContext(latestValue: 65);
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void Below_DoesNotTriggerWhenValueAboveThreshold()
+    public async Task Below_DoesNotTriggerWhenValueAboveThreshold()
     {
         var json = """{"direction": "below", "value": 70}""";
         var context = MakeContext(latestValue: 85);
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void Below_ExactBoundaryReturnsFalse()
+    public async Task Below_ExactBoundaryReturnsFalse()
     {
         var json = """{"direction": "below", "value": 70}""";
         var context = MakeContext(latestValue: 70);
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void Above_TriggersWhenValueAboveThreshold()
+    public async Task Above_TriggersWhenValueAboveThreshold()
     {
         var json = """{"direction": "above", "value": 250}""";
         var context = MakeContext(latestValue: 260);
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void Above_DoesNotTriggerWhenValueBelowThreshold()
+    public async Task Above_DoesNotTriggerWhenValueBelowThreshold()
     {
         var json = """{"direction": "above", "value": 250}""";
         var context = MakeContext(latestValue: 200);
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void Above_ExactBoundaryReturnsFalse()
+    public async Task Above_ExactBoundaryReturnsFalse()
     {
         var json = """{"direction": "above", "value": 250}""";
         var context = MakeContext(latestValue: 250);
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void NullLatestValue_ReturnsFalse()
+    public async Task NullLatestValue_ReturnsFalse()
     {
         var json = """{"direction": "below", "value": 70}""";
         var context = MakeContext(latestValue: null);
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void UnknownDirection_ReturnsFalse()
+    public async Task UnknownDirection_ReturnsFalse()
     {
         var json = """{"direction": "sideways", "value": 70}""";
         var context = MakeContext(latestValue: 50);
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     private static SensorContext MakeContext(decimal? latestValue = 100) => new()
@@ -120,76 +119,76 @@ public class RateOfChangeEvaluatorTests
     }
 
     [Fact]
-    public void Falling_TriggersWhenRateAtNegativeThreshold()
+    public async Task Falling_TriggersWhenRateAtNegativeThreshold()
     {
         // rate = -3.0, threshold = 3.0 => -3.0 <= -3.0 => true
         var json = """{"direction": "falling", "rate": 3.0}""";
         var context = MakeContext(trendRate: -3.0m);
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void Falling_TriggersWhenRateBelowNegativeThreshold()
+    public async Task Falling_TriggersWhenRateBelowNegativeThreshold()
     {
         var json = """{"direction": "falling", "rate": 3.0}""";
         var context = MakeContext(trendRate: -4.0m);
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void Falling_DoesNotTriggerWhenRateAboveNegativeThreshold()
+    public async Task Falling_DoesNotTriggerWhenRateAboveNegativeThreshold()
     {
         var json = """{"direction": "falling", "rate": 3.0}""";
         var context = MakeContext(trendRate: -2.0m);
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void Rising_TriggersWhenRateAtThreshold()
+    public async Task Rising_TriggersWhenRateAtThreshold()
     {
         var json = """{"direction": "rising", "rate": 3.0}""";
         var context = MakeContext(trendRate: 3.0m);
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void Rising_TriggersWhenRateAboveThreshold()
+    public async Task Rising_TriggersWhenRateAboveThreshold()
     {
         var json = """{"direction": "rising", "rate": 3.0}""";
         var context = MakeContext(trendRate: 5.0m);
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void Rising_DoesNotTriggerWhenRateBelowThreshold()
+    public async Task Rising_DoesNotTriggerWhenRateBelowThreshold()
     {
         var json = """{"direction": "rising", "rate": 3.0}""";
         var context = MakeContext(trendRate: 2.0m);
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void NullTrendRate_ReturnsFalse()
+    public async Task NullTrendRate_ReturnsFalse()
     {
         var json = """{"direction": "falling", "rate": 3.0}""";
         var context = MakeContext(trendRate: null);
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void UnknownDirection_ReturnsFalse()
+    public async Task UnknownDirection_ReturnsFalse()
     {
         var json = """{"direction": "spinning", "rate": 3.0}""";
         var context = MakeContext(trendRate: 10m);
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     private static SensorContext MakeContext(decimal? trendRate = 0m) => new()
@@ -198,78 +197,6 @@ public class RateOfChangeEvaluatorTests
         LatestTimestamp = DateTime.UtcNow,
         TrendRate = trendRate,
         LastReadingAt = DateTime.UtcNow
-    };
-}
-
-#endregion
-
-#region SignalLossEvaluator
-
-[Trait("Category", "Unit")]
-public class SignalLossEvaluatorTests
-{
-    // Use a fixed "now" so tests are deterministic.
-    // FakeTimeProvider is set to this exact instant.
-    private static readonly DateTime FixedNow = new(2026, 3, 22, 12, 0, 0, DateTimeKind.Utc);
-    private readonly SignalLossEvaluator _sut;
-
-    public SignalLossEvaluatorTests()
-    {
-        var timeProvider = new FakeTimeProvider(new DateTimeOffset(FixedNow));
-        _sut = new SignalLossEvaluator(timeProvider);
-    }
-
-    [Fact]
-    public void ConditionType_ShouldBeSignalLoss()
-    {
-        _sut.ConditionType.Should().Be(AlertConditionType.SignalLoss);
-    }
-
-    [Fact]
-    public void TriggersWhenElapsedExceedsTimeout()
-    {
-        var json = """{"timeout_minutes": 15}""";
-        // Last reading was 20 minutes ago
-        var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-20));
-
-        _sut.Evaluate(json, context).Should().BeTrue();
-    }
-
-    [Fact]
-    public void DoesNotTriggerWhenWithinWindow()
-    {
-        var json = """{"timeout_minutes": 15}""";
-        // Last reading was 10 minutes ago
-        var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-10));
-
-        _sut.Evaluate(json, context).Should().BeFalse();
-    }
-
-    [Fact]
-    public void DoesNotTriggerAtExactBoundary()
-    {
-        var json = """{"timeout_minutes": 15}""";
-        // Last reading was exactly 15 minutes ago — not exceeded, so no alert
-        var context = MakeContext(lastReadingAt: FixedNow.AddMinutes(-15));
-
-        _sut.Evaluate(json, context).Should().BeFalse();
-    }
-
-    [Fact]
-    public void NullLastReadingAt_ReturnsTrue()
-    {
-        var json = """{"timeout_minutes": 15}""";
-        var context = MakeContext(lastReadingAt: null);
-
-        _sut.Evaluate(json, context).Should().BeTrue();
-    }
-
-    private static SensorContext MakeContext(DateTime? lastReadingAt) => new()
-    {
-        LatestValue = 100m,
-        LatestTimestamp = FixedNow,
-        TrendRate = 0m,
-        LastReadingAt = lastReadingAt
     };
 }
 
@@ -291,12 +218,10 @@ public class CompositeEvaluatorTests
 
     public CompositeEvaluatorTests()
     {
-        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
         var evaluators = new IConditionEvaluator[]
         {
             new ThresholdEvaluator(),
-            new RateOfChangeEvaluator(),
-            new SignalLossEvaluator(timeProvider)
+            new RateOfChangeEvaluator()
         };
 
         _registry = new ConditionEvaluatorRegistry(evaluators);
@@ -314,7 +239,7 @@ public class CompositeEvaluatorTests
     }
 
     [Fact]
-    public void And_AllTrue_ReturnsTrue()
+    public async Task And_AllTrue_ReturnsTrue()
     {
         // Both conditions true: value < 70 AND falling rate <= -3
         var composite = new CompositeCondition("and", new List<ConditionNode>
@@ -331,11 +256,11 @@ public class CompositeEvaluatorTests
             LastReadingAt = DateTime.UtcNow
         };
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void And_OneFalse_ReturnsFalse()
+    public async Task And_OneFalse_ReturnsFalse()
     {
         // First true (value < 70), second false (rate > -3)
         var composite = new CompositeCondition("and", new List<ConditionNode>
@@ -352,11 +277,11 @@ public class CompositeEvaluatorTests
             LastReadingAt = DateTime.UtcNow
         };
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void Or_AnyTrue_ReturnsTrue()
+    public async Task Or_AnyTrue_ReturnsTrue()
     {
         // First false (value > 70), second true (rate <= -3)
         var composite = new CompositeCondition("or", new List<ConditionNode>
@@ -373,11 +298,11 @@ public class CompositeEvaluatorTests
             LastReadingAt = DateTime.UtcNow
         };
 
-        _sut.Evaluate(json, context).Should().BeTrue();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void Or_AllFalse_ReturnsFalse()
+    public async Task Or_AllFalse_ReturnsFalse()
     {
         var composite = new CompositeCondition("or", new List<ConditionNode>
         {
@@ -393,11 +318,11 @@ public class CompositeEvaluatorTests
             LastReadingAt = DateTime.UtcNow
         };
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void EmptyConditionsList_ReturnsFalse()
+    public async Task EmptyConditionsList_ReturnsFalse()
     {
         var composite = new CompositeCondition("and", new List<ConditionNode>());
         var json = JsonSerializer.Serialize(composite, SnakeCaseOptions);
@@ -409,19 +334,17 @@ public class CompositeEvaluatorTests
             LastReadingAt = DateTime.UtcNow
         };
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 
     [Fact]
-    public void NestedComposite_Works()
+    public async Task NestedComposite_Works()
     {
         // Register the composite evaluator itself in the registry
-        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
         var evaluators = new List<IConditionEvaluator>
         {
             new ThresholdEvaluator(),
-            new RateOfChangeEvaluator(),
-            new SignalLossEvaluator(timeProvider)
+            new RateOfChangeEvaluator()
         };
         var registry = new ConditionEvaluatorRegistry(evaluators);
         var sp = new Mock<IServiceProvider>();
@@ -456,11 +379,11 @@ public class CompositeEvaluatorTests
             LastReadingAt = DateTime.UtcNow
         };
 
-        sut.Evaluate(json, context).Should().BeTrue();
+        (await sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeTrue();
     }
 
     [Fact]
-    public void UnknownOperator_ReturnsFalse()
+    public async Task UnknownOperator_ReturnsFalse()
     {
         var composite = new CompositeCondition("xor", new List<ConditionNode>
         {
@@ -475,7 +398,7 @@ public class CompositeEvaluatorTests
             LastReadingAt = DateTime.UtcNow
         };
 
-        _sut.Evaluate(json, context).Should().BeFalse();
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().BeFalse();
     }
 }
 

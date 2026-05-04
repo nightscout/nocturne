@@ -10,7 +10,9 @@
       sysTime: DateTimeOffset_1,
       mgdl: 100,
       sgv: 100,
+      mmol: 5.54994394556615,
       direction: Flat,
+      trend: 4,
       type: sgv,
       device: xDrip-DexcomG6,
       isValid: true
@@ -23,7 +25,9 @@
       sysTime: DateTimeOffset_2,
       mgdl: 110,
       sgv: 110,
+      mmol: 6.104938340122764,
       direction: Flat,
+      trend: 4,
       type: sgv,
       device: xDrip-DexcomG6,
       isValid: true
@@ -36,7 +40,9 @@
       sysTime: DateTimeOffset_3,
       mgdl: 120,
       sgv: 120,
+      mmol: 6.65993273467938,
       direction: Flat,
+      trend: 4,
       type: sgv,
       device: xDrip-DexcomG6,
       isValid: true
@@ -49,7 +55,9 @@
       sysTime: DateTimeOffset_4,
       mgdl: 130,
       sgv: 130,
+      mmol: 7.214927129235995,
       direction: Flat,
+      trend: 4,
       type: sgv,
       device: xDrip-DexcomG6,
       isValid: true
@@ -62,7 +70,9 @@
       sysTime: DateTimeOffset_5,
       mgdl: 140,
       sgv: 140,
+      mmol: 7.769921523792609,
       direction: Flat,
+      trend: 4,
       type: sgv,
       device: xDrip-DexcomG6,
       isValid: true

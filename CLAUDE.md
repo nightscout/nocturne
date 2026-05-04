@@ -146,7 +146,7 @@ BYPASSRLS to either role.
 
 ## Local Container Build
 
-`scripts/build.sh` mirrors the CI pipeline locally: restores .NET, generates the API client (NSwag + Zod + remote codegen), verifies generated files, and builds both containers. Without `--push`, images are loaded into the local Docker daemon.
+`scripts/build.cs` (run via `dotnet run scripts/build.cs`) mirrors the CI pipeline locally: restores .NET, generates the API client (NSwag + Zod + remote codegen), verifies generated files, and builds both containers. Without `--push`, images are loaded into the local Docker daemon. `scripts/publish-release.cs` generates the production Docker Compose bundle (compose + `.env.example` + init script) that gets attached to GitHub Releases.
 
 ## Code Style Requirements
 

@@ -3,7 +3,6 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Services.Demo.Configuration;
@@ -141,23 +140,21 @@ public class DemoDataHostedService : BackgroundService
 
         using var scope = _serviceProvider.CreateScope();
         SetAuditContext(scope.ServiceProvider);
-        var entryRepository = scope.ServiceProvider.GetRequiredService<IEntryRepository>();
-        var treatmentRepository = scope.ServiceProvider.GetRequiredService<ITreatmentRepository>();
+        var sensorGlucoseRepository = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
         var entryService = scope.ServiceProvider.GetRequiredService<IDemoEntryService>();
         var treatmentService = scope.ServiceProvider.GetRequiredService<IDemoTreatmentService>();
 
         // Clear existing demo data
-        var entriesDeleted = await entryRepository.DeleteEntriesByDataSourceAsync(
+        var entriesDeleted = await sensorGlucoseRepository.DeleteBySourceAsync(
             DataSources.DemoService,
             cancellationToken
         );
-        var treatmentsDeleted = await treatmentRepository.DeleteTreatmentsByDataSourceAsync(
-            DataSources.DemoService,
+        var treatmentsDeleted = await treatmentService.DeleteAllDemoTreatmentsAsync(
             cancellationToken
         );
 
         _logger.LogInformation(
-            "Cleared {Entries} demo entries and {Treatments} demo treatments",
+            "Cleared {Entries} demo sensor glucose records and {Treatments} demo treatments",
             entriesDeleted,
             treatmentsDeleted
         );

@@ -3,9 +3,8 @@ using Nocturne.Core.Models;
 namespace Nocturne.Core.Contracts.Alerts;
 
 /// <summary>
-/// Repository port for alert rule configuration, alert instances, excursion state,
-/// and escalation metadata. Provides the persistence layer consumed by
-/// <see cref="IAlertOrchestrator"/> and <see cref="IEscalationAdvancer"/>.
+/// Repository port for alert rule configuration, alert instances, and excursion state.
+/// Provides the persistence layer consumed by <see cref="IAlertOrchestrator"/>.
 /// </summary>
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="IExcursionTracker"/>
@@ -20,36 +19,15 @@ public interface IAlertRepository
     Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
-    /// Returns all <see cref="AlertScheduleSnapshot"/> records configured for a given rule.
+    /// Returns the flat per-rule channel list. Channels are dispatched in parallel when the
+    /// rule fires; <see cref="AlertRuleChannelSnapshot.SortOrder"/> is cosmetic only.
     /// </summary>
-    /// <param name="ruleId">The alert rule identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A read-only list of schedule snapshots for the rule.</returns>
-    Task<IReadOnlyList<AlertScheduleSnapshot>> GetSchedulesForRuleAsync(Guid ruleId, CancellationToken ct);
-
-    /// <summary>
-    /// Returns the ordered <see cref="AlertEscalationStepSnapshot"/> records for a schedule.
-    /// </summary>
-    /// <param name="scheduleId">The alert schedule identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A read-only list of escalation steps, ordered by <c>StepOrder</c>.</returns>
-    Task<IReadOnlyList<AlertEscalationStepSnapshot>> GetEscalationStepsAsync(Guid scheduleId, CancellationToken ct);
+    Task<IReadOnlyList<AlertRuleChannelSnapshot>> GetChannelsForRuleAsync(Guid ruleId, CancellationToken ct);
 
     /// <summary>
     /// Creates a new <see cref="AlertInstanceSnapshot"/> for a triggered alert.
     /// </summary>
-    /// <param name="request">The creation request containing excursion, schedule, and step details.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The newly created alert instance snapshot.</returns>
     Task<AlertInstanceSnapshot> CreateInstanceAsync(CreateAlertInstanceRequest request, CancellationToken ct);
-
-    /// <summary>
-    /// Returns all escalating alert instances whose next escalation time is at or before <paramref name="asOf"/>.
-    /// </summary>
-    /// <param name="asOf">The point-in-time cutoff for due escalations.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A read-only list of alert instances ready for escalation advancement.</returns>
-    Task<IReadOnlyList<AlertInstanceSnapshot>> GetEscalatingInstancesDueAsync(DateTime asOf, CancellationToken ct);
 
     /// <summary>
     /// Returns all alert instances associated with a specific excursion.
@@ -61,13 +39,33 @@ public interface IAlertRepository
 
     /// <summary>
     /// Resolves all active alert instances for the specified excursion, marking them
-    /// with the given resolution timestamp.
+    /// with the given resolution timestamp and reason.
     /// </summary>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <param name="resolvedAt">The timestamp when the excursion was resolved.</param>
+    /// <param name="resolutionReason">
+    /// Wire string from <see cref="Nocturne.Core.Models.Alerts.ExcursionCloseReason"/>
+    /// (e.g. <c>"hysteresis"</c>, <c>"auto"</c>). Null is allowed only as a defensive
+    /// fall-back — every production call site has a reason.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes when all instances have been resolved.</returns>
-    Task ResolveInstancesForExcursionAsync(Guid excursionId, DateTime resolvedAt, CancellationToken ct);
+    Task ResolveInstancesForExcursionAsync(Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct);
+
+    /// <summary>
+    /// Returns every open excursion whose owning rule has auto-resolve enabled
+    /// and a non-null <c>AutoResolveParams</c>. Used by <c>AlertSweepService</c>
+    /// to evaluate auto-resolve conditions that don't depend on the latest
+    /// reading (e.g. time-of-day, IOB, sensor age).
+    /// </summary>
+    Task<IReadOnlyList<AutoResolveExcursionSnapshot>> GetAutoResolveExcursionsAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Returns the distinct InApp delivery <c>Destination</c> values (user identifiers) that
+    /// received any delivery for this excursion's instances. Used by
+    /// <c>ExcursionResolutionHandler</c> to auto-archive in-app notifications when the
+    /// excursion closes.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetInAppDestinationsForExcursionAsync(Guid excursionId, CancellationToken ct);
 
     /// <summary>
     /// Updates an existing alert instance (e.g., advancing its escalation step or snooze state).
@@ -102,16 +100,6 @@ public interface IAlertRepository
     Task<IReadOnlyList<HysteresisExcursionSnapshot>> GetExcursionsInHysteresisAsync(CancellationToken ct);
 
     /// <summary>
-    /// Closes a hysteresis excursion, marking it as ended.
-    /// </summary>
-    /// <param name="excursionId">The excursion to close.</param>
-    /// <param name="alertRuleId">The associated <see cref="AlertRule"/> identifier.</param>
-    /// <param name="endedAt">The timestamp when hysteresis expired.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes when the excursion has been closed.</returns>
-    Task CloseHysteresisExcursionAsync(Guid excursionId, Guid alertRuleId, DateTime endedAt, CancellationToken ct);
-
-    /// <summary>
     /// Returns the tenant-level alert context (global mute state, timezone, etc.) used
     /// by the orchestrator to evaluate scheduling rules.
     /// </summary>
@@ -119,6 +107,23 @@ public interface IAlertRepository
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The tenant alert context, or <c>null</c> if the tenant has no alert configuration.</returns>
     Task<TenantAlertContext?> GetTenantAlertContextAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Returns the tenant's <c>tenant_alert_settings</c> row as a snapshot, or
+    /// <see cref="TenantAlertSettingsSnapshot.Empty"/> when no row exists.
+    /// Used by <see cref="ISensorContextEnricher"/> to populate
+    /// <see cref="SensorContext.ActiveDoNotDisturb"/> per evaluation pass.
+    /// </summary>
+    Task<TenantAlertSettingsSnapshot> GetTenantAlertSettingsAsync(Guid tenantId, CancellationToken ct);
+
+    /// <summary>
+    /// Marks an alert instance as suppressed at fire time without dispatching deliveries.
+    /// Writes <paramref name="reason"/> to <c>alert_instances.suppression_reason</c> so Replay
+    /// and History can display "would have fired but suppressed" rows. Currently the only
+    /// reason emitted by the orchestrator is <c>"dnd"</c>.
+    /// </summary>
+    /// <param name="tenantId">Tenant scope for the lookup. Defence-in-depth alongside RLS.</param>
+    Task MarkInstanceSuppressedAsync(Guid tenantId, Guid instanceId, string reason, CancellationToken ct);
 
     /// <summary>
     /// Returns all enabled signal-loss detection rules across all tenants.
@@ -145,6 +150,21 @@ public interface IAlertRepository
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A read-only list of previously snoozed instance snapshots.</returns>
     Task<IReadOnlyList<SnoozedInstanceSnapshot>> GetExpiredSnoozedInstancesAsync(DateTime asOf, CancellationToken ct);
+
+    /// <summary>
+    /// Returns a snapshot of every active <see cref="AlertExcursion"/> for the tenant, keyed by
+    /// the <see cref="AlertRule"/> id that owns it. Used by <c>alert_state</c> conditions to
+    /// reference live alerts cross-rule.
+    /// </summary>
+    /// <param name="tenantId">The tenant identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// Dictionary keyed by alert rule id. Each value's <see cref="ActiveAlertSnapshot.State"/> is
+    /// always <c>"firing"</c>; downstream evaluators decide acknowledgement state from
+    /// <see cref="ActiveAlertSnapshot.AcknowledgedAt"/>.
+    /// </returns>
+    Task<IReadOnlyDictionary<Guid, ActiveAlertSnapshot>> GetActiveAlertSnapshotsAsync(
+        Guid tenantId, CancellationToken ct);
 
     /// <summary>
     /// Persists all pending changes tracked by the underlying context.

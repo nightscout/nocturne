@@ -17,8 +17,8 @@
     type TrackerDefinitionDto,
   } from "$api";
 
-  const createForm = trackersRemote.createDefinition;
-  const updateForm = trackersRemote.updateDefinition;
+  const createRemote = trackersRemote.createDefinition;
+  const updateRemote = trackersRemote.updateDefinition;
 
   let {
     open = $bindable(false),
@@ -57,6 +57,9 @@
     categoryLabels: Record<TrackerCategory, string>;
     loadData: () => Promise<void>;
   }>();
+
+  const createForm = $derived(createRemote.for("create"));
+  const updateForm = $derived(updateRemote.for(editingDefinition?.id ?? ""));
 
   function notificationsToApiFormat(notifications: TrackerNotification[]) {
     return notifications
@@ -334,9 +337,9 @@
 
     {#if isNewDefinition}
       <form
-        {...createForm.for("create").enhance(async ({ submit }) => {
+        {...createForm.enhance(async ({ submit }) => {
           await submit();
-          if (createForm.for("create").result) {
+          if (createForm.result) {
             await loadData();
             await tick();
             open = false;
@@ -357,24 +360,22 @@
           </Button>
           <Button
             type="submit"
-            disabled={!formName || !!createForm.for("create").pending}
+            disabled={!formName || !!createForm.pending}
           >
-            {createForm.for("create").pending ? "Saving..." : "Save"}
+            {createForm.pending ? "Saving..." : "Save"}
           </Button>
         </Dialog.Footer>
       </form>
     {:else}
       <form
-        {...updateForm
-          .for(editingDefinition?.id ?? "")
-          .enhance(async ({ submit }) => {
-            await submit();
-            if (updateForm.for(editingDefinition?.id ?? "").result) {
-              await loadData();
-              await tick();
-              open = false;
-            }
-          })}
+        {...updateForm.enhance(async ({ submit }) => {
+          await submit();
+          if (updateForm.result) {
+            await loadData();
+            await tick();
+            open = false;
+          }
+        })}
       >
         <input type="hidden" name="id" value={editingDefinition?.id ?? ""} />
         <div class="space-y-6 py-4">
@@ -391,12 +392,9 @@
           </Button>
           <Button
             type="submit"
-            disabled={!formName ||
-              !!updateForm.for(editingDefinition?.id ?? "").pending}
+            disabled={!formName || !!updateForm.pending}
           >
-            {updateForm.for(editingDefinition?.id ?? "").pending
-              ? "Saving..."
-              : "Save"}
+            {updateForm.pending ? "Saving..." : "Save"}
           </Button>
         </Dialog.Footer>
       </form>

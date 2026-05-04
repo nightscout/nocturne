@@ -4,39 +4,58 @@
     Check,
     ChartLine,
     Users,
-    Moon,
+    Bell,
     BookOpen,
+    Plug,
     ArrowRight,
   } from "lucide-svelte";
 
   let {
     path,
     onEnterDashboard,
+    onNavigateWithCoach,
   }: {
     path: "fresh" | "migration";
     onEnterDashboard: () => void;
+    onNavigateWithCoach: (url: string) => void;
   } = $props();
 
-  const nextSteps = [
+  const nextSteps = $derived([
     {
       icon: Users,
       title: "Invite a caretaker",
       subtitle: "Add follower access with one link",
+      coachUrl: "/settings/members?coach=setup-invite",
     },
     {
-      icon: Moon,
-      title: "Quiet hours",
-      subtitle: "Silence low-priority alerts overnight",
+      icon: Bell,
+      title: "Alerts",
+      subtitle: "Set up alerts",
+      coachUrl: "/alerts?coach=setup-alerts",
     },
-    {
-      icon: BookOpen,
-      title: "Your first report",
-      subtitle: "Generate an AGP for your next clinic visit",
-    },
-  ] as const;
+    ...(path === "migration"
+      ? [
+          {
+            icon: BookOpen,
+            title: "Your first report",
+            subtitle: "Generate an AGP for your next clinic visit",
+            coachUrl: "/reports?coach=setup-reports",
+          },
+        ]
+      : [
+          {
+            icon: Plug,
+            title: "Connect another source",
+            subtitle: "Add another device or service",
+            coachUrl: "/settings/connectors?coach=setup-connectors",
+          },
+        ]),
+  ]);
 </script>
 
-<div class="grid grid-cols-[1.1fr_0.9fr] max-[820px]:grid-cols-1 gap-10 items-start">
+<div
+  class="grid grid-cols-[1.1fr_0.9fr] max-[820px]:grid-cols-1 gap-10 items-start"
+>
   <!-- Left column -->
   <div class="flex flex-col gap-8">
     <!-- Celebration checkmark -->
@@ -50,11 +69,23 @@
     </div>
 
     <!-- Heading -->
-    <h1 class="font-[Montserrat] font-[250] text-[52px] max-[820px]:text-[36px] leading-tight">
+    <h1
+      class="font-[Montserrat] font-[250] text-[52px] max-[820px]:text-[36px] leading-tight"
+    >
       {#if path === "migration"}
-        Your data is <em class="not-italic font-light" style="color: var(--onb-accent);">home.</em>
+        Your data is <em
+          class="not-italic font-light"
+          style="color: var(--onb-accent);"
+        >
+          home.
+        </em>
       {:else}
-        You're <em class="not-italic font-light" style="color: var(--onb-accent);">in.</em>
+        You're <em
+          class="not-italic font-light"
+          style="color: var(--onb-accent);"
+        >
+          in.
+        </em>
       {/if}
     </h1>
 
@@ -76,7 +107,7 @@
         <ChartLine class="mr-2 h-4 w-4" />
         Open my dashboard
       </Button>
-      <Button variant="ghost">Take the 60-second tour</Button>
+      <Button variant="ghost" onclick={() => onNavigateWithCoach("/?coach=quick-tour")}>Take the 60-second tour</Button>
     </div>
   </div>
 
@@ -91,6 +122,7 @@
         <button
           class="group grid grid-cols-[34px_1fr_auto] gap-3 items-center p-3 rounded-xl border border-white/6 bg-white/3 transition-[border-color,background-color] duration-150 cursor-pointer hover:border-white/12 hover:bg-white/5"
           type="button"
+          onclick={() => onNavigateWithCoach(step.coachUrl)}
         >
           <div
             class="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-muted-foreground"

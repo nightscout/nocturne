@@ -18,7 +18,7 @@ public static class DecompositionBatchMapper
             Id = entity.Id,
             Source = entity.Source,
             SourceRecordId = entity.SourceRecordId,
-            SourceTreatmentId = entity.SourceTreatmentId,
+
             CreatedAt = entity.CreatedAt,
         };
     }
@@ -34,7 +34,6 @@ public static class DecompositionBatchMapper
             TenantId = tenantId,
             Source = model.Source,
             SourceRecordId = model.SourceRecordId,
-            SourceTreatmentId = model.SourceTreatmentId,
             CreatedAt = model.CreatedAt,
         };
     }

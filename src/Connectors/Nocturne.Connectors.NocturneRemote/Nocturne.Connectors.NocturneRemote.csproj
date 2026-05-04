@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Description>Nocturne-to-Nocturne remote data source connector service</Description>
+        <Company>Nocturne</Company>
+        <Product>Nocturne Connectors</Product>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
+        <ProjectReference Include="..\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj"/>
+    </ItemGroup>
+</Project>

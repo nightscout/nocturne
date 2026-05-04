@@ -1,7 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { onMount } from "svelte";
   import { ArrowRight, ArrowLeft, Sprout, Cable } from "lucide-svelte";
   import { Button } from "$lib/components/ui/button";
   import Github from "lucide-svelte/icons/github";
@@ -16,8 +15,6 @@
   import type {
     UploaderApp,
     DataSourceInfo,
-    ServicesOverview,
-    UploaderSetupResponse,
   } from "$lib/api/generated/nocturne-api-client";
 
   import ConstellationCanvas from "./ConstellationCanvas.svelte";
@@ -38,27 +35,35 @@
   // - Authenticated → show onboarding wizard
 
   // ── Setup phase (pre-auth) ──────────────────────────────────────────
-  const setupRequired = $derived(page.data?.setupRequired === true);
+  let accountCreated = $state(false);
+  const setupRequired = $derived(!accountCreated && page.data?.setupRequired === true);
 
   const SETUP_STEPS = [
     { id: "tenant", label: "Name your instance", short: "Instance" },
     { id: "account", label: "Create your account", short: "Account" },
   ] as const;
 
-  let setupStepIndex = $state(0);
+  // If the tenant already exists (user abandoned after step 1), skip to account creation.
+  // page.data is resolved before render, so this is correct at init time.
+  let setupStepIndex = $state(page.data?.tenantExists === true ? 1 : 0);
   const setupStep = $derived(SETUP_STEPS[setupStepIndex]);
   const setupProgressPct = $derived(
     SETUP_STEPS.length <= 1 ? 100 : (setupStepIndex / (SETUP_STEPS.length - 1)) * 100
   );
 
-  function handleTenantCreated() {
+  function handleTenantCreated(slug: string) {
+    tenantSlug = slug;
     setupStepIndex = 1;
   }
 
   function handleAccountCreated() {
-    // Account created — reload the page to transition to the onboarding wizard.
-    // The server load will now see isAuthenticated=true and return setupRequired=false.
-    goto("/setup", { replaceState: true, invalidateAll: true });
+    // Flip client-side — no server round-trip needed. The user just
+    // registered; we already have auth cookies. Trying to reload or goto
+    // the same URL hits a redirect loop because +page.server.ts falls
+    // through to the /auth/login redirect before hooks recognise the
+    // freshly-set session.
+    // Reactive queries auto-activate when setupRequired becomes false.
+    accountCreated = true;
   }
 
   // ── Onboarding step definitions (post-auth) ────────────────────────
@@ -80,13 +85,27 @@
   // ── State ───────────────────────────────────────────────────────────
   let path = $state<"fresh" | "migration">("fresh");
   let stepIndex = $state(0);
+  let tenantSlug = $state<string | null>(null);
   let selectedConnectorId = $state<string | null>(null);
   let selectedUploader = $state<UploaderApp | null>(null);
-  let uploaderSetupResponse = $state<UploaderSetupResponse | null>(null);
-  let servicesData = $state<ServicesOverview | null>(null);
-  let activeDataSources = $state<DataSourceInfo[]>([]);
-  let servicesLoading = $state(true);
-  let servicesError = $state<string | null>(null);
+  // ── Reactive service queries (auto-activate when setup completes) ──
+  // query() returns reactive objects anchored to this component's lifecycle.
+  // They cannot be awaited in event handlers — must live in $derived context.
+  const servicesQuery = $derived(!setupRequired ? getServicesOverview() : null);
+  const dataSourcesQuery = $derived(!setupRequired ? getActiveDataSources() : null);
+  const uploaderSetupQuery = $derived(
+    selectedUploader?.id ? getUploaderSetup(selectedUploader.id) : null
+  );
+
+  const servicesData = $derived(servicesQuery?.current ?? null);
+  const activeDataSources = $derived<DataSourceInfo[]>(dataSourcesQuery?.current ?? []);
+  const uploaderSetupResponse = $derived(uploaderSetupQuery?.current ?? null);
+  const servicesLoading = $derived(
+    servicesQuery == null ||
+    servicesQuery.current === undefined ||
+    dataSourcesQuery == null ||
+    dataSourcesQuery.current === undefined
+  );
   let importProgress = $state(0);
   let migrationJobId = $state<string | undefined>(undefined);
 
@@ -108,22 +127,6 @@
   // ── Data source loading ──────────────────────────────────────────────
   const connectors = $derived(servicesData?.availableConnectors ?? []);
   const uploaderApps = $derived(servicesData?.uploaderApps ?? []);
-
-  onMount(async () => {
-    try {
-      const [overview, sources] = await Promise.all([
-        getServicesOverview(),
-        getActiveDataSources(),
-      ]);
-      servicesData = overview;
-      activeDataSources = sources ?? [];
-    } catch (e) {
-      servicesError =
-        e instanceof Error ? e.message : "Failed to load data sources";
-    } finally {
-      servicesLoading = false;
-    }
-  });
 
   // ── Onboarding CSS variables ──────────────────────────────────────────
   // Path-independent surface/utility tokens
@@ -177,22 +180,21 @@
     await goto("/", { invalidateAll: true });
   }
 
+  async function handleNavigateWithCoach(url: string) {
+    await markSetupComplete();
+    await goto(url, { invalidateAll: true });
+  }
+
   function handleSelectConnector(id: string) {
     selectedConnectorId = id;
     selectedUploader = null;
     handleNext();
   }
 
-  async function handleSelectUploader(app: UploaderApp) {
+  function handleSelectUploader(app: UploaderApp) {
     selectedUploader = app;
     selectedConnectorId = null;
-    if (app.id) {
-      try {
-        uploaderSetupResponse = await getUploaderSetup(app.id);
-      } catch {
-        uploaderSetupResponse = null;
-      }
-    }
+    // uploaderSetupQuery auto-fetches reactively when selectedUploader.id changes
     handleNext();
   }
 
@@ -488,7 +490,7 @@
                   {uploaderApps}
                   dataSources={activeDataSources}
                   isLoading={servicesLoading}
-                  loadError={servicesError}
+                  loadError={null}
                   onSelectConnector={handleSelectConnector}
                   onSelectUploader={handleSelectUploader}
                   onSkip={handleSourceSkip}
@@ -565,7 +567,7 @@
                 onComplete={handleImportComplete}
               />
             {:else if currentStep?.id === "finish"}
-              <Finish {path} onEnterDashboard={handleEnterDashboard} />
+              <Finish {path} onEnterDashboard={handleEnterDashboard} onNavigateWithCoach={handleNavigateWithCoach} />
             {/if}
           </div>
 

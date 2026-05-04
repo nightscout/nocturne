@@ -15,7 +15,9 @@
         sysTime: {Scrubbed},
         mgdl: 145,
         sgv: 145,
+        mmol: 8.047418721070917,
         direction: FortyFiveUp,
+        trend: 3,
         type: sgv,
         device: xDrip-DexcomG6,
         isValid: true

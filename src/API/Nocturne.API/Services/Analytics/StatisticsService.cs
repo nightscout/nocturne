@@ -2357,7 +2357,10 @@ public class StatisticsService : IStatisticsService
         IEnumerable<SensorGlucose> entries,
         IEnumerable<Bolus> boluses,
         IEnumerable<CarbIntake> carbIntakes,
-        ExtendedAnalysisConfig? config = null
+        ExtendedAnalysisConfig? config = null,
+        DateTime? startDate = null,
+        DateTime? endDate = null,
+        int updateIntervalMinutes = 5
     )
     {
         config ??= new ExtendedAnalysisConfig();
@@ -2388,7 +2391,7 @@ public class StatisticsService : IStatisticsService
         var basicStats = CalculateBasicStats(glucoseValues);
         var timeInRange = CalculateTimeInRange(sortedEntries, config.Thresholds);
         var glycemicVariability = CalculateGlycemicVariability(glucoseValues, sortedEntries);
-        var dataQuality = AssessDataQuality(sortedEntries);
+        var dataQuality = AssessDataQuality(sortedEntries, startDate, endDate, updateIntervalMinutes);
 
         var timeStart = sortedEntries.FirstOrDefault()?.Mills ?? 0;
         var timeEnd = sortedEntries.LastOrDefault()?.Mills ?? 0;
@@ -2416,7 +2419,11 @@ public class StatisticsService : IStatisticsService
         };
     }
 
-    private DataQuality AssessDataQuality(IList<SensorGlucose> entries)
+    private DataQuality AssessDataQuality(
+        IList<SensorGlucose> entries,
+        DateTime? reportStart = null,
+        DateTime? reportEnd = null,
+        int updateIntervalMinutes = 5)
     {
         var totalReadings = entries.Count;
         var gaps = new List<DataGap>();
@@ -2429,16 +2436,14 @@ public class StatisticsService : IStatisticsService
                 var currentTime = entries[i].Mills;
                 var gapMinutes = (currentTime - prevTime) / (1000.0 * 60);
 
-                if (gapMinutes > 15) // Gap larger than expected 5-10 minute interval
+                if (gapMinutes > 15)
                 {
-                    gaps.Add(
-                        new DataGap
-                        {
-                            Start = prevTime,
-                            End = currentTime,
-                            Duration = gapMinutes,
-                        }
-                    );
+                    gaps.Add(new DataGap
+                    {
+                        Start = prevTime,
+                        End = currentTime,
+                        Duration = gapMinutes,
+                    });
                 }
             }
         }
@@ -2446,22 +2451,39 @@ public class StatisticsService : IStatisticsService
         var longestGap = gaps.Any() ? gaps.Max(g => g.Duration) : 0;
         var averageGap = gaps.Any() ? gaps.Average(g => g.Duration) : 0;
 
+        // CgmActivePercent: actual readings vs expected readings over report period
+        var effectiveStart = reportStart ?? (entries.Count > 0 ? entries[0].Timestamp : DateTime.UtcNow);
+        var effectiveEnd = reportEnd ?? (entries.Count > 0 ? entries[^1].Timestamp : DateTime.UtcNow);
+        var reportSpanMinutes = (effectiveEnd - effectiveStart).TotalMinutes;
+        var expectedReadings = reportSpanMinutes / updateIntervalMinutes;
+        var cgmActivePercent = expectedReadings > 0
+            ? Math.Min(totalReadings / expectedReadings * 100.0, 100.0)
+            : 0;
+
+        // DataCompleteness: time coverage within the data range (first->last reading)
+        var dataSpanMinutes = entries.Count > 1
+            ? (entries[^1].Mills - entries[0].Mills) / (1000.0 * 60)
+            : 0;
+        var totalGapMinutes = gaps.Sum(g => g.Duration);
+        var dataCompleteness = dataSpanMinutes > 0
+            ? ((dataSpanMinutes - totalGapMinutes) / dataSpanMinutes) * 100.0
+            : 0;
+
         return new DataQuality
         {
             TotalReadings = totalReadings,
-            MissingReadings = gaps.Sum(g => (int)(g.Duration / 5)), // Assuming 5-minute intervals
-            DataCompleteness =
-                totalReadings > 0 ? (1.0 - (double)gaps.Count / totalReadings) * 100 : 0,
-            CgmActivePercent = 100, // Simplified - would need more sophisticated calculation
+            MissingReadings = gaps.Sum(g => (int)(g.Duration / updateIntervalMinutes)),
+            DataCompleteness = dataCompleteness,
+            CgmActivePercent = cgmActivePercent,
             GapAnalysis = new GapAnalysis
             {
                 Gaps = gaps,
                 LongestGap = longestGap,
                 AverageGap = averageGap,
             },
-            NoiseLevel = 0, // Would require noise analysis
-            CalibrationEvents = 0, // Would require analysis of cal entries
-            SensorWarmups = 0, // Would require analysis of sensor events
+            NoiseLevel = 0,
+            CalibrationEvents = 0,
+            SensorWarmups = 0,
         };
     }
 

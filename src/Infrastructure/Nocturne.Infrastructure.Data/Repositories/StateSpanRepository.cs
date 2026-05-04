@@ -62,6 +62,7 @@ public class StateSpanRepository : IStateSpanRepository
     /// <param name="active">Optional filter for active (open-ended) vs completed spans.</param>
     /// <param name="count">The maximum number of spans to return.</param>
     /// <param name="skip">The number of spans to skip.</param>
+    /// <param name="descending">Whether to sort by start timestamp descending.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A collection of state spans.</returns>
     public async Task<IEnumerable<StateSpan>> GetStateSpansAsync(
@@ -73,8 +74,46 @@ public class StateSpanRepository : IStateSpanRepository
         bool? active = null,
         int count = 100,
         int skip = 0,
+        bool descending = true,
         CancellationToken cancellationToken = default
     )
+    {
+        var query = BuildFilteredQuery(category, state, from, to, source, active);
+
+        var ordered = descending
+            ? query.OrderByDescending(s => s.StartTimestamp)
+            : query.OrderBy(s => s.StartTimestamp);
+
+        var entities = await ordered
+            .Skip(skip)
+            .Take(count)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(StateSpanMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountStateSpansAsync(
+        StateSpanCategory? category = null,
+        string? state = null,
+        DateTime? from = null,
+        DateTime? to = null,
+        string? source = null,
+        bool? active = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var query = BuildFilteredQuery(category, state, from, to, source, active);
+        return await query.CountAsync(cancellationToken);
+    }
+
+    private IQueryable<StateSpanEntity> BuildFilteredQuery(
+        StateSpanCategory? category,
+        string? state,
+        DateTime? from,
+        DateTime? to,
+        string? source,
+        bool? active)
     {
         var query = _context.StateSpans.AsQueryable();
 
@@ -107,13 +146,7 @@ public class StateSpanRepository : IStateSpanRepository
             .Select(lr => lr.RecordId);
         query = query.Where(s => !nonPrimaryIds.Contains(s.Id));
 
-        var entities = await query
-            .OrderByDescending(s => s.StartTimestamp)
-            .Skip(skip)
-            .Take(count)
-            .ToListAsync(cancellationToken);
-
-        return entities.Select(StateSpanMapper.ToDomainModel);
+        return query;
     }
 
     /// <summary>
@@ -367,6 +400,25 @@ public class StateSpanRepository : IStateSpanRepository
             to: to,
             cancellationToken: cancellationToken
         );
+    }
+
+    /// <inheritdoc />
+    public async Task<StateSpan?> GetActiveAtAsync(
+        StateSpanCategory category,
+        string? state,
+        DateTime at,
+        CancellationToken cancellationToken = default)
+    {
+        var categoryString = category.ToString();
+        var entity = await _context.StateSpans
+            .AsNoTracking()
+            .Where(s => s.Category == categoryString
+                        && (state == null || s.State == state)
+                        && s.StartTimestamp <= at
+                        && (s.EndTimestamp == null || s.EndTimestamp > at))
+            .OrderByDescending(s => s.StartTimestamp)
+            .FirstOrDefaultAsync(cancellationToken);
+        return entity is null ? null : StateSpanMapper.ToDomainModel(entity);
     }
 
     /// <summary>

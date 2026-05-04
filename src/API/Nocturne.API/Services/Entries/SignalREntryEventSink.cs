@@ -14,7 +14,8 @@ namespace Nocturne.API.Services.Entries;
 /// </summary>
 /// <remarks>
 /// Cache invalidation removes the per-tenant current-entry key and clears recent-entry cache patterns.
-/// V4 decomposition is enabled on all events so that SGV entries are projected into typed V4 tables.
+/// V4 decomposition is disabled here because <see cref="EntryService"/> writes directly to V4 tables
+/// via <see cref="Nocturne.Core.Contracts.V4.IEntryDecomposer"/> before side effects fire.
 /// <c>dataUpdate</c> broadcasts are suppressed on single-record updates to avoid duplicate client refreshes.
 /// </remarks>
 /// <seealso cref="IDataEventSink{T}"/>
@@ -50,7 +51,7 @@ public class SignalREntryEventSink : IDataEventSink<Entry>
     {
         CacheKeysToRemove = [CacheKeyBuilder.BuildCurrentEntriesKey(TenantCacheId)],
         CachePatternsToClear = [CacheKeyBuilder.BuildRecentEntriesPattern(TenantCacheId)],
-        DecomposeToV4 = true,
+        DecomposeToV4 = false,
         BroadcastDataUpdate = true,
     };
 
@@ -58,7 +59,7 @@ public class SignalREntryEventSink : IDataEventSink<Entry>
     {
         CacheKeysToRemove = [CacheKeyBuilder.BuildCurrentEntriesKey(TenantCacheId)],
         CachePatternsToClear = [CacheKeyBuilder.BuildRecentEntriesPattern(TenantCacheId)],
-        DecomposeToV4 = true,
+        DecomposeToV4 = false,
         BroadcastDataUpdate = false,
     };
 

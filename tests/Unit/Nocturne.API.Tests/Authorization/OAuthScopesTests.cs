@@ -23,6 +23,8 @@ public class OAuthScopesTests
     [InlineData("heartrate.readwrite", true)]
     [InlineData("stepcount.read", true)]
     [InlineData("stepcount.readwrite", true)]
+    [InlineData("food.read", true)]
+    [InlineData("food.readwrite", true)]
     [InlineData("health.readwrite", true)]
     [InlineData("*", true)]
     [InlineData("health.read", true)]
@@ -154,6 +156,32 @@ public class OAuthScopesTests
 
         Assert.True(OAuthScopes.SatisfiesScope(granted, "stepcount.read"));
         Assert.True(OAuthScopes.SatisfiesScope(granted, "stepcount.readwrite"));
+        Assert.False(OAuthScopes.SatisfiesScope(granted, "entries.read"));
+    }
+
+    [Fact]
+    public void Normalize_HealthRead_IncludesFood()
+    {
+        var result = OAuthScopes.Normalize(new[] { "health.read" });
+
+        Assert.Contains(OAuthScopes.FoodRead, result);
+    }
+
+    [Fact]
+    public void Normalize_HealthReadWrite_IncludesFood()
+    {
+        var result = OAuthScopes.Normalize(new[] { "health.readwrite" });
+
+        Assert.Contains(OAuthScopes.FoodReadWrite, result);
+    }
+
+    [Fact]
+    public void SatisfiesScope_FoodReadWriteImpliesRead()
+    {
+        var granted = new HashSet<string> { "food.readwrite" };
+
+        Assert.True(OAuthScopes.SatisfiesScope(granted, "food.read"));
+        Assert.True(OAuthScopes.SatisfiesScope(granted, "food.readwrite"));
         Assert.False(OAuthScopes.SatisfiesScope(granted, "entries.read"));
     }
 }

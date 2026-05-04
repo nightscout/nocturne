@@ -111,4 +111,37 @@ public interface ISensorGlucoseRepository : IV4Repository<SensorGlucose>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The latest reading timestamp, or <c>null</c> if no records exist.</returns>
     Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retrieve the timestamp of the oldest stored <see cref="SensorGlucose"/> reading, optionally scoped to a data source.
+    /// </summary>
+    /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The oldest reading timestamp, or <c>null</c> if no records exist.</returns>
+    Task<DateTime?> GetOldestTimestampAsync(string? source = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Count <see cref="SensorGlucose"/> records matching the given data source.
+    /// </summary>
+    /// <param name="source">Data source identifier (e.g., connector name).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Number of matching records.</returns>
+    Task<int> CountBySourceAsync(string source, CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete all <see cref="SensorGlucose"/> records matching the given data source.
+    /// </summary>
+    /// <param name="source">Data source identifier (e.g., connector name).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Number of records deleted.</returns>
+    Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete all records within the given time range.
+    /// </summary>
+    /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
+    /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Number of records deleted.</returns>
+    Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 }

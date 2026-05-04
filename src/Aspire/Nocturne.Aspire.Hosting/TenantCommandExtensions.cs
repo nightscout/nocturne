@@ -359,13 +359,10 @@ public static class TenantCommandExtensions
                 context.CancellationToken);
 
             var tenantId = tenant.GetProperty("id").GetGuid();
-            var apiSecret = tenant.TryGetProperty("apiSecret", out var secretProp)
-                ? secretProp.GetString()
-                : null;
 
             logger.LogInformation(
-                "Tenant '{Slug}' created successfully. API secret: {ApiSecret}",
-                slug, apiSecret);
+                "Tenant '{Slug}' created successfully.",
+                slug);
 
             // Import scoped snapshot if requested and matching slug exists
             if (initWithSnapshot && snapshotSlugs.Contains(slug))

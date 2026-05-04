@@ -5,15 +5,15 @@
   <ItemGroup>
     <!-- Aspire packages -->
     <!-- Aspire packages -->
-    <PackageVersion Include="Aspire.Hosting.Python" Version="13.2.3" />
+    <PackageVersion Include="Aspire.Hosting.Python" Version="13.2.4" />
     <PackageVersion Include="Aspire.Hosting.Testing" Version="13.2.0" />
-    <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.2.3" />
+    <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.2.4" />
     <PackageVersion Include="Aspire.Hosting.NodeJs" Version="9.5.2" />
-    <PackageVersion Include="Aspire.Hosting" Version="13.2.3" />
-    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.2.3" />
-    <PackageVersion Include="Aspire.Hosting.Docker" Version="13.2.3" />
-    <PackageVersion Include="Aspire.Hosting.Yarp" Version="13.2.3" />
-    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.3" />
+    <PackageVersion Include="Aspire.Hosting" Version="13.2.4" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.2.4" />
+    <PackageVersion Include="Aspire.Hosting.Docker" Version="13.2.4" />
+    <PackageVersion Include="Aspire.Hosting.Yarp" Version="13.2.4" />
+    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.2.4" />
     <PackageVersion Include="CommunityToolkit.Aspire.Hosting.NodeJS.Extensions" Version="9.9.0" />
     <PackageVersion Include="CommunityToolkit.Aspire.Hosting.Rust" Version="9.9.0" />
     <PackageVersion Include="Fido2.AspNet" Version="4.0.0" />
@@ -70,11 +70,11 @@
     <!-- Health Check packages -->
     <PackageVersion Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
     <!-- OpenTelemetry packages -->
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.14.0" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.14.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.14.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.14.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.14.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
     <!-- Testing packages -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
@@ -146,5 +146,8 @@
     <PackageVersion Include="H.NotifyIcon.WinUI" Version="2.2.0" />
     <PackageVersion Include="Microsoft.Graphics.Win2D" Version="1.3.0" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <!-- Packages with security patches -->
+    <PackageVersion Include="System.Drawing.Common" Version="4.7.2" />
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="9.0.15" />
   </ItemGroup>
 </Project>

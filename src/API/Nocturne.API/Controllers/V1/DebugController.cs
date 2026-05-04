@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Models;
-using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -8,17 +8,17 @@ namespace Nocturne.API.Controllers.V1;
 /// V1 debug controller for development and diagnostics.
 /// Provides basic database connectivity tests against the PostgreSQL data store.
 /// </summary>
-/// <seealso cref="IEntryRepository"/>
+/// <seealso cref="IEntryStore"/>
 [ApiController]
 [Route("api/v1/[controller]")]
 public class DebugController : ControllerBase
 {
-    private readonly IEntryRepository _entryRepository;
+    private readonly IEntryStore _store;
     private readonly ILogger<DebugController> _logger;
 
-    public DebugController(IEntryRepository entryRepository, ILogger<DebugController> logger)
+    public DebugController(IEntryStore store, ILogger<DebugController> logger)
     {
-        _entryRepository = entryRepository;
+        _store = store;
         _logger = logger;
     }
 
@@ -29,20 +29,15 @@ public class DebugController : ControllerBase
         {
             _logger.LogInformation("Testing PostgreSQL connection");
 
-            // Count documents
-            var count = await _entryRepository.CountEntriesAsync();
-            _logger.LogInformation("Entries table document count: {Count}", count);
-
-            // Try to get recent entries
-            var entries = await _entryRepository.GetEntriesAsync("sgv", 1, 0);
+            // Try to get recent entries as a connectivity check
+            var entries = await _store.QueryAsync(new EntryQuery { Type = "sgv", Count = 1 });
             var firstEntry = entries.FirstOrDefault();
 
             return Ok(
                 new
                 {
                     DatabaseType = "PostgreSQL",
-                    TableName = "entries",
-                    DocumentCount = count,
+                    HasEntries = firstEntry != null,
                     SampleEntry = firstEntry,
                     Status = "Success",
                 }
@@ -68,7 +63,7 @@ public class DebugController : ControllerBase
     {
         try
         {
-            var entries = await _entryRepository.GetEntriesAsync("sgv", 5, 0);
+            var entries = await _store.QueryAsync(new EntryQuery { Type = "sgv", Count = 5 });
             return Ok(entries);
         }
         catch (Exception ex)

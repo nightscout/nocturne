@@ -9,7 +9,7 @@
 {#if reliability && reliability.meetsReliabilityCriteria === false}
   <Badge
     variant="outline"
-    class="text-amber-600 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950/30 dark:border-amber-800 gap-1.5"
+    class="text-amber-600 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950/30 dark:border-amber-800 gap-1.5 h-auto whitespace-normal text-left py-1.5"
   >
     <Info class="size-3 shrink-0" />
     <span>

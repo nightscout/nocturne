@@ -193,6 +193,7 @@ public class ChartDataService : IChartDataService
                     Id = bolus.LegacyId ?? bolus.Id.ToString(),
                     Mills = bolus.Mills,
                     Insulin = bolus.Insulin,
+                    InsulinContext = bolus.InsulinContext,
                 }
             );
         }

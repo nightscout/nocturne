@@ -111,6 +111,25 @@ public class BasalScheduleRepository : IBasalScheduleRepository
     }
 
     /// <summary>
+    /// Gets the most recent basal schedule for a profile that was active at-or-before the given timestamp.
+    /// </summary>
+    /// <param name="profileName">The name of the profile.</param>
+    /// <param name="timestamp">The point-in-time to query against.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The matching basal schedule, or null if none found.</returns>
+    public async Task<BasalSchedule?> GetActiveAtAsync(
+        string profileName, DateTime timestamp, CancellationToken ct = default)
+    {
+        var entity = await _context.BasalSchedules
+            .AsNoTracking()
+            .Where(e => e.ProfileName == profileName && e.Timestamp <= timestamp)
+            .OrderByDescending(e => e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+
+        return entity is null ? null : BasalScheduleMapper.ToDomainModel(entity);
+    }
+
+    /// <summary>
     /// Creates a new basal schedule record.
     /// </summary>
     /// <param name="model">The basal schedule to create.</param>

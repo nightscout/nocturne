@@ -71,15 +71,25 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             VERSION="pr-${{ github.event.pull_request.number }}-${GITHUB_SHA::7}"
+            DOTNET_TAGS="$VERSION"
+            DOCKER_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${VERSION}"
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION=${GITHUB_REF#refs/tags/v}
+            DOTNET_TAGS="${VERSION};latest"
+            DOCKER_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${VERSION},${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:latest"
           elif [[ "${{ github.ref }}" == refs/heads/master ]] || [[ "${{ github.ref }}" == refs/heads/main ]]; then
             VERSION=latest
+            DOTNET_TAGS="$VERSION"
+            DOCKER_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${VERSION}"
           else
             SAFE_REF=$(echo "${GITHUB_REF_NAME}" | tr '/_' '-' | tr -cd '[:alnum:].-')
             VERSION="${SAFE_REF}-${GITHUB_SHA::7}"
+            DOTNET_TAGS="$VERSION"
+            DOCKER_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${VERSION}"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "dotnet_tags=$DOTNET_TAGS" >> $GITHUB_OUTPUT
+          echo "docker_tags=$DOCKER_TAGS" >> $GITHUB_OUTPUT
 
       - name: Restore .NET dependencies
         run: dotnet restore
@@ -97,7 +107,7 @@ jobs:
           MISSING=()
 
           # Spot-check a representative set of generated remote files
-          for f in passkeys patientRecords chartDatas profiles treatments alerts; do
+          for f in passkeys patientRecords chartDatas profiles alerts; do
             if [ ! -f "$GENERATED_DIR/${f}.generated.remote.ts" ]; then
               MISSING+=("$f")
             fi
@@ -126,14 +136,19 @@ jobs:
             -p:PublishProfile=DefaultContainer \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-api \
-            -p:ContainerImageTag=${{ steps.version.outputs.version }}
+            "-p:ContainerImageTags=${{ steps.version.outputs.dotnet_tags }}"
 
       - name: Build and push Nocturne.Web container
         if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
         run: |
+          IFS=',' read -ra TAGS <<< "${{ steps.version.outputs.docker_tags }}"
+          TAG_ARGS=""
+          for t in "${TAGS[@]}"; do
+            TAG_ARGS+=" --tag ${t}"
+          done
           docker buildx build \
             --platform linux/amd64 \
-            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${{ steps.version.outputs.version }} \
+            ${TAG_ARGS} \
             --file Dockerfile.web \
             --push \
             .
@@ -285,75 +300,6 @@ jobs:
               });
             }
 
-  publish-compose:
-    needs: [build-and-push]
-    runs-on: ubuntu-latest
-    if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && github.event_name != 'pull_request'
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Install Aspire CLI
-        run: dotnet tool install --global aspire.cli
-
-      - name: Restore .NET dependencies
-        run: dotnet restore
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "pnpm"
-          cache-dependency-path: src/Web/pnpm-lock.yaml
-
-      - name: Install web dependencies
-        working-directory: src/Web
-        run: pnpm install --frozen-lockfile
-
-      - name: Build bridge package
-        working-directory: src/Web/packages/bridge
-        run: pnpm run build
-
-      - name: Build bot package
-        working-directory: src/Web/packages/bot
-        run: pnpm run build
-
-      # Only the AppHost project is needed for `aspire publish --no-build`.
-      # Building the whole solution on Ubuntu fails because it includes
-      # Windows-only projects (Desktop.Tray, Widget.Windows11) whose SDK
-      # build tools can't run on Linux.
-      - name: Build Aspire AppHost
-        run: dotnet build -c Debug src/Aspire/Nocturne.Aspire.Host/Nocturne.Aspire.Host.csproj
-
-      - name: Generate docker-compose via aspire publish
-        working-directory: src/Aspire/Nocturne.Aspire.Host
-        run: aspire publish --project . --publisher docker-compose --output-path aspire-output --no-build --non-interactive
-
-      - name: Commit updated compose file
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f src/Aspire/Nocturne.Aspire.Host/aspire-output/docker-compose.yaml
-          if git diff --cached --quiet; then
-            echo "No changes to docker-compose.yaml"
-          else
-            git commit -m "chore: regenerate aspire-output compose [skip ci]"
-            git push
-          fi
-
   publish-glucose-chart:
     needs: [build-and-push]
     runs-on: ubuntu-latest
@@ -431,4 +377,67 @@ jobs:
         working-directory: src/Web/packages/cms
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  create-release:
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install Aspire CLI
+        run: dotnet tool install --global aspire.cli
+
+      - name: Restore .NET dependencies
+        run: dotnet restore
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+          cache-dependency-path: src/Web/pnpm-lock.yaml
+
+      - name: Install web dependencies
+        working-directory: src/Web
+        run: pnpm install --frozen-lockfile
+
+      - name: Build bridge package
+        working-directory: src/Web/packages/bridge
+        run: pnpm run build
+
+      - name: Build bot package
+        working-directory: src/Web/packages/bot
+        run: pnpm run build
+
+      - name: Build Aspire AppHost
+        run: dotnet build -c Debug src/Aspire/Nocturne.Aspire.Host/Nocturne.Aspire.Host.csproj
+
+      - name: Generate production compose bundle
+        run: dotnet run scripts/publish-release.cs ./release-output
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          gh release create "$VERSION" \
+            --generate-notes \
+            ./release-output/docker-compose.yaml \
+            ./release-output/.env.example \
+            ./release-output/00-init.sh
 

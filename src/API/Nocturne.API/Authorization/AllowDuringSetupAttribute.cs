@@ -13,7 +13,6 @@ namespace Nocturne.API.Authorization;
 /// </para>
 /// </summary>
 /// <seealso cref="Middleware.TenantSetupMiddleware"/>
-/// <seealso cref="Middleware.RecoveryModeMiddleware"/>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
 public sealed class AllowDuringSetupAttribute : Attribute
 {

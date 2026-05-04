@@ -2,6 +2,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -73,7 +74,12 @@ public class Program
         });
 
         // Register V4 repositories needed for demo data
+        builder.Services.AddScoped<ISensorGlucoseRepository, SensorGlucoseRepository>();
         builder.Services.AddScoped<IPatientInsulinRepository, PatientInsulinRepository>();
+
+        // Register audit context for V4 repositories (demo service uses system context)
+        builder.Services.AddScoped<IAuditContext>(_ =>
+            SystemAuditContext.ForService("service:demo-generator"));
 
         // Register demo data entry/treatment services
         builder.Services.AddScoped<IDemoEntryService, DemoEntryService>();
@@ -127,13 +133,12 @@ public class Program
             async (IServiceProvider sp, CancellationToken ct) =>
             {
                 using var scope = sp.CreateScope();
-                var entryRepository =
-                    scope.ServiceProvider.GetRequiredService<IEntryRepository>();
+                var sensorGlucoseRepository =
+                    scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
 
-                // Count demo entries using find query
-                var entriesCount = await entryRepository.CountEntriesAsync(
-                    findQuery: "{\"data_source\":\"" + DataSources.DemoService + "\"}",
-                    cancellationToken: ct
+                var entriesCount = await sensorGlucoseRepository.CountBySourceAsync(
+                    DataSources.DemoService,
+                    ct
                 );
 
                 return Results.Ok(
@@ -175,16 +180,10 @@ public class Program
             async (IServiceProvider sp, CancellationToken ct) =>
             {
                 using var scope = sp.CreateScope();
-                var entryRepository =
-                    scope.ServiceProvider.GetRequiredService<IEntryRepository>();
-                var treatmentRepository =
-                    scope.ServiceProvider.GetRequiredService<ITreatmentRepository>();
+                var sensorGlucoseRepository =
+                    scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
 
-                var entriesDeleted = await entryRepository.DeleteEntriesByDataSourceAsync(
-                    DataSources.DemoService,
-                    ct
-                );
-                var treatmentsDeleted = await treatmentRepository.DeleteTreatmentsByDataSourceAsync(
+                var entriesDeleted = await sensorGlucoseRepository.DeleteBySourceAsync(
                     DataSources.DemoService,
                     ct
                 );
@@ -194,7 +193,6 @@ public class Program
                     {
                         message = "Demo data cleared",
                         entriesDeleted,
-                        treatmentsDeleted,
                         timestamp = DateTime.UtcNow,
                     }
                 );

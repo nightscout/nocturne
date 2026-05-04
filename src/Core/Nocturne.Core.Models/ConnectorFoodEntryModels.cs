@@ -94,13 +94,6 @@ public class ConnectorFoodEntry
     [JsonPropertyName("status")]
     public ConnectorFoodEntryStatus Status { get; set; } = ConnectorFoodEntryStatus.Pending;
 
-    /// <summary>
-    /// ID of the <see cref="Treatment"/> this entry was matched to.
-    /// Populated when <see cref="Status"/> is <see cref="ConnectorFoodEntryStatus.Matched"/>.
-    /// </summary>
-    [JsonPropertyName("matchedTreatmentId")]
-    public Guid? MatchedTreatmentId { get; set; }
-
     /// <summary>When the entry was matched or marked as standalone/deleted</summary>
     [JsonPropertyName("resolvedAt")]
     public DateTimeOffset? ResolvedAt { get; set; }

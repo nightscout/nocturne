@@ -11,6 +11,12 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 export const markSetupComplete = command(z.void(), async () => {
   const event = getRequestEvent();
 
+  try {
+    await event.locals.apiClient.passkey.completeOnboarding();
+  } catch {
+    // Non-fatal: cookie still works for this browser session
+  }
+
   event.cookies.set(COOKIE_NAME, "true", {
     path: "/",
     httpOnly: true,

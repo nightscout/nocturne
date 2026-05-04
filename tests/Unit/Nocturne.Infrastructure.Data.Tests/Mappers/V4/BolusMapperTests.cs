@@ -410,4 +410,147 @@ public class BolusMapperTests
         roundTripped.CorrelationId.Should().Be(original.CorrelationId);
         roundTripped.LegacyId.Should().Be(original.LegacyId);
     }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToEntity_WithInsulinContext_SerializesContextToJson()
+    {
+        var insulinId = Guid.NewGuid();
+        var model = new Bolus
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Insulin = 5.0,
+            InsulinContext = new TreatmentInsulinContext
+            {
+                PatientInsulinId = insulinId,
+                InsulinName = "Humalog",
+                Dia = 4.0,
+                Peak = 75,
+                Curve = "rapid-acting",
+                Concentration = 100,
+            },
+        };
+
+        var entity = BolusMapper.ToEntity(model);
+
+        entity.InsulinContextJson.Should().NotBeNullOrEmpty();
+        entity.InsulinContextJson.Should().Contain("Humalog");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToDomainModel_WithInsulinContextJson_DeserializesContext()
+    {
+        var insulinId = Guid.NewGuid();
+        var context = new TreatmentInsulinContext
+        {
+            PatientInsulinId = insulinId,
+            InsulinName = "Fiasp",
+            Dia = 3.5,
+            Peak = 55,
+            Curve = "ultra-rapid",
+            Concentration = 100,
+        };
+
+        var entity = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Insulin = 3.0,
+            InsulinContextJson = System.Text.Json.JsonSerializer.Serialize(context),
+        };
+
+        var model = BolusMapper.ToDomainModel(entity);
+
+        model.InsulinContext.Should().NotBeNull();
+        model.InsulinContext!.PatientInsulinId.Should().Be(insulinId);
+        model.InsulinContext.InsulinName.Should().Be("Fiasp");
+        model.InsulinContext.Dia.Should().Be(3.5);
+        model.InsulinContext.Peak.Should().Be(55);
+        model.InsulinContext.Curve.Should().Be("ultra-rapid");
+        model.InsulinContext.Concentration.Should().Be(100);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RoundTrip_WithNullInsulinContext_StaysNull()
+    {
+        var model = new Bolus
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Insulin = 1.0,
+        };
+
+        var entity = BolusMapper.ToEntity(model);
+        entity.InsulinContextJson.Should().BeNull();
+
+        var roundTripped = BolusMapper.ToDomainModel(entity);
+        roundTripped.InsulinContext.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RoundTrip_WithInsulinContext_PreservesAllFields()
+    {
+        var insulinId = Guid.NewGuid();
+        var original = new Bolus
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Insulin = 5.0,
+            InsulinType = "Humalog",
+            InsulinContext = new TreatmentInsulinContext
+            {
+                PatientInsulinId = insulinId,
+                InsulinName = "Humalog",
+                Dia = 4.0,
+                Peak = 75,
+                Curve = "rapid-acting",
+                Concentration = 100,
+            },
+        };
+
+        var entity = BolusMapper.ToEntity(original);
+        var roundTripped = BolusMapper.ToDomainModel(entity);
+
+        roundTripped.InsulinContext.Should().NotBeNull();
+        roundTripped.InsulinContext!.PatientInsulinId.Should().Be(insulinId);
+        roundTripped.InsulinContext.InsulinName.Should().Be("Humalog");
+        roundTripped.InsulinContext.Dia.Should().Be(4.0);
+        roundTripped.InsulinContext.Peak.Should().Be(75);
+        roundTripped.InsulinContext.Curve.Should().Be("rapid-acting");
+        roundTripped.InsulinContext.Concentration.Should().Be(100);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void UpdateEntity_WithInsulinContext_SerializesContext()
+    {
+        var entity = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Insulin = 1.0,
+            InsulinContextJson = null,
+        };
+
+        var model = new Bolus
+        {
+            Insulin = 5.0,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            InsulinContext = new TreatmentInsulinContext
+            {
+                PatientInsulinId = Guid.NewGuid(),
+                InsulinName = "Lantus",
+                Dia = 24.0,
+                Peak = 600,
+                Curve = "ultra-long",
+                Concentration = 100,
+            },
+        };
+
+        BolusMapper.UpdateEntity(entity, model);
+
+        entity.InsulinContextJson.Should().NotBeNullOrEmpty();
+        entity.InsulinContextJson.Should().Contain("Lantus");
+    }
 }

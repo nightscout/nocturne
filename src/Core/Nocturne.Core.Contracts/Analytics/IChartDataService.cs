@@ -12,7 +12,6 @@ namespace Nocturne.Core.Contracts.Analytics;
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="ITreatmentService"/>
 /// <seealso cref="IIobService"/>
-/// <seealso cref="IProfileService"/>
 public interface IChartDataService
 {
     /// <summary>

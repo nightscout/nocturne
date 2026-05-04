@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Cache.Abstractions;
@@ -45,8 +45,6 @@ public interface ICachedIobService
     /// </summary>
     Task<IobResult> CalculateTotalAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null,
         CancellationToken cancellationToken = default
@@ -56,15 +54,6 @@ public interface ICachedIobService
     /// Invalidate IOB cache for specific user
     /// </summary>
     Task InvalidateIobCacheAsync(string userId, CancellationToken cancellationToken = default);
-
-    // Forward synchronous methods to underlying service
-    IobResult CalculateTotal(
-        List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
-        IProfileService? profile = null,
-        long? time = null,
-        string? specProfile = null
-    );
 }
 
 /// <summary>
@@ -93,20 +82,18 @@ public class CachedIobService : ICachedIobService
     /// <inheritdoc />
     public async Task<IobResult> CalculateTotalAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
-        IProfileService? profile = null,
         long? time = null,
         string? specProfile = null,
         CancellationToken cancellationToken = default
     )
     {
         var timestamp = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var userId = ExtractUserId(treatments, deviceStatus);
+        var userId = ExtractUserId(treatments);
 
         if (string.IsNullOrEmpty(userId))
         {
             // No user ID available, skip caching
-            return _iobService.CalculateTotal(treatments, deviceStatus, profile, time, specProfile);
+            return await _iobService.CalculateTotalAsync(treatments, time, specProfile, ct: cancellationToken);
         }
 
         var cacheKey = CacheKeyBuilder.BuildIobCalculationKey(userId, timestamp);
@@ -114,27 +101,10 @@ public class CachedIobService : ICachedIobService
 
         return await _cacheService.GetOrSetAsync(
             cacheKey,
-            () =>
-                Task.FromResult(
-                    _iobService.CalculateTotal(treatments, deviceStatus, profile, time, specProfile)
-                ),
+            () => _iobService.CalculateTotalAsync(treatments, time, specProfile, ct: cancellationToken),
             expiration,
             cancellationToken
         );
-    }
-
-    /// <inheritdoc />
-    public IobResult CalculateTotal(
-        List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus,
-        IProfileService? profile = null,
-        long? time = null,
-        string? specProfile = null
-    )
-    {
-        return CalculateTotalAsync(treatments, deviceStatus, profile, time, specProfile)
-            .GetAwaiter()
-            .GetResult();
     }
 
     /// <inheritdoc />
@@ -156,39 +126,28 @@ public class CachedIobService : ICachedIobService
     }
 
     /// <summary>
-    /// Extracts user ID from treatments or device status for cache key generation
+    /// Extracts user ID from treatments for cache key generation.
     /// </summary>
-    private static string? ExtractUserId(
-        List<Treatment> treatments,
-        List<DeviceStatus> deviceStatus
-    )
+    private static string? ExtractUserId(List<Treatment> treatments)
     {
-        // Try to extract from treatments first
         var userIdFromTreatment = treatments?.FirstOrDefault()?.EnteredBy;
         if (!string.IsNullOrEmpty(userIdFromTreatment))
         {
             return userIdFromTreatment;
         }
 
-        // Try to extract from device status
-        var userIdFromDevice = deviceStatus?.FirstOrDefault()?.Device;
-        if (!string.IsNullOrEmpty(userIdFromDevice))
-        {
-            return userIdFromDevice;
-        }
-
-        // Could not determine user ID
         return null;
     }
 }
 
 /// <summary>
-/// Cached wrapper for Profile calculations implementing Phase 3 caching strategy
+/// Cached wrapper for Profile calculations implementing Phase 3 caching strategy.
+/// Delegates to the V4 resolver interfaces for actual value resolution.
 /// </summary>
 public interface ICachedProfileService
 {
     /// <summary>
-    /// Get profile values at timestamp with caching
+    /// Get profile values at timestamp with caching.
     /// </summary>
     Task<ProfileCalculationResult> GetProfileCalculationsAsync(
         string profileId,
@@ -198,22 +157,36 @@ public interface ICachedProfileService
     );
 
     /// <summary>
-    /// Invalidate profile calculation cache
+    /// Invalidate profile calculation cache.
     /// </summary>
     Task InvalidateProfileCalculationCacheAsync(
         string profileId,
         CancellationToken cancellationToken = default
     );
 
-    // Forward other methods to underlying service
-    double GetBasalRate(long time, string? specProfile = null);
-    double GetSensitivity(long time, string? specProfile = null);
-    double GetCarbRatio(long time, string? specProfile = null);
-    double GetDIA(long time, string? specProfile = null);
+    /// <summary>
+    /// Get scheduled basal rate (U/hr) at a given time.
+    /// </summary>
+    Task<double> GetBasalRateAsync(long time, string? specProfile = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get insulin sensitivity factor (mg/dL per U) at a given time.
+    /// </summary>
+    Task<double> GetSensitivityAsync(long time, string? specProfile = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get carb ratio (g/U) at a given time.
+    /// </summary>
+    Task<double> GetCarbRatioAsync(long time, string? specProfile = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get Duration of Insulin Action in hours at a given time.
+    /// </summary>
+    Task<double> GetDIAAsync(long time, string? specProfile = null, CancellationToken ct = default);
 }
 
 /// <summary>
-/// Result object for cached profile calculations at a specific timestamp
+/// Result object for cached profile calculations at a specific timestamp.
 /// </summary>
 public class ProfileCalculationResult
 {
@@ -229,23 +202,39 @@ public class ProfileCalculationResult
 }
 
 /// <summary>
-/// Cached profile service implementation with in-memory caching for expensive calculations
+/// Cached profile service implementation that delegates to V4 resolver interfaces
+/// and caches the results.
 /// </summary>
 public class CachedProfileService : ICachedProfileService
 {
-    private readonly IProfileService _profileService;
+    private readonly IBasalRateResolver _basalRateResolver;
+    private readonly ISensitivityResolver _sensitivityResolver;
+    private readonly ICarbRatioResolver _carbRatioResolver;
+    private readonly ITherapySettingsResolver _therapySettingsResolver;
+    private readonly ITargetRangeResolver _targetRangeResolver;
+    private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ICacheService _cacheService;
     private readonly ILogger<CachedProfileService> _logger;
     private readonly CalculationCacheConfiguration _config;
 
     public CachedProfileService(
-        IProfileService profileService,
+        IBasalRateResolver basalRateResolver,
+        ISensitivityResolver sensitivityResolver,
+        ICarbRatioResolver carbRatioResolver,
+        ITherapySettingsResolver therapySettingsResolver,
+        ITargetRangeResolver targetRangeResolver,
+        IActiveProfileResolver activeProfileResolver,
         ICacheService cacheService,
         IOptions<CalculationCacheConfiguration> config,
         ILogger<CachedProfileService> logger
     )
     {
-        _profileService = profileService;
+        _basalRateResolver = basalRateResolver;
+        _sensitivityResolver = sensitivityResolver;
+        _carbRatioResolver = carbRatioResolver;
+        _therapySettingsResolver = therapySettingsResolver;
+        _targetRangeResolver = targetRangeResolver;
+        _activeProfileResolver = activeProfileResolver;
         _cacheService = cacheService;
         _config = config.Value;
         _logger = logger;
@@ -264,25 +253,19 @@ public class CachedProfileService : ICachedProfileService
 
         return await _cacheService.GetOrSetAsync(
             cacheKey,
-            () =>
-                Task.FromResult(
-                    new ProfileCalculationResult
-                    {
-                        BasalRate = _profileService.GetBasalRate(timestamp, specProfile),
-                        Sensitivity = _profileService.GetSensitivity(timestamp, specProfile),
-                        CarbRatio = _profileService.GetCarbRatio(timestamp, specProfile),
-                        CarbAbsorptionRate = _profileService.GetCarbAbsorptionRate(
-                            timestamp,
-                            specProfile
-                        ),
-                        DIA = _profileService.GetDIA(timestamp, specProfile),
-                        LowBGTarget = _profileService.GetLowBGTarget(timestamp, specProfile),
-                        HighBGTarget = _profileService.GetHighBGTarget(timestamp, specProfile),
-                        Timestamp = timestamp,
-                        ProfileName =
-                            specProfile ?? _profileService.GetActiveProfileName(timestamp),
-                    }
-                ),
+            async () =>
+                new ProfileCalculationResult
+                {
+                    BasalRate = await _basalRateResolver.GetBasalRateAsync(timestamp, specProfile, cancellationToken),
+                    Sensitivity = await _sensitivityResolver.GetSensitivityAsync(timestamp, specProfile, cancellationToken),
+                    CarbRatio = await _carbRatioResolver.GetCarbRatioAsync(timestamp, specProfile, cancellationToken),
+                    CarbAbsorptionRate = await _therapySettingsResolver.GetCarbAbsorptionRateAsync(timestamp, specProfile, cancellationToken),
+                    DIA = await _therapySettingsResolver.GetDIAAsync(timestamp, specProfile, cancellationToken),
+                    LowBGTarget = await _targetRangeResolver.GetLowBGTargetAsync(timestamp, specProfile, cancellationToken),
+                    HighBGTarget = await _targetRangeResolver.GetHighBGTargetAsync(timestamp, specProfile, cancellationToken),
+                    Timestamp = timestamp,
+                    ProfileName = specProfile ?? await _activeProfileResolver.GetActiveProfileNameAsync(timestamp, cancellationToken),
+                },
             expiration,
             cancellationToken
         );
@@ -313,20 +296,19 @@ public class CachedProfileService : ICachedProfileService
         }
     }
 
-    // Forward methods to underlying service without caching
     /// <inheritdoc />
-    public double GetBasalRate(long time, string? specProfile = null) =>
-        _profileService.GetBasalRate(time, specProfile);
+    public Task<double> GetBasalRateAsync(long time, string? specProfile = null, CancellationToken ct = default) =>
+        _basalRateResolver.GetBasalRateAsync(time, specProfile, ct);
 
     /// <inheritdoc />
-    public double GetSensitivity(long time, string? specProfile = null) =>
-        _profileService.GetSensitivity(time, specProfile);
+    public Task<double> GetSensitivityAsync(long time, string? specProfile = null, CancellationToken ct = default) =>
+        _sensitivityResolver.GetSensitivityAsync(time, specProfile, ct);
 
     /// <inheritdoc />
-    public double GetCarbRatio(long time, string? specProfile = null) =>
-        _profileService.GetCarbRatio(time, specProfile);
+    public Task<double> GetCarbRatioAsync(long time, string? specProfile = null, CancellationToken ct = default) =>
+        _carbRatioResolver.GetCarbRatioAsync(time, specProfile, ct);
 
     /// <inheritdoc />
-    public double GetDIA(long time, string? specProfile = null) =>
-        _profileService.GetDIA(time, specProfile);
+    public Task<double> GetDIAAsync(long time, string? specProfile = null, CancellationToken ct = default) =>
+        _therapySettingsResolver.GetDIAAsync(time, specProfile, ct);
 }

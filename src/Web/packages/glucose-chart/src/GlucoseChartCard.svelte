@@ -70,6 +70,8 @@
   const activitySpans = $derived(data.activitySpans);
   const tempBasalSpans = $derived(data.tempBasalSpans);
   const basalDeliverySpans = $derived(data.basalDeliverySpans);
+  const heartRateSeries = $derived(data.heartRateSeries);
+  const stepSeries = $derived(data.stepSeries);
 
   const maxBasalRate = $derived(data.maxBasalRate > 0 ? data.maxBasalRate : 2.5);
   const maxIob = $derived(data.maxIob > 0 ? data.maxIob : 3);
@@ -409,6 +411,8 @@
             {lowThreshold}
             contextWidth={context.width}
             onPointClick={handleGlucosePointClick}
+            {heartRateSeries}
+            {stepSeries}
           />
           <Axis
             placement="bottom"

@@ -1,0 +1,95 @@
+---
+title: "V1 Treatment Decomposition"
+---
+flowchart LR
+    subgraph legacy["V1 Monolithic Treatment"]
+        direction TB
+        et["eventType (string)<br/>determines meaning of<br/>all other fields"]
+
+        subgraph fields["~100 polymorphic fields"]
+            direction TB
+            ins["insulin, programmed<br/>delivered, unabsorbed<br/>insulinType, automatic"]
+            carb["carbs, protein, fat<br/>foodType, carbTime<br/>absorptionTime"]
+            bg["glucose, glucoseType<br/>mgdl, mmol, units"]
+            calc["bloodGlucoseInput, insulinOnBoard<br/>insulinRecommendation, CR<br/>calculationType, splitNow/Ext"]
+            tb["rate, duration<br/>absolute, percent"]
+            notes["notes (freeform text)"]
+            device["enteredBy, syncIdentifier"]
+            state["profile, profileJson<br/>targetTop, targetBottom<br/>reason, durationType"]
+        end
+    end
+
+    ins --> Bolus
+    carb --> CarbIntake
+    bg --> BGCheck
+    calc --> BolusCalc
+    tb --> TempBasal
+    notes --> Note
+    device --> DeviceEvent
+    state --> StateSpan
+
+    subgraph v4["V4 Decomposed Models"]
+        direction TB
+
+        Bolus["<b>Bolus</b><br/>insulin, programmed, delivered<br/>bolusType, kind, automatic<br/>bolusCalculationId (FK)"]
+
+        CarbIntake["<b>CarbIntake</b><br/>carbs, carbTime<br/>absorptionTime"]
+
+        BGCheck["<b>BGCheck</b><br/>glucose, glucoseType<br/>units, mgdl, mmol"]
+
+        BolusCalc["<b>BolusCalculation</b><br/>bgInput, carbInput, IOB<br/>recommendation, carbRatio<br/>calculationType"]
+
+        TempBasal["<b>TempBasal</b><br/>start/endTimestamp<br/>rate, scheduledRate, origin<br/>(span-based, not IV4Record)"]
+
+        Note["<b>Note</b><br/>text, eventType<br/>isAnnouncement"]
+
+        DeviceEvent["<b>DeviceEvent</b><br/>eventType (enum)<br/>SiteChange, SensorStart<br/>PodChange, etc."]
+
+        StateSpan["<b>StateSpan</b><br/>Profile Switch<br/>Temporary Override<br/>Temporary Target"]
+    end
+
+    subgraph eventmap["EventType Routing"]
+        direction TB
+
+        m1["<b>Meal Bolus / Snack Bolus</b><br/>→ Bolus + CarbIntake"]
+        m2["<b>Correction Bolus</b><br/>→ Bolus"]
+        m3["<b>Carb Correction</b><br/>→ CarbIntake"]
+        m4["<b>BG Check</b><br/>→ BGCheck"]
+        m5["<b>Bolus Wizard</b><br/>→ BolusCalculation + Bolus"]
+        m6["<b>Note / Announcement</b><br/>→ Note"]
+        m7["<b>Site Change, Sensor Start, ...</b><br/>→ DeviceEvent"]
+        m8["<b>Profile Switch, Temp Override, ...</b><br/>→ StateSpan"]
+        m9["<b>Override rule:</b><br/>insulin > 0 AND carbs > 0<br/>→ always Bolus + CarbIntake<br/>regardless of eventType"]
+        m10["<b>Notes rule:</b><br/>non-empty notes field<br/>→ always produces a Note<br/>alongside other records"]
+    end
+
+    subgraph reasons["Why Decompose?"]
+        direction TB
+
+        r1["<b>IOB vs COB are separate calculations</b><br/>Insulin on board depends only on<br/>boluses and pharmacokinetics.<br/>Carbs on board depends only on<br/>intake and absorption time.<br/>Bundling them conflates two<br/>independent calculation domains."]
+
+        r2["<b>Measurements are not actions</b><br/>A finger-stick BG check is an<br/>observation, not a treatment.<br/>Grouping it with insulin delivery<br/>corrupts 'show me all treatments'<br/>queries with passive readings."]
+
+        r3["<b>Decisions vs delivery</b><br/>A bolus calculator captures why<br/>a dose was chosen. The bolus<br/>itself captures what was delivered.<br/>Not every calculation produces a<br/>bolus; not every bolus comes from<br/>a calculator. Separating them<br/>enables decision-chain auditing."]
+
+        r4["<b>Point events vs time spans</b><br/>Boluses are instantaneous.<br/>Temp basals and profile switches<br/>are active for a duration.<br/>They need start/end timestamps<br/>and state-tracking infrastructure<br/>that point-event models lack."]
+
+        r5["<b>Freeform text vs structured data</b><br/>Notes are annotations on the<br/>timeline. Any record can carry<br/>notes (bolus, device event, etc.)<br/>Separating them avoids bloating<br/>every model with a notes field<br/>and lets notes exist standalone."]
+
+        r6["<b>Device lifecycle vs clinical events</b><br/>Site changes, sensor starts,<br/>and pod changes are hardware<br/>maintenance, not clinical therapy.<br/>A strongly-typed enum replaces<br/>fragile string matching and<br/>enables 'last site change?' queries."]
+
+        r7["<b>Polymorphic blob prevents type safety</b><br/>One class with ~100 nullable fields<br/>means any field can appear on any<br/>record. Decomposed models enforce<br/>which fields belong where at the<br/>schema level, not by convention."]
+
+        r8["<b>APS algorithm vs manual actions</b><br/>SMBs from AAPS and auto-boluses<br/>from Loop are fundamentally<br/>different from manual corrections.<br/>Bolus.Kind (Algorithm vs Manual)<br/>and Automatic flag distinguish<br/>them for safety analysis."]
+    end
+
+    Bolus -.- r1
+    CarbIntake -.- r1
+    BGCheck -.- r2
+    BolusCalc -.- r3
+    TempBasal -.- r4
+    StateSpan -.- r4
+    Note -.- r5
+    DeviceEvent -.- r6
+    v4 -.- r7
+    Bolus -.- r8

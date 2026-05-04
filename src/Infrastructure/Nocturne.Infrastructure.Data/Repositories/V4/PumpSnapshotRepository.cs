@@ -75,6 +75,28 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
         return entity is null ? null : PumpSnapshotMapper.ToDomainModel(entity);
     }
 
+    /// <inheritdoc />
+    public async Task<PumpSnapshot?> GetLatestBeforeAsync(DateTime timestamp, CancellationToken ct = default)
+    {
+        var entity = await _context.PumpSnapshots
+            .AsNoTracking()
+            .Where(e => e.Timestamp < timestamp)
+            .OrderByDescending(e => e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : PumpSnapshotMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<PumpSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default)
+    {
+        var query = _context.PumpSnapshots.AsNoTracking();
+        if (asOf.HasValue) query = query.Where(e => e.Timestamp <= asOf.Value);
+        var entity = await query
+            .OrderByDescending(e => e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : PumpSnapshotMapper.ToDomainModel(entity);
+    }
+
     /// <summary>
     /// Creates a new pump snapshot record.
     /// </summary>
@@ -116,6 +138,26 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
             ?? throw new KeyNotFoundException($"PumpSnapshot {id} not found");
         _context.PumpSnapshots.Remove(entity);
         await _context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Gets pump snapshots by correlation IDs.
+    /// </summary>
+    /// <param name="correlationIds">The correlation IDs to match.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Matching pump snapshots.</returns>
+    public async Task<IEnumerable<PumpSnapshot>> GetByCorrelationIdsAsync(
+        IEnumerable<Guid> correlationIds, CancellationToken ct = default)
+    {
+        var ids = correlationIds.ToList();
+        if (ids.Count == 0) return [];
+
+        var entities = await _context.PumpSnapshots
+            .AsNoTracking()
+            .Where(e => e.CorrelationId != null && ids.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+
+        return entities.Select(PumpSnapshotMapper.ToDomainModel);
     }
 
     /// <summary>

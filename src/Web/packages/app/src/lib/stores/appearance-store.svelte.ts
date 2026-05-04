@@ -21,8 +21,8 @@ import { WidgetId } from "../api/generated/nocturne-api-client";
 // Type Definitions
 // ==========================================
 
-/** Color theme - visual styling (Nocturne custom vs Trio iOS app) */
-export type ColorTheme = "nocturne" | "trio";
+/** Color theme - visual styling */
+export type ColorTheme = "nocturne" | "trio" | "aaps" | "classic";
 
 /** Color scheme - light/dark mode preference */
 export type ColorScheme = "system" | "light" | "dark";
@@ -89,6 +89,9 @@ export const dashboardTopWidgets = new PersistedState<WidgetId[]>(
 // Color Theme Management (Nocturne/Trio)
 // ==========================================
 
+/** All theme CSS classes that can be applied to the document root */
+const THEME_CLASSES = ["trio-theme", "aaps-theme", "classic-theme"] as const;
+
 /**
  * Apply color theme class to document
  */
@@ -96,10 +99,17 @@ function applyColorTheme(theme: ColorTheme): void {
   if (!browser) return;
 
   const root = document.documentElement;
-  if (theme === "trio") {
-    root.classList.add("trio-theme");
+  root.classList.remove(...THEME_CLASSES);
+
+  if (theme === "trio") root.classList.add("trio-theme");
+  else if (theme === "aaps") root.classList.add("aaps-theme");
+  else if (theme === "classic") root.classList.add("classic-theme");
+
+  // Classic theme uses minimal border radius (2015 utilitarian aesthetic)
+  if (theme === "classic") {
+    root.style.setProperty("--radius", "0.25rem");
   } else {
-    root.classList.remove("trio-theme");
+    root.style.removeProperty("--radius");
   }
 }
 
@@ -117,13 +127,6 @@ export function setColorTheme(theme: ColorTheme): void {
  */
 export function getColorTheme(): ColorTheme {
   return colorTheme.current;
-}
-
-/**
- * Toggle between Nocturne and Trio themes
- */
-export function toggleColorTheme(): void {
-  setColorTheme(colorTheme.current === "nocturne" ? "trio" : "nocturne");
 }
 
 /**

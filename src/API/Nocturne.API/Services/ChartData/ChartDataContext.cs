@@ -63,8 +63,6 @@ public sealed record ChartDataContext
     public IReadOnlyList<BGCheck> BgCheckList { get; init; } = [];
     public IReadOnlyList<DeviceEvent> DeviceEventList { get; init; } = [];
     public IReadOnlyList<TempBasal> TempBasalList { get; init; } = [];
-    public IReadOnlyList<DeviceStatus> DeviceStatusList { get; init; } = [];
-
     /// <summary>State spans keyed by category, populated from a batched repository query.</summary>
     public IReadOnlyDictionary<StateSpanCategory, IEnumerable<StateSpan>> StateSpans { get; init; }
         = new Dictionary<StateSpanCategory, IEnumerable<StateSpan>>();
@@ -72,6 +70,8 @@ public sealed record ChartDataContext
     public IReadOnlyList<SystemEvent> SystemEvents { get; init; } = [];
     public IReadOnlyList<TrackerDefinitionEntity> TrackerDefinitions { get; init; } = [];
     public IReadOnlyList<TrackerInstanceEntity> TrackerInstances { get; init; } = [];
+    public IReadOnlyList<HeartRate> HeartRateList { get; init; } = [];
+    public IReadOnlyList<StepCount> StepCountList { get; init; } = [];
 
     // === Intermediate computed data (set by TreatmentAdapterStage) ===
 
@@ -110,4 +110,9 @@ public sealed record ChartDataContext
     public List<ChartStateSpanDto> ActivitySpans { get; init; } = [];
     public List<ChartStateSpanDto> TempBasalSpans { get; init; } = [];
     public List<BasalDeliverySpanDto> BasalDeliverySpans { get; init; } = [];
+
+    // === Health series (set by DtoMappingStage) ===
+
+    public List<HeartRatePointDto> HeartRateSeries { get; init; } = [];
+    public List<StepBubbleDto> StepSeries { get; init; } = [];
 }

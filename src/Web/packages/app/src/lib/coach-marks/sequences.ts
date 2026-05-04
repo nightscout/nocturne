@@ -44,4 +44,47 @@ export const sequences: SequenceConfig = {
       "power-user.compatibility",
     ],
   },
+  "quick-tour": {
+    priority: 200,
+    steps: [
+      "quick-tour.current-bg",
+      "quick-tour.chart",
+      "quick-tour.widgets",
+      "quick-tour.sidebar",
+    ],
+  },
+  "setup-invite": {
+    priority: 200,
+    steps: [
+      "setup-invite.create-link",
+      "setup-invite.roles",
+      "setup-invite.copy-link",
+    ],
+    completesKeys: ["onboarding.sharing"],
+  },
+  "setup-alerts": {
+    priority: 200,
+    steps: [
+      "setup-alerts.overview",
+      "setup-alerts.wizard",
+    ],
+    completesKeys: ["onboarding.alerts"],
+  },
+  "setup-reports": {
+    priority: 200,
+    steps: [
+      "setup-reports.metrics",
+      "setup-reports.agp",
+      "setup-reports.categories",
+    ],
+    completesKeys: ["dashboard-discovery.reports"],
+  },
+  "setup-connectors": {
+    priority: 200,
+    steps: [
+      "setup-connectors.sources",
+      "setup-connectors.server-connectors",
+    ],
+    completesKeys: ["power-user.connectors"],
+  },
 };

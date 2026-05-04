@@ -81,6 +81,13 @@ public interface IBolusRepository : IV4Repository<Bolus>
     /// <returns>Number of records deleted (0 or 1).</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
 
+    /// <summary>Delete <see cref="Bolus"/> records matching the given data source and sync identifier.</summary>
+    /// <param name="dataSource">The external data source name.</param>
+    /// <param name="syncIdentifier">The external sync identifier (e.g., UUID from the uploading system).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Number of records deleted.</returns>
+    Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default);
+
     /// <summary>Count <see cref="Bolus"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>

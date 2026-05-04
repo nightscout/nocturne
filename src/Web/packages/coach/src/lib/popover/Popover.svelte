@@ -85,6 +85,7 @@
         updateSpotlightRect(currentRegistration.element);
 
         computePosition(currentRegistration.element, popoverEl, {
+          strategy: "fixed",
           placement: "bottom",
           middleware: [
             offset(12 + SPOTLIGHT_PADDING),

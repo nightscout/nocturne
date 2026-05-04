@@ -225,7 +225,7 @@
 <form
   bind:this={deviceEventFormRef}
   class="hidden"
-  {...createDeviceEventForm.enhance(async ({ submit }) => {
+  {...createDeviceEventForm.for("tracker-start").enhance(async ({ submit }) => {
     await submit();
   })}
 >

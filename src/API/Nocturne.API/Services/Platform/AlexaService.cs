@@ -1,7 +1,7 @@
 using System.Globalization;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
-using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Services.Platform;
 
@@ -12,7 +12,7 @@ namespace Nocturne.API.Services.Platform;
 /// <seealso cref="IAlexaService"/>
 public class AlexaService : IAlexaService
 {
-    private readonly IEntryRepository _entries;
+    private readonly IEntryStore _store;
     private readonly ILogger<AlexaService> _logger;
 
     // Translation mappings for supported locales (simplified implementation)
@@ -47,9 +47,9 @@ public class AlexaService : IAlexaService
         },
     };
 
-    public AlexaService(IEntryRepository entries, ILogger<AlexaService> logger)
+    public AlexaService(IEntryStore store, ILogger<AlexaService> logger)
     {
-        _entries = entries;
+        _store = store;
         _logger = logger;
     }
 
@@ -350,11 +350,9 @@ public class AlexaService : IAlexaService
         try
         {
             // Get latest glucose reading using the correct method
-            var entries = await _entries.GetEntriesAsync(
-                type: "sgv",
-                count: 1,
-                cancellationToken: cancellationToken
-            );
+            var entries = await _store.QueryAsync(
+                new EntryQuery { Type = "sgv", Count = 1 },
+                cancellationToken);
             var latest = entries.FirstOrDefault();
             if (latest == null)
             {

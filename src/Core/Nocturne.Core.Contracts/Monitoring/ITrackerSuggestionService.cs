@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Monitoring;
@@ -41,26 +42,20 @@ public interface ITrackerSuggestionService
     );
 
     /// <summary>
-    /// Accept a tracker suggestion - completes the current instance (if any) and starts a new one
+    /// Accept a tracker suggestion - completes the current instance (if any) and starts a new one.
+    /// Returns the desired notification disposition; the orchestrator performs the archive.
     /// </summary>
-    /// <param name="notificationId">The notification ID to accept</param>
-    /// <param name="userId">The user ID executing the action</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>True if the tracker was reset successfully</returns>
-    Task<bool> AcceptSuggestionAsync(
+    Task<NotificationActionResult> AcceptSuggestionAsync(
         Guid notificationId,
         string userId,
         CancellationToken cancellationToken = default
     );
 
     /// <summary>
-    /// Dismiss a tracker suggestion without taking action
+    /// Dismiss a tracker suggestion without taking action.
+    /// Returns the desired notification disposition; the orchestrator performs the archive.
     /// </summary>
-    /// <param name="notificationId">The notification ID to dismiss</param>
-    /// <param name="userId">The user ID executing the action</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>True if dismissed successfully</returns>
-    Task<bool> DismissSuggestionAsync(
+    Task<NotificationActionResult> DismissSuggestionAsync(
         Guid notificationId,
         string userId,
         CancellationToken cancellationToken = default

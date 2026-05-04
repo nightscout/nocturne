@@ -32,7 +32,7 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
             - **OIDC** — Federated login via external identity providers, callback handling, and session management.
             - **Passkeys** — WebAuthn/FIDO2 registration and login ceremonies (discoverable and non-discoverable credentials), plus recovery codes.
             - **TOTP** — Time-based one-time password setup, verification, and credential lifecycle.
-            - **Direct Grants** — Programmatic API tokens (prefixed `noc_`) for headless / automation use cases. These bypass OAuth entirely.
+            - **Direct Grants** — Programmatic API tokens (prefixed `noc_`) for headless / automation use cases. These bypass OAuth entirely. Legacy Nightscout API secrets (SHA-1 hashes) are automatically migrated into equivalent direct grants.
 
             > **Footgun:** Direct grant tokens are long-lived and have no automatic expiry. Treat them like passwords.
             """,
@@ -52,8 +52,8 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
             - **Correlation** — Query across all V4 repositories by correlation ID to trace related records.
             - **Data Overview** — Year-level availability and day-level record counts for heatmap visualisation.
             - **Predictions** — Glucose forecasts from DeviceStatus sources (AAPS / Trio / Loop) or the OrefWasm engine.
-            - **Retrospective** — Day-in-review snapshots combining IOB, COB, glucose, and basal at specific points in time.
-            - **State Spans** — Time-ranged system states (pump modes, connectivity, overrides).
+            - **Retrospective** — Day-in-review snapshots combining IOB, COB, glucose, basal timelines, and insulin delivery at specific points in time.
+            - **Statistics** — Aggregated statistics including glucose time-in-range, insulin delivery breakdowns, and AID system metrics.
             - **Summary** — Widget-friendly data designed for mobile widgets, watch faces, and other constrained displays.
             - **Analytics** — Transparency controls for analytics collection — view, configure, and opt out.
             """,
@@ -71,25 +71,34 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
             - **Device Age** — CAGE (cannula), SAGE (sensor), IAGE (insulin reservoir), and BAGE (battery) age tracking, backed by the V4 DeviceEvents system.
             """,
 
+        ["Glucose"] = """
+            V4 glucose data: sensor readings, meter checks, calibrations, and blood glucose checks.
+
+            - **Sensor Glucose** — Continuous glucose monitor (CGM) readings.
+            - **Meter Glucose** — Fingerstick blood glucose meter readings.
+            - **Calibrations** — CGM calibration records.
+            - **BG Checks** — Point-in-time blood glucose checks from any source.
+            """,
+
         ["Health"] = """
             Biometric and activity data beyond glucose.
 
-            - **Heart Rate** — Heart rate readings sourced from xDrip.
-            - **Step Count** — Step count data from xDrip's PebbleMovement integration.
+            - **Heart Rate** — Heart rate readings from diabetes apps and wearables.
+            - **Step Count** — Step count data from diabetes apps and wearables.
             - **Body Weight** — Weight and body composition time-series.
             - **Patient Record** — Patient metadata: records, devices, and insulin formulations in use.
-
-            > **Note:** Heart rate and step count endpoints are currently xDrip-specific. Data from other sources (Garmin, Apple Health, etc.) is not yet ingested here.
             """,
 
         ["Identity"] = """
-            Multi-tenancy, membership, roles, and cross-platform identity linking.
+            Multi-tenancy, membership, roles, guest access, and cross-platform identity linking.
 
             - **My Tenants** — List tenants the authenticated user belongs to.
             - **My Permissions** — Effective permissions for the current tenant, computed from roles intersected with token scopes.
             - **Roles** — RBAC role and permission management.
             - **Member Invites** — Invite links, member listing, and role assignment.
+            - **Guest Links** — Temporary 48-hour read-only access links for data sharing. Recipients activate a short code to receive a scoped session cookie.
             - **Connected Apps** — OAuth app grants ("connected apps") for the authenticated user.
+            - **Linked Platforms** — Cross-platform identity linking for the authenticated user.
             - **Chat Identity** — Tenant-scoped linking of chat platform accounts (Discord, Telegram, etc.).
             - **Chat Identity Directory** — Cross-tenant directory for routing chat platform identities to the correct tenant. Server-to-server only.
 
@@ -128,10 +137,23 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
             Provides tenant creation, listing, and administration for platform operators. These endpoints require platform-level admin privileges — they are not accessible to regular tenant users.
             """,
 
+        ["State Spans"] = """
+            Time-ranged system states and user-annotated activity periods.
+
+            Records continuous state windows such as pump modes, connectivity periods, temporary targets, overrides, active profile switches, and user-annotated activities (sleep, exercise, illness, travel). State spans are created automatically by connector ingest pipelines or manually via this API.
+
+            Convenience sub-routes pre-filter by category: `/pump-modes`, `/connectivity`, `/overrides`, `/temporary-targets`, `/profiles`, `/sleep`, `/exercise`, `/illness`, `/travel`, `/activities`.
+            """,
+
         ["Profiles"] = """
             User and therapy configuration.
 
-            - **Profile** — Therapy settings: basal schedules, carb ratio schedules, and insulin sensitivity scales.
+            - **Therapy Settings** — Core therapy configuration (DIA, units, etc.).
+            - **Basal Schedules** — Time-of-day basal rate schedules.
+            - **Carb Ratio Schedules** — Time-of-day insulin-to-carb ratio schedules.
+            - **Sensitivity Schedules** — Time-of-day insulin sensitivity factor schedules.
+            - **Target Range Schedules** — Time-of-day target glucose range schedules.
+            - **Glucose Processing Settings** — Glucose data processing configuration (smoothing, calibration, noise filtering).
             - **UI Settings** — Aggregated frontend configuration from multiple sources (units, ranges, display preferences).
             - **User Preferences** — Per-user preference storage.
             - **Clock Faces** — Watch face configuration management.
@@ -155,15 +177,15 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
             """,
 
         ["Treatments"] = """
-            V4 treatment data: meals, boluses, site changes, and nutrition tracking.
+            V4 treatment data: boluses, nutrition, notes, and meal tracking.
 
-            - **Treatments** — V4 treatment CRUD with automatic tracker integration.
+            - **Boluses** — Insulin bolus records with calculator context.
+            - **Bolus Calculations** — Bolus calculator input/output records for audit and replay.
             - **Nutrition** — Carbohydrate intakes, food breakdown, and meal records.
             - **Foods** — Food favourites, recent foods, and food lifecycle management.
             - **Connector Food Entries** — Food entries imported by external connectors.
             - **Meal Matching** — Match nutrition data to treatment events.
-
-            > **Footgun:** Unlike V1–V3, the V4 treatments endpoint does **not** include StateSpan-derived basal data. For basal delivery, use the State Spans endpoints under Analytics instead. This is an intentional separation of concerns.
+            - **Notes** — Free-text observation records.
             """,
 
         ["Metadata"] = """
@@ -182,7 +204,9 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
 
             Covers the core Nightscout data model: entries (SGV, MBG, CAL), treatments (bolus, temp basal, carb corrections, site changes), profiles, device status, and food records. Also includes Alexa voice assistant integration and Pebble smartwatch endpoints.
 
-            > **Timestamps:** V1 uses a "mills-first" convention. `Entry.Mills` (Unix milliseconds) is the source of truth; `Date` and `DateString` are computed from it. Clients that write entries must provide `date` in epoch milliseconds.
+            All writes decompose into V4 granular models — there are no standalone legacy tables. Reads project back from V4 data into the legacy shape.
+
+            > **Timestamps:** V1 uses a "mills-first" convention. Clients that write entries must provide `date` in epoch milliseconds.
 
             > **Authentication:** V1 endpoints accept the legacy `api_secret` header (SHA-1 hash) or token-based auth via `?token=` query parameter. Both are supported for backwards compatibility.
             """,
@@ -201,7 +225,7 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
         ["V3"] = """
             Nightscout V3 RESTful API — full CRUD with `Last-Modified` / `If-Modified-Since` support.
 
-            Provides a consistent RESTful interface across all core collections: entries, treatments, device status, food, profiles, and settings. Each collection supports filtering, pagination, field projection, and soft-delete semantics.
+            Provides a consistent RESTful interface across all core collections: entries, treatments, device status, food, profiles, and settings. Each collection supports filtering, pagination, field projection, and soft-delete semantics. All writes decompose into V4 granular models — reads project back from V4 data into the legacy shape.
 
             - **Last Modified** — Timestamps for when each collection was last modified, enabling efficient polling via conditional requests.
             - **Status** — Extended status with permissions and authorization details.
@@ -259,7 +283,9 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
                     if (!string.IsNullOrWhiteSpace(diagram.Description))
                         sb.AppendLine($"_{diagram.Description}_");
                     sb.AppendLine();
-                    sb.AppendLine($"[![{diagram.Title}]({diagram.SvgPath})]({diagram.SvgPath})");
+                    sb.AppendLine("```mermaid");
+                    sb.AppendLine(diagram.MermaidSource);
+                    sb.AppendLine("```");
                     sb.AppendLine();
                 }
 
@@ -280,7 +306,8 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
 
     private static Dictionary<string, List<DiagramRef>> BuildTagDiagramMap(IWebHostEnvironment env)
     {
-        var manifestPath = Path.Combine(env.ContentRootPath, "..", "..", "..", "docs", "diagrams", "diagrams.yaml");
+        var diagramsDir = Path.Combine(env.ContentRootPath, "..", "..", "..", "docs", "diagrams");
+        var manifestPath = Path.Combine(diagramsDir, "diagrams.yaml");
         var map = new Dictionary<string, List<DiagramRef>>(StringComparer.Ordinal);
 
         if (!File.Exists(manifestPath))
@@ -298,8 +325,10 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
             if (diagram.Tags is not { Count: > 0 })
                 continue;
 
-            var svgName = Path.GetFileNameWithoutExtension(diagram.Source) + ".svg";
-            var diagramRef = new DiagramRef(diagram.Title, diagram.Description, $"/diagrams/{svgName}");
+            var mermaid = MermaidSourceLoader.TryRead(diagramsDir, diagram.Source);
+            if (mermaid is null) continue;
+
+            var diagramRef = new DiagramRef(diagram.Title, diagram.Description, mermaid);
 
             foreach (var tag in diagram.Tags)
             {
@@ -315,7 +344,7 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
         return map;
     }
 
-    private sealed record DiagramRef(string Title, string? Description, string SvgPath);
+    private sealed record DiagramRef(string Title, string? Description, string MermaidSource);
 
     private sealed class DiagramManifest
     {

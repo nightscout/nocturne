@@ -1,0 +1,20 @@
+---
+title: "Glucose Processing: Type Resolution Chain"
+---
+flowchart TD
+    Arrive([Payload received]) --> PayloadField{glucoseProcessing\nin payload?}
+
+    PayloadField -->|"Yes, valid"| UsePayload[Use payload value]
+    PayloadField -->|"Yes, invalid"| Reject([400 Bad Request])
+    PayloadField -->|No| SourceConfig{"device/app matches\na source default rule?\n(starts-with, ordered)"}
+
+    SourceConfig -->|Yes| UseSource[Use source default]
+    SourceConfig -->|No| IsConnector{Server-side\nconnector?}
+
+    IsConnector -->|Yes| UseConnector["Use connector config\n(default: Smoothed)"]
+    IsConnector -->|No| NoneResolved["GlucoseProcessing = null"]
+
+    UsePayload --> Resolved([Processing type resolved])
+    UseSource --> Resolved
+    UseConnector --> Resolved
+    NoneResolved --> Resolved

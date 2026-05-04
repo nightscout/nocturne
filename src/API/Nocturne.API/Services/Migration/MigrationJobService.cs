@@ -458,12 +458,10 @@ internal class MigrationJob
         // Build the list of collections to migrate
         var allCollections = new (string name, Func<HttpClient, NocturneDbContext, CancellationToken, Task> migrate)[]
         {
-            ("entries", MigrateEntriesViaApiAsync),
             ("treatments", MigrateTreatmentsViaApiAsync),
             ("devicestatus", MigrateDeviceStatusViaApiAsync),
             ("profile", MigrateProfilesViaApiAsync),
             ("food", MigrateFoodViaApiAsync),
-            ("activity", MigrateActivityViaApiAsync),
         };
 
         var collectionsToMigrate = allCollections
@@ -561,166 +559,16 @@ internal class MigrationJob
         };
     }
 
-    private async Task MigrateEntriesViaApiAsync(
+    private Task MigrateTreatmentsViaApiAsync(
         HttpClient httpClient,
         NocturneDbContext dbContext,
         CancellationToken ct
     )
     {
-        _currentOperation = "Migrating entries";
-        var collectionName = "entries";
-        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing) ? existing.TotalDocuments : 0;
-
-        var totalMigrated = 0L;
-        var totalFailed = 0L;
-
-        try
-        {
-            var response = await httpClient.GetAsync("/api/v1/entries.json?count=10000", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Failed to fetch entries: {StatusCode}", response.StatusCode);
-                return;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
-            var entries = System.Text.Json.JsonSerializer.Deserialize<Entry[]>(content) ?? [];
-
-            // If count endpoint wasn't available, use the fetched array length
-            if (knownTotal == 0) knownTotal = entries.Length;
-            UpdateCollectionProgress(collectionName, knownTotal, 0, 0, false);
-            UpdateOverallProgress();
-
-            foreach (var entry in entries)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                try
-                {
-                    var mills = entry.Mills;
-
-                    var exists = await dbContext.Entries.AnyAsync(
-                        e => e.Mills == mills && e.Sgv == entry.Sgv,
-                        ct
-                    );
-
-                    if (!exists)
-                    {
-                        dbContext.Entries.Add(
-                            new Infrastructure.Data.Entities.EntryEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                Type = entry.Type ?? "sgv",
-                                Sgv = entry.Sgv,
-                                Mgdl = entry.Mgdl,
-                                Direction = entry.Direction,
-                                Device = entry.Device,
-                                Mills = mills,
-                                DataSource = DataSources.MongoDbImport,
-                            }
-                        );
-                    }
-                    totalMigrated++;
-                    UpdateCollectionProgress(collectionName, knownTotal, totalMigrated, totalFailed, false);
-                    UpdateOverallProgress();
-                }
-                catch
-                {
-                    totalFailed++;
-                }
-            }
-
-            await dbContext.SaveChangesAsync(ct);
-            UpdateCollectionProgress(collectionName, knownTotal, totalMigrated, totalFailed, true);
-            UpdateOverallProgress();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error migrating entries via API");
-        }
-
-        _logger.LogInformation("Migrated {Count} entries via API", totalMigrated);
-    }
-
-    private async Task MigrateTreatmentsViaApiAsync(
-        HttpClient httpClient,
-        NocturneDbContext dbContext,
-        CancellationToken ct
-    )
-    {
-        _currentOperation = "Migrating treatments";
-        var collectionName = "treatments";
-        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing) ? existing.TotalDocuments : 0;
-
-        var totalMigrated = 0L;
-        var totalFailed = 0L;
-
-        try
-        {
-            var response = await httpClient.GetAsync("/api/v1/treatments.json?count=10000", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Failed to fetch treatments: {StatusCode}", response.StatusCode);
-                return;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
-            var treatments =
-                System.Text.Json.JsonSerializer.Deserialize<Treatment[]>(content) ?? [];
-
-            if (knownTotal == 0) knownTotal = treatments.Length;
-            UpdateCollectionProgress(collectionName, knownTotal, 0, 0, false);
-            UpdateOverallProgress();
-
-            foreach (var treatment in treatments)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                try
-                {
-                    var mills = treatment.CalculatedMills;
-
-                    var exists = await dbContext.Treatments.AnyAsync(
-                        t => t.Mills == mills && t.EventType == treatment.EventType,
-                        ct
-                    );
-
-                    if (!exists)
-                    {
-                        dbContext.Treatments.Add(
-                            new Infrastructure.Data.Entities.TreatmentEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                EventType = treatment.EventType,
-                                Insulin = treatment.Insulin,
-                                Carbs = treatment.Carbs,
-                                Notes = treatment.Notes,
-                                Duration = treatment.Duration,
-                                Mills = mills,
-                                DataSource = DataSources.MongoDbImport,
-                            }
-                        );
-                    }
-                    totalMigrated++;
-                    UpdateCollectionProgress(collectionName, knownTotal, totalMigrated, totalFailed, false);
-                    UpdateOverallProgress();
-                }
-                catch
-                {
-                    totalFailed++;
-                }
-            }
-
-            await dbContext.SaveChangesAsync(ct);
-            UpdateCollectionProgress(collectionName, knownTotal, totalMigrated, totalFailed, true);
-            UpdateOverallProgress();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error migrating treatments via API");
-        }
-
-        _logger.LogInformation("Migrated {Count} treatments via API", totalMigrated);
+        // Legacy treatments table has been dropped; treatment migration is a no-op.
+        // Treatments are now stored exclusively in V4 granular tables.
+        _logger.LogInformation("Skipping legacy treatments migration (table dropped)");
+        return Task.CompletedTask;
     }
 
     private async Task MigrateDeviceStatusViaApiAsync(
@@ -752,38 +600,16 @@ internal class MigrationJob
             UpdateCollectionProgress(collectionName, knownTotal, 0, 0, false);
             UpdateOverallProgress();
 
+            using var scope = _serviceProvider.CreateScope();
+            var decomposer = scope.ServiceProvider.GetRequiredService<Core.Contracts.V4.IDeviceStatusDecomposer>();
+
             foreach (var status in statuses)
             {
                 ct.ThrowIfCancellationRequested();
 
                 try
                 {
-                    var mills = status.Date ?? status.Mills;
-
-                    var exists = await dbContext.DeviceStatuses.AnyAsync(
-                        d => d.Mills == mills && d.Device == (status.Device ?? ""),
-                        ct
-                    );
-
-                    if (!exists)
-                    {
-                        dbContext.DeviceStatuses.Add(
-                            new Infrastructure.Data.Entities.DeviceStatusEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                Mills = mills,
-                                CreatedAt = status.CreatedAt,
-                                Device = status.Device ?? "",
-                                IsCharging = status.IsCharging,
-                                UploaderJson = status.Uploader != null ? System.Text.Json.JsonSerializer.Serialize(status.Uploader) : null,
-                                PumpJson = status.Pump != null ? System.Text.Json.JsonSerializer.Serialize(status.Pump) : null,
-                                OpenApsJson = status.OpenAps != null ? System.Text.Json.JsonSerializer.Serialize(status.OpenAps) : null,
-                                LoopJson = status.Loop != null ? System.Text.Json.JsonSerializer.Serialize(status.Loop) : null,
-                                XDripJsJson = status.XDripJs != null ? System.Text.Json.JsonSerializer.Serialize(status.XDripJs) : null,
-                                OverrideJson = status.Override != null ? System.Text.Json.JsonSerializer.Serialize(status.Override) : null,
-                            }
-                        );
-                    }
+                    await decomposer.DecomposeAsync(status, ct);
                     totalMigrated++;
                     UpdateCollectionProgress(collectionName, knownTotal, totalMigrated, totalFailed, false);
                     UpdateOverallProgress();
@@ -794,7 +620,6 @@ internal class MigrationJob
                 }
             }
 
-            await dbContext.SaveChangesAsync(ct);
             UpdateCollectionProgress(collectionName, knownTotal, totalMigrated, totalFailed, true);
             UpdateOverallProgress();
         }
@@ -833,37 +658,24 @@ internal class MigrationJob
             UpdateCollectionProgress(collectionName, profiles.Length, 0, 0, false);
             UpdateOverallProgress();
 
+            using var scope = _serviceProvider.CreateScope();
+            var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
+
             foreach (var profile in profiles)
             {
                 ct.ThrowIfCancellationRequested();
 
                 try
                 {
-                    var mills = profile.Mills;
-
-                    var exists = await dbContext.Profiles.AnyAsync(
-                        p => p.Mills == mills && p.DefaultProfile == (profile.DefaultProfile ?? "Default"),
-                        ct
-                    );
-
-                    if (!exists)
+                    if (string.IsNullOrEmpty(profile.Id))
                     {
-                        dbContext.Profiles.Add(
-                            new Infrastructure.Data.Entities.ProfileEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                DefaultProfile = profile.DefaultProfile ?? "Default",
-                                StartDate = profile.StartDate ?? DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                                Mills = mills,
-                                CreatedAt = profile.CreatedAt,
-                                Units = profile.Units ?? "mg/dl",
-                                StoreJson = profile.Store != null ? System.Text.Json.JsonSerializer.Serialize(profile.Store) : "{}",
-                                EnteredBy = profile.EnteredBy,
-                                LoopSettingsJson = profile.LoopSettings != null ? System.Text.Json.JsonSerializer.Serialize(profile.LoopSettings) : null,
-                            }
-                        );
+                        profile.Id = Guid.CreateVersion7().ToString();
                     }
+
+                    await decomposer.DecomposeAsync(profile, ct);
                     totalMigrated++;
+                    UpdateCollectionProgress(collectionName, profiles.Length, totalMigrated, totalFailed, false);
+                    UpdateOverallProgress();
                 }
                 catch
                 {
@@ -871,7 +683,6 @@ internal class MigrationJob
                 }
             }
 
-            await dbContext.SaveChangesAsync(ct);
             UpdateCollectionProgress(collectionName, profiles.Length, totalMigrated, totalFailed, true);
             UpdateOverallProgress();
         }
@@ -963,86 +774,6 @@ internal class MigrationJob
         }
 
         _logger.LogInformation("Migrated {Count} food items via API", totalMigrated);
-    }
-
-    private async Task MigrateActivityViaApiAsync(
-        HttpClient httpClient,
-        NocturneDbContext dbContext,
-        CancellationToken ct
-    )
-    {
-        _currentOperation = "Migrating activities";
-        var collectionName = "activity";
-
-        var totalMigrated = 0L;
-        var totalFailed = 0L;
-
-        try
-        {
-            var response = await httpClient.GetAsync("/api/v1/activity.json?count=10000", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Failed to fetch activities: {StatusCode}", response.StatusCode);
-                return;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
-            var activities = System.Text.Json.JsonSerializer.Deserialize<Activity[]>(content) ?? [];
-
-            UpdateCollectionProgress(collectionName, activities.Length, 0, 0, false);
-            UpdateOverallProgress();
-
-            foreach (var activity in activities)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                try
-                {
-                    var mills = activity.Mills;
-
-                    var exists = await dbContext.Activities.AnyAsync(
-                        a => a.Mills == mills && a.Type == activity.Type,
-                        ct
-                    );
-
-                    if (!exists)
-                    {
-                        dbContext.Activities.Add(
-                            new Infrastructure.Data.Entities.ActivityEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                Mills = mills,
-                                DateString = activity.DateString,
-                                Type = activity.Type,
-                                Description = activity.Description,
-                                Duration = activity.Duration,
-                                Intensity = activity.Intensity,
-                                Notes = activity.Notes,
-                                EnteredBy = activity.EnteredBy,
-                                UtcOffset = activity.UtcOffset,
-                                Timestamp = activity.Timestamp,
-                                CreatedAt = activity.CreatedAt,
-                            }
-                        );
-                    }
-                    totalMigrated++;
-                }
-                catch
-                {
-                    totalFailed++;
-                }
-            }
-
-            await dbContext.SaveChangesAsync(ct);
-            UpdateCollectionProgress(collectionName, activities.Length, totalMigrated, totalFailed, true);
-            UpdateOverallProgress();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error migrating activities via API");
-        }
-
-        _logger.LogInformation("Migrated {Count} activities via API", totalMigrated);
     }
 
     private async Task ExecuteMongoMigrationAsync(CancellationToken ct)
@@ -1170,9 +901,6 @@ internal class MigrationJob
     {
         switch (collectionName)
         {
-            case "entries":
-                await TransformEntryAsync(doc, dbContext, ct);
-                break;
             case "treatments":
                 await TransformTreatmentAsync(doc, dbContext, ct);
                 break;
@@ -1185,97 +913,20 @@ internal class MigrationJob
             case "food":
                 await TransformFoodAsync(doc, dbContext, ct);
                 break;
-            case "activity":
-                await TransformActivityAsync(doc, dbContext, ct);
-                break;
             default:
                 _logger.LogDebug("Skipping unsupported collection: {Collection}", collectionName);
                 break;
         }
     }
 
-    private async Task TransformEntryAsync(
+    private Task TransformTreatmentAsync(
         BsonDocument doc,
         NocturneDbContext dbContext,
         CancellationToken ct
     )
     {
-        var mills =
-            doc.Contains("date") ? doc["date"].ToInt64()
-            : doc.Contains("mills") ? doc["mills"].ToInt64()
-            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        double? sgv = doc.Contains("sgv") ? doc["sgv"].ToDouble() : null;
-
-        // Check for duplicates
-        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-        var exists = await dbContext.Entries.AnyAsync(
-            e =>
-                (originalId != null && e.OriginalId == originalId)
-                || (e.Mills == mills && e.Sgv == sgv),
-            ct
-        );
-
-        if (exists)
-            return;
-
-        var entity = new Infrastructure.Data.Entities.EntryEntity
-        {
-            Id = Guid.CreateVersion7(),
-            OriginalId = originalId,
-            Type = doc.Contains("type") ? doc["type"].AsString : "sgv",
-            Sgv = sgv,
-            Mgdl = sgv ?? 0,
-            Direction = doc.Contains("direction") ? doc["direction"].AsString : null,
-            Device = doc.Contains("device") ? doc["device"].AsString : null,
-            Mills = mills,
-            DataSource = DataSources.MongoDbImport,
-        };
-
-        dbContext.Entries.Add(entity);
-    }
-
-    private async Task TransformTreatmentAsync(
-        BsonDocument doc,
-        NocturneDbContext dbContext,
-        CancellationToken ct
-    )
-    {
-        var mills =
-            doc.Contains("mills") ? doc["mills"].ToInt64()
-            : doc.Contains("created_at")
-            && DateTime.TryParse(doc["created_at"].AsString, out var createdAt)
-                ? new DateTimeOffset(createdAt).ToUnixTimeMilliseconds()
-            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        var eventType = doc.Contains("eventType") ? doc["eventType"].AsString : "Note";
-
-        // Check for duplicates
-        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-        var exists = await dbContext.Treatments.AnyAsync(
-            t =>
-                (originalId != null && t.OriginalId == originalId)
-                || (t.Mills == mills && t.EventType == eventType),
-            ct
-        );
-
-        if (exists)
-            return;
-
-        var entity = new Infrastructure.Data.Entities.TreatmentEntity
-        {
-            Id = Guid.CreateVersion7(),
-            OriginalId = originalId,
-            EventType = eventType,
-            Insulin = doc.Contains("insulin") ? doc["insulin"].ToDouble() : null,
-            Carbs = doc.Contains("carbs") ? doc["carbs"].ToDouble() : null,
-            Notes = doc.Contains("notes") ? doc["notes"].AsString : null,
-            Duration = doc.Contains("duration") ? doc["duration"].ToDouble() : null,
-            Mills = mills,
-            DataSource = DataSources.MongoDbImport,
-        };
-
-        dbContext.Treatments.Add(entity);
+        // Legacy treatments table has been dropped; BSON treatment import is a no-op.
+        return Task.CompletedTask;
     }
 
     private async Task TransformDeviceStatusAsync(
@@ -1284,49 +935,27 @@ internal class MigrationJob
         CancellationToken ct
     )
     {
-        var mills =
-            doc.Contains("mills") ? doc["mills"].ToInt64()
-            : doc.Contains("date") ? doc["date"].ToInt64()
-            : doc.Contains("created_at")
-              && DateTime.TryParse(doc["created_at"].AsString, out var createdAt)
-                ? new DateTimeOffset(createdAt).ToUnixTimeMilliseconds()
-            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        // Convert BSON to JSON, then deserialize to DeviceStatus domain model and decompose
+        var jsonWriterSettings = new MongoDB.Bson.IO.JsonWriterSettings
+        {
+            OutputMode = MongoDB.Bson.IO.JsonOutputMode.RelaxedExtendedJson
+        };
+        var json = doc.ToJson(jsonWriterSettings);
+        var status = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus>(json, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
 
-        var device = doc.Contains("device") ? doc["device"].AsString : "";
-
-        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-        var exists = await dbContext.DeviceStatuses.AnyAsync(
-            d =>
-                (originalId != null && d.OriginalId == originalId)
-                || (d.Mills == mills && d.Device == device),
-            ct
-        );
-
-        if (exists)
+        if (status == null)
             return;
 
-        var entity = new Infrastructure.Data.Entities.DeviceStatusEntity
-        {
-            Id = Guid.CreateVersion7(),
-            OriginalId = originalId,
-            Mills = mills,
-            CreatedAt = doc.Contains("created_at") ? doc["created_at"].AsString : null,
-            Device = device,
-            IsCharging = doc.Contains("isCharging") ? doc["isCharging"].AsBoolean : null,
-            UploaderJson = doc.Contains("uploader") ? doc["uploader"].ToJson() : null,
-            PumpJson = doc.Contains("pump") ? doc["pump"].ToJson() : null,
-            OpenApsJson = doc.Contains("openaps") ? doc["openaps"].ToJson() : null,
-            LoopJson = doc.Contains("loop") ? doc["loop"].ToJson() : null,
-            XDripJsJson = doc.Contains("xdripjs") ? doc["xdripjs"].ToJson() : null,
-            RadioAdapterJson = doc.Contains("radioAdapter") ? doc["radioAdapter"].ToJson() : null,
-            ConnectJson = doc.Contains("connect") ? doc["connect"].ToJson() : null,
-            OverrideJson = doc.Contains("override") ? doc["override"].ToJson() : null,
-            CgmJson = doc.Contains("cgm") ? doc["cgm"].ToJson() : null,
-            MeterJson = doc.Contains("meter") ? doc["meter"].ToJson() : null,
-            InsulinPenJson = doc.Contains("insulinPen") ? doc["insulinPen"].ToJson() : null,
-        };
+        // Set the original ID from MongoDB _id
+        if (doc.Contains("_id"))
+            status.Id = doc["_id"].AsObjectId.ToString();
 
-        dbContext.DeviceStatuses.Add(entity);
+        using var scope = _serviceProvider.CreateScope();
+        var decomposer = scope.ServiceProvider.GetRequiredService<Core.Contracts.V4.IDeviceStatusDecomposer>();
+        await decomposer.DecomposeAsync(status, ct);
     }
 
     private async Task TransformProfileAsync(
@@ -1343,33 +972,35 @@ internal class MigrationJob
             : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         var defaultProfile = doc.Contains("defaultProfile") ? doc["defaultProfile"].AsString : "Default";
-
         var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-        var exists = await dbContext.Profiles.AnyAsync(
-            p =>
-                (originalId != null && p.OriginalId == originalId)
-                || (p.Mills == mills && p.DefaultProfile == defaultProfile),
-            ct
-        );
 
-        if (exists)
-            return;
+        // Build a domain Profile and decompose into V4 records
+        var storeJson = doc.Contains("store") ? doc["store"].ToJson() : "{}";
+        var store = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, ProfileData>>(storeJson)
+            ?? new Dictionary<string, ProfileData>();
 
-        var entity = new Infrastructure.Data.Entities.ProfileEntity
+        LoopProfileSettings? loopSettings = null;
+        if (doc.Contains("loopSettings"))
         {
-            Id = Guid.CreateVersion7(),
-            OriginalId = originalId,
+            loopSettings = System.Text.Json.JsonSerializer.Deserialize<LoopProfileSettings>(doc["loopSettings"].ToJson());
+        }
+
+        var profile = new Profile
+        {
+            Id = originalId ?? Guid.CreateVersion7().ToString(),
             DefaultProfile = defaultProfile,
             StartDate = doc.Contains("startDate") ? doc["startDate"].AsString : DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             Mills = mills,
             CreatedAt = doc.Contains("created_at") ? doc["created_at"].AsString : null,
             Units = doc.Contains("units") ? doc["units"].AsString : "mg/dl",
-            StoreJson = doc.Contains("store") ? doc["store"].ToJson() : "{}",
+            Store = store,
             EnteredBy = doc.Contains("enteredBy") ? doc["enteredBy"].AsString : null,
-            LoopSettingsJson = doc.Contains("loopSettings") ? doc["loopSettings"].ToJson() : null,
+            LoopSettings = loopSettings,
         };
 
-        dbContext.Profiles.Add(entity);
+        using var scope = _serviceProvider.CreateScope();
+        var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
+        await decomposer.DecomposeAsync(profile, ct);
     }
 
     private async Task TransformFoodAsync(
@@ -1414,52 +1045,6 @@ internal class MigrationJob
         };
 
         dbContext.Foods.Add(entity);
-    }
-
-    private async Task TransformActivityAsync(
-        BsonDocument doc,
-        NocturneDbContext dbContext,
-        CancellationToken ct
-    )
-    {
-        var mills =
-            doc.Contains("mills") ? doc["mills"].ToInt64()
-            : doc.Contains("created_at")
-              && DateTime.TryParse(doc["created_at"].AsString, out var createdAt)
-                ? new DateTimeOffset(createdAt).ToUnixTimeMilliseconds()
-            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-        var type = doc.Contains("type") ? doc["type"].AsString : null;
-
-        var originalId = doc.Contains("_id") ? doc["_id"].AsObjectId.ToString() : null;
-        var exists = await dbContext.Activities.AnyAsync(
-            a =>
-                (originalId != null && a.OriginalId == originalId)
-                || (a.Mills == mills && a.Type == type),
-            ct
-        );
-
-        if (exists)
-            return;
-
-        var entity = new Infrastructure.Data.Entities.ActivityEntity
-        {
-            Id = Guid.CreateVersion7(),
-            OriginalId = originalId,
-            Mills = mills,
-            DateString = doc.Contains("dateString") ? doc["dateString"].AsString : null,
-            Type = type,
-            Description = doc.Contains("description") ? doc["description"].AsString : null,
-            Duration = doc.Contains("duration") ? doc["duration"].ToDouble() : null,
-            Intensity = doc.Contains("intensity") ? doc["intensity"].AsString : null,
-            Notes = doc.Contains("notes") ? doc["notes"].AsString : null,
-            EnteredBy = doc.Contains("enteredBy") ? doc["enteredBy"].AsString : null,
-            UtcOffset = doc.Contains("utcOffset") ? doc["utcOffset"].ToInt32() : null,
-            Timestamp = doc.Contains("timestamp") ? doc["timestamp"].ToInt64() : null,
-            CreatedAt = doc.Contains("created_at") ? doc["created_at"].AsString : null,
-        };
-
-        dbContext.Activities.Add(entity);
     }
 
     /// <summary>

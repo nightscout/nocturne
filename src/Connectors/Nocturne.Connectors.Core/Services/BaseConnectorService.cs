@@ -265,6 +265,8 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                     CompletedDataTypes = [.. completedTypes],
                     TotalDataTypes = typesToSync.Count,
                     ItemsSyncedSoFar = new(itemsSoFar),
+                    MessageType = SyncMessageType.FetchingDataType,
+                    MessageParams = new() { ["dataType"] = type.ToString() },
                 }, cancellationToken);
             }
 
@@ -325,6 +327,22 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                     result.Errors.Add($"{type} publish failed");
                 }
 
+                if (progressReporter != null && count > 0)
+                {
+                    await progressReporter.ReportProgressAsync(new SyncProgressEvent
+                    {
+                        ConnectorId = ConnectorSource,
+                        ConnectorName = ServiceName,
+                        Phase = SyncPhase.Syncing,
+                        CurrentDataType = type,
+                        CompletedDataTypes = [.. completedTypes],
+                        TotalDataTypes = typesToSync.Count,
+                        ItemsSyncedSoFar = new(itemsSoFar) { [type] = count },
+                        MessageType = SyncMessageType.PublishingDataType,
+                        MessageParams = new() { ["dataType"] = type.ToString(), ["count"] = count.ToString() },
+                    }, cancellationToken);
+                }
+
                 completedTypes.Add(type);
                 itemsSoFar[type] = count;
             }
@@ -359,6 +377,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
                 TotalDataTypes = typesToSync.Count,
                 ItemsSyncedSoFar = new(itemsSoFar),
                 ErrorMessage = result.Success ? null : string.Join("; ", result.Errors),
+                MessageType = result.Success ? SyncMessageType.SyncComplete : SyncMessageType.SyncFailed,
             }, cancellationToken);
         }
 
@@ -565,6 +584,14 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         {
             _logger?.LogWarning("Publisher not available for SensorGlucose submission");
             return false;
+        }
+
+        // Stamp glucose processing metadata from connector config
+        var processing = config.GlucoseProcessing;
+        foreach (var record in records)
+        {
+            record.GlucoseProcessing = processing;
+            record.SmoothedMgdl ??= processing == GlucoseProcessing.Smoothed ? record.Mgdl : null;
         }
 
         return await _publisher.Glucose.PublishSensorGlucoseAsync(

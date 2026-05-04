@@ -13,7 +13,7 @@
       type: sgv,
       device: xDrip-DexcomG6,
       utcOffset: 0,
-      isValid: true
+      created_at: {Scrubbed}
     }
   ]
 }

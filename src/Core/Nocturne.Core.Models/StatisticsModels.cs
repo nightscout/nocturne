@@ -2176,9 +2176,13 @@ public class SiteChangeImpactAnalysis
 /// </summary>
 public class AidSystemMetrics
 {
-    /// <summary>Percentage of time CGM was in use</summary>
-    [JsonPropertyName("cgmUsePercent")]
-    public double? CgmUsePercent { get; set; }
+    /// <summary>Comma-separated current CGM device names from catalog</summary>
+    [JsonPropertyName("cgmDeviceNames")]
+    public string? CgmDeviceNames { get; set; }
+
+    /// <summary>Comma-separated current pump device names from catalog</summary>
+    [JsonPropertyName("pumpDeviceNames")]
+    public string? PumpDeviceNames { get; set; }
 
     /// <summary>Time-weighted pump use percentage across segments</summary>
     [JsonPropertyName("pumpUsePercent")]

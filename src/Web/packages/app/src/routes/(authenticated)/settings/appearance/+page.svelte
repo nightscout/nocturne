@@ -20,12 +20,20 @@
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
   import { updateLanguagePreference } from "$api/user-preferences.remote";
   import {
+    getPreference,
+    setPreference,
+    getSourceDefaults,
+    setSourceDefaults,
+  } from "$api/generated/glucoseProcessingSettings.generated.remote";
+  import GlucoseSourceDefaultsDialog from "$lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
+  import {
     Card,
     CardContent,
     CardDescription,
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
+  import { Button } from "$lib/components/ui/button";
   import { Switch } from "$lib/components/ui/switch";
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
@@ -38,6 +46,7 @@
   } from "$lib/components/ui/select";
   import { Label as FormLabel } from "$lib/components/ui/label";
   import {
+    Activity,
     Palette,
     Sun,
     Moon,
@@ -110,6 +119,22 @@
       second: "2-digit",
     })
   );
+
+  // Glucose processing settings
+  let glucoseProcessingPreference = $state<string | null>(null);
+  let sourceDefaults = $state<Array<{ match: string; field: string; processing: string }>>([]);
+  let sourceDefaultsDialogOpen = $state(false);
+
+  $effect(() => {
+    if (browser) {
+      getPreference().then((result) => {
+        glucoseProcessingPreference = result?.preferredGlucoseProcessing ?? null;
+      });
+      getSourceDefaults().then((result) => {
+        sourceDefaults = result?.rules ?? [];
+      });
+    }
+  });
 </script>
 
 <svelte:head>
@@ -118,9 +143,14 @@
 
 <div class="container mx-auto max-w-4xl p-6 space-y-6">
   <!-- Header -->
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight">Appearance</h1>
-    <p class="text-muted-foreground">Customize the look and feel of Nocturne</p>
+  <div class="flex items-center gap-3">
+    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+      <Palette class="h-6 w-6 text-primary" />
+    </div>
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Appearance</h1>
+      <p class="text-muted-foreground">Customize the look and feel of Nocturne</p>
+    </div>
   </div>
 
   {#if store.isLoading}
@@ -144,11 +174,11 @@
           Color Theme
         </CardTitle>
         <CardDescription>
-          Choose between Nocturne's custom theme or match the Trio iOS app
+          Choose a color theme that matches your preferred app experience
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <!-- Nocturne Theme -->
           <button
             type="button"
@@ -156,11 +186,7 @@
             'nocturne'
               ? 'border-primary bg-accent/30'
               : 'border-border'}"
-            onclick={() => {
-              if (currentTheme !== "nocturne") {
-                handleThemeChange("nocturne");
-              }
-            }}
+            onclick={() => handleThemeChange("nocturne")}
           >
             {#if currentTheme === "nocturne"}
               <Badge class="absolute right-2 top-2" variant="default">
@@ -169,9 +195,8 @@
             {/if}
             <div class="font-semibold">Nocturne</div>
             <p class="text-sm text-muted-foreground">
-              Custom color palette designed for Nocturne
+              Custom palette designed for Nocturne
             </p>
-            <!-- Color preview -->
             <div class="flex gap-1 mt-2">
               <div
                 class="h-4 w-4 rounded-full"
@@ -208,11 +233,7 @@
             'trio'
               ? 'border-primary bg-accent/30'
               : 'border-border'}"
-            onclick={() => {
-              if (currentTheme !== "trio") {
-                handleThemeChange("trio");
-              }
-            }}
+            onclick={() => handleThemeChange("trio")}
           >
             {#if currentTheme === "trio"}
               <Badge class="absolute right-2 top-2" variant="default">
@@ -223,7 +244,6 @@
             <p class="text-sm text-muted-foreground">
               Match the Trio iOS app color scheme
             </p>
-            <!-- Color preview -->
             <div class="flex gap-1 mt-2">
               <div
                 class="h-4 w-4 rounded-full"
@@ -249,6 +269,100 @@
                 class="h-4 w-4 rounded-full"
                 style="background: rgb(255, 240, 23)"
                 title="Carbs"
+              ></div>
+            </div>
+          </button>
+
+          <!-- AAPS Theme -->
+          <button
+            type="button"
+            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {currentTheme ===
+            'aaps'
+              ? 'border-primary bg-accent/30'
+              : 'border-border'}"
+            onclick={() => handleThemeChange("aaps")}
+          >
+            {#if currentTheme === "aaps"}
+              <Badge class="absolute right-2 top-2" variant="default">
+                Active
+              </Badge>
+            {/if}
+            <div class="font-semibold">AAPS</div>
+            <p class="text-sm text-muted-foreground">
+              Match the AndroidAPS color scheme
+            </p>
+            <div class="flex gap-1 mt-2">
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #006493"
+                title="Primary Blue"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #006A5F"
+                title="Teal Secondary"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #00FF00"
+                title="In Range"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #FFFF00"
+                title="Warning"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #40bbaa"
+                title="Accent"
+              ></div>
+            </div>
+          </button>
+
+          <!-- Classic Theme -->
+          <button
+            type="button"
+            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {currentTheme ===
+            'classic'
+              ? 'border-primary bg-accent/30'
+              : 'border-border'}"
+            onclick={() => handleThemeChange("classic")}
+          >
+            {#if currentTheme === "classic"}
+              <Badge class="absolute right-2 top-2" variant="default">
+                Active
+              </Badge>
+            {/if}
+            <div class="font-semibold">Classic</div>
+            <p class="text-sm text-muted-foreground">
+              Legacy Nightscout dark theme
+            </p>
+            <div class="flex gap-1 mt-2">
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #000000"
+                title="Black Background"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #4cff00"
+                title="Neon Green"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #808080"
+                title="Pill Grey"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #bdbdbd"
+                title="Text Grey"
+              ></div>
+              <div
+                class="h-4 w-4 rounded-full"
+                style="background: #0099ff"
+                title="Classic Blue"
               ></div>
             </div>
           </button>
@@ -420,6 +534,85 @@
             </Select>
           </div>
         </div>
+      </CardContent>
+    </Card>
+
+    <!-- Glucose Processing -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <Activity class="h-5 w-5" />
+          Glucose Processing
+        </CardTitle>
+        <CardDescription>
+          Choose how glucose values are displayed when both smoothed and unsmoothed readings are available
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-2">
+            <Label>Display preference</Label>
+            <Select
+              type="single"
+              value={glucoseProcessingPreference ?? "default"}
+              onValueChange={async (value) => {
+                const newValue = value === "default" ? null : value;
+                glucoseProcessingPreference = newValue;
+                await setPreference({ preferredGlucoseProcessing: newValue });
+              }}
+            >
+              <SelectTrigger>
+                <span>
+                  {#if glucoseProcessingPreference === "Smoothed"}
+                    Smoothed
+                  {:else if glucoseProcessingPreference === "Unsmoothed"}
+                    Unsmoothed
+                  {:else}
+                    Default
+                  {/if}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default</SelectItem>
+                <SelectItem value="Smoothed">Smoothed</SelectItem>
+                <SelectItem value="Unsmoothed">Unsmoothed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <p class="text-xs text-muted-foreground">
+          This only affects values where both smoothed and unsmoothed readings are present.
+          "Default" uses the value as reported by the data source.
+        </p>
+
+        <Separator />
+
+        <div class="flex items-center justify-between">
+          <div class="space-y-0.5">
+            <Label>Client upload source defaults</Label>
+            <p class="text-sm text-muted-foreground">
+              {#if sourceDefaults.length === 0}
+                No source rules configured. All uploads use the default processing.
+              {:else}
+                {sourceDefaults.length} rule{sourceDefaults.length === 1 ? '' : 's'} configured
+              {/if}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onclick={() => (sourceDefaultsDialogOpen = true)}>
+            Configure
+          </Button>
+        </div>
+
+        <GlucoseSourceDefaultsDialog
+          bind:open={sourceDefaultsDialogOpen}
+          rules={sourceDefaults}
+          onSave={async (rules) => {
+            sourceDefaults = rules;
+            sourceDefaultsDialogOpen = false;
+            await setSourceDefaults({ rules });
+          }}
+          onCancel={() => (sourceDefaultsDialogOpen = false)}
+        />
       </CardContent>
     </Card>
 

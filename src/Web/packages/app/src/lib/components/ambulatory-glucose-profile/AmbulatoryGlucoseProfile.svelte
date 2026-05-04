@@ -8,6 +8,11 @@
   } from "$lib/stores/appearance-store.svelte";
   import { convertToDisplayUnits } from "$lib/utils/formatting";
   import type { AveragedStats } from "$lib/api";
+  import {
+    formatHour as _formatHour,
+    transformStats,
+    AGP_LOW_THRESHOLD,
+  } from "./agp-utils";
 
   let {
     averagedStats,
@@ -22,27 +27,14 @@
   const units = $derived(glucoseUnits.current);
   const isMMOL = $derived(units === "mmol");
 
-  const data = $derived(
-    rawData.map((d) => ({
-      ...d,
-      median: convertToDisplayUnits(d.median ?? 0, units),
-      percentiles: d.percentiles
-        ? {
-            p10: convertToDisplayUnits(d.percentiles.p10 ?? 0, units),
-            p25: convertToDisplayUnits(d.percentiles.p25 ?? 0, units),
-            p75: convertToDisplayUnits(d.percentiles.p75 ?? 0, units),
-            p90: convertToDisplayUnits(d.percentiles.p90 ?? 0, units),
-          }
-        : undefined,
-    }))
-  );
+  const data = $derived(transformStats(rawData, units));
 
   // Dynamic Y-axis domain based on units
   const yDomain = $derived<[number, number]>(isMMOL ? [0, 22.2] : [0, 400]);
 
   // Convert threshold values to display units
   const lowThreshold = $derived(
-    convertToDisplayUnits(DEFAULT_THRESHOLDS.low ?? 70, units)
+    convertToDisplayUnits(AGP_LOW_THRESHOLD, units)
   );
   const highThreshold = $derived(
     convertToDisplayUnits(DEFAULT_THRESHOLDS.high ?? 180, units)
@@ -50,17 +42,7 @@
 
   // Time format for X-axis labels
   const is24Hour = $derived(timeFormat.current === "24");
-
-  // Format hour for X-axis tick label
-  function formatHour(hour: number): string {
-    if (is24Hour) {
-      return `${hour.toString().padStart(2, "0")}:00`;
-    }
-    if (hour === 0) return "12am";
-    if (hour === 12) return "12pm";
-    if (hour < 12) return `${hour}am`;
-    return `${hour - 12}pm`;
-  }
+  const formatHour = $derived((hour: number) => _formatHour(hour, is24Hour));
 </script>
 
 {#if rawData.length > 0}

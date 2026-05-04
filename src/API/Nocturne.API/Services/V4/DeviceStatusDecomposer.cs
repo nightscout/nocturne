@@ -28,6 +28,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
     private readonly IApsSnapshotRepository _apsRepo;
     private readonly IPumpSnapshotRepository _pumpRepo;
     private readonly IUploaderSnapshotRepository _uploaderRepo;
+    private readonly IDeviceStatusExtrasRepository _extrasRepo;
     private readonly IStateSpanService _stateSpanService;
     private readonly IDeviceService _deviceService;
     private readonly ILogger<DeviceStatusDecomposer> _logger;
@@ -41,6 +42,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
     /// <param name="apsRepo">Repository for <see cref="V4Models.ApsSnapshot"/> records.</param>
     /// <param name="pumpRepo">Repository for <see cref="V4Models.PumpSnapshot"/> records.</param>
     /// <param name="uploaderRepo">Repository for <see cref="V4Models.UploaderSnapshot"/> records.</param>
+    /// <param name="extrasRepo">Repository for <see cref="V4Models.DeviceStatusExtras"/> records.</param>
     /// <param name="stateSpanService">Service used to upsert override state spans extracted from device status.</param>
     /// <param name="deviceService">Service that resolves or creates canonical device references.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
@@ -49,6 +51,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
         IApsSnapshotRepository apsRepo,
         IPumpSnapshotRepository pumpRepo,
         IUploaderSnapshotRepository uploaderRepo,
+        IDeviceStatusExtrasRepository extrasRepo,
         IStateSpanService stateSpanService,
         IDeviceService deviceService,
         ILogger<DeviceStatusDecomposer> logger)
@@ -57,6 +60,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
         _apsRepo = apsRepo;
         _pumpRepo = pumpRepo;
         _uploaderRepo = uploaderRepo;
+        _extrasRepo = extrasRepo;
         _stateSpanService = stateSpanService;
         _deviceService = deviceService;
         _logger = logger;
@@ -110,6 +114,8 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             await DecomposeOverrideAsync(ds, legacyId, result, ct);
         }
 
+        await DecomposeExtrasAsync(ds, result, ct);
+
         return result;
     }
 
@@ -158,6 +164,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             PredictedCobJson = SerializeOrNull(predBGs?.COB),
             PredictedUamJson = SerializeOrNull(predBGs?.UAM),
             PredictedStartTimestamp = ParseTimestampToDateTime(command?.Timestamp),
+            AidVersion = ds.OpenAps?.Version,
         };
 
         await UpsertApsSnapshotAsync(legacyId, model, result, ct);
@@ -188,6 +195,9 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             EnactedJson = SerializeOrNull(ds.Loop.Enacted),
             PredictedDefaultJson = SerializeOrNull(ds.Loop.Predicted?.Values),
             PredictedStartTimestamp = ParseTimestampToDateTime(ds.Loop.Predicted?.StartDate),
+            LoopJson = SerializeOrNull(ds.Loop),
+            // Loop's version is captured from the device string (e.g. "Loop/3.0"), not from the Loop data object
+            AidVersion = null,
         };
 
         await UpsertApsSnapshotAsync(legacyId, model, result, ct);
@@ -238,6 +248,11 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             Suspended = ds.Pump.Status?.Suspended,
             PumpStatus = ds.Pump.Status?.Status,
             Clock = ds.Pump.Clock,
+            Iob = ds.Pump.Iob?.Iob,
+            BolusIob = ds.Pump.Iob?.BolusIob,
+            AdditionalProperties = ds.Pump.Extended is { Count: > 0 }
+                ? ds.Pump.Extended.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
+                : null,
         };
 
         model.DeviceId = await _deviceService.ResolveAsync(
@@ -250,18 +265,101 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             ? await _pumpRepo.GetByLegacyIdAsync(legacyId, ct)
             : null;
 
+        V4Models.PumpSnapshot persisted;
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _pumpRepo.UpdateAsync(existing.Id, model, ct);
-            result.UpdatedRecords.Add(updated);
+            persisted = await _pumpRepo.UpdateAsync(existing.Id, model, ct);
+            result.UpdatedRecords.Add(persisted);
             _logger.LogDebug("Updated existing PumpSnapshot {Id} from legacy device status {LegacyId}", existing.Id, legacyId);
         }
         else
         {
-            var created = await _pumpRepo.CreateAsync(model, ct);
-            result.CreatedRecords.Add(created);
+            persisted = await _pumpRepo.CreateAsync(model, ct);
+            result.CreatedRecords.Add(persisted);
             _logger.LogDebug("Created PumpSnapshot from legacy device status {LegacyId}", legacyId);
+        }
+
+        await DecomposePumpSuspensionAsync(ds, persisted, result, ct);
+    }
+
+    /// <summary>
+    /// Detects pump-suspension transitions and emits/closes a
+    /// <see cref="StateSpanCategory.PumpMode"/> / <see cref="PumpModeState.Suspended"/> state span.
+    /// </summary>
+    /// <remarks>
+    /// <para>Compares the just-upserted <see cref="V4Models.PumpSnapshot"/> against the most-recent
+    /// prior snapshot strictly before its timestamp. On a <c>false → true</c> transition (or first
+    /// observation with <c>Suspended == true</c>), opens a new span. On <c>true → false</c>, closes
+    /// the open span. Equal-state comparisons are no-ops.</para>
+    /// <para>First observation: when there is no prior snapshot, opening on
+    /// <c>Suspended == true</c> anchors the span at the first observed timestamp — there is no
+    /// transition signal to anchor on otherwise.</para>
+    /// <para>Idempotency: the open span carries a deterministic
+    /// <c>OriginalId = "pump-suspended:{snapshotId}"</c> so re-decomposing the same legacy
+    /// <see cref="DeviceStatus"/> will upsert (not duplicate) the row.</para>
+    /// <para>Assumes a single insulin pump per tenant — the open-span lookup does not filter by
+    /// <c>Source</c>, so a second pump's resume could close a first pump's open span. Out of scope
+    /// per the alerting model (one tenant = one diabetic person).</para>
+    /// </remarks>
+    private async Task DecomposePumpSuspensionAsync(
+        DeviceStatus ds,
+        V4Models.PumpSnapshot newSnapshot,
+        V4Models.DecompositionResult result,
+        CancellationToken ct)
+    {
+        var prior = await _pumpRepo.GetLatestBeforeAsync(newSnapshot.Timestamp, ct);
+        var priorSuspended = prior?.Suspended ?? false;
+        var nowSuspended = newSnapshot.Suspended ?? false;
+
+        if (priorSuspended == nowSuspended)
+            return;
+
+        // Prefer pump's own clock for the transition timestamp; fall back to ingestion timestamp.
+        var transitionAt = ParseTimestampToDateTime(newSnapshot.Clock) ?? newSnapshot.Timestamp;
+
+        if (!priorSuspended && nowSuspended)
+        {
+            var span = new StateSpan
+            {
+                Category = StateSpanCategory.PumpMode,
+                State = PumpModeState.Suspended.ToString(),
+                StartTimestamp = transitionAt,
+                EndTimestamp = null,
+                Source = ds.Device,
+                OriginalId = $"pump-suspended:{newSnapshot.Id}",
+            };
+
+            var upserted = await _stateSpanService.UpsertStateSpanAsync(span, ct);
+            result.CreatedRecords.Add(upserted);
+            _logger.LogDebug(
+                "Opened PumpMode/Suspended StateSpan for snapshot {SnapshotId} (legacy {LegacyId})",
+                newSnapshot.Id, newSnapshot.LegacyId);
+        }
+        else // priorSuspended && !nowSuspended
+        {
+            var openSpans = await _stateSpanService.GetStateSpansAsync(
+                category: StateSpanCategory.PumpMode,
+                state: PumpModeState.Suspended.ToString(),
+                active: true,
+                count: 1,
+                cancellationToken: ct);
+
+            var openSpan = openSpans.FirstOrDefault();
+            if (openSpan is null)
+            {
+                _logger.LogWarning(
+                    "PumpMode/Suspended transition true→false detected but no open StateSpan to close (snapshot {SnapshotId})",
+                    newSnapshot.Id);
+                return;
+            }
+
+            openSpan.EndTimestamp = transitionAt;
+            var closed = await _stateSpanService.UpsertStateSpanAsync(openSpan, ct);
+            result.UpdatedRecords.Add(closed);
+            _logger.LogDebug(
+                "Closed PumpMode/Suspended StateSpan {SpanId} at {EndTimestamp}",
+                openSpan.Id, transitionAt);
         }
     }
 
@@ -335,6 +433,55 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
         var upserted = await _stateSpanService.UpsertStateSpanAsync(stateSpan, ct);
         result.CreatedRecords.Add(upserted);
         _logger.LogDebug("Delegated Override from device status {LegacyId} to IStateSpanService", legacyId);
+    }
+
+    #endregion
+
+    #region Extras Decomposition
+
+    private async Task DecomposeExtrasAsync(
+        DeviceStatus ds, V4Models.DecompositionResult result, CancellationToken ct)
+    {
+        var extras = new Dictionary<string, object?>();
+
+        if (ds.XDripJs != null)
+            extras["xdripjs"] = ds.XDripJs;
+        if (ds.RadioAdapter != null)
+            extras["radioAdapter"] = ds.RadioAdapter;
+        if (ds.Connect != null)
+            extras["connect"] = ds.Connect;
+        if (ds.Cgm != null)
+            extras["cgm"] = ds.Cgm;
+        if (ds.Meter != null)
+            extras["meter"] = ds.Meter;
+        if (ds.InsulinPen != null)
+            extras["insulinPen"] = ds.InsulinPen;
+        if (ds.MmTune != null)
+            extras["mmtune"] = ds.MmTune;
+        // RileyLinks live on the Loop object, which is already fully serialized into
+        // ApsSnapshot.LoopJson when ds.Loop is present — no need to duplicate here.
+
+        // Capture unknown top-level keys from JSON deserialization
+        if (ds.ExtensionData != null)
+        {
+            foreach (var kvp in ds.ExtensionData)
+                extras[kvp.Key] = kvp.Value;
+        }
+
+        if (extras.Count == 0 || result.CorrelationId is not { } correlationId)
+            return;
+
+        var model = new V4Models.DeviceStatusExtras
+        {
+            CorrelationId = correlationId,
+            Timestamp = ResolveTimestamp(ds),
+            Extras = extras,
+        };
+
+        var created = await _extrasRepo.CreateAsync(model, ct);
+        result.CreatedRecords.Add(created);
+        _logger.LogDebug("Created DeviceStatusExtras with {Count} keys for correlation {CorrelationId}",
+            extras.Count, result.CorrelationId);
     }
 
     #endregion
@@ -440,9 +587,27 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
         var deleted = 0;
+
+        // Look up correlation ID from any snapshot with this legacy ID before deleting
+        var apsSnapshot = await _apsRepo.GetByLegacyIdAsync(legacyId, ct);
+        var correlationId = apsSnapshot?.CorrelationId;
+        if (correlationId == null)
+        {
+            var pumpSnapshot = await _pumpRepo.GetByLegacyIdAsync(legacyId, ct);
+            correlationId = pumpSnapshot?.CorrelationId;
+        }
+        if (correlationId == null)
+        {
+            var uploaderSnapshot = await _uploaderRepo.GetByLegacyIdAsync(legacyId, ct);
+            correlationId = uploaderSnapshot?.CorrelationId;
+        }
+
         deleted += await _apsRepo.DeleteByLegacyIdAsync(legacyId, ct);
         deleted += await _pumpRepo.DeleteByLegacyIdAsync(legacyId, ct);
         deleted += await _uploaderRepo.DeleteByLegacyIdAsync(legacyId, ct);
+
+        if (correlationId.HasValue)
+            deleted += await _extrasRepo.DeleteByCorrelationIdAsync(correlationId.Value, ct);
 
         if (deleted > 0)
             _logger.LogDebug("Deleted {Count} v4 snapshot records for legacy device status {LegacyId}", deleted, legacyId);

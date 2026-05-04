@@ -63,7 +63,6 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
     public async Task UpdateStatusAsync(
         Guid id,
         ConnectorFoodEntryStatus status,
-        Guid? matchedTreatmentId,
         CancellationToken ct = default)
     {
         var entity = await _context.ConnectorFoodEntries
@@ -72,7 +71,6 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
         if (entity != null)
         {
             entity.Status = status;
-            entity.MatchedTreatmentId = matchedTreatmentId;
             entity.ResolvedAt = DateTimeOffset.UtcNow;
             await _context.SaveChangesAsync(ct);
         }
@@ -98,7 +96,6 @@ public class ConnectorFoodEntryRepository : IConnectorFoodEntryRepository
             Servings = entity.Servings,
             ServingDescription = entity.ServingDescription,
             Status = entity.Status,
-            MatchedTreatmentId = entity.MatchedTreatmentId,
             ResolvedAt = entity.ResolvedAt,
         };
     }

@@ -32,4 +32,13 @@ public interface IEntryDecomposer
     /// <param name="ct">Cancellation token</param>
     /// <returns>Total number of v4 records deleted across all tables</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk-deletes V4 records matching the given MongoDB-style find query.
+    /// Parses time bounds from the find JSON and deletes across all glucose repositories.
+    /// </summary>
+    /// <param name="find">Optional MongoDB-style find query for time-range extraction.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Total number of records deleted across all V4 tables.</returns>
+    Task<long> BulkDeleteAsync(string? find, CancellationToken ct = default);
 }

@@ -11,37 +11,6 @@ namespace Nocturne.Core.Models.Entries;
 public static class EntryDomainLogic
 {
     /// <summary>
-    /// Merges legacy entries with V4-projected entries.
-    /// Deduplicates by ID and Mills (timestamp).
-    /// Orders by <see cref="Entry.Mills"/> descending, applies skip/take.
-    /// </summary>
-    /// <param name="legacyEntries">Entries from the legacy V1-V3 data store.</param>
-    /// <param name="projectedEntries">Entries projected from V4 glucose readings.</param>
-    /// <param name="count">Maximum number of entries to return.</param>
-    /// <param name="skip">Number of entries to skip (for pagination).</param>
-    /// <returns>Deduplicated, sorted list of entries.</returns>
-    public static IReadOnlyList<Entry> MergeAndDeduplicate(
-        IEnumerable<Entry> legacyEntries,
-        IEnumerable<Entry> projectedEntries,
-        int count,
-        int skip)
-    {
-        var legacyList = legacyEntries.ToList();
-        var legacyIds = legacyList.Select(e => e.Id).Where(id => id != null).ToHashSet();
-        var legacyMillsSet = legacyList.Select(e => e.Mills).ToHashSet();
-
-        var filteredProjected = projectedEntries
-            .Where(p => !legacyIds.Contains(p.Id) && !legacyMillsSet.Contains(p.Mills));
-
-        return legacyList
-            .Concat(filteredProjected)
-            .OrderByDescending(e => e.Mills)
-            .Skip(skip)
-            .Take(count)
-            .ToList();
-    }
-
-    /// <summary>
     /// Builds a MongoDB-style JSON find query with data_source filter injected
     /// based on whether demo mode is enabled.
     /// </summary>
@@ -108,9 +77,9 @@ public static class EntryDomainLogic
                     if (op.Value.ValueKind != JsonValueKind.Number)
                         continue;
 
-                    if (op.Name == "$gte" && op.Value.TryGetInt64(out var gte))
+                    if ((op.Name == "$gte" || op.Name == "$gt") && op.Value.TryGetInt64(out var gte))
                         from = gte;
-                    else if (op.Name == "$lte" && op.Value.TryGetInt64(out var lte))
+                    else if ((op.Name == "$lte" || op.Name == "$lt") && op.Value.TryGetInt64(out var lte))
                         to = lte;
                 }
             }
@@ -130,28 +99,4 @@ public static class EntryDomainLogic
     /// <returns><c>true</c> if <paramref name="count"/> is 10, 50, or 100.</returns>
     public static bool IsCommonEntryCount(int count) => count is 10 or 50 or 100;
 
-    /// <summary>
-    /// Returns the <see cref="Entry"/> with the higher <see cref="Entry.Mills"/> timestamp, handling nulls.
-    /// </summary>
-    /// <param name="legacy">Entry from the legacy data store (may be null).</param>
-    /// <param name="projected">Entry projected from V4 data (may be null).</param>
-    /// <returns>The more recent entry, or <c>null</c> if both are null.</returns>
-    public static Entry? SelectMostRecent(Entry? legacy, Entry? projected)
-    {
-        if (legacy == null && projected == null)
-            return null;
-        if (legacy == null)
-            return projected;
-        if (projected == null)
-            return legacy;
-
-        return projected.Mills > legacy.Mills ? projected : legacy;
-    }
-
-    /// <summary>
-    /// Returns true if the type is null, empty, or "sgv" -- i.e., should be projected from V4.
-    /// </summary>
-    /// <param name="type">The <see cref="Entry.Type"/> value to check.</param>
-    /// <returns><c>true</c> if entries of this type should be projected from V4 glucose readings.</returns>
-    public static bool ShouldProject(string? type) => string.IsNullOrEmpty(type) || type == "sgv";
 }

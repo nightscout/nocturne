@@ -18,5 +18,6 @@
   },
   "files.associations": {
     "appsettings*.json": "jsonc"
-  }
+  },
+  "vitest.workspaceConfig": "src/Web/packages/app/vitest.workspace.ts"
 }

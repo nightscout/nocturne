@@ -64,6 +64,12 @@ public class SensorGlucoseEntity : ITenantScoped, IAuditable
     public Guid? CorrelationId { get; set; }
 
     /// <summary>
+    /// FK to the patient's registered device record (resolved at ingest time)
+    /// </summary>
+    [Column("patient_device_id")]
+    public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     [Column("legacy_id")]
@@ -126,6 +132,25 @@ public class SensorGlucoseEntity : ITenantScoped, IAuditable
     /// </summary>
     [Column("delta")]
     public double? Delta { get; set; }
+
+    /// <summary>
+    /// Whether this reading is smoothed or unsmoothed (enum stored as string). Null when unknown.
+    /// </summary>
+    [Column("glucose_processing")]
+    [MaxLength(16)]
+    public string? GlucoseProcessing { get; set; }
+
+    /// <summary>
+    /// Smoothed glucose value in mg/dL
+    /// </summary>
+    [Column("smoothed_mgdl")]
+    public double? SmoothedMgdl { get; set; }
+
+    /// <summary>
+    /// Unsmoothed (raw) glucose value in mg/dL
+    /// </summary>
+    [Column("unsmoothed_mgdl")]
+    public double? UnsmoothedMgdl { get; set; }
 
     /// <summary>
     /// Catch-all JSONB column for fields not mapped to dedicated columns

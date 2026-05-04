@@ -106,6 +106,25 @@ public class TargetRangeScheduleRepository : ITargetRangeScheduleRepository
     }
 
     /// <summary>
+    /// Gets the most recent target range schedule for a profile that was active at-or-before the given timestamp.
+    /// </summary>
+    /// <param name="profileName">The name of the profile.</param>
+    /// <param name="timestamp">The point-in-time to query against.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The matching target range schedule, or null if none found.</returns>
+    public async Task<TargetRangeSchedule?> GetActiveAtAsync(
+        string profileName, DateTime timestamp, CancellationToken ct = default)
+    {
+        var entity = await _context.TargetRangeSchedules
+            .AsNoTracking()
+            .Where(e => e.ProfileName == profileName && e.Timestamp <= timestamp)
+            .OrderByDescending(e => e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+
+        return entity is null ? null : TargetRangeScheduleMapper.ToDomainModel(entity);
+    }
+
+    /// <summary>
     /// Creates a new target range schedule.
     /// </summary>
     /// <param name="model">The target range schedule to create.</param>

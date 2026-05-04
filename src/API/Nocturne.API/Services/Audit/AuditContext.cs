@@ -10,6 +10,7 @@ namespace Nocturne.API.Services.Audit;
 public class AuditContext : IAuditContext
 {
     public Guid? SubjectId { get; set; }
+    public string? SubjectName { get; set; }
     public string? AuthType { get; set; }
     public string? IpAddress { get; set; }
     public Guid? TokenId { get; set; }

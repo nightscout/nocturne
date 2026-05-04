@@ -161,4 +161,64 @@ public class MeterGlucoseRepository : IMeterGlucoseRepository
             .Where(e => e.LegacyId == legacyId)
             .ExecuteDeleteAsync(ct);
     }
+
+    /// <summary>
+    /// Gets the timestamp of the latest meter glucose record.
+    /// </summary>
+    /// <param name="source">Optional data source filter.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The latest timestamp, or null if no records found.</returns>
+    public async Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default)
+    {
+        var query = _context.MeterGlucose.AsNoTracking().AsQueryable();
+        if (source != null)
+            query = query.Where(e => e.DataSource == source);
+        return await query.MaxAsync(e => (DateTime?)e.Timestamp, ct);
+    }
+
+    /// <summary>
+    /// Gets the timestamp of the oldest meter glucose record.
+    /// </summary>
+    /// <param name="source">Optional data source filter.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The oldest timestamp, or null if no records found.</returns>
+    public async Task<DateTime?> GetOldestTimestampAsync(string? source = null, CancellationToken ct = default)
+    {
+        var query = _context.MeterGlucose.AsNoTracking().AsQueryable();
+        if (source != null)
+            query = query.Where(e => e.DataSource == source);
+        return await query.MinAsync(e => (DateTime?)e.Timestamp, ct);
+    }
+
+    /// <summary>
+    /// Deletes all meter glucose records for the given data source.
+    /// </summary>
+    /// <param name="source">Data source identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Number of records deleted.</returns>
+    public async Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default)
+    {
+        return await _context.MeterGlucose
+            .Where(e => e.DataSource == source)
+            .ExecuteDeleteAsync(ct);
+    }
+
+    /// <summary>
+    /// Deletes all meter glucose records within the given time range.
+    /// </summary>
+    /// <param name="from">Inclusive start, or null for no lower bound.</param>
+    /// <param name="to">Exclusive end, or null for no upper bound.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>Number of records deleted.</returns>
+    public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
+    {
+        var query = _context.MeterGlucose.AsQueryable();
+
+        if (from.HasValue)
+            query = query.Where(e => e.Timestamp >= from.Value);
+        if (to.HasValue)
+            query = query.Where(e => e.Timestamp < to.Value);
+
+        return await query.ExecuteDeleteAsync(ct);
+    }
 }

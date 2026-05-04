@@ -2,7 +2,6 @@
   import {
     CurrentBGDisplay,
     GlucoseChartCard,
-    OnboardingProgress,
     RecentEntriesCard,
     RecentTreatmentsCard,
     WidgetGrid,
@@ -38,35 +37,40 @@
 </script>
 
 <div class="@container p-3 @md:p-6 space-y-3 @md:space-y-6">
-  <CurrentBGDisplay />
+  <div {@attach coachmark({
+    key: "quick-tour.current-bg",
+    title: "Your glucose, live",
+    description: "This updates in real-time as new readings arrive from your CGM.",
+  })}>
+    <CurrentBGDisplay />
+  </div>
 
-  <OnboardingProgress />
+  <div class="flex flex-col-reverse @md:flex-col gap-3 @md:gap-6">
+    {#if isMainEnabled(WidgetId.Statistics)}
+      <div {@attach coachmark({
+        key: "quick-tour.widgets",
+        title: "Customizable widgets",
+        description: "Reorder or swap these in Settings \u2192 Appearance. You can choose from over a dozen stats.",
+      })}>
+        <WidgetGrid widgets={topWidgets} maxWidgets={3} />
+      </div>
+    {/if}
 
-  {#if isMainEnabled(WidgetId.Statistics)}
-    <div {@attach coachmark({
-      key: "dashboard-discovery.widgets",
-      title: "Your stats at a glance",
-      description: "These widgets show your key stats at a glance \u2014 customize them in Appearance settings.",
-    })}>
-      <WidgetGrid widgets={topWidgets} maxWidgets={3} />
-    </div>
-  {/if}
-
-  {#if isMainEnabled(WidgetId.GlucoseChart)}
-    <div {@attach coachmark({
-      key: "dashboard-discovery.chart-timerange",
-      title: "Time range",
-      description: "Adjust the time window to see more or less glucose history.",
-      completeOn: { event: "click" },
-    })}>
-    <GlucoseChartCard
-      showPredictions={isMainEnabled(WidgetId.Predictions) && predictionEnabled}
-      defaultFocusHours={focusHours}
-      initialChartData={data.initialChartData}
-      streamedHistoricalData={data.streamed?.historicalChartData}
-    />
-    </div>
-  {/if}
+    {#if isMainEnabled(WidgetId.GlucoseChart)}
+      <div {@attach coachmark({
+        key: "quick-tour.chart",
+        title: "Interactive chart",
+        description: "Drag to pan, pinch or scroll to zoom. Tap any point to see the exact reading and time.",
+      })}>
+      <GlucoseChartCard
+        showPredictions={isMainEnabled(WidgetId.Predictions) && predictionEnabled}
+        defaultFocusHours={focusHours}
+        initialChartData={data.initialChartData}
+        streamedHistoricalData={data.streamed?.historicalChartData}
+      />
+      </div>
+    {/if}
+  </div>
 
   {#if isMainEnabled(WidgetId.DailyStats)}
     <RecentEntriesCard />

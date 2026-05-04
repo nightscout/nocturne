@@ -60,9 +60,29 @@ public interface IUploaderSnapshotRepository : IV4Repository<UploaderSnapshot>
     /// <returns>Number of records deleted (0 or 1).</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
 
+    /// <summary>Retrieve <see cref="UploaderSnapshot"/> records matching any of the given correlation IDs.</summary>
+    /// <param name="correlationIds">Correlation IDs to match.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IEnumerable<UploaderSnapshot>> GetByCorrelationIdsAsync(IEnumerable<Guid> correlationIds, CancellationToken ct = default);
+
     /// <summary>Count <see cref="UploaderSnapshot"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
     /// <param name="ct">Cancellation token.</param>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the <see cref="UploaderSnapshot"/> representing the weakest uploader for the
+    /// current tenant — i.e. the row with the lowest <see cref="UploaderSnapshot.Battery"/>
+    /// among the most recent telemetry — or <c>null</c> if none exists.
+    /// </summary>
+    /// <remarks>
+    /// When multiple uploaders report telemetry, returns the one with the lowest battery so
+    /// alerts reflect the weakest device. Rows with <c>Battery = null</c> sort last; ties
+    /// break by most-recent <c>Timestamp</c>.
+    /// </remarks>
+    /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>;
+    /// when <c>null</c>, returns the absolute latest snapshot per the lowest-battery rule.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<UploaderSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default);
 }

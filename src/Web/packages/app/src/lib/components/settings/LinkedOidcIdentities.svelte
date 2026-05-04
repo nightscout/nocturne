@@ -106,7 +106,7 @@
     if (!providerId) return;
     showPickerDialog = false;
     const returnUrl = encodeURIComponent("/settings/account");
-    window.location.href = `/api/v4/oidc/link?provider=${encodeURIComponent(providerId)}&returnUrl=${returnUrl}`;
+    window.location.href = `/api/auth/oidc/link?provider=${encodeURIComponent(providerId)}&returnUrl=${returnUrl}`;
   }
 </script>
 

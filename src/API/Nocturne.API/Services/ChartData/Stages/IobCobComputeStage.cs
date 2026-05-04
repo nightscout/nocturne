@@ -4,9 +4,10 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Treatments;
-using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -18,9 +19,11 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// <remarks>
 /// <para>
 /// IOB and COB are computed at each interval step across the requested time window.
-/// To avoid O(n²) work on wide windows, treatments are pre-filtered before each iteration:
-/// only boluses within DIA hours of the current timestamp contribute to IOB, and only
-/// carb intakes within 6 hours contribute to COB. The DIA value is read from the loaded profile.
+/// Treatments are kept in time-sorted arrays and the active window is tracked with two-pointer
+/// indices that advance with each tick: only boluses within DIA hours of the current timestamp
+/// contribute to IOB, and only carb intakes within 6 hours contribute to COB. Total inner-loop
+/// work is therefore O(ticks + active-window) rather than O(ticks × treatments).
+/// The DIA value is read from the loaded profile.
 /// </para>
 /// <para>
 /// Results are cached in <see cref="Microsoft.Extensions.Caching.Memory.IMemoryCache"/> for
@@ -29,7 +32,7 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// and interval. The tenant ID component prevents cross-tenant cache leakage.
 /// </para>
 /// <para>
-/// Basal series construction (<see cref="BuildBasalSeriesFromTempBasals"/>) uses v4
+/// Basal series construction (<see cref="BuildBasalSeriesFromTempBasalsAsync"/>) uses v4
 /// <see cref="TempBasal"/> records as the source of truth and fills any gaps with
 /// profile-inferred rates at 5-minute resolution. When no TempBasal records exist the
 /// entire series is inferred from the profile. The y-axis maximum is clamped to at least
@@ -45,7 +48,10 @@ namespace Nocturne.API.Services.ChartData.Stages;
 internal sealed class IobCobComputeStage(
     IIobService iobService,
     ICobService cobService,
-    IProfileService profileService,
+    ITherapySettingsResolver therapySettingsResolver,
+    IBasalRateResolver basalRateResolver,
+    ITherapyTimelineResolver therapyTimelineResolver,
+    IApsSnapshotRepository apsSnapshotRepo,
     IMemoryCache cache,
     ITenantAccessor tenantAccessor,
     ILogger<IobCobComputeStage> logger
@@ -56,33 +62,32 @@ internal sealed class IobCobComputeStage(
     private string TenantCacheId => tenantAccessor.Context?.TenantId.ToString()
         ?? throw new InvalidOperationException("Tenant context is not resolved");
 
-    public Task<ChartDataContext> ExecuteAsync(ChartDataContext context, CancellationToken cancellationToken)
+    public async Task<ChartDataContext> ExecuteAsync(ChartDataContext context, CancellationToken cancellationToken)
     {
         var syntheticTreatments = context.SyntheticTreatments.ToList();
-        var deviceStatusList = context.DeviceStatusList.ToList();
         var tempBasalList = context.TempBasalList.ToList();
         var startTime = context.StartTime;
         var endTime = context.EndTime;
         var intervalMinutes = context.IntervalMinutes;
         var defaultBasalRate = context.DefaultBasalRate;
 
-        var (iobSeries, cobSeries, maxIob, maxCob) = BuildIobCobSeries(
+        var (iobSeries, cobSeries, maxIob, maxCob) = await BuildIobCobSeriesAsync(
             syntheticTreatments,
-            deviceStatusList,
             startTime,
             endTime,
             intervalMinutes,
-            tempBasalList
+            tempBasalList,
+            cancellationToken
         );
 
-        var basalSeries = BuildBasalSeriesFromTempBasals(tempBasalList, startTime, endTime, defaultBasalRate);
+        var basalSeries = await BuildBasalSeriesFromTempBasalsAsync(tempBasalList, startTime, endTime, defaultBasalRate, cancellationToken);
 
         var maxBasalRate = Math.Max(
             defaultBasalRate * 2.5,
             basalSeries.Any() ? basalSeries.Max(b => b.Rate) : defaultBasalRate
         );
 
-        return Task.FromResult(context with
+        return context with
         {
             IobSeries = iobSeries,
             CobSeries = cobSeries,
@@ -90,21 +95,21 @@ internal sealed class IobCobComputeStage(
             MaxCob = Math.Max(30, maxCob),
             BasalSeries = basalSeries,
             MaxBasalRate = maxBasalRate,
-        });
+        };
     }
 
-    internal (
+    internal async Task<(
         List<TimeSeriesPoint> iobSeries,
         List<TimeSeriesPoint> cobSeries,
         double maxIob,
         double maxCob
-    ) BuildIobCobSeries(
+    )> BuildIobCobSeriesAsync(
         List<Treatment> treatments,
-        List<DeviceStatus> deviceStatuses,
         long startTime,
         long endTime,
         int intervalMinutes,
-        List<TempBasal>? tempBasals = null
+        List<TempBasal>? tempBasals = null,
+        CancellationToken ct = default
     )
     {
         // Generate cache key based on treatment data hash and time range
@@ -139,47 +144,86 @@ internal sealed class IobCobComputeStage(
         double maxIob = 0,
             maxCob = 0;
 
-        // Pre-compute DIA and COB absorption window for filtering
-        var dia = profileService.HasData() ? profileService.GetDIA(endTime, null) : 3.0;
-        var diaMs = (long)(dia * 60 * 60 * 1000); // DIA in milliseconds
-        var cobAbsorptionMs = 6L * 60 * 60 * 1000; // 6 hours for COB absorption
+        // Build the request-scoped therapy timeline once. SnapshotAt(t) inside the loop
+        // resolves DIA / sensitivity / carb ratio / basal rate / carbsPerHour via in-memory
+        // schedule lookup with a sticky cursor — replacing four nested async resolver awaits per tick.
+        // The window extends one millisecond past endTime so SnapshotAt(endTime) lands inside a segment.
+        var timeline = await therapyTimelineResolver.BuildAsync(startTime, endTime + 1, ct: ct);
 
-        // Pre-filter treatments with insulin for IOB calculations
-        var insulinTreatments = treatments
+        // Pre-fetch the latest device COB once. The freshness check is against wall-clock now,
+        // so the answer is constant across all ticks in this request.
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var deviceCob = await PrefetchDeviceCobAsync(nowMills, ct);
+
+        // DIA at endTime drives the IOB / temp-basal eviction window. Matches legacy behavior.
+        var diaMs = (long)(timeline.SnapshotAt(endTime).Dia * 60 * 60 * 1000);
+        var cobAbsorptionMs = 6L * 60 * 60 * 1000;
+
+        // Sort once by Mills/StartMills so the active window can be tracked with two pointers
+        // as t advances. The hi index admits entries whose source time is <= t; the lo index
+        // evicts entries that have aged past their respective windows (DIA for IOB / temp basal,
+        // 6h for COB). Total work across the full tick loop is O(ticks + treatments) instead of
+        // O(ticks × treatments) — see remarks on the class.
+        var sortedInsulin = treatments
             .Where(t => t.Insulin.HasValue && t.Insulin.Value > 0)
+            .OrderBy(t => t.Mills)
             .ToList();
+        var sortedCarb = treatments
+            .Where(t => t.Carbs.HasValue && t.Carbs.Value > 0)
+            .OrderBy(t => t.Mills)
+            .ToList();
+        var sortedTempBasals = tempBasals?.OrderBy(tb => tb.StartMills).ToList();
 
-        // Pre-filter treatments with carbs for COB calculations
-        var carbTreatments = treatments.Where(t => t.Carbs.HasValue && t.Carbs.Value > 0).ToList();
-
-        var profile = profileService.HasData() ? profileService : null;
+        int insulinHi = 0,
+            insulinLo = 0;
+        int carbHi = 0,
+            carbLo = 0;
+        int basalHi = 0,
+            basalLo = 0;
 
         for (long t = startTime; t <= endTime; t += intervalMs)
         {
-            // Filter to only treatments that could still have active IOB at time t
-            // A treatment can only contribute IOB if it was given within DIA hours before t
-            var relevantIobTreatments = insulinTreatments
-                .Where(tr => tr.Mills <= t && tr.Mills >= t - diaMs)
-                .ToList();
+            ct.ThrowIfCancellationRequested();
 
-            var iobResult =
-                relevantIobTreatments.Count > 0
-                    ? iobService.FromTreatments(relevantIobTreatments, profile, t, null)
-                    : new IobResult { Iob = 0 };
-
-            // Calculate basal IOB from V4 TempBasal records
-            var basalIob = 0.0;
-            if (tempBasals?.Count > 0)
+            // Admit newly-elapsed entries (Mills/StartMills <= t)
+            while (insulinHi < sortedInsulin.Count && sortedInsulin[insulinHi].Mills <= t)
+                insulinHi++;
+            while (carbHi < sortedCarb.Count && sortedCarb[carbHi].Mills <= t)
+                carbHi++;
+            if (sortedTempBasals is not null)
             {
-                var relevantTempBasals = tempBasals
-                    .Where(tb => tb.StartMills <= t && tb.StartMills >= t - diaMs)
-                    .ToList();
+                while (basalHi < sortedTempBasals.Count && sortedTempBasals[basalHi].StartMills <= t)
+                    basalHi++;
+            }
 
-                if (relevantTempBasals.Count > 0)
-                {
-                    var basalResult = iobService.FromTempBasals(relevantTempBasals, profile, t, null);
-                    basalIob = basalResult.BasalIob ?? 0;
-                }
+            // Evict entries that have aged out of their window
+            while (insulinLo < insulinHi && sortedInsulin[insulinLo].Mills < t - diaMs)
+                insulinLo++;
+            while (carbLo < carbHi && sortedCarb[carbLo].Mills < t - cobAbsorptionMs)
+                carbLo++;
+            if (sortedTempBasals is not null)
+            {
+                while (basalLo < basalHi && sortedTempBasals[basalLo].StartMills < t - diaMs)
+                    basalLo++;
+            }
+
+            var snapshot = timeline.SnapshotAt(t);
+
+            var insulinCount = insulinHi - insulinLo;
+            var iobResult = insulinCount > 0
+                ? iobService.FromTreatments(sortedInsulin.GetRange(insulinLo, insulinCount), t, snapshot)
+                : new IobResult { Iob = 0 };
+
+            var basalIob = 0.0;
+            var basalCount = basalHi - basalLo;
+            if (sortedTempBasals is not null && basalCount > 0)
+            {
+                var basalResult = iobService.FromTempBasals(
+                    sortedTempBasals.GetRange(basalLo, basalCount),
+                    t,
+                    snapshot
+                );
+                basalIob = basalResult.BasalIob ?? 0;
             }
 
             var iob = iobResult.Iob + basalIob;
@@ -187,15 +231,10 @@ internal sealed class IobCobComputeStage(
             if (iob > maxIob)
                 maxIob = iob;
 
-            // Filter to only treatments that could still have active COB at time t
-            var relevantCobTreatments = carbTreatments
-                .Where(tr => tr.Mills <= t && tr.Mills >= t - cobAbsorptionMs)
-                .ToList();
-
-            var cobResult =
-                relevantCobTreatments.Count > 0
-                    ? cobService.CobTotal(relevantCobTreatments, deviceStatuses, profile, t, null)
-                    : new CobResult { Cob = 0 };
+            var carbCount = carbHi - carbLo;
+            var cobResult = carbCount > 0
+                ? cobService.CobTotal(sortedCarb.GetRange(carbLo, carbCount), t, snapshot, deviceCob, nowMills)
+                : new CobResult { Cob = 0 };
 
             var cob = cobResult.Cob;
             cobSeries.Add(new TimeSeriesPoint { Timestamp = t, Value = cob });
@@ -208,6 +247,42 @@ internal sealed class IobCobComputeStage(
         cache.Set(cacheKey, result, IobCobCacheExpiration);
 
         return result;
+    }
+
+    private async Task<DeviceCobSnapshot?> PrefetchDeviceCobAsync(long nowMills, CancellationToken ct)
+    {
+        var futureMills = nowMills + 5 * 60 * 1000;
+        var recentMills = nowMills - 30 * 60 * 1000;
+        var recentTime = DateTimeOffset.FromUnixTimeMilliseconds(recentMills).UtcDateTime;
+        var futureTime = DateTimeOffset.FromUnixTimeMilliseconds(futureMills).UtcDateTime;
+
+        var snapshots = await apsSnapshotRepo.GetAsync(
+            from: recentTime,
+            to: futureTime,
+            device: null,
+            source: null,
+            limit: 1,
+            offset: 0,
+            descending: true,
+            ct: ct
+        );
+
+        var snapshot = snapshots.FirstOrDefault();
+        if (snapshot?.Cob is > 0)
+        {
+            var source = snapshot.AidAlgorithm switch
+            {
+                AidAlgorithm.Loop => "Loop",
+                _ => "OpenAPS",
+            };
+            return new DeviceCobSnapshot(
+                Cob: snapshot.Cob.Value,
+                Mills: new DateTimeOffset(snapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                Source: source,
+                Device: snapshot.Device
+            );
+        }
+        return null;
     }
 
     /// <summary>
@@ -272,11 +347,12 @@ internal sealed class IobCobComputeStage(
     /// TempBasal records are the v4 source of truth for pump-confirmed basal delivery.
     /// Falls back to profile-based rates when there are gaps in TempBasal data.
     /// </summary>
-    internal List<BasalPoint> BuildBasalSeriesFromTempBasals(
+    internal async Task<List<BasalPoint>> BuildBasalSeriesFromTempBasalsAsync(
         List<TempBasal> tempBasals,
         long startTime,
         long endTime,
-        double defaultBasalRate
+        double defaultBasalRate,
+        CancellationToken ct = default
     )
     {
         var series = new List<BasalPoint>();
@@ -288,9 +364,11 @@ internal sealed class IobCobComputeStage(
         );
 
         if (sorted.Count == 0)
-            return BuildBasalSeriesFromProfile(startTime, endTime, defaultBasalRate);
+            return await BuildBasalSeriesFromProfileAsync(startTime, endTime, defaultBasalRate, ct);
 
         long currentTime = startTime;
+
+        var hasData = await therapySettingsResolver.HasDataAsync(ct);
 
         foreach (var tb in sorted)
         {
@@ -306,15 +384,15 @@ internal sealed class IobCobComputeStage(
             if (tbStart > currentTime)
             {
                 series.AddRange(
-                    BuildBasalSeriesFromProfile(currentTime, tbStart, defaultBasalRate)
+                    await BuildBasalSeriesFromProfileAsync(currentTime, tbStart, defaultBasalRate, ct)
                 );
             }
 
             var origin = MapTempBasalOrigin(tb.Origin);
 
             var scheduledRate = tb.ScheduledRate
-                ?? (profileService.HasData()
-                    ? profileService.GetBasalRate(tbStart, null)
+                ?? (hasData
+                    ? await basalRateResolver.GetBasalRateAsync(tbStart, ct: ct)
                     : defaultBasalRate);
 
             series.Add(
@@ -333,7 +411,7 @@ internal sealed class IobCobComputeStage(
         }
 
         if (currentTime < endTime)
-            series.AddRange(BuildBasalSeriesFromProfile(currentTime, endTime, defaultBasalRate));
+            series.AddRange(await BuildBasalSeriesFromProfileAsync(currentTime, endTime, defaultBasalRate, ct));
 
         if (series.Count == 0)
         {
@@ -355,20 +433,23 @@ internal sealed class IobCobComputeStage(
         return series;
     }
 
-    internal List<BasalPoint> BuildBasalSeriesFromProfile(
+    internal async Task<List<BasalPoint>> BuildBasalSeriesFromProfileAsync(
         long startTime,
         long endTime,
-        double defaultBasalRate
+        double defaultBasalRate,
+        CancellationToken ct = default
     )
     {
         var series = new List<BasalPoint>();
         const long intervalMs = 5 * 60 * 1000;
         double? prevRate = null;
 
+        var hasData = await therapySettingsResolver.HasDataAsync(ct);
+
         for (long t = startTime; t <= endTime; t += intervalMs)
         {
-            var rate = profileService.HasData()
-                ? profileService.GetBasalRate(t, null)
+            var rate = hasData
+                ? await basalRateResolver.GetBasalRateAsync(t, ct: ct)
                 : defaultBasalRate;
 
             if (prevRate == null || Math.Abs(rate - prevRate.Value) > 0.001)

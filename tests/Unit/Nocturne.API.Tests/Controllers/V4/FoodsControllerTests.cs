@@ -81,7 +81,7 @@ public class FoodsControllerTests
         var controller = CreateController(new AuthContext
         {
             IsAuthenticated = true,
-            AuthType = AuthType.ApiSecret,
+            AuthType = AuthType.ApiKey,
             SubjectName = "admin",
             SubjectId = null,
         });
@@ -125,7 +125,7 @@ public class FoodsControllerTests
         var controller = CreateController(new AuthContext
         {
             IsAuthenticated = true,
-            AuthType = AuthType.ApiSecret,
+            AuthType = AuthType.ApiKey,
             SubjectName = "admin",
             SubjectId = null,
         });

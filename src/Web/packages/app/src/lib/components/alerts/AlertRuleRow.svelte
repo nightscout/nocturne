@@ -1,307 +1,186 @@
 <script lang="ts">
   import type { AlertRuleResponse } from "$api-clients";
-  import { AlertConditionType } from "$api-clients";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Switch } from "$lib/components/ui/switch";
-  import { Separator } from "$lib/components/ui/separator";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import {
-    Bell,
-    Trash2,
-    ChevronDown,
-    ChevronUp,
-    Clock,
     Loader2,
-    Shield,
-    Zap,
-    WifiOff,
-    TrendingDown,
-    ArrowUpRight,
     Pencil,
+    Trash2,
+    Zap,
+    MoreHorizontal,
   } from "lucide-svelte";
+  import {
+    summarizeCondition,
+    type SummarizeContext,
+  } from "./summarizeCondition";
+  import { severity } from "./severity";
+  import { nodeFromApi } from "./types";
+  import { findChannelMeta } from "./channelMeta";
 
   interface Props {
     rule: AlertRuleResponse;
-    isExpanded: boolean;
     isToggling: boolean;
     isDeleting: boolean;
-    onToggleExpand: () => void;
+    isTesting: boolean;
     onToggleEnabled: () => void;
     onEdit: () => void;
     onDelete: () => void;
+    onTestFire: () => void;
+    /** Lookup map for `alert_state` references in the rule chip. */
+    resolveAlertName?: (id: string) => string | undefined;
   }
 
-  let { rule, isExpanded, isToggling, isDeleting, onToggleExpand, onToggleEnabled, onEdit, onDelete }: Props = $props();
+  let {
+    rule,
+    isToggling,
+    isDeleting,
+    isTesting,
+    onToggleEnabled,
+    onEdit,
+    onDelete,
+    onTestFire,
+    resolveAlertName,
+  }: Props = $props();
 
-  function getConditionIcon(conditionType: AlertConditionType | undefined) {
-    switch (conditionType) {
-      case AlertConditionType.Threshold:
-        return TrendingDown;
-      case AlertConditionType.RateOfChange:
-        return Zap;
-      case AlertConditionType.SignalLoss:
-        return WifiOff;
-      case AlertConditionType.Composite:
-        return Shield;
-      default:
-        return Bell;
-    }
-  }
+  // Reconstruct the editor-side ConditionNode from the API's flat
+  // (conditionType, conditionParams) pair so we can render a human chip via
+  // summarizeCondition. Defensive against malformed rows: if reconstruction
+  // fails we fall back to the raw discriminator.
+  let chip = $derived(
+    (() => {
+      const node = nodeFromApi(rule.conditionType, rule.conditionParams);
+      const ctx: SummarizeContext = { resolveAlertName };
+      return node ? summarizeCondition(node, ctx) : (rule.conditionType ?? "");
+    })()
+  );
 
-  function getConditionBadgeVariant(
-    conditionType: AlertConditionType | undefined,
-  ): "default" | "secondary" | "destructive" | "outline" {
-    switch (conditionType) {
-      case AlertConditionType.Threshold:
-        return "destructive";
-      case AlertConditionType.SignalLoss:
-        return "secondary";
-      default:
-        return "outline";
-    }
-  }
-
-  function getConditionLabel(conditionType: AlertConditionType | undefined): string {
-    switch (conditionType) {
-      case AlertConditionType.Threshold:
-        return "Threshold";
-      case AlertConditionType.RateOfChange:
-        return "Rate of Change";
-      case AlertConditionType.SignalLoss:
-        return "Signal Loss";
-      case AlertConditionType.Composite:
-        return "Composite";
-      default:
-        return conditionType ?? "Unknown";
-    }
-  }
-
-  function getConditionSummary(rule: AlertRuleResponse): string {
-    const params = rule.conditionParams;
-    if (!params) return "No condition configured";
-
-    switch (rule.conditionType) {
-      case AlertConditionType.Threshold: {
-        const dir = (params as Record<string, unknown>)["direction"];
-        if (dir === "below") return `Below ${(params as Record<string, unknown>)["threshold"] ?? "?"} mg/dL`;
-        if (dir === "above") return `Above ${(params as Record<string, unknown>)["threshold"] ?? "?"} mg/dL`;
-        return `Threshold: ${(params as Record<string, unknown>)["threshold"] ?? "?"} mg/dL`;
-      }
-      case AlertConditionType.RateOfChange: {
-        const dir = (params as Record<string, unknown>)["direction"] === "falling" ? "Falling" : "Rising";
-        return `${dir} faster than ${(params as Record<string, unknown>)["rateThreshold"] ?? "?"} mg/dL/min`;
-      }
-      case AlertConditionType.SignalLoss:
-        return `No data for ${(params as Record<string, unknown>)["minutes"] ?? "?"} minutes`;
-      case AlertConditionType.Composite:
-        return "Multiple conditions combined";
-      default:
-        return "Custom condition";
-    }
-  }
+  let severityClass = $derived(severity(rule.severity, "dot"));
 </script>
 
-<div class="rounded-lg border transition-all hover:shadow-sm">
-  <!-- Rule Summary Row -->
-  {#key rule.id}
-    {@const ConditionIcon = getConditionIcon(rule.conditionType)}
-    <button
-      class="flex items-center gap-4 p-4 w-full text-left"
-      onclick={onToggleExpand}
+<div
+  class="flex items-center gap-3 rounded-md border bg-background px-4 py-3 {!rule.isEnabled
+    ? 'opacity-60'
+    : ''}"
+>
+  <!-- Severity dot -->
+  <span
+    class="h-2.5 w-2.5 shrink-0 rounded-full {severityClass}"
+    aria-label="Severity: {rule.severity ?? 'warning'}"
+  ></span>
+
+  <!-- Identity + condition summary chip -->
+  <div class="min-w-0 flex-1">
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        class="text-sm font-semibold truncate hover:underline"
+        onclick={onEdit}
+      >
+        {rule.name ?? "(unnamed)"}
+      </button>
+      {#if !rule.isEnabled}
+        <Badge variant="secondary" class="text-[10px]">Disabled</Badge>
+      {/if}
+    </div>
+    <div class="truncate text-xs text-muted-foreground" title={chip}>
+      {chip || "No condition configured"}
+    </div>
+  </div>
+
+  <!-- Channel icons -->
+  {#if rule.channels && rule.channels.length > 0}
+    <div class="hidden items-center gap-1 sm:flex" aria-label="Channels">
+      {#each rule.channels.slice(0, 4) as ch (ch.id)}
+        {@const meta = findChannelMeta(ch.channelType)}
+        <span
+          class="grid h-6 w-6 place-items-center rounded bg-muted text-muted-foreground overflow-hidden"
+          title={ch.destinationLabel ?? ch.channelType ?? ""}
+        >
+          {#if meta?.logo}
+            <img src={meta.logo} alt="" class="h-4 w-4 object-contain" />
+          {:else if meta?.icon}
+            {@const G = meta.icon}
+            <G class="h-3 w-3" />
+          {/if}
+        </span>
+      {/each}
+      {#if rule.channels.length > 4}
+        <span class="text-xs text-muted-foreground">
+          +{rule.channels.length - 4}
+        </span>
+      {/if}
+    </div>
+  {/if}
+
+  <!-- Per-row actions -->
+  <div class="flex items-center gap-1 shrink-0">
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      class="h-8 w-8"
+      onclick={onTestFire}
+      disabled={isTesting || !rule.isEnabled}
+      title="Test fire — sends a real notification"
     >
-      <ConditionIcon
-        class="h-5 w-5 shrink-0 {rule.isEnabled
-          ? 'text-primary'
-          : 'text-muted-foreground'}"
-      />
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="font-medium truncate">
-            {rule.name ?? "Unnamed Rule"}
-          </span>
-          <Badge variant={getConditionBadgeVariant(rule.conditionType)}>
-            {getConditionLabel(rule.conditionType)}
-          </Badge>
-          {#if !rule.isEnabled}
-            <Badge variant="secondary">Disabled</Badge>
-          {/if}
-        </div>
-        <div
-          class="flex items-center gap-4 text-sm text-muted-foreground"
-        >
-          <span>{getConditionSummary(rule)}</span>
-          {#if rule.schedules && rule.schedules.length > 0}
-            <span class="flex items-center gap-1">
-              <Clock class="h-3 w-3" />
-              {rule.schedules.length} schedule{rule.schedules.length !== 1 ? "s" : ""}
-            </span>
-          {/if}
-          {#if rule.schedules}
-            {@const stepCount = rule.schedules.reduce(
-              (acc, s) => acc + (s.escalationSteps?.length ?? 0),
-              0,
-            )}
-            {#if stepCount > 0}
-              <span class="flex items-center gap-1">
-                <ArrowUpRight class="h-3 w-3" />
-                {stepCount} escalation step{stepCount !== 1 ? "s" : ""}
-              </span>
-            {/if}
-          {/if}
-          {#if rule.confirmationReadings && rule.confirmationReadings > 1}
-            <span>{rule.confirmationReadings} confirmations</span>
-          {/if}
-        </div>
-      </div>
-      <div class="flex items-center gap-2 shrink-0">
-        <Switch
-          checked={rule.isEnabled ?? false}
-          onCheckedChange={onToggleEnabled}
-          disabled={isToggling}
-          onclick={(e: MouseEvent) => e.stopPropagation()}
-        />
-        {#if isExpanded}
-          <ChevronUp class="h-4 w-4 text-muted-foreground" />
-        {:else}
-          <ChevronDown class="h-4 w-4 text-muted-foreground" />
-        {/if}
-      </div>
-    </button>
-  {/key}
-
-  <!-- Expanded Detail -->
-  {#if isExpanded}
-    <div class="border-t px-4 py-4 space-y-4 bg-muted/30">
-      {#if rule.description}
-        <p class="text-sm text-muted-foreground">
-          {rule.description}
-        </p>
+      {#if isTesting}
+        <Loader2 class="h-4 w-4 animate-spin" />
+      {:else}
+        <Zap class="h-4 w-4" />
       {/if}
-
-      <div class="grid gap-4 sm:grid-cols-3 text-sm">
-        <div>
-          <p class="text-muted-foreground mb-1">Hysteresis</p>
-          <p class="font-medium">
-            {rule.hysteresisMinutes ?? 0} minutes
-          </p>
-        </div>
-        <div>
-          <p class="text-muted-foreground mb-1">Confirmations</p>
-          <p class="font-medium">
-            {rule.confirmationReadings ?? 1} reading{(rule.confirmationReadings ?? 1) !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <div>
-          <p class="text-muted-foreground mb-1">Sort Order</p>
-          <p class="font-medium">{rule.sortOrder ?? 0}</p>
-        </div>
-      </div>
-
-      <!-- Schedules -->
-      {#if rule.schedules && rule.schedules.length > 0}
-        <Separator />
-        <div>
-          <h4 class="text-sm font-medium mb-3">Schedules</h4>
-          {#each rule.schedules as schedule (schedule.id)}
-            <div class="mb-3 p-3 rounded-md border bg-background">
-              <div class="flex items-center gap-2 mb-2">
-                <Clock class="h-4 w-4 text-muted-foreground" />
-                <span class="text-sm font-medium">
-                  {schedule.name ?? "Default Schedule"}
-                </span>
-                {#if schedule.isDefault}
-                  <Badge variant="secondary">Default</Badge>
-                {/if}
-              </div>
-              {#if schedule.startTime || schedule.endTime}
-                <p class="text-xs text-muted-foreground mb-2">
-                  {schedule.startTime ?? "00:00"} - {schedule.endTime ?? "23:59"}
-                  ({schedule.timezone ?? "UTC"})
-                </p>
-              {/if}
-              {#if schedule.daysOfWeek && schedule.daysOfWeek.length > 0 && schedule.daysOfWeek.length < 7}
-                <p class="text-xs text-muted-foreground mb-2">
-                  Days: {schedule.daysOfWeek.map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d] ?? d).join(", ")}
-                </p>
-              {/if}
-
-              <!-- Escalation Steps -->
-              {#if schedule.escalationSteps && schedule.escalationSteps.length > 0}
-                <div class="mt-2 space-y-1">
-                  {#each schedule.escalationSteps.sort((a, b) => (a.stepOrder ?? 0) - (b.stepOrder ?? 0)) as step, idx}
-                    <div
-                      class="flex items-center gap-2 text-xs text-muted-foreground pl-4 border-l-2 border-muted py-1"
-                    >
-                      <span class="font-medium text-foreground">
-                        Step {idx + 1}
-                      </span>
-                      {#if step.delaySeconds && step.delaySeconds > 0}
-                        <span>
-                          after {Math.round(step.delaySeconds / 60)}m
-                        </span>
-                      {:else}
-                        <span>immediately</span>
-                      {/if}
-                      {#if step.channels && step.channels.length > 0}
-                        <span class="mx-1">via</span>
-                        {#each step.channels as channel}
-                          <Badge variant="outline" class="text-xs">
-                            {channel.channelType}
-                            {#if channel.destinationLabel}
-                              : {channel.destinationLabel}
-                            {/if}
-                          </Badge>
-                        {/each}
-                      {/if}
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/each}
-        </div>
-      {/if}
-
-      <!-- Actions -->
-      <Separator />
-      <div class="flex items-center justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onclick={onEdit}
-        >
-          <Pencil class="h-4 w-4 mr-2" />
-          Edit Rule
-        </Button>
+    </Button>
+    <Switch
+      checked={rule.isEnabled ?? false}
+      onCheckedChange={onToggleEnabled}
+      disabled={isToggling}
+      aria-label="Enable rule"
+    />
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            type="button"
+            variant="ghost"
+            size="icon"
+            class="h-8 w-8"
+            aria-label="Row actions"
+          >
+            <MoreHorizontal class="h-4 w-4" />
+          </Button>
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end">
+        <DropdownMenu.Item onclick={onEdit}>
+          <Pencil class="h-4 w-4 mr-2" /> Edit
+        </DropdownMenu.Item>
+        <DropdownMenu.Separator />
         <AlertDialog.Root>
           <AlertDialog.Trigger>
             {#snippet child({ props }: { props: Record<string, unknown> })}
-              <Button
+              <DropdownMenu.Item
                 {...props}
-                variant="outline"
-                size="sm"
                 class="text-destructive"
+                onSelect={(e: Event) => e.preventDefault()}
               >
-                <Trash2 class="h-4 w-4 mr-2" />
-                Delete Rule
-              </Button>
+                <Trash2 class="h-4 w-4 mr-2" /> Delete
+              </DropdownMenu.Item>
             {/snippet}
           </AlertDialog.Trigger>
           <AlertDialog.Content>
             <AlertDialog.Header>
-              <AlertDialog.Title>Delete Alert Rule</AlertDialog.Title>
+              <AlertDialog.Title>Delete "{rule.name}"?</AlertDialog.Title>
               <AlertDialog.Description>
-                Are you sure you want to delete "{rule.name}"? This
-                will also remove all associated schedules and
-                escalation steps. This action cannot be undone.
+                This rule will stop firing immediately. Existing alert history
+                is preserved. This action cannot be undone.
               </AlertDialog.Description>
             </AlertDialog.Header>
             <AlertDialog.Footer>
               <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-              <AlertDialog.Action
-                onclick={onDelete}
-              >
+              <AlertDialog.Action onclick={onDelete} disabled={isDeleting}>
                 {#if isDeleting}
                   <Loader2 class="h-4 w-4 mr-2 animate-spin" />
                 {/if}
@@ -310,7 +189,7 @@
             </AlertDialog.Footer>
           </AlertDialog.Content>
         </AlertDialog.Root>
-      </div>
-    </div>
-  {/if}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  </div>
 </div>

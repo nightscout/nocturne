@@ -17,4 +17,5 @@ public enum ConnectSource
     Nightscout,
     HomeAssistant,
     Eversense,
+    NocturneRemote,
 }

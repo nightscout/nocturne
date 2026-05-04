@@ -1,4 +1,0 @@
-﻿{
-  StatusCode: 200,
-  ContentType: application/json; charset=utf-8
-}

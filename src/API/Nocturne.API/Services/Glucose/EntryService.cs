@@ -1,7 +1,7 @@
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Glucose;
@@ -9,16 +9,21 @@ namespace Nocturne.API.Services.Glucose;
 /// <summary>
 /// Domain service implementation for <see cref="Entry"/> operations using Store/Cache/EventSink ports.
 /// Delegates reads through <see cref="IEntryCache"/> with fallback to <see cref="IEntryStore"/>,
-/// and writes through <see cref="IEntryRepository"/> with event notification via <see cref="IDataEventSink{T}"/>.
+/// and writes through <see cref="IEntryDecomposer"/> to V4 tables with event notification via <see cref="IDataEventSink{T}"/>.
 /// </summary>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="IEntryStore"/>
-/// <seealso cref="IEntryRepository"/>
+/// <seealso cref="IEntryDecomposer"/>
 /// <seealso cref="IEntryCache"/>
 public class EntryService : IEntryService
 {
+    private static readonly HashSet<string> ValidEntryTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sgv", "mbg", "cal"
+    };
+
     private readonly IEntryStore _store;
-    private readonly IEntryRepository _repository;
+    private readonly IEntryDecomposer _decomposer;
     private readonly IEntryCache _cache;
     private readonly IDataEventSink<Entry> _events;
     private readonly ILogger<EntryService> _logger;
@@ -27,19 +32,19 @@ public class EntryService : IEntryService
     /// Initializes a new instance of <see cref="EntryService"/>.
     /// </summary>
     /// <param name="store">The entry store for query operations.</param>
-    /// <param name="repository">The entry repository for write operations.</param>
+    /// <param name="decomposer">The entry decomposer for writing to V4 tables.</param>
     /// <param name="cache">The entry cache for read-through caching.</param>
     /// <param name="events">The event sink for broadcasting create/update/delete events.</param>
     /// <param name="logger">The logger instance.</param>
     public EntryService(
         IEntryStore store,
-        IEntryRepository repository,
+        IEntryDecomposer decomposer,
         IEntryCache cache,
         IDataEventSink<Entry> events,
         ILogger<EntryService> logger)
     {
         _store = store;
-        _repository = repository;
+        _decomposer = decomposer;
         _cache = cache;
         _events = events;
         _logger = logger;
@@ -159,50 +164,69 @@ public class EntryService : IEntryService
 
     /// <inheritdoc />
     /// <remarks>
-    /// Persists entries via <see cref="IEntryRepository.CreateEntriesAsync"/> and then
-    /// fires <see cref="IDataEventSink{T}.OnCreatedAsync(IReadOnlyList{T}, CancellationToken)"/> to trigger cache invalidation
-    /// and SignalR broadcasting.
+    /// Validates entry types, decomposes each entry directly to V4 tables via
+    /// <see cref="IEntryDecomposer.DecomposeAsync"/>, then fires
+    /// <see cref="IDataEventSink{T}.OnCreatedAsync(IReadOnlyList{T}, CancellationToken)"/>
+    /// to trigger cache invalidation and SignalR broadcasting.
+    /// Entries with unrecognised types are silently filtered out.
     /// </remarks>
     public async Task<IEnumerable<Entry>> CreateEntriesAsync(
         IEnumerable<Entry> entries,
         CancellationToken cancellationToken = default)
     {
-        var created = (await _repository.CreateEntriesAsync(entries.ToList(), cancellationToken)).ToList();
+        var validEntries = entries
+            .Where(e => !string.IsNullOrEmpty(e.Type) && ValidEntryTypes.Contains(e.Type))
+            .ToList();
 
-        await _events.OnCreatedAsync(created, cancellationToken);
+        if (validEntries.Count == 0)
+            return [];
 
-        return created;
+        foreach (var entry in validEntries)
+        {
+            await _decomposer.DecomposeAsync(entry, cancellationToken);
+        }
+
+        await _events.OnCreatedAsync(validEntries, cancellationToken);
+
+        return validEntries;
     }
 
     /// <inheritdoc />
     /// <returns>The updated <see cref="Entry"/>, or <see langword="null"/> if no entry with the given <paramref name="id"/> exists.</returns>
+    /// <remarks>
+    /// Verifies the entry exists via the store, then performs an idempotent upsert through
+    /// <see cref="IEntryDecomposer.DecomposeAsync"/> which matches on <c>LegacyId</c>.
+    /// </remarks>
     public async Task<Entry?> UpdateEntryAsync(
         string id,
         Entry entry,
         CancellationToken cancellationToken = default)
     {
-        var updated = await _repository.UpdateEntryAsync(id, entry, cancellationToken);
-        if (updated is null) return null;
+        var existing = await _store.GetByIdAsync(id, cancellationToken);
+        if (existing is null) return null;
 
-        await _events.OnUpdatedAsync(updated, cancellationToken);
+        // Ensure the entry carries the correct ID for LegacyId-based upsert
+        entry.Id = id;
+        await _decomposer.DecomposeAsync(entry, cancellationToken);
 
-        return updated;
+        await _events.OnUpdatedAsync(entry, cancellationToken);
+
+        return entry;
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// Fires <see cref="IDataEventSink{T}.BeforeDeleteAsync"/> before deletion to allow
-    /// V4 decomposition cleanup, then removes the entry and broadcasts the deletion event.
+    /// Deletes the entry's V4 records directly via <see cref="IEntryDecomposer.DeleteByLegacyIdAsync"/>,
+    /// then broadcasts the deletion event for cache invalidation and SignalR.
     /// </remarks>
     public async Task<bool> DeleteEntryAsync(
         string id,
         CancellationToken cancellationToken = default)
     {
-        await _events.BeforeDeleteAsync(id, cancellationToken);
-
         var entryToDelete = await _store.GetByIdAsync(id, cancellationToken);
-        var deleted = await _repository.DeleteEntryAsync(id, cancellationToken);
+        var deletedCount = await _decomposer.DeleteByLegacyIdAsync(id, cancellationToken);
 
+        var deleted = deletedCount > 0;
         if (deleted)
         {
             await _events.OnDeletedAsync(entryToDelete, cancellationToken);
@@ -217,7 +241,7 @@ public class EntryService : IEntryService
         string? find = null,
         CancellationToken cancellationToken = default)
     {
-        var deletedCount = await _repository.BulkDeleteEntriesAsync(find ?? "{}", cancellationToken);
+        var deletedCount = await _decomposer.BulkDeleteAsync(find, cancellationToken);
 
         await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);
 

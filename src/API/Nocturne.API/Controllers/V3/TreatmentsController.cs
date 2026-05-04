@@ -6,7 +6,6 @@ using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
-using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Controllers.V3;
 
@@ -15,7 +14,7 @@ namespace Nocturne.API.Controllers.V3;
 /// Implements the /api/v3/treatments endpoints with pagination, field selection, sorting, and advanced filtering.
 /// </summary>
 /// <seealso cref="ITreatmentService"/>
-/// <seealso cref="ITreatmentRepository"/>
+/// <seealso cref="ITreatmentStore"/>
 /// <seealso cref="Treatment"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
@@ -23,18 +22,18 @@ namespace Nocturne.API.Controllers.V3;
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class TreatmentsController : BaseV3Controller<Treatment>
 {
-    private readonly ITreatmentRepository _treatments;
+    private readonly ITreatmentStore _treatmentStore;
     private readonly ITreatmentService _treatmentService;
 
     public TreatmentsController(
-        ITreatmentRepository treatments,
+        ITreatmentStore treatmentStore,
         IDocumentProcessingService documentProcessingService,
         ITreatmentService treatmentService,
         ILogger<TreatmentsController> logger
     )
         : base(documentProcessingService, logger)
     {
-        _treatments = treatments;
+        _treatmentStore = treatmentStore;
         _treatmentService = treatmentService;
     }
 
@@ -666,7 +665,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
         try
         {
             // Use the count endpoint to get total
-            return await _treatments.CountTreatmentsAsync(findQuery, cancellationToken);
+            return await _treatmentStore.CountAsync(findQuery, cancellationToken);
         }
         catch (Exception ex)
         {

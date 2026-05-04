@@ -169,6 +169,7 @@ public class DirectGrantController : ControllerBase
                 Scopes = g.Scopes,
                 CreatedAt = g.CreatedAt,
                 LastUsedAt = g.LastUsedAt,
+                IsLegacy = g.LegacySecretHash != null,
             })
             .ToListAsync();
 
@@ -267,6 +268,12 @@ public class DirectGrantDto
     public List<string> Scopes { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime? LastUsedAt { get; set; }
+
+    /// <summary>
+    /// True when this grant was created from a migrated Nightscout API secret
+    /// rather than as a scoped <c>noc_</c> token.
+    /// </summary>
+    public bool IsLegacy { get; set; }
 }
 
 #endregion

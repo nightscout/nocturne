@@ -197,7 +197,6 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
                     TenantId = _dbContext.TenantId,
                     Source = batch.Source,
                     SourceRecordId = batch.SourceRecordId,
-                    SourceTreatmentId = batch.SourceTreatmentId,
                     CreatedAt = batch.CreatedAt,
                 });
             }

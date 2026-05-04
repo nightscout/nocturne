@@ -71,6 +71,13 @@ public class UpdateBolusRequest
     public string? InsulinType { get; set; }
 
     /// <summary>
+    /// Optional reference to a <see cref="PatientInsulin"/>. When provided, the server
+    /// resolves it to a <see cref="TreatmentInsulinContext"/> snapshot and overwrites
+    /// <see cref="InsulinType"/> with the insulin's name.
+    /// </summary>
+    public Guid? PatientInsulinId { get; set; }
+
+    /// <summary>
     /// Insulin on board (unabsorbed) at the time of the bolus, in units.
     /// </summary>
     public double? Unabsorbed { get; set; }

@@ -6,7 +6,6 @@
  * $lib/api/generated/chatIdentities.generated.remote.ts.
  */
 import { getRequestEvent, query, command } from "$app/server";
-import { redirect } from "@sveltejs/kit";
 import { signOAuthLinkState } from "$lib/server/bot/oauth-state";
 
 /**
@@ -63,5 +62,5 @@ export const initiateDiscordLink = command(async () => {
   authorizeUrl.searchParams.set("state", state);
   authorizeUrl.searchParams.set("prompt", "none");
 
-  throw redirect(303, authorizeUrl.toString());
+  return { redirectUrl: authorizeUrl.toString() };
 });

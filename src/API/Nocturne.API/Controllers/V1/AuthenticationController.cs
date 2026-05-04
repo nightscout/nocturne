@@ -42,7 +42,7 @@ public class AuthenticationController : ControllerBase
                 var isAdmin = HttpContext.IsAdmin();
 
                 // For JWT/OIDC token authentication, use the detailed response format
-                if (authContext.AuthType != AuthType.ApiSecret)
+                if (authContext.AuthType != AuthType.ApiKey)
                 {
                     var response = new VerifyAuthResponse
                     {

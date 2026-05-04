@@ -33,6 +33,27 @@ public interface IStateSpanRepository
         bool? active = null,
         int count = 100,
         int skip = 0,
+        bool descending = true,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Counts state spans matching the specified filters.
+    /// </summary>
+    /// <param name="category">Optional <see cref="StateSpanCategory"/> filter.</param>
+    /// <param name="state">Optional state string filter.</param>
+    /// <param name="from">Optional start of the time range (inclusive).</param>
+    /// <param name="to">Optional end of the time range (inclusive).</param>
+    /// <param name="source">Optional data source filter.</param>
+    /// <param name="active">When set, filters to only active or only ended spans.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The total number of matching records.</returns>
+    Task<int> CountStateSpansAsync(
+        StateSpanCategory? category = null,
+        string? state = null,
+        DateTime? from = null,
+        DateTime? to = null,
+        string? source = null,
+        bool? active = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -95,6 +116,23 @@ public interface IStateSpanRepository
     /// <returns>The number of records deleted.</returns>
     Task<long> DeleteBySourceAsync(
         string source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the <see cref="StateSpan"/> of <paramref name="category"/> that contains
+    /// <paramref name="at"/> (<c>StartTimestamp &lt;= at &lt; EndTimestamp</c>),
+    /// optionally filtered by <paramref name="state"/>. When multiple spans overlap the
+    /// instant, the one with the most recent <c>StartTimestamp</c> wins. Returns
+    /// <c>null</c> if no span is active.
+    /// </summary>
+    /// <param name="category">The category to filter by.</param>
+    /// <param name="state">Optional <c>State</c> filter; <c>null</c> matches any state.</param>
+    /// <param name="at">The instant to evaluate.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<StateSpan?> GetActiveAtAsync(
+        StateSpanCategory category,
+        string? state,
+        DateTime at,
         CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -26,8 +26,6 @@
         <PackageReference Include="Testcontainers.PostgreSql"/>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Console"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="../../../src/Infrastructure/Nocturne.Infrastructure.Data/Nocturne.Infrastructure.Data.csproj"/>

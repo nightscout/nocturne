@@ -1,5 +1,4 @@
 using Nocturne.Core.Models;
-using Nocturne.Core.Contracts.Glucose;
 
 namespace Nocturne.Core.Contracts.Infrastructure;
 
@@ -7,7 +6,6 @@ namespace Nocturne.Core.Contracts.Infrastructure;
 /// Service for deduplicating records from multiple data sources.
 /// Links records that represent the same underlying event and provides unified views.
 /// </summary>
-/// <seealso cref="IEntryService"/>
 /// <seealso cref="ITreatmentService"/>
 public interface IDeduplicationService
 {
@@ -62,26 +60,6 @@ public interface IDeduplicationService
     Task<LinkedRecord?> GetLinkedRecordAsync(
         RecordType recordType,
         Guid recordId,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get the unified/merged view for a canonical group of entries
-    /// </summary>
-    /// <param name="canonicalId">The canonical group ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>A merged entry with data from all sources</returns>
-    Task<Entry?> GetUnifiedEntryAsync(
-        Guid canonicalId,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get the unified/merged view for a canonical group of treatments
-    /// </summary>
-    /// <param name="canonicalId">The canonical group ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>A merged treatment with data from all sources</returns>
-    Task<Treatment?> GetUnifiedTreatmentAsync(
-        Guid canonicalId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

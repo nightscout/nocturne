@@ -11,6 +11,7 @@ export interface MarkState {
 export interface CoachMarkAdapter {
   fetchAll: () => Promise<MarkState[]>;
   update: (key: string, status: MarkStatus) => Promise<void>;
+  deleteAll?: () => Promise<void>;
 }
 
 export interface CoachMarkStep {
@@ -37,6 +38,7 @@ export interface SequenceDefinition {
   priority: number;
   steps: string[];
   prerequisite?: string;
+  completesKeys?: string[];
 }
 
 export interface SequenceConfig {

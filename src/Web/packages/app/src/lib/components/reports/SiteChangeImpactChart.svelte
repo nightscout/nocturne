@@ -53,13 +53,25 @@
 
   let { analysis }: Props = $props();
 
-  // Format hours for X-axis
+  // Format hours for X-axis (ticks are always on hour boundaries)
   function formatHoursFromChange(minutes: number): string {
-    const hours = minutes / 60;
+    const hours = Math.round(minutes / 60);
     if (hours === 0) return "Site Change";
     if (hours > 0) return `+${hours}h`;
     return `${hours}h`;
   }
+
+  // Generate explicit hourly tick values from the x-axis domain
+  const hourlyTicks = $derived.by(() => {
+    const [minMinutes, maxMinutes] = xDomain;
+    const ticks: number[] = [];
+    const startHour = Math.ceil(minMinutes / 60);
+    const endHour = Math.floor(maxMinutes / 60);
+    for (let h = startHour; h <= endHour; h++) {
+      ticks.push(h * 60);
+    }
+    return ticks;
+  });
 
   // Filter and validate data points to ensure all required fields are present
   const chartData = $derived.by((): SiteChangeImpactDataPointValid[] => {
@@ -197,6 +209,7 @@
             motion: { type: "tween", duration: 200 },
             tickMultiline: true,
             format: formatHoursFromChange,
+            ticks: hourlyTicks,
           },
           yAxis: {
             label: "Glucose (mg/dL)",

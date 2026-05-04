@@ -3,9 +3,9 @@ import { getLocalTimeZone, now, fromDate } from "@internationalized/date";
 import {
   ArrowUp,
   ArrowUpRight,
+  ArrowRight,
   ArrowDown,
   ArrowDownRight,
-  Minus,
   HelpCircle,
   AlertTriangle,
 } from "lucide-svelte";
@@ -90,7 +90,7 @@ export function getDirectionInfo(direction?: Direction | string) {
       icon: ArrowUpRight,
       css: "text-yellow-500",
     },
-    [Direction.Flat]: { label: "stable", icon: Minus, css: "text-green-500" },
+    [Direction.Flat]: { label: "stable", icon: ArrowRight, css: "text-green-500" },
     [Direction.FortyFiveDown]: {
       label: "falling slowly",
       icon: ArrowDownRight,

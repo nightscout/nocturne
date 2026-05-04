@@ -10,8 +10,8 @@ namespace Nocturne.API.Middleware;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Pipeline order (position 1 of 8 custom middleware -- runs first, before routing):
-/// <b>JsonExtensionMiddleware</b>, <see cref="RecoveryModeMiddleware"/>,
+/// Pipeline order (position 1 of 7 custom middleware -- runs first, before routing):
+/// <b>JsonExtensionMiddleware</b>,
 /// <see cref="OidcCallbackRedirectMiddleware"/>, <see cref="Multitenancy.TenantResolutionMiddleware"/>,
 /// <see cref="TenantSetupMiddleware"/>, <see cref="AuthenticationMiddleware"/>,
 /// <see cref="MemberScopeMiddleware"/>, <see cref="SiteSecurityMiddleware"/>.

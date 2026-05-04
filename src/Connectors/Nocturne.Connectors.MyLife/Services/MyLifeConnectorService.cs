@@ -225,6 +225,16 @@ public class MyLifeConnectorService(
             {
                 var records = await FetchRecordsAsync(request.From, request.To);
 
+                // Persist decomposition batches before V4 records (FK constraint)
+                if (records.DecompositionBatches.Count > 0)
+                {
+                    await PublishDecompositionBatchesAsync(
+                        records.DecompositionBatches,
+                        config,
+                        cancellationToken
+                    );
+                }
+
                 // Publish Boluses
                 if (activeTypes.Contains(SyncDataType.Boluses) && records.Boluses.Count > 0)
                 {

@@ -106,6 +106,25 @@ public class CarbRatioScheduleRepository : ICarbRatioScheduleRepository
     }
 
     /// <summary>
+    /// Gets the most recent carb ratio schedule for a profile that was active at-or-before the given timestamp.
+    /// </summary>
+    /// <param name="profileName">The name of the profile.</param>
+    /// <param name="timestamp">The point-in-time to query against.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The matching carb ratio schedule, or null if none found.</returns>
+    public async Task<CarbRatioSchedule?> GetActiveAtAsync(
+        string profileName, DateTime timestamp, CancellationToken ct = default)
+    {
+        var entity = await _context.CarbRatioSchedules
+            .AsNoTracking()
+            .Where(e => e.ProfileName == profileName && e.Timestamp <= timestamp)
+            .OrderByDescending(e => e.Timestamp)
+            .FirstOrDefaultAsync(ct);
+
+        return entity is null ? null : CarbRatioScheduleMapper.ToDomainModel(entity);
+    }
+
+    /// <summary>
     /// Creates a new carbohydrate ratio schedule record.
     /// </summary>
     /// <param name="model">The carbohydrate ratio schedule to create.</param>

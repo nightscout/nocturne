@@ -3,10 +3,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
-using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
@@ -31,8 +31,8 @@ public class DataFetchStageTests
     private readonly Mock<IStateSpanRepository> _mockStateSpanRepo;
     private readonly Mock<ISystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<ITrackerRepository> _mockTrackerRepo;
-    private readonly Mock<IDeviceStatusService> _mockDeviceStatusService = new();
-
+    private readonly Mock<IHeartRateService> _mockHeartRateService = new();
+    private readonly Mock<IStepCountService> _mockStepCountService = new();
     private readonly DataFetchStage _stage;
 
     public DataFetchStageTests()
@@ -53,8 +53,9 @@ public class DataFetchStageTests
             _mockStateSpanRepo.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
-            _mockDeviceStatusService.Object,
-            NullLogger<DataFetchStage>.Instance
+            NullLogger<DataFetchStage>.Instance,
+            _mockHeartRateService.Object,
+            _mockStepCountService.Object
         );
     }
 
@@ -153,13 +154,16 @@ public class DataFetchStageTests
             .Setup(r => r.GetActiveInstancesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<TrackerInstanceEntity>());
 
-        _mockDeviceStatusService
-            .Setup(s => s.GetDeviceStatusAsync(
-                It.IsAny<string?>(),
-                It.IsAny<int?>(),
-                It.IsAny<int?>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<DeviceStatus>());
+        _mockHeartRateService
+            .Setup(s => s.GetHeartRatesByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<HeartRate>());
+
+        _mockStepCountService
+            .Setup(s => s.GetStepCountsByDateRangeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<StepCount>());
+
     }
 
     [Fact]
@@ -186,7 +190,6 @@ public class DataFetchStageTests
         result.BgCheckList.Should().NotBeNull();
         result.DeviceEventList.Should().NotBeNull();
         result.TempBasalList.Should().NotBeNull();
-        result.DeviceStatusList.Should().NotBeNull();
         result.SystemEvents.Should().NotBeNull();
         result.TrackerDefinitions.Should().NotBeNull();
         result.TrackerInstances.Should().NotBeNull();

@@ -5,6 +5,7 @@
 import { getRequestEvent, query, command, form } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
+import { formCoerce } from './form-utils.generated.js';
 import { CreateCarbIntakeRequestSchema, UpdateCarbIntakeRequestSchema, CarbIntakeFoodRequestSchema, CreateMealRequestSchema } from '$lib/api/generated/schemas';
 import { type CreateCarbIntakeRequest, type UpdateCarbIntakeRequest, type CarbIntakeFoodRequest, type CreateMealRequest } from '$api';
 
@@ -18,12 +19,15 @@ export const getCarbIntakes = query(z.object({ from: z.coerce.date().optional(),
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.getCarbIntakes:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get carb intakes');
   }
 });
 
 /** Create a new carb intake */
-export const createCarbIntake = form(CreateCarbIntakeRequestSchema as any, async (request) => {
+export const createCarbIntake = form(formCoerce(CreateCarbIntakeRequestSchema) as any, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const result = await apiClient.nutrition.createCarbIntake(request as CreateCarbIntakeRequest);
@@ -36,6 +40,9 @@ export const createCarbIntake = form(CreateCarbIntakeRequestSchema as any, async
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.createCarbIntake:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to create carb intake');
   }
 });
@@ -50,12 +57,15 @@ export const getCarbIntakeById = query(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.getCarbIntakeById:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get carb intake by id');
   }
 });
 
 /** Update an existing carb intake */
-export const updateCarbIntake = form(z.object({ id: z.string(), request: UpdateCarbIntakeRequestSchema }) as any, async ({ id, request }) => {
+export const updateCarbIntake = form(formCoerce(z.object({ id: z.string(), request: UpdateCarbIntakeRequestSchema })) as any, async ({ id, request }) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const result = await apiClient.nutrition.updateCarbIntake(id, request as UpdateCarbIntakeRequest);
@@ -69,6 +79,9 @@ export const updateCarbIntake = form(z.object({ id: z.string(), request: UpdateC
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.updateCarbIntake:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to update carb intake');
   }
 });
@@ -87,6 +100,9 @@ export const deleteCarbIntake = command(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.deleteCarbIntake:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to delete carb intake');
   }
 });
@@ -101,6 +117,9 @@ export const getCarbIntakeFoods = query(z.string(), async (id) => {
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.getCarbIntakeFoods:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get carb intake foods');
   }
 });
@@ -119,6 +138,9 @@ export const addCarbIntakeFood = command(z.object({ id: z.string(), request: Car
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.addCarbIntakeFood:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to add carb intake food');
   }
 });
@@ -137,6 +159,9 @@ export const updateCarbIntakeFood = command(z.object({ id: z.string(), foodEntry
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.updateCarbIntakeFood:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to update carb intake food');
   }
 });
@@ -155,6 +180,9 @@ export const deleteCarbIntakeFood = command(z.object({ id: z.string(), foodEntry
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.deleteCarbIntakeFood:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to delete carb intake food');
   }
 });
@@ -172,6 +200,9 @@ export const getMeals = query(z.object({ from: z.coerce.date().optional(), to: z
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.getMeals:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to get meals');
   }
 });
@@ -181,7 +212,7 @@ Both records share a single CorrelationId and are persisted within a
 single transaction. When an existing row matches on
 (DataSource, SyncIdentifier), the idempotent upsert applies and the
 response returns 200 instead of 201. */
-export const createMeal = form(CreateMealRequestSchema as any, async (request) => {
+export const createMeal = form(formCoerce(CreateMealRequestSchema) as any, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const result = await apiClient.nutrition.createMeal(request as CreateMealRequest);
@@ -195,6 +226,9 @@ export const createMeal = form(CreateMealRequestSchema as any, async (request) =
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.createMeal:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, 'Failed to create meal');
   }
 });

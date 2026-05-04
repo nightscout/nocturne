@@ -93,6 +93,12 @@
     showAlarms: boolean;
     // Stale data indicator
     staleBasalData: { start: Date; end: Date } | null;
+    /**
+     * Optional extra rows rendered after the built-in tooltip items. Receives
+     * the hovered time so callers (e.g. the alert replay simulator) can show
+     * events near that instant without forking the tooltip.
+     */
+    tooltipExtras?: import("svelte").Snippet<[{ time: Date }]>;
   }
 
   let {
@@ -122,6 +128,7 @@
     showActivitySpans,
     showAlarms,
     staleBasalData,
+    tooltipExtras,
   }: Props = $props();
 </script>
 
@@ -317,6 +324,7 @@
           class="font-medium"
         />
       {/if}
+      {@render tooltipExtras?.({ time: data.time })}
     </Tooltip.List>
   {/snippet}
 </Tooltip.Root>

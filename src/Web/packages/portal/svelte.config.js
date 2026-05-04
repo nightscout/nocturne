@@ -12,6 +12,13 @@ const config = {
       out: 'build',
       precompress: true,
     }),
+    prerender: {
+      handleHttpError: ({ path, message }) => {
+        // /setup lives in the main app, not the portal — ignore during prerendering
+        if (path === '/setup') return;
+        throw new Error(message);
+      },
+    },
     experimental: {
       remoteFunctions: true,
     },

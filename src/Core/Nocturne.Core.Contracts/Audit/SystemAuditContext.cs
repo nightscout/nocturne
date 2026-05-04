@@ -8,6 +8,7 @@ namespace Nocturne.Core.Contracts.Audit;
 public sealed class SystemAuditContext : IAuditContext
 {
     public Guid? SubjectId => null;
+    public string? SubjectName => null;
     public string? AuthType { get; init; }
     public string? IpAddress => null;
     public Guid? TokenId => null;

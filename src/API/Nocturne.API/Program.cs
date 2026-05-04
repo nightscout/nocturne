@@ -12,15 +12,17 @@ using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Extensions;
+using Nocturne.API.Filters;
 using Nocturne.API.Hubs;
 using Nocturne.API.Middleware;
 using Nocturne.API.Multitenancy;
 using OpenApi.Remote.Processors;
 using Nocturne.API.OpenApi;
+using Scalar.AspNetCore;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Extensions;
-using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Entries;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -142,13 +144,16 @@ builder.Services.AddResponseCaching();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
+builder.Services.AddHostedService<AuditRetentionService>();
 
 // Add native API services for strangler pattern
 // Note: NightscoutJsonFilter is added globally to apply null-omission and
 // NocturneOnly field exclusion to v1-v3 API responses only
+builder.Services.AddScoped<ReadAccessAuditFilter>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<NightscoutJsonFilter>();
+    options.Filters.AddService<ReadAccessAuditFilter>();
 })
 .ConfigureApplicationPartManager(manager =>
 {
@@ -181,7 +186,9 @@ builder.Services.AddOpenApiDocument(config =>
     });
 
     config.OperationProcessors.Add(new RemoteFunctionOperationProcessor());
+    config.OperationProcessors.Add(new ConsumesContentTypeOperationProcessor());
     config.OperationProcessors.Add(new ControllerNameTagOperationProcessor());
+    config.OperationProcessors.Add(new SummaryToDescriptionOperationProcessor());
 
     config.PostProcess = document =>
     {
@@ -202,11 +209,13 @@ builder.Services.AddOpenApi("nocturne", options =>
             || ns.Contains(".Controllers.Authentication")
             || ns == "Nocturne.API.Controllers";
     };
+    options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
     options.AddOperationTransformer<FolderBasedTagOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
     options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
+    options.AddDocumentTransformer<ScalarExtensionsDocumentTransformer>();
 });
 
 builder.Services.AddOpenApi("nightscout", options =>
@@ -222,11 +231,13 @@ builder.Services.AddOpenApi("nightscout", options =>
             || ns.Contains(".Controllers.V3.")
             || ns.EndsWith(".Controllers.V3", StringComparison.Ordinal);
     };
+    options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
     options.AddOperationTransformer<FolderBasedTagOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
     options.AddDocumentTransformer<DiagramDescriptionDocumentTransformer>();
+    options.AddDocumentTransformer<ScalarExtensionsDocumentTransformer>();
 });
 
 // ── Service registration (grouped by concern) ──────────────────────────
@@ -320,6 +331,25 @@ app.UseMiddleware<JsonExtensionMiddleware>();
 // but we make it explicit for clarity.
 app.UseRouting();
 
+// Documentation paths (/scalar, /openapi) bypass the entire tenant/auth
+// middleware stack — they're tenantless and publicly accessible.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value ?? "";
+    if (path.StartsWith("/scalar", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/openapi", StringComparison.OrdinalIgnoreCase))
+    {
+        // Jump straight to the endpoint (MapOpenApi / MapScalarApiReference)
+        var endpoint = context.GetEndpoint();
+        if (endpoint != null)
+        {
+            await endpoint.RequestDelegate!(context);
+            return;
+        }
+    }
+    await next();
+});
+
 // Redirect OIDC callbacks from apex to the originating tenant subdomain
 app.UseMiddleware<OidcCallbackRedirectMiddleware>();
 
@@ -363,13 +393,20 @@ app.MapHub<ConfigHub>("/hubs/config");
 // Serve OpenAPI specs at /openapi/{documentName}.json
 app.MapOpenApi();
 
-// Scalar API docs are served by the Aspire host integration, not here.
-// OpenAPI specs are still served from this project at /openapi/{documentName}.json.
+// Scalar interactive API docs at /scalar/{documentName}
+app.MapScalarApiReference(options =>
+{
+    options.WithTheme(ScalarTheme.Mars);
+    options.WithOpenApiRoutePattern("/openapi/{documentName}.json");
+    options.AddDocument("nocturne", "Nocturne API", isDefault: true);
+    options.AddDocument("nightscout", "Nightscout API");
+    options.AddHeadContent(MermaidLazyLoader.HeadContent);
+});
 
 // Add root endpoint to serve a basic info page
 app.MapGet(
     "/",
-    async (IEntryRepository entryRepository) =>
+    async (IEntryStore entryStore) =>
     {
         // Check database connection by fetching the latest entry
         string databaseStatus = "unknown";
@@ -377,7 +414,7 @@ app.MapGet(
 
         try
         {
-            var entry = await entryRepository.GetCurrentEntryAsync();
+            var entry = await entryStore.GetCurrentAsync();
 
             if (entry != null)
             {
@@ -559,6 +596,7 @@ internal class NSwagStartup
             });
 
             config.OperationProcessors.Add(new RemoteFunctionOperationProcessor());
+            config.OperationProcessors.Add(new ConsumesContentTypeOperationProcessor());
             config.OperationProcessors.Add(new ControllerNameTagOperationProcessor());
         });
     }

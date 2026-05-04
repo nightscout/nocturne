@@ -507,22 +507,32 @@ public class StatusService : IStatusService
 
         // Each query gets its own short-lived DbContext via the factory so they can
         // run concurrently — a single DbContext is not thread-safe.
-        var entriesTask = LastModifiedAsync(ctx => ctx.Entries.AsNoTracking()
+        var entriesTask = LastModifiedAsync(ctx => ctx.SensorGlucose.AsNoTracking()
             .OrderByDescending(e => e.SysUpdatedAt)
             .Select(e => (DateTime?)e.SysUpdatedAt)
             .FirstOrDefaultAsync());
 
-        var treatmentsTask = LastModifiedAsync(ctx => ctx.Treatments.AsNoTracking()
+        var treatmentsTask = LastModifiedAsync(async ctx =>
+        {
+            var timestamps = new[]
+            {
+                await ctx.Boluses.AsNoTracking().OrderByDescending(b => b.SysUpdatedAt).Select(b => (DateTime?)b.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.CarbIntakes.AsNoTracking().OrderByDescending(c => c.SysUpdatedAt).Select(c => (DateTime?)c.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.BGChecks.AsNoTracking().OrderByDescending(b => b.SysUpdatedAt).Select(b => (DateTime?)b.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.Notes.AsNoTracking().OrderByDescending(n => n.SysUpdatedAt).Select(n => (DateTime?)n.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.DeviceEvents.AsNoTracking().OrderByDescending(d => d.SysUpdatedAt).Select(d => (DateTime?)d.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.TempBasals.AsNoTracking().OrderByDescending(t => t.SysUpdatedAt).Select(t => (DateTime?)t.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.BolusCalculations.AsNoTracking().OrderByDescending(b => b.SysUpdatedAt).Select(b => (DateTime?)b.SysUpdatedAt).FirstOrDefaultAsync(),
+            };
+            return timestamps.Where(d => d.HasValue).Max();
+        });
+
+        var profileTask = LastModifiedAsync(ctx => ctx.TherapySettings.AsNoTracking()
             .OrderByDescending(t => t.SysUpdatedAt)
             .Select(t => (DateTime?)t.SysUpdatedAt)
             .FirstOrDefaultAsync());
 
-        var profileTask = LastModifiedAsync(ctx => ctx.Profiles.AsNoTracking()
-            .OrderByDescending(p => p.UpdatedAtPg)
-            .Select(p => (DateTime?)p.UpdatedAtPg)
-            .FirstOrDefaultAsync());
-
-        var deviceStatusTask = LastModifiedAsync(ctx => ctx.DeviceStatuses.AsNoTracking()
+        var deviceStatusTask = LastModifiedAsync(ctx => ctx.ApsSnapshots.AsNoTracking()
             .OrderByDescending(d => d.SysUpdatedAt)
             .Select(d => (DateTime?)d.SysUpdatedAt)
             .FirstOrDefaultAsync());
@@ -536,11 +546,6 @@ public class StatusService : IStatusService
             .OrderByDescending(s => s.SrvModified ?? s.SysUpdatedAt)
             .Select(s =>
                 (DateTime?)(s.SrvModified.HasValue ? s.SrvModified.Value.UtcDateTime : s.SysUpdatedAt))
-            .FirstOrDefaultAsync());
-
-        var activityTask = LastModifiedAsync(ctx => ctx.Activities.AsNoTracking()
-            .OrderByDescending(a => a.SysUpdatedAt)
-            .Select(a => (DateTime?)a.SysUpdatedAt)
             .FirstOrDefaultAsync());
 
         var authSubjectsTask = LastModifiedAsync(ctx => ctx.Subjects.AsNoTracking()
@@ -560,7 +565,7 @@ public class StatusService : IStatusService
 
         await Task.WhenAll(
             entriesTask, treatmentsTask, profileTask, deviceStatusTask,
-            foodTask, settingsTask, activityTask, authSubjectsTask,
+            foodTask, settingsTask, authSubjectsTask,
             roleTask, oidcProviderTask);
 
         var additional = new Dictionary<string, DateTime>();
@@ -585,7 +590,6 @@ public class StatusService : IStatusService
             DeviceStatus = await deviceStatusTask,
             Food = await foodTask,
             Settings = await settingsTask,
-            Activity = await activityTask,
             Additional = additional,
         };
 

@@ -42,6 +42,27 @@ public interface IStateSpanService
         bool? active = null,
         int count = 100,
         int skip = 0,
+        bool descending = true,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Count state spans matching the specified filters
+    /// </summary>
+    /// <param name="category">Optional category filter</param>
+    /// <param name="state">Optional state filter</param>
+    /// <param name="from">Optional start time filter</param>
+    /// <param name="to">Optional end time filter</param>
+    /// <param name="source">Optional source filter</param>
+    /// <param name="active">Optional active status filter</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Total count of matching state spans</returns>
+    Task<int> CountStateSpansAsync(
+        StateSpanCategory? category = null,
+        string? state = null,
+        DateTime? from = null,
+        DateTime? to = null,
+        string? source = null,
+        bool? active = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -84,6 +105,22 @@ public interface IStateSpanService
     Task<StateSpan?> UpdateStateSpanAsync(
         string id,
         StateSpan stateSpan,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the <see cref="StateSpan"/> of <paramref name="category"/> that contains
+    /// <paramref name="at"/> (<c>StartTimestamp &lt;= at &lt; EndTimestamp</c>),
+    /// optionally filtered by <paramref name="state"/>. Latest <c>StartTimestamp</c> wins
+    /// on overlap; returns <c>null</c> if no span is active.
+    /// </summary>
+    /// <param name="category">The category to filter by.</param>
+    /// <param name="state">Optional <c>State</c> filter; <c>null</c> matches any state.</param>
+    /// <param name="at">The instant to evaluate.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<StateSpan?> GetActiveAtAsync(
+        StateSpanCategory category,
+        string? state,
+        DateTime at,
         CancellationToken cancellationToken = default);
 
     #region Activity Compatibility Methods

@@ -227,6 +227,25 @@ public class NutritionController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Delete a carb intake by its external sync identifier (dataSource + syncIdentifier pair).
+    /// </summary>
+    [HttpDelete("carbs/by-sync-id")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult> DeleteCarbIntakeBySyncIdentifier(
+        [FromQuery] string dataSource,
+        [FromQuery] string syncIdentifier,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(dataSource) || string.IsNullOrEmpty(syncIdentifier))
+            return BadRequest("dataSource and syncIdentifier are required");
+
+        var deleted = await _carbIntakeRepo.DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, ct);
+        return deleted > 0 ? NoContent() : NotFound();
+    }
+
     #endregion
 
     #region Carb Intake Food Breakdown
@@ -287,11 +306,10 @@ public class NutritionController : ControllerBase
         [FromBody] CarbIntakeFoodRequest request,
         CancellationToken ct = default)
     {
-        var existing = await _context.Set<TreatmentFoodEntity>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(tf => tf.Id == foodEntryId, ct);
+        var breakdown = await _treatmentFoodService.GetByCarbIntakeIdAsync(id, ct);
+        var existing = breakdown?.Foods.FirstOrDefault(f => f.Id == foodEntryId);
 
-        if (existing == null || existing.CarbIntakeId != id)
+        if (existing == null)
             return NotFound();
 
         var entry = await BuildFoodEntryAsync(request, id, existing, ct);
@@ -303,8 +321,8 @@ public class NutritionController : ControllerBase
         if (updated == null)
             return NotFound();
 
-        var breakdown = await _treatmentFoodService.GetByCarbIntakeIdAsync(id, ct);
-        return Ok(breakdown);
+        var updatedBreakdown = await _treatmentFoodService.GetByCarbIntakeIdAsync(id, ct);
+        return Ok(updatedBreakdown);
     }
 
     /// <summary>
@@ -319,11 +337,10 @@ public class NutritionController : ControllerBase
         Guid foodEntryId,
         CancellationToken ct = default)
     {
-        var existing = await _context.Set<TreatmentFoodEntity>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(tf => tf.Id == foodEntryId, ct);
+        var existingBreakdown = await _treatmentFoodService.GetByCarbIntakeIdAsync(id, ct);
+        var existing = existingBreakdown?.Foods.FirstOrDefault(f => f.Id == foodEntryId);
 
-        if (existing == null || existing.CarbIntakeId != id)
+        if (existing == null)
             return NotFound();
 
         await _treatmentFoodService.DeleteAsync(foodEntryId, ct);
@@ -600,7 +617,7 @@ public class NutritionController : ControllerBase
     private async Task<TreatmentFood?> BuildFoodEntryAsync(
         CarbIntakeFoodRequest request,
         Guid carbIntakeId,
-        TreatmentFoodEntity? existing,
+        TreatmentFood? existing,
         CancellationToken ct)
     {
         var timeOffset = request.TimeOffsetMinutes ?? existing?.TimeOffsetMinutes ?? 0;

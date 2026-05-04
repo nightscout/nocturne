@@ -76,6 +76,7 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
                 Action = action,
                 ChangesJson = changesJson,
                 SubjectId = auditContext?.SubjectId,
+                SubjectName = auditContext?.SubjectName,
                 AuthType = auditContext?.AuthType,
                 IpAddress = auditContext?.IpAddress,
                 TokenId = auditContext?.TokenId,

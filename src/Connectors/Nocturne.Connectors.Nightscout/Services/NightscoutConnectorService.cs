@@ -78,6 +78,20 @@ public class NightscoutConnectorService : BaseConnectorService<NightscoutConnect
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync();
+
+                // Detect Cloudflare/WAF challenge pages that block server-to-server requests
+                if (IsWafChallengePage(response, body))
+                {
+                    _logger.LogError(
+                        "[{ConnectorSource}] Nightscout instance at {Url} is behind a WAF (e.g. Cloudflare) that is blocking API requests",
+                        ConnectorSource,
+                        _httpClient.BaseAddress);
+                    TrackFailedRequest(
+                        "Your Nightscout instance is behind a firewall (e.g. Cloudflare) that is blocking Nocturne from syncing. " +
+                        "Please add a WAF bypass rule for API paths (e.g. /api/*) or allowlist the Nocturne server IP.");
+                    return false;
+                }
+
                 _logger.LogError(
                     "[{ConnectorSource}] Nightscout auth check returned HTTP {StatusCode}: {Body}",
                     ConnectorSource,
@@ -718,5 +732,29 @@ public class NightscoutConnectorService : BaseConnectorService<NightscoutConnect
     private static bool IsAlreadySha1Hash(string value)
     {
         return value.Length == 40 && value.All(c => char.IsAsciiHexDigit(c));
+    }
+
+    /// <summary>
+    ///     Detects WAF challenge pages (Cloudflare, Akamai, etc.) that block server-to-server API requests.
+    ///     These return HTML instead of JSON and typically include challenge scripts.
+    /// </summary>
+    private static bool IsWafChallengePage(HttpResponseMessage response, string body)
+    {
+        // Check for Cloudflare server header
+        if (response.Headers.TryGetValues("server", out var serverValues) &&
+            serverValues.Any(v => v.Contains("cloudflare", StringComparison.OrdinalIgnoreCase)))
+        {
+            // Cloudflare returning non-JSON (challenge page) for an API request
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? "";
+            if (contentType.Contains("html", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        // Check for cf-ray header (Cloudflare) with HTML body containing challenge markers
+        if (response.Headers.Contains("cf-ray") &&
+            body.Contains("challenge-platform", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
     }
 }

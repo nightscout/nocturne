@@ -11,7 +11,6 @@ using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
-using Subject = Nocturne.Core.Models.Authorization.Subject;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -26,7 +25,7 @@ public class PasskeyControllerTests : IDisposable
     private readonly Mock<IPasskeyService> _passkeyService;
     private readonly Mock<IRecoveryCodeService> _recoveryCodeService;
     private readonly Mock<IJwtService> _jwtService;
-    private readonly Mock<IRefreshTokenService> _refreshTokenService;
+    private readonly Mock<ISessionService> _sessionService;
     private readonly Mock<ISubjectService> _subjectService;
     private readonly Mock<ITenantAccessor> _tenantAccessor;
     private readonly Mock<ITenantService> _tenantService;
@@ -50,7 +49,7 @@ public class PasskeyControllerTests : IDisposable
         _passkeyService = new Mock<IPasskeyService>();
         _recoveryCodeService = new Mock<IRecoveryCodeService>();
         _jwtService = new Mock<IJwtService>();
-        _refreshTokenService = new Mock<IRefreshTokenService>();
+        _sessionService = new Mock<ISessionService>();
         _subjectService = new Mock<ISubjectService>();
         _tenantAccessor = new Mock<ITenantAccessor>();
         _tenantAccessor.Setup(t => t.TenantId).Returns(_tenantId);
@@ -76,7 +75,7 @@ public class PasskeyControllerTests : IDisposable
             _passkeyService.Object,
             _recoveryCodeService.Object,
             _jwtService.Object,
-            _refreshTokenService.Object,
+            _sessionService.Object,
             _subjectService.Object,
             auditService.Object,
             _tenantAccessor.Object,
@@ -413,43 +412,12 @@ public class PasskeyControllerTests : IDisposable
             .Setup(s => s.GenerateCodesAsync(subjectId))
             .ReturnsAsync(new List<string> { "CODE1", "CODE2", "CODE3" });
 
-        _subjectService
-            .Setup(s => s.GetSubjectByIdAsync(subjectId))
-            .ReturnsAsync(new Subject
-            {
-                Id = subjectId,
-                Name = "Administrator",
-                Email = null,
-            });
-
-        _subjectService
-            .Setup(s => s.GetSubjectRolesAsync(subjectId))
-            .ReturnsAsync(new List<string> { "admin" });
-
-        _subjectService
-            .Setup(s => s.GetSubjectPermissionsAsync(subjectId))
-            .ReturnsAsync(new List<string> { "*" });
-
-        _jwtService
-            .Setup(s => s.GenerateAccessToken(
-                It.Is<SubjectInfo>(si => si.Id == subjectId && si.Name == "Administrator"),
-                It.Is<IEnumerable<string>>(p => p.Contains("*")),
-                It.Is<IEnumerable<string>>(r => r.Contains("admin")),
-                null))
-            .Returns("jwt-access-token");
-
-        _jwtService
-            .Setup(s => s.GetAccessTokenLifetime())
-            .Returns(TimeSpan.FromMinutes(15));
-
-        _refreshTokenService
-            .Setup(s => s.CreateRefreshTokenAsync(
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(
                 subjectId,
-                null,
-                "Setup Passkey",
-                It.IsAny<string?>(),
-                It.IsAny<string?>()))
-            .ReturnsAsync("refresh-token-value");
+                It.IsAny<SessionContext>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("jwt-access-token", "refresh-token-value", 900));
 
         var request = new SetupCompleteRequest
         {
@@ -469,18 +437,13 @@ public class PasskeyControllerTests : IDisposable
         response.RecoveryCodes.Should().HaveCount(3);
         response.ExpiresIn.Should().Be(900);
 
-        // Assert — JWT was generated with admin role and wildcard permission
-        _jwtService.Verify(
-            s => s.GenerateAccessToken(
-                It.Is<SubjectInfo>(si => si.Id == subjectId),
-                It.Is<IEnumerable<string>>(p => p.Contains("*")),
-                It.Is<IEnumerable<string>>(r => r.Contains("admin")),
-                null),
+        // Assert — session was issued for the subject
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(
+                subjectId,
+                It.Is<SessionContext>(ctx => ctx.DeviceDescription == "Setup Passkey"),
+                It.IsAny<CancellationToken>()),
             Times.Once);
-
-        // Assert — roles and permissions were fetched for the subject
-        _subjectService.Verify(s => s.GetSubjectRolesAsync(subjectId), Times.Once);
-        _subjectService.Verify(s => s.GetSubjectPermissionsAsync(subjectId), Times.Once);
     }
 
     [Fact]
@@ -660,34 +623,12 @@ public class PasskeyControllerTests : IDisposable
             .Setup(s => s.GenerateCodesAsync(subjectId))
             .ReturnsAsync(["CODE1", "CODE2", "CODE3"]);
 
-        _subjectService
-            .Setup(s => s.GetSubjectByIdAsync(subjectId))
-            .ReturnsAsync(new Subject { Id = subjectId, Name = "Rhys" });
-
-        _subjectService
-            .Setup(s => s.GetSubjectRolesAsync(subjectId))
-            .ReturnsAsync([]);
-
-        _subjectService
-            .Setup(s => s.GetSubjectPermissionsAsync(subjectId))
-            .ReturnsAsync([]);
-
-        _jwtService
-            .Setup(s => s.GenerateAccessToken(
-                It.IsAny<SubjectInfo>(),
-                It.IsAny<IEnumerable<string>>(),
-                It.IsAny<IEnumerable<string>>(),
-                null))
-            .Returns("access-token");
-
-        _jwtService
-            .Setup(s => s.GetAccessTokenLifetime())
-            .Returns(TimeSpan.FromMinutes(15));
-
-        _refreshTokenService
-            .Setup(s => s.CreateRefreshTokenAsync(
-                subjectId, null, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>()))
-            .ReturnsAsync("refresh-token");
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(
+                subjectId,
+                It.IsAny<SessionContext>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access-token", "refresh-token", 900));
 
         var request = new SetupCompleteRequest
         {

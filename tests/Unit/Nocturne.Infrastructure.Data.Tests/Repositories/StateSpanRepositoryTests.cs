@@ -4,6 +4,7 @@ using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -179,5 +180,173 @@ public class StateSpanRepositoryTests : IDisposable
         allSpans.Should().HaveCount(1);
         allSpans[0].SupersededById.Should().BeNull();
         allSpans[0].EndTimestamp.Should().Be(new DateTime(2026, 1, 1, 11, 0, 0, DateTimeKind.Utc));
+    }
+
+    // --- GetActiveAtAsync ---
+
+    private static StateSpanEntity SpanEntity(
+        Guid tenantId,
+        StateSpanCategory category,
+        string state,
+        DateTime start,
+        DateTime? end)
+        => new()
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            Category = category.ToString(),
+            State = state,
+            StartTimestamp = start,
+            EndTimestamp = end,
+            Source = "test",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+    [Fact]
+    public async Task GetActiveAtAsync_returns_null_when_no_rows()
+    {
+        var result = await _repository.GetActiveAtAsync(
+            StateSpanCategory.Override,
+            state: null,
+            at: new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),
+            CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetActiveAtAsync_returns_active_span_with_null_end()
+    {
+        var start = new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc);
+        _context.StateSpans.Add(SpanEntity(
+            _context.TenantId, StateSpanCategory.Override, "Custom", start, end: null));
+        await _context.SaveChangesAsync();
+
+        var result = await _repository.GetActiveAtAsync(
+            StateSpanCategory.Override,
+            state: null,
+            at: new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.StartTimestamp.Should().Be(start);
+    }
+
+    [Fact]
+    public async Task GetActiveAtAsync_returns_active_span_with_future_end()
+    {
+        var start = new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc);
+        var end = new DateTime(2026, 4, 30, 14, 0, 0, DateTimeKind.Utc);
+        _context.StateSpans.Add(SpanEntity(
+            _context.TenantId, StateSpanCategory.Sleep, "Sleeping", start, end));
+        await _context.SaveChangesAsync();
+
+        var result = await _repository.GetActiveAtAsync(
+            StateSpanCategory.Sleep,
+            state: null,
+            at: new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.EndTimestamp.Should().Be(end);
+    }
+
+    [Fact]
+    public async Task GetActiveAtAsync_returns_null_when_none_active()
+    {
+        _context.StateSpans.Add(SpanEntity(
+            _context.TenantId, StateSpanCategory.Sleep, "Sleeping",
+            new DateTime(2026, 4, 30, 6, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 4, 30, 7, 0, 0, DateTimeKind.Utc)));
+        _context.StateSpans.Add(SpanEntity(
+            _context.TenantId, StateSpanCategory.Sleep, "Sleeping",
+            new DateTime(2026, 4, 30, 14, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 4, 30, 15, 0, 0, DateTimeKind.Utc)));
+        await _context.SaveChangesAsync();
+
+        var result = await _repository.GetActiveAtAsync(
+            StateSpanCategory.Sleep,
+            state: null,
+            at: new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),
+            CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetActiveAtAsync_picks_latest_start_when_overlapping()
+    {
+        _context.StateSpans.Add(SpanEntity(
+            _context.TenantId, StateSpanCategory.Sleep, "A",
+            new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 4, 30, 14, 0, 0, DateTimeKind.Utc)));
+        _context.StateSpans.Add(SpanEntity(
+            _context.TenantId, StateSpanCategory.Sleep, "B",
+            new DateTime(2026, 4, 30, 11, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 4, 30, 13, 0, 0, DateTimeKind.Utc)));
+        await _context.SaveChangesAsync();
+
+        var result = await _repository.GetActiveAtAsync(
+            StateSpanCategory.Sleep,
+            state: null,
+            at: new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),
+            CancellationToken.None);
+
+        result!.State.Should().Be("B");
+    }
+
+    [Fact]
+    public async Task GetActiveAtAsync_filters_by_state_when_provided()
+    {
+        var at = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        _context.StateSpans.Add(SpanEntity(
+            _context.TenantId, StateSpanCategory.Sleep, "A",
+            new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 4, 30, 14, 0, 0, DateTimeKind.Utc)));
+        await _context.SaveChangesAsync();
+
+        var matching = await _repository.GetActiveAtAsync(
+            StateSpanCategory.Sleep, state: "A", at, CancellationToken.None);
+        var nonMatching = await _repository.GetActiveAtAsync(
+            StateSpanCategory.Sleep, state: "B", at, CancellationToken.None);
+
+        matching.Should().NotBeNull();
+        nonMatching.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetActiveAtAsync_end_is_exclusive()
+    {
+        var end = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        _context.StateSpans.Add(SpanEntity(
+            _context.TenantId, StateSpanCategory.Sleep, "A",
+            new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc),
+            end));
+        await _context.SaveChangesAsync();
+
+        var result = await _repository.GetActiveAtAsync(
+            StateSpanCategory.Sleep, state: null, at: end, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetActiveAtAsync_respects_tenant_isolation()
+    {
+        var otherTenant = Guid.Parse("00000000-0000-0000-0000-000000000099");
+        _context.StateSpans.Add(SpanEntity(
+            otherTenant, StateSpanCategory.Override, "Custom",
+            new DateTime(2026, 4, 30, 9, 0, 0, DateTimeKind.Utc),
+            end: null));
+        await _context.SaveChangesAsync();
+
+        var result = await _repository.GetActiveAtAsync(
+            StateSpanCategory.Override,
+            state: null,
+            at: new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc),
+            CancellationToken.None);
+
+        result.Should().BeNull();
     }
 }

@@ -15,7 +15,9 @@
         sysTime: {Scrubbed},
         mgdl: 120,
         sgv: 120,
+        mmol: 6.65993273467938,
         direction: Flat,
+        trend: 4,
         type: sgv,
         device: xDrip-DexcomG6,
         isValid: true
@@ -31,7 +33,9 @@
         sysTime: {Scrubbed},
         mgdl: 110,
         sgv: 110,
+        mmol: 6.104938340122764,
         direction: Flat,
+        trend: 4,
         type: sgv,
         device: xDrip-DexcomG6,
         isValid: true
@@ -47,7 +51,9 @@
         sysTime: {Scrubbed},
         mgdl: 100,
         sgv: 100,
+        mmol: 5.54994394556615,
         direction: Flat,
+        trend: 4,
         type: sgv,
         device: xDrip-DexcomG6,
         isValid: true

@@ -2,7 +2,6 @@ using Nocturne.API.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Models.Configuration;
-using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -14,7 +13,7 @@ namespace Nocturne.API.Services.Connectors;
 /// <seealso cref="IConnectorHealthService"/>
 public class ConnectorHealthService(
     IConfiguration configuration,
-    IEntryRepository entries,
+    IDataSourceService dataSourceService,
     IConnectorConfigurationService connectorConfigService,
     ILogger<ConnectorHealthService> logger
 ) : IConnectorHealthService
@@ -91,8 +90,8 @@ public class ConnectorHealthService(
             };
         }
 
-        // Always get database stats for historical data (entries + treatments + state spans)
-        var dbStats = await entries.GetEntryStatsBySourceAsync(
+        // Always get database stats for historical data (glucose + treatments + state spans)
+        var dbStats = await dataSourceService.GetDataSourceStatsAsync(
             connector.DataSourceId,
             cancellationToken
         );

@@ -85,6 +85,15 @@ export interface NotificationUpdateEvent {
   notification: InAppNotificationDto;
 }
 
+export type SyncMessageType =
+  | "Authenticating"
+  | "FetchingData"
+  | "FetchingDataType"
+  | "ProcessingDataType"
+  | "PublishingDataType"
+  | "SyncComplete"
+  | "SyncFailed";
+
 export interface SyncProgressEvent {
   connectorId: string;
   connectorName: string;
@@ -95,6 +104,8 @@ export interface SyncProgressEvent {
   itemsSyncedSoFar: Record<string, number>;
   errorMessage: string | null;
   timestamp: string;
+  messageType: SyncMessageType | null;
+  messageParams: Record<string, string> | null;
 }
 
 // WebSocket client statistics

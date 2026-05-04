@@ -253,7 +253,6 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
             Servings = entity.Servings,
             ServingDescription = entity.ServingDescription,
             Status = entity.Status,
-            MatchedTreatmentId = entity.MatchedTreatmentId,
             ResolvedAt = entity.ResolvedAt,
         };
     }

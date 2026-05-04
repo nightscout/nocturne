@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Connectors.Core.Constants;
@@ -6,6 +7,9 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Mappers;
+using Nocturne.Infrastructure.Data.Mappers.V4;
 
 namespace Nocturne.API.Services.V4;
 
@@ -24,8 +28,6 @@ namespace Nocturne.API.Services.V4;
 /// </remarks>
 /// <seealso cref="IV4ToLegacyProjectionService"/>
 /// <seealso cref="DecompositionPipeline"/>
-/// <seealso cref="DualPathEntryStore"/>
-/// <seealso cref="DualPathTreatmentStore"/>
 public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 {
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
@@ -34,7 +36,10 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     private readonly IBGCheckRepository _bgCheckRepository;
     private readonly INoteRepository _noteRepository;
     private readonly IDeviceEventRepository _deviceEventRepository;
+    private readonly ITempBasalRepository _tempBasalRepository;
+    private readonly IBolusCalculationRepository _bolusCalculationRepository;
     private readonly ITreatmentFoodService _treatmentFoodService;
+    private readonly NocturneDbContext _dbContext;
     private readonly ILogger<V4ToLegacyProjectionService> _logger;
 
     // DeviceEventType → legacy Nightscout eventType string (reverse of TreatmentTypes.DeviceEventTypeMap)
@@ -53,17 +58,6 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             [DeviceEventType.TransmitterSensorInsert] = TreatmentTypes.TransmitterSensorInsert,
         };
 
-    /// <summary>
-    /// Initializes a new instance of <see cref="V4ToLegacyProjectionService"/>.
-    /// </summary>
-    /// <param name="sensorGlucoseRepository">Repository for V4 sensor glucose records projected back to SGV entries.</param>
-    /// <param name="bolusRepository">Repository for V4 bolus records projected back to bolus treatments.</param>
-    /// <param name="carbIntakeRepository">Repository for V4 carb intake records projected back to carb treatments.</param>
-    /// <param name="bgCheckRepository">Repository for V4 blood glucose check records projected back to BG check treatments.</param>
-    /// <param name="noteRepository">Repository for V4 note records projected back to note treatments.</param>
-    /// <param name="deviceEventRepository">Repository for V4 device event records projected back to device event treatments.</param>
-    /// <param name="treatmentFoodService">Service for resolving food data attached to projected carb intake treatments.</param>
-    /// <param name="logger">The logger instance.</param>
     public V4ToLegacyProjectionService(
         ISensorGlucoseRepository sensorGlucoseRepository,
         IBolusRepository bolusRepository,
@@ -71,7 +65,10 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         IBGCheckRepository bgCheckRepository,
         INoteRepository noteRepository,
         IDeviceEventRepository deviceEventRepository,
+        ITempBasalRepository tempBasalRepository,
+        IBolusCalculationRepository bolusCalculationRepository,
         ITreatmentFoodService treatmentFoodService,
+        NocturneDbContext dbContext,
         ILogger<V4ToLegacyProjectionService> logger
     )
     {
@@ -81,7 +78,10 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         _bgCheckRepository = bgCheckRepository;
         _noteRepository = noteRepository;
         _deviceEventRepository = deviceEventRepository;
+        _tempBasalRepository = tempBasalRepository;
+        _bolusCalculationRepository = bolusCalculationRepository;
         _treatmentFoodService = treatmentFoodService;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
@@ -158,6 +158,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         long? fromMills,
         long? toMills,
         int limit,
+        bool nativeOnly = true,
         CancellationToken ct = default
     )
     {
@@ -173,7 +174,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                 limit: limit,
                 offset: 0,
                 descending: true,
-                nativeOnly: true,
+                nativeOnly: nativeOnly,
                 ct: ct
             )
         )).ToList();
@@ -187,7 +188,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                 limit: limit,
                 offset: 0,
                 descending: true,
-                nativeOnly: true,
+                nativeOnly: nativeOnly,
                 ct: ct
             )
         )).ToList();
@@ -201,7 +202,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                 limit: limit,
                 offset: 0,
                 descending: true,
-                nativeOnly: true,
+                nativeOnly: nativeOnly,
                 ct: ct
             )
         )).ToList();
@@ -215,7 +216,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                 limit: limit,
                 offset: 0,
                 descending: true,
-                nativeOnly: true,
+                nativeOnly: nativeOnly,
                 ct: ct
             )
         )).ToList();
@@ -229,10 +230,40 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
                 limit: limit,
                 offset: 0,
                 descending: true,
-                nativeOnly: true,
+                nativeOnly: nativeOnly,
                 ct: ct
             )
         )).ToList();
+
+        var tempBasals = (await FetchSafe(() =>
+            _tempBasalRepository.GetAsync(
+                from: MillsToDateTime(fromMills),
+                to: MillsToDateTime(toMills),
+                device: null,
+                source: null,
+                limit: limit,
+                offset: 0,
+                descending: true,
+                ct: ct
+            )
+        )).ToList();
+        if (nativeOnly)
+            tempBasals = tempBasals.Where(r => r.LegacyId == null).ToList();
+
+        var bolusCalcs = (await FetchSafe(() =>
+            _bolusCalculationRepository.GetAsync(
+                from: MillsToDateTime(fromMills),
+                to: MillsToDateTime(toMills),
+                device: null,
+                source: null,
+                limit: limit,
+                offset: 0,
+                descending: true,
+                ct: ct
+            )
+        )).ToList();
+        if (nativeOnly)
+            bolusCalcs = bolusCalcs.Where(r => r.LegacyId == null).ToList();
 
         // Load food breakdown entries for all carb intakes to populate legacy fields
         var carbIds = carbs.Select(c => c.Id).ToList();
@@ -329,7 +360,83 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         foreach (var deviceEvent in deviceEvents)
             treatments.Add(ProjectDeviceEvent(deviceEvent));
 
+        // --- TempBasal → Treatment ---
+        foreach (var tempBasal in tempBasals)
+            treatments.Add(TempBasalToTreatmentMapper.ToTreatment(tempBasal));
+
+        // --- BolusCalculation → Treatment ---
+        foreach (var bolusCalc in bolusCalcs)
+            treatments.Add(ProjectBolusCalculation(bolusCalc));
+
         return treatments.OrderByDescending(t => t.Mills).Take(limit);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Treatment>> GetProjectedTreatmentsModifiedSinceAsync(
+        long lastModifiedMills, int limit, CancellationToken ct = default)
+    {
+        var threshold = DateTimeOffset.FromUnixTimeMilliseconds(lastModifiedMills).UtcDateTime;
+        var treatments = new List<Treatment>();
+
+        // Query each V4 entity table by ModifiedAt, map to domain, then project to Treatment.
+        // Sequential to avoid DbContext thread-safety issues.
+        var boluses = await _dbContext.Boluses.AsNoTracking()
+            .Where(e => e.SysUpdatedAt >= threshold)
+            .OrderBy(e => e.SysUpdatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+        foreach (var entity in boluses)
+            treatments.Add(WithSrvModified(ProjectCorrectionBolus(BolusMapper.ToDomainModel(entity)), entity.SysUpdatedAt));
+
+        var carbIntakes = await _dbContext.CarbIntakes.AsNoTracking()
+            .Where(e => e.SysUpdatedAt >= threshold)
+            .OrderBy(e => e.SysUpdatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+        foreach (var entity in carbIntakes)
+            treatments.Add(WithSrvModified(ProjectCarbCorrection(CarbIntakeMapper.ToDomainModel(entity), []), entity.SysUpdatedAt));
+
+        var bgChecks = await _dbContext.BGChecks.AsNoTracking()
+            .Where(e => e.SysUpdatedAt >= threshold)
+            .OrderBy(e => e.SysUpdatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+        foreach (var entity in bgChecks)
+            treatments.Add(WithSrvModified(ProjectBgCheck(BGCheckMapper.ToDomainModel(entity)), entity.SysUpdatedAt));
+
+        var notes = await _dbContext.Notes.AsNoTracking()
+            .Where(e => e.SysUpdatedAt >= threshold)
+            .OrderBy(e => e.SysUpdatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+        foreach (var entity in notes)
+            treatments.Add(WithSrvModified(ProjectNote(NoteMapper.ToDomainModel(entity)), entity.SysUpdatedAt));
+
+        var deviceEvents = await _dbContext.DeviceEvents.AsNoTracking()
+            .Where(e => e.SysUpdatedAt >= threshold)
+            .OrderBy(e => e.SysUpdatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+        foreach (var entity in deviceEvents)
+            treatments.Add(WithSrvModified(ProjectDeviceEvent(DeviceEventMapper.ToDomainModel(entity)), entity.SysUpdatedAt));
+
+        var tempBasals = await _dbContext.TempBasals.AsNoTracking()
+            .Where(e => e.SysUpdatedAt >= threshold)
+            .OrderBy(e => e.SysUpdatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+        foreach (var entity in tempBasals)
+            treatments.Add(WithSrvModified(TempBasalToTreatmentMapper.ToTreatment(TempBasalMapper.ToDomainModel(entity)), entity.SysUpdatedAt));
+
+        var bolusCalcs = await _dbContext.BolusCalculations.AsNoTracking()
+            .Where(e => e.SysUpdatedAt >= threshold)
+            .OrderBy(e => e.SysUpdatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+        foreach (var entity in bolusCalcs)
+            treatments.Add(WithSrvModified(ProjectBolusCalculation(BolusCalculationMapper.ToDomainModel(entity)), entity.SysUpdatedAt));
+
+        return treatments.OrderBy(t => t.SrvModified ?? t.Mills).Take(limit);
     }
 
     // -------------------------------------------------------------------------
@@ -372,6 +479,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             DataSource = bolus.DataSource,
             SyncIdentifier = bolus.SyncIdentifier,
             InsulinType = bolus.InsulinType,
+            UtcOffset = bolus.UtcOffset,
         };
 
     private static Treatment ProjectCorrectionBolus(Bolus bolus) =>
@@ -385,6 +493,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             DataSource = bolus.DataSource,
             SyncIdentifier = bolus.SyncIdentifier,
             InsulinType = bolus.InsulinType,
+            UtcOffset = bolus.UtcOffset,
         };
 
     private static Treatment ProjectCarbCorrection(CarbIntake carb, List<TreatmentFood> foods) =>
@@ -402,6 +511,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             EnteredBy = carb.Device,
             DataSource = carb.DataSource,
             SyncIdentifier = carb.SyncIdentifier,
+            UtcOffset = carb.UtcOffset,
         };
 
     private static string? DeriveeFoodType(List<TreatmentFood> foods)
@@ -446,6 +556,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             EnteredBy = bgCheck.Device,
             DataSource = bgCheck.DataSource,
             SyncIdentifier = bgCheck.SyncIdentifier,
+            UtcOffset = bgCheck.UtcOffset,
         };
 
     private static Treatment ProjectNote(Note note) =>
@@ -459,6 +570,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             EnteredBy = note.Device,
             DataSource = note.DataSource,
             SyncIdentifier = note.SyncIdentifier,
+            UtcOffset = note.UtcOffset,
         };
 
     private static Treatment ProjectDeviceEvent(DeviceEvent deviceEvent)
@@ -473,7 +585,40 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             EnteredBy = deviceEvent.Device,
             DataSource = deviceEvent.DataSource,
             SyncIdentifier = deviceEvent.SyncIdentifier,
+            UtcOffset = deviceEvent.UtcOffset,
         };
+    }
+
+    private static Treatment ProjectBolusCalculation(BolusCalculation bc) =>
+        new()
+        {
+            Id = bc.Id.ToString(),
+            EventType = "Bolus Wizard",
+            Mills = bc.Mills,
+            BloodGlucoseInput = bc.BloodGlucoseInput,
+            BloodGlucoseInputSource = bc.BloodGlucoseInputSource,
+            Carbs = bc.CarbInput,
+            InsulinOnBoard = bc.InsulinOnBoard,
+            InsulinRecommendationForCorrection = bc.InsulinRecommendation,
+            CR = bc.CarbRatio,
+            CalculationType = bc.CalculationType.HasValue
+                ? (Nocturne.Core.Models.CalculationType)(int)bc.CalculationType.Value
+                : null,
+            InsulinRecommendationForCarbs = bc.InsulinRecommendationForCarbs,
+            InsulinProgrammed = bc.InsulinProgrammed,
+            EnteredInsulin = bc.EnteredInsulin,
+            SplitNow = bc.SplitNow,
+            SplitExt = bc.SplitExt,
+            PreBolus = bc.PreBolus,
+            EnteredBy = bc.Device,
+            DataSource = bc.DataSource,
+            UtcOffset = bc.UtcOffset,
+        };
+
+    private static Treatment WithSrvModified(Treatment treatment, DateTime modifiedAt)
+    {
+        treatment.SrvModified = new DateTimeOffset(modifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        return treatment;
     }
 
     private async Task<IEnumerable<T>> FetchSafe<T>(Func<Task<IEnumerable<T>>> fetchFunc)

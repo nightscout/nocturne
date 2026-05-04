@@ -1,7 +1,7 @@
 /**
  * Remote functions for OAuth device authorization and consent flows
  */
-import { getRequestEvent, query, command, form } from "$app/server";
+import { getRequestEvent, query, form } from "$app/server";
 import { z } from "zod";
 import { error, invalid, redirect } from "@sveltejs/kit";
 
@@ -57,64 +57,6 @@ export const getClientInfo = query(
 );
 
 // ============================================================================
-// Command Functions
-// ============================================================================
-
-/**
- * Approve a device authorization request
- */
-export const approveDevice = command(
-  z.object({
-    userCode: z.string().min(1, "User code is required"),
-  }),
-  async ({ userCode }) => {
-    const { locals } = getRequestEvent();
-    const { apiClient } = locals;
-
-    if (!locals.isAuthenticated) {
-      throw redirect(303, "/auth/login");
-    }
-
-    try {
-      await apiClient.oAuth.deviceApprove(userCode, true);
-      return { success: true };
-    } catch (err) {
-      console.error("Error approving device:", err);
-      throw error(400, "The device code has expired or is no longer valid");
-    }
-  }
-);
-
-/**
- * Deny a device authorization request
- */
-export const denyDevice = command(
-  z.object({
-    userCode: z.string().min(1, "User code is required"),
-  }),
-  async ({ userCode }) => {
-    const { locals } = getRequestEvent();
-    const { apiClient } = locals;
-
-    if (!locals.isAuthenticated) {
-      throw redirect(303, "/auth/login");
-    }
-
-    try {
-      await apiClient.oAuth.deviceApprove(userCode, false);
-      return { denied: true };
-    } catch (err) {
-      console.error("Error denying device:", err);
-      throw error(400, "The device code has expired or is no longer valid");
-    }
-  }
-);
-
-// ============================================================================
-// Form Functions (for use in form actions)
-// ============================================================================
-
-// ============================================================================
 // Device Flow Form Functions
 // ============================================================================
 
@@ -155,34 +97,37 @@ const deviceApproveSchema = z.object({
 });
 
 /**
- * Helper to call device-approve endpoint with proper content type
+ * Call the device-approve endpoint with application/x-www-form-urlencoded.
+ *
+ * The NSwag-generated client sends FormData (multipart/form-data), but the
+ * OAuth endpoint requires application/x-www-form-urlencoded per RFC 8628.
+ * This helper sends the correct content type and forwards the Host/Cookie
+ * headers needed for tenant resolution and authentication.
  */
 async function callDeviceApprove(
   event: ReturnType<typeof getRequestEvent>,
   userCode: string,
   approved: boolean
 ): Promise<void> {
-  const { apiClient } = event!.locals;
+  const { apiClient } = event.locals;
 
   const body = new URLSearchParams();
   body.set("user_code", userCode);
   body.set("approved", approved.toString());
 
-  // Forward Host (for tenant resolution) and Cookie (for authentication)
-  // since the API is a different origin from the incoming request
   const headers: Record<string, string> = {
     "Content-Type": "application/x-www-form-urlencoded",
   };
-  const originalHost = event!.request.headers.get("host");
+  const originalHost = event.request.headers.get("host");
   if (originalHost) {
     headers["X-Forwarded-Host"] = originalHost;
   }
-  const cookie = event!.request.headers.get("cookie");
+  const cookie = event.request.headers.get("cookie");
   if (cookie) {
     headers["Cookie"] = cookie;
   }
 
-  const response = await event!.fetch(`${apiClient.baseUrl}/api/oauth/device-approve`, {
+  const response = await event.fetch(`${apiClient.baseUrl}/api/oauth/device-approve`, {
     method: "POST",
     headers,
     body: body.toString(),
