@@ -27,6 +27,7 @@ export { default as ChartTooltip } from "./ChartTooltip.svelte";
 export { default as DeviceEventMarkers } from "./markers/DeviceEventMarkers.svelte";
 export { default as SystemEventMarkers } from "./markers/SystemEventMarkers.svelte";
 export { default as TrackerMarkers } from "./markers/TrackerMarkers.svelte";
+export { default as BasalInjectionMarker } from "./markers/BasalInjectionMarker.svelte";
 
 // Dialogs
 export { default as InspectionDialogs } from "./InspectionDialogs.svelte";
