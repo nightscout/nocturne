@@ -5,6 +5,7 @@ namespace Nocturne.Core.Models.V4;
 /// Conceptually parallel to <see cref="BasalSchedule"/> for pump users:
 /// represents baseline coverage, not stacking IOB.
 /// </summary>
+/// <seealso cref="BasalSchedule"/>
 /// <seealso cref="PatientInsulin"/>
 /// <seealso cref="TreatmentInsulinContext"/>
 /// <seealso cref="IV4Record"/>
