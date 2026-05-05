@@ -17,6 +17,10 @@ public static class BasalInjectionMapper
     /// <returns>A new instance of BasalInjectionEntity.</returns>
     public static BasalInjectionEntity ToEntity(BasalInjection model)
     {
+        if (model.InsulinContext is null)
+            throw new InvalidOperationException(
+                $"BasalInjection {model.Id} has null InsulinContext; the InsulinContext property is required.");
+
         return new BasalInjectionEntity
         {
             Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
@@ -46,6 +50,10 @@ public static class BasalInjectionMapper
     /// <returns>A new instance of BasalInjection domain model.</returns>
     public static BasalInjection ToDomainModel(BasalInjectionEntity entity)
     {
+        var insulinContext = JsonSerializer.Deserialize<TreatmentInsulinContext>(entity.InsulinContextJson)
+            ?? throw new InvalidDataException(
+                $"BasalInjectionEntity {entity.Id} has invalid InsulinContext JSON: '{entity.InsulinContextJson}'.");
+
         return new BasalInjection
         {
             Id = entity.Id,
@@ -61,9 +69,7 @@ public static class BasalInjectionMapper
             ModifiedAt = entity.SysUpdatedAt,
             Units = entity.Units,
             Notes = entity.Notes,
-            InsulinContext = !string.IsNullOrEmpty(entity.InsulinContextJson)
-                ? JsonSerializer.Deserialize<TreatmentInsulinContext>(entity.InsulinContextJson)!
-                : null!,
+            InsulinContext = insulinContext,
             AdditionalProperties = !string.IsNullOrEmpty(entity.AdditionalPropertiesJson)
                 ? JsonSerializer.Deserialize<Dictionary<string, object?>>(entity.AdditionalPropertiesJson)
                 : null,
@@ -77,6 +83,10 @@ public static class BasalInjectionMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(BasalInjectionEntity entity, BasalInjection model)
     {
+        if (model.InsulinContext is null)
+            throw new InvalidOperationException(
+                $"BasalInjection {model.Id} has null InsulinContext; the InsulinContext property is required.");
+
         entity.Timestamp = model.Timestamp;
         entity.UtcOffset = model.UtcOffset;
         entity.Device = model.Device;
