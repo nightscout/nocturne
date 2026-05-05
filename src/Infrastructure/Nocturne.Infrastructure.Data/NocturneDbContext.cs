@@ -289,6 +289,12 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<BolusEntity> Boluses { get; set; }
 
+    /// <summary>
+    /// Gets or sets the BasalInjections table for discrete long-acting basal insulin
+    /// injection records (MDI; v4 granular model).
+    /// </summary>
+    public DbSet<BasalInjectionEntity> BasalInjections => Set<BasalInjectionEntity>();
+
 
     /// <summary>
     /// Gets or sets the CarbIntakes table for carbohydrate intake records (v4 granular model)
@@ -1381,6 +1387,35 @@ public class NocturneDbContext : DbContext
             .IsUnique()
             .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
+        // BasalInjections indexes
+        modelBuilder
+            .Entity<BasalInjectionEntity>()
+            .HasIndex(e => e.Timestamp)
+            .HasDatabaseName("ix_basal_injections_timestamp")
+            .IsDescending();
+
+        modelBuilder
+            .Entity<BasalInjectionEntity>()
+            .HasIndex(e => new { e.TenantId, e.LegacyId })
+            .HasDatabaseName("ix_basal_injections_tenant_legacy_id")
+            .IsUnique()
+            .HasFilter("legacy_id IS NOT NULL");
+
+        modelBuilder
+            .Entity<BasalInjectionEntity>()
+            .HasIndex(e => e.CorrelationId)
+            .HasDatabaseName("ix_basal_injections_correlation_id");
+
+        // BasalInjection is the first consumer of the dormant soft-delete
+        // infrastructure, so the sync_identifier uniqueness filter must also
+        // exclude soft-deleted rows. ConfigureTenantFilters automatically
+        // applies the deleted_at IS NULL clause to runtime SELECTs.
+        modelBuilder.Entity<BasalInjectionEntity>()
+            .HasIndex(e => new { e.TenantId, e.DataSource, e.SyncIdentifier })
+            .HasDatabaseName("ix_basal_injections_tenant_source_sync_id")
+            .IsUnique()
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
         // CarbIntakes indexes
         modelBuilder
             .Entity<CarbIntakeEntity>()
@@ -1971,6 +2006,10 @@ public class NocturneDbContext : DbContext
             .HasValueGenerator<GuidV7ValueGenerator>();
         modelBuilder
             .Entity<BolusEntity>()
+            .Property(e => e.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<BasalInjectionEntity>()
             .Property(e => e.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
         modelBuilder
@@ -3136,6 +3175,14 @@ public class NocturneDbContext : DbContext
                     bolusEntity.SysCreatedAt = utcNow;
                 }
                 bolusEntity.SysUpdatedAt = utcNow;
+            }
+            else if (entry.Entity is BasalInjectionEntity basalInjectionEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    basalInjectionEntity.SysCreatedAt = utcNow;
+                }
+                basalInjectionEntity.SysUpdatedAt = utcNow;
             }
             else if (entry.Entity is CarbIntakeEntity carbIntakeEntity)
             {
