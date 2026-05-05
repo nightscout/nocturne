@@ -39,6 +39,10 @@
         return r.data.text || "\u2014";
       case "deviceEvent":
         return r.data.eventType ?? "\u2014";
+      case "basalInjection":
+        return r.data.units != null
+          ? `${formatInsulinDisplay(r.data.units)}U`
+          : "\u2014";
     }
   }
 

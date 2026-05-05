@@ -12,6 +12,8 @@
     PatientInsulin,
     InsulinFormulation,
     InsulinCategory,
+    BasalInjection,
+    CreateBasalInjectionRequest,
   } from "$lib/api";
   import { InsulinCategory as InsulinCategoryEnum } from "$lib/api";
   import type { EntryRecord } from "$lib/constants/entry-categories";
@@ -42,6 +44,7 @@
   import BGCheckFormFields from "./edit-dialog/BGCheckFormFields.svelte";
   import NoteFormFields from "./edit-dialog/NoteFormFields.svelte";
   import DeviceEventFormFields from "./edit-dialog/DeviceEventFormFields.svelte";
+  import BasalInjectionFormFields from "./edit-dialog/BasalInjectionFormFields.svelte";
   import LinkedRecordsPanel from "./edit-dialog/LinkedRecordsPanel.svelte";
   import InsulinFormFields from "$lib/components/patient/InsulinFormFields.svelte";
   import { insulinCategoryLabels } from "$lib/components/patient/labels";
@@ -111,6 +114,12 @@
 
   let deviceEventForm = $state({
     eventType: undefined as DeviceEventType | undefined,
+    notes: "",
+  });
+
+  let basalInjectionForm = $state<Partial<CreateBasalInjectionRequest>>({
+    patientInsulinId: undefined,
+    units: undefined,
     notes: "",
   });
 
@@ -234,7 +243,28 @@
         };
         break;
       }
+      case "basalInjection": {
+        const d = activeRecord.data;
+        basalInjectionForm = {
+          patientInsulinId: d.insulinContext?.patientInsulinId ?? undefined,
+          units: d.units ?? undefined,
+          notes: d.notes ?? "",
+        };
+        break;
+      }
     }
+  });
+
+  // Filter patientInsulins to those eligible for a basal injection at the
+  // currently-edited timestamp: role in (Basal, Both) and active at that mills.
+  let basalEligibleInsulins = $derived.by(() => {
+    const ts = editMills;
+    return patientInsulins.filter((i) => {
+      if (i.role !== "Basal" && i.role !== "Both") return false;
+      const start = i.startDate ? new Date(i.startDate).getTime() : -Infinity;
+      const end = i.endDate ? new Date(i.endDate).getTime() : Infinity;
+      return ts >= start && ts <= end;
+    });
   });
 
   // Correlation group: all records sharing the same correlationId
@@ -258,6 +288,7 @@
     bgCheck: Droplet,
     note: FileText,
     deviceEvent: Smartphone,
+    basalInjection: Syringe,
   };
 
   let activeCategory = $derived(
@@ -326,6 +357,32 @@
           } as DeviceEvent,
         };
         break;
+      case "basalInjection": {
+        const existingContext = activeRecord.data.insulinContext;
+        const selectedInsulin = patientInsulins.find(
+          (i) => i.id === basalInjectionForm.patientInsulinId
+        );
+        const nextContext = selectedInsulin
+          ? {
+              patientInsulinId: selectedInsulin.id,
+              insulinName: selectedInsulin.name,
+              dia: selectedInsulin.dia,
+              peak: selectedInsulin.peak,
+              curve: selectedInsulin.curve,
+              concentration: selectedInsulin.concentration,
+            }
+          : existingContext;
+        updated = {
+          kind: "basalInjection",
+          data: {
+            ...baseData,
+            units: basalInjectionForm.units ?? activeRecord.data.units,
+            notes: basalInjectionForm.notes ?? "",
+            insulinContext: nextContext,
+          } as BasalInjection,
+        };
+        break;
+      }
     }
 
     onSave(updated);
@@ -422,6 +479,11 @@
           <NoteFormFields bind:form={noteForm} />
         {:else if activeRecord.kind === "deviceEvent"}
           <DeviceEventFormFields bind:form={deviceEventForm} />
+        {:else if activeRecord.kind === "basalInjection"}
+          <BasalInjectionFormFields
+            bind:value={basalInjectionForm}
+            basalInsulins={basalEligibleInsulins}
+          />
         {/if}
 
         <!-- Linked Records Panel -->

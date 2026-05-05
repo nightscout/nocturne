@@ -1,4 +1,11 @@
-import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent } from "$lib/api";
+import type {
+  Bolus,
+  CarbIntake,
+  BGCheck,
+  Note,
+  DeviceEvent,
+  BasalInjection,
+} from "$lib/api";
 
 export const ENTRY_CATEGORIES = {
   bolus: {
@@ -46,6 +53,15 @@ export const ENTRY_CATEGORIES = {
     bgClass: "bg-orange-100 dark:bg-orange-900/30",
     borderClass: "border-orange-200 dark:border-orange-700",
   },
+  basalInjection: {
+    id: "basalInjection" as const,
+    name: "Long-acting injection",
+    description: "Basal insulin injections (pen / syringe)",
+    icon: "syringe" as const,
+    colorClass: "text-indigo-600 dark:text-indigo-400",
+    bgClass: "bg-indigo-100 dark:bg-indigo-900/30",
+    borderClass: "border-indigo-200 dark:border-indigo-700",
+  },
 } as const;
 
 export type EntryCategoryId = keyof typeof ENTRY_CATEGORIES;
@@ -56,7 +72,8 @@ export type EntryRecord =
   | { kind: "carbs"; data: CarbIntake }
   | { kind: "bgCheck"; data: BGCheck }
   | { kind: "note"; data: Note }
-  | { kind: "deviceEvent"; data: DeviceEvent };
+  | { kind: "deviceEvent"; data: DeviceEvent }
+  | { kind: "basalInjection"; data: BasalInjection };
 
 /** Get the category style for an entry record */
 export function getEntryStyle(kind: EntryCategoryId) {
@@ -70,6 +87,7 @@ export function mergeEntryRecords(params: {
   bgChecks?: BGCheck[];
   notes?: Note[];
   deviceEvents?: DeviceEvent[];
+  basalInjections?: BasalInjection[];
 }): EntryRecord[] {
   const records: EntryRecord[] = [
     ...(params.boluses ?? []).map((d) => ({ kind: "bolus" as const, data: d })),
@@ -77,13 +95,22 @@ export function mergeEntryRecords(params: {
     ...(params.bgChecks ?? []).map((d) => ({ kind: "bgCheck" as const, data: d })),
     ...(params.notes ?? []).map((d) => ({ kind: "note" as const, data: d })),
     ...(params.deviceEvents ?? []).map((d) => ({ kind: "deviceEvent" as const, data: d })),
+    ...(params.basalInjections ?? []).map((d) => ({ kind: "basalInjection" as const, data: d })),
   ];
   return records.sort((a, b) => (b.data.mills ?? 0) - (a.data.mills ?? 0));
 }
 
 /** Count records by category */
 export function countEntryRecords(records: EntryRecord[]): Record<EntryCategoryId | "all", number> {
-  const counts = { all: records.length, bolus: 0, carbs: 0, bgCheck: 0, note: 0, deviceEvent: 0 };
+  const counts = {
+    all: records.length,
+    bolus: 0,
+    carbs: 0,
+    bgCheck: 0,
+    note: 0,
+    deviceEvent: 0,
+    basalInjection: 0,
+  };
   for (const r of records) counts[r.kind]++;
   return counts;
 }

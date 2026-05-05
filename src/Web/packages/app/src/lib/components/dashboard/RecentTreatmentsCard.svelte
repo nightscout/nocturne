@@ -54,6 +54,8 @@
         return entry.data.text ?? "Note";
       case "deviceEvent":
         return entry.data.eventType ?? "Device Event";
+      case "basalInjection":
+        return entry.data.units ? `${entry.data.units}u basal` : "Long-acting injection";
     }
   }
 
@@ -69,6 +71,8 @@
         return entry.data.isAnnouncement ? "Announcement" : "";
       case "deviceEvent":
         return entry.data.notes ?? "";
+      case "basalInjection":
+        return entry.data.insulinContext?.insulinName ?? "";
     }
   }
 </script>

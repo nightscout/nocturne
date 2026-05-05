@@ -69,6 +69,7 @@
     bgCheck: "BG Check",
     note: "Note",
     deviceEvent: "Device Event",
+    basalInjection: "Long-acting injection",
   };
 
   // Compute unique sources from data
@@ -115,6 +116,8 @@
           : "\u2014";
       case "deviceEvent":
         return record.data.eventType ?? "\u2014";
+      case "basalInjection":
+        return formatNumber(record.data.units, "U");
     }
   }
 
@@ -143,6 +146,8 @@
             ? record.data.notes.slice(0, 30) + "\u2026"
             : record.data.notes
           : "\u2014";
+      case "basalInjection":
+        return record.data.insulinContext?.insulinName ?? "\u2014";
     }
   }
 
@@ -331,6 +336,10 @@
           break;
         case "deviceEvent":
           if (r.data.eventType) values.push(r.data.eventType);
+          if (r.data.notes) values.push(r.data.notes);
+          break;
+        case "basalInjection":
+          if (r.data.insulinContext?.insulinName) values.push(r.data.insulinContext.insulinName);
           if (r.data.notes) values.push(r.data.notes);
           break;
       }
