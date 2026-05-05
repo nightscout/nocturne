@@ -518,6 +518,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IMeterGlucoseRepository, MeterGlucoseRepository>();
         services.AddScoped<ICalibrationRepository, CalibrationRepository>();
         services.AddScoped<IBolusRepository, BolusRepository>();
+        services.AddScoped<IBasalInjectionRepository, BasalInjectionRepository>();
         services.AddScoped<ITempBasalRepository, TempBasalRepository>();
         services.AddScoped<ICarbIntakeRepository, CarbIntakeRepository>();
         services.AddScoped<IBGCheckRepository, BGCheckRepository>();
