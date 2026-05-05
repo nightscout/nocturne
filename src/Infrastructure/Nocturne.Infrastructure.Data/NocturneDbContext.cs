@@ -293,8 +293,7 @@ public class NocturneDbContext : DbContext
     /// Gets or sets the BasalInjections table for discrete long-acting basal insulin
     /// injection records (MDI; v4 granular model).
     /// </summary>
-    public DbSet<BasalInjectionEntity> BasalInjections => Set<BasalInjectionEntity>();
-
+    public DbSet<BasalInjectionEntity> BasalInjections { get; set; }
 
     /// <summary>
     /// Gets or sets the CarbIntakes table for carbohydrate intake records (v4 granular model)

@@ -101,6 +101,7 @@ public class BasalInjectionEntity : ITenantScoped, IAuditable, ISoftDeletable
     /// Optional user-supplied note.
     /// </summary>
     [Column("notes")]
+    [MaxLength(4096)]
     public string? Notes { get; set; }
 
     /// <summary>
