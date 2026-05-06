@@ -107,6 +107,12 @@ public static class ServiceNames
     public const string NocturneRemoteConnector = "nocturne-remote-connector";
 
     /// <summary>
+    /// Aspire resource name for the Twiist Insight follower connector service.
+    /// </summary>
+    /// <seealso cref="DataSources.TwiistConnector"/>
+    public const string TwiistConnector = "twiist-connector";
+
+    /// <summary>
     /// Aspire parameter names resolved by the AppHost via <c>AddParameter</c> and
     /// by services reading <c>Parameters:&lt;name&gt;</c> from configuration.
     /// </summary>

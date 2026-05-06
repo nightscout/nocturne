@@ -73,6 +73,7 @@
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Nightscout\Nocturne.Connectors.Nightscout.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.HomeAssistant\Nocturne.Connectors.HomeAssistant.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.NocturneRemote\Nocturne.Connectors.NocturneRemote.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Twiist\Nocturne.Connectors.Twiist.csproj" />
   </ItemGroup>
   <!-- NSwag TypeScript Client Generation -->
   <!-- Runs automatically after build in development mode -->

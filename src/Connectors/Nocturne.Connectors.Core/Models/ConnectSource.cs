@@ -18,4 +18,5 @@ public enum ConnectSource
     HomeAssistant,
     Eversense,
     NocturneRemote,
+    Twiist,
 }

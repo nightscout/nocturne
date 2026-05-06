@@ -107,6 +107,11 @@ public static class DataSources
     /// </summary>
     public const string NocturneRemoteConnector = "nocturne-remote-connector";
 
+    /// <summary>
+    /// Data fetched from Twiist Insight follower API (Omnipod 5 / Tidepool Loop).
+    /// </summary>
+    public const string TwiistConnector = "twiist-connector";
+
     // ============================================================================
     // Manual Entry Sources
     // ============================================================================
@@ -229,7 +234,8 @@ public static class DataSources
                 or TConnectSyncConnector
                 or HomeAssistantConnector
                 or EversenseConnector
-                or NocturneRemoteConnector;
+                or NocturneRemoteConnector
+                or TwiistConnector;
     }
 
     /// <summary>
@@ -295,6 +301,7 @@ public static class DataSources
             HomeAssistantConnector,
             EversenseConnector,
             NocturneRemoteConnector,
+            TwiistConnector,
             XDrip,
             Spike,
             ManualEntry,
