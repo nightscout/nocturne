@@ -36,6 +36,8 @@
     totalEntries?: number;
     entriesLast24Hours?: number;
     lastEntryTime?: Date;
+    lastSyncAttempt?: Date;
+    lastSuccessfulSync?: Date;
     totalItemsBreakdown?: { [key: string]: number };
     itemsLast24HoursBreakdown?: { [key: string]: number };
   }
@@ -206,7 +208,7 @@
           {:else}
             <Badge variant="destructive">
               <AlertCircle class="h-3 w-3 mr-1" />
-              {selectedConnector.status}
+              {selectedConnector.stateMessage ?? selectedConnector.state ?? "Error"}
             </Badge>
           {/if}
         </div>
@@ -332,6 +334,26 @@
                 </span>
                 <span class="font-medium">
                   {formatLastSeen(selectedConnector.lastEntryTime)}
+                </span>
+              </div>
+            {/if}
+            {#if selectedConnector.lastSuccessfulSync}
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-muted-foreground">
+                  Last successful sync
+                </span>
+                <span class="font-medium">
+                  {formatLastSeen(selectedConnector.lastSuccessfulSync)}
+                </span>
+              </div>
+            {/if}
+            {#if !selectedConnector.isHealthy && selectedConnector.lastSyncAttempt}
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-muted-foreground">
+                  Last sync attempt
+                </span>
+                <span class="font-medium text-destructive">
+                  {formatLastSeen(selectedConnector.lastSyncAttempt)}
                 </span>
               </div>
             {/if}

@@ -165,7 +165,7 @@
         {@const isConnected = connectorStatusInfo?.isEnabled === true && connectorStatusInfo?.hasDatabaseConfig === true}
         {@const isDisabled = connectorStatusInfo?.isEnabled === false && connectorStatusInfo?.hasDatabaseConfig === true}
         {@const connectorDataSource = getConnectorDataSource(connector)}
-        {@const hasData = connectorDataSource !== null || isDisabled}
+        {@const hasData = connectorDataSource !== null || (isDisabled && (connectorStatusInfo?.totalEntries ?? 0) > 0)}
         {@const connectorCapabilities = connector.id
           ? connectorCapabilitiesById[connector.id]
           : null}
@@ -180,7 +180,6 @@
             id: connector.id,
             name: connector.name ?? connector.id,
             description: connector.description,
-            state: "Configured",
           }}
           <DataSourceRow
             name={connector.name ?? connector.id ?? "Unknown"}
@@ -217,7 +216,7 @@
               {/if}
             {/snippet}
           </DataSourceRow>
-        {:else if hasData}
+        {:else if hasData || isDisabled}
           <!-- Has data but not connected/disabled -->
           {@const entryCount = isDisabled
             ? 0
@@ -257,6 +256,7 @@
             }}
           >
             {#snippet badges()}
+              {#if hasData}
               <Badge
                 variant="secondary"
                 class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 text-xs"
@@ -264,6 +264,7 @@
                 <Database class="h-3 w-3 mr-1" />
                 Has Data
               </Badge>
+              {/if}
             {/snippet}
           </DataSourceRow>
         {:else}

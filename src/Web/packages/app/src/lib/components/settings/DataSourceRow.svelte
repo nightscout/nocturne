@@ -347,7 +347,7 @@
 
           <span class="mx-1">&middot;</span>
           <Clock class="inline h-3 w-3" />
-          {formatLastSeen(lastSeen)}
+          {formatLastSeen(lastSuccessfulSync ?? lastSeen)}
         </p>
         {/if}
         {#if syncProgress?.phase === "Syncing" && Object.keys(syncProgress.itemsSyncedSoFar).length > 0}

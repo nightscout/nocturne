@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getAllConnectorStatus } from "$api/generated/configurations.generated.remote";
+  import { getStatus as getConnectorHealthStatuses } from "$api/generated/connectorStatus.generated.remote";
   import {
     getServicesOverview,
     getConnectorCapabilities,
@@ -62,19 +63,45 @@
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
   const servicesOverviewQuery = $derived(getServicesOverview());
-  const connectorStatusesQuery = $derived(getAllConnectorStatus());
+  const connectorConfigQuery = $derived(getAllConnectorStatus());
+  const connectorHealthQuery = $derived(getConnectorHealthStatuses());
 
   const servicesOverview = $derived<ServicesOverview | null>(
     servicesOverviewQuery.current ?? null,
   );
-  const connectorStatuses = $derived<ConnectorStatusInfo[]>(
-    connectorStatusesQuery.current ?? [],
-  );
+
+  // Merge configuration status (isEnabled, hasDatabaseConfig, hasSecrets) with
+  // health status (totalEntries, lastEntryTime, lastSyncAttempt, etc.)
+  const connectorStatuses = $derived.by<ConnectorStatusInfo[]>(() => {
+    const configs = connectorConfigQuery.current ?? [];
+    const health = connectorHealthQuery.current ?? [];
+
+    return configs.map((config) => {
+      const healthMatch = health.find(
+        (h: any) => h.id?.toLowerCase() === config.connectorName?.toLowerCase()
+      );
+      if (!healthMatch) return config;
+
+      return {
+        ...config,
+        totalEntries: healthMatch.totalEntries,
+        entriesLast24Hours: healthMatch.entriesLast24Hours,
+        lastEntryTime: healthMatch.lastEntryTime,
+        lastSyncAttempt: healthMatch.lastSyncAttempt,
+        lastSuccessfulSync: healthMatch.lastSuccessfulSync,
+        state: healthMatch.state,
+        stateMessage: healthMatch.stateMessage,
+        isHealthy: healthMatch.isHealthy,
+        totalItemsBreakdown: healthMatch.totalItemsBreakdown,
+        itemsLast24HoursBreakdown: healthMatch.itemsLast24HoursBreakdown,
+      };
+    });
+  });
   const isLoading = $derived(
     servicesOverviewQuery.current === undefined,
   );
   const isLoadingConnectorStatuses = $derived(
-    connectorStatusesQuery.current === undefined,
+    connectorConfigQuery.current === undefined,
   );
 
   const error = $derived<string | null>(
@@ -117,7 +144,8 @@
       (p) => p.phase === "Completed" || p.phase === "Failed"
     );
     if (hasCompleted) {
-      connectorStatusesQuery.refresh();
+      connectorConfigQuery.refresh();
+      connectorHealthQuery.refresh();
     }
   });
 
@@ -143,7 +171,8 @@
   async function refreshAll() {
     await Promise.all([
       servicesOverviewQuery.refresh(),
-      connectorStatusesQuery.refresh(),
+      connectorConfigQuery.refresh(),
+      connectorHealthQuery.refresh(),
     ]);
   }
 
@@ -152,7 +181,10 @@
   }
 
   async function loadConnectorStatuses() {
-    await connectorStatusesQuery.refresh();
+    await Promise.all([
+      connectorConfigQuery.refresh(),
+      connectorHealthQuery.refresh(),
+    ]);
   }
 
   async function loadConnectorCapabilitiesFor(connectorId?: string) {
