@@ -10,12 +10,14 @@
   import { getTimeSpansData } from "./data.remote";
 
   // Get date range from URL search params
+  const defaultFrom = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const defaultTo = new Date().toISOString().split("T")[0];
+
   const fromParam = $derived(
-    page.url.searchParams.get("from") ??
-      new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+    page.url.searchParams.get("from") ?? defaultFrom
   );
   const toParam = $derived(
-    page.url.searchParams.get("to") ?? new Date().toISOString().split("T")[0]
+    page.url.searchParams.get("to") ?? defaultTo
   );
 
   // Fetch data using remote function with date range

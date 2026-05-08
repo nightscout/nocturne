@@ -31,9 +31,9 @@
 
   // ── Data ──────────────────────────────────────────────────────────
 
-  const uploaderAppsQuery = $derived(getUploaderApps());
-  const dataSourcesQuery = $derived(getActiveDataSources());
-  const overviewQuery = $derived(getServicesOverview());
+  const uploaderAppsQuery = getUploaderApps();
+  const dataSourcesQuery = getActiveDataSources();
+  const overviewQuery = getServicesOverview();
 
   // ── Select a connector ────────────────────────────────────────────
 

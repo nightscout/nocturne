@@ -10,7 +10,7 @@
   } from "$api/notifications/webhooks.remote";
   import WebhookSettingsModal from "./WebhookSettingsModal.svelte";
 
-  const settingsQuery = $derived(getWebhookSettings());
+  const settingsQuery = getWebhookSettings();
 
   let enabled = $state(false);
   let urls = $state<string[]>([]);

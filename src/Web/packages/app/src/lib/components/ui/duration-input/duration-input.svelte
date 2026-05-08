@@ -169,7 +169,7 @@
   );
 
   // Effective hours for Duration mode negative thresholds
-  const effectiveHours = $derived(() => {
+  const effectiveHours = $derived.by(() => {
     if (value === undefined) return null;
     if (mode === "Event") return null; // Event mode doesn't need this
     if (value >= 0) return null; // Positive values don't need effective calculation
@@ -249,7 +249,7 @@
           = <span class="font-medium">{formatHours(computedHours)}</span> after event
         {/if}
       {:else if computedHours < 0 && lifespanHours !== undefined}
-        = <span class="font-medium">{formatHours(effectiveHours() ?? 0)}</span>
+        = <span class="font-medium">{formatHours(effectiveHours ?? 0)}</span>
         <span class="text-muted-foreground/70">
           ({formatHours(Math.abs(computedHours))} before expiration)
         </span>

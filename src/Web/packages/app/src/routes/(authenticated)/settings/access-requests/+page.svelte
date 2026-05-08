@@ -23,9 +23,9 @@
   import { getRoles } from "$lib/api/generated/roles.generated.remote";
 
   // Queries
-  const requestsQuery = $derived(getPendingRequests());
+  const requestsQuery = getPendingRequests();
   const requests = $derived(requestsQuery.current ?? []);
-  const rolesQuery = $derived(getRoles());
+  const rolesQuery = getRoles();
   const allRoles = $derived(rolesQuery.current ?? []);
 
   // Per-request role/permission selection

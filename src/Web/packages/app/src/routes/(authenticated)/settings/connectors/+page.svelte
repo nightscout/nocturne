@@ -62,9 +62,9 @@
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
-  const servicesOverviewQuery = $derived(getServicesOverview());
-  const connectorConfigQuery = $derived(getAllConnectorStatus());
-  const connectorHealthQuery = $derived(getConnectorHealthStatuses());
+  const servicesOverviewQuery = getServicesOverview();
+  const connectorStatusesQuery = getAllConnectorStatus();
+  const connectorHealthQuery = getConnectorHealthStatuses();
 
   const servicesOverview = $derived<ServicesOverview | null>(
     servicesOverviewQuery.current ?? null,

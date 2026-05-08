@@ -46,6 +46,12 @@ public interface IStateSpanService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns the current pump operational mode, derived from the most recently started
+    /// open-ended <see cref="StateSpanCategory.PumpMode"/> span.
+    /// </summary>
+    Task<PumpModeState?> GetCurrentPumpModeAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Count state spans matching the specified filters
     /// </summary>
     /// <param name="category">Optional category filter</param>

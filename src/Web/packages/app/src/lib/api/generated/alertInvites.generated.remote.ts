@@ -16,7 +16,7 @@ export const createInvite = command(CreateAlertInviteRequestSchema, async (reque
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertInvites.createInvite:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -51,7 +51,7 @@ export const redeemInvite = command(z.string(), async (token) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertInvites.redeemInvite:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -69,7 +69,7 @@ export const revokeInvite = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertInvites.revokeInvite:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

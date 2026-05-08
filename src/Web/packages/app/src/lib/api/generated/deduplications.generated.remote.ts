@@ -14,7 +14,7 @@ export const startDeduplicationJob = command(async () => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in deduplication.startDeduplicationJob:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -47,7 +47,7 @@ export const cancelJob = command(z.string(), async (jobId) => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in deduplication.cancelJob:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

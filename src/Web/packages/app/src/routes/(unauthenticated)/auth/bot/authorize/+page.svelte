@@ -9,7 +9,7 @@
 	const stateToken = $derived(page.url.searchParams.get("state") ?? "");
 
 	// Get context (apex vs tenant)
-	const contextQuery = $derived(getBotAuthorizeContext());
+	const contextQuery = getBotAuthorizeContext();
 	const context = $derived(contextQuery.current);
 
 	// On tenant subdomain, validate the pending token

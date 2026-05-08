@@ -45,7 +45,7 @@
     const showFilters = $derived(page.url.pathname !== "/reports");
 
     // Format date range for display
-    const dateRangeDisplay = $derived(() => {
+    const dateRangeDisplay = $derived.by(() => {
         if (params.days) {
             if (params.days === 1) return "Today";
             return `Last ${params.days} days`;
@@ -83,7 +83,7 @@
                                 class="hidden sm:flex items-center gap-2 text-sm text-muted-foreground"
                         >
                             <Calendar class="h-3 w-3"/>
-                            <span>{dateRangeDisplay()}</span>
+                            <span>{dateRangeDisplay}</span>
                         </div>
                     </div>
                 </div>

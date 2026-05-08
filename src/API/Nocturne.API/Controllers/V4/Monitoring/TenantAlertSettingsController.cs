@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -25,10 +26,14 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 public class TenantAlertSettingsController : ControllerBase
 {
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
+    private readonly ITenantAccessor _tenantAccessor;
 
-    public TenantAlertSettingsController(IDbContextFactory<NocturneDbContext> contextFactory)
+    public TenantAlertSettingsController(
+        IDbContextFactory<NocturneDbContext> contextFactory,
+        ITenantAccessor tenantAccessor)
     {
         _contextFactory = contextFactory;
+        _tenantAccessor = tenantAccessor;
     }
 
     /// <summary>
@@ -40,6 +45,7 @@ public class TenantAlertSettingsController : ControllerBase
     public async Task<ActionResult<TenantAlertSettingsResponse>> Get(CancellationToken ct)
     {
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        db.TenantId = _tenantAccessor.TenantId;
 
         var entity = await db.TenantAlertSettings.FirstOrDefaultAsync(ct);
         if (entity is null)
@@ -63,6 +69,7 @@ public class TenantAlertSettingsController : ControllerBase
         [FromBody] UpdateTenantAlertSettingsRequest request, CancellationToken ct)
     {
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        db.TenantId = _tenantAccessor.TenantId;
 
         var entity = await db.TenantAlertSettings.FirstOrDefaultAsync(ct);
         var isNew = entity is null;

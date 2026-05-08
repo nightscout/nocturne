@@ -19,6 +19,7 @@ using Nocturne.API.Multitenancy;
 using OpenApi.Remote.Processors;
 using Nocturne.API.OpenApi;
 using Scalar.AspNetCore;
+using Nocturne.Aspire.Scalar;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Cache.Extensions;
@@ -307,7 +308,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
                              | ForwardedHeaders.XForwardedProto
                              | ForwardedHeaders.XForwardedHost;
     // Trust any proxy — the API is only reachable through the gateway.
-    options.KnownNetworks.Clear();
+    options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
 
@@ -320,6 +321,10 @@ app.UseResponseCaching();
 app.UseCors();
 app.UseStaticFiles();
 app.UseForwardedHeaders();
+
+// Reject or redirect HTTP to HTTPS. Must run before any other middleware
+// to prevent WebAuthn failures and setup state corruption from insecure access.
+app.UseMiddleware<HttpsRequirementMiddleware>();
 
 // Strip .json suffixes before routing so /api/v1/treatments.json matches
 // the TreatmentsController route /api/v1/treatments. Must run before

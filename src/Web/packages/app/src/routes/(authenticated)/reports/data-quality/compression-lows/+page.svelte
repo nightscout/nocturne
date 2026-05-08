@@ -17,7 +17,13 @@
 		triggerDetection as triggerCompressionLowDetection
 	} from '$api/generated/compressionLows.generated.remote';
 	import { contextResource } from '$lib/hooks/resource-context.svelte';
-	import { GlucoseChartCard } from '$lib/components/dashboard/glucose-chart';
+	import { createChartDataEngine } from '$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte';
+	import GlucoseChartShell from '$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte';
+	import GlucoseTrack from '$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte';
+	import BasalTrack from '$lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte';
+	import IobCobTrack from '$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte';
+	import ThresholdRules from '$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte';
+	import ChartTooltip from '$lib/components/dashboard/glucose-chart/ChartTooltip.svelte';
 	import Check from 'lucide-svelte/icons/check';
 	import X from 'lucide-svelte/icons/x';
 	import Clock from 'lucide-svelte/icons/clock';
@@ -452,24 +458,30 @@
 							<CardContent>
 								<!-- Glucose Chart with Brush -->
 								{#if suggestionDetail?.entries && suggestionDetail.entries.length > 0 && chartDateRange}
-									<div class="mb-6 h-64">
-										<GlucoseChartCard
-											dateRange={chartDateRange}
-											compact={true}
-											heightClass="h-64"
-											showPredictions={false}
-											initialShowIob={false}
-											initialShowCob={false}
-											initialShowBasal={true}
-											initialShowBolus={true}
-											initialShowCarbs={true}
-											initialShowDeviceEvents={false}
-											initialShowAlarms={false}
-											initialShowScheduledTrackers={false}
-											selectionDomain={brushDomain}
-											onSelectionChange={isPending ? handleSelectionChange : undefined}
-										/>
-									</div>
+									{#key chartDateRange.from.getTime() + '-' + chartDateRange.to.getTime()}
+										{@const chartEngine = createChartDataEngine({
+											dateRange: chartDateRange,
+											enablePredictions: false,
+										})}
+										<div class="mb-6 h-64">
+											<GlucoseChartShell
+												engine={chartEngine}
+												heightClass="h-64"
+												selectionDomain={brushDomain}
+												onSelectionChange={isPending ? handleSelectionChange : undefined}
+											>
+												{#snippet tracks(_ctx)}
+													<ThresholdRules />
+													<GlucoseTrack />
+													<BasalTrack />
+													<IobCobTrack />
+												{/snippet}
+												{#snippet overlays(_ctx)}
+													<ChartTooltip />
+												{/snippet}
+											</GlucoseChartShell>
+										</div>
+									{/key}
 								{/if}
 
 								<!-- Stats -->

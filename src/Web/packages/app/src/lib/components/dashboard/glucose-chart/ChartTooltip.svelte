@@ -1,98 +1,12 @@
 <script lang="ts">
-  import { Tooltip } from "layerchart";
+  import { Tooltip, getChartContext } from "layerchart";
   import { cn } from "$lib/utils";
   import { goto } from "$app/navigation";
-  import { BasalDeliveryOrigin, type BasalPoint } from "$lib/api";
+  import { BasalDeliveryOrigin } from "$lib/api";
   import { bg, bgLabel } from "$lib/utils/formatting";
-
-  // Local types for tooltip data shapes
-  interface TimeSeriesPoint {
-    time: Date;
-    value: number;
-  }
-
-  type DisplaySpan<T> = T & { displayStart: Date; displayEnd: Date };
-
-  interface StateSpan {
-    id?: string;
-    category?: string;
-    state?: string;
-    startTime: Date;
-    endTime: Date | null;
-    color: string;
-  }
-
-  interface BolusMarker {
-    time: Date;
-    insulin?: number;
-  }
-
-  interface CarbMarker {
-    time: Date;
-    carbs?: number;
-  }
-
-  interface DeviceEventMarker {
-    time: Date;
-    eventType?: string;
-    notes?: string | null;
-    color: string;
-  }
-
-  type ProfileSpan = DisplaySpan<StateSpan> & { profileName: string };
-
-  type TempBasalSpan = DisplaySpan<StateSpan> & {
-    rate: number | null;
-    percent: number | null;
-  };
-
-  interface BasalDeliverySpan {
-    startTime: Date;
-    endTime: Date | null;
-    rate?: number;
-    origin?: BasalDeliveryOrigin;
-  }
-
-  interface SystemEvent {
-    eventType?: string;
-    code?: string | null;
-    description?: string | null;
-    color: string;
-  }
+  import { getGlucoseChartContext } from "./chart-context.svelte";
 
   interface Props {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    context: any;
-    // Data finders - functions that find relevant data at a given time
-    findBasalValue: (time: Date) => BasalPoint | undefined;
-    findIobValue: (time: Date) => TimeSeriesPoint | undefined;
-    findCobValue: (time: Date) => TimeSeriesPoint | undefined;
-    findNearbyBolus: (time: Date) => BolusMarker | undefined;
-    findNearbyCarbs: (time: Date) => CarbMarker | undefined;
-    findNearbyDeviceEvent: (time: Date) => DeviceEventMarker | undefined;
-    findActivePumpMode: (time: Date) => DisplaySpan<StateSpan> | undefined;
-    findActiveOverride: (time: Date) => DisplaySpan<StateSpan> | undefined;
-    findActiveProfile: (time: Date) => ProfileSpan | undefined;
-    findActiveActivities: (time: Date) => DisplaySpan<StateSpan>[];
-    findActiveTempBasal: (time: Date) => TempBasalSpan | undefined;
-    findActiveBasalDelivery: (
-      time: Date
-    ) => DisplaySpan<BasalDeliverySpan> | undefined;
-    findNearbySystemEvent: (time: Date) => SystemEvent | undefined;
-    // Visibility toggles
-    showBolus: boolean;
-    showCarbs: boolean;
-    showDeviceEvents: boolean;
-    showIob: boolean;
-    showCob: boolean;
-    showBasal: boolean;
-    showPumpModes: boolean;
-    showOverrideSpans: boolean;
-    showProfileSpans: boolean;
-    showActivitySpans: boolean;
-    showAlarms: boolean;
-    // Stale data indicator
-    staleBasalData: { start: Date; end: Date } | null;
     /**
      * Optional extra rows rendered after the built-in tooltip items. Receives
      * the hovered time so callers (e.g. the alert replay simulator) can show
@@ -101,11 +15,21 @@
     tooltipExtras?: import("svelte").Snippet<[{ time: Date }]>;
   }
 
-  let {
-    context,
-    findBasalValue,
-    findIobValue,
-    findCobValue,
+  let { tooltipExtras }: Props = $props();
+
+  const ctx = getGlucoseChartContext();
+  const chartCtx = getChartContext();
+
+  // Finders — bind the generic two-arg finders to their series data
+  const findBasal = (time: Date) =>
+    ctx.engine.finders.findBasalValue(ctx.engine.basalData, time);
+  const findIob = (time: Date) =>
+    ctx.engine.finders.findSeriesValue(ctx.engine.iobData, time);
+  const findCob = (time: Date) =>
+    ctx.engine.finders.findSeriesValue(ctx.engine.cobData, time);
+
+  // Single-arg finders from engine
+  const {
     findNearbyBolus,
     findNearbyCarbs,
     findNearbyDeviceEvent,
@@ -116,30 +40,32 @@
     findActiveTempBasal,
     findActiveBasalDelivery,
     findNearbySystemEvent,
-    showBolus,
-    showCarbs,
-    showDeviceEvents,
-    showIob,
-    showCob,
-    showBasal,
-    showPumpModes,
-    showOverrideSpans,
-    showProfileSpans,
-    showActivitySpans,
-    showAlarms,
-    staleBasalData,
-    tooltipExtras,
-  }: Props = $props();
+  } = ctx.engine.finders;
+
+  // Visibility (with defaults for when no legend is set)
+  const showBolus = $derived(ctx.legend?.bolus ?? true);
+  const showCarbs = $derived(ctx.legend?.carbs ?? true);
+  const showDeviceEvents = $derived(ctx.legend?.deviceEvents ?? true);
+  const showIob = $derived(ctx.legend?.iob ?? true);
+  const showCob = $derived(ctx.legend?.cob ?? true);
+  const showBasal = $derived(ctx.legend?.basal ?? true);
+  const showPumpModes = $derived(ctx.legend?.pumpModes ?? true);
+  const showOverrideSpans = $derived(ctx.legend?.overrideSpans ?? false);
+  const showProfileSpans = $derived(ctx.legend?.profileSpans ?? false);
+  const showActivitySpans = $derived(ctx.legend?.activitySpans ?? false);
+  const showAlarms = $derived(ctx.legend?.alarms ?? true);
+
+  const staleBasalData = $derived(ctx.engine.staleBasalData);
 </script>
 
 <Tooltip.Root
-  {context}
+  context={chartCtx}
   class="bg-popover/95 border border-border rounded-lg shadow-xl text-xs z-50 backdrop-blur-sm"
 >
   {#snippet children({ data })}
-    {@const activeBasal = findBasalValue(data.time)}
-    {@const activeIob = findIobValue(data.time)}
-    {@const activeCob = findCobValue(data.time)}
+    {@const activeBasal = findBasal(data.time)}
+    {@const activeIob = findIob(data.time)}
+    {@const activeCob = findCob(data.time)}
     {@const activePumpMode = findActivePumpMode(data.time)}
     {@const activeOverride = findActiveOverride(data.time)}
     {@const activeProfile = findActiveProfile(data.time)}
@@ -193,7 +119,7 @@
         <Tooltip.Item
           label="IOB"
           value={activeIob.value}
-          format={"decimal"}
+          format="decimal"
           color="var(--iob-basal)"
         />
       {/if}
@@ -221,7 +147,7 @@
           <Tooltip.Item
             label={basalLabel}
             value={activeBasal.rate}
-            format={"decimal"}
+            format="decimal"
             color={isAdjusted ||
             activeBasal.origin === BasalDeliveryOrigin.Suspended
               ? "var(--insulin-temp-basal)"
@@ -236,7 +162,7 @@
             <Tooltip.Item
               label="Scheduled"
               value={activeBasal.scheduledRate}
-              format={"decimal"}
+              format="decimal"
               color="var(--muted-foreground)"
             />
           {/if}
@@ -256,7 +182,7 @@
           <Tooltip.Item
             label={basalLabel}
             value={activeBasalDelivery.rate ?? 0}
-            format={"decimal"}
+            format="decimal"
             color={isAdjusted ||
             activeBasalDelivery.origin === BasalDeliveryOrigin.Suspended
               ? "var(--insulin-temp-basal)"
@@ -271,7 +197,7 @@
           <Tooltip.Item
             label="Temp Basal"
             value={activeTempBasal.rate}
-            format={"decimal"}
+            format="decimal"
             color="var(--insulin-temp-basal)"
           />
           {#if activeTempBasal.percent != null}
@@ -332,7 +258,7 @@
 <!-- Time axis tooltip -->
 <Tooltip.Root
   x="data"
-  y={context.height + context.padding.top}
+  y={chartCtx.height + chartCtx.padding.top}
   yOffset={2}
   anchor="top"
   variant="none"

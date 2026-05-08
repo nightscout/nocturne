@@ -16,7 +16,7 @@ export const testConnection = form(formCoerce(TestMigrationConnectionRequestSche
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in migration.testConnection:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -33,7 +33,7 @@ export const startMigration = form(formCoerce(StartMigrationRequestSchema) as an
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in migration.startMigration:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -51,7 +51,7 @@ export const startFromConnector = command(z.string(), async (connectorName) => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in migration.startFromConnector:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -84,7 +84,7 @@ export const cancelMigration = command(z.string(), async (jobId) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in migration.cancelMigration:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

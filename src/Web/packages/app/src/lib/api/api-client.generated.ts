@@ -33,6 +33,7 @@ import {
   ConnectorFoodEntriesClient,
   ConnectorStatusClient,
   CorrelationClient,
+  CurrentTherapyStateClient,
   DataOverviewClient,
   DebugClient,
   DeduplicationClient,
@@ -132,6 +133,7 @@ export class ApiClient {
   public readonly connectorFoodEntries: ConnectorFoodEntriesClient;
   public readonly connectorStatus: ConnectorStatusClient;
   public readonly correlation: CorrelationClient;
+  public readonly currentTherapyState: CurrentTherapyStateClient;
   public readonly dataOverview: DataOverviewClient;
   public readonly debug: DebugClient;
   public readonly deduplication: DeduplicationClient;
@@ -231,6 +233,7 @@ export class ApiClient {
     this.connectorFoodEntries = new ConnectorFoodEntriesClient(apiBaseUrl, http);
     this.connectorStatus = new ConnectorStatusClient(apiBaseUrl, http);
     this.correlation = new CorrelationClient(apiBaseUrl, http);
+    this.currentTherapyState = new CurrentTherapyStateClient(apiBaseUrl, http);
     this.dataOverview = new DataOverviewClient(apiBaseUrl, http);
     this.debug = new DebugClient(apiBaseUrl, http);
     this.deduplication = new DeduplicationClient(apiBaseUrl, http);

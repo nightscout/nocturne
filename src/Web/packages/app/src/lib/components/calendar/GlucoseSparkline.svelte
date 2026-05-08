@@ -1,27 +1,30 @@
 <script lang="ts">
   /**
-   * Tiny glucose curve for embedding in calendar day cells. Renders a
-   * smoothed line spanning a full local-day window with low/high regions
-   * tinted via Threshold/Area, plus a soft in-range backdrop band.
+   * Tiny glucose curve for embedding in calendar day cells. Uses the shared
+   * GlucoseTrack component with threshold-coloured line and deviation-fill
+   * area, so the curve picks up the same visual contract as the dashboard
+   * chart (red below low, in-range with no fill, red above high).
    *
    * Pure visual — no button, no click handling — so callers can wrap it
    * in whatever interactive element they need without nested-button HTML.
    */
-  import {
-    Chart,
-    Svg,
-    Spline,
-    Area,
-    Threshold,
-    AnnotationRange,
-  } from "layerchart";
-  import { curveMonotoneX } from "d3-shape";
+  import { Chart, Svg } from "layerchart";
+  import { scaleTime } from "d3-scale";
+  import { setGlucoseChartContext } from "$lib/components/dashboard/glucose-chart/chart-context.svelte";
+  import { computeTrackLayout } from "$lib/components/dashboard/glucose-chart/engine/track-layout";
+  import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
+  import type { ChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
 
-  // Glucose thresholds (mg/dL) and y-axis bounds match DayGlucoseProfile.
-  const LOW_THRESHOLD = 70;
-  const HIGH_THRESHOLD = 180;
-  const Y_MIN = 40;
-  const Y_MAX = 350;
+  // Calendar receives raw entries without threshold context. Defaults: legacy
+  // sparkline values for low/high (70/180), ADA-style boundaries for veryLow/veryHigh.
+  // If we ever pass per-tenant thresholds down to the calendar, replace this.
+  const THRESHOLDS = {
+    low: 70,
+    high: 180,
+    veryLow: 55,
+    veryHigh: 250,
+    glucoseYMax: 350,
+  };
 
   interface Props {
     /** Glucose entries for the day: { mills, mgdl } */
@@ -30,8 +33,11 @@
 
   let { entries }: Props = $props();
 
-  const chartData = $derived(
-    entries.map((e) => ({ date: new Date(e.mills), value: e.mgdl })),
+  const glucoseData = $derived(
+    entries
+      .filter((e) => e.mgdl > 0)
+      .map((e) => ({ time: new Date(e.mills), sgv: e.mgdl, color: "" }))
+      .sort((a, b) => a.time.getTime() - b.time.getTime()),
   );
 
   // Snap the x-domain to the local-day boundaries of the first entry so
@@ -49,45 +55,62 @@
     ] as [Date, Date];
   });
 
-  const yDomain = [Y_MIN, Y_MAX] as [number, number];
+  let chartHeight = $state(0);
+
+  // Intentional escape hatch — engineStub doesn't satisfy the full ChartDataEngine
+  // surface. GlucoseTrack only reads `glucoseData` and `thresholds`. If GlucoseTrack
+  // starts touching more fields, this cast won't catch it; either widen the stub
+  // or refactor GlucoseTrack to declare a narrower context type.
+  const engineStub = {
+    get glucoseData() {
+      return glucoseData;
+    },
+    thresholds: THRESHOLDS,
+  } as Partial<ChartDataEngine> as ChartDataEngine;
+
+  const layout = $derived(
+    computeTrackLayout(
+      chartHeight,
+      THRESHOLDS.glucoseYMax,
+      0,
+      0,
+      { basal: false, iob: false, cob: false },
+      { pumpMode: false, override: false, profile: false, activity: false },
+    ),
+  );
+
+  setGlucoseChartContext({
+    get engine() {
+      return engineStub;
+    },
+    get layout() {
+      return layout;
+    },
+  });
 </script>
 
 {#if entries.length > 0 && xDomain}
   <Chart
-    data={chartData}
-    x="date"
-    y="value"
+    data={glucoseData}
+    x={(d) => d.time}
+    y={(d) => d.sgv}
+    xScale={scaleTime()}
     {xDomain}
-    {yDomain}
+    yDomain={[0, THRESHOLDS.glucoseYMax]}
     padding={{ top: 1, bottom: 1, left: 1, right: 1 }}
   >
-    <Svg>
-      <AnnotationRange
-        y={[LOW_THRESHOLD, HIGH_THRESHOLD]}
-        class="fill-glucose-in-range opacity-20"
-      />
-      <Threshold curve={curveMonotoneX}>
-        {#snippet above()}
-          <Area
-            y0={HIGH_THRESHOLD}
-            curve={curveMonotoneX}
-            class="fill-red-500"
-            line={{ class: "stroke-none" }}
+    {#snippet children({ context })}
+      {(chartHeight = context.height, "")}
+      <Svg>
+        {#if chartHeight > 0}
+          <GlucoseTrack
+            lineColorMode="threshold"
+            areaMode="deviation"
+            showAxis={false}
+            showPoints={false}
           />
-        {/snippet}
-        {#snippet below()}
-          <Area
-            y0={LOW_THRESHOLD}
-            curve={curveMonotoneX}
-            class="fill-glucose-low opacity-50"
-            line={{ class: "stroke-none" }}
-          />
-        {/snippet}
-        <Spline
-          curve={curveMonotoneX}
-          class="stroke-glucose-in-range stroke-[1.5] fill-none"
-        />
-      </Threshold>
-    </Svg>
+        {/if}
+      </Svg>
+    {/snippet}
   </Chart>
 {/if}

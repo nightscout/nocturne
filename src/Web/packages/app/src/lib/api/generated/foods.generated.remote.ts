@@ -39,7 +39,7 @@ export const createFood = command(FoodSchema, async (request) => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in foodsV4.createFood:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -80,7 +80,7 @@ export const updateFood = command(z.object({ foodId: z.string(), request: FoodSc
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in foodsV4.updateFood:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -102,7 +102,7 @@ export const deleteFood = command(z.object({ foodId: z.string(), attributionMode
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in foodsV4.deleteFood:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -140,7 +140,7 @@ export const addFavorite = command(z.string(), async (foodId) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in foodsV4.addFavorite:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -161,7 +161,7 @@ export const removeFavorite = command(z.string(), async (foodId) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in foodsV4.removeFavorite:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

@@ -36,7 +36,7 @@ export const create = command(BodyWeightSchema, async (request) => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in bodyWeight.create:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -75,7 +75,7 @@ export const updateBodyWeight = command(z.object({ id: z.string(), request: Body
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in bodyWeight.updateBodyWeight:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -97,7 +97,7 @@ export const deleteBodyWeight = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in bodyWeight.deleteBodyWeight:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

@@ -34,7 +34,7 @@ export const create = command(CreateOidcProviderRequestSchema, async (request) =
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.create:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -87,7 +87,7 @@ export const update = command(z.object({ id: z.string(), request: UpdateOidcProv
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.update:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -107,7 +107,7 @@ export const remove = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.delete:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -128,7 +128,7 @@ export const enable = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.enable:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -149,7 +149,7 @@ export const disable = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.disable:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -166,7 +166,7 @@ export const testExisting = command(z.string(), async (id) => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.testExisting:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -183,7 +183,7 @@ export const testUnsaved = command(TestProviderRequestSchema, async (request) =>
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in oidcProviderAdmin.testUnsaved:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

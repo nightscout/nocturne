@@ -33,7 +33,7 @@ export const acceptInvite = command(z.string(), async (token) => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in memberInvite.acceptInvite:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -88,7 +88,7 @@ export const setMemberRoles = command(z.object({ id: z.string(), request: SetMem
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in memberInvite.setMemberRoles:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -109,7 +109,7 @@ export const setMemberPermissions = command(z.object({ id: z.string(), request: 
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in memberInvite.setMemberPermissions:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -147,7 +147,7 @@ export const setMemberLimitTo24Hours = command(z.object({ id: z.string(), reques
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in memberInvite.setMemberLimitTo24Hours:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

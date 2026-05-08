@@ -13,7 +13,7 @@
   let pollInterval: ReturnType<typeof setInterval> | null = null;
 
   const visibleAlerts = $derived(
-    alerts.filter((a) => !dismissedIds.has(a.id ?? ""))
+    alerts.filter((a) => !a.acknowledgedAt && !dismissedIds.has(a.id ?? ""))
   );
 
   function getConditionLabel(conditionType: string | undefined): string {

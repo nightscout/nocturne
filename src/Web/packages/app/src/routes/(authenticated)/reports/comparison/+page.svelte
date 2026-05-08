@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { resource } from "runed";
   import { ArrowLeftRight, ArrowRight } from "lucide-svelte";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
@@ -7,8 +6,8 @@
   import * as Select from "$lib/components/ui/select";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { getReportsData, type DateRangeInput } from "$api/reports.remote";
-  import { useResourceContext } from "$lib/hooks/resource-context.svelte";
   import { bg, bgLabel } from "$lib/utils/formatting";
+  import { getResourceContext } from "$lib/hooks/resource-context.svelte";
 
   type Preset =
     | "last7-prior7"
@@ -97,19 +96,29 @@
   const inputA = $derived<DateRangeInput>({ from: periods.a.from, to: periods.a.to });
   const inputB = $derived<DateRangeInput>({ from: periods.b.from, to: periods.b.to });
 
-  const resA = resource(() => inputA, async (input) => getReportsData(input), { debounce: 100 });
-  const resB = resource(() => inputB, async (input) => getReportsData(input), { debounce: 100 });
+  // Call queries directly in reactive context — SvelteKit query() returns a
+  // reactive QueryResult, not a Promise. Using $derived ensures the queries
+  // re-run when inputs change.
+  const queryA = $derived(getReportsData(inputA));
+  const queryB = $derived(getReportsData(inputB));
 
-  // Combined state for the layout's ResourceGuard.
-  useResourceContext({
-    loading: () => resA.loading || resB.loading,
-    error: () => (resA.error ?? resB.error) as Error | string | null | undefined,
-    hasData: () => !!resA.current && !!resB.current,
-    errorTitle: "Error Loading Comparison",
-    refetch: () => {
-      resA.refetch();
-      resB.refetch();
-    },
+  // Sync to layout's ResourceContext using $effect.pre (matching contextResource's
+  // approach). $effect.pre runs before DOM updates, which is critical: the layout's
+  // ResourceGuard conditionally renders children, so the context must be updated
+  // before the render pass commits.
+  const ctx = getResourceContext();
+
+  $effect.pre(() => {
+    if (ctx) {
+      ctx.loading = queryA.loading || queryB.loading;
+      ctx.error = (queryA.error ?? queryB.error) as Error | string | null | undefined;
+      ctx.hasData = !!queryA.current && !!queryB.current;
+      ctx.errorTitle = "Error Loading Comparison";
+      ctx.refetch = () => {
+        queryA.refresh();
+        queryB.refresh();
+      };
+    }
   });
 
   type MetricKey =
@@ -180,7 +189,7 @@
     },
   };
 
-  type Analysis = NonNullable<NonNullable<typeof resA.current>["analysis"]>;
+  type Analysis = NonNullable<NonNullable<typeof queryA.current>["analysis"]>;
 
   function getMetric(a: Analysis | undefined, key: MetricKey): number | null {
     if (!a) return null;
@@ -235,8 +244,8 @@
   };
 
   const diffRows = $derived.by<DiffRow[]>(() => {
-    const aAnalysis = resA.current?.analysis;
-    const bAnalysis = resB.current?.analysis;
+    const aAnalysis = queryA.current?.analysis;
+    const bAnalysis = queryB.current?.analysis;
 
     return metricKeys.map<DiffRow>((key) => {
       const def = metricDefs[key];
@@ -306,8 +315,8 @@
     return metricDefs[key].format(v);
   }
 
-  const tirA = $derived(resA.current?.analysis?.timeInRange?.percentages);
-  const tirB = $derived(resB.current?.analysis?.timeInRange?.percentages);
+  const tirA = $derived(queryA.current?.analysis?.timeInRange?.percentages);
+  const tirB = $derived(queryB.current?.analysis?.timeInRange?.percentages);
   const presetLabel = $derived(
     presetOptions.find((p) => p.value === preset)?.label ?? "Custom"
   );

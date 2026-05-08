@@ -17897,6 +17897,28 @@
         }
       }
     },
+    "/api/v4/current-therapy-state": {
+      "get": {
+        "tags": [
+          "Current Therapy State"
+        ],
+        "summary": "Get the current pump mode and sensitivity adjustment for the active tenant.",
+        "operationId": "CurrentTherapyState_GetCurrentTherapyState",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentTherapyStateResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
     "/api/v4/year-overview/years": {
       "get": {
         "tags": [
@@ -20133,7 +20155,7 @@
           "Statistics"
         ],
         "summary": "Gets comprehensive statistics for multiple time periods (1, 3, 7, 30, and 90 days).\nFetches sensor glucose, bolus, carb, and temp-basal data from the database for each period,\ncomputes GlucoseAnalytics, TreatmentSummary, and\nInsulinDeliveryStatistics, and caches the result for 5 minutes.",
-        "description": "When no TempBasal or algorithm bolus records are found but a profile is loaded, the method\nfalls back to computing scheduled basal from the active profile schedule via IBasalRateResolver.\nGMI reliability is assessed per-period using context-appropriate recommended-day minimums\n(e.g., 1-day periods cannot require 14 days of data).",
+        "description": "When no TempBasal or algorithm bolus records are found but a profile is loaded, the method\nfalls back to integrating scheduled basal across the period via IBasalSegmentService.\nGMI reliability is assessed per-period using context-appropriate recommended-day minimums\n(e.g., 1-day periods cannot require 14 days of data).",
         "operationId": "Statistics_GetMultiPeriodStatistics",
         "responses": {
           "200": {
@@ -20220,6 +20242,50 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DailyBasalBolusRatioResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
+    "/api/v4/Statistics/punch-card": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Pre-aggregated month-by-day statistics for the calendar punch-card view. Fetches glucose,\nboluses, carb intakes, and daily basal totals in a single batch, then computes per-day TIR\nand treatment summaries inline (no per-day round-trips). Replaces a frontend orchestrator\nthat was issuing ~62 sequential HTTP calls per 31-day month.",
+        "operationId": "Statistics_GetPunchCardData",
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Inclusive start of the date range.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "Inclusive end of the date range.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PunchCardResponse with months, days, and global maxes for chart scaling.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchCardResponse"
                 }
               }
             }
@@ -29676,6 +29742,9 @@
           },
           "security": {
             "$ref": "#/components/schemas/SecuritySettings"
+          },
+          "haloDial": {
+            "$ref": "#/components/schemas/HaloDialConfig"
           }
         }
       },
@@ -30668,6 +30737,184 @@
             "type": "boolean"
           }
         }
+      },
+      "HaloDialConfig": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "colorMode": {
+            "$ref": "#/components/schemas/HaloDialColorMode"
+          },
+          "historyMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "predictionMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "predictionCurve": {
+            "$ref": "#/components/schemas/HaloDialPredictionCurve"
+          },
+          "centerSub": {
+            "$ref": "#/components/schemas/HaloDialCenterSubElement"
+          },
+          "innerLeftArc": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HaloDialArcElement"
+              }
+            ]
+          },
+          "innerRightArc": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/HaloDialArcElement"
+              }
+            ]
+          },
+          "iobMaxUnits": {
+            "type": "number",
+            "format": "double"
+          },
+          "cobMaxGrams": {
+            "type": "number",
+            "format": "double"
+          },
+          "corners": {
+            "$ref": "#/components/schemas/HaloDialCorners"
+          },
+          "elementConfig": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        }
+      },
+      "HaloDialColorMode": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Discrete",
+          "Continuous"
+        ],
+        "enum": [
+          "Discrete",
+          "Continuous"
+        ]
+      },
+      "HaloDialPredictionCurve": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Main",
+          "Iob",
+          "Uam",
+          "Cob",
+          "ZeroTemp"
+        ],
+        "enum": [
+          "Main",
+          "Iob",
+          "Uam",
+          "Cob",
+          "ZeroTemp"
+        ]
+      },
+      "HaloDialCenterSubElement": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "MinutesAndDelta",
+          "MinutesOnly",
+          "DeltaOnly",
+          "Mmol",
+          "None"
+        ],
+        "enum": [
+          "MinutesAndDelta",
+          "MinutesOnly",
+          "DeltaOnly",
+          "Mmol",
+          "None"
+        ]
+      },
+      "HaloDialArcElement": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Iob",
+          "Cob",
+          "BasalPercent",
+          "Sensitivity"
+        ],
+        "enum": [
+          "Iob",
+          "Cob",
+          "BasalPercent",
+          "Sensitivity"
+        ]
+      },
+      "HaloDialCorners": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tl": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HaloDialCornerElement"
+            }
+          },
+          "tr": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HaloDialCornerElement"
+            }
+          },
+          "bl": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HaloDialCornerElement"
+            }
+          },
+          "br": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HaloDialCornerElement"
+            }
+          }
+        }
+      },
+      "HaloDialCornerElement": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "BasalRate",
+          "Reservoir",
+          "SensorAge",
+          "PumpSiteAge",
+          "Battery",
+          "LoopLabel",
+          "LoopDot",
+          "Direction",
+          "Eventual"
+        ],
+        "enum": [
+          "BasalRate",
+          "Reservoir",
+          "SensorAge",
+          "PumpSiteAge",
+          "Battery",
+          "LoopLabel",
+          "LoopDot",
+          "Direction",
+          "Eventual"
+        ]
       },
       "UserPreferencesResponse": {
         "type": "object",
@@ -38891,6 +39138,28 @@
           }
         }
       },
+      "CurrentTherapyStateResponse": {
+        "type": "object",
+        "description": "Snapshot of \"right now\" therapy state for the Halo Dial.",
+        "additionalProperties": false,
+        "properties": {
+          "currentPumpMode": {
+            "description": "The active pump operational mode, derived from the most recently started\nopen-ended PumpMode span. Null when no\npump-mode span is currently open.",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PumpModeState"
+              }
+            ]
+          },
+          "sensitivityPercent": {
+            "type": "number",
+            "description": "Current effective ISF as a percentage of the schedule baseline.\n100 = at baseline. Below 100 = active CCP makes the pump more aggressive.\nNull when no CircadianPercentageProfile adjustment is active.",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
       "DataOverviewYearsResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -41780,6 +42049,207 @@
           "bolusPercent": {
             "type": "number",
             "format": "double"
+          }
+        }
+      },
+      "PunchCardResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "months": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PunchCardMonth"
+            }
+          },
+          "dateRange": {
+            "$ref": "#/components/schemas/PunchCardDateRange"
+          },
+          "globalMaxCarbs": {
+            "type": "number",
+            "format": "double"
+          },
+          "globalMaxInsulin": {
+            "type": "number",
+            "format": "double"
+          },
+          "globalMaxCarbInsulinDiff": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "PunchCardMonth": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "year": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "monthName": {
+            "type": "string"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PunchCardDay"
+            }
+          },
+          "maxCarbs": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxInsulin": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxCarbInsulinDiff": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalReadings": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "summary": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PunchCardMonthSummary"
+              }
+            ]
+          }
+        }
+      },
+      "PunchCardDay": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalReadings": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inRangeCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lowCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "highCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inRangePercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "lowPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "highPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "averageGlucose": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalCarbs": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalInsulin": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalBolus": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalBasal": {
+            "type": "number",
+            "format": "double"
+          },
+          "carbToInsulinRatio": {
+            "type": "number",
+            "format": "double"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PunchCardEntry"
+            }
+          }
+        }
+      },
+      "PunchCardEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mgdl": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "PunchCardMonthSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dayCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalReadings": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inRangePercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "lowPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "highPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "avgGlucose": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "PunchCardDateRange": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
           }
         }
       },

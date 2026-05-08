@@ -33,7 +33,7 @@
   );
 
   // --- Config ---
-  const configQuery = $derived(getAuditConfig());
+  const configQuery = getAuditConfig();
   const config = $derived(configQuery.current);
 
   let readAuditEnabled = $state(false);
@@ -84,10 +84,11 @@
   let activeTab = $state("mutations");
 
   // --- Mutation log server-side filters ---
-  let mFrom = $state(
-    new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-  );
-  let mTo = $state(new Date().toISOString().split("T")[0]);
+  const defaultFrom = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const defaultTo = new Date().toISOString().split("T")[0];
+
+  let mFrom = $state(defaultFrom);
+  let mTo = $state(defaultTo);
   let mGlobalFilter = $state("");
 
   const mutationsQuery = $derived(
@@ -104,10 +105,8 @@
   const mutationsTotal = $derived((mutationsResult as any)?.pagination?.total ?? 0);
 
   // --- Read access log server-side filters ---
-  let rFrom = $state(
-    new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-  );
-  let rTo = $state(new Date().toISOString().split("T")[0]);
+  let rFrom = $state(defaultFrom);
+  let rTo = $state(defaultTo);
   let rGlobalFilter = $state("");
 
   const readsQuery = $derived(
@@ -125,13 +124,11 @@
 
   // --- Filter state helpers ---
   const mHasDateFilter = $derived(
-    mFrom !== new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] ||
-    mTo !== new Date().toISOString().split("T")[0]
+    mFrom !== defaultFrom || mTo !== defaultTo
   );
 
   const rHasDateFilter = $derived(
-    rFrom !== new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] ||
-    rTo !== new Date().toISOString().split("T")[0]
+    rFrom !== defaultFrom || rTo !== defaultTo
   );
 
   function resetMutationDateFilter() {

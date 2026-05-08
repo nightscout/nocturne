@@ -37,7 +37,7 @@ export const updatePatientRecord = command(PatientRecordSchema, async (request) 
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.updatePatientRecord:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -75,7 +75,7 @@ export const createDevice = form(formCoerce(PatientDeviceSchema) as any, async (
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.createDevice:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -96,7 +96,7 @@ export const updateDevice = form(formCoerce(z.object({ id: z.string(), request: 
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.updateDevice:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -117,7 +117,7 @@ export const deleteDevice = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.deleteDevice:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -155,7 +155,7 @@ export const createInsulin = form(formCoerce(PatientInsulinSchema) as any, async
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.createInsulin:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -176,7 +176,7 @@ export const updateInsulin = form(formCoerce(z.object({ id: z.string(), request:
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.updateInsulin:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -197,7 +197,7 @@ export const deleteInsulin = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in patientRecord.deleteInsulin:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

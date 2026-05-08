@@ -256,6 +256,28 @@ export function useDateParams(defaultDays = 7) {
       return memoizedInput;
     },
 
+    /** Start of the date range as a Date object. Derived from memoizedInput for stability. */
+    get startDate(): Date {
+      const from = memoizedInput.from;
+      return from ? new Date(from) : new Date();
+    },
+
+    /** End of the date range as a Date object. Derived from memoizedInput for stability. */
+    get endDate(): Date {
+      const to = memoizedInput.to;
+      return to ? new Date(to) : new Date();
+    },
+
+    /** Date range as Unix milliseconds. Derived from memoizedInput for stability. */
+    get dateRangeMillis(): { from: number; to: number } {
+      const from = memoizedInput.from;
+      const to = memoizedInput.to;
+      return {
+        from: from ? new Date(from).getTime() : Date.now(),
+        to: to ? new Date(to).getTime() : Date.now(),
+      };
+    },
+
     // Helper methods
     setDayRange,
     setCustomRange,

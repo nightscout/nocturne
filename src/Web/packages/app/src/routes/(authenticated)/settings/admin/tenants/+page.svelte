@@ -26,11 +26,11 @@
   import { getCurrentTenantId } from "../../current-tenant.remote";
   import { getTransitionStatus } from "../../../tenants/transition-status.remote";
 
-  const tenantIdQuery = $derived(getCurrentTenantId());
+  const tenantIdQuery = getCurrentTenantId();
   const currentTenantId = $derived(tenantIdQuery.current ?? undefined);
 
   // Transition status
-  const transitionQuery = $derived(getTransitionStatus());
+  const transitionQuery = getTransitionStatus();
   const transitionStatus = $derived(transitionQuery.current);
 
   const DISMISS_KEY = "nocturne:multitenancy-notice-dismissed";

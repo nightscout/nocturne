@@ -6,10 +6,9 @@
     formatGlucoseDelta,
   } from "$lib/utils/formatting";
   import { getDirectionInfo } from "$lib/utils";
+  import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
 
   const realtimeStore = getRealtimeStore();
-
-  const STALE_THRESHOLD_MS = 10 * 60 * 1000;
 
   const units = $derived(glucoseUnits.current);
   const currentBG = $derived(realtimeStore.currentBG);

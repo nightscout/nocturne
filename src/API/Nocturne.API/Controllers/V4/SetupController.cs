@@ -88,9 +88,7 @@ public partial class SetupController : ControllerBase
     {
         await using var context = await _dbFactory.CreateDbContextAsync(ct);
 
-        // Check for tenants that have real members with credentials (passkey or OIDC).
-        // The multitenancy migration seeds a 'default' tenant for backfilling, which
-        // has no members and should not block fresh setup.
+        // Block if any tenant already has a member with credentials (passkey or OIDC).
         var hasConfiguredTenant = await context.TenantMembers
             .AnyAsync(m =>
                 context.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||

@@ -36,7 +36,7 @@ export const deleteAll = command(async () => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in coachMark.deleteAll:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -57,7 +57,7 @@ export const updateStatus = command(z.object({ key: z.string(), request: UpdateC
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in coachMark.updateStatus:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

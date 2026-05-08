@@ -426,6 +426,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IProfileWriteService, ProfileWriteService>();
         services.AddScoped<IActiveProfileResolver, ActiveProfileResolver>();
         services.AddScoped<IBasalRateResolver, BasalRateResolver>();
+        services.AddScoped<IBasalSegmentService, BasalSegmentService>();
         services.AddScoped<ISensitivityResolver, SensitivityResolver>();
         services.AddScoped<ICarbRatioResolver, CarbRatioResolver>();
         services.AddScoped<ITargetRangeResolver, TargetRangeResolver>();

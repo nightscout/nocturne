@@ -78,7 +78,7 @@
     getUnitLabel,
   } from "$lib/utils/formatting";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
-  import { resource } from "runed";
+  import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { coachmark } from "@nocturne/coach";
   import { fly, fade, scale } from "svelte/transition";
   import { cubicOut, elasticOut } from "svelte/easing";
@@ -87,13 +87,9 @@
   // Default: 14 days is standard for reports overview
   const reportsParams = requireDateParamsContext(14);
 
-  // Use resource for controlled reactivity
-  const reportsResource = resource(
-    () => reportsParams.dateRangeInput,
-    async (dateRangeInput) => {
-      return await getReportsData(dateRangeInput);
-    },
-    { debounce: 100 }
+  const reportsResource = contextResource(
+    () => getReportsData(reportsParams.dateRangeInput),
+    { errorTitle: "Error Loading Reports" }
   );
 
   const isLoading = $derived(reportsResource.loading);
@@ -181,7 +177,7 @@
           ? reportsResource.error.message
           : "Something went wrong"}
       </p>
-      <Button variant="outline" onclick={() => reportsResource.refetch()}>
+      <Button variant="outline" onclick={() => reportsResource.refresh()}>
         Try again
       </Button>
     </div>

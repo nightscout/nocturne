@@ -379,6 +379,30 @@ public class StateSpanRepository : IStateSpanRepository
         return deletedCount;
     }
 
+    /// <inheritdoc />
+    public async Task<PumpModeState?> GetCurrentPumpModeAsync(CancellationToken cancellationToken = default)
+    {
+        var pumpModeCategory = nameof(StateSpanCategory.PumpMode);
+        var nonPrimaryIds = _context.LinkedRecords
+            .Where(lr => lr.RecordType == "statespan" && !lr.IsPrimary)
+            .Select(lr => lr.RecordId);
+
+        var latest = await _context.StateSpans
+            .Where(s => s.Category == pumpModeCategory && s.EndTimestamp == null)
+            .Where(s => !nonPrimaryIds.Contains(s.Id))
+            .OrderByDescending(s => s.StartTimestamp)
+            .ThenByDescending(s => s.Id)
+            .Select(s => s.State)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (latest is null)
+            return null;
+
+        return Enum.TryParse<PumpModeState>(latest, ignoreCase: true, out var mode)
+            ? mode
+            : null;
+    }
+
     /// <summary>
     /// Get state spans by category
     /// </summary>

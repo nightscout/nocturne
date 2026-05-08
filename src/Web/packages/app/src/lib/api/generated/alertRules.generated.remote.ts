@@ -36,7 +36,7 @@ export const createRule = command(CreateAlertRuleRequestSchema, async (request) 
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.createRule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -75,7 +75,7 @@ export const updateRule = command(z.object({ id: z.string(), request: UpdateAler
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.updateRule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -96,7 +96,7 @@ export const deleteRule = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.deleteRule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -118,7 +118,7 @@ export const toggleRule = command(z.string(), async (id) => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.toggleRule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -138,7 +138,7 @@ export const testFire = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.testFire:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -157,7 +157,7 @@ export const testFireDryRun = command(TestFireDryRunRequestSchema, async (reques
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in alertRules.testFireDryRun:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

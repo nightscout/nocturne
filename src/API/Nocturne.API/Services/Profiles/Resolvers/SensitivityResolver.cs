@@ -65,6 +65,15 @@ internal sealed class SensitivityResolver : ISensitivityResolver
         return value;
     }
 
+    public async Task<double?> GetCurrentSensitivityPercentAsync(CancellationToken ct = default)
+    {
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var adjustment = await _activeProfileResolver.GetCircadianAdjustmentAsync(nowMills, ct);
+        if (adjustment is null || adjustment.Percentage <= 0)
+            return null;
+        return 10_000.0 / adjustment.Percentage;
+    }
+
     private async Task<Core.Models.V4.SensitivitySchedule?> GetCachedScheduleAsync(
         string profileName, DateTime timestamp, CancellationToken ct)
     {

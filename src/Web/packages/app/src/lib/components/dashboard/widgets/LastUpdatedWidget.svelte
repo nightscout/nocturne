@@ -10,7 +10,7 @@
   } from "lucide-svelte";
   import { formatTime, timeAgo } from "$lib/utils";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { getBatteryCardData } from "$api/battery.remote";
+  import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
 
   interface Props {
     /** Override lastUpdated from props instead of realtime store */
@@ -23,8 +23,8 @@
   const displayLastUpdated = $derived(lastUpdated ?? realtimeStore.lastUpdated);
 
   // Battery data
-  const batteryDataPromise = $derived(
-    getBatteryCardData({ recentMinutes: 30 })
+  const batteryStatusPromise = $derived(
+    getCurrentBatteryStatus({ recentMinutes: 30 })
   );
 
   // Get battery icon component based on level
@@ -46,7 +46,7 @@
   }
 </script>
 
-{#await batteryDataPromise}
+{#await batteryStatusPromise}
   <WidgetCard title="Last Updated">
     <div class="text-2xl font-bold">
       {timeAgo(displayLastUpdated)}
@@ -55,8 +55,7 @@
       {formatTime(displayLastUpdated)}
     </p>
   </WidgetCard>
-{:then data}
-  {@const currentStatus = data?.currentStatus}
+{:then currentStatus}
   {@const hasDevices =
     currentStatus && Object.keys(currentStatus.devices ?? {}).length > 0}
   <WidgetCard title="Last Updated">

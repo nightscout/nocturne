@@ -61,6 +61,7 @@ export * from './configurations.generated.remote';
 export * from './audits.generated.remote';
 export * from './actograms.generated.remote';
 export * from './chartDatas.generated.remote';
+export * from './currentTherapyStates.generated.remote';
 export * from './dataOverviews.generated.remote';
 export { getPredictions } from './predictions.generated.remote';
 export * from './retrospectives.generated.remote';

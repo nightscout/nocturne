@@ -2,16 +2,10 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
-  import { getPunchCardData } from "$api/month-to-month.remote";
-  import {
-    getActiveInstances,
-    getDefinitions,
-    getInstanceHistory,
-  } from "$api";
+  import { getPunchCardData } from "$api/generated/statistics.generated.remote";
+  import { getActiveInstances, getDefinitions, getInstanceHistory } from "$api/generated/trackers.generated.remote";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
-  import {
-    NotificationUrgency as NotificationUrgencyEnum,
-  } from "$api";
+  import { NotificationUrgency as NotificationUrgencyEnum } from "$api";
   import { Button } from "$lib/components/ui/button";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getUnitLabel } from "$lib/utils/formatting";
@@ -44,6 +38,7 @@
   }
 
   // Initialize viewDate from URL params or use current date
+  const today = new Date();
   let viewDate = $state(
     (() => {
       const yearParam = page.url.searchParams.get("year");
@@ -55,26 +50,26 @@
           return new Date(year, month, 1);
         }
       }
-      return new Date();
+      return today;
     })()
   );
   const currentMonth = $derived(viewDate.getMonth());
   const currentYear = $derived(viewDate.getFullYear());
 
   // Calculate date range for current view (full month)
+  // Pass ISO strings (not Date objects) so the hydration key is stable across SSR/client timezones
   const dateRangeInput = $derived.by(() => {
-    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    return {
-      fromDate: `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`,
-      toDate: `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`,
-    };
+    const startDate = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`;
+    const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const endDate = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    return { startDate, endDate };
   });
 
   // Query responses
   const punchCardQuery = $derived(getPunchCardData(dateRangeInput));
-  const trackersQuery = $derived(getActiveInstances());
-  const historyQuery = $derived(getInstanceHistory({ limit: 100 }));
-  const definitionsQuery = $derived(getDefinitions({}));
+  const trackersQuery = getActiveInstances();
+  const historyQuery = getInstanceHistory({ limit: 100 });
+  const definitionsQuery = getDefinitions({});
 
   // Tracker event types
   type TrackerEventType = "start" | "due" | "completed";
@@ -129,9 +124,32 @@
 
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
+
+  // Reactive loading/error states for query results
+  const punchCardLoading = $derived(punchCardQuery.loading);
+  const punchCardError = $derived(punchCardQuery.error);
+  const activeTrackers = $derived(trackersQuery.current ?? []);
+  const historyTrackers = $derived(historyQuery.current ?? []);
+  const definitions = $derived(definitionsQuery.current ?? []);
+  const trackersLoading = $derived(
+    trackersQuery.loading || historyQuery.loading || definitionsQuery.loading
+  );
+  const trackersError = $derived(
+    trackersQuery.error || historyQuery.error || definitionsQuery.error
+  );
 
   const daysData = $derived.by(() => {
     const currentData = punchCardQuery.current;
@@ -140,7 +158,7 @@
     );
     const daysMap = new Map<string, DayStats>();
     if (monthData) {
-      for (const day of monthData.days) {
+      for (const day of monthData?.days || []) {
         daysMap.set(day.date, day);
       }
     }
@@ -158,11 +176,16 @@
     const daysInMonth = lastDay.getDate();
     const startDayOfWeek = firstDay.getDay();
 
-    const grid: (DayStats | null | { empty: true; dayNumber?: number })[][] = [];
+    const grid: (DayStats | null | { empty: true; dayNumber?: number })[][] =
+      [];
     let currentDay = 1;
 
     for (let week = 0; week < 6; week++) {
-      const weekDays: (DayStats | null | { empty: true; dayNumber?: number })[] = [];
+      const weekDays: (
+        | DayStats
+        | null
+        | { empty: true; dayNumber?: number }
+      )[] = [];
       for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
         if (week === 0 && dayOfWeek < startDayOfWeek) {
           weekDays.push(null);
@@ -196,9 +219,12 @@
     );
     const summary = monthData?.summary;
     const days = monthData?.days ?? [];
-    const daysWithData = days.filter((d) => d.totalReadings > 0);
+    const daysWithData = days.filter((d) => d.totalReadings || 0 > 0);
     const totalCarbs = days.reduce((sum, d) => sum + (d.totalCarbs ?? 0), 0);
-    const totalInsulin = days.reduce((sum, d) => sum + (d.totalInsulin ?? 0), 0);
+    const totalInsulin = days.reduce(
+      (sum, d) => sum + (d.totalInsulin ?? 0),
+      0
+    );
     const dayCount = daysWithData.length;
 
     return {
@@ -263,13 +289,20 @@
     }
     for (const instance of active) {
       const startDate = toDateStr(instance.startedAt);
-      if (startDate) addEvent(startDate, { instance, eventType: "start", date: startDate });
+      if (startDate)
+        addEvent(startDate, { instance, eventType: "start", date: startDate });
       const dueDate = toDateStr(instance.expectedEndAt);
-      if (dueDate) addEvent(dueDate, { instance, eventType: "due", date: dueDate });
+      if (dueDate)
+        addEvent(dueDate, { instance, eventType: "due", date: dueDate });
     }
     for (const instance of history) {
       const completedDate = toDateStr(instance.completedAt);
-      if (completedDate) addEvent(completedDate, { instance, eventType: "completed", date: completedDate });
+      if (completedDate)
+        addEvent(completedDate, {
+          instance,
+          eventType: "completed",
+          date: completedDate,
+        });
     }
     return events;
   }
@@ -278,11 +311,16 @@
     if (eventType === "completed") return "text-muted-foreground";
     if (eventType === "start") return "text-green-500 dark:text-green-400";
     switch (level) {
-      case "urgent": return "text-red-500 dark:text-red-400";
-      case "hazard": return "text-orange-500 dark:text-orange-400";
-      case "warn": return "text-yellow-500 dark:text-yellow-400";
-      case "info": return "text-blue-500 dark:text-blue-400";
-      default: return "text-muted-foreground";
+      case "urgent":
+        return "text-red-500 dark:text-red-400";
+      case "hazard":
+        return "text-orange-500 dark:text-orange-400";
+      case "warn":
+        return "text-yellow-500 dark:text-yellow-400";
+      case "info":
+        return "text-blue-500 dark:text-blue-400";
+      default:
+        return "text-muted-foreground";
     }
   }
 
@@ -290,7 +328,10 @@
     if (!startedAt) return null;
     const date = new Date(startedAt);
     if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    return date.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   let isCompletionDialogOpen = $state(false);
@@ -311,6 +352,10 @@
     isCompletionDialogOpen = true;
   }
 
+  const trackerEvents = $derived(
+    buildTrackerEvents(activeTrackers, historyTrackers)
+  );
+
   function handleCompletionDialogClose() {
     isCompletionDialogOpen = false;
     completingInstance = null;
@@ -327,16 +372,37 @@
   }
 </script>
 
-{#await punchCardQuery}
+{#if punchCardLoading}
   <CalendarSkeleton />
-{:then}
+{:else if punchCardError}
+  <div class="flex items-center justify-center h-full p-6">
+    <Card.Root class="max-w-md border-destructive">
+      <Card.Content class="py-8">
+        <div class="text-center">
+          <p class="font-medium text-destructive">
+            Failed to load calendar data
+          </p>
+          <p class="text-sm text-muted-foreground mt-1">
+            {punchCardError instanceof Error ? punchCardError.message : "An error occurred"}
+          </p>
+          <Button class="mt-4" onclick={() => window.location.reload()}>
+            Try Again
+          </Button>
+        </div>
+      </Card.Content>
+    </Card.Root>
+  </div>
+{:else}
   <div class="flex flex-col h-full">
-    <div {@attach coachmark({
-      key: "feature-intro.calendar-views",
-      title: "View modes",
-      description: "Switch between Time in Range and Profile views to see different patterns.",
-      completeOn: { event: "click" },
-    })}>
+    <div
+      {@attach coachmark({
+        key: "feature-intro.calendar-views",
+        title: "View modes",
+        description:
+          "Switch between Time in Range and Profile views to see different patterns.",
+        completeOn: { event: "click" },
+      })}
+    >
       <CalendarHeader
         {viewDate}
         bind:viewMode
@@ -349,7 +415,7 @@
       />
     </div>
 
-    {#await Promise.all([trackersQuery, historyQuery, definitionsQuery])}
+    {#if trackersLoading}
       <div class="flex-1 p-4">
         <Card.Root class="h-full">
           <Card.Content class="p-4 h-full flex items-center justify-center">
@@ -357,22 +423,49 @@
           </Card.Content>
         </Card.Root>
       </div>
-    {:then [activeTrackers, historyTrackers, definitions]}
-      {@const trackerEvents = buildTrackerEvents(activeTrackers ?? [], historyTrackers ?? [])}
+    {:else if trackersError}
       <div class="flex-1 p-4">
         <Card.Root class="h-full">
           <Card.Content class="p-4 h-full flex flex-col">
             <div class="grid grid-cols-7 gap-1 mb-2">
               {#each DAY_NAMES as dayName}
-                <div class="text-center text-sm font-medium text-muted-foreground py-2">{dayName}</div>
+                <div
+                  class="text-center text-sm font-medium text-muted-foreground py-2"
+                >
+                  {dayName}
+                </div>
+              {/each}
+            </div>
+            <div class="text-center text-muted-foreground py-8">
+              <p>Could not load tracker data</p>
+              <p class="text-sm">Calendar view is still available</p>
+            </div>
+          </Card.Content>
+        </Card.Root>
+      </div>
+    {:else}
+      <div class="flex-1 p-4">
+        <Card.Root class="h-full">
+          <Card.Content class="p-4 h-full flex flex-col">
+            <div class="grid grid-cols-7 gap-1 mb-2">
+              {#each DAY_NAMES as dayName}
+                <div
+                  class="text-center text-sm font-medium text-muted-foreground py-2"
+                >
+                  {dayName}
+                </div>
               {/each}
             </div>
 
-            <div class="flex-1 grid grid-rows-6 gap-1" {@attach coachmark({
-              key: "feature-intro.calendar-trackers",
-              title: "Tracker events",
-              description: "Tracker events appear on your calendar \u2014 colored by urgency.",
-            })}>
+            <div
+              class="flex-1 grid grid-rows-6 gap-1"
+              {@attach coachmark({
+                key: "feature-intro.calendar-trackers",
+                title: "Tracker events",
+                description:
+                  "Tracker events appear on your calendar \u2014 colored by urgency.",
+              })}
+            >
               {#each calendarGrid as week}
                 <div class="grid grid-cols-7 gap-1">
                   {#each week as day}
@@ -382,7 +475,7 @@
                       {currentYear}
                       {currentMonth}
                       {trackerEvents}
-                      definitions={definitions ?? []}
+                      {definitions}
                       bind:openPopoverId
                       {units}
                       {unitLabel}
@@ -403,39 +496,9 @@
           </Card.Content>
         </Card.Root>
       </div>
-    {:catch}
-      <div class="flex-1 p-4">
-        <Card.Root class="h-full">
-          <Card.Content class="p-4 h-full flex flex-col">
-            <div class="grid grid-cols-7 gap-1 mb-2">
-              {#each DAY_NAMES as dayName}
-                <div class="text-center text-sm font-medium text-muted-foreground py-2">{dayName}</div>
-              {/each}
-            </div>
-            <div class="text-center text-muted-foreground py-8">
-              <p>Could not load tracker data</p>
-              <p class="text-sm">Calendar view is still available</p>
-            </div>
-          </Card.Content>
-        </Card.Root>
-      </div>
-    {/await}
+    {/if}
   </div>
-{:catch error}
-  <div class="flex items-center justify-center h-full p-6">
-    <Card.Root class="max-w-md border-destructive">
-      <Card.Content class="py-8">
-        <div class="text-center">
-          <p class="font-medium text-destructive">Failed to load calendar data</p>
-          <p class="text-sm text-muted-foreground mt-1">
-            {error instanceof Error ? error.message : "An error occurred"}
-          </p>
-          <Button class="mt-4" onclick={() => window.location.reload()}>Try Again</Button>
-        </div>
-      </Card.Content>
-    </Card.Root>
-  </div>
-{/await}
+{/if}
 
 <TrackerCompletionDialog
   bind:open={isCompletionDialogOpen}

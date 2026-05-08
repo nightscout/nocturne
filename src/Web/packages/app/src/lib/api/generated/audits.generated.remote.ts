@@ -70,7 +70,7 @@ export const updateAuditConfig = command(AuditConfigDtoSchema, async (request) =
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in audit.updateAuditConfig:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

@@ -74,9 +74,10 @@
   const meals = $derived<MealEvent[]>(mealsQuery.current ?? []);
 
   // Query for suggested meal matches using the endpoint
+  const today = new Date().toISOString().split("T")[0];
   const suggestionsQueryParams = $derived({
-    from: dateRange.from ?? new Date().toISOString().split("T")[0],
-    to: dateRange.to ?? new Date().toISOString().split("T")[0],
+    from: dateRange.from ?? today,
+    to: dateRange.to ?? today,
   });
   const suggestionsQuery = $derived(
     getMealMatchingSuggestions(suggestionsQueryParams)

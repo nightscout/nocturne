@@ -28,7 +28,7 @@
   import { getTransitionStatus } from "./transition-status.remote";
 
   // Transition status
-  const transitionQuery = $derived(getTransitionStatus());
+  const transitionQuery = getTransitionStatus();
   const transitionStatus = $derived(transitionQuery.current);
 
   const DISMISS_KEY = "nocturne:multitenancy-notice-dismissed";
@@ -47,7 +47,7 @@
   );
 
   // Reactive queries
-  const tenantsQuery = $derived(getMyTenants());
+  const tenantsQuery = getMyTenants();
 
   const tenants = $derived(
     (tenantsQuery.current as TenantDto[] | undefined) ?? [],

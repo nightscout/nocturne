@@ -49,7 +49,6 @@
 
   let value = $state<DateRange | undefined>();
   let open = $state(false);
-  let id = `date-range-${Math.random().toString(36).substr(2, 9)}`;
   let initialized = $state(false);
 
   // Derived state for selected days (for UI highlighting)
@@ -162,7 +161,7 @@
 <div class="flex flex-wrap items-center justify-between gap-4">
   <!-- Date Range Calendar (left) -->
   <Popover.Root bind:open>
-    <Popover.Trigger id="{id}-dates">
+    <Popover.Trigger>
       {#snippet child({ props })}
         <Button
           {...props}

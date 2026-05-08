@@ -34,7 +34,7 @@ export const create = command(CreateTenantRequestSchema, async (request) => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in tenant.create:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -71,7 +71,7 @@ export const update = command(z.object({ id: z.string(), request: UpdateTenantRe
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in tenant.update:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -91,7 +91,7 @@ export const remove = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in tenant.delete:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -111,7 +111,7 @@ export const addMember = command(z.object({ id: z.string(), request: AddMemberRe
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in tenant.addMember:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -131,7 +131,7 @@ export const removeMember = command(z.object({ id: z.string(), subjectId: z.stri
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in tenant.removeMember:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -167,7 +167,7 @@ export const createInvite = command(z.object({ id: z.string(), request: CreateMe
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in tenant.createInvite:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -188,7 +188,7 @@ export const revokeInvite = command(z.object({ id: z.string(), inviteId: z.strin
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in tenant.revokeInvite:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -208,7 +208,7 @@ export const provision = command(ProvisionRequestSchema, async (request) => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in tenant.provision:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -246,7 +246,7 @@ export const attachOidcIdentity = command(z.object({ id: z.string(), subjectId: 
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in tenant.attachOidcIdentity:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -267,7 +267,7 @@ export const removePasskeyCredential = command(z.object({ id: z.string(), subjec
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in tenant.removePasskeyCredential:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -288,7 +288,7 @@ export const removeOidcIdentity = command(z.object({ id: z.string(), subjectId: 
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in tenant.removeOidcIdentity:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

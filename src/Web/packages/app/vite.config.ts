@@ -89,6 +89,21 @@ export default defineConfig(({ mode }) => {
             clientPort: parseInt(process.env.VITE_HMR_CLIENT_PORT, 10),
           }
         : undefined,
+      warmup: {
+        clientFiles: [
+          "./src/app.css",
+          "./src/routes/+layout.svelte",
+          "./src/routes/+layout.ts",
+          "./src/routes/(authenticated)/+layout.svelte",
+          "./src/routes/(authenticated)/+page.svelte",
+        ],
+        ssrFiles: [
+          "./src/hooks.server.ts",
+          "./src/routes/+layout.server.ts",
+          "./src/routes/(authenticated)/+layout.server.ts",
+          "./src/routes/(authenticated)/+page.server.ts",
+        ],
+      },
       watch: {
         ignored: ["**/node_modules/**", "**/.git/**"],
         usePolling: false,

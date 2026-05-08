@@ -56,6 +56,18 @@
   const showContent = $derived(!showSkeleton && !showError);
 </script>
 
+<!--
+  Children are always rendered so any remote `query()` calls inside them stay
+  in a live tracking context. SvelteKit's hydratable model requires that a
+  query rendered during SSR continues to render during hydration; unmounting
+  children to swap in a skeleton would destroy that tracking context and
+  break hydration on the next render. When skeleton or error UI is shown,
+  children remain mounted but are visually hidden via the `hidden` attribute.
+-->
+<div hidden={!showContent} aria-hidden={!showContent}>
+  {@render children()}
+</div>
+
 {#if showSkeleton}
   {#if loadingSnippet}
     {@render loadingSnippet()}
@@ -107,6 +119,4 @@
       </Card>
     </div>
   {/if}
-{:else if showContent}
-  {@render children()}
 {/if}

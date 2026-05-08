@@ -1,3 +1,4 @@
+import { untrack } from "svelte";
 import type { CoachMarkOptions, MarkRegistration } from "./types.js";
 import type { CoachMarkContext } from "./context.svelte.js";
 
@@ -52,15 +53,22 @@ export function coachmark(options: CoachMarkOptions | CoachMarkOptions[]) {
 
     const optionsArray = Array.isArray(options) ? options : [options];
 
-    // Build registrations and register all keys
+    // Build registrations and register all keys. `ctx.register` calls
+    // `scheduleSelection` which reads coach state synchronously — those reads
+    // would subscribe this attachment effect to coach state, causing it to
+    // tear down and re-run every time coach state mutates and triggering the
+    // depth-exceeded guard. Untrack to keep the attachment effect's
+    // dependency set bounded to the parent component's reactive inputs.
     const registrations: { opts: CoachMarkOptions; reg: MarkRegistration; unregister: () => void }[] = [];
 
-    for (const opts of optionsArray) {
-      const reg = buildRegistration(opts, element);
-      if (!reg) continue;
-      const unregister = ctx.register(reg);
-      registrations.push({ opts, reg, unregister });
-    }
+    untrack(() => {
+      for (const opts of optionsArray) {
+        const reg = buildRegistration(opts, element);
+        if (!reg) continue;
+        const unregister = ctx.register(reg);
+        registrations.push({ opts, reg, unregister });
+      }
+    });
 
     if (registrations.length === 0) return;
 
@@ -159,7 +167,11 @@ export function coachmark(options: CoachMarkOptions | CoachMarkOptions[]) {
       }
     };
 
-    updateVisibility();
+    // Initial visibility check needs to read coach state but must not
+    // subscribe the attachment effect to those reads — same reasoning as the
+    // register block above. The setInterval below picks up subsequent
+    // changes within 500ms.
+    untrack(() => updateVisibility());
     const interval = setInterval(updateVisibility, 500);
 
     // Cleanup

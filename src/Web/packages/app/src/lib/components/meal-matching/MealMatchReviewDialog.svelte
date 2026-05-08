@@ -100,7 +100,7 @@
   const isLoggedTime = $derived(selectedTime === loggedTimeInput && loggedTimeInput !== bolusTimeInput);
 
   // Calculate offset minutes from selected date and time
-  const timeOffsetMinutes = $derived(() => {
+  const timeOffsetMinutes = $derived.by(() => {
     if (!treatmentMills || !selectedTime || !selectedDate) return 0;
     const [hours, minutes] = selectedTime.split(":").map(Number);
     const [year, month, day] = selectedDate.split("-").map(Number);
@@ -149,7 +149,7 @@
         foodEntryId,
         treatmentId,
         carbs,
-        timeOffsetMinutes: timeOffsetMinutes(),
+        timeOffsetMinutes,
       });
       toast.success("Meal match accepted");
       onComplete?.();
@@ -183,36 +183,21 @@
   }
 
   // Calculate scale factor based on carbs adjustment
-  const scaleFactor = $derived(() => {
+  const scaleFactor = $derived.by(() => {
     const originalCarbs = foodEntry?.carbs ?? foodEntryCarbs;
     if (!originalCarbs || originalCarbs === 0) return 1;
     return carbs / originalCarbs;
   });
 
   // Scaled values for display
-  const scaledServings = $derived(() => {
-    const original = foodEntry?.servings ?? 1;
-    const factor = scaleFactor();
-    return Math.round(original * factor * 100) / 100;
-  });
+  const scaledServings = $derived(Math.round((foodEntry?.servings ?? 1) * scaleFactor * 100) / 100);
 
-  const scaledProtein = $derived(() => {
-    const original = foodEntry?.protein ?? 0;
-    const factor = scaleFactor();
-    return Math.round(original * factor);
-  });
+  const scaledProtein = $derived(Math.round((foodEntry?.protein ?? 0) * scaleFactor));
 
-  const scaledFat = $derived(() => {
-    const original = foodEntry?.fat ?? 0;
-    const factor = scaleFactor();
-    return Math.round(original * factor);
-  });
+  const scaledFat = $derived(Math.round((foodEntry?.fat ?? 0) * scaleFactor));
 
   // Check if values have been scaled
-  const isScaled = $derived(() => {
-    const originalCarbs = foodEntry?.carbs ?? foodEntryCarbs;
-    return carbs !== originalCarbs;
-  });
+  const isScaled = $derived(carbs !== (foodEntry?.carbs ?? foodEntryCarbs));
 </script>
 
 <Dialog.Root bind:open onOpenChange={(value) => !value && resetAndClose()}>
@@ -232,9 +217,9 @@
           </div>
           {#if foodEntry.servingDescription}
             <div class="text-sm text-muted-foreground">
-              {#if isScaled()}
+              {#if isScaled}
                 <span class="line-through opacity-50">{foodEntry.servings ?? 1}</span>
-                <span class="font-medium text-foreground">{scaledServings()}</span>
+                <span class="font-medium text-foreground">{scaledServings}</span>
               {:else}
                 {foodEntry.servings ?? 1}
               {/if}
@@ -242,24 +227,24 @@
             </div>
           {/if}
           <div class="mt-1 text-sm text-muted-foreground">
-            {#if isScaled()}
+            {#if isScaled}
               <span class="line-through opacity-50">{foodEntry.carbs}g</span>
               <span class="font-medium text-foreground">{carbs}g</span> carbs
             {:else}
               {foodEntry.carbs}g carbs
             {/if}
             {#if foodEntry.protein}
-              · {#if isScaled()}
+              · {#if isScaled}
                 <span class="line-through opacity-50">{foodEntry.protein}g</span>
-                <span class="font-medium text-foreground">{scaledProtein()}g</span>
+                <span class="font-medium text-foreground">{scaledProtein}g</span>
               {:else}
                 {foodEntry.protein}g
               {/if} protein
             {/if}
             {#if foodEntry.fat}
-              · {#if isScaled()}
+              · {#if isScaled}
                 <span class="line-through opacity-50">{foodEntry.fat}g</span>
-                <span class="font-medium text-foreground">{scaledFat()}g</span>
+                <span class="font-medium text-foreground">{scaledFat}g</span>
               {:else}
                 {foodEntry.fat}g
               {/if} fat
@@ -310,9 +295,9 @@
             bind:value={selectedTime}
             class="w-28"
           />
-          {#if timeOffsetMinutes() !== 0}
+          {#if timeOffsetMinutes !== 0}
             <span class="text-sm text-muted-foreground">
-              ({timeOffsetMinutes() > 0 ? "+" : ""}{timeOffsetMinutes()} min)
+              ({timeOffsetMinutes > 0 ? "+" : ""}{timeOffsetMinutes} min)
             </span>
           {/if}
         </div>

@@ -22,12 +22,8 @@
   const reportsParams = requireDateParamsContext(14);
 
   const dateRangeMillis = $derived({
-    from: new Date(
-      reportsParams.dateRangeInput.from ?? new Date().toISOString()
-    ).getTime() - PADDING_DAYS * MS_PER_DAY,
-    to: new Date(
-      reportsParams.dateRangeInput.to ?? new Date().toISOString()
-    ).getTime() + PADDING_DAYS * MS_PER_DAY,
+    from: reportsParams.dateRangeMillis.from - PADDING_DAYS * MS_PER_DAY,
+    to: reportsParams.dateRangeMillis.to + PADDING_DAYS * MS_PER_DAY,
   });
 
   const actogramResource = contextResource(

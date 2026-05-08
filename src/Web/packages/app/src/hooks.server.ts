@@ -198,7 +198,8 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
     pathname.startsWith("/setup") ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/api/v4/webhooks") ||
-    pathname.startsWith("/api/v4/bot");
+    pathname.startsWith("/api/v4/bot") ||
+    pathname.startsWith("/api/otel");
 
   if (skipProbe) {
     return resolve(event);
@@ -288,7 +289,7 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
 const proxyHandle: Handle = async ({ event, resolve }) => {
   // Check if the request is for /api (but not SvelteKit-handled routes like webhooks and bot dispatch)
   const path = event.url.pathname;
-  if (path.startsWith("/api") && !path.startsWith("/api/v4/webhooks") && !path.startsWith("/api/v4/bot")) {
+  if (path.startsWith("/api") && !path.startsWith("/api/v4/webhooks") && !path.startsWith("/api/v4/bot") && !path.startsWith("/api/otel")) {
     const apiBaseUrl = getApiBaseUrl();
     if (!apiBaseUrl) {
       throw new Error(
@@ -507,5 +508,12 @@ export const locale: Handle = async ({ event, resolve }) => {
   return resolve(event);
 }
 
+// Reset bits-ui's global ID counter at the start of each SSR request so that
+// server-generated IDs match the client (which always starts at 0).
+const resetBitsId: Handle = async ({ event, resolve }) => {
+  (globalThis as any).bitsIdCounter = { current: 0 };
+  return resolve(event);
+};
+
 // Chain the auth handler, site security handler, proxy handler, and API client handler
-export const handle: Handle = sequence(authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);
+export const handle: Handle = sequence(resetBitsId, authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);

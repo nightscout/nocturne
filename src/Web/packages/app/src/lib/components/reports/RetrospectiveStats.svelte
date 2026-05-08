@@ -15,7 +15,7 @@
   } from "lucide-svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
-  import { getRetrospectiveData } from "$api";
+  import { getRetrospectiveData } from "$api/generated/retrospectives.generated.remote";
 
   interface Props {
     /** Unix timestamp in milliseconds to fetch data for */

@@ -20,6 +20,7 @@
     children: Snippet;
   } = $props();
 
+  // svelte-ignore state_referenced_locally
   const ctx = createCoachMarkContext(adapter, sequences, settleDelay, seenDwellMs);
   setCoachMarkContextRef(ctx);
 

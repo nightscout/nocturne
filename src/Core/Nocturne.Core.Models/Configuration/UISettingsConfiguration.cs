@@ -51,6 +51,13 @@ public class UISettingsConfiguration
     /// </summary>
     [JsonPropertyName("security")]
     public SecuritySettings Security { get; set; } = new();
+
+    /// <summary>
+    /// Per-tenant configuration for the dashboard Halo Dial component (history /
+    /// prediction durations, color mode, slot composition, element options).
+    /// </summary>
+    [JsonPropertyName("haloDial")]
+    public HaloDialConfig HaloDial { get; set; } = new();
 }
 
 #region Device Settings

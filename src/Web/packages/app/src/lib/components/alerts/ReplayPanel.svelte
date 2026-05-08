@@ -33,7 +33,14 @@
   } from "$api-clients";
   import { severityLabel, severityVar } from "./severity";
   import { formatTime, formatRange } from "./alertTime";
-  import GlucoseChartCard from "$lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
+  import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
+  import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
+  import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
+  import BasalTrack from "$lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte";
+  import IobCobTrack from "$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
+  import ThresholdRules from "$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
+  import ChartTooltip from "$lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
+  import ReplayOverlay from "./ReplayOverlay.svelte";
   import { Tooltip } from "layerchart";
   import PlaybackStrip from "./PlaybackStrip.svelte";
   import RuleSidebar from "./RuleSidebar.svelte";
@@ -447,15 +454,6 @@
     untrack(() => handleRun());
   });
 
-  // Type alias mirrors the GlucoseChartCard `annotations` snippet payload.
-  type AnnotationProps = {
-    xScale: import("d3-scale").ScaleTime<number, number>;
-    yScale: import("d3-scale").ScaleLinear<number, number>;
-    width: number;
-    height: number;
-    padding: { top: number; right: number; bottom: number; left: number };
-  };
-
   // Replay events land on the same 5-min ticks the chart's glucose readings
   // do, so a half-tick window catches all events for the hovered point
   // without bleeding into neighbouring ones.
@@ -465,45 +463,6 @@
     return markers.filter((m) => Math.abs(m.tMs - t) <= TOOLTIP_HALF_WINDOW_MS);
   }
 </script>
-
-{#snippet replayAnnotations({ xScale, height }: AnnotationProps)}
-  {#each firedMarkers as m (`${m.ev.ruleId ?? "x"}:${m.tMs}`)}
-    {@const px = xScale(new Date(m.tMs))}
-    {@const color = severityVar(m.ev.severity)}
-    {@const isResolved = m.ev.kind === AlertReplayEventKind.AutoResolved}
-    {@const isSuppressed = m.ev.kind === AlertReplayEventKind.SuppressedByDnd}
-    <line
-      x1={px}
-      x2={px}
-      y1={height - 20}
-      y2={height - 8}
-      stroke={color}
-      stroke-width="1.5"
-      stroke-dasharray={isSuppressed ? "2 2" : null}
-      opacity={isSuppressed ? 0.6 : 1}
-    />
-    <circle
-      cx={px}
-      cy={height - 8}
-      r="4"
-      fill={isResolved || isSuppressed ? "none" : color}
-      stroke={color}
-      stroke-width={isResolved || isSuppressed ? 1.5 : 0}
-      opacity={isSuppressed ? 0.6 : 1}
-    />
-  {/each}
-  {#if currentDate}
-    {@const px = xScale(currentDate)}
-    <line
-      x1={px}
-      x2={px}
-      y1="0"
-      y2={height}
-      class="stroke-foreground/80"
-      stroke-width="1.5"
-    />
-  {/if}
-{/snippet}
 
 {#snippet replayTooltipExtras({ time }: { time: Date })}
   {@const nearby = eventsNear(time)}
@@ -604,14 +563,28 @@
         <!-- Chart + playback + events list (left on wide containers, full width on narrow) -->
         <div class="flex min-w-0 min-h-0 flex-col gap-4">
           <div class="rounded-md border bg-background p-1">
-            <GlucoseChartCard
-              compact
-              dateRange={{ from: xDomain[0], to: xDomain[1] }}
-              annotations={replayAnnotations}
-              tooltipExtras={replayTooltipExtras}
-              onSelectionChange={handleBrushSelection}
-              heightClass="h-[280px]"
-            />
+            {#key xDomain[0].getTime() + '-' + xDomain[1].getTime()}
+              {@const replayEngine = createChartDataEngine({
+                dateRange: { from: xDomain[0], to: xDomain[1] },
+                enablePredictions: false,
+              })}
+              <GlucoseChartShell
+                engine={replayEngine}
+                heightClass="h-[280px]"
+                onSelectionChange={handleBrushSelection}
+              >
+                {#snippet tracks(_ctx)}
+                  <BasalTrack />
+                  <ThresholdRules />
+                  <GlucoseTrack />
+                  <IobCobTrack />
+                  <ReplayOverlay {firedMarkers} {currentDate} />
+                {/snippet}
+                {#snippet overlays(_ctx)}
+                  <ChartTooltip tooltipExtras={replayTooltipExtras} />
+                {/snippet}
+              </GlucoseChartShell>
+            {/key}
           </div>
 
           <PlaybackStrip

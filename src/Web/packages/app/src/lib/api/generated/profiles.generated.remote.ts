@@ -56,7 +56,7 @@ export const createTherapySettings = form(formCoerce(TherapySettingsSchema) as a
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.createTherapySettings:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -113,7 +113,7 @@ export const updateTherapySettings = form(formCoerce(z.object({ id: z.string(), 
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.updateTherapySettings:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -135,7 +135,7 @@ export const deleteTherapySettings = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.deleteTherapySettings:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -190,7 +190,7 @@ export const createBasalSchedule = form(formCoerce(BasalScheduleSchema) as any, 
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.createBasalSchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -212,7 +212,7 @@ export const updateBasalSchedule = form(formCoerce(z.object({ id: z.string(), re
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.updateBasalSchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -233,7 +233,7 @@ export const deleteBasalSchedule = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.deleteBasalSchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -288,7 +288,7 @@ export const createCarbRatioSchedule = command(CarbRatioScheduleSchema, async (r
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.createCarbRatioSchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -310,7 +310,7 @@ export const updateCarbRatioSchedule = command(z.object({ id: z.string(), reques
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.updateCarbRatioSchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -331,7 +331,7 @@ export const deleteCarbRatioSchedule = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.deleteCarbRatioSchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -386,7 +386,7 @@ export const createSensitivitySchedule = command(SensitivityScheduleSchema, asyn
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.createSensitivitySchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -408,7 +408,7 @@ export const updateSensitivitySchedule = command(z.object({ id: z.string(), requ
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.updateSensitivitySchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -429,7 +429,7 @@ export const deleteSensitivitySchedule = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.deleteSensitivitySchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -484,7 +484,7 @@ export const createTargetRangeSchedule = command(TargetRangeScheduleSchema, asyn
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.createTargetRangeSchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -506,7 +506,7 @@ export const updateTargetRangeSchedule = command(z.object({ id: z.string(), requ
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.updateTargetRangeSchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -527,7 +527,7 @@ export const deleteTargetRangeSchedule = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in profile.deleteTargetRangeSchedule:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

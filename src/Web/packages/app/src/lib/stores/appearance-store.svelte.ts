@@ -16,6 +16,7 @@ import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
 import { WidgetId } from "../api/generated/nocturne-api-client";
+import { type HaloDialConfig, defaultHaloDialConfig } from "$lib/components/dashboard/halo-dial/config";
 
 // ==========================================
 // Type Definitions
@@ -32,6 +33,9 @@ export type GlucoseUnits = "mg/dl" | "mmol";
 
 /** Time format preference */
 export type TimeFormat = "12" | "24";
+
+/** Sidebar widget preference */
+export type SidebarWidget = "graph" | "halo-dial";
 
 /** Supported locale type - derived from supportedLocales.json */
 export type SupportedLocale = (typeof supportedLocales)[number];
@@ -83,6 +87,24 @@ export const nightModeSchedule = new PersistedState<boolean>(
 export const dashboardTopWidgets = new PersistedState<WidgetId[]>(
   "nocturne-dashboard-top-widgets",
   [WidgetId.BgDelta, WidgetId.TirChart, WidgetId.Tdd]
+);
+
+/**
+ * Sidebar widget preference — graph or halo dial
+ * Default: graph (compact glucose chart)
+ */
+export const sidebarWidget = new PersistedState<SidebarWidget>(
+  "nocturne-sidebar-widget",
+  "graph"
+);
+
+/**
+ * Halo dial configuration
+ * Full config for the halo dial sidebar widget
+ */
+export const haloDialConfig = new PersistedState<HaloDialConfig>(
+  "nocturne-halo-dial-config",
+  defaultHaloDialConfig()
 );
 
 // ==========================================
@@ -257,6 +279,9 @@ export type PredictionDisplayMode =
   | "uam"
   | "cob";
 
+export type LineColorMode = "single" | "threshold" | "continuous";
+export type AreaMode = "off" | "baseline" | "deviation";
+
 /**
  * Prediction display mode preference
  */
@@ -286,6 +311,45 @@ export const glucoseChartLookback = new PersistedState<number>(
  * Always fetches this much data regardless of display range
  */
 export const GLUCOSE_CHART_FETCH_HOURS = 48;
+
+// ==========================================
+// Glucose Chart Visual Style
+// ==========================================
+
+export const chartLineColorMode = new PersistedState<LineColorMode>(
+  "nocturne-chart-line-color-mode",
+  "threshold"
+);
+
+export const chartLineColor = new PersistedState<string>(
+  "nocturne-chart-line-color",
+  "#22c55e"
+);
+
+export const chartPointColorMode = new PersistedState<LineColorMode>(
+  "nocturne-chart-point-color-mode",
+  "threshold"
+);
+
+export const chartPointColor = new PersistedState<string>(
+  "nocturne-chart-point-color",
+  "#22c55e"
+);
+
+export const chartShowPoints = new PersistedState<boolean>(
+  "nocturne-chart-show-points",
+  true
+);
+
+export const chartAreaMode = new PersistedState<AreaMode>(
+  "nocturne-chart-area-mode",
+  "off"
+);
+
+export const chartAreaOpacity = new PersistedState<number>(
+  "nocturne-chart-area-opacity",
+  0.5
+);
 
 // ==========================================
 // Language Preference

@@ -4,6 +4,7 @@
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { formatGlucoseDelta, getUnitLabel } from "$lib/utils/formatting";
   import { timeAgo, formatTime } from "$lib/utils";
+  import { onMount } from "svelte";
   import {
     BatteryCharging,
     BatteryFull,
@@ -14,7 +15,7 @@
     Wifi,
     WifiOff,
   } from "lucide-svelte";
-  import { getBatteryCardData } from "$api/battery.remote";
+  import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
 
   interface Props {
     /** Override bgDelta from props instead of realtime store */
@@ -39,10 +40,7 @@
   const connectionStatus = $derived(realtimeStore.connectionStatus);
 
   // Battery data
-  const batteryDataPromise = $derived(
-    getBatteryCardData({ recentMinutes: 30 })
-  );
-
+  const batteryStatusPromise = getCurrentBatteryStatus({ recentMinutes: 30 });
   // Get battery icon component based on level
   function getBatteryIconComponent(level: number | undefined) {
     if (!level) return BatteryWarning;
@@ -91,8 +89,10 @@
   </div>
 
   <!-- Last updated info with battery -->
-  {#await batteryDataPromise}
-    <div class="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
+  {#if !batteryStatusPromise}
+    <div
+      class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
+    >
       <span class="text-xs text-muted-foreground">
         {timeAgo(displayLastUpdated)}
       </span>
@@ -100,48 +100,66 @@
         {formatTime(displayLastUpdated)}
       </span>
     </div>
-  {:then data}
-    {@const currentStatus = data?.currentStatus}
-    {@const hasDevices =
-      currentStatus && Object.keys(currentStatus.devices ?? {}).length > 0}
-    <div class="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
-      <span class="text-xs text-muted-foreground">
-        {timeAgo(displayLastUpdated)}
-      </span>
-      {#if hasDevices && currentStatus?.min}
-        <span
-          class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium {currentStatus.status ===
-          'urgent'
-            ? 'bg-red-500/20 text-red-400'
-            : currentStatus.status === 'warn'
-              ? 'bg-yellow-500/20 text-yellow-400'
-              : 'bg-green-500/20 text-green-400'}"
-        >
-          {#if currentStatus.min.isCharging}
-            <BatteryCharging class="h-3 w-3" />
-          {:else}
-            {@const IconComponent = getBatteryIconComponent(currentStatus.level)}
-            <IconComponent class="h-3 w-3" />
-          {/if}
-          {currentStatus.display}
-          {#if currentStatus.min.isCharging}
-            <Zap class="h-3 w-3" />
-          {/if}
+  {:else}
+    {#await batteryStatusPromise}
+      <div
+        class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
+      >
+        <span class="text-xs text-muted-foreground">
+          {timeAgo(displayLastUpdated)}
         </span>
-      {:else}
         <span class="text-xs text-muted-foreground">
           {formatTime(displayLastUpdated)}
         </span>
-      {/if}
-    </div>
-  {:catch}
-    <div class="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
-      <span class="text-xs text-muted-foreground">
-        {timeAgo(displayLastUpdated)}
-      </span>
-      <span class="text-xs text-muted-foreground">
-        {formatTime(displayLastUpdated)}
-      </span>
-    </div>
-  {/await}
+      </div>
+    {:then currentStatus}
+      {@const hasDevices =
+        currentStatus && Object.keys(currentStatus.devices ?? {}).length > 0}
+      <div
+        class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
+      >
+        <span class="text-xs text-muted-foreground">
+          {timeAgo(displayLastUpdated)}
+        </span>
+        {#if hasDevices && currentStatus?.min}
+          <span
+            class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium {currentStatus.status ===
+            'urgent'
+              ? 'bg-red-500/20 text-red-400'
+              : currentStatus.status === 'warn'
+                ? 'bg-yellow-500/20 text-yellow-400'
+                : 'bg-green-500/20 text-green-400'}"
+          >
+            {#if currentStatus.min.isCharging}
+              <BatteryCharging class="h-3 w-3" />
+            {:else}
+              {@const IconComponent = getBatteryIconComponent(
+                currentStatus.level
+              )}
+              <IconComponent class="h-3 w-3" />
+            {/if}
+            {currentStatus.display}
+            {#if currentStatus.min.isCharging}
+              <Zap class="h-3 w-3" />
+            {/if}
+          </span>
+        {:else}
+          <span class="text-xs text-muted-foreground">
+            {formatTime(displayLastUpdated)}
+          </span>
+        {/if}
+      </div>
+    {:catch}
+      <div
+        class="flex items-center justify-between mt-2 pt-2 border-t border-border/50"
+      >
+        <span class="text-xs text-muted-foreground">
+          {timeAgo(displayLastUpdated)}
+        </span>
+        <span class="text-xs text-muted-foreground">
+          {formatTime(displayLastUpdated)}
+        </span>
+      </div>
+    {/await}
+  {/if}
 </WidgetCard>

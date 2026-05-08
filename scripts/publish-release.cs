@@ -51,35 +51,29 @@ try
         return 1;
     }
 
-    // Post-process compose: rename ugly auto-generated env var names
-    var envVarRenames = new Dictionary<string, string>
-    {
-        ["NOCTURNE_POSTGRES_SERVER_BINDMOUNT_0"] = "POSTGRES_INIT_DIR",
-    };
-
-    var composeContent = File.ReadAllText(composePath);
-    foreach (var (oldName, newName) in envVarRenames)
-    {
-        composeContent = composeContent.Replace(oldName, newName);
-    }
-    File.WriteAllText(Path.Combine(outputDir, "docker-compose.yaml"), composeContent);
+    // Copy compose verbatim — AppHost rewrites the init bind-mount source
+    // to ./init at publish time, so no string-substitution is needed.
+    File.Copy(composePath, Path.Combine(outputDir, "docker-compose.yaml"), overwrite: true);
     Console.WriteLine($"[publish-release] Wrote {Path.Combine(outputDir, "docker-compose.yaml")}");
 
     // Generate .env.example from aspire-generated .env
     var aspireEnvPath = Path.Combine(tempDir, ".env");
-    GenerateEnvExample(aspireEnvPath, Path.Combine(outputDir, ".env.example"), envVarRenames);
+    GenerateEnvExample(aspireEnvPath, Path.Combine(outputDir, ".env.example"));
     Console.WriteLine($"[publish-release] Wrote {Path.Combine(outputDir, ".env.example")}");
 
-    // Copy init script
+    // Copy init script into ./init/ — matches the bind-mount source path
+    // hardcoded in docker-compose.yaml.
+    var initOutDir = Path.Combine(outputDir, "init");
+    Directory.CreateDirectory(initOutDir);
     var initScriptSource = Path.Combine(repoRoot, "docs", "postgres", "container-init", "00-init.sh");
-    File.Copy(initScriptSource, Path.Combine(outputDir, "00-init.sh"), overwrite: true);
-    Console.WriteLine($"[publish-release] Wrote {Path.Combine(outputDir, "00-init.sh")}");
+    File.Copy(initScriptSource, Path.Combine(initOutDir, "00-init.sh"), overwrite: true);
+    Console.WriteLine($"[publish-release] Wrote {Path.Combine(initOutDir, "00-init.sh")}");
 
     Console.WriteLine();
     Console.WriteLine("[publish-release] Done! Output files:");
     Console.WriteLine($"  {Path.Combine(outputDir, "docker-compose.yaml")}");
     Console.WriteLine($"  {Path.Combine(outputDir, ".env.example")}");
-    Console.WriteLine($"  {Path.Combine(outputDir, "00-init.sh")}");
+    Console.WriteLine($"  {Path.Combine(initOutDir, "00-init.sh")}");
 
     return 0;
 }
@@ -91,8 +85,7 @@ finally
 
 static void GenerateEnvExample(
     string aspireEnvPath,
-    string outputPath,
-    Dictionary<string, string> renames)
+    string outputPath)
 {
     // Known defaults for non-secret values
     var defaults = new Dictionary<string, string>
@@ -101,8 +94,6 @@ static void GenerateEnvExample(
         ["NOCTURNE_WEB_IMAGE"] = "ghcr.io/nightscout/nocturne/nocturne-web:latest",
         ["NOCTURNE_API_PORT"] = "8080",
         ["POSTGRES_USERNAME"] = "nocturne",
-        ["POSTGRES_INIT_DIR"] = "./init",
-        ["NOCTURNE_POSTGRES_SERVER_BINDMOUNT_0"] = "./init",
     };
 
     // Secret vars -- leave blank
@@ -155,18 +146,17 @@ static void GenerateEnvExample(
             if (eqIndex < 0) continue;
 
             var name = line[..eqIndex];
-            var renamedName = renames.GetValueOrDefault(name, name);
 
-            if (!seenVars.Add(renamedName)) continue;
+            if (!seenVars.Add(name)) continue;
 
-            if (secrets.Contains(renamedName))
-                secretVars.Add((renamedName, ""));
-            else if (requiredConfig.Contains(renamedName))
-                requiredConfigVars.Add((renamedName, ""));
-            else if (optional.Contains(renamedName))
-                optionalVars.Add((renamedName, defaults.GetValueOrDefault(renamedName, "")));
+            if (secrets.Contains(name))
+                secretVars.Add((name, ""));
+            else if (requiredConfig.Contains(name))
+                requiredConfigVars.Add((name, ""));
+            else if (optional.Contains(name))
+                optionalVars.Add((name, defaults.GetValueOrDefault(name, "")));
             else
-                configVars.Add((renamedName, defaults.GetValueOrDefault(renamedName, defaults.GetValueOrDefault(name, ""))));
+                configVars.Add((name, defaults.GetValueOrDefault(name, "")));
         }
 
         writer.WriteLine("# -- Configuration ---------------------------------------------");
@@ -195,7 +185,6 @@ static void GenerateEnvExample(
         writer.WriteLine("NOCTURNE_WEB_IMAGE=ghcr.io/nightscout/nocturne/nocturne-web:latest");
         writer.WriteLine("NOCTURNE_API_PORT=8080");
         writer.WriteLine("POSTGRES_USERNAME=nocturne");
-        writer.WriteLine("POSTGRES_INIT_DIR=./init");
         writer.WriteLine();
         writer.WriteLine("PUBLIC_BASE_DOMAIN=");
         writer.WriteLine("POSTGRES_PASSWORD=");

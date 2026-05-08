@@ -29,7 +29,7 @@
   type Summary = Awaited<ReturnType<typeof getProfileSummary>>;
 
   // Query for profile summary data
-  const summaryQuery = $derived(getProfileSummary(undefined));
+  const summaryQuery = getProfileSummary(undefined);
 
   // Selected profile name from URL or default
   const urlProfileName = $derived(page.url.searchParams.get("name"));

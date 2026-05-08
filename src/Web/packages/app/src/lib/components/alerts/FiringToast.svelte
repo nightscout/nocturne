@@ -41,11 +41,14 @@
       const fresh: ActiveExcursionResponse[] = [];
       for (const a of list) {
         const id = a.id ?? "";
-        if (!id || seen.has(id)) continue;
+        if (!id || seen.has(id) || a.acknowledgedAt) continue;
         seen.add(id);
         fresh.push(a);
       }
       if (fresh.length > 0) queue = [...fresh, ...queue];
+      // Remove toasts that were acknowledged elsewhere (other tab, banner, etc.)
+      const ackedIds = new Set(list.filter((a) => a.acknowledgedAt).map((a) => a.id));
+      if (ackedIds.size > 0) queue = queue.filter((a) => !ackedIds.has(a.id));
     } catch {
       // Silent: polling shouldn't surface transient errors.
     }

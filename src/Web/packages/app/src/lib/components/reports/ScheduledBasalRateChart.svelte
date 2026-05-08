@@ -56,7 +56,7 @@
   }
 
   const yMax = $derived(niceMax(chartData.maxRate));
-  const yTicks = $derived(() => {
+  const yTicks = $derived.by(() => {
     const mid = yMax / 2;
     return [0, mid, yMax];
   });
@@ -118,7 +118,7 @@
 {#if chartData.steps.length > 0}
   <svg viewBox="0 0 400 80" class="w-full h-full">
     <!-- Y axis labels -->
-    {#each yTicks() as tick}
+    {#each yTicks as tick}
       {@const y = 75 - (tick / yMax) * 70}
       <text
         x="28"
@@ -147,7 +147,7 @@
     <!-- Chart area -->
     <g transform="translate(32, 5)">
       <!-- Horizontal gridlines -->
-      {#each yTicks() as tick}
+      {#each yTicks as tick}
         {@const y = 70 - (tick / yMax) * 70}
         <line
           x1="0"

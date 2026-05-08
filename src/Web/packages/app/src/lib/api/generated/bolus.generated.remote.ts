@@ -33,7 +33,7 @@ export const create = form(formCoerce(CreateBolusRequestSchema) as any, async (r
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in bolus.create:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -68,7 +68,7 @@ export const update = form(formCoerce(z.object({ id: z.string(), request: Update
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in bolus.update:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -86,7 +86,7 @@ export const remove = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in bolus.delete:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

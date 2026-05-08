@@ -78,6 +78,13 @@
   );
   const sidebar = Sidebar.useSidebar();
 
+  // Defer localStorage check to after hydration so SSR and client initial render
+  // both produce the same DOM (avoids hydration mismatch from conditional rendering).
+  let langPrefKnown = $state(false);
+  $effect(() => {
+    langPrefKnown = hasLanguagePreference();
+  });
+
   // Tenant switcher state
   interface TenantTarget {
     id: string;
@@ -500,7 +507,7 @@
 
   <Sidebar.Footer class="p-2">
     <Sidebar.Menu>
-      {#if !hasLanguagePreference()}
+      {#if !langPrefKnown}
         <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">
           <LanguageSelector
             onLanguageChange={user

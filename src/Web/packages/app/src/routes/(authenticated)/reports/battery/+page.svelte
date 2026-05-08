@@ -34,18 +34,12 @@
   // State for device selection
   let selectedDevice = $state<string | null>(null);
 
-  // Calculate date range in milliseconds from the params
-  const dateRangeMillis = $derived({
-    from: new Date(reportsParams.dateRangeInput.from ?? new Date().toISOString()).getTime(),
-    to: new Date(reportsParams.dateRangeInput.to ?? new Date().toISOString()).getTime(),
-  });
-
   // Create resource with automatic layout registration
   const batteryResource = contextResource(
     () => getBatteryReportData({
       device: selectedDevice,
-      from: dateRangeMillis.from,
-      to: dateRangeMillis.to,
+      from: reportsParams.dateRangeMillis.from,
+      to: reportsParams.dateRangeMillis.to,
       cycleLimit: 50,
     }),
     { errorTitle: "Error Loading Battery Report" }
@@ -56,11 +50,8 @@
   const cycles = $derived<ChargeCycle[]>(batteryResource.current?.cycles ?? []);
   const readings = $derived<BatteryReading[]>(batteryResource.current?.readings ?? []);
 
-  // Helper for date range display
-  const dateRange = $derived({
-    from: dateRangeMillis.from,
-    to: dateRangeMillis.to,
-  });
+  // Helper alias for template readability
+  const dateRange = $derived(reportsParams.dateRangeMillis);
 
   function fetchData() {
     batteryResource.refresh();

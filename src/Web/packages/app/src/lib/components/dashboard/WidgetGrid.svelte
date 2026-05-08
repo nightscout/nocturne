@@ -1,15 +1,7 @@
 <script lang="ts">
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { DEFAULT_TOP_WIDGETS } from "$lib/types/dashboard-widgets";
-  import BgDeltaWidget from "./widgets/BgDeltaWidget.svelte";
-  import LastUpdatedWidget from "./widgets/LastUpdatedWidget.svelte";
-  import ConnectionStatusWidget from "./widgets/ConnectionStatusWidget.svelte";
-  import MealsWidget from "./widgets/MealsWidget.svelte";
-  import TrackersWidget from "./widgets/TrackersWidget.svelte";
-  import TirChartWidget from "./widgets/TirChartWidget.svelte";
-  import DailySummaryWidget from "./widgets/DailySummaryWidget.svelte";
-  import ClockWidget from "./widgets/ClockWidget.svelte";
-  import TddWidget from "./widgets/TddWidget.svelte";
+  import type { Component } from "svelte";
 
   interface Props {
     /** Ordered list of widget IDs to display */
@@ -23,26 +15,37 @@
   // Limit to max widgets
   const displayWidgets = $derived(widgets.slice(0, maxWidgets));
 
-  // Widget component map using enum values
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const widgetComponents: Partial<Record<WidgetId, any>> = {
-    [WidgetId.BgDelta]: BgDeltaWidget,
-    [WidgetId.LastUpdated]: LastUpdatedWidget,
-    [WidgetId.ConnectionStatus]: ConnectionStatusWidget,
-    [WidgetId.Meals]: MealsWidget,
-    [WidgetId.Trackers]: TrackersWidget,
-    [WidgetId.TirChart]: TirChartWidget,
-    [WidgetId.DailySummary]: DailySummaryWidget,
-    [WidgetId.Clock]: ClockWidget,
-    [WidgetId.Tdd]: TddWidget,
+  // Lazy loaders — only the rendered widgets are imported
+  const widgetLoaders: Partial<Record<WidgetId, () => Promise<{ default: Component }>>> = {
+    [WidgetId.BgDelta]: () => import("./widgets/BgDeltaWidget.svelte"),
+    [WidgetId.LastUpdated]: () => import("./widgets/LastUpdatedWidget.svelte"),
+    [WidgetId.ConnectionStatus]: () => import("./widgets/ConnectionStatusWidget.svelte"),
+    [WidgetId.Meals]: () => import("./widgets/MealsWidget.svelte"),
+    [WidgetId.Trackers]: () => import("./widgets/TrackersWidget.svelte"),
+    [WidgetId.TirChart]: () => import("./widgets/TirChartWidget.svelte"),
+    [WidgetId.DailySummary]: () => import("./widgets/DailySummaryWidget.svelte"),
+    [WidgetId.Clock]: () => import("./widgets/ClockWidget.svelte"),
+    [WidgetId.Tdd]: () => import("./widgets/TddWidget.svelte"),
   };
+
+  // Cache resolved modules so re-renders don't re-import
+  const cache = new Map<WidgetId, Promise<Component>>();
+  function loadWidget(id: WidgetId): Promise<Component> | undefined {
+    if (!cache.has(id)) {
+      const loader = widgetLoaders[id];
+      if (loader) cache.set(id, loader().then((m) => m.default));
+    }
+    return cache.get(id);
+  }
 </script>
 
 <div class="@container grid grid-cols-1 @md:grid-cols-3 gap-2 @md:gap-4">
   {#each displayWidgets as widgetId (widgetId)}
-    {@const WidgetComponent = widgetComponents[widgetId] as typeof BgDeltaWidget | undefined}
-    {#if WidgetComponent}
-      <WidgetComponent />
+    {@const promise = loadWidget(widgetId)}
+    {#if promise}
+      {#await promise then WidgetComponent}
+        <WidgetComponent />
+      {/await}
     {/if}
   {/each}
 </div>

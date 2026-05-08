@@ -54,10 +54,10 @@
   // State
   let activeTab = $state("active");
 
-  const definitionsQuery = $derived(trackersRemote.getDefinitions(undefined));
-  const activeInstancesQuery = $derived(trackersRemote.getActiveInstances());
-  const historyInstancesQuery = $derived(trackersRemote.getInstanceHistory(undefined));
-  const presetsQuery = $derived(trackersRemote.getPresets());
+  const definitionsQuery = trackersRemote.getDefinitions(undefined);
+  const activeInstancesQuery = trackersRemote.getActiveInstances();
+  const historyInstancesQuery = trackersRemote.getInstanceHistory(undefined);
+  const presetsQuery = trackersRemote.getPresets();
 
   // Mirrors via `.current` for event handlers (which run outside the boundary's
   // template scope and can't see {@const} bindings).

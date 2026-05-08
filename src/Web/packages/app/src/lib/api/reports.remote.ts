@@ -180,13 +180,6 @@ export const getAnalysis = query(
   }
 );
 
-/** Get multi-period statistics summary */
-export const getSummary = query(async () => {
-  const { locals } = getRequestEvent();
-  const { apiClient } = locals;
-  return apiClient.statistics.getMultiPeriodStatistics();
-});
-
 /**
  * Combined query to get all reports data in one call This is the main entry
  * point for reports pages

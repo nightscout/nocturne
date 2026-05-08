@@ -79,6 +79,26 @@ export const getDailyBasalBolusRatios = query(z.object({ startDate: z.coerce.dat
   }
 });
 
+/** Pre-aggregated month-by-day statistics for the calendar punch-card view. Fetches glucose,
+boluses, carb intakes, and daily basal totals in a single batch, then computes per-day TIR
+and treatment summaries inline (no per-day round-trips). Replaces a frontend orchestrator
+that was issuing ~62 sequential HTTP calls per 31-day month. */
+export const getPunchCardData = query(z.object({ startDate: z.coerce.date().optional(), endDate: z.coerce.date().optional() }).optional(), async (params) => {
+  const apiClient = getRequestEvent().locals.apiClient;
+  try {
+    return await apiClient.statistics.getPunchCardData(params?.startDate, params?.endDate);
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, 'Forbidden');
+    console.error('Error in statistics.getPunchCardData:', err);
+    const body = (err as any)?.body ?? (err as any)?.response;
+    const message = body?.message ?? body?.title ?? body?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
+    throw error(500, 'Failed to get punch card data');
+  }
+});
+
 /** Calculate comprehensive insulin delivery statistics for a date range */
 export const getInsulinDeliveryStatistics = query(z.object({ startDate: z.coerce.date().optional(), endDate: z.coerce.date().optional() }).optional(), async (params) => {
   const apiClient = getRequestEvent().locals.apiClient;

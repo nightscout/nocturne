@@ -20,10 +20,11 @@ describe("ResourceGuard", () => {
 			})),
 		});
 
-		// Should not show content
+		// Children stay mounted (so remote queries keep their tracking context)
+		// but are visually hidden via the `hidden` attribute on their wrapper.
 		await expect
 			.element(page.getByText("Content loaded"))
-			.not.toBeInTheDocument();
+			.not.toBeVisible();
 	});
 
 	it("shows error message in compact mode", async () => {

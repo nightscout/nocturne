@@ -29,17 +29,13 @@
     { errorTitle: "Error Loading Week Comparison" }
   );
 
-  // Calculate start and end dates from the date params
-  const startDate = $derived(new Date(reportsParams.dateRangeInput.from ?? new Date().toISOString()));
-  const endDate = $derived(new Date(reportsParams.dateRangeInput.to ?? new Date().toISOString()));
-
   const dateRangeDisplay = $derived.by(() => {
     const opts: Intl.DateTimeFormatOptions = {
       month: "short",
       day: "numeric",
       year: "numeric",
     };
-    return `${startDate.toLocaleDateString(undefined, opts)} – ${endDate.toLocaleDateString(undefined, opts)}`;
+    return `${reportsParams.startDate.toLocaleDateString(undefined, opts)} – ${reportsParams.endDate.toLocaleDateString(undefined, opts)}`;
   });
 
   // Transform entries into chart data: each row = { time, sun?, mon?, tue?, ... }
@@ -85,7 +81,7 @@
 
   // Navigation helpers
   function previousWeek() {
-    const newEnd = new Date(startDate);
+    const newEnd = new Date(reportsParams.startDate);
     newEnd.setDate(newEnd.getDate() - 1);
     const newStart = new Date(newEnd);
     newStart.setDate(newStart.getDate() - 6);
@@ -96,7 +92,7 @@
   }
 
   function nextWeek() {
-    const newStart = new Date(endDate);
+    const newStart = new Date(reportsParams.endDate);
     newStart.setDate(newStart.getDate() + 1);
     const newEnd = new Date(newStart);
     newEnd.setDate(newEnd.getDate() + 6);

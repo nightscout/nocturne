@@ -1,71 +1,16 @@
 <script lang="ts">
-  import { Rect, Text, Group } from "layerchart";
+  import { Rect, Text, Group, getChartContext } from "layerchart";
   import { PumpModeIcon, ActivityCategoryIcon } from "$lib/components/icons";
-  import type { StateSpanCategory } from "$lib/api";
+  import { getGlucoseChartContext } from "../chart-context.svelte";
 
-  interface PumpModeSpan {
-    id?: string;
-    displayStart: Date;
-    displayEnd: Date;
-    state?: string;
-    color: string;
-  }
+  const ctx = getGlucoseChartContext();
+  const chartCtx = getChartContext();
 
-  interface OverrideSpan {
-    id?: string;
-    displayStart: Date;
-    displayEnd: Date;
-    state?: string;
-    color: string;
-  }
-
-  interface ProfileSpan {
-    id?: string;
-    displayStart: Date;
-    displayEnd: Date;
-    profileName: string;
-    color: string;
-  }
-
-  interface ActivitySpan {
-    id?: string;
-    displayStart: Date;
-    displayEnd: Date;
-    category?: StateSpanCategory;
-    state?: string;
-    color: string;
-  }
-
-  interface SwimLanePosition {
-    top: number;
-    bottom: number;
-    visible: boolean;
-  }
-
-  interface SwimLanePositions {
-    pumpMode: SwimLanePosition;
-    override: SwimLanePosition;
-    profile: SwimLanePosition;
-    activity: SwimLanePosition;
-  }
-
-  interface Props {
-    context: { xScale: (time: Date) => number; width: number };
-    swimLanePositions: SwimLanePositions;
-    pumpModeSpans: PumpModeSpan[];
-    overrideSpans: OverrideSpan[];
-    profileSpans: ProfileSpan[];
-    activitySpans: ActivitySpan[];
-  }
-
-  let {
-    context,
-    swimLanePositions,
-    pumpModeSpans,
-    overrideSpans,
-    profileSpans,
-    activitySpans,
-  }: Props = $props();
+  const swimLanePositions = $derived(ctx.layout.swimLanes);
+  const pumpModeSpans = $derived(ctx.engine.displayPumpModeSpans);
+  const overrideSpans = $derived(ctx.engine.displayOverrideSpans);
+  const profileSpans = $derived(ctx.engine.displayProfileSpans);
+  const activitySpans = $derived(ctx.engine.displayActivitySpans);
 </script>
 
 <!-- Pump Mode Swim Lane -->
@@ -75,7 +20,7 @@
   <Rect
     x={0}
     y={lane.top}
-    width={context.width}
+    width={chartCtx.width}
     height={lane.bottom - lane.top}
     fill="var(--muted)"
     class="opacity-20"
@@ -90,11 +35,11 @@
   </Text>
   <!-- Pump mode spans -->
   {#each pumpModeSpans as span (span.id)}
-    {@const spanXPos = context.xScale(span.displayStart)}
+    {@const spanXPos = chartCtx.xScale(span.displayStart)}
     <Rect
       x={spanXPos}
       y={lane.top + 1}
-      width={context.xScale(span.displayEnd) - spanXPos}
+      width={chartCtx.xScale(span.displayEnd) - spanXPos}
       height={lane.bottom - lane.top - 2}
       fill={span.color}
       class="opacity-60"
@@ -118,7 +63,7 @@
   <Rect
     x={0}
     y={lane.top}
-    width={context.width}
+    width={chartCtx.width}
     height={lane.bottom - lane.top}
     fill="var(--muted)"
     class="opacity-20"
@@ -133,11 +78,11 @@
   </Text>
   <!-- Override spans -->
   {#each overrideSpans as span (span.id)}
-    {@const spanXPos = context.xScale(span.displayStart)}
+    {@const spanXPos = chartCtx.xScale(span.displayStart)}
     <Rect
       x={spanXPos}
       y={lane.top + 1}
-      width={context.xScale(span.displayEnd) - spanXPos}
+      width={chartCtx.xScale(span.displayEnd) - spanXPos}
       height={lane.bottom - lane.top - 2}
       fill={span.color}
       class="opacity-50"
@@ -161,7 +106,7 @@
   <Rect
     x={0}
     y={lane.top}
-    width={context.width}
+    width={chartCtx.width}
     height={lane.bottom - lane.top}
     fill="var(--muted)"
     class="opacity-20"
@@ -176,11 +121,11 @@
   </Text>
   <!-- Profile spans -->
   {#each profileSpans as span (span.id)}
-    {@const spanXPos = context.xScale(span.displayStart)}
+    {@const spanXPos = chartCtx.xScale(span.displayStart)}
     <Rect
       x={spanXPos}
       y={lane.top + 1}
-      width={context.xScale(span.displayEnd) - spanXPos}
+      width={chartCtx.xScale(span.displayEnd) - spanXPos}
       height={lane.bottom - lane.top - 2}
       fill={span.color}
       class="opacity-30"
@@ -204,7 +149,7 @@
   <Rect
     x={0}
     y={lane.top}
-    width={context.width}
+    width={chartCtx.width}
     height={lane.bottom - lane.top}
     fill="var(--muted)"
     class="opacity-10"
@@ -219,11 +164,11 @@
   </Text>
   <!-- All activity spans rendered in the same lane -->
   {#each activitySpans as span (span.id)}
-    {@const spanXPos = context.xScale(span.displayStart)}
+    {@const spanXPos = chartCtx.xScale(span.displayStart)}
     <Rect
       x={spanXPos}
       y={lane.top + 1}
-      width={context.xScale(span.displayEnd) - spanXPos}
+      width={chartCtx.xScale(span.displayEnd) - spanXPos}
       height={lane.bottom - lane.top - 2}
       fill={span.color}
       class="opacity-50"

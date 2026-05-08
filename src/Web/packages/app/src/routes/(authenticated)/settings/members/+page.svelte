@@ -45,13 +45,13 @@
   );
 
   // Tenant
-  const tenantIdQuery = $derived(getCurrentTenantId());
+  const tenantIdQuery = getCurrentTenantId();
   const tenantId = $derived(tenantIdQuery.current ?? undefined);
 
   // Queries
-  const membersQuery = $derived(getMembers());
+  const membersQuery = getMembers();
   const invitesQuery = $derived(tenantId ? listInvites(tenantId) : null);
-  const rolesQuery = $derived(getRoles());
+  const rolesQuery = getRoles();
 
   // Data
   const allMembers = $derived(membersQuery.current ?? []);

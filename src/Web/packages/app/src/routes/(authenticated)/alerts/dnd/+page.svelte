@@ -23,8 +23,8 @@
   import { ArrowLeft, BellOff, Save, Loader2 } from "lucide-svelte";
 
   // Queries seed the form once on first response.
-  const dndQuery = $derived(getDnd());
-  const profileQuery = $derived(getProfileSummary(undefined));
+  const dndQuery = getDnd();
+  const profileQuery = getProfileSummary(undefined);
 
   let saving = $state(false);
   let error = $state<string | null>(null);

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Nocturne.API.Middleware;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
@@ -56,8 +57,9 @@ public class AlarmHub : TenantAwareHub
                     var configuration = Context
                         .GetHttpContext()
                         ?.RequestServices.GetRequiredService<IConfiguration>();
-                    var configuredSecret = configuration?["Parameters:instance-key"];
-
+                    var configuredSecret =
+                        configuration?[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
+                        ?? configuration?[ServiceNames.ConfigKeys.InstanceKey];
                     if (!string.IsNullOrEmpty(configuredSecret))
                     {
                         // Calculate SHA1 hash of the configured secret
@@ -78,7 +80,10 @@ public class AlarmHub : TenantAwareHub
             if (isAuthorized)
             {
                 // Add connection to tenant-scoped alarm subscribers group
-                await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup("alarm-subscribers"));
+                await Groups.AddToGroupAsync(
+                    Context.ConnectionId,
+                    TenantGroup("alarm-subscribers")
+                );
 
                 _logger.LogInformation(
                     "Client {ConnectionId} subscribed to alarms successfully",

@@ -15,6 +15,7 @@
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
+  import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
@@ -64,8 +65,6 @@
   // Connection status
   const isConnected = $derived(realtimeStore.isConnected);
 
-  // Stale threshold in milliseconds (10 minutes)
-  const STALE_THRESHOLD_MS = 10 * 60 * 1000;
 
   // Format values based on user's unit preference
   const units = $derived(glucoseUnits.current);

@@ -40,8 +40,9 @@
   import { apsSnapshotToPrediction } from "$lib/utils/aps-snapshot-to-prediction";
 
   // Get date from URL search params
+  const today = new Date().toISOString().split("T")[0];
   const dateParam = $derived(
-    page.url.searchParams.get("date") ?? new Date().toISOString().split("T")[0]
+    page.url.searchParams.get("date") ?? today
   );
 
   // Create resource with automatic layout registration

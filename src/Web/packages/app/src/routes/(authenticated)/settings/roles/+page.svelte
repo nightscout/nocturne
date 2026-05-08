@@ -37,7 +37,7 @@
   );
 
   // Query
-  const rolesQuery = $derived(getRoles());
+  const rolesQuery = getRoles();
   const roles = $derived(rolesQuery.current ?? []);
 
   // Create dialog state

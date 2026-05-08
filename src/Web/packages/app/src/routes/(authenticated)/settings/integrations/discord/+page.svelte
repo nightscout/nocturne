@@ -25,9 +25,9 @@
 	});
 
 	// Queries
-	const linksQuery = $derived(getLinks());
+	const linksQuery = getLinks();
 	const links = $derived(linksQuery.current ?? []);
-	const configQuery = $derived(getDiscordConfig());
+	const configQuery = getDiscordConfig();
 	const config = $derived(configQuery.current);
 
 	let editingId: string | null = $state(null);

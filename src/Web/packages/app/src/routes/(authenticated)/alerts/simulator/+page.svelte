@@ -12,7 +12,7 @@
   import { ArrowLeft, PlayCircle, Loader2 } from "lucide-svelte";
   import ReplayPanel from "$lib/components/alerts/ReplayPanel.svelte";
 
-  const rulesQuery = $derived(getRules());
+  const rulesQuery = getRules();
 </script>
 
 <svelte:head>

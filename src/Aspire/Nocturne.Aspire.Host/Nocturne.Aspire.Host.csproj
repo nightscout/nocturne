@@ -21,6 +21,7 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\API\Nocturne.API\Nocturne.API.csproj" />
+        <ProjectReference Include="..\Nocturne.Aspire.ScalarBootstrap\Nocturne.Aspire.ScalarBootstrap.csproj" />
         <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" IsAspireProjectResource="false" />
         <ProjectReference Include="..\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" IsAspireProjectResource="false" />
         <ProjectReference Include="..\Nocturne.Aspire.Hosting\Nocturne.Aspire.Hosting.csproj" IsAspireProjectResource="false" />

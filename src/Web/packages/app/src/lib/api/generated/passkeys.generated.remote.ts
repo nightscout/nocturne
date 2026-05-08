@@ -16,7 +16,7 @@ export const registerOptions = command(PasskeyRegisterOptionsRequestSchema, asyn
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.registerOptions:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -37,7 +37,7 @@ export const registerComplete = command(PasskeyRegisterCompleteRequestSchema, as
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.registerComplete:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -55,7 +55,7 @@ export const discoverableLoginOptions = command(async () => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.discoverableLoginOptions:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -73,7 +73,7 @@ export const loginOptions = command(PasskeyLoginOptionsRequestSchema, async (req
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.loginOptions:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -91,7 +91,7 @@ export const loginComplete = command(PasskeyLoginCompleteRequestSchema, async (r
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.loginComplete:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -109,7 +109,7 @@ export const recoveryVerify = command(RecoveryVerifyRequestSchema, async (reques
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.recoveryVerify:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -147,7 +147,7 @@ export const removeCredential = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.removeCredential:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -168,7 +168,7 @@ export const regenerateRecoveryCodes = command(async () => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.regenerateRecoveryCodes:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -224,7 +224,7 @@ export const completeOnboarding = command(async () => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.completeOnboarding:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -244,7 +244,7 @@ export const setupOptions = command(SetupOptionsRequestSchema, async (request) =
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.setupOptions:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -264,7 +264,7 @@ export const setupComplete = command(SetupCompleteRequestSchema, async (request)
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.setupComplete:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -284,7 +284,7 @@ export const accessRequestOptions = command(AccessRequestOptionsRequestSchema, a
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.accessRequestOptions:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -304,7 +304,7 @@ export const accessRequestComplete = command(AccessRequestCompleteRequestSchema,
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.accessRequestComplete:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -323,7 +323,7 @@ export const inviteOptions = command(InviteOptionsRequestSchema, async (request)
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.inviteOptions:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -342,7 +342,7 @@ export const inviteComplete = command(InviteCompleteRequestSchema, async (reques
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in passkey.inviteComplete:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

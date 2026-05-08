@@ -169,7 +169,7 @@ export const getProvidersInfo = query(async () => {
 /**
  * Refresh the current session tokens
  */
-export const refreshSession = query(async () => {
+export const refreshSession = command(async () => {
   const event = getRequestEvent();
   if (!event) {
     return { success: false };
@@ -229,7 +229,7 @@ export const refreshSession = query(async () => {
 /**
  * Logout and clear session cookies
  */
-export const logoutSession = query(z.string().optional(), async (_providerId) => {
+export const logoutSession = command(z.string().optional(), async (_providerId) => {
   const event = getRequestEvent();
   if (!event) {
     return { success: false };

@@ -12,8 +12,19 @@
     setColorScheme,
     userPrefersMode,
     dashboardTopWidgets,
+    sidebarWidget,
+    haloDialConfig,
+    chartLineColorMode,
+    chartLineColor,
+    chartPointColorMode,
+    chartPointColor,
+    chartShowPoints,
+    chartAreaMode,
+    chartAreaOpacity,
     type ColorScheme,
   } from "$lib/stores/appearance-store.svelte";
+  import HaloDialConfigurator from "$lib/components/settings/HaloDialConfigurator.svelte";
+  import type { HaloDialConfig } from "$lib/components/dashboard/halo-dial/config";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import TitleFaviconSettings from "$lib/components/settings/TitleFaviconSettings.svelte";
   import DashboardWidgetConfigurator from "$lib/components/settings/DashboardWidgetConfigurator.svelte";
@@ -57,6 +68,7 @@
     AlertCircle,
     Timer,
     Eye,
+    PanelLeft,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import { browser } from "$app/environment";
@@ -495,6 +507,65 @@
       />
     </div>
 
+    <!-- Sidebar Widget -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <PanelLeft class="h-5 w-5" />
+          Sidebar Widget
+        </CardTitle>
+        <CardDescription>
+          Choose what to display in the sidebar above the navigation
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <button
+            type="button"
+            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {sidebarWidget.current === 'graph'
+              ? 'border-primary bg-accent/30'
+              : 'border-border'}"
+            onclick={() => (sidebarWidget.current = "graph")}
+          >
+            {#if sidebarWidget.current === "graph"}
+              <Badge class="absolute right-2 top-2" variant="default">Active</Badge>
+            {/if}
+            <div class="font-semibold">Glucose Chart</div>
+            <p class="text-sm text-muted-foreground">
+              Compact glucose chart showing recent readings
+            </p>
+          </button>
+
+          <button
+            type="button"
+            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {sidebarWidget.current === 'halo-dial'
+              ? 'border-primary bg-accent/30'
+              : 'border-border'}"
+            onclick={() => (sidebarWidget.current = "halo-dial")}
+          >
+            {#if sidebarWidget.current === "halo-dial"}
+              <Badge class="absolute right-2 top-2" variant="default">Active</Badge>
+            {/if}
+            <div class="font-semibold">Halo Dial</div>
+            <p class="text-sm text-muted-foreground">
+              Circular dial with glucose history, predictions, and data-at-a-glance
+            </p>
+          </button>
+        </div>
+
+        <p class="text-xs text-muted-foreground">
+          Changes take effect immediately
+        </p>
+      </CardContent>
+    </Card>
+
+    {#if sidebarWidget.current === "halo-dial"}
+      <HaloDialConfigurator
+        value={haloDialConfig.current}
+        onchange={(config) => (haloDialConfig.current = config)}
+      />
+    {/if}
+
     <!-- Chart Options -->
     <Card>
       <CardHeader>
@@ -534,6 +605,147 @@
             </Select>
           </div>
         </div>
+
+        <Separator class="my-4" />
+
+        <!-- Glucose line visual style -->
+        <div class="grid gap-4 sm:grid-cols-2">
+          <!-- Line Color Mode -->
+          <div class="space-y-2">
+            <FormLabel>Line color mode</FormLabel>
+            <div class="flex items-center gap-2">
+              <Select
+                type="single"
+                value={chartLineColorMode.current}
+                onValueChange={(value: string) => {
+                  chartLineColorMode.current = value as "single" | "threshold" | "continuous";
+                }}
+              >
+                <SelectTrigger>
+                  <span>
+                    {chartLineColorMode.current === "threshold"
+                      ? "Threshold bands"
+                      : chartLineColorMode.current === "continuous"
+                        ? "Continuous gradient"
+                        : "Single color"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="threshold">Threshold bands</SelectItem>
+                  <SelectItem value="continuous">Continuous gradient</SelectItem>
+                  <SelectItem value="single">Single color</SelectItem>
+                </SelectContent>
+              </Select>
+              {#if chartLineColorMode.current === "single"}
+                <input
+                  type="color"
+                  value={chartLineColor.current}
+                  oninput={(e) => {
+                    chartLineColor.current = e.currentTarget.value;
+                  }}
+                  class="h-9 w-12 cursor-pointer rounded border"
+                />
+              {/if}
+            </div>
+          </div>
+
+          <!-- Show Points -->
+          <div class="flex items-center justify-between gap-4">
+            <FormLabel>Show data points</FormLabel>
+            <Switch
+              checked={chartShowPoints.current}
+              onCheckedChange={(checked: boolean) => {
+                chartShowPoints.current = checked;
+              }}
+            />
+          </div>
+
+          <!-- Point Color Mode (visible only when showPoints is on) -->
+          {#if chartShowPoints.current}
+            <div class="space-y-2">
+              <FormLabel>Point color mode</FormLabel>
+              <div class="flex items-center gap-2">
+                <Select
+                  type="single"
+                  value={chartPointColorMode.current}
+                  onValueChange={(value: string) => {
+                    chartPointColorMode.current = value as "single" | "threshold" | "continuous";
+                  }}
+                >
+                  <SelectTrigger>
+                    <span>
+                      {chartPointColorMode.current === "threshold"
+                        ? "Threshold bands"
+                        : chartPointColorMode.current === "continuous"
+                          ? "Continuous gradient"
+                          : "Single color"}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="threshold">Threshold bands</SelectItem>
+                    <SelectItem value="continuous">Continuous gradient</SelectItem>
+                    <SelectItem value="single">Single color</SelectItem>
+                  </SelectContent>
+                </Select>
+                {#if chartPointColorMode.current === "single"}
+                  <input
+                    type="color"
+                    value={chartPointColor.current}
+                    oninput={(e) => {
+                      chartPointColor.current = e.currentTarget.value;
+                    }}
+                    class="h-9 w-12 cursor-pointer rounded border"
+                  />
+                {/if}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Area Fill -->
+          <div class="space-y-2">
+            <FormLabel>Area fill</FormLabel>
+            <Select
+              type="single"
+              value={chartAreaMode.current}
+              onValueChange={(value: string) => {
+                chartAreaMode.current = value as "off" | "baseline" | "deviation";
+              }}
+            >
+              <SelectTrigger>
+                <span>
+                  {chartAreaMode.current === "off"
+                    ? "Off"
+                    : chartAreaMode.current === "baseline"
+                      ? "Baseline"
+                      : "Deviation"}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="off">Off</SelectItem>
+                <SelectItem value="baseline">Baseline</SelectItem>
+                <SelectItem value="deviation">Deviation</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <!-- Area Opacity (visible only when area fill is not off) -->
+        {#if chartAreaMode.current !== "off"}
+          <div class="mt-4 space-y-2">
+            <FormLabel>Area opacity: {Math.round(chartAreaOpacity.current * 100)}%</FormLabel>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={chartAreaOpacity.current}
+              oninput={(e) => {
+                chartAreaOpacity.current = parseFloat(e.currentTarget.value);
+              }}
+              class="w-full"
+            />
+          </div>
+        {/if}
       </CardContent>
     </Card>
 

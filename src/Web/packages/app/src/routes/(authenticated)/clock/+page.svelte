@@ -19,7 +19,7 @@
   import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";
   import type { ClockFaceConfig } from "$lib/api";
 
-  const clockFacesQuery = $derived(listClockFaces());
+  const clockFacesQuery = listClockFaces();
 
   let creating = $state(false);
   let deleting = $state(false);

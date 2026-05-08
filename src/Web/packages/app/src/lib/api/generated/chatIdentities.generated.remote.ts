@@ -36,7 +36,7 @@ export const claimLink = command(ClaimChatIdentityLinkRequestSchema, async (requ
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in chatIdentity.claimLink:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -57,7 +57,7 @@ export const createDirectLink = command(CreateDirectLinkRequestSchema, async (re
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in chatIdentity.createDirectLink:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -77,7 +77,7 @@ export const setDefault = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in chatIdentity.setDefault:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -97,7 +97,7 @@ export const updateLink = command(z.object({ id: z.string(), request: UpdateChat
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in chatIdentity.updateLink:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -117,7 +117,7 @@ export const revokeLink = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in chatIdentity.revokeLink:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

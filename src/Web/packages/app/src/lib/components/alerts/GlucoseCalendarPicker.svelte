@@ -22,7 +22,7 @@
   import { Button } from "$lib/components/ui/button";
   import { cn } from "$lib/utils";
   import GlucoseSparkline from "$lib/components/calendar/GlucoseSparkline.svelte";
-  import { getPunchCardData } from "$api/month-to-month.remote";
+  import { getPunchCardData } from "$api/generated/statistics.generated.remote";
 
   interface Props {
     /** Currently-selected date, or undefined for the "Last 24 hours" sentinel. */
@@ -94,9 +94,9 @@
   // out the `entries` array per day.
   type EntriesByDate = Record<string, { mills: number; mgdl: number }[]>;
   const entriesPromise = $derived.by<Promise<EntriesByDate>>(() => {
-    const fromDate = startOfMonth(viewMonth).toString();
-    const toDate = endOfMonth(viewMonth).toString();
-    return getPunchCardData({ fromDate, toDate }).then((data) => {
+    const startDate = startOfMonth(viewMonth).toDate(tz);
+    const endDate = endOfMonth(viewMonth).toDate(tz);
+    return getPunchCardData({ startDate, endDate }).then((data) => {
       const out: EntriesByDate = {};
       for (const m of data?.months ?? []) {
         for (const d of m.days ?? []) {

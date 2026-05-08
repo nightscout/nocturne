@@ -52,6 +52,7 @@ internal sealed class AlertDeliveryService(
         var payloadJson = JsonSerializer.Serialize(payload);
 
         await using var db = await contextFactory.CreateDbContextAsync(ct);
+        db.TenantId = tenantId;
 
         // Zero-channel rules still leave an audit anchor: an InApp delivery row marked
         // delivered immediately. Without this row the History/Replay page cannot tell the
@@ -122,6 +123,7 @@ internal sealed class AlertDeliveryService(
     {
         var tenantId = tenantAccessor.TenantId;
         await using var db = await contextFactory.CreateDbContextAsync(ct);
+        db.TenantId = tenantId;
 
         // Synthesise a parent excursion so the delivery rows have somewhere to hang. The
         // excursion is opened and immediately resolved — it never participates in tracker
@@ -260,6 +262,7 @@ internal sealed class AlertDeliveryService(
     public async Task MarkDeliveredAsync(Guid deliveryId, string? platformMessageId, string? platformThreadId, CancellationToken ct)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
+        db.TenantId = tenantAccessor.TenantId;
         var delivery = await db.AlertDeliveries.FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
         if (delivery is null) return;
 
@@ -273,6 +276,7 @@ internal sealed class AlertDeliveryService(
     public async Task MarkFailedAsync(Guid deliveryId, string error, CancellationToken ct)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
+        db.TenantId = tenantAccessor.TenantId;
         var delivery = await db.AlertDeliveries.FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
         if (delivery is null) return;
 

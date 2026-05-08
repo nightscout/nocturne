@@ -90,16 +90,34 @@ public class TenantSetupMiddleware
         // Check 1: Does this tenant have any members with auth credentials (passkey or OIDC)?
         // These entities are subject-scoped (not tenant-scoped), so we join through TenantMembers.
         var tenantId = tenantAccessor.TenantId;
-        var hasCredentials = await db.TenantMembers
+        var memberCount = await db.TenantMembers
+            .Where(m => m.TenantId == tenantId)
+            .CountAsync();
+        var hasCredentials = memberCount > 0 && await db.TenantMembers
             .Where(m => m.TenantId == tenantId)
             .AnyAsync(m =>
                 db.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
                 db.SubjectOidcIdentities.Any(i => i.SubjectId == m.SubjectId));
         if (!hasCredentials)
         {
-            _logger.LogDebug(
-                "Tenant {TenantId} has no passkey credentials — returning setup required",
-                tenantAccessor.TenantId);
+            var passkeyCount = memberCount > 0
+                ? await db.TenantMembers
+                    .Where(m => m.TenantId == tenantId)
+                    .SelectMany(m => db.PasskeyCredentials.Where(c => c.SubjectId == m.SubjectId))
+                    .CountAsync()
+                : 0;
+            var oidcCount = memberCount > 0
+                ? await db.TenantMembers
+                    .Where(m => m.TenantId == tenantId)
+                    .SelectMany(m => db.SubjectOidcIdentities.Where(i => i.SubjectId == m.SubjectId))
+                    .CountAsync()
+                : 0;
+
+            _logger.LogWarning(
+                "Tenant {TenantId} setup check failed — returning 503 setup_required. " +
+                "Path={Path}, MemberCount={MemberCount}, PasskeyCount={PasskeyCount}, OidcCount={OidcCount}, " +
+                "DbContextTenantId={DbContextTenantId}",
+                tenantId, path, memberCount, passkeyCount, oidcCount, db.TenantId);
 
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await context.Response.WriteAsJsonAsync(new
@@ -128,9 +146,23 @@ public class TenantSetupMiddleware
 
         if (hasOrphaned)
         {
-            _logger.LogDebug(
-                "Tenant {TenantId} has orphaned subjects — returning recovery mode",
-                tenantAccessor.TenantId);
+            var orphanedSubjects = await db.TenantMembers
+                .Where(tm => tm.TenantId == tenantId)
+                .Join(
+                    db.Subjects.Where(s => s.IsActive && !s.IsSystemSubject),
+                    tm => tm.SubjectId,
+                    s => s.Id,
+                    (tm, s) => s)
+                .Where(s =>
+                    !db.SubjectOidcIdentities.Any(i => i.SubjectId == s.Id) &&
+                    !db.PasskeyCredentials.Any(p => p.SubjectId == s.Id))
+                .Select(s => new { s.Id, s.Name, s.Username })
+                .ToListAsync();
+
+            _logger.LogWarning(
+                "Tenant {TenantId} has orphaned subjects — returning 503 recovery_mode. " +
+                "Path={Path}, OrphanedSubjects={@OrphanedSubjects}",
+                tenantId, path, orphanedSubjects);
 
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await context.Response.WriteAsJsonAsync(new

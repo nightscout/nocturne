@@ -37,7 +37,7 @@ export const createCarbIntake = form(formCoerce(CreateCarbIntakeRequestSchema) a
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.createCarbIntake:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -76,7 +76,7 @@ export const updateCarbIntake = form(formCoerce(z.object({ id: z.string(), reque
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.updateCarbIntake:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -97,7 +97,7 @@ export const deleteCarbIntake = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.deleteCarbIntake:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -135,7 +135,7 @@ export const addCarbIntakeFood = command(z.object({ id: z.string(), request: Car
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.addCarbIntakeFood:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -156,7 +156,7 @@ export const updateCarbIntakeFood = command(z.object({ id: z.string(), foodEntry
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.updateCarbIntakeFood:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -177,7 +177,7 @@ export const deleteCarbIntakeFood = command(z.object({ id: z.string(), foodEntry
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.deleteCarbIntakeFood:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -223,7 +223,7 @@ export const createMeal = form(formCoerce(CreateMealRequestSchema) as any, async
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in nutrition.createMeal:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

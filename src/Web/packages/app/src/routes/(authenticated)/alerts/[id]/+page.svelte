@@ -72,7 +72,7 @@
   let seededId = $state<string | null>(null);
 
   // Queries — fire on the server during SSR, results land in cache for hydration.
-  const rulesQuery = $derived(getRules());
+  const rulesQuery = getRules();
   const ruleQuery = $derived(isNew ? null : getRule(ruleId));
   const historyQuery = $derived(
     isNew ? null : getAlertHistory({ page: 1, pageSize: 25, alertRuleId: ruleId }),

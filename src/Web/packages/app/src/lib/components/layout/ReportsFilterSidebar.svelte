@@ -119,7 +119,7 @@
   }
 
   // Get formatted date range for display
-  const dateRangeText = $derived(() => {
+  const dateRangeText = $derived.by(() => {
     if (draftCalendarValue?.start && draftCalendarValue?.end) {
       const start = draftCalendarValue.start.toDate(getLocalTimeZone());
       const end = draftCalendarValue.end.toDate(getLocalTimeZone());
@@ -171,7 +171,7 @@
             Custom Date Range
           </Label>
           <div class="text-sm text-muted-foreground mb-2">
-            {dateRangeText()}
+            {dateRangeText}
           </div>
           <div class="border border-border rounded-lg overflow-hidden">
             <RangeCalendar

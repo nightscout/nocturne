@@ -32,7 +32,7 @@ export const executeAction = command(z.object({ id: z.string(), actionId: z.stri
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in notifications.executeAction:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -52,7 +52,7 @@ export const dismissNotification = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in notifications.dismissNotification:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

@@ -35,7 +35,7 @@
   // Get the realtime store for reactive tracker data
   const realtimeStore = getRealtimeStore();
 
-  const historyQuery = $derived(trackersRemote.getInstanceHistory(undefined));
+  const historyQuery = trackersRemote.getInstanceHistory(undefined);
 
   // Use active tracker notifications from realtime store
   const trackerNotifications = $derived(realtimeStore.trackerNotifications);

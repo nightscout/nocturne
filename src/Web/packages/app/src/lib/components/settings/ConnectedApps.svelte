@@ -20,7 +20,7 @@
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
 
   // Remote queries
-  const appsQuery = $derived(list());
+  const appsQuery = list();
   const apps = $derived(appsQuery.current ?? []);
 
   // Loading/error states

@@ -13,6 +13,7 @@
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
   import { browser } from "$app/environment";
   import * as Card from "$lib/components/ui/card";
+  import { Button } from "$lib/components/ui/button";
   import AlertBanner from "$lib/components/alerts/AlertBanner.svelte";
   import FiringToast from "$lib/components/alerts/FiringToast.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
@@ -23,6 +24,7 @@
   import { createCoachMarkAdapter } from "$lib/coach-marks/adapter";
   import { sequences } from "$lib/coach-marks/sequences";
   import CoachParamHandler from "$lib/coach-marks/CoachParamHandler.svelte";
+  import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
 
   // LocalStorage key for title/favicon settings
   const SETTINGS_STORAGE_KEY = "nocturne-title-favicon-settings";
@@ -121,9 +123,6 @@
     }
   });
 
-  // Stale threshold in milliseconds (10 minutes)
-  const STALE_THRESHOLD_MS = 10 * 60 * 1000;
-
   // Track current time for stale calculation - use shared store
   const now = $derived(realtimeStore.now);
 
@@ -209,15 +208,22 @@
         <svelte:boundary>
           {@render children()}
 
-          {#snippet failed(e)}
-            <Card.Root class="flex items-center justify-center h-full">
+          {#snippet failed(e, reset)}
+            {@const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'An unexpected error occurred'}
+            {@const stack = e instanceof Error ? e.stack : undefined}
+            <Card.Root class="mx-auto mt-10 max-w-2xl">
               <Card.Header>
-                <Card.Title>Error</Card.Title>
+                <Card.Title>Something went wrong</Card.Title>
               </Card.Header>
-              <Card.Content
-                class="text-destructive grid place-items-center h-full max-w-2xl"
-              >
-                {e instanceof Error ? e.message : JSON.stringify(e)}
+              <Card.Content class="space-y-4">
+                <p class="text-destructive">{message}</p>
+                {#if stack}
+                  <pre class="max-h-48 overflow-auto rounded bg-muted p-3 text-xs text-muted-foreground">{stack}</pre>
+                {/if}
+                <div class="flex gap-2">
+                  <Button variant="outline" onclick={reset}>Retry</Button>
+                  <Button variant="ghost" href="/">Go home</Button>
+                </div>
               </Card.Content>
             </Card.Root>
           {/snippet}

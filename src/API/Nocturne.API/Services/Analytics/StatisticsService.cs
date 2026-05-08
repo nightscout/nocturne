@@ -2043,19 +2043,24 @@ public class StatisticsService : IStatisticsService
     }
 
     /// <summary>
-    /// Calculate comprehensive basal analysis statistics using TempBasals and algorithm boluses
+    /// Calculate comprehensive basal analysis statistics using TempBasals and algorithm boluses.
+    /// Hourly percentiles are computed by duration-weighted overlap of each TempBasal's interval
+    /// with each <paramref name="userTimeZone"/>-local hour-of-day bucket: a TempBasal that runs
+    /// 13:55–14:25 local contributes 5 minutes to bucket 13 and 25 minutes to bucket 14. When
+    /// <paramref name="userTimeZone"/> is null, buckets are UTC hour-of-day.
     /// </summary>
     public BasalAnalysisResponse CalculateBasalAnalysis(
         IEnumerable<TempBasal> tempBasals,
         IEnumerable<Bolus> algorithmBoluses,
         DateTime startDate,
-        DateTime endDate
+        DateTime endDate,
+        TimeZoneInfo? userTimeZone = null
     )
     {
+        var tz = userTimeZone ?? TimeZoneInfo.Utc;
         var tempBasalList = tempBasals.ToList();
         var dayCount = Math.Max(1, (int)Math.Ceiling((endDate - startDate).TotalDays));
 
-        // Track stats
         var allRates = new List<double>();
         double totalDelivered = 0;
         int tempBasalCount = 0;
@@ -2063,50 +2068,39 @@ public class StatisticsService : IStatisticsService
         int lowTempCount = 0;
         int zeroTempCount = 0;
 
-        // Hourly rate buckets
-        var hourlyRates = new Dictionary<int, List<double>>();
-        for (int h = 0; h < 24; h++)
-            hourlyRates[h] = new List<double>();
+        // Each bucket holds (rate, durationMs) pairs for weighted percentile calculation.
+        var hourlyRates = new List<(double Rate, long WeightMs)>[24];
+        for (int h = 0; h < 24; h++) hourlyRates[h] = new();
 
         foreach (var tb in tempBasalList)
         {
             var rate = tb.Rate;
-            var scheduledRate = tb.ScheduledRate;
-            var origin = tb.Origin;
-
-            var startTime = DateTimeOffset.FromUnixTimeMilliseconds(tb.StartMills).DateTime;
-
             allRates.Add(rate);
             totalDelivered += GetTempBasalInsulin(tb);
 
-            // Add to hourly buckets
-            var hour = startTime.Hour;
-            hourlyRates[hour].Add(rate);
+            // Effective interval: open-ended TempBasals fall back to a 5-min slice (matches
+            // GetTempBasalInsulin's convention), so the weight isn't zero.
+            var effectiveEndMills = tb.EndMills ?? tb.StartMills + 5 * 60_000L;
+            DistributeAcrossHourOfDay(tb.StartMills, effectiveEndMills, rate, tz, hourlyRates);
 
-            // Track temp basals (non-scheduled origins)
-            if (origin != TempBasalOrigin.Scheduled && origin != TempBasalOrigin.Inferred)
+            if (tb.Origin != TempBasalOrigin.Scheduled && tb.Origin != TempBasalOrigin.Inferred)
             {
                 tempBasalCount++;
 
-                if (rate == 0 || origin == TempBasalOrigin.Suspended)
+                if (rate == 0 || tb.Origin == TempBasalOrigin.Suspended)
                 {
                     zeroTempCount++;
                 }
-                else if (scheduledRate.HasValue)
+                else if (tb.ScheduledRate.HasValue)
                 {
-                    if (rate > scheduledRate.Value)
-                        highTempCount++;
-                    else if (rate < scheduledRate.Value)
-                        lowTempCount++;
+                    if (rate > tb.ScheduledRate.Value) highTempCount++;
+                    else if (rate < tb.ScheduledRate.Value) lowTempCount++;
                 }
             }
         }
 
-        // Add algorithm bolus insulin to total delivered
         foreach (var ab in algorithmBoluses)
-        {
             totalDelivered += ab.Insulin;
-        }
 
         var basalStats = new BasalStats
         {
@@ -2126,40 +2120,27 @@ public class StatisticsService : IStatisticsService
             ZeroTemps = zeroTempCount,
         };
 
-        var hourlyPercentiles = new List<HourlyBasalPercentileData>();
+        var hourlyPercentiles = new List<HourlyBasalPercentileData>(24);
         for (int hour = 0; hour < 24; hour++)
         {
-            var hourRates = hourlyRates[hour];
-            if (hourRates.Count > 0)
+            var samples = hourlyRates[hour];
+            if (samples.Count == 0)
             {
-                hourlyPercentiles.Add(
-                    new HourlyBasalPercentileData
-                    {
-                        Hour = hour,
-                        P10 = Math.Round(CalculatePercentile(hourRates, 10) * 100) / 100,
-                        P25 = Math.Round(CalculatePercentile(hourRates, 25) * 100) / 100,
-                        Median = Math.Round(CalculatePercentile(hourRates, 50) * 100) / 100,
-                        P75 = Math.Round(CalculatePercentile(hourRates, 75) * 100) / 100,
-                        P90 = Math.Round(CalculatePercentile(hourRates, 90) * 100) / 100,
-                        Count = hourRates.Count,
-                    }
-                );
+                hourlyPercentiles.Add(new HourlyBasalPercentileData { Hour = hour, Count = 0 });
+                continue;
             }
-            else
+
+            samples.Sort((a, b) => a.Rate.CompareTo(b.Rate));
+            hourlyPercentiles.Add(new HourlyBasalPercentileData
             {
-                hourlyPercentiles.Add(
-                    new HourlyBasalPercentileData
-                    {
-                        Hour = hour,
-                        P10 = 0,
-                        P25 = 0,
-                        Median = 0,
-                        P75 = 0,
-                        P90 = 0,
-                        Count = 0,
-                    }
-                );
-            }
+                Hour = hour,
+                P10 = Math.Round(WeightedPercentile(samples, 10) * 100) / 100,
+                P25 = Math.Round(WeightedPercentile(samples, 25) * 100) / 100,
+                Median = Math.Round(WeightedPercentile(samples, 50) * 100) / 100,
+                P75 = Math.Round(WeightedPercentile(samples, 75) * 100) / 100,
+                P90 = Math.Round(WeightedPercentile(samples, 90) * 100) / 100,
+                Count = samples.Count,
+            });
         }
 
         return new BasalAnalysisResponse
@@ -2171,6 +2152,64 @@ public class StatisticsService : IStatisticsService
             StartDate = startDate.ToString("yyyy-MM-dd"),
             EndDate = endDate.ToString("yyyy-MM-dd"),
         };
+    }
+
+    /// <summary>
+    /// Walks a [startMills, endMills) interval and adds (rate, overlapMs) entries to each
+    /// <paramref name="tz"/>-local hour-of-day bucket the interval crosses. A 30-minute interval
+    /// at local 13:55 contributes 5 min to bucket 13 and 25 min to bucket 14. Slices on UTC
+    /// hour boundaries; the local hour at the slice start determines the bucket. DST transitions
+    /// that occur on the UTC hour boundary correctly skip (spring-forward) or repeat (fall-back)
+    /// the affected local-hour bucket.
+    /// </summary>
+    private static void DistributeAcrossHourOfDay(
+        long startMills,
+        long endMills,
+        double rate,
+        TimeZoneInfo tz,
+        List<(double Rate, long WeightMs)>[] buckets)
+    {
+        if (endMills <= startMills) return;
+        const long HourMs = 3_600_000L;
+        long cursor = startMills;
+        while (cursor < endMills)
+        {
+            long nextHourBoundary = (cursor / HourMs + 1) * HourMs;
+            long sliceEnd = Math.Min(nextHourBoundary, endMills);
+            long weight = sliceEnd - cursor;
+            var utcDt = DateTimeOffset.FromUnixTimeMilliseconds(cursor).UtcDateTime;
+            var localDt = TimeZoneInfo.ConvertTimeFromUtc(utcDt, tz);
+            int hourOfDay = localDt.Hour;
+            buckets[hourOfDay].Add((rate, weight));
+            cursor = sliceEnd;
+        }
+    }
+
+    /// <summary>
+    /// Nearest-rank weighted percentile over duration-weighted samples — returns the rate of the
+    /// sample whose cumulative weight first reaches the target fraction of total weight. Suitable
+    /// for piecewise-constant rate timelines where interpolating between two distinct rates would
+    /// invent a value the user never actually delivered. Input must be pre-sorted by <c>Rate</c>
+    /// ascending. Returns 0 for empty input.
+    /// </summary>
+    private static double WeightedPercentile(
+        List<(double Rate, long WeightMs)> sortedByRate,
+        double percentile)
+    {
+        if (sortedByRate.Count == 0) return 0;
+
+        long totalWeight = 0;
+        for (int i = 0; i < sortedByRate.Count; i++) totalWeight += sortedByRate[i].WeightMs;
+        if (totalWeight == 0) return sortedByRate[0].Rate;
+
+        double target = percentile / 100.0 * totalWeight;
+        long cumulative = 0;
+        for (int i = 0; i < sortedByRate.Count; i++)
+        {
+            cumulative += sortedByRate[i].WeightMs;
+            if (cumulative >= target) return sortedByRate[i].Rate;
+        }
+        return sortedByRate[^1].Rate;
     }
 
     #endregion

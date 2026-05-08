@@ -387,12 +387,14 @@ public interface IStatisticsService
         TimeZoneInfo? userTimeZone = null);
 
     /// <summary>
-    /// Calculate comprehensive basal analysis statistics from TempBasals.
-    /// Pass empty collections if none are available.
+    /// Calculate comprehensive basal analysis statistics from TempBasals. Hourly percentiles are
+    /// bucketed by <paramref name="userTimeZone"/>'s local hour-of-day (0–23) so the chart shows
+    /// rates against the user's wall clock, not UTC. Defaults to UTC when null.
     /// </summary>
     BasalAnalysisResponse CalculateBasalAnalysis(
         IEnumerable<TempBasal> tempBasals,
         IEnumerable<Bolus> algorithmBoluses,
         DateTime startDate,
-        DateTime endDate);
+        DateTime endDate,
+        TimeZoneInfo? userTimeZone = null);
 }

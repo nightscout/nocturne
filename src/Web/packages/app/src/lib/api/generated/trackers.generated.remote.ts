@@ -38,7 +38,7 @@ export const createDefinition = form(formCoerce(CreateTrackerDefinitionRequestSc
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.createDefinition:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -77,7 +77,7 @@ export const updateDefinition = form(formCoerce(z.object({ id: z.string(), reque
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.updateDefinition:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -98,7 +98,7 @@ export const deleteDefinition = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.deleteDefinition:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -136,7 +136,7 @@ export const startInstance = command(StartTrackerInstanceRequestSchema, async (r
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.startInstance:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -192,7 +192,7 @@ export const completeInstance = command(z.object({ id: z.string(), request: Comp
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.completeInstance:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -213,7 +213,7 @@ export const ackInstance = command(z.object({ id: z.string(), request: AckTracke
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.ackInstance:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -234,7 +234,7 @@ export const deleteInstance = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.deleteInstance:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -272,7 +272,7 @@ export const createPreset = command(CreateTrackerPresetRequestSchema, async (req
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.createPreset:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -293,7 +293,7 @@ export const applyPreset = command(z.object({ id: z.string(), request: ApplyPres
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.applyPreset:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -314,7 +314,7 @@ export const deletePreset = command(z.string(), async (id) => {
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in trackers.deletePreset:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

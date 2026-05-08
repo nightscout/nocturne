@@ -73,7 +73,7 @@ export const deleteDataSourceData = command(z.string(), async (id) => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in services.deleteDataSourceData:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -181,7 +181,7 @@ export const deleteDemoData = command(async () => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in services.deleteDemoData:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -223,7 +223,7 @@ export const deleteConnectorData = command(z.string(), async (id) => {
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in services.deleteConnectorData:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -241,7 +241,7 @@ export const triggerConnectorSync = command(z.object({ id: z.string(), request: 
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in services.triggerConnectorSync:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

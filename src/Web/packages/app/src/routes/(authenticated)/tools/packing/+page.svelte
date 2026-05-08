@@ -18,7 +18,7 @@
   import { categories } from "$lib/components/tools/packing/packing-config";
   import { getPackingHints } from "./packing.remote";
 
-  const hintsQuery = $derived(getPackingHints());
+  const hintsQuery = getPackingHints();
   const hints = $derived(hintsQuery.current);
   let tripDays = $state(7);
 

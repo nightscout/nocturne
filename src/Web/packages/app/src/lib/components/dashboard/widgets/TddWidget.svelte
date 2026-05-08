@@ -1,15 +1,22 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import WidgetCard from "./WidgetCard.svelte";
   import { Text, PieChart } from "layerchart";
-  import { getSummary } from "$api/reports.remote";
+  import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
   import { Button } from "$lib/components/ui/button";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
 
   // Toggle between today and 90-day average
   let showAverage = $state(false);
 
-  // Fetch TDD data from backend statistics
-  const statsPromise = $derived(getSummary());
+  // Fetch on the client after hydration — the underlying API can be slow and
+  // would otherwise block SSR (timing out and breaking hydration).
+  let statsPromise = $state<ReturnType<typeof getMultiPeriodStatistics> | null>(
+    null
+  );
+  onMount(() => {
+    statsPromise = getMultiPeriodStatistics();
+  });
 
   function toggleView() {
     showAverage = !showAverage;
@@ -28,11 +35,16 @@
     </Button>
   {/snippet}
 
-  {#await statsPromise}
+  {#if !statsPromise}
     <div class="flex items-center justify-center py-4">
       <div class="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
     </div>
-  {:then stats}
+  {:else}
+    {#await statsPromise}
+      <div class="flex items-center justify-center py-4">
+        <div class="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+      </div>
+    {:then stats}
     {@const todayDelivery = stats?.lastDay?.insulinDelivery}
     {@const avgDelivery = stats?.last90Days?.insulinDelivery}
     {@const todayCarbs = stats?.lastDay?.treatmentSummary?.totals?.food?.carbs ?? 0}
@@ -123,10 +135,11 @@
         <p class="text-xs">{showAverage ? "No data for 90-day average" : "No data today"}</p>
       </div>
     {/if}
-  {:catch err}
-    <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
-      <p class="text-xs">Failed to load data</p>
-      <p class="text-xs text-destructive">{err?.message ?? JSON.stringify(err)}</p>
-    </div>
-  {/await}
+    {:catch err}
+      <div class="flex flex-col items-center justify-center text-muted-foreground py-4">
+        <p class="text-xs">Failed to load data</p>
+        <p class="text-xs text-destructive">{err?.message ?? JSON.stringify(err)}</p>
+      </div>
+    {/await}
+  {/if}
 </WidgetCard>

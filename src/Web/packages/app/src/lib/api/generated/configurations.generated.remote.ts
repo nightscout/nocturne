@@ -40,7 +40,7 @@ export const saveConfiguration = command(z.object({ connectorName: z.string(), r
     return result;
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in configuration.saveConfiguration:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -62,7 +62,7 @@ export const deleteConfiguration = command(z.string(), async (connectorName) => 
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in configuration.deleteConfiguration:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -122,7 +122,7 @@ export const saveSecrets = command(z.object({ connectorName: z.string(), request
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in configuration.saveSecrets:', err);
     const body = (err as any)?.body ?? (err as any)?.response;
@@ -160,7 +160,7 @@ export const setActive = command(z.object({ connectorName: z.string(), request: 
     return { success: true };
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { throw error(401, 'Unauthorized'); }
     if (status === 403) throw error(403, 'Forbidden');
     console.error('Error in configuration.setActive:', err);
     const body = (err as any)?.body ?? (err as any)?.response;

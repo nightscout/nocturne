@@ -36,10 +36,10 @@
   import ArmedStatusStrip from "$lib/components/alerts/ArmedStatusStrip.svelte";
 
   // ---- Queries ----
-  const rulesQuery = $derived(getRules());
-  const activeAlertsQuery = $derived(getActiveAlerts());
-  const historyQuery = $derived(getAlertHistory({ page: 1, pageSize: 50 }));
-  const dndQuery = $derived(getTenantAlertSettings());
+  const rulesQuery = getRules();
+  const activeAlertsQuery = getActiveAlerts();
+  const historyQuery = getAlertHistory({ page: 1, pageSize: 50 });
+  const dndQuery = getTenantAlertSettings();
 
   // ---- Mutation state ----
   let togglingRuleId = $state<string | null>(null);

@@ -7,7 +7,16 @@
     formatGlucoseDelta,
   } from "$lib/utils/formatting";
   import { ArrowUp } from "lucide-svelte";
-  import GlucoseChartCard from "$lib/components/dashboard/glucose-chart/GlucoseChartCard.svelte";
+  import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
+  import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
+  import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
+  import BasalTrack from "$lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte";
+  import IobCobTrack from "$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte";
+  import ThresholdRules from "$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
+  import PredictionTrack from "$lib/components/dashboard/glucose-chart/tracks/PredictionTrack.svelte";
+  import DeviceEventMarkers from "$lib/components/dashboard/glucose-chart/markers/DeviceEventMarkers.svelte";
+  import TrackerMarkers from "$lib/components/dashboard/glucose-chart/markers/TrackerMarkers.svelte";
+  import ChartTooltip from "$lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
   import TrackerCategoryIcon from "$lib/components/icons/TrackerCategoryIcon.svelte";
   import type {
     ClockFaceConfig,
@@ -15,7 +24,7 @@
     ClockElementStyle,
     TrackerDefinitionDto,
   } from "$lib/api";
-  import { getDefinitions } from "$api";
+  import { getDefinitions } from "$api/generated/trackers.generated.remote";
 
   interface Props {
     config: ClockFaceConfig;
@@ -270,21 +279,35 @@
   <!-- Background chart -->
   {#if backgroundChart}
     {#if showCharts}
+      {@const bgChartEngine = createChartDataEngine({
+        focusHours: backgroundChart.hours || 3,
+        enablePredictions: backgroundChart.chartConfig?.showPredictions ?? false,
+      })}
       <div class="absolute inset-0 z-0">
-        <GlucoseChartCard
-          compact={true}
-          heightClass="h-full"
-          defaultFocusHours={backgroundChart.hours || 3}
-          initialShowIob={backgroundChart.chartConfig?.showIob ?? false}
-          initialShowCob={backgroundChart.chartConfig?.showCob ?? false}
-          initialShowBasal={backgroundChart.chartConfig?.showBasal ?? false}
-          initialShowBolus={backgroundChart.chartConfig?.showBolus ?? true}
-          initialShowCarbs={backgroundChart.chartConfig?.showCarbs ?? true}
-          initialShowDeviceEvents={backgroundChart.chartConfig?.showDeviceEvents ?? false}
-          initialShowAlarms={backgroundChart.chartConfig?.showAlarms ?? false}
-          initialShowScheduledTrackers={backgroundChart.chartConfig?.showTrackers ?? false}
-          showPredictions={backgroundChart.chartConfig?.showPredictions ?? false}
-        />
+        <GlucoseChartShell engine={bgChartEngine} heightClass="h-full">
+          {#snippet tracks(_ctx)}
+            {#if backgroundChart.chartConfig?.showBasal ?? false}
+              <BasalTrack />
+            {/if}
+            <ThresholdRules />
+            <GlucoseTrack />
+            {#if backgroundChart.chartConfig?.showPredictions ?? false}
+              <PredictionTrack />
+            {/if}
+            {#if (backgroundChart.chartConfig?.showBolus ?? true) || (backgroundChart.chartConfig?.showCarbs ?? true) || (backgroundChart.chartConfig?.showIob ?? false) || (backgroundChart.chartConfig?.showCob ?? false)}
+              <IobCobTrack />
+            {/if}
+            {#if backgroundChart.chartConfig?.showDeviceEvents ?? false}
+              <DeviceEventMarkers />
+            {/if}
+            {#if backgroundChart.chartConfig?.showTrackers ?? false}
+              <TrackerMarkers />
+            {/if}
+          {/snippet}
+          {#snippet overlays(_ctx)}
+            <ChartTooltip />
+          {/snippet}
+        </GlucoseChartShell>
       </div>
     {:else}
       <!-- Background chart placeholder -->
@@ -314,24 +337,38 @@
           {#if !(element.type === "chart" && element.chartConfig?.asBackground)}
             {#if element.type === "chart"}
               {#if showCharts}
+                {@const inlineEngine = createChartDataEngine({
+                  focusHours: element.hours || 3,
+                  enablePredictions: element.chartConfig?.showPredictions ?? false,
+                })}
                 <div
                   class="overflow-hidden rounded"
                   style="width: {(element.width || 400) * scale}px; height: {(element.height || 200) * scale}px;"
                 >
-                  <GlucoseChartCard
-                    compact={true}
-                    heightClass="h-full"
-                    defaultFocusHours={element.hours || 3}
-                    initialShowIob={element.chartConfig?.showIob ?? false}
-                    initialShowCob={element.chartConfig?.showCob ?? false}
-                    initialShowBasal={element.chartConfig?.showBasal ?? false}
-                    initialShowBolus={element.chartConfig?.showBolus ?? true}
-                    initialShowCarbs={element.chartConfig?.showCarbs ?? true}
-                    initialShowDeviceEvents={element.chartConfig?.showDeviceEvents ?? false}
-                    initialShowAlarms={element.chartConfig?.showAlarms ?? false}
-                    initialShowScheduledTrackers={element.chartConfig?.showTrackers ?? false}
-                    showPredictions={element.chartConfig?.showPredictions ?? false}
-                  />
+                  <GlucoseChartShell engine={inlineEngine} heightClass="h-full">
+                    {#snippet tracks(_ctx)}
+                      {#if element.chartConfig?.showBasal ?? false}
+                        <BasalTrack />
+                      {/if}
+                      <ThresholdRules />
+                      <GlucoseTrack />
+                      {#if element.chartConfig?.showPredictions ?? false}
+                        <PredictionTrack />
+                      {/if}
+                      {#if (element.chartConfig?.showBolus ?? true) || (element.chartConfig?.showCarbs ?? true) || (element.chartConfig?.showIob ?? false) || (element.chartConfig?.showCob ?? false)}
+                        <IobCobTrack />
+                      {/if}
+                      {#if element.chartConfig?.showDeviceEvents ?? false}
+                        <DeviceEventMarkers />
+                      {/if}
+                      {#if element.chartConfig?.showTrackers ?? false}
+                        <TrackerMarkers />
+                      {/if}
+                    {/snippet}
+                    {#snippet overlays(_ctx)}
+                      <ChartTooltip />
+                    {/snippet}
+                  </GlucoseChartShell>
                 </div>
               {:else}
                 <!-- Inline chart placeholder -->
