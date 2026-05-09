@@ -99,6 +99,11 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
                 await SyncCarbIntakeAsync(package.Status, result, config, cancellationToken);
             }
         }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Twiist sync was canceled");
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during Twiist sync");
