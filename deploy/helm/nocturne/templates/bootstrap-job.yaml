@@ -1,9 +1,14 @@
 {{- if .Values.bootstrap.enabled -}}
+{{- $bundled := .Values.postgresql.enabled -}}
+{{- if and $bundled .Values.externalDatabase.host -}}
+{{- fail "Set EITHER postgresql.enabled OR externalDatabase.host, not both" -}}
+{{- end -}}
+{{- if not $bundled -}}
 {{- if not .Values.bootstrap.adminSecret.existingSecret -}}
 {{- fail "bootstrap.adminSecret.existingSecret must be set when bootstrap.enabled=true (or set bootstrap.enabled=false to run bootstrap-roles.sql manually)" -}}
 {{- end -}}
 {{- if not .Values.externalDatabase.host -}}
-{{- fail "externalDatabase.host is required" -}}
+{{- fail "externalDatabase.host is required when postgresql.enabled=false" -}}
 {{- end -}}
 {{- if not .Values.externalDatabase.appSecret.existingSecret -}}
 {{- fail "externalDatabase.appSecret.existingSecret is required" -}}
@@ -14,14 +19,23 @@
 {{- if not .Values.externalDatabase.webSecret.existingSecret -}}
 {{- fail "externalDatabase.webSecret.existingSecret is required (web role is created even if bots are disabled)" -}}
 {{- end -}}
+{{- end -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ include "nocturne.bootstrap.fullname" . }}
   labels: {{- include "nocturne.labels" . | nindent 4 }}
   annotations:
+    {{- if $bundled }}
+    # Bundled mode: postgres is created as part of the main release, so the
+    # bootstrap must run AFTER. API/Web have a wait-for-postgres initContainer
+    # that gates on this Job completing.
+    "helm.sh/hook": post-install,post-upgrade
+    {{- else }}
+    # External mode: DB is already up; run before the API/Web Deployments.
     "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "-10"
+    {{- end }}
+    "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: {{ .Values.bootstrap.backoffLimit }}
@@ -44,11 +58,20 @@ spec:
           command: ["/bin/sh", "/scripts/run.sh"]
           env:
             - name: PGHOST
-              value: {{ .Values.externalDatabase.host | quote }}
+              value: {{ include "nocturne.db.host" . | quote }}
             - name: PGPORT
-              value: {{ .Values.externalDatabase.port | quote }}
+              value: {{ include "nocturne.db.port" . | quote }}
             - name: PGDATABASE
-              value: {{ .Values.externalDatabase.database | quote }}
+              value: {{ include "nocturne.db.database" . | quote }}
+            {{- if $bundled }}
+            - name: PGUSER
+              value: "postgres"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.bundledPostgresSuperSecret" . }}
+                  key: {{ include "nocturne.bundledPostgresSuperKey" . }}
+            {{- else }}
             - name: PGUSER
               {{- if .Values.bootstrap.adminSecret.existingSecretUsernameKey }}
               valueFrom:
@@ -64,21 +87,22 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.bootstrap.adminSecret.existingSecret }}
                   key: {{ .Values.bootstrap.adminSecret.existingSecretPasswordKey }}
+            {{- end }}
             - name: MIGRATOR_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.externalDatabase.migratorSecret.existingSecret }}
-                  key: {{ .Values.externalDatabase.migratorSecret.existingSecretKey }}
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "migrator") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "migrator") }}
             - name: APP_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.externalDatabase.appSecret.existingSecret }}
-                  key: {{ .Values.externalDatabase.appSecret.existingSecretKey }}
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "app") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "app") }}
             - name: WEB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.externalDatabase.webSecret.existingSecret }}
-                  key: {{ .Values.externalDatabase.webSecret.existingSecretKey }}
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "web") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "web") }}
           volumeMounts:
             - name: scripts
               mountPath: /scripts

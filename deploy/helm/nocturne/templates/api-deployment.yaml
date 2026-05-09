@@ -23,6 +23,45 @@ spec:
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.postgresql.enabled }}
+      # Bundled mode: gate API startup on the bootstrap Job creating
+      # nocturne_app. Loops pg_isready, then a strict psql -U nocturne_app
+      # probe (when waitForBootstrap=true) so we don't proceed until the
+      # role exists.
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ include "nocturne.bootstrap.image" . }}
+          imagePullPolicy: {{ .Values.bootstrap.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              until pg_isready -h "$PGHOST" -p "$PGPORT" -U postgres; do
+                echo "Waiting for postgres at $PGHOST:$PGPORT ..."; sleep 2
+              done
+              {{- if .Values.postgresql.waitForBootstrap }}
+              until PGPASSWORD="$APP_PASSWORD" psql -h "$PGHOST" -p "$PGPORT" \
+                  -U nocturne_app -d "$PGDATABASE" -c 'SELECT 1' >/dev/null 2>&1; do
+                echo "Waiting for nocturne_app role + database ..."; sleep 2
+              done
+              echo "Postgres ready."
+              {{- end }}
+          env:
+            - name: PGHOST
+              value: {{ include "nocturne.db.host" . | quote }}
+            - name: PGPORT
+              value: {{ include "nocturne.db.port" . | quote }}
+            - name: PGDATABASE
+              value: {{ include "nocturne.db.database" . | quote }}
+            {{- if .Values.postgresql.waitForBootstrap }}
+            - name: APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "app") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "app") }}
+            {{- end }}
+      {{- end }}
       containers:
         - name: api
           image: {{ include "nocturne.api.image" . }}
@@ -50,26 +89,26 @@ spec:
                 secretKeyRef:
                   name: {{ include "nocturne.instanceKeySecretName" . }}
                   key: {{ include "nocturne.instanceKeySecretKey" . }}
-            # Database connection — assembled from externalDatabase.* values plus
-            # the password mounted from the per-role Secret.
+            # Database connection — host/port/name/sslMode resolve via helpers
+            # (bundled or external mode); password mounted from per-role Secret.
             - name: __DB_HOST
-              value: {{ .Values.externalDatabase.host | quote }}
+              value: {{ include "nocturne.db.host" . | quote }}
             - name: __DB_PORT
-              value: {{ .Values.externalDatabase.port | quote }}
+              value: {{ include "nocturne.db.port" . | quote }}
             - name: __DB_NAME
-              value: {{ .Values.externalDatabase.database | quote }}
+              value: {{ include "nocturne.db.database" . | quote }}
             - name: __DB_SSLMODE
-              value: {{ .Values.externalDatabase.sslMode | quote }}
+              value: {{ include "nocturne.db.sslMode" . | quote }}
             - name: __DB_APP_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.externalDatabase.appSecret.existingSecret }}
-                  key: {{ .Values.externalDatabase.appSecret.existingSecretKey }}
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "app") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "app") }}
             - name: __DB_MIGRATOR_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.externalDatabase.migratorSecret.existingSecret }}
-                  key: {{ .Values.externalDatabase.migratorSecret.existingSecretKey }}
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "migrator") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "migrator") }}
             # .NET reads ConnectionStrings:<key> from env vars named
             # ConnectionStrings__<key>. The key contains a dash, which is fine
             # in env var names.

@@ -1,0 +1,19 @@
+# Bundled-Postgres quickstart: Bitnami subchart deploys an in-cluster
+# Postgres, the chart auto-generates the three Nocturne role passwords,
+# and a post-install Job runs bootstrap-roles.sql against it.
+
+baseUrl: https://nocturne.example.com
+
+instanceKey:
+  existingSecret: nocturne-instance-key
+
+postgresql:
+  enabled: true
+  primary:
+    persistence:
+      size: 5Gi
+
+ingress:
+  enabled: true
+  className: traefik
+  host: nocturne.example.com

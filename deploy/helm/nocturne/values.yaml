@@ -128,6 +128,58 @@ ingress:
     enabled: false
     secretName: ""              # existing TLS secret; cert-manager users add annotations above
 
+# Bundled Postgres via the Bitnami `postgresql` subchart.
+#
+# When enabled, the chart deploys an in-cluster PostgreSQL StatefulSet, a
+# chart-managed Secret holding all four passwords (postgres superuser plus
+# nocturne_app / nocturne_migrator / nocturne_web), and runs the existing
+# bootstrap-roles.sql as a post-install/post-upgrade hook against it. The API
+# Deployment gets a wait-for-postgres initContainer that blocks until the
+# nocturne_app role is reachable.
+#
+# DO NOT use bundled mode AND set externalDatabase.host — the chart will fail
+# the render. Toggle bundled→external in either direction is supported only
+# with `postgresql.uninstallAcknowledge: true` to avoid silent data loss.
+#
+# GitOps users (Argo CD / Flux): set `postgresql.auth.existingSecret` and
+# pre-create the Secret yourself. The default lookup-based password generation
+# is non-idempotent under `helm template | kubectl apply`.
+postgresql:
+  enabled: false
+  # When existingSecret is unset (default), Bitnami auto-generates its
+  # postgres-password into <release>-postgresql. The chart creates a
+  # separate Secret <release>-nocturne-db with the three Nocturne role
+  # passwords (app/migrator/web). To BYO all credentials, set
+  # existingSecret to a Secret containing both the Bitnami keys
+  # (postgres-password, password, replication-password) AND the three
+  # nocturne keys (app-password, migrator-password, web-password).
+  auth:
+    existingSecret: ""
+    secretKeys:
+      adminPasswordKey: postgres-password
+    database: nocturne
+    username: nocturne_bootstrap   # Bitnami creates this user but the chart does not use it
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+      # See `postgresql.persistence.retainOnUninstall` below
+      storageClass: ""
+  architecture: standalone
+  metrics:
+    enabled: false
+  # Annotate the PVC so `helm uninstall` does not delete it. Default keep —
+  # safer for a stateful database, surprises users who expect clean uninstall.
+  persistence:
+    retainOnUninstall: true
+  # Set to true to allow toggling postgresql.enabled in either direction —
+  # acknowledges that data on disk may be lost or stranded.
+  uninstallAcknowledge: false
+  # Strict ordering for the API initContainer: psql -U nocturne_app probe.
+  # Set to false to use only pg_isready (lighter, but pods may briefly
+  # CrashLoopBackOff until the bootstrap Job finishes).
+  waitForBootstrap: true
+
 # OpenTelemetry / observability.
 #
 # Nocturne's API uses Aspire ServiceDefaults' OTLP push exporter, gated on

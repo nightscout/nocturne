@@ -72,6 +72,30 @@ helm install nocturne ./deploy/helm/nocturne -f my-values.yaml
 
 Disable the bootstrap Job and run [`bootstrap-roles.sql`](https://github.com/nightscout/nocturne/blob/main/docs/postgres/bootstrap-roles.sql) yourself with whatever admin tooling your provider gives you. Then `bootstrap.enabled: false` in your values.
 
+## Bundled Postgres (quickstart, not for production)
+
+For evaluation or homelab use, the chart can deploy an in-cluster PostgreSQL via the [Bitnami `postgresql` subchart](https://github.com/bitnami/charts/tree/main/bitnami/postgresql):
+
+```yaml
+postgresql:
+  enabled: true
+  primary:
+    persistence:
+      size: 10Gi
+```
+
+What happens:
+- Bitnami creates a `<release>-postgresql` StatefulSet, Service, and an auto-generated auth Secret holding `postgres-password`.
+- The chart creates `<release>-nocturne-db` containing the three Nocturne role passwords (`app-password`, `migrator-password`, `web-password`), generated via Helm's `lookup` so they remain stable across `helm upgrade`.
+- After install, a **post-install hook Job** runs `bootstrap-roles.sql` against the new Postgres using the postgres superuser password from Bitnami's Secret.
+- The API Deployment has a `wait-for-postgres` initContainer that loops `pg_isready` and then a strict `psql -U nocturne_app` probe until the bootstrap Job completes.
+
+Caveats:
+- **Not recommended for production.** Single replica, no backups, no managed failover. Use a managed Postgres or a Postgres operator (CloudNativePG, Zalando) for serious deployments.
+- **`helm template | kubectl apply` is non-idempotent in bundled mode** because the password Secret uses `lookup`, which returns nothing during offline rendering and re-randomizes on every render. **GitOps users (Argo CD / Flux): pre-create your own Secret** with all three role passwords and set `postgresql.auth.existingSecret: <name>` (along with the Bitnami auth keys). See the [Open question](#open-question--gitops-byo-secret) section below.
+- **PVC retention.** `postgresql.persistence.retainOnUninstall: true` (default) keeps the PVC behind on `helm uninstall`. Set to `false` to delete with the release.
+- **Toggling `postgresql.enabled` in either direction** requires `postgresql.uninstallAcknowledge: true` to avoid silent data loss.
+
 ## Configuration
 
 The full set of configurable values is in [`values.yaml`](./values.yaml). Highlights:
@@ -144,7 +168,7 @@ The chart is intentionally minimal in v0. Planned for v1:
 - [x] HPA, PodDisruptionBudget toggles
 - [x] CI: `helm lint` + `kubeconform` + SHA256 drift check on `bootstrap-roles.sql`
 - [x] OTLP observability env wiring
-- [ ] Bundled-Postgres quickstart via Bitnami `postgresql` subchart with auto-bootstrap
+- [x] Bundled-Postgres quickstart via Bitnami `postgresql` subchart with auto-bootstrap
 - [ ] NetworkPolicy toggle
 - [ ] `values.schema.json` for editor autocomplete
 - [ ] Distribution: OCI publish to `oci://ghcr.io/nightscout/charts/nocturne`
@@ -156,3 +180,7 @@ The chart is intentionally minimal in v0. Planned for v1:
 - `containerSecurityContext.readOnlyRootFilesystem: false` — both containers may tolerate `true` but this hasn't been verified.
 - `bootstrap-roles.sql` lives in two places (`docs/postgres/` and `deploy/helm/nocturne/files/`). Drift is not yet enforced by CI.
 - The docstring in `docs/postgres/bootstrap-roles.sql` references env var names (`ConnectionStrings__NocturneDb`, `ConnectionStrings__NocturneDbMigrator`) that do not match the actual code (`ConnectionStrings__nocturne-postgres[-migrator]`). Documentation fix tracked separately.
+
+### Open question — GitOps BYO Secret
+
+When `postgresql.auth.existingSecret` is set, Bitnami expects keys `postgres-password`, `password`, `replication-password`. The chart additionally needs `app-password`, `migrator-password`, `web-password` for the three Nocturne roles. The current expectation is that a single Secret holds all six keys; this is not yet validated against a real Argo deployment.

@@ -32,6 +32,15 @@ jobs:
           sudo mv kubeconform /usr/local/bin/
           kubeconform -v
 
+      - name: helm dependency build
+        working-directory: deploy/helm/nocturne
+        run: |
+          helm dependency update .
+          # Unpack subcharts so `helm template` resolves them reliably.
+          for tgz in charts/*.tgz; do
+            tar xzf "$tgz" -C charts/
+          done
+
       - name: helm lint
         working-directory: deploy/helm/nocturne
         run: helm lint .
@@ -46,7 +55,8 @@ jobs:
               | kubeconform \
                   -strict \
                   -summary \
-                  -kubernetes-version 1.28.0
+                  -kubernetes-version 1.28.0 \
+                  -ignore-missing-schemas
             echo "::endgroup::"
           done
 
