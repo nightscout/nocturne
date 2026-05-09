@@ -6,7 +6,9 @@ metadata:
     {{- include "nocturne.labels" . | nindent 4 }}
     app.kubernetes.io/component: api
 spec:
+  {{- if not .Values.api.autoscaling.enabled }}
   replicas: {{ .Values.api.replicaCount }}
+  {{- end }}
   selector:
     matchLabels: {{- include "nocturne.api.selectorLabels" . | nindent 6 }}
   template:

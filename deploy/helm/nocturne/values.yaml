@@ -24,6 +24,16 @@ api:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 0   # 0 disables; otherwise e.g. 80
+  pdb:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: 0    # 0 disables; set when minAvailable is unset
 
 web:
   image:
@@ -39,6 +49,16 @@ web:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 0
+  pdb:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: 0
 
 # Public base URL the deployment is reachable at (e.g. https://nocturne.example.com).
 # Used by the API for OIDC redirects, invite links, and the BaseUrl config key.

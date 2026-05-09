@@ -1,0 +1,17 @@
+{{- if .Values.web.pdb.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "nocturne.web.fullname" . }}
+  labels:
+    {{- include "nocturne.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  {{- if and (gt (int .Values.web.pdb.maxUnavailable) 0) (eq (int .Values.web.pdb.minAvailable) 0) }}
+  maxUnavailable: {{ .Values.web.pdb.maxUnavailable }}
+  {{- else }}
+  minAvailable: {{ .Values.web.pdb.minAvailable }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "nocturne.web.selectorLabels" . | nindent 6 }}
+{{- end }}

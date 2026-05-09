@@ -1,0 +1,42 @@
+# HA-style configuration with autoscaling and PDBs.
+
+baseUrl: https://nocturne.example.com
+
+instanceKey:
+  existingSecret: nocturne-instance-key
+
+externalDatabase:
+  host: postgres.databases.svc.cluster.local
+  port: 5432
+  database: nocturne
+  appSecret:       { existingSecret: nocturne-db-app }
+  migratorSecret:  { existingSecret: nocturne-db-migrator }
+  webSecret:       { existingSecret: nocturne-db-web }
+
+bootstrap:
+  enabled: false      # assume already bootstrapped
+
+api:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: 80
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+web:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+ingress:
+  enabled: true
+  className: traefik
+  host: nocturne.example.com
