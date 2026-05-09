@@ -1,0 +1,125 @@
+# Default values for the Nocturne Helm chart.
+# This is v0 / alpha — external Postgres only, single-replica, opinionated defaults.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  registry: ghcr.io
+  # Set per-component below; these are shared defaults.
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+api:
+  image:
+    repository: nightscout/nocturne/nocturne-api
+    tag: ""              # defaults to .Chart.AppVersion
+  replicaCount: 1
+  containerPort: 8080    # .NET DefaultContainer default; matches HTTP_PORTS env below
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+web:
+  image:
+    repository: nightscout/nocturne/nocturne-web
+    tag: ""              # defaults to .Chart.AppVersion
+  replicaCount: 1
+  containerPort: 5173    # Dockerfile.web ENV PORT=5173
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Public base URL the deployment is reachable at (e.g. https://nocturne.example.com).
+# Used by the API for OIDC redirects, invite links, and the BaseUrl config key.
+# Also used as the web container's NOCTURNE_API_URL when ingress.enabled=true and
+# api.externalUrl is empty.
+baseUrl: ""
+
+# Shared instance key (HMAC for JWT signing, shared between API and Web).
+# Provide either an existing Secret OR a literal value (NOT both).
+instanceKey:
+  existingSecret: ""           # name of a Secret containing key `instance-key`
+  existingSecretKey: instance-key
+  value: ""                    # literal — only for quick local trials; prefer existingSecret
+
+# Postgres connection details. Bring-your-own only in v0.
+# Three roles are required (see https://github.com/nightscout/nocturne/blob/main/docs/postgres/bootstrap-roles.sql);
+# the chart's bootstrap Job (below) creates them for you.
+externalDatabase:
+  host: ""                     # e.g. postgres.databases.svc.cluster.local
+  port: 5432
+  database: nocturne
+  sslMode: prefer              # prefer | require | disable
+  # Names of existing Secrets containing each role's password under key `password`
+  # (override `existingSecretKey` if your Secret uses a different key).
+  appSecret:
+    existingSecret: ""
+    existingSecretKey: password
+  migratorSecret:
+    existingSecret: ""
+    existingSecretKey: password
+  webSecret:
+    existingSecret: ""         # optional in v0 (web only needs DB if bot adapters are used)
+    existingSecretKey: password
+
+# Bootstrap Job: creates the three Postgres roles before API/Web start.
+# Runs as a Helm pre-install/pre-upgrade hook. Idempotent — safe to re-run.
+# Disable if you cannot grant superuser/CREATEROLE to a Kubernetes secret
+# (managed Postgres) and prefer to run the SQL yourself.
+bootstrap:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: postgres
+    tag: "17-alpine"
+    pullPolicy: IfNotPresent
+  # Secret with admin credentials. Required when bootstrap.enabled=true.
+  # Must contain key `password`. Username defaults to `postgres` unless overridden.
+  adminSecret:
+    existingSecret: ""
+    existingSecretUsernameKey: username       # optional; falls back to bootstrap.adminUser
+    existingSecretPasswordKey: password
+  adminUser: postgres
+  resources: {}
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: ""                      # required when enabled=true; defaults to baseUrl host
+  # By default, only the web service is exposed at the host. The API is reached
+  # internally via cluster DNS. Set api.externalPath to expose API at /api etc.
+  api:
+    externalPath: ""            # e.g. "/api" to also expose API on the same host
+  tls:
+    enabled: false
+    secretName: ""              # existing TLS secret; cert-manager users add annotations above
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: false   # API may write to temp paths; tighten in a later iteration

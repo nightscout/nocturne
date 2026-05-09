@@ -1,0 +1,92 @@
+{{- if .Values.bootstrap.enabled -}}
+{{- if not .Values.bootstrap.adminSecret.existingSecret -}}
+{{- fail "bootstrap.adminSecret.existingSecret must be set when bootstrap.enabled=true (or set bootstrap.enabled=false to run bootstrap-roles.sql manually)" -}}
+{{- end -}}
+{{- if not .Values.externalDatabase.host -}}
+{{- fail "externalDatabase.host is required" -}}
+{{- end -}}
+{{- if not .Values.externalDatabase.appSecret.existingSecret -}}
+{{- fail "externalDatabase.appSecret.existingSecret is required" -}}
+{{- end -}}
+{{- if not .Values.externalDatabase.migratorSecret.existingSecret -}}
+{{- fail "externalDatabase.migratorSecret.existingSecret is required" -}}
+{{- end -}}
+{{- if not .Values.externalDatabase.webSecret.existingSecret -}}
+{{- fail "externalDatabase.webSecret.existingSecret is required (web role is created even if bots are disabled)" -}}
+{{- end -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nocturne.bootstrap.fullname" . }}
+  labels: {{- include "nocturne.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.bootstrap.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.bootstrap.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels: {{- include "nocturne.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "nocturne.serviceAccountName" . }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bootstrap
+          image: {{ include "nocturne.bootstrap.image" . }}
+          imagePullPolicy: {{ .Values.bootstrap.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command: ["/bin/sh", "/scripts/run.sh"]
+          env:
+            - name: PGHOST
+              value: {{ .Values.externalDatabase.host | quote }}
+            - name: PGPORT
+              value: {{ .Values.externalDatabase.port | quote }}
+            - name: PGDATABASE
+              value: {{ .Values.externalDatabase.database | quote }}
+            - name: PGUSER
+              {{- if .Values.bootstrap.adminSecret.existingSecretUsernameKey }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.bootstrap.adminSecret.existingSecret }}
+                  key: {{ .Values.bootstrap.adminSecret.existingSecretUsernameKey }}
+                  optional: true
+              {{- else }}
+              value: {{ .Values.bootstrap.adminUser | quote }}
+              {{- end }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.bootstrap.adminSecret.existingSecret }}
+                  key: {{ .Values.bootstrap.adminSecret.existingSecretPasswordKey }}
+            - name: MIGRATOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.migratorSecret.existingSecret }}
+                  key: {{ .Values.externalDatabase.migratorSecret.existingSecretKey }}
+            - name: APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.appSecret.existingSecret }}
+                  key: {{ .Values.externalDatabase.appSecret.existingSecretKey }}
+            - name: WEB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.webSecret.existingSecret }}
+                  key: {{ .Values.externalDatabase.webSecret.existingSecretKey }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          resources: {{- toYaml .Values.bootstrap.resources | nindent 12 }}
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "nocturne.bootstrap.fullname" . }}
+            defaultMode: 0555
+{{- end }}

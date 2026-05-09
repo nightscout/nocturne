@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nocturne.api.fullname" . }}
+  labels:
+    {{- include "nocturne.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels: {{- include "nocturne.api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "nocturne.api.selectorLabels" . | nindent 8 }}
+      {{- with .Values.api.podAnnotations }}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "nocturne.serviceAccountName" . }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: api
+          image: {{ include "nocturne.api.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.containerPort }}
+              protocol: TCP
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            - name: ASPNETCORE_FORWARDEDHEADERS_ENABLED
+              value: "true"
+            - name: HTTP_PORTS
+              value: {{ .Values.api.containerPort | quote }}
+            - name: ASPNETCORE_URLS
+              value: "http://+:{{ .Values.api.containerPort }}"
+            {{- if .Values.baseUrl }}
+            - name: BaseUrl
+              value: {{ .Values.baseUrl | quote }}
+            {{- end }}
+            - name: INSTANCE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.instanceKeySecretName" . }}
+                  key: {{ include "nocturne.instanceKeySecretKey" . }}
+            # Database connection — assembled from externalDatabase.* values plus
+            # the password mounted from the per-role Secret.
+            - name: __DB_HOST
+              value: {{ .Values.externalDatabase.host | quote }}
+            - name: __DB_PORT
+              value: {{ .Values.externalDatabase.port | quote }}
+            - name: __DB_NAME
+              value: {{ .Values.externalDatabase.database | quote }}
+            - name: __DB_SSLMODE
+              value: {{ .Values.externalDatabase.sslMode | quote }}
+            - name: __DB_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.appSecret.existingSecret }}
+                  key: {{ .Values.externalDatabase.appSecret.existingSecretKey }}
+            - name: __DB_MIGRATOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.migratorSecret.existingSecret }}
+                  key: {{ .Values.externalDatabase.migratorSecret.existingSecretKey }}
+            # .NET reads ConnectionStrings:<key> from env vars named
+            # ConnectionStrings__<key>. The key contains a dash, which is fine
+            # in env var names.
+            - name: ConnectionStrings__nocturne-postgres
+              value: "Host=$(__DB_HOST);Port=$(__DB_PORT);Database=$(__DB_NAME);Username=nocturne_app;Password=$(__DB_APP_PASSWORD);SslMode=$(__DB_SSLMODE)"
+            - name: ConnectionStrings__nocturne-postgres-migrator
+              value: "Host=$(__DB_HOST);Port=$(__DB_PORT);Database=$(__DB_NAME);Username=nocturne_migrator;Password=$(__DB_MIGRATOR_PASSWORD);SslMode=$(__DB_SSLMODE)"
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}

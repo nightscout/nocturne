@@ -1,0 +1,28 @@
+# Example values for `helm template` smoke testing.
+# Not used at install time.
+
+baseUrl: https://nocturne.example.com
+
+instanceKey:
+  existingSecret: nocturne-instance-key
+
+externalDatabase:
+  host: postgres.databases.svc.cluster.local
+  port: 5432
+  database: nocturne
+  appSecret:
+    existingSecret: nocturne-db-app
+  migratorSecret:
+    existingSecret: nocturne-db-migrator
+  webSecret:
+    existingSecret: nocturne-db-web
+
+bootstrap:
+  enabled: true
+  adminSecret:
+    existingSecret: nocturne-db-admin
+
+ingress:
+  enabled: true
+  className: traefik
+  host: nocturne.example.com
