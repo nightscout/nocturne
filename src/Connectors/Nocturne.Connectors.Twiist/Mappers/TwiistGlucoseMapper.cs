@@ -75,7 +75,7 @@ public class TwiistGlucoseMapper(ILogger logger)
                 ModifiedAt = now
             };
         }
-        catch (Exception ex)
+        catch (ArgumentException ex)
         {
             _logger.LogWarning(ex, "Error converting Twiist glucose record at {Timestamp}", record.Timestamp);
             return null;
