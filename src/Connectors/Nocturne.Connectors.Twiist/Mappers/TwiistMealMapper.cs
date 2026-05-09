@@ -52,7 +52,7 @@ public class TwiistMealMapper(ILogger logger)
                 ModifiedAt = now
             };
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException)
         {
             _logger.LogWarning(ex, "Error converting Twiist meal at {Date}", meal.StartDate);
             return null;
