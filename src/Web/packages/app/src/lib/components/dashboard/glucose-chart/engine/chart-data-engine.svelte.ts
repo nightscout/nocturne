@@ -486,6 +486,10 @@ export function createChartDataEngine(
   });
 
   // ---- Glucose data (merged with realtime) ----
+  // Dedupe by timestamp: server data wins on collision, realtime fills gaps.
+  // A keyed {#each} downstream requires a unique key per point, so the same
+  // mills value must never appear twice — even if base or realtimeStore
+  // emit duplicates.
   const glucoseData = $derived.by(() => {
     const base = serverChartData?.glucoseData ?? [];
     if (!serverChartData) return base as GlucosePoint[];
@@ -493,29 +497,31 @@ export function createChartDataEngine(
     const thresholds = serverChartData.thresholds;
     const fromMs = fullDataRange.from.getTime();
     const toMs = fullDataRange.to.getTime();
-    const existingTimes = new Set(base.map((p) => p.time.getTime()));
 
-    const realtimePoints: GlucosePoint[] = realtimeStore.entries
-      .filter(
-        (e) =>
-          e.type === "sgv" &&
-          e.mills != null &&
-          e.sgv != null &&
-          e.mills >= fromMs &&
-          e.mills <= toMs &&
-          !existingTimes.has(e.mills)
-      )
-      .map((e) => ({
-        time: new Date(e.mills!),
-        sgv: e.sgv!,
+    const byMills = new Map<number, GlucosePoint>();
+    for (const p of base) byMills.set(p.time.getTime(), p);
+
+    for (const e of realtimeStore.entries) {
+      if (
+        e.type !== "sgv" ||
+        e.mills == null ||
+        e.sgv == null ||
+        e.mills < fromMs ||
+        e.mills > toMs ||
+        byMills.has(e.mills)
+      ) {
+        continue;
+      }
+      byMills.set(e.mills, {
+        time: new Date(e.mills),
+        sgv: e.sgv,
         direction: e.direction,
         dataSource: e.data_source,
-        color: getGlucoseColor(e.sgv!, thresholds),
-      }));
+        color: getGlucoseColor(e.sgv, thresholds),
+      });
+    }
 
-    if (realtimePoints.length === 0) return base as GlucosePoint[];
-
-    return [...base, ...realtimePoints].sort(
+    return [...byMills.values()].sort(
       (a, b) => a.time.getTime() - b.time.getTime()
     ) as GlucosePoint[];
   });

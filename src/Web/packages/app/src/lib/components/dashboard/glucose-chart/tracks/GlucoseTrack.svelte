@@ -161,7 +161,7 @@
   {/if}
 
   {#if effectiveShowPoints}
-    {#each glucoseData as point (point.time)}
+    {#each glucoseData as point (point.time.getTime())}
       <Points
         data={[point]}
         x={(d) => d.time}
