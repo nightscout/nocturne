@@ -86,16 +86,67 @@ The full set of configurable values is in [`values.yaml`](./values.yaml). Highli
 | `ingress.enabled` / `.host` / `.className` / `.tls` | Single-host ingress fronting the web service. Optional `ingress.api.externalPath` exposes the API on the same host. |
 | `api.replicaCount` / `web.replicaCount` | Replica counts (default 1 each). HPA support not yet wired. |
 
+## Observability
+
+Nocturne's API uses Aspire ServiceDefaults' OpenTelemetry plumbing and exports metrics, traces, and logs over **OTLP push** when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. There is no Prometheus `/metrics` endpoint, so direct scrape is not supported.
+
+The web container has no OpenTelemetry SDK and is intentionally not instrumented.
+
+### Three scenarios
+
+**1. You already run an OTLP collector.** Point the chart at it:
+
+```yaml
+observability:
+  otlp:
+    enabled: true
+    endpoint: http://otel-collector.observability.svc.cluster.local:4317
+    protocol: grpc       # grpc (default, port 4317) or http/protobuf (port 4318)
+```
+
+If the collector requires auth (e.g. SaaS like Grafana Cloud, Honeycomb), put headers in a Secret and reference it:
+
+```bash
+kubectl create secret generic nocturne-otel-headers \
+  --from-literal=headers='x-api-key=...,x-tenant-id=...'
+```
+
+```yaml
+observability:
+  otlp:
+    enabled: true
+    endpoint: https://otlp.example.com:4317
+    headersSecretRef: { name: nocturne-otel-headers, key: headers }
+```
+
+**2. You only run Prometheus + Grafana, no OTLP.** Deploy the [OpenTelemetry Collector](https://github.com/open-telemetry/opentelemetry-collector) with an `otlp` receiver and a `prometheus` (scrape target) or `prometheusremotewrite` exporter. Then point the chart at the collector as in scenario 1. The chart does not bundle a collector.
+
+**3. Nothing.** Default. `observability.otlp.enabled: false` registers no exporter; in-process telemetry is collected and dropped with negligible overhead.
+
+### Resource attributes
+
+The chart automatically sets:
+- `service.name` → `<release>-nocturne-api` (override via `observability.otlp.serviceName`)
+- `service.version` → image tag
+- `k8s.namespace.name`, `k8s.pod.name` → via downward API
+
+Add custom attributes via `observability.otlp.resourceAttributes` (a map merged into `OTEL_RESOURCE_ATTRIBUTES`).
+
+### Reserved keys
+
+`observability.prometheus.serviceMonitor.enabled` is reserved and currently emits nothing — it will become functional if upstream Nocturne adds a `/metrics` endpoint. No `PrometheusRule` or Grafana dashboard ConfigMap is shipped because there are no stable scrape-derived metric names yet.
+
 ## Roadmap
 
 The chart is intentionally minimal in v0. Planned for v1:
 
-- [ ] README + NOTES.txt (this commit)
-- [ ] HPA, PodDisruptionBudget, NetworkPolicy toggles
-- [ ] Prometheus ServiceMonitor toggle
+- [x] README + NOTES.txt
+- [x] HPA, PodDisruptionBudget toggles
+- [x] CI: `helm lint` + `kubeconform` + SHA256 drift check on `bootstrap-roles.sql`
+- [x] OTLP observability env wiring
 - [ ] Bundled-Postgres quickstart via Bitnami `postgresql` subchart with auto-bootstrap
+- [ ] NetworkPolicy toggle
 - [ ] `values.schema.json` for editor autocomplete
-- [ ] CI: `helm lint` + `kubeconform` + drift check between `files/bootstrap-roles.sql` and `docs/postgres/bootstrap-roles.sql`
 - [ ] Distribution: OCI publish to `oci://ghcr.io/nightscout/charts/nocturne`
 
 ## Known limitations / things to verify

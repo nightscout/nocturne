@@ -128,6 +128,37 @@ ingress:
     enabled: false
     secretName: ""              # existing TLS secret; cert-manager users add annotations above
 
+# OpenTelemetry / observability.
+#
+# Nocturne's API uses Aspire ServiceDefaults' OTLP push exporter, gated on
+# OTEL_EXPORTER_OTLP_ENDPOINT. There is no Prometheus /metrics endpoint —
+# scrape-based monitoring is not supported until upstream adds it. To use
+# Prometheus + Grafana, run an OpenTelemetry Collector with an `otlp` receiver
+# and a `prometheus` / `prometheusremotewrite` exporter; point the chart's
+# observability.otlp.endpoint at the collector.
+#
+# The web container has no OpenTelemetry SDK and is not instrumented here.
+observability:
+  otlp:
+    enabled: false
+    endpoint: ""                # e.g. http://otel-collector.observability.svc:4317
+    protocol: grpc              # grpc | http/protobuf
+    serviceName: ""             # default: <release>-nocturne-api
+    # Extra OTEL_RESOURCE_ATTRIBUTES merged with chart-injected k8s.* attrs
+    resourceAttributes: {}      # e.g. { deployment.environment: production }
+    # Pull OTEL_EXPORTER_OTLP_HEADERS from a Secret (e.g. for collector auth tokens)
+    headersSecretRef:
+      name: ""
+      key: headers
+    # Pass-through extra OTEL_* env vars (e.g. OTEL_EXPORTER_OTLP_INSECURE,
+    # OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_LOG_LEVEL, etc.)
+    extraEnv: {}
+  prometheus:
+    serviceMonitor:
+      # Reserved — does not currently render anything. Will activate when
+      # upstream Nocturne exposes a /metrics endpoint.
+      enabled: false
+
 serviceAccount:
   create: true
   name: ""

@@ -1,0 +1,28 @@
+# OTLP-enabled configuration. Pointed at an in-cluster otel-collector.
+
+baseUrl: https://nocturne.example.com
+
+instanceKey:
+  existingSecret: nocturne-instance-key
+
+externalDatabase:
+  host: postgres.databases.svc.cluster.local
+  appSecret:       { existingSecret: nocturne-db-app }
+  migratorSecret:  { existingSecret: nocturne-db-migrator }
+  webSecret:       { existingSecret: nocturne-db-web }
+
+bootstrap:
+  enabled: false
+
+observability:
+  otlp:
+    enabled: true
+    endpoint: http://otel-collector.observability.svc.cluster.local:4317
+    protocol: grpc
+    resourceAttributes:
+      deployment.environment: production
+    headersSecretRef:
+      name: nocturne-otel-headers
+      key: headers
+    extraEnv:
+      OTEL_LOG_LEVEL: info

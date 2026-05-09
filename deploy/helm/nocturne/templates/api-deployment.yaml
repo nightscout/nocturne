@@ -77,6 +77,7 @@ spec:
               value: "Host=$(__DB_HOST);Port=$(__DB_PORT);Database=$(__DB_NAME);Username=nocturne_app;Password=$(__DB_APP_PASSWORD);SslMode=$(__DB_SSLMODE)"
             - name: ConnectionStrings__nocturne-postgres-migrator
               value: "Host=$(__DB_HOST);Port=$(__DB_PORT);Database=$(__DB_NAME);Username=nocturne_migrator;Password=$(__DB_MIGRATOR_PASSWORD);SslMode=$(__DB_SSLMODE)"
+            {{- include "nocturne.observability.api.env" . | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /alive
