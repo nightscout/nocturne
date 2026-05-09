@@ -77,6 +77,11 @@ public class DataSourceService : IDataSourceService
             .Select(g => new { Device = g.Key!, LastMills = new DateTimeOffset(g.Max(ds => ds.Timestamp), TimeSpan.Zero).ToUnixTimeMilliseconds() })
             .ToListAsync(cancellationToken);
 
+        // Build a lookup of connector stats providers keyed by DataSourceId
+        var connectorProviders = ConnectorMetadataService.GetAll()
+            .Where(c => !string.IsNullOrEmpty(c.DataSourceId))
+            .ToDictionary(c => c.DataSourceId, c => c, StringComparer.OrdinalIgnoreCase);
+
         var dataSources = new List<DataSourceInfo>();
 
         foreach (var device in entryDevices)
@@ -95,15 +100,29 @@ public class DataSourceService : IDataSourceService
                 info.LastSeen = DateTimeOffset.FromUnixTimeMilliseconds(dsDevice.LastMills);
             }
 
-            // Calculate status
-            var minutesSinceLast = (int)(now - info.LastSeen.Value).TotalMinutes;
-            info.MinutesSinceLastData = minutesSinceLast;
-            info.Status = minutesSinceLast switch
+            // If this device belongs to a server connector with a custom stats provider,
+            // let it customize the displayed stats (total entries, last seen, status thresholds).
+            // Connectors without a custom provider use the default glucose-only behavior.
+            var dataSourceId = device.DataSource ?? device.Device;
+            if (dataSourceId != null
+                && connectorProviders.TryGetValue(dataSourceId, out var connectorMeta)
+                && connectorMeta.StatsProvider != null)
             {
-                < 15 => "active",
-                < 60 => "stale",
-                _ => "inactive",
-            };
+                try
+                {
+                    var stats = await GetDataSourceStatsAsync(dataSourceId, cancellationToken);
+                    connectorMeta.StatsProvider.ApplyStats(info, stats, now);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to apply connector stats for {DataSource}", dataSourceId);
+                    ApplyDefaultStatus(info, now);
+                }
+            }
+            else
+            {
+                ApplyDefaultStatus(info, now);
+            }
 
             dataSources.Add(info);
         }
@@ -119,20 +138,50 @@ public class DataSourceService : IDataSourceService
                 info.TotalEntries = 0;
                 info.EntriesLast24Hours = 0;
 
-                var minutesSinceLast = (int)(now - info.LastSeen.Value).TotalMinutes;
-                info.MinutesSinceLastData = minutesSinceLast;
-                info.Status = minutesSinceLast switch
-                {
-                    < 15 => "active",
-                    < 60 => "stale",
-                    _ => "inactive",
-                };
-
+                ApplyDefaultStatus(info, now);
                 dataSources.Add(info);
             }
         }
 
+        // Add server connectors that have a custom stats provider and data but no sensor glucose records
+        // (e.g., connectors that only sync treatments/food without CGM backfill)
+        foreach (var (dsId, connectorMeta) in connectorProviders)
+        {
+            if (connectorMeta.StatsProvider == null) continue;
+            if (dataSources.Any(d => d.DeviceId == dsId || d.SourceType == dsId))
+                continue;
+
+            try
+            {
+                var stats = await GetDataSourceStatsAsync(dsId, cancellationToken);
+                if (stats.TotalItems <= 0) continue;
+
+                var info = CreateDataSourceInfo(dsId, dsId);
+                connectorMeta.StatsProvider.ApplyStats(info, stats, now);
+
+                dataSources.Add(info);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to get stats for connector data source {DataSource}", dsId);
+            }
+        }
+
         return dataSources.OrderByDescending(d => d.LastSeen).ToList();
+    }
+
+    private static void ApplyDefaultStatus(DataSourceInfo info, DateTimeOffset now)
+    {
+        var minutesSinceLast = info.LastSeen.HasValue
+            ? (int)(now - info.LastSeen.Value).TotalMinutes
+            : int.MaxValue;
+        info.MinutesSinceLastData = minutesSinceLast;
+        info.Status = minutesSinceLast switch
+        {
+            < 15 => "active",
+            < 60 => "stale",
+            _ => "inactive",
+        };
     }
 
     /// <inheritdoc />

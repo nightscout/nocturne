@@ -89,6 +89,7 @@
 
   // Data source management dialog state
   let selectedDataSource = $state<DataSourceInfo | null>(null);
+  let selectedDataSourceLastSync = $state<Date | undefined>(undefined);
   let showManageDataSourceDialog = $state(false);
 
   // Manual sync state
@@ -205,7 +206,17 @@
 
   function openDataSourceDialog(source: DataSourceInfo) {
     selectedDataSource = source;
-    showManageDataSourceDialog = true;
+    // Look up matching connector health data for last successful sync.
+    // Match via availableConnectors which maps dataSourceId → connector id.
+    const matchingAvailable = servicesOverview?.availableConnectors?.find(
+      (c) => c.dataSourceId === source.deviceId || c.dataSourceId === source.sourceType
+        || c.id === source.sourceType || c.id === source.deviceId
+    );
+    const matchingConnector = matchingAvailable
+      ? connectorStatuses.find((cs) => cs.id === matchingAvailable.id)
+      : null;
+    selectedDataSourceLastSync = matchingConnector?.lastSuccessfulSync ?? undefined;
+   showManageDataSourceDialog = true;
   }
 
   function isDemoDataSource(source: DataSourceInfo): boolean {
@@ -672,6 +683,7 @@
 <DataSourceManageDialog
   bind:open={showManageDataSourceDialog}
   {selectedDataSource}
+  lastSuccessfulSync={selectedDataSourceLastSync}
   onDeleteComplete={loadServices}
 />
 

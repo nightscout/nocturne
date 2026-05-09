@@ -1,4 +1,5 @@
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Services;
 
 namespace Nocturne.Connectors.Core.Extensions;
 
@@ -125,4 +126,11 @@ public class ConnectorRegistrationAttribute(
     ///     Supported data types for this connector.
     /// </summary>
     public SyncDataType[] SupportedDataTypes { get; set; } = [SyncDataType.Glucose];
+
+    /// <summary>
+    ///     Optional type of a <see cref="ConnectorStatsProvider"/> subclass that customizes
+    ///     how this connector's data appears in the Active Data Sources UI.
+    ///     Must have a parameterless constructor. When null, the default provider is used.
+    /// </summary>
+    public Type? StatsProviderType { get; set; }
 }

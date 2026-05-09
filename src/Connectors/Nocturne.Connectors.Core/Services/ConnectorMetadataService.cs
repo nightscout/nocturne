@@ -123,7 +123,10 @@ public static class ConnectorMetadataService
                             Icon = attr.Icon,
                             Category = attr.Category,
                             Description = attr.Description,
-                            ServiceName = attr.ServiceName
+                            ServiceName = attr.ServiceName,
+                            StatsProvider = attr.StatsProviderType != null
+                                ? Activator.CreateInstance(attr.StatsProviderType) as ConnectorStatsProvider
+                                : null,
                         };
 
                         ConnectorsByDataSourceId[attr.DataSourceId] = info;
@@ -153,6 +156,14 @@ public static class ConnectorMetadataService
         public ConnectorCategory Category { get; init; } = ConnectorCategory.Other;
         public string Description { get; init; } = string.Empty;
         public string ServiceName { get; set; } = string.Empty;
+
+        /// <summary>
+        ///     Optional custom stats provider for this connector.
+        ///     When set, <see cref="ConnectorStatsProvider.ApplyStats"/> is called to customize
+        ///     how this connector's data appears in the Active Data Sources UI.
+        ///     When null, <see cref="ConnectorStatsProvider.Default"/> is used.
+        /// </summary>
+        public ConnectorStatsProvider? StatsProvider { get; set; }
 
         /// <summary>
         ///     Converts this connector info to an AvailableService for UI consumption.

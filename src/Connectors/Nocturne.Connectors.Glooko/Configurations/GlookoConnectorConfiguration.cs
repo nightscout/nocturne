@@ -1,5 +1,6 @@
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Glooko.Services;
 using Nocturne.Core.Constants;
 
 namespace Nocturne.Connectors.Glooko.Configurations;
@@ -19,6 +20,7 @@ namespace Nocturne.Connectors.Glooko.Configurations;
     "Glooko",
     SupportsHistoricalSync = true,
     SupportsManualSync = true,
+    StatsProviderType = typeof(GlookoStatsProvider),
     SupportedDataTypes = [
         SyncDataType.Glucose,
         SyncDataType.Boluses,

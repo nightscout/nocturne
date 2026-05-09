@@ -19,10 +19,12 @@
   let {
     open = $bindable(false),
     selectedDataSource,
+    lastSuccessfulSync,
     onDeleteComplete,
   } = $props<{
     open: boolean;
     selectedDataSource: DataSourceInfo | null;
+    lastSuccessfulSync?: Date;
     onDeleteComplete?: () => Promise<void>;
   }>();
 
@@ -148,11 +150,19 @@
             </div>
           </div>
           <div>
-            <span class="text-muted-foreground">Last Seen</span>
+            <span class="text-muted-foreground">Last Record Received</span>
             <p class="mt-1 font-medium">
               {formatLastSeen(selectedDataSource.lastSeen)}
             </p>
           </div>
+          {#if lastSuccessfulSync}
+          <div>
+            <span class="text-muted-foreground">Last Successful Sync</span>
+            <p class="mt-1 font-medium">
+              {formatLastSeen(lastSuccessfulSync)}
+            </p>
+          </div>
+          {/if}
           <div>
             <span class="text-muted-foreground">Records (24h)</span>
             <p class="mt-1 font-medium">
