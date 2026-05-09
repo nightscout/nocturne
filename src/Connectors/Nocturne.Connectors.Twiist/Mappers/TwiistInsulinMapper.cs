@@ -56,7 +56,17 @@ public class TwiistInsulinMapper(ILogger logger)
                 ModifiedAt = now
             };
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Error converting Twiist insulin dose: {Identifier}", dose.Identifier);
+            return null;
+        }
+        catch (FormatException ex)
+        {
+            _logger.LogWarning(ex, "Error converting Twiist insulin dose: {Identifier}", dose.Identifier);
+            return null;
+        }
+        catch (OverflowException ex)
         {
             _logger.LogWarning(ex, "Error converting Twiist insulin dose: {Identifier}", dose.Identifier);
             return null;
