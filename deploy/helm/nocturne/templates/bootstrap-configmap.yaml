@@ -6,12 +6,14 @@ metadata:
   labels: {{- include "nocturne.labels" . | nindent 4 }}
   annotations:
     {{- if .Values.postgresql.enabled }}
-    "helm.sh/hook": post-install,post-upgrade
+    # Bundled mode: applied as a regular resource (Job waits for postgres
+    # internally via pg_isready). See bootstrap-job.yaml for rationale.
+    "helm.sh/hook-delete-policy": hook-succeeded
     {{- else }}
     "helm.sh/hook": pre-install,pre-upgrade
-    {{- end }}
     "helm.sh/hook-weight": "-10"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- end }}
 data:
   bootstrap-roles.sql: |-
 {{ .Files.Get "files/bootstrap-roles.sql" | indent 4 }}
@@ -26,6 +28,14 @@ data:
     : "${MIGRATOR_PASSWORD:?MIGRATOR_PASSWORD is required}"
     : "${APP_PASSWORD:?APP_PASSWORD is required}"
     : "${WEB_PASSWORD:?WEB_PASSWORD is required}"
+
+    # Wait for postgres to accept connections. In bundled mode the Job is
+    # applied alongside the postgres StatefulSet, so it may start before
+    # postgres is ready; in external mode this should pass on first try.
+    until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER"; do
+      echo "Waiting for postgres at ${PGHOST}:${PGPORT} ..."
+      sleep 2
+    done
 
     echo "Running Nocturne role bootstrap against ${PGHOST}:${PGPORT}/${PGDATABASE} as ${PGUSER}"
     exec psql \
