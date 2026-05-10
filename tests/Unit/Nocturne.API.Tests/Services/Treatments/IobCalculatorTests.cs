@@ -138,6 +138,67 @@ public class IobCalculatorTests
 
     #endregion
 
+    #region CalcTempBasal Tests
+
+    [Fact]
+    public void CalcTempBasal_WithInsulinContext_UsesDiaFromContext()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var oneHourAgo = now - 60 * 60 * 1000;
+        var thirtyMinAgo = now - 30 * 60 * 1000;
+
+        var tempBasal = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(oneHourAgo).UtcDateTime,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(thirtyMinAgo).UtcDateTime,
+            Rate = 2.0,
+            ScheduledRate = 1.0,
+            Origin = TempBasalOrigin.Algorithm,
+            InsulinContext = new TreatmentInsulinContext
+            {
+                Dia = 5.0,
+                Peak = 55,
+                Curve = "ultra-rapid",
+                Concentration = 100,
+            },
+        };
+
+        var resultWithContext = _calculator.CalcTempBasal(tempBasal, now);
+
+        // Now remove InsulinContext so it falls back to profile DIA=3
+        tempBasal.InsulinContext = null;
+        var resultWithoutContext = _calculator.CalcTempBasal(tempBasal, now);
+
+        // Longer DIA (5h) means slower decay, so MORE IOB remaining
+        Assert.True(
+            resultWithContext.IobContrib > resultWithoutContext.IobContrib,
+            $"DIA=5h IOB ({resultWithContext.IobContrib}) should exceed DIA=3h IOB ({resultWithoutContext.IobContrib})");
+    }
+
+    [Fact]
+    public void CalcTempBasal_WithoutInsulinContext_FallsBackToProfileDia()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var oneHourAgo = now - 60 * 60 * 1000;
+        var thirtyMinAgo = now - 30 * 60 * 1000;
+
+        var tempBasal = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(oneHourAgo).UtcDateTime,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(thirtyMinAgo).UtcDateTime,
+            Rate = 2.0,
+            ScheduledRate = 1.0,
+            Origin = TempBasalOrigin.Algorithm,
+            InsulinContext = null,
+        };
+
+        var result = _calculator.CalcTempBasal(tempBasal, now);
+
+        Assert.True(result.IobContrib > 0, "TempBasal with rate > scheduled should have non-zero IOB");
+    }
+
+    #endregion
+
     #region FromBoluses Tests
 
     [Fact]
