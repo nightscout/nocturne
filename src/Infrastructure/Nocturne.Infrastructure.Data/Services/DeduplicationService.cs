@@ -389,12 +389,117 @@ public class DeduplicationService : IDeduplicationService
     }
 
     /// <inheritdoc />
-    public Task<DeduplicationBatchResult> DeduplicateBatchAsync(
+    public async Task<DeduplicationBatchResult> DeduplicateBatchAsync(
         RecordType recordType,
         IReadOnlyList<DeduplicationInput> records,
-        CancellationToken cancellationToken = default)
+        CancellationToken ct = default)
     {
-        throw new NotImplementedException();
+        if (records.Count == 0)
+            return new DeduplicationBatchResult(0, 0, 0, 0);
+
+        var recordTypeStr = recordType.ToString().ToLowerInvariant();
+
+        // 1. Compute union time window
+        var minMills = records.Min(r => r.Mills) - MatchingWindowMillis;
+        var maxMills = records.Max(r => r.Mills) + MatchingWindowMillis;
+
+        // 2. One query: all linked_records in the window for this type
+        var allPotentialMatches = await _context.LinkedRecords
+            .Where(lr => lr.RecordType == recordTypeStr)
+            .Where(lr => lr.SourceTimestamp >= minMills && lr.SourceTimestamp <= maxMills)
+            .ToListAsync(ct);
+
+        // 3. One query: load type-specific matcher
+        var referencedIds = allPotentialMatches.Select(m => m.RecordId).ToHashSet();
+        var matcher = await LoadMatcherAsync(recordType, referencedIds, ct);
+
+        // 4. One query: which input records are already linked?
+        var inputIds = records.Select(r => r.RecordId).ToList();
+        var alreadyLinked = (await _context.LinkedRecords
+            .Where(lr => lr.RecordType == recordTypeStr && inputIds.Contains(lr.RecordId))
+            .Select(lr => lr.RecordId)
+            .ToListAsync(ct))
+            .ToHashSet();
+
+        // 5. In-memory matching + intra-batch canonical assignment
+        var batchAssignments = new List<(DeduplicationInput input, Guid canonicalId)>();
+        var newLinks = new List<LinkedRecordEntity>();
+        var groupsCreated = 0;
+        var duplicateGroups = 0;
+
+        foreach (var record in records)
+        {
+            if (alreadyLinked.Contains(record.RecordId))
+                continue;
+
+            var windowStart = record.Mills - MatchingWindowMillis;
+            var windowEnd = record.Mills + MatchingWindowMillis;
+
+            // Check DB matches
+            var myMatches = allPotentialMatches
+                .Where(m => m.SourceTimestamp >= windowStart && m.SourceTimestamp <= windowEnd)
+                .ToList();
+
+            Guid? canonicalId = null;
+
+            // Try to match against existing canonical groups
+            foreach (var group in myMatches.GroupBy(m => m.CanonicalId))
+            {
+                if (group.Any(m => matcher(m.RecordId, record.Criteria)))
+                {
+                    canonicalId = group.Key;
+                    duplicateGroups++;
+                    break;
+                }
+            }
+
+            // Try intra-batch matches
+            if (canonicalId == null)
+            {
+                foreach (var (priorInput, priorCanonical) in batchAssignments)
+                {
+                    if (Math.Abs(priorInput.Mills - record.Mills) <= MatchingWindowMillis
+                        && CriteriaMatch(recordType, priorInput.Criteria, record.Criteria))
+                    {
+                        canonicalId = priorCanonical;
+                        duplicateGroups++;
+                        break;
+                    }
+                }
+            }
+
+            if (canonicalId == null)
+            {
+                canonicalId = Guid.CreateVersion7();
+                groupsCreated++;
+            }
+
+            batchAssignments.Add((record, canonicalId.Value));
+            newLinks.Add(new LinkedRecordEntity
+            {
+                CanonicalId = canonicalId.Value,
+                RecordType = recordTypeStr,
+                RecordId = record.RecordId,
+                SourceTimestamp = record.Mills,
+                DataSource = record.DataSource,
+                IsPrimary = !allPotentialMatches.Any(m => m.CanonicalId == canonicalId.Value)
+                            && !newLinks.Any(l => l.CanonicalId == canonicalId.Value)
+            });
+        }
+
+        // 6. Bulk insert
+        if (newLinks.Count > 0)
+        {
+            _context.LinkedRecords.AddRange(newLinks);
+            await _context.SaveChangesAsync(ct);
+            _context.ChangeTracker.Clear();
+        }
+
+        return new DeduplicationBatchResult(
+            Processed: records.Count,
+            GroupsCreated: groupsCreated,
+            RecordsLinked: newLinks.Count,
+            DuplicateGroups: duplicateGroups);
     }
 
     private async Task<bool> RecordExistsAsync(string recordType, Guid recordId, CancellationToken ct)
@@ -410,6 +515,131 @@ public class DeduplicationService : IDeduplicationService
             "note" => await _context.Notes.AnyAsync(n => n.Id == recordId, ct),
             "boluscalculation" => await _context.BolusCalculations.AnyAsync(b => b.Id == recordId, ct),
             _ => true // Assume exists for unknown types to avoid accidental promotion
+        };
+    }
+
+    private async Task<Func<Guid, MatchCriteria, bool>> LoadMatcherAsync(
+        RecordType recordType, HashSet<Guid> ids, CancellationToken ct)
+    {
+        if (ids.Count == 0)
+            return (_, _) => false;
+
+        switch (recordType)
+        {
+            case RecordType.TempBasal:
+            {
+                var records = (await _context.TempBasals
+                    .Where(t => ids.Contains(t.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(t => t.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var tb) && criteria.Rate.HasValue
+                    && Math.Abs(tb.Rate - criteria.Rate.Value) <= criteria.RateTolerance;
+            }
+            case RecordType.SensorGlucose:
+            {
+                var records = (await _context.SensorGlucose
+                    .Where(s => ids.Contains(s.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(s => s.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var sg) && criteria.GlucoseValue.HasValue
+                    && Math.Abs(sg.Mgdl - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance;
+            }
+            case RecordType.Bolus:
+            {
+                var records = (await _context.Boluses
+                    .Where(b => ids.Contains(b.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(b => b.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var b) && criteria.Insulin.HasValue
+                    && Math.Abs(b.Insulin - criteria.Insulin.Value) <= criteria.InsulinTolerance;
+            }
+            case RecordType.CarbIntake:
+            {
+                var records = (await _context.CarbIntakes
+                    .Where(c => ids.Contains(c.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(c => c.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var c) && criteria.Carbs.HasValue
+                    && Math.Abs(c.Carbs - criteria.Carbs.Value) <= criteria.CarbsTolerance;
+            }
+            case RecordType.BGCheck:
+            {
+                var records = (await _context.BGChecks
+                    .Where(bg => ids.Contains(bg.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(bg => bg.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var bg) && criteria.GlucoseValue.HasValue
+                    && Math.Abs(bg.Glucose - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance;
+            }
+            case RecordType.DeviceEvent:
+            {
+                var records = (await _context.DeviceEvents
+                    .Where(d => ids.Contains(d.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(d => d.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var d) && !string.IsNullOrEmpty(criteria.EventType)
+                    && string.Equals(d.EventType, criteria.EventType, StringComparison.OrdinalIgnoreCase);
+            }
+            case RecordType.Note:
+                return (_, _) => true; // time-window only matching
+            case RecordType.BolusCalculation:
+            {
+                var records = (await _context.BolusCalculations
+                    .Where(bc => ids.Contains(bc.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(bc => bc.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var bc) && criteria.Carbs.HasValue
+                    && Math.Abs((bc.CarbInput ?? 0) - criteria.Carbs.Value) <= criteria.CarbsTolerance;
+            }
+            case RecordType.StateSpan:
+            {
+                var records = (await _context.StateSpans
+                    .Where(s => ids.Contains(s.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(s => s.Id);
+                return (id, criteria) =>
+                {
+                    if (!records.TryGetValue(id, out var ss) || !criteria.Category.HasValue)
+                        return false;
+                    var categoryStr = criteria.Category.Value.ToString();
+                    if (!string.Equals(ss.Category, categoryStr, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                    if (!string.IsNullOrEmpty(criteria.State)
+                        && !string.Equals(ss.State, criteria.State, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                    return true;
+                };
+            }
+            default:
+                return (_, _) => false;
+        }
+    }
+
+    private static bool CriteriaMatch(RecordType recordType, MatchCriteria a, MatchCriteria b)
+    {
+        return recordType switch
+        {
+            RecordType.TempBasal => a.Rate.HasValue && b.Rate.HasValue
+                && Math.Abs(a.Rate.Value - b.Rate.Value) <= Math.Max(a.RateTolerance, b.RateTolerance),
+            RecordType.SensorGlucose or RecordType.BGCheck => a.GlucoseValue.HasValue && b.GlucoseValue.HasValue
+                && Math.Abs(a.GlucoseValue.Value - b.GlucoseValue.Value) <= Math.Max(a.GlucoseTolerance, b.GlucoseTolerance),
+            RecordType.Bolus => a.Insulin.HasValue && b.Insulin.HasValue
+                && Math.Abs(a.Insulin.Value - b.Insulin.Value) <= Math.Max(a.InsulinTolerance, b.InsulinTolerance),
+            RecordType.CarbIntake or RecordType.BolusCalculation => a.Carbs.HasValue && b.Carbs.HasValue
+                && Math.Abs(a.Carbs.Value - b.Carbs.Value) <= Math.Max(a.CarbsTolerance, b.CarbsTolerance),
+            RecordType.DeviceEvent => string.Equals(a.EventType, b.EventType, StringComparison.OrdinalIgnoreCase),
+            RecordType.Note => true,
+            RecordType.StateSpan => a.Category == b.Category
+                && (string.IsNullOrEmpty(a.State) || string.IsNullOrEmpty(b.State)
+                    || string.Equals(a.State, b.State, StringComparison.OrdinalIgnoreCase)),
+            _ => false
         };
     }
 
