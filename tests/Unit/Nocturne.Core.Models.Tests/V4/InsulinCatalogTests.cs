@@ -72,4 +72,30 @@ public class InsulinCatalogTests
         custom!.Category.Should().Be(InsulinCategory.RapidActing);
         custom.Concentration.Should().Be(100);
     }
+
+    [Theory]
+    [InlineData("humalog-u10", 10)]
+    [InlineData("humalog-u40", 40)]
+    [InlineData("humalog-u50", 50)]
+    [InlineData("novorapid-u10", 10)]
+    [InlineData("novorapid-u40", 40)]
+    [InlineData("novorapid-u50", 50)]
+    [InlineData("fiasp-u10", 10)]
+    public void GetById_DilutedFormulations_ReturnsExpectedConcentration(string id, int expectedConcentration)
+    {
+        var formulation = InsulinCatalog.GetById(id);
+
+        formulation.Should().NotBeNull();
+        formulation!.Concentration.Should().Be(expectedConcentration);
+    }
+
+    [Fact]
+    public void GetByCategory_RapidActing_IncludesDilutedVariants()
+    {
+        var rapidActing = InsulinCatalog.GetByCategory(InsulinCategory.RapidActing);
+
+        rapidActing.Should().Contain(f => f.Concentration == 10);
+        rapidActing.Should().Contain(f => f.Concentration == 40);
+        rapidActing.Should().Contain(f => f.Concentration == 50);
+    }
 }
