@@ -32,7 +32,13 @@ spec:
         - name: wait-for-postgres
           image: {{ include "nocturne.bootstrap.image" . }}
           imagePullPolicy: {{ .Values.bootstrap.image.pullPolicy }}
-          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          # postgres:17-alpine doesn't declare a non-root USER; provide one
+          # explicitly so it satisfies pod-level runAsNonRoot. Users can
+          # override via containerSecurityContext.runAsUser if needed.
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           command: ["/bin/sh", "-c"]
           args:
             - |

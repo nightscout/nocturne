@@ -27,7 +27,13 @@ spec:
         - name: web
           image: {{ include "nocturne.web.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          # Dockerfile.web (the published image) doesn't declare a non-root
+          # USER; provide one explicitly so it satisfies pod-level
+          # runAsNonRoot. Users can override via containerSecurityContext.
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - name: http
               containerPort: {{ .Values.web.containerPort }}
