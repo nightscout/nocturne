@@ -388,6 +388,15 @@ public class DeduplicationService : IDeduplicationService
             recordType, recordId, canonicalId, isPrimary);
     }
 
+    /// <inheritdoc />
+    public Task<DeduplicationBatchResult> DeduplicateBatchAsync(
+        RecordType recordType,
+        IReadOnlyList<DeduplicationInput> records,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException();
+    }
+
     private async Task<bool> RecordExistsAsync(string recordType, Guid recordId, CancellationToken ct)
     {
         return recordType switch

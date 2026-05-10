@@ -41,6 +41,19 @@ public interface IDeduplicationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Deduplicate a batch of records: find or create canonical groups and link all records in bulk.
+    /// Replaces per-record GetOrCreateCanonicalIdAsync + LinkRecordAsync loops.
+    /// </summary>
+    /// <param name="recordType">The type of all records in the batch</param>
+    /// <param name="records">The records to deduplicate</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Stats about the batch operation</returns>
+    Task<DeduplicationBatchResult> DeduplicateBatchAsync(
+        RecordType recordType,
+        IReadOnlyList<DeduplicationInput> records,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get all records linked to a canonical group
     /// </summary>
     /// <param name="canonicalId">The canonical group ID</param>
