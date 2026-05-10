@@ -4,6 +4,45 @@ Helm chart for deploying [Nocturne](https://github.com/nightscout/nocturne) on K
 
 > **Status:** alpha (v0.1.x). External Postgres only; opinionated single-replica defaults; many production-grade toggles are not yet implemented. See [Roadmap](#roadmap) below.
 
+## Install
+
+The chart is published to GitHub Container Registry as an OCI artifact. Released builds are tagged via Chart.yaml's `version:`; `latest` follows `main` HEAD.
+
+```bash
+helm install nocturne oci://ghcr.io/nightscout/charts/nocturne \
+  --version 0.1.0-alpha.3 \
+  --namespace nocturne --create-namespace \
+  -f my-values.yaml
+```
+
+To install via Argo CD, point an Application at the published chart:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nocturne
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nocturne
+  source:
+    repoURL: ghcr.io/nightscout/charts
+    chart: nocturne
+    targetRevision: 0.1.0-alpha.3
+    helm:
+      releaseName: nocturne
+      valueFiles:
+        - $values/path/to/your/values.yaml   # optional — via a second `sources:` entry
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+```
+
+Argo CD needs a Repository CR registered for `ghcr.io/nightscout/charts` with `enableOCI: "true"`. Anonymous read works once the published package is set to Public on GitHub.
+
 ## Prerequisites
 
 - Kubernetes 1.27+
@@ -64,9 +103,25 @@ ingress:
   host: nocturne.example.com
 EOF
 
-# 3. Install.
+# 3. Install from the published OCI chart.
+helm install nocturne oci://ghcr.io/nightscout/charts/nocturne \
+  --version 0.1.0-alpha.3 \
+  --namespace nocturne --create-namespace \
+  -f my-values.yaml
+```
+
+## Developing the chart
+
+If you're iterating on the chart itself rather than consuming it:
+
+```bash
+git clone https://github.com/nightscout/nocturne.git
+cd nocturne
+helm dependency update deploy/helm/nocturne   # resolves Bitnami postgresql subchart
 helm install nocturne ./deploy/helm/nocturne -f my-values.yaml
 ```
+
+The path-source install requires `helm dependency update` because the Bitnami `postgresql` subchart isn't checked into git. The published OCI artifact has it bundled, so consumers don't need to run dep update.
 
 ## Managed Postgres (RDS / Cloud SQL / Neon)
 
@@ -169,9 +224,9 @@ The chart is intentionally minimal in v0. Planned for v1:
 - [x] CI: `helm lint` + `kubeconform` + SHA256 drift check on `bootstrap-roles.sql`
 - [x] OTLP observability env wiring
 - [x] Bundled-Postgres quickstart via Bitnami `postgresql` subchart with auto-bootstrap
+- [x] Distribution: OCI publish to `oci://ghcr.io/nightscout/charts/nocturne`
 - [ ] NetworkPolicy toggle
 - [ ] `values.schema.json` for editor autocomplete
-- [ ] Distribution: OCI publish to `oci://ghcr.io/nightscout/charts/nocturne`
 
 ## Known limitations / things to verify
 

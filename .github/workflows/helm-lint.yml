@@ -6,10 +6,12 @@ on:
     paths:
       - "deploy/helm/**"
       - ".github/workflows/helm-lint.yml"
+      - ".github/workflows/helm-publish.yml"
   pull_request:
     paths:
       - "deploy/helm/**"
       - ".github/workflows/helm-lint.yml"
+      - ".github/workflows/helm-publish.yml"
   workflow_dispatch:
 
 jobs:
