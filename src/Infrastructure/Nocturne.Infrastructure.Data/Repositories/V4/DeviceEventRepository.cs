@@ -282,33 +282,20 @@ public class DeviceEventRepository : IDeviceEventRepository
         }
 
         // Insert-time deduplication: link saved records to canonical groups
-        foreach (var entity in entities)
+        try
         {
-            try
-            {
-                var criteria = new MatchCriteria
-                {
-                    EventType = entity.EventType
-                };
+            var dedupInputs = entities.Select(e => new DeduplicationInput(
+                RecordId: e.Id,
+                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                DataSource: e.DataSource ?? "unknown",
+                Criteria: new MatchCriteria { EventType = e.EventType }
+            )).ToList();
 
-                var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
-                    RecordType.DeviceEvent,
-                    new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    criteria,
-                    ct);
-
-                await _deduplicationService.LinkRecordAsync(
-                    canonicalId,
-                    RecordType.DeviceEvent,
-                    entity.Id,
-                    new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    entity.DataSource ?? "unknown",
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to deduplicate DeviceEvent {Id}", entity.Id);
-            }
+            await _deduplicationService.DeduplicateBatchAsync(RecordType.DeviceEvent, dedupInputs, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "DeviceEvent", entities.Count);
         }
 
         return entities.Select(DeviceEventMapper.ToDomainModel);

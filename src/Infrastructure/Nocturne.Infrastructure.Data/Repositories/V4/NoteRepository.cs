@@ -264,30 +264,20 @@ public class NoteRepository : INoteRepository
         }
 
         // Insert-time deduplication: link saved records to canonical groups
-        foreach (var entity in entities)
+        try
         {
-            try
-            {
-                var criteria = new MatchCriteria();
+            var dedupInputs = entities.Select(e => new DeduplicationInput(
+                RecordId: e.Id,
+                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                DataSource: e.DataSource ?? "unknown",
+                Criteria: new MatchCriteria()
+            )).ToList();
 
-                var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
-                    RecordType.Note,
-                    new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    criteria,
-                    ct);
-
-                await _deduplicationService.LinkRecordAsync(
-                    canonicalId,
-                    RecordType.Note,
-                    entity.Id,
-                    new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    entity.DataSource ?? "unknown",
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to deduplicate Note {Id}", entity.Id);
-            }
+            await _deduplicationService.DeduplicateBatchAsync(RecordType.Note, dedupInputs, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Note", entities.Count);
         }
 
         return entities.Select(NoteMapper.ToDomainModel);

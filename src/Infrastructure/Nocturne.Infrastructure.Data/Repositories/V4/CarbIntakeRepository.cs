@@ -362,34 +362,20 @@ public class CarbIntakeRepository : ICarbIntakeRepository
             // Insert-time deduplication: link saved records to canonical groups.
             // Only runs on newly inserted entities — updated-in-place rows were
             // already linked when first inserted.
-            foreach (var entity in entities)
+            try
             {
-                try
-                {
-                    var criteria = new MatchCriteria
-                    {
-                        Carbs = entity.Carbs,
-                        CarbsTolerance = 1.0
-                    };
+                var dedupInputs = entities.Select(e => new DeduplicationInput(
+                    RecordId: e.Id,
+                    Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    DataSource: e.DataSource ?? "unknown",
+                    Criteria: new MatchCriteria { Carbs = e.Carbs, CarbsTolerance = 1.0 }
+                )).ToList();
 
-                    var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
-                        RecordType.CarbIntake,
-                        new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        criteria,
-                        ct);
-
-                    await _deduplicationService.LinkRecordAsync(
-                        canonicalId,
-                        RecordType.CarbIntake,
-                        entity.Id,
-                        new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        entity.DataSource ?? "unknown",
-                        ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to deduplicate CarbIntake {Id}", entity.Id);
-                }
+                await _deduplicationService.DeduplicateBatchAsync(RecordType.CarbIntake, dedupInputs, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "CarbIntake", entities.Count);
             }
         }
 

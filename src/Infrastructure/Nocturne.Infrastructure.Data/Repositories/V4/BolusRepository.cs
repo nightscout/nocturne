@@ -355,34 +355,20 @@ public class BolusRepository : IBolusRepository
             // Insert-time deduplication: link saved records to canonical groups.
             // Only runs on newly inserted entities — updated-in-place rows were
             // already linked when first inserted.
-            foreach (var entity in entities)
+            try
             {
-                try
-                {
-                    var criteria = new MatchCriteria
-                    {
-                        Insulin = entity.Insulin,
-                        InsulinTolerance = 0.05
-                    };
+                var dedupInputs = entities.Select(e => new DeduplicationInput(
+                    RecordId: e.Id,
+                    Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    DataSource: e.DataSource ?? "unknown",
+                    Criteria: new MatchCriteria { Insulin = e.Insulin, InsulinTolerance = 0.05 }
+                )).ToList();
 
-                    var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
-                        RecordType.Bolus,
-                        new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        criteria,
-                        ct);
-
-                    await _deduplicationService.LinkRecordAsync(
-                        canonicalId,
-                        RecordType.Bolus,
-                        entity.Id,
-                        new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        entity.DataSource ?? "unknown",
-                        ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to deduplicate Bolus {Id}", entity.Id);
-                }
+                await _deduplicationService.DeduplicateBatchAsync(RecordType.Bolus, dedupInputs, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Bolus", entities.Count);
             }
         }
 
