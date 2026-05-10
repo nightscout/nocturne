@@ -271,9 +271,9 @@ public class DeduplicationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeduplicateAllAsync_ShouldNotGroupTempBasals_WithDifferentOrigins()
+    public async Task DeduplicateAllAsync_ShouldGroupTempBasals_WithDifferentOrigins()
     {
-        // Arrange
+        // Arrange — origin should NOT prevent cross-connector deduplication
         await using var context = new NocturneDbContext(_contextOptions);
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
@@ -291,7 +291,7 @@ public class DeduplicationServiceTests : IDisposable
         var algorithmBasal = CreateTestTempBasalEntity(
             startTimestamp: timestamp.AddSeconds(5),
             rate: 1.2, // Same rate
-            origin: "Algorithm", // Different origin
+            origin: "Algorithm", // Different origin — should still group
             dataSource: "mylife-connector"
         );
 
@@ -308,8 +308,8 @@ public class DeduplicationServiceTests : IDisposable
             .Where(lr => lr.RecordType == "tempbasal")
             .ToListAsync();
         linkedRecords.Should().HaveCount(2);
-        linkedRecords.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2,
-            "temp basals with different origins should not be grouped");
+        linkedRecords.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1,
+            "temp basals with different origins but same rate should be grouped for cross-connector dedup");
     }
 
     [Fact]
