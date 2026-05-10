@@ -355,6 +355,61 @@ public class TempBasalMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void RoundTrip_WithInsulinContext_PreservesAllFields()
+    {
+        var insulinId = Guid.NewGuid();
+        var original = new TempBasal
+        {
+            Id = Guid.CreateVersion7(),
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Rate = 0.8,
+            Origin = TempBasalOrigin.Algorithm,
+            InsulinContext = new TreatmentInsulinContext
+            {
+                PatientInsulinId = insulinId,
+                InsulinName = "Humalog",
+                Dia = 4.0,
+                Peak = 75,
+                Curve = "rapid-acting",
+                Concentration = 100,
+            },
+        };
+
+        var entity = TempBasalMapper.ToEntity(original);
+        entity.InsulinContextJson.Should().NotBeNullOrEmpty();
+
+        var roundTripped = TempBasalMapper.ToDomainModel(entity);
+
+        roundTripped.InsulinContext.Should().NotBeNull();
+        roundTripped.InsulinContext!.PatientInsulinId.Should().Be(insulinId);
+        roundTripped.InsulinContext.InsulinName.Should().Be("Humalog");
+        roundTripped.InsulinContext.Dia.Should().Be(4.0);
+        roundTripped.InsulinContext.Peak.Should().Be(75);
+        roundTripped.InsulinContext.Curve.Should().Be("rapid-acting");
+        roundTripped.InsulinContext.Concentration.Should().Be(100);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void RoundTrip_WithNullInsulinContext_StaysNull()
+    {
+        var model = new TempBasal
+        {
+            Id = Guid.CreateVersion7(),
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Rate = 1.0,
+            Origin = TempBasalOrigin.Manual,
+        };
+
+        var entity = TempBasalMapper.ToEntity(model);
+        entity.InsulinContextJson.Should().BeNull();
+
+        var roundTripped = TempBasalMapper.ToDomainModel(entity);
+        roundTripped.InsulinContext.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void RoundTrip_AllOriginValues_PreserveCorrectly()
     {
         foreach (var origin in Enum.GetValues<TempBasalOrigin>())
