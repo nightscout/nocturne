@@ -584,6 +584,93 @@ public class DeduplicationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeduplicateBatchAsync_DoesNotPromoteToPrimary_WhenCanonicalAlreadyExists()
+    {
+        await using var context = new NocturneDbContext(_contextOptions);
+        context.TenantId = TestTenantId;
+        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new Mock<ILogger<DeduplicationService>>();
+        var service = new DeduplicationService(context, scopeFactory, logger.Object);
+
+        var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+
+        var tbA = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.5, origin: "Scheduled", dataSource: "glooko-connector");
+        context.TempBasals.Add(tbA);
+        await context.SaveChangesAsync();
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, new List<DeduplicationInput> { ToDeduplicationInput(tbA) });
+
+        var tbB = CreateTestTempBasalEntity(startTimestamp: baseTime.AddSeconds(10), rate: 1.5, origin: "Scheduled", dataSource: "mylife-connector");
+        context.TempBasals.Add(tbB);
+        await context.SaveChangesAsync();
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, new List<DeduplicationInput> { ToDeduplicationInput(tbB) });
+
+        var linked = await context.LinkedRecords.OrderBy(lr => lr.SourceTimestamp).ToListAsync();
+        linked.Should().HaveCount(2);
+        linked[0].RecordId.Should().Be(tbA.Id);
+        linked[0].IsPrimary.Should().BeTrue("A is the only member when first inserted");
+        linked[1].RecordId.Should().Be(tbB.Id);
+        linked[1].IsPrimary.Should().BeFalse("primary is sticky — B joining A's existing canonical does not promote B");
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_HandlesMixedBatch_NewExistingAndIntraBatch()
+    {
+        await using var context = new NocturneDbContext(_contextOptions);
+        context.TenantId = TestTenantId;
+        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new Mock<ILogger<DeduplicationService>>();
+        var service = new DeduplicationService(context, scopeFactory, logger.Object);
+
+        var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+
+        // Seed: pre-existing canonical group via prior batch
+        var existing = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.5, origin: "Scheduled", dataSource: "glooko-connector");
+        context.TempBasals.Add(existing);
+        await context.SaveChangesAsync();
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, new List<DeduplicationInput> { ToDeduplicationInput(existing) });
+
+        // New batch:
+        //   tbMatchExisting: matches existing canonical → joins it, IsPrimary=false
+        //   tbNew1 + tbNew2: same time + rate → intra-batch dedup → one canonical, one primary
+        //   tbStandalone: distinct time + rate → new canonical, IsPrimary=true
+        var tbMatchExisting = CreateTestTempBasalEntity(startTimestamp: baseTime.AddSeconds(5), rate: 1.5, origin: "Scheduled", dataSource: "mylife-connector");
+        var tbNew1 = CreateTestTempBasalEntity(startTimestamp: baseTime.AddMinutes(10), rate: 2.0, origin: "Scheduled", dataSource: "glooko-connector");
+        var tbNew2 = CreateTestTempBasalEntity(startTimestamp: baseTime.AddMinutes(10).AddSeconds(2), rate: 2.0, origin: "Scheduled", dataSource: "mylife-connector");
+        var tbStandalone = CreateTestTempBasalEntity(startTimestamp: baseTime.AddMinutes(20), rate: 0.5, origin: "Scheduled", dataSource: "glooko-connector");
+
+        context.TempBasals.AddRange(tbMatchExisting, tbNew1, tbNew2, tbStandalone);
+        await context.SaveChangesAsync();
+
+        var inputs = new List<DeduplicationInput>
+        {
+            ToDeduplicationInput(tbMatchExisting),
+            ToDeduplicationInput(tbNew1),
+            ToDeduplicationInput(tbNew2),
+            ToDeduplicationInput(tbStandalone),
+        };
+
+        var result = await service.DeduplicateBatchAsync(RecordType.TempBasal, inputs);
+
+        result.Processed.Should().Be(4);
+        result.RecordsLinked.Should().Be(4);
+        result.GroupsCreated.Should().Be(2, "tbNew1+tbNew2 share one new canonical; tbStandalone is another new canonical");
+
+        var linked = await context.LinkedRecords.ToListAsync();
+        linked.Should().HaveCount(5, "1 seed + 4 new");
+
+        var canonicalCounts = linked.GroupBy(lr => lr.CanonicalId).ToDictionary(g => g.Key, g => g.ToList());
+        canonicalCounts.Should().HaveCount(3, "existing + intra-batch group + standalone");
+
+        foreach (var (canonicalId, members) in canonicalCounts)
+        {
+            members.Count(m => m.IsPrimary).Should().Be(1, $"canonical {canonicalId} should have exactly one primary");
+        }
+
+        var matchExistingLink = linked.Single(lr => lr.RecordId == tbMatchExisting.Id);
+        matchExistingLink.IsPrimary.Should().BeFalse("joining existing canonical never promotes");
+    }
+
+    [Fact]
     public async Task DeduplicateBatchAsync_ReturnsEmptyResultForEmptyBatch()
     {
         // Arrange

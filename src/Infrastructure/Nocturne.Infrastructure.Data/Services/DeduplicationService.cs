@@ -421,8 +421,27 @@ public class DeduplicationService : IDeduplicationService
             .ToListAsync(ct))
             .ToHashSet();
 
-        // 5. In-memory matching + intra-batch canonical assignment
-        var batchAssignments = new List<(DeduplicationInput input, Guid canonicalId)>();
+        // 5. Pre-compute structures so the per-record loop is O(log M + window) instead of O(N*(M+N)):
+        //    - sortedMatches: timestamp-sorted, sliced via binary search
+        //    - existingCanonicals: O(1) "is this canonical already in DB?" check for IsPrimary
+        //    - newCanonicalsSeen: O(1) "did this batch already create a primary for this canonical?"
+        //    - newCanonicalReps: one (mills, canonicalId, criteria) per new canonical for intra-batch
+        //      matching — record-vs-canonical instead of record-vs-every-prior-record
+        allPotentialMatches.Sort((a, b) => a.SourceTimestamp.CompareTo(b.SourceTimestamp));
+        var sortedTimestamps = new long[allPotentialMatches.Count];
+        for (int i = 0; i < allPotentialMatches.Count; i++)
+        {
+            sortedTimestamps[i] = allPotentialMatches[i].SourceTimestamp;
+        }
+
+        var existingCanonicals = new HashSet<Guid>(allPotentialMatches.Count);
+        foreach (var m in allPotentialMatches)
+        {
+            existingCanonicals.Add(m.CanonicalId);
+        }
+
+        var newCanonicalsSeen = new HashSet<Guid>();
+        var newCanonicalReps = new List<(long mills, Guid canonicalId, MatchCriteria criteria)>();
         var newLinks = new List<LinkedRecordEntity>();
         var groupsCreated = 0;
         var duplicateGroups = 0;
@@ -435,31 +454,31 @@ public class DeduplicationService : IDeduplicationService
             var windowStart = record.Mills - MatchingWindowMillis;
             var windowEnd = record.Mills + MatchingWindowMillis;
 
-            // Check DB matches
-            var myMatches = allPotentialMatches
-                .Where(m => m.SourceTimestamp >= windowStart && m.SourceTimestamp <= windowEnd)
-                .ToList();
-
             Guid? canonicalId = null;
 
-            // Try to match against existing canonical groups
-            foreach (var group in myMatches.GroupBy(m => m.CanonicalId))
+            // Match against existing canonical groups: scan only the timestamp slice.
+            int lo = LowerBoundTimestamp(sortedTimestamps, windowStart);
+            int hi = UpperBoundTimestamp(sortedTimestamps, windowEnd);
+            for (int i = lo; i < hi; i++)
             {
-                if (group.Any(m => matcher(m.RecordId, record.Criteria)))
+                var m = allPotentialMatches[i];
+                if (matcher(m.RecordId, record.Criteria))
                 {
-                    canonicalId = group.Key;
+                    canonicalId = m.CanonicalId;
                     duplicateGroups++;
                     break;
                 }
             }
 
-            // Try intra-batch matches
+            // Intra-batch match: scan canonicals created earlier in this batch, not records.
+            // Records sharing a canonical share matching criteria by transitivity, so checking
+            // one representative per canonical is sufficient.
             if (canonicalId == null)
             {
-                foreach (var (priorInput, priorCanonical) in batchAssignments)
+                foreach (var (priorMills, priorCanonical, priorCriteria) in newCanonicalReps)
                 {
-                    if (Math.Abs(priorInput.Mills - record.Mills) <= MatchingWindowMillis
-                        && CriteriaMatch(recordType, priorInput.Criteria, record.Criteria))
+                    if (Math.Abs(priorMills - record.Mills) <= MatchingWindowMillis
+                        && CriteriaMatch(recordType, priorCriteria, record.Criteria))
                     {
                         canonicalId = priorCanonical;
                         duplicateGroups++;
@@ -468,13 +487,18 @@ public class DeduplicationService : IDeduplicationService
                 }
             }
 
+            bool isNewCanonical = false;
             if (canonicalId == null)
             {
                 canonicalId = Guid.CreateVersion7();
                 groupsCreated++;
+                isNewCanonical = true;
             }
 
-            batchAssignments.Add((record, canonicalId.Value));
+            // IsPrimary iff this is the first link this batch creates for a not-already-existing canonical.
+            var isPrimary = !existingCanonicals.Contains(canonicalId.Value)
+                            && newCanonicalsSeen.Add(canonicalId.Value);
+
             newLinks.Add(new LinkedRecordEntity
             {
                 CanonicalId = canonicalId.Value,
@@ -482,9 +506,13 @@ public class DeduplicationService : IDeduplicationService
                 RecordId = record.RecordId,
                 SourceTimestamp = record.Mills,
                 DataSource = record.DataSource,
-                IsPrimary = !allPotentialMatches.Any(m => m.CanonicalId == canonicalId.Value)
-                            && !newLinks.Any(l => l.CanonicalId == canonicalId.Value)
+                IsPrimary = isPrimary
             });
+
+            if (isNewCanonical)
+            {
+                newCanonicalReps.Add((record.Mills, canonicalId.Value, record.Criteria));
+            }
         }
 
         // 6. Bulk insert
@@ -620,6 +648,30 @@ public class DeduplicationService : IDeduplicationService
             default:
                 return (_, _) => false;
         }
+    }
+
+    private static int LowerBoundTimestamp(long[] sortedTimestamps, long value)
+    {
+        int lo = 0, hi = sortedTimestamps.Length;
+        while (lo < hi)
+        {
+            int mid = lo + ((hi - lo) >> 1);
+            if (sortedTimestamps[mid] < value) lo = mid + 1;
+            else hi = mid;
+        }
+        return lo;
+    }
+
+    private static int UpperBoundTimestamp(long[] sortedTimestamps, long value)
+    {
+        int lo = 0, hi = sortedTimestamps.Length;
+        while (lo < hi)
+        {
+            int mid = lo + ((hi - lo) >> 1);
+            if (sortedTimestamps[mid] <= value) lo = mid + 1;
+            else hi = mid;
+        }
+        return lo;
     }
 
     private static bool CriteriaMatch(RecordType recordType, MatchCriteria a, MatchCriteria b)
