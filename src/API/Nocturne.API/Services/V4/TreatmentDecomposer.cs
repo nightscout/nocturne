@@ -1244,14 +1244,11 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             // Tier 1: batch-local profile switch timeline (avoids cache staleness).
             // Walk the sorted keys in reverse to find the most-recent switch at or before StartMills.
             V4Models.TreatmentInsulinContext? icfg = null;
-            foreach (var key in batchInsulinTimeline.Keys.Reverse())
-            {
-                if (key <= tb.StartMills)
-                {
-                    icfg = batchInsulinTimeline[key];
-                    break;
-                }
-            }
+            var matchingKey = batchInsulinTimeline.Keys
+                .Reverse()
+                .FirstOrDefault(key => key <= tb.StartMills);
+            if (matchingKey != 0 || batchInsulinTimeline.ContainsKey(0))
+                icfg = batchInsulinTimeline[matchingKey];
 
             // Tier 2: ActiveProfileResolver (covers profile switches from previous batches)
             if (icfg is null)
