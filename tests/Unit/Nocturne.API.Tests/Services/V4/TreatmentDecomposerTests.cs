@@ -2560,6 +2560,42 @@ public class TreatmentDecomposerTests : IDisposable
     }
 
     [Fact]
+    public async Task DecomposeTempBasal_Single_AllTiersReturnNull_InsulinContextIsNull()
+    {
+        // Arrange — no active profile switch, no primary insulin configured
+        _activeProfileResolverMock
+            .Setup(r => r.GetActiveInsulinContextAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TreatmentInsulinContext?)null);
+
+        _insulinRepoMock
+            .Setup(r => r.GetPrimaryBolusInsulinAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.PatientInsulin?)null);
+
+        _tempBasalRepoMock
+            .Setup(r => r.GetByLegacyIdAsync("tb-notiers-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal?)null);
+        _tempBasalRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+
+        var treatment = new Treatment
+        {
+            Id = "tb-notiers-1",
+            EventType = "Temp Basal",
+            Mills = 1700000000000,
+            Rate = 0.5,
+            Duration = 30,
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert — record is created but InsulinContext is null; IOB falls back to profile DIA
+        var tempBasal = result.CreatedRecords.OfType<V4Models.TempBasal>().Single();
+        tempBasal.InsulinContext.Should().BeNull();
+    }
+
+    [Fact]
     public async Task DecomposeBatch_TempBasalAfterProfileSwitch_UsesProfileSwitchIcfg()
     {
         // Arrange — a batch with a profile switch at T=0 and a temp basal at T+5min

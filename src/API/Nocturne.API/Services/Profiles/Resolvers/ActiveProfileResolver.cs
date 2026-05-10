@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -184,6 +185,6 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
         long l => l,
         float f => f,
         JsonElement { ValueKind: JsonValueKind.Number } je => je.GetDouble(),
-        _ => double.TryParse(value.ToString(), out var d) ? d : null,
+        _ => double.TryParse(value.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var d) ? d : null,
     };
 }

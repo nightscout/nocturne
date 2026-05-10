@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -955,7 +956,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (icfg is not null)
         {
             metadata["insulinName"] = icfg.InsulinName;
-            metadata["insulinDia"] = icfg.Dia.ToString("F1");
+            metadata["insulinDia"] = icfg.Dia.ToString("F1", CultureInfo.InvariantCulture);
             metadata["insulinPeak"] = icfg.Peak.ToString();
             metadata["insulinConcentration"] = icfg.Concentration.ToString();
             metadata["insulinCurve"] = icfg.Curve;
@@ -1230,33 +1231,46 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         }
 
         // Resolve insulin context for each temp basal
+        // primaryInsulin is fetched at most once lazily if the third tier is ever needed.
+        V4Models.PatientInsulin? primaryInsulin = null;
+        var primaryInsulinFetched = false;
+
         foreach (var tb in tempBasalList)
         {
-            // Try batch-local profile switch first (avoids cache staleness)
-            var icfg = batchInsulinTimeline
-                .Where(kvp => kvp.Key <= tb.StartMills)
-                .OrderByDescending(kvp => kvp.Key)
-                .Select(kvp => kvp.Value)
-                .FirstOrDefault();
+            // Tier 1: batch-local profile switch timeline (avoids cache staleness).
+            // Walk the sorted keys in reverse to find the most-recent switch at or before StartMills.
+            V4Models.TreatmentInsulinContext? icfg = null;
+            foreach (var key in batchInsulinTimeline.Keys.Reverse())
+            {
+                if (key <= tb.StartMills)
+                {
+                    icfg = batchInsulinTimeline[key];
+                    break;
+                }
+            }
 
-            // Fall back to ActiveProfileResolver (covers previous batches)
+            // Tier 2: ActiveProfileResolver (covers profile switches from previous batches)
             if (icfg is null)
                 icfg = await _activeProfileResolver.GetActiveInsulinContextAsync(tb.StartMills, ct);
 
-            // Fall back to primary insulin
+            // Tier 3: primary configured insulin — fetched once per batch, not per record
             if (icfg is null)
             {
-                var primary = await _insulinRepo.GetPrimaryBolusInsulinAsync(ct);
-                if (primary is not null)
+                if (!primaryInsulinFetched)
+                {
+                    primaryInsulin = await _insulinRepo.GetPrimaryBolusInsulinAsync(ct);
+                    primaryInsulinFetched = true;
+                }
+                if (primaryInsulin is not null)
                 {
                     icfg = new V4Models.TreatmentInsulinContext
                     {
-                        PatientInsulinId = primary.Id,
-                        InsulinName = primary.Name,
-                        Dia = primary.Dia,
-                        Peak = primary.Peak,
-                        Curve = primary.Curve,
-                        Concentration = primary.Concentration,
+                        PatientInsulinId = primaryInsulin.Id,
+                        InsulinName = primaryInsulin.Name,
+                        Dia = primaryInsulin.Dia,
+                        Peak = primaryInsulin.Peak,
+                        Curve = primaryInsulin.Curve,
+                        Concentration = primaryInsulin.Concentration,
                     };
                 }
             }
