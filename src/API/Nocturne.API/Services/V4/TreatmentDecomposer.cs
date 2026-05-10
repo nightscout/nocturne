@@ -847,6 +847,51 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         return string.Equals(appString, "AAPS", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Extracts AAPS v4 insulin configuration from the <c>icfg</c> JSON field in
+    /// <see cref="Treatment.AdditionalProperties"/> and converts it into a
+    /// <see cref="V4Models.TreatmentInsulinContext"/>.
+    /// </summary>
+    /// <returns>
+    /// A populated <see cref="V4Models.TreatmentInsulinContext"/> when the treatment carries a
+    /// valid <c>icfg</c> object with positive <c>insulinEndTime</c> and <c>insulinPeakTime</c>;
+    /// <c>null</c> otherwise.
+    /// </returns>
+    internal static V4Models.TreatmentInsulinContext? ExtractAapsIcfg(Treatment treatment)
+    {
+        if (treatment.AdditionalProperties is null
+            || !treatment.AdditionalProperties.TryGetValue("icfg", out var icfgRaw))
+            return null;
+
+        try
+        {
+            if (icfgRaw is not JsonElement icfgElement || icfgElement.ValueKind != JsonValueKind.Object)
+                return null;
+
+            var label = icfgElement.TryGetProperty("insulinLabel", out var lp) ? lp.GetString() ?? "" : "";
+            var endTimeMs = icfgElement.TryGetProperty("insulinEndTime", out var ep) ? ep.GetInt64() : 0L;
+            var peakTimeMs = icfgElement.TryGetProperty("insulinPeakTime", out var pp) ? pp.GetInt64() : 0L;
+            var concentrationRatio = icfgElement.TryGetProperty("concentration", out var cp) ? cp.GetDouble() : 1.0;
+
+            if (endTimeMs <= 0 || peakTimeMs <= 0)
+                return null;
+
+            return new V4Models.TreatmentInsulinContext
+            {
+                PatientInsulinId = Guid.Empty,
+                InsulinName = label,
+                Dia = Math.Round(endTimeMs / 3_600_000.0, 1),
+                Peak = (int)(peakTimeMs / 60_000),
+                Concentration = (int)Math.Round(concentrationRatio * 100),
+                Curve = "rapid-acting",
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static bool IsTempBasal(string? eventType)
     {
         if (string.IsNullOrEmpty(eventType))
@@ -876,6 +921,16 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             metadata["enteredBy"] = treatment.EnteredBy;
 
         metadata["utcOffset"] = treatment.UtcOffset ?? 0;
+
+        var icfg = ExtractAapsIcfg(treatment);
+        if (icfg is not null)
+        {
+            metadata["insulinName"] = icfg.InsulinName;
+            metadata["insulinDia"] = icfg.Dia.ToString("F1");
+            metadata["insulinPeak"] = icfg.Peak.ToString();
+            metadata["insulinConcentration"] = icfg.Concentration.ToString();
+            metadata["insulinCurve"] = icfg.Curve;
+        }
 
         return metadata.Count > 0 ? metadata : null;
     }

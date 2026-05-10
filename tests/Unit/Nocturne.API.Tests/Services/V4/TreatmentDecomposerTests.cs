@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -2149,6 +2150,150 @@ public class TreatmentDecomposerTests : IDisposable
         // Assert
         var bolus = result.CreatedRecords.OfType<V4Models.Bolus>().Single();
         bolus.PatientDeviceId.Should().Be(expectedPatientDeviceId);
+    }
+
+    #endregion
+
+    #region ExtractAapsIcfg
+
+    [Fact]
+    public void ExtractAapsIcfg_ValidIcfg_ReturnsContext()
+    {
+        // Arrange — Lyumjev U200 with 8.8h DIA, 45min peak
+        var icfgJson = JsonSerializer.SerializeToElement(new
+        {
+            insulinLabel = "Lyumjev 45m 8.8h U200",
+            insulinEndTime = 31680000L,   // 8.8 hours in ms
+            insulinPeakTime = 2700000L,   // 45 minutes in ms
+            concentration = 2.0
+        });
+
+        var treatment = new Treatment
+        {
+            Id = "icfg-valid",
+            Mills = 1700000000000,
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["icfg"] = icfgJson
+            }
+        };
+
+        // Act
+        var ctx = TreatmentDecomposer.ExtractAapsIcfg(treatment);
+
+        // Assert
+        ctx.Should().NotBeNull();
+        ctx!.InsulinName.Should().Be("Lyumjev 45m 8.8h U200");
+        ctx.Dia.Should().BeApproximately(8.8, 0.01);
+        ctx.Peak.Should().Be(45);
+        ctx.Concentration.Should().Be(200);
+        ctx.Curve.Should().Be("rapid-acting");
+        ctx.PatientInsulinId.Should().Be(Guid.Empty);
+    }
+
+    [Fact]
+    public void ExtractAapsIcfg_NoAdditionalProperties_ReturnsNull()
+    {
+        var treatment = new Treatment
+        {
+            Id = "icfg-no-props",
+            Mills = 1700000000000,
+            AdditionalProperties = null
+        };
+
+        TreatmentDecomposer.ExtractAapsIcfg(treatment).Should().BeNull();
+    }
+
+    [Fact]
+    public void ExtractAapsIcfg_MalformedIcfg_ReturnsNull()
+    {
+        // icfg is a string instead of an object
+        var icfgElement = JsonSerializer.SerializeToElement("not-json");
+
+        var treatment = new Treatment
+        {
+            Id = "icfg-malformed",
+            Mills = 1700000000000,
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["icfg"] = icfgElement
+            }
+        };
+
+        TreatmentDecomposer.ExtractAapsIcfg(treatment).Should().BeNull();
+    }
+
+    [Fact]
+    public void ExtractAapsIcfg_U40Concentration_ConvertsCorrectly()
+    {
+        var icfgJson = JsonSerializer.SerializeToElement(new
+        {
+            insulinLabel = "Insulin U40",
+            insulinEndTime = 12600000L,   // 3.5 hours
+            insulinPeakTime = 3300000L,   // 55 minutes
+            concentration = 0.4
+        });
+
+        var treatment = new Treatment
+        {
+            Id = "icfg-u40",
+            Mills = 1700000000000,
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["icfg"] = icfgJson
+            }
+        };
+
+        var ctx = TreatmentDecomposer.ExtractAapsIcfg(treatment);
+
+        ctx.Should().NotBeNull();
+        ctx!.Concentration.Should().Be(40);
+        ctx.Dia.Should().BeApproximately(3.5, 0.01);
+        ctx.Peak.Should().Be(55);
+    }
+
+    [Fact]
+    public async Task DecomposeProfileSwitch_WithAapsIcfg_StoresInMetadata()
+    {
+        // Arrange — Profile Switch with icfg in AdditionalProperties
+        var icfgJson = JsonSerializer.SerializeToElement(new
+        {
+            insulinLabel = "NovoRapid",
+            insulinEndTime = 12600000L,   // 3.5 hours
+            insulinPeakTime = 3300000L,   // 55 minutes
+            concentration = 1.0
+        });
+
+        var treatment = new Treatment
+        {
+            Id = "profile-switch-icfg",
+            EventType = "Profile Switch",
+            Mills = 1700000000000,
+            Profile = "Default",
+            EnteredBy = "AAPS",
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["icfg"] = icfgJson
+            }
+        };
+
+        StateSpan? capturedSpan = null;
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .Callback<StateSpan, CancellationToken>((ss, _) => capturedSpan = ss)
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => ss);
+
+        // Act
+        await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        capturedSpan.Should().NotBeNull();
+        capturedSpan!.Metadata.Should().NotBeNull();
+        capturedSpan.Metadata!["insulinName"].Should().Be("NovoRapid");
+        capturedSpan.Metadata["insulinDia"].Should().Be("3.5");
+        capturedSpan.Metadata["insulinPeak"].Should().Be("55");
+        capturedSpan.Metadata["insulinConcentration"].Should().Be("100");
+        capturedSpan.Metadata["insulinCurve"].Should().Be("rapid-acting");
     }
 
     #endregion
