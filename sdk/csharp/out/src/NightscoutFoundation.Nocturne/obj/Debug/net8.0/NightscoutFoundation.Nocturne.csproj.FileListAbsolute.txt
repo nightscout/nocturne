@@ -10,3 +10,15 @@ C:\Users\rhysg\Documents\Github\nocturne\sdk\csharp\out\src\NightscoutFoundation
 C:\Users\rhysg\Documents\Github\nocturne\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\net8.0\refint\NightscoutFoundation.Nocturne.dll
 C:\Users\rhysg\Documents\Github\nocturne\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\net8.0\NightscoutFoundation.Nocturne.pdb
 C:\Users\rhysg\Documents\Github\nocturne\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\net8.0\ref\NightscoutFoundation.Nocturne.dll
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\bin\Debug\net8.0\NightscoutFoundation.Nocturne.xml
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\bin\Debug\net8.0\NightscoutFoundation.Nocturne.deps.json
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\bin\Debug\net8.0\NightscoutFoundation.Nocturne.dll
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\bin\Debug\net8.0\NightscoutFoundation.Nocturne.pdb
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\net8.0\NightscoutFoundation.Nocturne.csproj.AssemblyReference.cache
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\net8.0\NightscoutFoundation.Nocturne.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\net8.0\NightscoutFoundation.Nocturne.csproj.CoreCompileInputs.cache
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\net8.0\NightscoutFoundation.Nocturne.sourcelink.json
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\net8.0\NightscoutFoundation.Nocturne.dll
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\net8.0\refint\NightscoutFoundation.Nocturne.dll
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\net8.0\NightscoutFoundation.Nocturne.pdb
+C:\Users\rhysg\Documents\Github\nocturne\.worktrees\insulin-concentration-aaps-v4\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\net8.0\ref\NightscoutFoundation.Nocturne.dll

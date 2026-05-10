@@ -31386,6 +31386,15 @@
           "icon": {
             "type": "string"
           },
+          "connectorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastSuccessfulSync": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "isHealthy": {
             "type": "boolean"
           }

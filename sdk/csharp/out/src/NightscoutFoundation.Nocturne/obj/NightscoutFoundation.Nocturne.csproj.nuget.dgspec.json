@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj": {}
+    "c:\\Users\\rhysg\\Documents\\Github\\nocturne\\.worktrees\\insulin-concentration-aaps-v4\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj": {}
   },
   "projects": {
-    "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj": {
+    "c:\\Users\\rhysg\\Documents\\Github\\nocturne\\.worktrees\\insulin-concentration-aaps-v4\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj": {
       "version": "0.1.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj",
+        "projectUniqueName": "c:\\Users\\rhysg\\Documents\\Github\\nocturne\\.worktrees\\insulin-concentration-aaps-v4\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj",
         "projectName": "NightscoutFoundation.Nocturne",
-        "projectPath": "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj",
+        "projectPath": "c:\\Users\\rhysg\\Documents\\Github\\nocturne\\.worktrees\\insulin-concentration-aaps-v4\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj",
         "packagesPath": "C:\\Users\\rhysg\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\obj\\",
+        "outputPath": "c:\\Users\\rhysg\\Documents\\Github\\nocturne\\.worktrees\\insulin-concentration-aaps-v4\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

@@ -27435,6 +27435,8 @@ export interface DataSourceInfo {
     status?: string;
     minutesSinceLastData?: number | undefined;
     icon?: string;
+    connectorId?: string | undefined;
+    lastSuccessfulSync?: Date | undefined;
     isHealthy?: boolean;
 }
 

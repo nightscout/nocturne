@@ -170,11 +170,11 @@
   "project": {
     "version": "0.1.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj",
+      "projectUniqueName": "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\.worktrees\\insulin-concentration-aaps-v4\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj",
       "projectName": "NightscoutFoundation.Nocturne",
-      "projectPath": "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj",
+      "projectPath": "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\.worktrees\\insulin-concentration-aaps-v4\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj",
       "packagesPath": "C:\\Users\\rhysg\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\obj\\",
+      "outputPath": "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\.worktrees\\insulin-concentration-aaps-v4\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

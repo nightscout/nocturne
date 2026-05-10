@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "MXk6NzHQJRI=",
+  "dgSpecHash": "5ppBBkW8ssY=",
   "success": true,
-  "projectFilePath": "C:\\Users\\rhysg\\Documents\\Github\\nocturne\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj",
+  "projectFilePath": "c:\\Users\\rhysg\\Documents\\Github\\nocturne\\.worktrees\\insulin-concentration-aaps-v4\\sdk\\csharp\\out\\src\\NightscoutFoundation.Nocturne\\NightscoutFoundation.Nocturne.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\rhysg\\.nuget\\packages\\jsonsubtypes\\2.0.1\\jsonsubtypes.2.0.1.nupkg.sha512",
     "C:\\Users\\rhysg\\.nuget\\packages\\newtonsoft.json\\13.0.3\\newtonsoft.json.13.0.3.nupkg.sha512",
