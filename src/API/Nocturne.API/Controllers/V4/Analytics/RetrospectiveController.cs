@@ -30,6 +30,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="IBasalRateResolver"/>
 [ApiController]
+[Tags("Analytics")]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
 public class RetrospectiveController : ControllerBase

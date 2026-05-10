@@ -15,6 +15,7 @@ namespace Nocturne.API.Controllers.V1;
 /// <seealso cref="IStatusService"/>
 /// <seealso cref="StatusResponse"/>
 [ApiController]
+[Tags("V1")]
 [Route("api/v1/[controller]")]
 public class StatusController : ControllerBase
 {

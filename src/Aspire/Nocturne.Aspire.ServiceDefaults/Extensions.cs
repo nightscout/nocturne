@@ -20,6 +20,12 @@ public static class Extensions
 {
     public static IHostApplicationBuilder AddServiceDefaults(this IHostApplicationBuilder builder)
     {
+        // EF Core logs every executed SQL command at Information by default. Under
+        // load (e.g. connector ingest) this floods stdout and the OTEL pipeline
+        // with thousands of entries per second. Suppress at the source so all
+        // downstream providers (Console, OTEL) see the reduced volume.
+        builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
+
         builder.ConfigureOpenTelemetry();
 
         builder.AddDefaultHealthChecks();

@@ -388,6 +388,120 @@ public class DeduplicationService : IDeduplicationService
             recordType, recordId, canonicalId, isPrimary);
     }
 
+    /// <inheritdoc />
+    public async Task<DeduplicationBatchResult> DeduplicateBatchAsync(
+        RecordType recordType,
+        IReadOnlyList<DeduplicationInput> records,
+        CancellationToken ct = default)
+    {
+        if (records.Count == 0)
+            return new DeduplicationBatchResult(0, 0, 0, 0);
+
+        var recordTypeStr = recordType.ToString().ToLowerInvariant();
+
+        // 1. Compute union time window
+        var minMills = records.Min(r => r.Mills) - MatchingWindowMillis;
+        var maxMills = records.Max(r => r.Mills) + MatchingWindowMillis;
+
+        // 2. One query: all linked_records in the window for this type
+        var allPotentialMatches = await _context.LinkedRecords
+            .Where(lr => lr.RecordType == recordTypeStr)
+            .Where(lr => lr.SourceTimestamp >= minMills && lr.SourceTimestamp <= maxMills)
+            .ToListAsync(ct);
+
+        // 3. One query: load type-specific matcher
+        var referencedIds = allPotentialMatches.Select(m => m.RecordId).ToHashSet();
+        var matcher = await LoadMatcherAsync(recordType, referencedIds, ct);
+
+        // 4. One query: which input records are already linked?
+        var inputIds = records.Select(r => r.RecordId).ToList();
+        var alreadyLinked = (await _context.LinkedRecords
+            .Where(lr => lr.RecordType == recordTypeStr && inputIds.Contains(lr.RecordId))
+            .Select(lr => lr.RecordId)
+            .ToListAsync(ct))
+            .ToHashSet();
+
+        // 5. In-memory matching + intra-batch canonical assignment
+        var batchAssignments = new List<(DeduplicationInput input, Guid canonicalId)>();
+        var newLinks = new List<LinkedRecordEntity>();
+        var groupsCreated = 0;
+        var duplicateGroups = 0;
+
+        foreach (var record in records)
+        {
+            if (alreadyLinked.Contains(record.RecordId))
+                continue;
+
+            var windowStart = record.Mills - MatchingWindowMillis;
+            var windowEnd = record.Mills + MatchingWindowMillis;
+
+            // Check DB matches
+            var myMatches = allPotentialMatches
+                .Where(m => m.SourceTimestamp >= windowStart && m.SourceTimestamp <= windowEnd)
+                .ToList();
+
+            Guid? canonicalId = null;
+
+            // Try to match against existing canonical groups
+            foreach (var group in myMatches.GroupBy(m => m.CanonicalId))
+            {
+                if (group.Any(m => matcher(m.RecordId, record.Criteria)))
+                {
+                    canonicalId = group.Key;
+                    duplicateGroups++;
+                    break;
+                }
+            }
+
+            // Try intra-batch matches
+            if (canonicalId == null)
+            {
+                foreach (var (priorInput, priorCanonical) in batchAssignments)
+                {
+                    if (Math.Abs(priorInput.Mills - record.Mills) <= MatchingWindowMillis
+                        && CriteriaMatch(recordType, priorInput.Criteria, record.Criteria))
+                    {
+                        canonicalId = priorCanonical;
+                        duplicateGroups++;
+                        break;
+                    }
+                }
+            }
+
+            if (canonicalId == null)
+            {
+                canonicalId = Guid.CreateVersion7();
+                groupsCreated++;
+            }
+
+            batchAssignments.Add((record, canonicalId.Value));
+            newLinks.Add(new LinkedRecordEntity
+            {
+                CanonicalId = canonicalId.Value,
+                RecordType = recordTypeStr,
+                RecordId = record.RecordId,
+                SourceTimestamp = record.Mills,
+                DataSource = record.DataSource,
+                IsPrimary = !allPotentialMatches.Any(m => m.CanonicalId == canonicalId.Value)
+                            && !newLinks.Any(l => l.CanonicalId == canonicalId.Value)
+            });
+        }
+
+        // 6. Bulk insert
+        if (newLinks.Count > 0)
+        {
+            _context.LinkedRecords.AddRange(newLinks);
+            await _context.SaveChangesAsync(ct);
+            _context.ChangeTracker.Clear();
+        }
+
+        return new DeduplicationBatchResult(
+            Processed: records.Count,
+            GroupsCreated: groupsCreated,
+            RecordsLinked: newLinks.Count,
+            DuplicateGroups: duplicateGroups);
+    }
+
     private async Task<bool> RecordExistsAsync(string recordType, Guid recordId, CancellationToken ct)
     {
         return recordType switch
@@ -401,6 +515,131 @@ public class DeduplicationService : IDeduplicationService
             "note" => await _context.Notes.AnyAsync(n => n.Id == recordId, ct),
             "boluscalculation" => await _context.BolusCalculations.AnyAsync(b => b.Id == recordId, ct),
             _ => true // Assume exists for unknown types to avoid accidental promotion
+        };
+    }
+
+    private async Task<Func<Guid, MatchCriteria, bool>> LoadMatcherAsync(
+        RecordType recordType, HashSet<Guid> ids, CancellationToken ct)
+    {
+        if (ids.Count == 0)
+            return (_, _) => false;
+
+        switch (recordType)
+        {
+            case RecordType.TempBasal:
+            {
+                var records = (await _context.TempBasals
+                    .Where(t => ids.Contains(t.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(t => t.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var tb) && criteria.Rate.HasValue
+                    && Math.Abs(tb.Rate - criteria.Rate.Value) <= criteria.RateTolerance;
+            }
+            case RecordType.SensorGlucose:
+            {
+                var records = (await _context.SensorGlucose
+                    .Where(s => ids.Contains(s.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(s => s.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var sg) && criteria.GlucoseValue.HasValue
+                    && Math.Abs(sg.Mgdl - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance;
+            }
+            case RecordType.Bolus:
+            {
+                var records = (await _context.Boluses
+                    .Where(b => ids.Contains(b.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(b => b.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var b) && criteria.Insulin.HasValue
+                    && Math.Abs(b.Insulin - criteria.Insulin.Value) <= criteria.InsulinTolerance;
+            }
+            case RecordType.CarbIntake:
+            {
+                var records = (await _context.CarbIntakes
+                    .Where(c => ids.Contains(c.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(c => c.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var c) && criteria.Carbs.HasValue
+                    && Math.Abs(c.Carbs - criteria.Carbs.Value) <= criteria.CarbsTolerance;
+            }
+            case RecordType.BGCheck:
+            {
+                var records = (await _context.BGChecks
+                    .Where(bg => ids.Contains(bg.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(bg => bg.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var bg) && criteria.GlucoseValue.HasValue
+                    && Math.Abs(bg.Glucose - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance;
+            }
+            case RecordType.DeviceEvent:
+            {
+                var records = (await _context.DeviceEvents
+                    .Where(d => ids.Contains(d.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(d => d.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var d) && !string.IsNullOrEmpty(criteria.EventType)
+                    && string.Equals(d.EventType, criteria.EventType, StringComparison.OrdinalIgnoreCase);
+            }
+            case RecordType.Note:
+                return (_, _) => true; // time-window only matching
+            case RecordType.BolusCalculation:
+            {
+                var records = (await _context.BolusCalculations
+                    .Where(bc => ids.Contains(bc.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(bc => bc.Id);
+                return (id, criteria) =>
+                    records.TryGetValue(id, out var bc) && criteria.Carbs.HasValue
+                    && Math.Abs((bc.CarbInput ?? 0) - criteria.Carbs.Value) <= criteria.CarbsTolerance;
+            }
+            case RecordType.StateSpan:
+            {
+                var records = (await _context.StateSpans
+                    .Where(s => ids.Contains(s.Id))
+                    .ToListAsync(ct))
+                    .ToDictionary(s => s.Id);
+                return (id, criteria) =>
+                {
+                    if (!records.TryGetValue(id, out var ss) || !criteria.Category.HasValue)
+                        return false;
+                    var categoryStr = criteria.Category.Value.ToString();
+                    if (!string.Equals(ss.Category, categoryStr, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                    if (!string.IsNullOrEmpty(criteria.State)
+                        && !string.Equals(ss.State, criteria.State, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                    return true;
+                };
+            }
+            default:
+                return (_, _) => false;
+        }
+    }
+
+    private static bool CriteriaMatch(RecordType recordType, MatchCriteria a, MatchCriteria b)
+    {
+        return recordType switch
+        {
+            RecordType.TempBasal => a.Rate.HasValue && b.Rate.HasValue
+                && Math.Abs(a.Rate.Value - b.Rate.Value) <= Math.Max(a.RateTolerance, b.RateTolerance),
+            RecordType.SensorGlucose or RecordType.BGCheck => a.GlucoseValue.HasValue && b.GlucoseValue.HasValue
+                && Math.Abs(a.GlucoseValue.Value - b.GlucoseValue.Value) <= Math.Max(a.GlucoseTolerance, b.GlucoseTolerance),
+            RecordType.Bolus => a.Insulin.HasValue && b.Insulin.HasValue
+                && Math.Abs(a.Insulin.Value - b.Insulin.Value) <= Math.Max(a.InsulinTolerance, b.InsulinTolerance),
+            RecordType.CarbIntake or RecordType.BolusCalculation => a.Carbs.HasValue && b.Carbs.HasValue
+                && Math.Abs(a.Carbs.Value - b.Carbs.Value) <= Math.Max(a.CarbsTolerance, b.CarbsTolerance),
+            RecordType.DeviceEvent => string.Equals(a.EventType, b.EventType, StringComparison.OrdinalIgnoreCase),
+            RecordType.Note => true,
+            RecordType.StateSpan => a.Category == b.Category
+                && (string.IsNullOrEmpty(a.State) || string.IsNullOrEmpty(b.State)
+                    || string.Equals(a.State, b.State, StringComparison.OrdinalIgnoreCase)),
+            _ => false
         };
     }
 
@@ -495,10 +734,8 @@ public class DeduplicationService : IDeduplicationService
 
         try
         {
-            var treatmentCount = 0;
             var stateSpanCount = await _context.StateSpans.CountAsync(cancellationToken);
             var sensorGlucoseCount = await _context.SensorGlucose.CountAsync(cancellationToken);
-            var meterGlucoseCount = await _context.MeterGlucose.CountAsync(cancellationToken);
             var bolusCount = await _context.Boluses.CountAsync(cancellationToken);
             var carbIntakeCount = await _context.CarbIntakes.CountAsync(cancellationToken);
             var bgCheckCount = await _context.BGChecks.CountAsync(cancellationToken);
@@ -506,174 +743,157 @@ public class DeduplicationService : IDeduplicationService
             var noteCount = await _context.Notes.CountAsync(cancellationToken);
             var bolusCalcCount = await _context.BolusCalculations.CountAsync(cancellationToken);
             var tempBasalCount = await _context.TempBasals.CountAsync(cancellationToken);
-            var totalRecords = treatmentCount + stateSpanCount
-                + sensorGlucoseCount + meterGlucoseCount + bolusCount + carbIntakeCount + bgCheckCount
-                + deviceEventCount + noteCount + bolusCalcCount + tempBasalCount;
+            // NOTE: MeterGlucose was previously processed via DeduplicateEntriesAsync alongside
+            // SensorGlucose, but there is no RecordType.MeterGlucose enum value. The old code also
+            // double-processed SensorGlucose (once in Entries, once standalone). MeterGlucose dedup
+            // is intentionally dropped; add a RecordType if it's needed in the future.
+            var totalRecords = stateSpanCount + sensorGlucoseCount + bolusCount + carbIntakeCount
+                + bgCheckCount + deviceEventCount + noteCount + bolusCalcCount + tempBasalCount;
 
             var processed = 0;
             var groupsCreated = 0;
             var recordsLinked = 0;
             var duplicateGroups = 0;
 
-            // Process entries
-            progress?.Report(new DeduplicationProgress
-            {
-                TotalRecords = totalRecords,
-                ProcessedRecords = processed,
-                GroupsFound = groupsCreated,
-                RecordsLinked = recordsLinked,
-                CurrentPhase = "Entries"
-            });
-
-            var entryResult = await DeduplicateEntriesAsync(progress, totalRecords, processed, cancellationToken);
-            processed += entryResult.processed;
-            groupsCreated += entryResult.groups;
-            recordsLinked += entryResult.linked;
-            duplicateGroups += entryResult.duplicates;
-
-            // Process state spans
-            progress?.Report(new DeduplicationProgress
-            {
-                TotalRecords = totalRecords,
-                ProcessedRecords = processed,
-                GroupsFound = groupsCreated,
-                RecordsLinked = recordsLinked,
-                CurrentPhase = "StateSpans"
-            });
-
-            var stateSpanResult = await DeduplicateStateSpansAsync(progress, totalRecords, processed, cancellationToken);
-            processed += stateSpanResult.processed;
-            groupsCreated += stateSpanResult.groups;
-            recordsLinked += stateSpanResult.linked;
-            duplicateGroups += stateSpanResult.duplicates;
-
-            // Process sensor glucose
-            progress?.Report(new DeduplicationProgress
-            {
-                TotalRecords = totalRecords,
-                ProcessedRecords = processed,
-                GroupsFound = groupsCreated,
-                RecordsLinked = recordsLinked,
-                CurrentPhase = "SensorGlucose"
-            });
-
-            var sensorGlucoseResult = await DeduplicateSensorGlucoseAsync(progress, totalRecords, processed, cancellationToken);
+            // --- SensorGlucose ---
+            var sensorGlucoseResult = await DeduplicateTypeAsync(
+                RecordType.SensorGlucose,
+                _context.SensorGlucose.OrderBy(e => e.Timestamp),
+                e => new DeduplicationInput(
+                    e.Id,
+                    new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    e.DataSource ?? "unknown",
+                    new MatchCriteria { GlucoseValue = e.Mgdl, GlucoseTolerance = 5.0 }),
+                "SensorGlucose", totalRecords, processed, progress, cancellationToken);
             processed += sensorGlucoseResult.processed;
             groupsCreated += sensorGlucoseResult.groups;
             recordsLinked += sensorGlucoseResult.linked;
             duplicateGroups += sensorGlucoseResult.duplicates;
 
-            // Process boluses
-            progress?.Report(new DeduplicationProgress
-            {
-                TotalRecords = totalRecords,
-                ProcessedRecords = processed,
-                GroupsFound = groupsCreated,
-                RecordsLinked = recordsLinked,
-                CurrentPhase = "Boluses"
-            });
-
-            var bolusResult = await DeduplicateBolusesAsync(progress, totalRecords, processed, cancellationToken);
+            // --- Boluses ---
+            var bolusResult = await DeduplicateTypeAsync(
+                RecordType.Bolus,
+                _context.Boluses.OrderBy(b => b.Timestamp),
+                b => new DeduplicationInput(
+                    b.Id,
+                    new DateTimeOffset(b.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    b.DataSource ?? "unknown",
+                    new MatchCriteria { Insulin = b.Insulin, InsulinTolerance = 0.05 }),
+                "Boluses", totalRecords, processed, progress, cancellationToken);
             processed += bolusResult.processed;
             groupsCreated += bolusResult.groups;
             recordsLinked += bolusResult.linked;
             duplicateGroups += bolusResult.duplicates;
 
-            // Process carb intakes
-            progress?.Report(new DeduplicationProgress
-            {
-                TotalRecords = totalRecords,
-                ProcessedRecords = processed,
-                GroupsFound = groupsCreated,
-                RecordsLinked = recordsLinked,
-                CurrentPhase = "CarbIntakes"
-            });
-
-            var carbIntakeResult = await DeduplicateCarbIntakesAsync(progress, totalRecords, processed, cancellationToken);
+            // --- CarbIntakes ---
+            var carbIntakeResult = await DeduplicateTypeAsync(
+                RecordType.CarbIntake,
+                _context.CarbIntakes.OrderBy(c => c.Timestamp),
+                c => new DeduplicationInput(
+                    c.Id,
+                    new DateTimeOffset(c.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    c.DataSource ?? "unknown",
+                    new MatchCriteria { Carbs = c.Carbs, CarbsTolerance = 1.0 }),
+                "CarbIntakes", totalRecords, processed, progress, cancellationToken);
             processed += carbIntakeResult.processed;
             groupsCreated += carbIntakeResult.groups;
             recordsLinked += carbIntakeResult.linked;
             duplicateGroups += carbIntakeResult.duplicates;
 
-            // Process BG checks
-            progress?.Report(new DeduplicationProgress
-            {
-                TotalRecords = totalRecords,
-                ProcessedRecords = processed,
-                GroupsFound = groupsCreated,
-                RecordsLinked = recordsLinked,
-                CurrentPhase = "BGChecks"
-            });
-
-            var bgCheckResult = await DeduplicateBGChecksAsync(progress, totalRecords, processed, cancellationToken);
+            // --- BGChecks ---
+            var bgCheckResult = await DeduplicateTypeAsync(
+                RecordType.BGCheck,
+                _context.BGChecks.OrderBy(bg => bg.Timestamp),
+                bg => new DeduplicationInput(
+                    bg.Id,
+                    new DateTimeOffset(bg.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    bg.DataSource ?? "unknown",
+                    new MatchCriteria { GlucoseValue = bg.Glucose, GlucoseTolerance = 5.0 }),
+                "BGChecks", totalRecords, processed, progress, cancellationToken);
             processed += bgCheckResult.processed;
             groupsCreated += bgCheckResult.groups;
             recordsLinked += bgCheckResult.linked;
             duplicateGroups += bgCheckResult.duplicates;
 
-            // Process device events
-            progress?.Report(new DeduplicationProgress
-            {
-                TotalRecords = totalRecords,
-                ProcessedRecords = processed,
-                GroupsFound = groupsCreated,
-                RecordsLinked = recordsLinked,
-                CurrentPhase = "DeviceEvents"
-            });
-
-            var deviceEventResult = await DeduplicateDeviceEventsAsync(progress, totalRecords, processed, cancellationToken);
+            // --- DeviceEvents ---
+            var deviceEventResult = await DeduplicateTypeAsync(
+                RecordType.DeviceEvent,
+                _context.DeviceEvents.OrderBy(d => d.Timestamp),
+                d => new DeduplicationInput(
+                    d.Id,
+                    new DateTimeOffset(d.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    d.DataSource ?? "unknown",
+                    new MatchCriteria { EventType = d.EventType }),
+                "DeviceEvents", totalRecords, processed, progress, cancellationToken);
             processed += deviceEventResult.processed;
             groupsCreated += deviceEventResult.groups;
             recordsLinked += deviceEventResult.linked;
             duplicateGroups += deviceEventResult.duplicates;
 
-            // Process notes
-            progress?.Report(new DeduplicationProgress
-            {
-                TotalRecords = totalRecords,
-                ProcessedRecords = processed,
-                GroupsFound = groupsCreated,
-                RecordsLinked = recordsLinked,
-                CurrentPhase = "Notes"
-            });
-
-            var noteResult = await DeduplicateNotesAsync(progress, totalRecords, processed, cancellationToken);
+            // --- Notes ---
+            var noteResult = await DeduplicateTypeAsync(
+                RecordType.Note,
+                _context.Notes.OrderBy(n => n.Timestamp),
+                n => new DeduplicationInput(
+                    n.Id,
+                    new DateTimeOffset(n.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    n.DataSource ?? "unknown",
+                    new MatchCriteria()),
+                "Notes", totalRecords, processed, progress, cancellationToken);
             processed += noteResult.processed;
             groupsCreated += noteResult.groups;
             recordsLinked += noteResult.linked;
             duplicateGroups += noteResult.duplicates;
 
-            // Process bolus calculations
-            progress?.Report(new DeduplicationProgress
-            {
-                TotalRecords = totalRecords,
-                ProcessedRecords = processed,
-                GroupsFound = groupsCreated,
-                RecordsLinked = recordsLinked,
-                CurrentPhase = "BolusCalculations"
-            });
-
-            var bolusCalcResult = await DeduplicateBolusCalculationsAsync(progress, totalRecords, processed, cancellationToken);
+            // --- BolusCalculations ---
+            var bolusCalcResult = await DeduplicateTypeAsync(
+                RecordType.BolusCalculation,
+                _context.BolusCalculations.OrderBy(bc => bc.Timestamp),
+                bc => new DeduplicationInput(
+                    bc.Id,
+                    new DateTimeOffset(bc.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    bc.DataSource ?? "unknown",
+                    new MatchCriteria { Carbs = bc.CarbInput ?? 0, CarbsTolerance = 1.0 }),
+                "BolusCalculations", totalRecords, processed, progress, cancellationToken);
             processed += bolusCalcResult.processed;
             groupsCreated += bolusCalcResult.groups;
             recordsLinked += bolusCalcResult.linked;
             duplicateGroups += bolusCalcResult.duplicates;
 
-            // Process temp basals
-            progress?.Report(new DeduplicationProgress
-            {
-                TotalRecords = totalRecords,
-                ProcessedRecords = processed,
-                GroupsFound = groupsCreated,
-                RecordsLinked = recordsLinked,
-                CurrentPhase = "TempBasals"
-            });
-
-            var tempBasalResult = await DeduplicateTempBasalsAsync(progress, totalRecords, processed, cancellationToken);
+            // --- TempBasals ---
+            var tempBasalResult = await DeduplicateTypeAsync(
+                RecordType.TempBasal,
+                _context.TempBasals.OrderBy(t => t.StartTimestamp),
+                t => new DeduplicationInput(
+                    t.Id,
+                    new DateTimeOffset(t.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    t.DataSource ?? "unknown",
+                    new MatchCriteria { Rate = t.Rate, RateTolerance = 0.05 }),
+                "TempBasals", totalRecords, processed, progress, cancellationToken);
             processed += tempBasalResult.processed;
             groupsCreated += tempBasalResult.groups;
             recordsLinked += tempBasalResult.linked;
             duplicateGroups += tempBasalResult.duplicates;
+
+            // --- StateSpans ---
+            var stateSpanResult = await DeduplicateTypeAsync(
+                RecordType.StateSpan,
+                _context.StateSpans.OrderBy(s => s.StartTimestamp),
+                s => new DeduplicationInput(
+                    s.Id,
+                    new DateTimeOffset(s.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    s.Source ?? "unknown",
+                    new MatchCriteria
+                    {
+                        Category = Enum.TryParse<StateSpanCategory>(s.Category, ignoreCase: true, out var cat)
+                            ? cat : null,
+                        State = s.State
+                    }),
+                "StateSpans", totalRecords, processed, progress, cancellationToken);
+            processed += stateSpanResult.processed;
+            groupsCreated += stateSpanResult.groups;
+            recordsLinked += stateSpanResult.linked;
+            duplicateGroups += stateSpanResult.duplicates;
 
             stopwatch.Stop();
 
@@ -688,7 +908,7 @@ public class DeduplicationService : IDeduplicationService
                 RecordsLinked = recordsLinked,
                 DuplicateGroupsFound = duplicateGroups,
                 Duration = stopwatch.Elapsed,
-                EntriesProcessed = entryResult.processed,
+                EntriesProcessed = sensorGlucoseResult.processed,
                 TreatmentsProcessed = 0,
                 StateSpansProcessed = stateSpanResult.processed,
                 SensorGlucoseProcessed = sensorGlucoseResult.processed,
@@ -814,926 +1034,46 @@ public class DeduplicationService : IDeduplicationService
         return Task.FromResult(false);
     }
 
-    private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateEntriesAsync(
-        IProgress<DeduplicationProgress>? progress,
+    private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateTypeAsync<TEntity>(
+        RecordType recordType,
+        IQueryable<TEntity> query,
+        Func<TEntity, DeduplicationInput> toInput,
+        string phaseName,
         int totalRecords,
         int startOffset,
-        CancellationToken cancellationToken)
-    {
-        const int batchSize = 1000;
-        var processed = 0;
-        var groupsCreated = 0;
-        var recordsLinked = 0;
-        var duplicateGroups = 0;
-
-        // Step 1: Materialize from DB with just the fields we need
-        var sgRaw = await _context.SensorGlucose
-            .Select(e => new { e.Id, e.Timestamp, Glucose = e.Mgdl, e.DataSource })
-            .ToListAsync(cancellationToken);
-        var mgRaw = await _context.MeterGlucose
-            .Select(e => new { e.Id, e.Timestamp, Glucose = e.Mgdl, e.DataSource })
-            .ToListAsync(cancellationToken);
-
-        // Step 2: Compute mills in memory and combine
-        var allRecords = sgRaw.Select(e => (e.Id, Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(), e.Glucose, Type: "sgv", e.DataSource))
-            .Concat(mgRaw.Select(e => (e.Id, Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(), e.Glucose, Type: "mbg", e.DataSource)))
-            .OrderBy(e => e.Mills)
-            .ToList();
-
-        var groupedByTime = new Dictionary<long, List<(Guid Id, double Glucose, string Type, string? DataSource)>>();
-
-        foreach (var record in allRecords)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var windowKey = record.Mills / MatchingWindowMillis;
-
-            if (!groupedByTime.ContainsKey(windowKey))
-                groupedByTime[windowKey] = new();
-
-            groupedByTime[windowKey].Add((record.Id, record.Glucose, record.Type, record.DataSource));
-        }
-
-        // Process each time window
-        foreach (var (windowKey, windowEntries) in groupedByTime)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            // Group by similar glucose values within the window
-            var glucoseGroups = windowEntries
-                .GroupBy(e => Math.Round(e.Glucose / 5) * 5) // Group within +/-5 mg/dL
-                .Where(g => g.Count() > 0);
-
-            foreach (var glucoseGroup in glucoseGroups)
-            {
-                var groupEntries = glucoseGroup.ToList();
-
-                if (groupEntries.Count > 1)
-                {
-                    duplicateGroups++;
-                }
-
-                var canonicalId = Guid.CreateVersion7();
-                groupsCreated++;
-
-                foreach (var entry in groupEntries)
-                {
-                    var recordType = entry.Type == "sgv" ? "sensorglucose" : "meterglucose";
-
-                    // Check if already linked
-                    var existing = await _context.LinkedRecords
-                        .AnyAsync(lr => lr.RecordType == recordType && lr.RecordId == entry.Id, cancellationToken);
-
-                    if (!existing)
-                    {
-                        var linkedRecord = new LinkedRecordEntity
-                        {
-                            CanonicalId = canonicalId,
-                            RecordType = recordType,
-                            RecordId = entry.Id,
-                            SourceTimestamp = windowKey * MatchingWindowMillis,
-                            DataSource = entry.DataSource ?? "unknown",
-                            IsPrimary = entry == groupEntries.First()
-                        };
-                        _context.LinkedRecords.Add(linkedRecord);
-                        recordsLinked++;
-                    }
-
-                    processed++;
-                }
-
-                if (processed % batchSize == 0)
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                    progress?.Report(new DeduplicationProgress
-                    {
-                        TotalRecords = totalRecords,
-                        ProcessedRecords = startOffset + processed,
-                        GroupsFound = groupsCreated,
-                        RecordsLinked = recordsLinked,
-                        CurrentPhase = "Entries"
-                    });
-                }
-            }
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return (processed, groupsCreated, recordsLinked, duplicateGroups);
-    }
-
-
-    private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateStateSpansAsync(
         IProgress<DeduplicationProgress>? progress,
-        int totalRecords,
-        int startOffset,
-        CancellationToken cancellationToken)
+        CancellationToken ct) where TEntity : class
     {
         const int batchSize = 500;
-        var processed = 0;
-        var groupsCreated = 0;
-        var recordsLinked = 0;
-        var duplicateGroups = 0;
+        var allEntities = await query.ToListAsync(ct);
+        var inputs = allEntities.Select(toInput).ToList();
 
-        var stateSpans = await _context.StateSpans
-            .OrderBy(s => s.StartTimestamp)
-            .Select(s => new { s.Id, s.StartTimestamp, s.Category, s.State, s.Source })
-            .ToListAsync(cancellationToken);
+        var totalProcessed = 0;
+        var totalGroups = 0;
+        var totalLinked = 0;
+        var totalDuplicates = 0;
 
-        // Track which spans have been processed to avoid duplicates
-        var processedSpans = new HashSet<Guid>();
-
-        // Process spans in order, looking for matches within the time window
-        foreach (var span in stateSpans)
+        foreach (var chunk in inputs.Chunk(batchSize))
         {
-            if (processedSpans.Contains(span.Id))
-                continue;
+            ct.ThrowIfCancellationRequested();
 
-            cancellationToken.ThrowIfCancellationRequested();
+            var result = await DeduplicateBatchAsync(recordType, chunk, ct);
+            totalProcessed += result.Processed;
+            totalGroups += result.GroupsCreated;
+            totalLinked += result.RecordsLinked;
+            totalDuplicates += result.DuplicateGroups;
 
-            // Find all spans within the matching window that have the same category and state
-            var windowStart = new DateTimeOffset(span.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds() - MatchingWindowMillis;
-            var windowEnd = new DateTimeOffset(span.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds() + MatchingWindowMillis;
-
-            var matches = stateSpans
-                .Where(s => !processedSpans.Contains(s.Id))
-                .Where(s => new DateTimeOffset(s.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds() >= windowStart && new DateTimeOffset(s.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds() <= windowEnd)
-                .Where(s => string.Equals(s.Category, span.Category, StringComparison.OrdinalIgnoreCase))
-                .Where(s => string.Equals(s.State, span.State, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            if (matches.Count == 0)
-                continue;
-
-            if (matches.Count > 1)
+            progress?.Report(new DeduplicationProgress
             {
-                duplicateGroups++;
-            }
-
-            var canonicalId = Guid.CreateVersion7();
-            groupsCreated++;
-
-            foreach (var match in matches)
-            {
-                processedSpans.Add(match.Id);
-
-                var existing = await _context.LinkedRecords
-                    .AnyAsync(lr => lr.RecordType == "statespan" && lr.RecordId == match.Id, cancellationToken);
-
-                if (!existing)
-                {
-                    var linkedRecord = new LinkedRecordEntity
-                    {
-                        CanonicalId = canonicalId,
-                        RecordType = "statespan",
-                        RecordId = match.Id,
-                        SourceTimestamp = new DateTimeOffset(match.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        DataSource = match.Source ?? "unknown",
-                        IsPrimary = match == matches.First()
-                    };
-                    _context.LinkedRecords.Add(linkedRecord);
-                    recordsLinked++;
-                }
-
-                processed++;
-            }
-
-            if (processed % batchSize == 0)
-            {
-                await _context.SaveChangesAsync(cancellationToken);
-                progress?.Report(new DeduplicationProgress
-                {
-                    TotalRecords = totalRecords,
-                    ProcessedRecords = startOffset + processed,
-                    GroupsFound = groupsCreated,
-                    RecordsLinked = recordsLinked,
-                    CurrentPhase = "StateSpans"
-                });
-            }
+                TotalRecords = totalRecords,
+                ProcessedRecords = startOffset + totalProcessed,
+                GroupsFound = totalGroups,
+                RecordsLinked = totalLinked,
+                CurrentPhase = phaseName
+            });
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
-        return (processed, groupsCreated, recordsLinked, duplicateGroups);
-    }
-
-    private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateSensorGlucoseAsync(
-        IProgress<DeduplicationProgress>? progress,
-        int totalRecords,
-        int startOffset,
-        CancellationToken cancellationToken)
-    {
-        const int batchSize = 1000;
-        var processed = 0;
-        var groupsCreated = 0;
-        var recordsLinked = 0;
-        var duplicateGroups = 0;
-
-        var readings = await _context.SensorGlucose
-            .OrderBy(r => r.Timestamp)
-            .Select(r => new { r.Id, r.Timestamp, r.Mgdl, r.DataSource })
-            .ToListAsync(cancellationToken);
-
-        var groupedByTime = new Dictionary<long, List<(Guid Id, double Mgdl, string? DataSource)>>();
-
-        foreach (var reading in readings)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var windowKey = new DateTimeOffset(reading.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds() / MatchingWindowMillis;
-
-            if (!groupedByTime.ContainsKey(windowKey))
-                groupedByTime[windowKey] = new();
-
-            groupedByTime[windowKey].Add((reading.Id, reading.Mgdl, reading.DataSource));
-        }
-
-        foreach (var (windowKey, windowReadings) in groupedByTime)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var glucoseGroups = windowReadings
-                .GroupBy(r => Math.Round(r.Mgdl))
-                .Where(g => g.Count() > 0);
-
-            foreach (var glucoseGroup in glucoseGroups)
-            {
-                var groupItems = glucoseGroup.ToList();
-
-                if (groupItems.Count > 1)
-                    duplicateGroups++;
-
-                var canonicalId = Guid.CreateVersion7();
-                groupsCreated++;
-
-                foreach (var item in groupItems)
-                {
-                    var existing = await _context.LinkedRecords
-                        .AnyAsync(lr => lr.RecordType == "sensorglucose" && lr.RecordId == item.Id, cancellationToken);
-
-                    if (!existing)
-                    {
-                        var linkedRecord = new LinkedRecordEntity
-                        {
-                            CanonicalId = canonicalId,
-                            RecordType = "sensorglucose",
-                            RecordId = item.Id,
-                            SourceTimestamp = windowKey * MatchingWindowMillis,
-                            DataSource = item.DataSource ?? "unknown",
-                            IsPrimary = item == groupItems.First()
-                        };
-                        _context.LinkedRecords.Add(linkedRecord);
-                        recordsLinked++;
-                    }
-
-                    processed++;
-                }
-
-                if (processed % batchSize == 0)
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                    progress?.Report(new DeduplicationProgress
-                    {
-                        TotalRecords = totalRecords,
-                        ProcessedRecords = startOffset + processed,
-                        GroupsFound = groupsCreated,
-                        RecordsLinked = recordsLinked,
-                        CurrentPhase = "SensorGlucose"
-                    });
-                }
-            }
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return (processed, groupsCreated, recordsLinked, duplicateGroups);
-    }
-
-    private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateBolusesAsync(
-        IProgress<DeduplicationProgress>? progress,
-        int totalRecords,
-        int startOffset,
-        CancellationToken cancellationToken)
-    {
-        const int batchSize = 500;
-        var processed = 0;
-        var groupsCreated = 0;
-        var recordsLinked = 0;
-        var duplicateGroups = 0;
-
-        var boluses = await _context.Boluses
-            .OrderBy(b => b.Timestamp)
-            .Select(b => new { b.Id, b.Timestamp, b.Insulin, b.DataSource })
-            .ToListAsync(cancellationToken);
-
-        var groupedByTime = new Dictionary<long, List<(Guid Id, double Insulin, string? DataSource)>>();
-
-        foreach (var bolus in boluses)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var windowKey = new DateTimeOffset(bolus.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds() / MatchingWindowMillis;
-
-            if (!groupedByTime.ContainsKey(windowKey))
-                groupedByTime[windowKey] = new();
-
-            groupedByTime[windowKey].Add((bolus.Id, bolus.Insulin, bolus.DataSource));
-        }
-
-        foreach (var (windowKey, windowBoluses) in groupedByTime)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var insulinGroups = windowBoluses
-                .GroupBy(b => Math.Round(b.Insulin * 20) / 20)
-                .Where(g => g.Count() > 0);
-
-            foreach (var insulinGroup in insulinGroups)
-            {
-                var groupItems = insulinGroup.ToList();
-
-                if (groupItems.Count > 1)
-                    duplicateGroups++;
-
-                var canonicalId = Guid.CreateVersion7();
-                groupsCreated++;
-
-                foreach (var item in groupItems)
-                {
-                    var existing = await _context.LinkedRecords
-                        .AnyAsync(lr => lr.RecordType == "bolus" && lr.RecordId == item.Id, cancellationToken);
-
-                    if (!existing)
-                    {
-                        var linkedRecord = new LinkedRecordEntity
-                        {
-                            CanonicalId = canonicalId,
-                            RecordType = "bolus",
-                            RecordId = item.Id,
-                            SourceTimestamp = windowKey * MatchingWindowMillis,
-                            DataSource = item.DataSource ?? "unknown",
-                            IsPrimary = item == groupItems.First()
-                        };
-                        _context.LinkedRecords.Add(linkedRecord);
-                        recordsLinked++;
-                    }
-
-                    processed++;
-                }
-
-                if (processed % batchSize == 0)
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                    progress?.Report(new DeduplicationProgress
-                    {
-                        TotalRecords = totalRecords,
-                        ProcessedRecords = startOffset + processed,
-                        GroupsFound = groupsCreated,
-                        RecordsLinked = recordsLinked,
-                        CurrentPhase = "Boluses"
-                    });
-                }
-            }
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return (processed, groupsCreated, recordsLinked, duplicateGroups);
-    }
-
-    private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateCarbIntakesAsync(
-        IProgress<DeduplicationProgress>? progress,
-        int totalRecords,
-        int startOffset,
-        CancellationToken cancellationToken)
-    {
-        const int batchSize = 500;
-        var processed = 0;
-        var groupsCreated = 0;
-        var recordsLinked = 0;
-        var duplicateGroups = 0;
-
-        var carbIntakes = await _context.CarbIntakes
-            .OrderBy(c => c.Timestamp)
-            .Select(c => new { c.Id, c.Timestamp, c.Carbs, c.DataSource })
-            .ToListAsync(cancellationToken);
-
-        var groupedByTime = new Dictionary<long, List<(Guid Id, double Carbs, string? DataSource)>>();
-
-        foreach (var carb in carbIntakes)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var windowKey = new DateTimeOffset(carb.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds() / MatchingWindowMillis;
-
-            if (!groupedByTime.ContainsKey(windowKey))
-                groupedByTime[windowKey] = new();
-
-            groupedByTime[windowKey].Add((carb.Id, carb.Carbs, carb.DataSource));
-        }
-
-        foreach (var (windowKey, windowCarbs) in groupedByTime)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var carbGroups = windowCarbs
-                .GroupBy(c => Math.Round(c.Carbs))
-                .Where(g => g.Count() > 0);
-
-            foreach (var carbGroup in carbGroups)
-            {
-                var groupItems = carbGroup.ToList();
-
-                if (groupItems.Count > 1)
-                    duplicateGroups++;
-
-                var canonicalId = Guid.CreateVersion7();
-                groupsCreated++;
-
-                foreach (var item in groupItems)
-                {
-                    var existing = await _context.LinkedRecords
-                        .AnyAsync(lr => lr.RecordType == "carbintake" && lr.RecordId == item.Id, cancellationToken);
-
-                    if (!existing)
-                    {
-                        var linkedRecord = new LinkedRecordEntity
-                        {
-                            CanonicalId = canonicalId,
-                            RecordType = "carbintake",
-                            RecordId = item.Id,
-                            SourceTimestamp = windowKey * MatchingWindowMillis,
-                            DataSource = item.DataSource ?? "unknown",
-                            IsPrimary = item == groupItems.First()
-                        };
-                        _context.LinkedRecords.Add(linkedRecord);
-                        recordsLinked++;
-                    }
-
-                    processed++;
-                }
-
-                if (processed % batchSize == 0)
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                    progress?.Report(new DeduplicationProgress
-                    {
-                        TotalRecords = totalRecords,
-                        ProcessedRecords = startOffset + processed,
-                        GroupsFound = groupsCreated,
-                        RecordsLinked = recordsLinked,
-                        CurrentPhase = "CarbIntakes"
-                    });
-                }
-            }
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return (processed, groupsCreated, recordsLinked, duplicateGroups);
-    }
-
-    private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateBGChecksAsync(
-        IProgress<DeduplicationProgress>? progress,
-        int totalRecords,
-        int startOffset,
-        CancellationToken cancellationToken)
-    {
-        const int batchSize = 500;
-        var processed = 0;
-        var groupsCreated = 0;
-        var recordsLinked = 0;
-        var duplicateGroups = 0;
-
-        var bgChecks = await _context.BGChecks
-            .OrderBy(bg => bg.Timestamp)
-            .Select(bg => new { bg.Id, bg.Timestamp, bg.Glucose, bg.DataSource })
-            .ToListAsync(cancellationToken);
-
-        var groupedByTime = new Dictionary<long, List<(Guid Id, double Glucose, string? DataSource)>>();
-
-        foreach (var bg in bgChecks)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var windowKey = new DateTimeOffset(bg.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds() / MatchingWindowMillis;
-
-            if (!groupedByTime.ContainsKey(windowKey))
-                groupedByTime[windowKey] = new();
-
-            groupedByTime[windowKey].Add((bg.Id, bg.Glucose, bg.DataSource));
-        }
-
-        foreach (var (windowKey, windowBGs) in groupedByTime)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var glucoseGroups = windowBGs
-                .GroupBy(bg => Math.Round(bg.Glucose))
-                .Where(g => g.Count() > 0);
-
-            foreach (var glucoseGroup in glucoseGroups)
-            {
-                var groupItems = glucoseGroup.ToList();
-
-                if (groupItems.Count > 1)
-                    duplicateGroups++;
-
-                var canonicalId = Guid.CreateVersion7();
-                groupsCreated++;
-
-                foreach (var item in groupItems)
-                {
-                    var existing = await _context.LinkedRecords
-                        .AnyAsync(lr => lr.RecordType == "bgcheck" && lr.RecordId == item.Id, cancellationToken);
-
-                    if (!existing)
-                    {
-                        var linkedRecord = new LinkedRecordEntity
-                        {
-                            CanonicalId = canonicalId,
-                            RecordType = "bgcheck",
-                            RecordId = item.Id,
-                            SourceTimestamp = windowKey * MatchingWindowMillis,
-                            DataSource = item.DataSource ?? "unknown",
-                            IsPrimary = item == groupItems.First()
-                        };
-                        _context.LinkedRecords.Add(linkedRecord);
-                        recordsLinked++;
-                    }
-
-                    processed++;
-                }
-
-                if (processed % batchSize == 0)
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                    progress?.Report(new DeduplicationProgress
-                    {
-                        TotalRecords = totalRecords,
-                        ProcessedRecords = startOffset + processed,
-                        GroupsFound = groupsCreated,
-                        RecordsLinked = recordsLinked,
-                        CurrentPhase = "BGChecks"
-                    });
-                }
-            }
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return (processed, groupsCreated, recordsLinked, duplicateGroups);
-    }
-
-    private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateDeviceEventsAsync(
-        IProgress<DeduplicationProgress>? progress,
-        int totalRecords,
-        int startOffset,
-        CancellationToken cancellationToken)
-    {
-        const int batchSize = 500;
-        var processed = 0;
-        var groupsCreated = 0;
-        var recordsLinked = 0;
-        var duplicateGroups = 0;
-
-        var deviceEvents = await _context.DeviceEvents
-            .OrderBy(e => e.Timestamp)
-            .Select(e => new { e.Id, e.Timestamp, e.EventType, e.DataSource })
-            .ToListAsync(cancellationToken);
-
-        var groupedByTime = new Dictionary<long, List<(Guid Id, string EventType, string? DataSource)>>();
-
-        foreach (var evt in deviceEvents)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var windowKey = new DateTimeOffset(evt.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds() / MatchingWindowMillis;
-
-            if (!groupedByTime.ContainsKey(windowKey))
-                groupedByTime[windowKey] = new();
-
-            groupedByTime[windowKey].Add((evt.Id, evt.EventType, evt.DataSource));
-        }
-
-        foreach (var (windowKey, windowEvents) in groupedByTime)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var eventTypeGroups = windowEvents
-                .GroupBy(e => e.EventType, StringComparer.OrdinalIgnoreCase)
-                .Where(g => g.Count() > 0);
-
-            foreach (var eventGroup in eventTypeGroups)
-            {
-                var groupItems = eventGroup.ToList();
-
-                if (groupItems.Count > 1)
-                    duplicateGroups++;
-
-                var canonicalId = Guid.CreateVersion7();
-                groupsCreated++;
-
-                foreach (var item in groupItems)
-                {
-                    var existing = await _context.LinkedRecords
-                        .AnyAsync(lr => lr.RecordType == "deviceevent" && lr.RecordId == item.Id, cancellationToken);
-
-                    if (!existing)
-                    {
-                        var linkedRecord = new LinkedRecordEntity
-                        {
-                            CanonicalId = canonicalId,
-                            RecordType = "deviceevent",
-                            RecordId = item.Id,
-                            SourceTimestamp = windowKey * MatchingWindowMillis,
-                            DataSource = item.DataSource ?? "unknown",
-                            IsPrimary = item == groupItems.First()
-                        };
-                        _context.LinkedRecords.Add(linkedRecord);
-                        recordsLinked++;
-                    }
-
-                    processed++;
-                }
-
-                if (processed % batchSize == 0)
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                    progress?.Report(new DeduplicationProgress
-                    {
-                        TotalRecords = totalRecords,
-                        ProcessedRecords = startOffset + processed,
-                        GroupsFound = groupsCreated,
-                        RecordsLinked = recordsLinked,
-                        CurrentPhase = "DeviceEvents"
-                    });
-                }
-            }
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return (processed, groupsCreated, recordsLinked, duplicateGroups);
-    }
-
-    private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateNotesAsync(
-        IProgress<DeduplicationProgress>? progress,
-        int totalRecords,
-        int startOffset,
-        CancellationToken cancellationToken)
-    {
-        const int batchSize = 500;
-        var processed = 0;
-        var groupsCreated = 0;
-        var recordsLinked = 0;
-        var duplicateGroups = 0;
-
-        var notes = await _context.Notes
-            .OrderBy(n => n.Timestamp)
-            .Select(n => new { n.Id, n.Timestamp, n.DataSource })
-            .ToListAsync(cancellationToken);
-
-        var groupedByTime = new Dictionary<long, List<(Guid Id, string? DataSource)>>();
-
-        foreach (var note in notes)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var windowKey = new DateTimeOffset(note.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds() / MatchingWindowMillis;
-
-            if (!groupedByTime.ContainsKey(windowKey))
-                groupedByTime[windowKey] = new();
-
-            groupedByTime[windowKey].Add((note.Id, note.DataSource));
-        }
-
-        foreach (var (windowKey, windowNotes) in groupedByTime)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            // Notes use time-window only — all notes in same window form one group
-            var groupItems = windowNotes;
-
-            if (groupItems.Count > 1)
-                duplicateGroups++;
-
-            var canonicalId = Guid.CreateVersion7();
-            groupsCreated++;
-
-            foreach (var item in groupItems)
-            {
-                var existing = await _context.LinkedRecords
-                    .AnyAsync(lr => lr.RecordType == "note" && lr.RecordId == item.Id, cancellationToken);
-
-                if (!existing)
-                {
-                    var linkedRecord = new LinkedRecordEntity
-                    {
-                        CanonicalId = canonicalId,
-                        RecordType = "note",
-                        RecordId = item.Id,
-                        SourceTimestamp = windowKey * MatchingWindowMillis,
-                        DataSource = item.DataSource ?? "unknown",
-                        IsPrimary = item == groupItems.First()
-                    };
-                    _context.LinkedRecords.Add(linkedRecord);
-                    recordsLinked++;
-                }
-
-                processed++;
-            }
-
-            if (processed % batchSize == 0)
-            {
-                await _context.SaveChangesAsync(cancellationToken);
-                progress?.Report(new DeduplicationProgress
-                {
-                    TotalRecords = totalRecords,
-                    ProcessedRecords = startOffset + processed,
-                    GroupsFound = groupsCreated,
-                    RecordsLinked = recordsLinked,
-                    CurrentPhase = "Notes"
-                });
-            }
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return (processed, groupsCreated, recordsLinked, duplicateGroups);
-    }
-
-    private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateBolusCalculationsAsync(
-        IProgress<DeduplicationProgress>? progress,
-        int totalRecords,
-        int startOffset,
-        CancellationToken cancellationToken)
-    {
-        const int batchSize = 500;
-        var processed = 0;
-        var groupsCreated = 0;
-        var recordsLinked = 0;
-        var duplicateGroups = 0;
-
-        var calcs = await _context.BolusCalculations
-            .OrderBy(bc => bc.Timestamp)
-            .Select(bc => new { bc.Id, bc.Timestamp, bc.CarbInput, bc.DataSource })
-            .ToListAsync(cancellationToken);
-
-        var groupedByTime = new Dictionary<long, List<(Guid Id, double CarbInput, string? DataSource)>>();
-
-        foreach (var calc in calcs)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var windowKey = new DateTimeOffset(calc.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds() / MatchingWindowMillis;
-
-            if (!groupedByTime.ContainsKey(windowKey))
-                groupedByTime[windowKey] = new();
-
-            groupedByTime[windowKey].Add((calc.Id, calc.CarbInput ?? 0, calc.DataSource));
-        }
-
-        foreach (var (windowKey, windowCalcs) in groupedByTime)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var carbGroups = windowCalcs
-                .GroupBy(bc => Math.Round(bc.CarbInput))
-                .Where(g => g.Count() > 0);
-
-            foreach (var carbGroup in carbGroups)
-            {
-                var groupItems = carbGroup.ToList();
-
-                if (groupItems.Count > 1)
-                    duplicateGroups++;
-
-                var canonicalId = Guid.CreateVersion7();
-                groupsCreated++;
-
-                foreach (var item in groupItems)
-                {
-                    var existing = await _context.LinkedRecords
-                        .AnyAsync(lr => lr.RecordType == "boluscalculation" && lr.RecordId == item.Id, cancellationToken);
-
-                    if (!existing)
-                    {
-                        var linkedRecord = new LinkedRecordEntity
-                        {
-                            CanonicalId = canonicalId,
-                            RecordType = "boluscalculation",
-                            RecordId = item.Id,
-                            SourceTimestamp = windowKey * MatchingWindowMillis,
-                            DataSource = item.DataSource ?? "unknown",
-                            IsPrimary = item == groupItems.First()
-                        };
-                        _context.LinkedRecords.Add(linkedRecord);
-                        recordsLinked++;
-                    }
-
-                    processed++;
-                }
-
-                if (processed % batchSize == 0)
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                    progress?.Report(new DeduplicationProgress
-                    {
-                        TotalRecords = totalRecords,
-                        ProcessedRecords = startOffset + processed,
-                        GroupsFound = groupsCreated,
-                        RecordsLinked = recordsLinked,
-                        CurrentPhase = "BolusCalculations"
-                    });
-                }
-            }
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return (processed, groupsCreated, recordsLinked, duplicateGroups);
-    }
-
-    private async Task<(int processed, int groups, int linked, int duplicates)> DeduplicateTempBasalsAsync(
-        IProgress<DeduplicationProgress>? progress,
-        int totalRecords,
-        int startOffset,
-        CancellationToken cancellationToken)
-    {
-        const int batchSize = 500;
-        var processed = 0;
-        var groupsCreated = 0;
-        var recordsLinked = 0;
-        var duplicateGroups = 0;
-
-        var tempBasals = await _context.TempBasals
-            .OrderBy(tb => tb.StartTimestamp)
-            .Select(tb => new { tb.Id, tb.StartTimestamp, tb.Rate, tb.Origin, tb.DataSource })
-            .ToListAsync(cancellationToken);
-
-        // Track which records have been processed to avoid duplicates
-        var processedIds = new HashSet<Guid>();
-
-        foreach (var tempBasal in tempBasals)
-        {
-            if (processedIds.Contains(tempBasal.Id))
-                continue;
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var mills = new DateTimeOffset(tempBasal.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-            var windowStart = mills - MatchingWindowMillis;
-            var windowEnd = mills + MatchingWindowMillis;
-
-            // Find all temp basals within the matching window that have the same rate and origin
-            var matches = tempBasals
-                .Where(tb => !processedIds.Contains(tb.Id))
-                .Where(tb =>
-                {
-                    var tbMills = new DateTimeOffset(tb.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                    return tbMills >= windowStart && tbMills <= windowEnd;
-                })
-                .Where(tb => Math.Abs(tb.Rate - tempBasal.Rate) <= 0.05) // ±0.05 u/hr tolerance
-                .Where(tb => string.Equals(tb.Origin, tempBasal.Origin, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            if (matches.Count == 0)
-                continue;
-
-            if (matches.Count > 1)
-            {
-                duplicateGroups++;
-            }
-
-            var canonicalId = Guid.CreateVersion7();
-            groupsCreated++;
-
-            foreach (var match in matches)
-            {
-                processedIds.Add(match.Id);
-
-                var existing = await _context.LinkedRecords
-                    .AnyAsync(lr => lr.RecordType == "tempbasal" && lr.RecordId == match.Id, cancellationToken);
-
-                if (!existing)
-                {
-                    var linkedRecord = new LinkedRecordEntity
-                    {
-                        CanonicalId = canonicalId,
-                        RecordType = "tempbasal",
-                        RecordId = match.Id,
-                        SourceTimestamp = new DateTimeOffset(match.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        DataSource = match.DataSource ?? "unknown",
-                        IsPrimary = match == matches.First()
-                    };
-                    _context.LinkedRecords.Add(linkedRecord);
-                    recordsLinked++;
-                }
-
-                processed++;
-            }
-
-            if (processed % batchSize == 0)
-            {
-                await _context.SaveChangesAsync(cancellationToken);
-                progress?.Report(new DeduplicationProgress
-                {
-                    TotalRecords = totalRecords,
-                    ProcessedRecords = startOffset + processed,
-                    GroupsFound = groupsCreated,
-                    RecordsLinked = recordsLinked,
-                    CurrentPhase = "TempBasals"
-                });
-            }
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return (processed, groupsCreated, recordsLinked, duplicateGroups);
+        return (totalProcessed, totalGroups, totalLinked, totalDuplicates);
     }
 
     private static Treatment MergeTreatments(List<Treatment> treatments, Guid canonicalId)

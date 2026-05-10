@@ -27,6 +27,7 @@ namespace Nocturne.API.Controllers.V4;
 /// Step 2: Create the owner account for that tenant (POST /api/v4/setup/owner/*).
 /// </summary>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/setup")]
 [Produces("application/json")]
 [AllowAnonymous]

@@ -12,6 +12,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </summary>
 /// <seealso cref="NocturneDbContext"/>
 [ApiController]
+[Tags("Monitoring")]
 [Authorize]
 [Route("api/v4/alert-sounds")]
 public class AlertCustomSoundsController : ControllerBase

@@ -21,6 +21,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="Note"/>
 /// <seealso cref="UpsertNoteRequest"/>
 [ApiController]
+[Tags("Treatments")]
 [Route("api/v4/observations/notes")]
 [Authorize]
 [Produces("application/json")]

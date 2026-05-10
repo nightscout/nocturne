@@ -20,6 +20,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="ISensorGlucoseRepository"/>
 /// <seealso cref="IBolusRepository"/>
 [ApiController]
+[Tags("Analytics")]
 [Route("api/v4/correlated")]
 [Authorize]
 [Produces("application/json")]

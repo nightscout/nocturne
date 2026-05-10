@@ -11,6 +11,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// and direct permissions, intersected with their auth token scopes.
 /// </summary>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/me/permissions")]
 [Produces("application/json")]
 [Authorize]

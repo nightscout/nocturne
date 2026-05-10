@@ -243,34 +243,26 @@ public class StateSpanRepository : IStateSpanRepository
         {
             try
             {
-                var criteria = new MatchCriteria
+                var dedupInputs = new List<DeduplicationInput>
                 {
-                    Category = Enum.TryParse<StateSpanCategory>(entity.Category, true, out var cat)
-                        ? cat
-                        : null,
-                    State = entity.State,
+                    new(
+                        RecordId: entity.Id,
+                        Mills: new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                        DataSource: entity.Source ?? "unknown",
+                        Criteria: new MatchCriteria
+                        {
+                            Category = Enum.Parse<StateSpanCategory>(entity.Category, true),
+                            State = entity.State
+                        }
+                    )
                 };
 
-                var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
-                    RecordType.StateSpan,
-                    new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    criteria,
-                    cancellationToken
-                );
-
-                await _deduplicationService.LinkRecordAsync(
-                    canonicalId,
-                    RecordType.StateSpan,
-                    entity.Id,
-                    new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    entity.Source ?? "unknown",
-                    cancellationToken
-                );
+                await _deduplicationService.DeduplicateBatchAsync(RecordType.StateSpan, dedupInputs, cancellationToken);
             }
             catch (Exception ex)
             {
                 // Don't fail the insert if deduplication fails
-                _logger.LogWarning(ex, "Failed to deduplicate state span {StateSpanId}", entity.Id);
+                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "StateSpan", 1);
             }
         }
 

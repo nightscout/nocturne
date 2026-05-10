@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V2;
 /// </summary>
 /// <seealso cref="IDDataService"/>
 [ApiController]
+[Tags("V2")]
 [Route("api/v2/ddata")]
 [Produces("application/json")]
 [ClientPropertyName("v2DData")]

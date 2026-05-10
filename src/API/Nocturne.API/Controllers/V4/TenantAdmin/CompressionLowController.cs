@@ -12,6 +12,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// <seealso cref="ICompressionLowService"/>
 /// <seealso cref="ICompressionLowDetectionService"/>
 [ApiController]
+[Tags("TenantAdmin")]
 [Route("api/v4/compression-lows")]
 [Authorize]
 public class CompressionLowController : ControllerBase

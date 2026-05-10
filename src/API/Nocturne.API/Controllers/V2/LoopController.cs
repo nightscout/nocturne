@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V2;
 /// </summary>
 /// <seealso cref="ILoopService"/>
 [ApiController]
+[Tags("V2")]
 [Route("api/v2")]
 [Produces("application/json")]
 [Authorize(Policy = PolicyNames.HasPermissions)]

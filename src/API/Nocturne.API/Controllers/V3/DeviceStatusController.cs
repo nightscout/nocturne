@@ -20,6 +20,7 @@ namespace Nocturne.API.Controllers.V3;
 /// <seealso cref="DeviceStatusProjectionService"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
+[Tags("V3")]
 [Route("api/v3/[controller]")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class DeviceStatusController : BaseV3Controller<DeviceStatus>

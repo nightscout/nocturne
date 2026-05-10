@@ -11,6 +11,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// </summary>
 /// <seealso cref="IDeduplicationService"/>
 [ApiController]
+[Tags("TenantAdmin")]
 [Route("api/v4/admin/deduplication")]
 [Produces("application/json")]
 [AllowDuringSetup]

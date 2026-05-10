@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V4.Health;
 /// </remarks>
 /// <seealso cref="IBodyWeightService"/>
 [ApiController]
+[Tags("Health")]
 [Route("api/v4/body-weight")]
 public class BodyWeightController : ControllerBase
 {

@@ -31,7 +31,7 @@ public sealed class DiagramDescriptionDocumentTransformer : IOpenApiDocumentTran
 
     private static string BuildDescription(IWebHostEnvironment env)
     {
-        var diagramsDir = Path.Combine(env.ContentRootPath, "..", "..", "..", "docs", "diagrams");
+        var diagramsDir = MermaidSourceLoader.ResolveDiagramsDir(env);
         var manifestPath = Path.Combine(diagramsDir, "diagrams.yaml");
 
         if (!File.Exists(manifestPath))

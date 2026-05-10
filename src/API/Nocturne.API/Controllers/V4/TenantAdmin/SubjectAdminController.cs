@@ -15,6 +15,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// an administrator can manage accounts before normal login is possible.
 /// </remarks>
 [ApiController]
+[Tags("TenantAdmin")]
 [Route("api/v4/admin/subjects")]
 [Produces("application/json")]
 [Authorize(Roles = "platform_admin")]

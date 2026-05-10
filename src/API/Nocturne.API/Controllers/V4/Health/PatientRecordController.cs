@@ -21,6 +21,7 @@ namespace Nocturne.API.Controllers.V4.Health;
 /// <seealso cref="IPatientRecordRepository"/>
 /// <seealso cref="IPatientDeviceRepository"/>
 [ApiController]
+[Tags("Health")]
 [Route("api/v4/patient-record")]
 [Authorize]
 [Produces("application/json")]

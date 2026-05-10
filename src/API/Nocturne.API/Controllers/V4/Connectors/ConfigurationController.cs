@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 /// </summary>
 /// <seealso cref="IConnectorConfigurationService"/>
 [ApiController]
+[Tags("Connectors")]
 [Route("api/v4/connectors/config")]
 [Authorize]
 public class ConfigurationController : ControllerBase

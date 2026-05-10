@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V4.Account;
 /// Upload, serve, and delete the authenticated subject's avatar image.
 /// </summary>
 [ApiController]
+[Tags("Identity")]
 [Authorize]
 [Route("api/v4/me/avatar")]
 public class AvatarController(IAvatarStore avatarStore, ILogger<AvatarController> logger) : ControllerBase

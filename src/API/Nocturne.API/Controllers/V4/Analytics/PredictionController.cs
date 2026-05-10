@@ -21,6 +21,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="GlucosePredictionResponse"/>
 /// <seealso cref="PredictionStatusResponse"/>
 [ApiController]
+[Tags("Analytics")]
 [Route("api/v4/predictions")]
 [Produces("application/json")]
 [ClientPropertyName("predictions")]

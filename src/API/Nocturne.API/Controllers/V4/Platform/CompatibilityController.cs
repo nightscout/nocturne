@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 /// <seealso cref="IDiscrepancyPersistenceService"/>
 /// <seealso cref="IDiscrepancyAnalysisRepository"/>
 [ApiController]
+[Tags("Platform")]
 [Route("api/v4/compatibility")]
 public class CompatibilityController : ControllerBase
 {

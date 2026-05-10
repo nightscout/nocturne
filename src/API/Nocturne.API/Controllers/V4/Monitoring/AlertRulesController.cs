@@ -29,6 +29,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// <seealso cref="IAlertReferenceService"/>
 /// <seealso cref="Services.Alerts.AlertOrchestrator"/>
 [ApiController]
+[Tags("Monitoring")]
 [Authorize]
 [Route("api/v4/alert-rules")]
 public class AlertRulesController : ControllerBase

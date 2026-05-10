@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// <seealso cref="ChatIdentityDirectoryService"/>
 /// <seealso cref="ChatIdentityPendingLinkService"/>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/chat-identity/directory")]
 [RequireInstanceKeyAuth]
 public class ChatIdentityDirectoryController : ControllerBase

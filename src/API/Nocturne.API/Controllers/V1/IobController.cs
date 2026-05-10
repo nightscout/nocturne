@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <seealso cref="IIobCalculator"/>
 [ApiController]
+[Tags("V1")]
 [Route("api/v1/[controller]")]
 [Produces("application/json")]
 [ClientPropertyName("iob")]

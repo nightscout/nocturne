@@ -272,34 +272,20 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         }
 
         // Insert-time deduplication: link saved records to canonical groups
-        foreach (var entity in entities)
+        try
         {
-            try
-            {
-                var criteria = new MatchCriteria
-                {
-                    GlucoseValue = entity.Mgdl,
-                    GlucoseTolerance = 1.0
-                };
+            var dedupInputs = entities.Select(e => new DeduplicationInput(
+                RecordId: e.Id,
+                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                DataSource: e.DataSource ?? "unknown",
+                Criteria: new MatchCriteria { GlucoseValue = e.Mgdl, GlucoseTolerance = 1.0 }
+            )).ToList();
 
-                var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
-                    RecordType.SensorGlucose,
-                    new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    criteria,
-                    ct);
-
-                await _deduplicationService.LinkRecordAsync(
-                    canonicalId,
-                    RecordType.SensorGlucose,
-                    entity.Id,
-                    new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    entity.DataSource ?? "unknown",
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to deduplicate SensorGlucose {Id}", entity.Id);
-            }
+            await _deduplicationService.DeduplicateBatchAsync(RecordType.SensorGlucose, dedupInputs, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", entities.Count);
         }
 
         return entities.Select(SensorGlucoseMapper.ToDomainModel);

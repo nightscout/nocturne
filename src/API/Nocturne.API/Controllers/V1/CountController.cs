@@ -20,6 +20,7 @@ namespace Nocturne.API.Controllers.V1;
 /// <seealso cref="IFoodRepository"/>
 /// <seealso cref="IActivityService"/>
 [ApiController]
+[Tags("V1")]
 [Route("api/v1/[controller]")]
 public class CountController : ControllerBase
 {

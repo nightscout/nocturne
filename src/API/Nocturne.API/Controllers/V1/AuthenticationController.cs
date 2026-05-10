@@ -10,6 +10,7 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <seealso cref="VerifyAuthResponse"/>
 [ApiController]
+[Tags("V1")]
 [Route("api/v1")]
 public class AuthenticationController : ControllerBase
 {

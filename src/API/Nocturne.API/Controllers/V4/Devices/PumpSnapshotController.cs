@@ -18,6 +18,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="IPumpSnapshotRepository"/>
 /// <seealso cref="PumpSnapshot"/>
 [ApiController]
+[Tags("Devices")]
 [Route("api/v4/device-status/pump")]
 [Authorize]
 [Produces("application/json")]

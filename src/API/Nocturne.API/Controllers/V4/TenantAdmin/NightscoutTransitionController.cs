@@ -16,6 +16,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// <seealso cref="IConnectorConfigurationService"/>
 /// <seealso cref="IDiscrepancyPersistenceService"/>
 [ApiController]
+[Tags("TenantAdmin")]
 [Route("api/v4/nightscout-transition")]
 [Produces("application/json")]
 public class NightscoutTransitionController : ControllerBase

@@ -1,0 +1,53 @@
+.nocturne-mermaid {
+  position: relative;
+  display: block;
+  margin: 1rem 0;
+  height: 480px;
+  border: 1px solid var(--scalar-border-color, rgba(127,127,127,0.3));
+  border-radius: 6px;
+  background: var(--scalar-background-1, transparent);
+  overflow: hidden;
+}
+.nocturne-mermaid[data-state="pending"]::before {
+  content: "Loading diagram…";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--scalar-color-3, #888);
+  font-size: 0.85em;
+}
+.nocturne-mermaid > svg {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none;
+  cursor: grab;
+}
+.nocturne-mermaid > svg:active { cursor: grabbing; }
+.nocturne-mermaid-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 1;
+}
+.nocturne-mermaid-controls button {
+  padding: 4px 8px;
+  font-size: 0.75em;
+  background: var(--scalar-background-2, rgba(0,0,0,0.6));
+  color: var(--scalar-color-1, #fff);
+  border: 1px solid var(--scalar-border-color, rgba(127,127,127,0.3));
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.nocturne-mermaid-controls button:hover { opacity: 1; }
+.nocturne-mermaid:fullscreen {
+  height: 100vh;
+  border: none;
+  border-radius: 0;
+  background: var(--scalar-background-1, #111);
+}

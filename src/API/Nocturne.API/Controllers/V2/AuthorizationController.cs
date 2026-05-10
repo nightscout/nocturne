@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V2;
 /// </summary>
 /// <seealso cref="IAuthorizationService"/>
 [ApiController]
+[Tags("V2")]
 [Route("api/v2/authorization")]
 [Authorize]
 public class AuthorizationController : ControllerBase

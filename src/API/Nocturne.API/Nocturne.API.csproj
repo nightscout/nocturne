@@ -74,6 +74,12 @@
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.HomeAssistant\Nocturne.Connectors.HomeAssistant.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.NocturneRemote\Nocturne.Connectors.NocturneRemote.csproj" />
   </ItemGroup>
+  <!-- Diagram sources — published to wwwroot/diagrams/ so the OpenAPI document
+       transformers can find them in Docker (where the source tree isn't available). -->
+  <ItemGroup>
+    <DiagramSource Include="..\..\..\docs\diagrams\diagrams.yaml;..\..\..\docs\diagrams\*.mmd" />
+    <Content Include="@(DiagramSource)" Link="wwwroot\diagrams\%(Filename)%(Extension)" CopyToOutputDirectory="Never" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
   <!-- NSwag TypeScript Client Generation -->
   <!-- Runs automatically after build in development mode -->
   <!-- Set GenerateNSwagClient=false to skip (e.g., in CI/CD or publish scenarios) -->

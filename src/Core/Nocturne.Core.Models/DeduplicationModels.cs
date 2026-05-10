@@ -97,6 +97,16 @@ public record MatchCriteria
 }
 
 /// <summary>
+/// Input for batch deduplication — one per record being ingested.
+/// </summary>
+public record DeduplicationInput(Guid RecordId, long Mills, string DataSource, MatchCriteria Criteria);
+
+/// <summary>
+/// Stats returned from a batch deduplication call.
+/// </summary>
+public record DeduplicationBatchResult(int Processed, int GroupsCreated, int RecordsLinked, int DuplicateGroups);
+
+/// <summary>
 /// Progress information for deduplication job
 /// </summary>
 public record DeduplicationProgress

@@ -10,6 +10,7 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <seealso cref="IEntryStore"/>
 [ApiController]
+[Tags("V1")]
 [Route("api/v1/[controller]")]
 public class DebugController : ControllerBase
 {

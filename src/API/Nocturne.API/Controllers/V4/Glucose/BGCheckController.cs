@@ -23,6 +23,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 /// <seealso cref="UpsertBGCheckRequest"/>
 /// <seealso cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>
 [ApiController]
+[Tags("Glucose")]
 [Route("api/v4/observations/bg-checks")]
 [Authorize]
 [Produces("application/json")]

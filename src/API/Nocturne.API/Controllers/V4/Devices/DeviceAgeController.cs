@@ -26,6 +26,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="DeviceAgeInfo"/>
 /// <seealso cref="SensorAgeInfo"/>
 [ApiController]
+[Tags("Devices")]
 [Authorize]
 [Route("api/v4/deviceage")]
 public class DeviceAgeController : ControllerBase

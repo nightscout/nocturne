@@ -11,6 +11,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// Returns the events that <em>would</em> have fired had the current rule set been active.
 /// </summary>
 [ApiController]
+[Tags("Monitoring")]
 [Authorize]
 [Route("api/v4/alerts/replay")]
 public class AlertReplayController : ControllerBase
