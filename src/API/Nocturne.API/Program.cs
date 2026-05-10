@@ -322,11 +322,6 @@ app.UseCors();
 app.UseStaticFiles();
 app.UseForwardedHeaders();
 
-// Reject or redirect HTTP to HTTPS. Runs after UseForwardedHeaders (needs
-// X-Forwarded-Proto) but before routing, tenant resolution, and auth to
-// prevent WebAuthn failures and setup state corruption from insecure access.
-app.UseMiddleware<HttpsRequirementMiddleware>();
-
 // Strip .json suffixes before routing so /api/v1/treatments.json matches
 // the TreatmentsController route /api/v1/treatments. Must run before
 // UseRouting so the rewritten path is what the router sees.
