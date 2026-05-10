@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.V4;
+
 namespace Nocturne.Core.Contracts.Profiles.Resolvers;
 
 /// <summary>
@@ -17,6 +19,12 @@ public interface IActiveProfileResolver
     /// or null if no CCP data is present in the active profile switch.
     /// </summary>
     Task<CircadianAdjustment?> GetCircadianAdjustmentAsync(long timeMills, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the insulin pharmacokinetic configuration from the profile switch active at the given time,
+    /// or null if the active profile switch has no insulin metadata (e.g., non-AAPS source).
+    /// </summary>
+    Task<TreatmentInsulinContext?> GetActiveInsulinContextAsync(long timeMills, CancellationToken ct = default);
 }
 
 /// <summary>

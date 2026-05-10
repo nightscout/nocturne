@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -45,6 +46,12 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
     {
         var span = await GetActiveProfileSpanAsync(timeMills, ct);
         return ExtractCircadianAdjustment(span);
+    }
+
+    public async Task<TreatmentInsulinContext?> GetActiveInsulinContextAsync(long timeMills, CancellationToken ct = default)
+    {
+        var span = await GetActiveProfileSpanAsync(timeMills, ct);
+        return ExtractInsulinContext(span);
     }
 
     private async Task<StateSpan?> GetActiveProfileSpanAsync(long timeMills, CancellationToken ct)
@@ -109,6 +116,48 @@ internal sealed class ActiveProfileResolver : IActiveProfileResolver
         }
 
         return new CircadianAdjustment(percentage.Value, timeshiftMs);
+    }
+
+    private static TreatmentInsulinContext? ExtractInsulinContext(StateSpan? span)
+    {
+        if (span?.Metadata is null)
+            return null;
+
+        if (!span.Metadata.TryGetValue("insulinDia", out var diaValue))
+            return null;
+
+        var dia = ConvertToDouble(diaValue);
+        if (dia is null or <= 0)
+            return null;
+
+        var peak = span.Metadata.TryGetValue("insulinPeak", out var peakValue)
+            ? (int)(ConvertToDouble(peakValue) ?? 0)
+            : 0;
+
+        if (peak <= 0)
+            return null;
+
+        var name = span.Metadata.TryGetValue("insulinName", out var nameValue)
+            ? ConvertToString(nameValue) ?? ""
+            : "";
+
+        var concentration = span.Metadata.TryGetValue("insulinConcentration", out var concValue)
+            ? (int)(ConvertToDouble(concValue) ?? 100)
+            : 100;
+
+        var curve = span.Metadata.TryGetValue("insulinCurve", out var curveValue)
+            ? ConvertToString(curveValue) ?? "rapid-acting"
+            : "rapid-acting";
+
+        return new TreatmentInsulinContext
+        {
+            PatientInsulinId = Guid.Empty,
+            InsulinName = name,
+            Dia = dia.Value,
+            Peak = peak,
+            Concentration = concentration,
+            Curve = curve,
+        };
     }
 
     /// <summary>
