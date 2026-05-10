@@ -916,7 +916,11 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                 Curve = "rapid-acting",
             };
         }
-        catch
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (FormatException)
         {
             return null;
         }
