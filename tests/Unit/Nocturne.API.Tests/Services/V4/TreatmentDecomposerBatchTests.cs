@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4;
@@ -30,6 +31,8 @@ public class TreatmentDecomposerBatchTests : IDisposable
     private readonly Mock<ITreatmentFoodService> _treatmentFoodServiceMock;
     private readonly Mock<IDeviceService> _deviceServiceMock;
     private readonly Mock<IProfileDecomposer> _profileDecomposerMock;
+    private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock;
+    private readonly Mock<IPatientInsulinRepository> _insulinRepoMock;
     private readonly TreatmentDecomposer _decomposer;
 
     public TreatmentDecomposerBatchTests()
@@ -48,6 +51,8 @@ public class TreatmentDecomposerBatchTests : IDisposable
         _treatmentFoodServiceMock = new Mock<ITreatmentFoodService>();
         _deviceServiceMock = new Mock<IDeviceService>();
         _profileDecomposerMock = new Mock<IProfileDecomposer>();
+        _activeProfileResolverMock = new Mock<IActiveProfileResolver>();
+        _insulinRepoMock = new Mock<IPatientInsulinRepository>();
 
         // BulkCreateAsync returns the input records
         _bolusRepoMock
@@ -100,6 +105,8 @@ public class TreatmentDecomposerBatchTests : IDisposable
             _treatmentFoodServiceMock.Object,
             _deviceServiceMock.Object,
             _profileDecomposerMock.Object,
+            _activeProfileResolverMock.Object,
+            _insulinRepoMock.Object,
             NullLogger<TreatmentDecomposer>.Instance);
     }
 
