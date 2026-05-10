@@ -664,6 +664,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             SyncIdentifier = treatment.SyncIdentifier,
             InsulinType = treatment.InsulinType,
             Unabsorbed = treatment.Unabsorbed,
+            InsulinContext = ExtractAapsIcfg(treatment),
             DeviceId = null, // Resolved by caller via IDeviceService
             PumpRecordId = treatment.PumpId?.ToString(),
         };

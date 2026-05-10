@@ -2395,4 +2395,61 @@ public class TreatmentDecomposerTests : IDisposable
     }
 
     #endregion
+
+    #region MapToBolus InsulinContext
+
+    [Fact]
+    public void MapToBolus_WithAapsIcfg_ExtractsInsulinContext()
+    {
+        // Arrange
+        var icfgJson = JsonSerializer.SerializeToElement(new
+        {
+            insulinLabel = "Lyumjev 45m 8.8h U200",
+            insulinEndTime = 31680000L,
+            insulinPeakTime = 2700000L,
+            concentration = 2.0
+        });
+
+        var treatment = new Treatment
+        {
+            Id = "bolus-icfg-1",
+            Mills = 1700000000000,
+            Insulin = 2.0,
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["icfg"] = icfgJson
+            }
+        };
+
+        // Act
+        var bolus = TreatmentDecomposer.MapToBolus(treatment, null);
+
+        // Assert
+        bolus.InsulinContext.Should().NotBeNull();
+        bolus.InsulinContext!.InsulinName.Should().Be("Lyumjev 45m 8.8h U200");
+        bolus.InsulinContext.Dia.Should().BeApproximately(8.8, 0.01);
+        bolus.InsulinContext.Peak.Should().Be(45);
+        bolus.InsulinContext.Concentration.Should().Be(200);
+        bolus.InsulinContext.Curve.Should().Be("rapid-acting");
+    }
+
+    [Fact]
+    public void MapToBolus_WithoutIcfg_InsulinContextRemainsNull()
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = "bolus-no-icfg",
+            Mills = 1700000000000,
+            Insulin = 2.0,
+        };
+
+        // Act
+        var bolus = TreatmentDecomposer.MapToBolus(treatment, null);
+
+        // Assert
+        bolus.InsulinContext.Should().BeNull();
+    }
+
+    #endregion
 }
