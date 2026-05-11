@@ -8,12 +8,24 @@ import { createLogger } from "./lib/logger.js";
 
 const logger = createLogger();
 
+export interface PlatformCredentials {
+  enabled: boolean;
+  botToken?: string;
+  publicKey?: string;
+  applicationId?: string;
+  signingSecret?: string;
+  accessToken?: string;
+  appSecret?: string;
+  phoneNumberId?: string;
+  verifyToken?: string;
+}
+
 export interface BotOptions {
   platforms?: {
-    discord?: boolean;
-    slack?: boolean;
-    telegram?: boolean;
-    whatsapp?: boolean;
+    discord?: PlatformCredentials | boolean;
+    slack?: PlatformCredentials | boolean;
+    telegram?: PlatformCredentials | boolean;
+    whatsapp?: PlatformCredentials | boolean;
   };
   postgresUrl: string;
 }
@@ -22,21 +34,62 @@ export function createBot(options: BotOptions): Chat {
   const adapters: Record<string, any> = {};
   const platforms = options.platforms ?? {};
 
-  if (platforms.discord) {
+  const discord = platforms.discord;
+  if (discord) {
     logger.info("Enabling Discord adapter");
-    adapters.discord = createDiscordAdapter();
+    if (typeof discord === "object") {
+      adapters.discord = createDiscordAdapter({
+        botToken: discord.botToken!,
+        publicKey: discord.publicKey!,
+        applicationId: discord.applicationId!,
+      });
+    } else {
+      adapters.discord = createDiscordAdapter(); // env var fallback
+    }
   }
-  if (platforms.slack) {
+
+  const slack = platforms.slack;
+  if (slack) {
     logger.info("Enabling Slack adapter");
-    adapters.slack = createSlackAdapter();
+    if (typeof slack === "object") {
+      adapters.slack = createSlackAdapter({
+        botToken: slack.botToken!,
+        signingSecret: slack.signingSecret!,
+      });
+    } else {
+      adapters.slack = createSlackAdapter(); // env var fallback
+    }
   }
-  if (platforms.telegram) {
+
+  const telegram = platforms.telegram;
+  if (telegram) {
     logger.info("Enabling Telegram adapter");
-    adapters.telegram = createTelegramAdapter();
+    if (typeof telegram === "object") {
+      adapters.telegram = createTelegramAdapter({
+        botToken: telegram.botToken!,
+      });
+    } else {
+      adapters.telegram = createTelegramAdapter(); // env var fallback
+    }
   }
-  if (platforms.whatsapp) {
-    logger.info("Enabling WhatsApp adapter");
-    adapters.whatsapp = createWhatsAppAdapter();
+
+  const whatsapp = platforms.whatsapp;
+  if (whatsapp) {
+    if (typeof whatsapp === "object") {
+      logger.info("Enabling WhatsApp adapter");
+      adapters.whatsapp = createWhatsAppAdapter({
+        accessToken: whatsapp.accessToken!,
+        appSecret: whatsapp.appSecret!,
+        phoneNumberId: whatsapp.phoneNumberId!,
+        verifyToken: whatsapp.verifyToken!,
+        userName: "nocturne",
+        logger,
+      });
+    } else {
+      logger.warn(
+        "WhatsApp requires explicit credentials configured via the admin UI — skipping env var fallback",
+      );
+    }
   }
 
   if (Object.keys(adapters).length === 0) {
