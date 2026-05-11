@@ -25,21 +25,20 @@ kind: Job
 metadata:
   name: {{ include "nocturne.bootstrap.fullname" . }}
   labels: {{- include "nocturne.labels" . | nindent 4 }}
+  {{- if not $bundled }}
+  # External mode: pre-install hook so the bootstrap runs before API/Web.
+  # In bundled mode we deliberately emit NO helm.sh annotations — the Job
+  # is a regular Sync-phase resource alongside the postgres StatefulSet,
+  # and run.sh's pg_isready loop handles the timing. ArgoCD treats any
+  # helm.sh/hook* annotation as a hook marker, so even
+  # `hook-delete-policy: hook-succeeded` alone causes it to be parsed as
+  # a (typeless) hook and skipped during normal sync. k8s' built-in
+  # ttlSecondsAfterFinished handles cleanup instead.
   annotations:
-    {{- if $bundled }}
-    # Bundled mode: the Job runs alongside the postgres StatefulSet in the
-    # main sync phase — NOT as a post-install hook. Helm `post-install` maps
-    # to ArgoCD's PostSync, which only fires after every main resource is
-    # Healthy; that would deadlock because API/Web have a wait-for-postgres
-    # initContainer that gates on this Job. The Job's run.sh handles the
-    # timing internally via a pg_isready loop.
-    "helm.sh/hook-delete-policy": hook-succeeded
-    {{- else }}
-    # External mode: DB is already up; run before the API/Web Deployments.
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
-    {{- end }}
+  {{- end }}
 spec:
   backoffLimit: {{ .Values.bootstrap.backoffLimit }}
   ttlSecondsAfterFinished: {{ .Values.bootstrap.ttlSecondsAfterFinished }}
