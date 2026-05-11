@@ -69,14 +69,11 @@ internal sealed class IobCobComputeStage(
         var intervalMinutes = context.IntervalMinutes;
         var defaultBasalRate = context.DefaultBasalRate;
 
-        var (iobSeries, cobSeries, maxIob, maxCob) = await BuildIobCobSeriesAsync(
-            bolusList,
-            carbIntakeList,
-            startTime,
-            endTime,
-            intervalMinutes,
-            tempBasalList,
-            cancellationToken
+        // Build once — reused by both IOB/COB and basal series to avoid per-tick resolver round-trips.
+        var timeline = await therapyTimelineResolver.BuildAsync(startTime, endTime + 1, ct: cancellationToken);
+
+        var (iobSeries, cobSeries, maxIob, maxCob) = BuildIobCobSeries(
+            bolusList, carbIntakeList, startTime, endTime, intervalMinutes, tempBasalList, timeline, cancellationToken
         );
 
         var basalSeries = await basalSeriesBuilder.BuildAsync(tempBasalList, startTime, endTime, defaultBasalRate, cancellationToken);
@@ -97,18 +94,19 @@ internal sealed class IobCobComputeStage(
         };
     }
 
-    internal async Task<(
+    internal (
         List<TimeSeriesPoint> iobSeries,
         List<TimeSeriesPoint> cobSeries,
         double maxIob,
         double maxCob
-    )> BuildIobCobSeriesAsync(
+    ) BuildIobCobSeries(
         List<Bolus> boluses,
         List<CarbIntake> carbIntakes,
         long startTime,
         long endTime,
         int intervalMinutes,
-        List<TempBasal>? tempBasals = null,
+        List<TempBasal>? tempBasals,
+        TherapyTimeline timeline,
         CancellationToken ct = default
     )
     {
@@ -143,12 +141,6 @@ internal sealed class IobCobComputeStage(
         var intervalMs = intervalMinutes * 60 * 1000;
         double maxIob = 0,
             maxCob = 0;
-
-        // Build the request-scoped therapy timeline once. SnapshotAt(t) inside the loop
-        // resolves DIA / sensitivity / carb ratio / basal rate / carbsPerHour via in-memory
-        // schedule lookup with a sticky cursor — replacing nested async resolver awaits per tick.
-        // The window extends one millisecond past endTime so SnapshotAt(endTime) lands inside a segment.
-        var timeline = await therapyTimelineResolver.BuildAsync(startTime, endTime + 1, ct: ct);
 
         // DIA at endTime drives the IOB / temp-basal eviction window. Matches legacy behavior.
         var diaMs = (long)(timeline.SnapshotAt(endTime).Dia * 60 * 60 * 1000);

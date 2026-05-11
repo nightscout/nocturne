@@ -16,7 +16,7 @@ namespace Nocturne.API.Services.ChartData;
 /// </summary>
 internal sealed class BasalSeriesBuilder(
     ITherapySettingsResolver therapySettingsResolver,
-    IBasalRateResolver basalRateResolver,
+    ITherapyTimelineResolver therapyTimelineResolver,
     ILogger<BasalSeriesBuilder> logger
 ) : IBasalSeriesBuilder
 {
@@ -28,20 +28,19 @@ internal sealed class BasalSeriesBuilder(
         CancellationToken ct = default
     )
     {
+        // Build once — reused by both gap-fill and profile-only paths to avoid per-tick resolver round-trips.
+        var timeline = await therapyTimelineResolver.BuildAsync(startTime, endTime + 1, ct: ct);
+        var hasData = await therapySettingsResolver.HasDataAsync(ct);
+
         var series = new List<BasalPoint>();
         var sorted = tempBasals.OrderBy(tb => tb.StartMills).ToList();
 
-        logger.LogDebug(
-            "Building basal series from {Count} TempBasal records",
-            sorted.Count
-        );
+        logger.LogDebug("Building basal series from {Count} TempBasal records", sorted.Count);
 
         if (sorted.Count == 0)
-            return await BuildFromProfileAsync(startTime, endTime, defaultBasalRate, ct);
+            return BuildFromProfile(startTime, endTime, defaultBasalRate, timeline, hasData);
 
         long currentTime = startTime;
-
-        var hasData = await therapySettingsResolver.HasDataAsync(ct);
 
         foreach (var tb in sorted)
         {
@@ -55,17 +54,13 @@ internal sealed class BasalSeriesBuilder(
             tbEnd = Math.Min(tbEnd, endTime);
 
             if (tbStart > currentTime)
-            {
-                series.AddRange(
-                    await BuildFromProfileAsync(currentTime, tbStart, defaultBasalRate, ct)
-                );
-            }
+                series.AddRange(BuildFromProfile(currentTime, tbStart, defaultBasalRate, timeline, hasData));
 
             var origin = MapTempBasalOrigin(tb.Origin);
 
             var scheduledRate = tb.ScheduledRate
                 ?? (hasData
-                    ? await basalRateResolver.GetBasalRateAsync(tbStart, ct: ct)
+                    ? timeline.SnapshotAt(tbStart).BasalRateAt(tbStart)
                     : defaultBasalRate);
 
             series.Add(
@@ -84,7 +79,7 @@ internal sealed class BasalSeriesBuilder(
         }
 
         if (currentTime < endTime)
-            series.AddRange(await BuildFromProfileAsync(currentTime, endTime, defaultBasalRate, ct));
+            series.AddRange(BuildFromProfile(currentTime, endTime, defaultBasalRate, timeline, hasData));
 
         if (series.Count == 0)
         {
@@ -96,9 +91,7 @@ internal sealed class BasalSeriesBuilder(
                     ScheduledRate = defaultBasalRate,
                     Origin = BasalDeliveryOrigin.Scheduled,
                     FillColor = ChartColorMapper.FillFromBasalOrigin(BasalDeliveryOrigin.Scheduled),
-                    StrokeColor = ChartColorMapper.StrokeFromBasalOrigin(
-                        BasalDeliveryOrigin.Scheduled
-                    ),
+                    StrokeColor = ChartColorMapper.StrokeFromBasalOrigin(BasalDeliveryOrigin.Scheduled),
                 }
             );
         }
@@ -106,23 +99,22 @@ internal sealed class BasalSeriesBuilder(
         return series;
     }
 
-    private async Task<List<BasalPoint>> BuildFromProfileAsync(
+    internal static List<BasalPoint> BuildFromProfile(
         long startTime,
         long endTime,
         double defaultBasalRate,
-        CancellationToken ct = default
+        TherapyTimeline timeline,
+        bool hasData
     )
     {
         var series = new List<BasalPoint>();
         const long intervalMs = 5 * 60 * 1000;
         double? prevRate = null;
 
-        var hasData = await therapySettingsResolver.HasDataAsync(ct);
-
         for (long t = startTime; t <= endTime; t += intervalMs)
         {
             var rate = hasData
-                ? await basalRateResolver.GetBasalRateAsync(t, ct: ct)
+                ? timeline.SnapshotAt(t).BasalRateAt(t)
                 : defaultBasalRate;
 
             if (prevRate == null || Math.Abs(rate - prevRate.Value) > 0.001)
@@ -134,12 +126,8 @@ internal sealed class BasalSeriesBuilder(
                         Rate = rate,
                         ScheduledRate = rate,
                         Origin = BasalDeliveryOrigin.Inferred,
-                        FillColor = ChartColorMapper.FillFromBasalOrigin(
-                            BasalDeliveryOrigin.Inferred
-                        ),
-                        StrokeColor = ChartColorMapper.StrokeFromBasalOrigin(
-                            BasalDeliveryOrigin.Inferred
-                        ),
+                        FillColor = ChartColorMapper.FillFromBasalOrigin(BasalDeliveryOrigin.Inferred),
+                        StrokeColor = ChartColorMapper.StrokeFromBasalOrigin(BasalDeliveryOrigin.Inferred),
                     }
                 );
                 prevRate = rate;
@@ -156,9 +144,7 @@ internal sealed class BasalSeriesBuilder(
                     ScheduledRate = defaultBasalRate,
                     Origin = BasalDeliveryOrigin.Inferred,
                     FillColor = ChartColorMapper.FillFromBasalOrigin(BasalDeliveryOrigin.Inferred),
-                    StrokeColor = ChartColorMapper.StrokeFromBasalOrigin(
-                        BasalDeliveryOrigin.Inferred
-                    ),
+                    StrokeColor = ChartColorMapper.StrokeFromBasalOrigin(BasalDeliveryOrigin.Inferred),
                 }
             );
         }
