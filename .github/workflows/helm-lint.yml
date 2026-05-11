@@ -14,6 +14,9 @@ on:
       - ".github/workflows/helm-publish.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   lint-and-template:
     runs-on: ubuntu-latest
