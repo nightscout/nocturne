@@ -229,6 +229,107 @@ public class ActiveProfileResolverTests : IDisposable
         }
     }
 
+    public class GetActiveProfileSpansForRangeAsync : ActiveProfileResolverTests
+    {
+        // 2024-01-15 08:00:00 UTC
+        private const long MorningMills = 1705305600000;
+        // 2024-01-15 20:00:00 UTC (12 hours later)
+        private const long EveningMills = 1705348800000;
+
+        [Fact]
+        public async Task NoSpans_ReturnsEmptyList()
+        {
+            SetupSpans();
+
+            var result = await _sut.GetActiveProfileSpansForRangeAsync(MorningMills, EveningMills);
+
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task SingleSpanCoveringRange_ReturnsSingleProfileSpan()
+        {
+            var span = MakeProfileSpan(
+                startMills: MorningMills - 3_600_000,
+                endMills: null,
+                profileName: "Default");
+
+            SetupSpans(span);
+
+            var result = await _sut.GetActiveProfileSpansForRangeAsync(MorningMills, EveningMills);
+
+            result.Should().HaveCount(1);
+            result[0].ProfileName.Should().Be("Default");
+            result[0].StartMills.Should().Be(MorningMills - 3_600_000);
+            result[0].EndMills.Should().BeNull();
+            result[0].Adjustment.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task SpanWithCcp_ReturnsAdjustmentOnProfileSpan()
+        {
+            var span = MakeProfileSpan(
+                startMills: MorningMills - 3_600_000,
+                endMills: null,
+                profileName: "Exercise",
+                percentage: 80.0,
+                timeshift: 0.5);
+
+            SetupSpans(span);
+
+            var result = await _sut.GetActiveProfileSpansForRangeAsync(MorningMills, EveningMills);
+
+            result.Should().HaveCount(1);
+            result[0].Adjustment.Should().NotBeNull();
+            result[0].Adjustment!.Percentage.Should().Be(80.0);
+            result[0].Adjustment.TimeshiftMs.Should().Be(1_800_000); // 0.5 hours in ms
+        }
+
+        [Fact]
+        public async Task MultipleSpans_ReturnedInChronologicalOrder()
+        {
+            var first = MakeProfileSpan(
+                startMills: MorningMills - 7_200_000,
+                endMills: MorningMills + 3_600_000,
+                profileName: "Morning");
+            var second = MakeProfileSpan(
+                startMills: MorningMills + 3_600_000,
+                endMills: null,
+                profileName: "Afternoon");
+
+            // Pass in reverse order — implementation must sort by StartMills
+            SetupSpans(second, first);
+
+            var result = await _sut.GetActiveProfileSpansForRangeAsync(MorningMills, EveningMills);
+
+            result.Should().HaveCount(2);
+            result[0].ProfileName.Should().Be("Morning");
+            result[1].ProfileName.Should().Be("Afternoon");
+        }
+
+        [Fact]
+        public async Task IssuesOneDbQuery_RegardlessOfRangeSize()
+        {
+            SetupSpans();
+
+            await _sut.GetActiveProfileSpansForRangeAsync(MorningMills, EveningMills);
+
+            _stateSpanService.Verify(
+                s => s.GetStateSpansAsync(
+                    StateSpanCategory.Profile,
+                    It.IsAny<string?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<DateTime?>(),
+                    It.IsAny<string?>(),
+                    It.IsAny<bool?>(),
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<bool>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Once);
+        }
+    }
+
     public class Caching : ActiveProfileResolverTests
     {
         [Fact]
