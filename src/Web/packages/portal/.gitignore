@@ -1,0 +1,4 @@
+# Logos are copied from packages/app/static/logos at build/dev time
+static/logos/
+# Release assets are copied from deploy/portainer at build/dev time
+src/lib/release/

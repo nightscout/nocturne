@@ -125,7 +125,16 @@ export class CoachMarkContext {
     if (this._forcedSequence) {
       this.activateNextForcedStep();
     } else {
-      this.scheduleSelection();
+      // Select the next mark immediately rather than via scheduleSelection so that
+      // _activeSelection goes from the old key → new key in the same synchronous
+      // execution. Svelte batches the two writes and the overlay never unmounts
+      // between consecutive coachmarks (no flash). The settle delay is only needed
+      // during initial registration when marks may still be mounting.
+      this._activeSelection = selectActiveMark(
+        this._states,
+        this._registrations,
+        this.sequences,
+      );
     }
   }
 

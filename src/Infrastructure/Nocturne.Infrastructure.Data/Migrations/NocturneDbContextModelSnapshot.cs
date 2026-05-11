@@ -4749,6 +4749,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_basal_schedules_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL");
 
+                    b.HasIndex("TenantId", "ProfileName", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_basal_schedules_tenant_profile_timestamp");
+
                     b.ToTable("basal_schedules");
                 });
 
@@ -5025,6 +5029,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_boluses_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL");
 
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_boluses_tenant_timestamp");
+
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
                         .HasDatabaseName("ix_boluses_tenant_source_sync_id")
@@ -5203,6 +5211,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_carb_intakes_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL");
 
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_carb_intakes_tenant_timestamp");
+
                     b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
                         .IsUnique()
                         .HasDatabaseName("ix_carb_intakes_tenant_source_sync_id")
@@ -5293,6 +5305,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_carb_ratio_schedules_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ProfileName", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_carb_ratio_schedules_tenant_profile_timestamp");
 
                     b.ToTable("carb_ratio_schedules");
                 });
@@ -6130,6 +6146,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_sensitivity_schedules_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL");
 
+                    b.HasIndex("TenantId", "ProfileName", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_sensitivity_schedules_tenant_profile_timestamp");
+
                     b.ToTable("sensitivity_schedules");
                 });
 
@@ -6338,6 +6358,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_target_range_schedules_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL");
 
+                    b.HasIndex("TenantId", "ProfileName", "Timestamp")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_target_range_schedules_tenant_profile_timestamp");
+
                     b.ToTable("target_range_schedules");
                 });
 
@@ -6457,6 +6481,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_temp_basals_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL");
+
+                    b.HasIndex("TenantId", "StartTimestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_temp_basals_tenant_start_timestamp");
 
                     b.ToTable("temp_basals");
                 });
@@ -6610,6 +6638,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_therapy_settings_tenant_legacy_id")
                         .HasFilter("legacy_id IS NOT NULL");
+
+                    b.HasIndex("TenantId", "Timestamp")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_therapy_settings_tenant_timestamp");
 
                     b.ToTable("therapy_settings");
                 });

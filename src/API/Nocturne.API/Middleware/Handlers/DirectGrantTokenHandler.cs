@@ -111,6 +111,7 @@ public class DirectGrantTokenHandler : IAuthHandler
         {
             await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
             await dbContext.OAuthGrants
+                .IgnoreQueryFilters()
                 .Where(g => g.Id == grantId)
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(g => g.LastUsedAt, DateTime.UtcNow)

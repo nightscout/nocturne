@@ -456,8 +456,8 @@
 
   // Re-fetch when data source filter changes
   $effect(() => {
-    const currentKey = selectedDataSources.sort().join(",");
-    const prevKey = prevDataSources.sort().join(",");
+    const currentKey = [...selectedDataSources].sort().join(",");
+    const prevKey = [...prevDataSources].sort().join(",");
     if (currentKey !== prevKey && metadataLoaded) {
       prevDataSources = [...selectedDataSources];
       clearAndReload();

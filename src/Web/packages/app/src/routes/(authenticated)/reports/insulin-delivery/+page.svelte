@@ -26,7 +26,7 @@
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
   import { getReportsData } from "$api/reports.remote";
-  import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
+  import { getMultiPeriodStatistics, getDailyBasalBolusRatios } from "$api/generated/statistics.generated.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { resource } from "runed";
@@ -48,6 +48,25 @@
       from: new Date().toISOString(),
       to: new Date().toISOString(),
     }
+  );
+
+  // Daily basal/bolus breakdown for the chart
+  const dailyRatiosResource = resource(
+    () => reportsParams.dateRangeInput,
+    async (input) => {
+      const endDate = input?.to ? new Date(input.to) : new Date();
+      endDate.setHours(23, 59, 59, 999);
+      const startDate = input?.from
+        ? new Date(input.from)
+        : (() => {
+            const d = new Date(endDate);
+            d.setDate(d.getDate() - ((input?.days ?? 30) - 1));
+            return d;
+          })();
+      startDate.setHours(0, 0, 0, 0);
+      return await getDailyBasalBolusRatios({ startDate, endDate });
+    },
+    { debounce: 100 }
   );
 
   // Secondary resource for multi-period statistics (uses plain resource)
@@ -308,7 +327,12 @@
       <CardDescription>See how your insulin was split each day</CardDescription>
     </CardHeader>
     <CardContent>
-      <BasalBolusRatioChart startDate={dateRange.from} endDate={dateRange.to} />
+      <BasalBolusRatioChart
+        startDate={dateRange.from}
+        endDate={dateRange.to}
+        data={dailyRatiosResource.current}
+        loading={dailyRatiosResource.loading}
+      />
     </CardContent>
   </Card>
 

@@ -55,18 +55,44 @@ function calculateDateRange(input?: DateRangeInput): {
   return { startDate, endDate };
 }
 
+/** Paginate through all sensor glucose readings for a date range */
+async function fetchAllGlucose(
+  apiClient: ReturnType<typeof getRequestEvent>["locals"]["apiClient"],
+  startDate: Date,
+  endDate: Date
+) {
+  const pageSize = 1000;
+  type GlucoseItem = NonNullable<Awaited<ReturnType<typeof apiClient.sensorGlucose.getAll>>["data"]>[number];
+  let all: GlucoseItem[] = [];
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const batch = await apiClient.sensorGlucose.getAll(startDate, endDate, pageSize, offset);
+    all = all.concat(batch.data ?? []);
+
+    if ((batch.data?.length ?? 0) < pageSize) {
+      hasMore = false;
+    } else {
+      offset += pageSize;
+    }
+
+    if (offset >= 200000) {
+      console.warn("Glucose fetch reached safety limit of 200,000 records");
+      hasMore = false;
+    }
+  }
+
+  return all;
+}
+
 /** Get sensor glucose readings for a date range */
 export const getEntries = query(DateRangeSchema.optional(), async (input) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
   const { startDate, endDate } = calculateDateRange(input);
 
-  const result = await apiClient.sensorGlucose.getAll(
-    startDate,
-    endDate,
-    10000
-  );
-  const entries = result.data ?? [];
+  const entries = await fetchAllGlucose(apiClient, startDate, endDate);
 
   return {
     entries,
@@ -193,13 +219,8 @@ export const getReportsData = query(
 
     const pageSize = 1000;
 
-    // Fetch sensor glucose readings
-    const glucoseResult = await apiClient.sensorGlucose.getAll(
-      startDate,
-      endDate,
-      10000
-    );
-    const entries = glucoseResult.data ?? [];
+    // Fetch all sensor glucose readings
+    const entries = await fetchAllGlucose(apiClient, startDate, endDate);
 
     // Paginate boluses
     let allBoluses: Awaited<ReturnType<typeof apiClient.bolus.getAll>>["data"] =
@@ -320,13 +341,8 @@ export const getSiteChangeImpact = query(
     const { apiClient } = locals;
     const { startDate, endDate } = calculateDateRange(input);
 
-    // Fetch sensor glucose readings
-    const glucoseResult = await apiClient.sensorGlucose.getAll(
-      startDate,
-      endDate,
-      10000
-    );
-    const entries = glucoseResult.data ?? [];
+    // Fetch all sensor glucose readings
+    const entries = await fetchAllGlucose(apiClient, startDate, endDate);
 
     // Paginate device events to get all site changes
     const pageSize = 1000;

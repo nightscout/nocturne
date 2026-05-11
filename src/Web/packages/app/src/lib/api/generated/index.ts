@@ -23,6 +23,7 @@ export * from './glucoseProcessingSettings.generated.remote';
 export * from './profiles.generated.remote';
 export * from './userPreferences.generated.remote';
 export * from './services.generated.remote';
+// './status.generated.remote' - all exports collide, import directly
 export * from './supports.generated.remote';
 export * from './systems.generated.remote';
 export * from './accessRequests.generated.remote';

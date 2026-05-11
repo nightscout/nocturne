@@ -1,297 +1,540 @@
 <script lang="ts">
-    // Decorative floating layer — mini chart thumbnails + connector chips
-    // positioned absolutely over the aurora canvas.
+  interface Props {
+    textBlock?: HTMLElement | null;
+  }
+  let { textBlock = null }: Props = $props();
 
-    const charts = [
-        { top: "11%", left: "6%", width: 230, rot: -8, kind: "wave", label: "OVERNIGHT · 7d" },
-        { top: "62%", left: "9%", width: 195, rot: 6, kind: "agp", label: "AGP · 14d" },
-        { top: "18%", right: "7%", width: 215, rot: 9, kind: "climb", label: "POST-LUNCH · 30d" },
-        { top: "55%", right: "10%", width: 185, rot: -7, kind: "steady", label: "WEEK · TIR 70%" },
-        { top: "78%", left: "44%", width: 240, rot: 3, kind: "crest", label: "DAWN · 14d" },
+  import { sampleFlow } from "$lib/utils/aurora-noise";
+
+  // ── Chip definitions ──────────────────────────────────────────────────────
+  // hPos: left or right as % of container width. Preserved from the original
+  // scattered layout so initial positions look like the current design.
+  const CHIP_DEFS = [
+    {
+      id: "dexcom",
+      file: "dexcom.png",
+      name: "Dexcom",
+      topPct: 8,
+      hPos: { left: 44 },
+    },
+    {
+      id: "loop",
+      file: "loop.png",
+      name: "Loop",
+      topPct: 25,
+      hPos: { left: 30 },
+    },
+    {
+      id: "trio",
+      file: "trio.jpg",
+      name: "Trio",
+      topPct: 30,
+      hPos: { right: 30 },
+    },
+    {
+      id: "libre",
+      file: "libre.png",
+      name: "FreeStyle Libre",
+      topPct: 48,
+      hPos: { left: 26 },
+    },
+    {
+      id: "nightscout",
+      file: "nightscout.png",
+      name: "Nightscout",
+      topPct: 44,
+      hPos: { right: 26 },
+    },
+    {
+      id: "tandem",
+      file: "tandem.png",
+      name: "Tandem",
+      topPct: 70,
+      hPos: { left: 20 },
+    },
+    {
+      id: "omnipod",
+      file: "omnipod.png",
+      name: "Omnipod",
+      topPct: 67,
+      hPos: { right: 18 },
+    },
+    {
+      id: "aaps",
+      file: "aaps.png",
+      name: "AAPS",
+      topPct: 82,
+      hPos: { right: 38 },
+    },
+    {
+      id: "xdrip",
+      file: "xdrip.jpg",
+      name: "xDrip+",
+      topPct: 84,
+      hPos: { left: 8 },
+    },
+  ] as const;
+
+  const INIT_ROTS = [-4, 6, -8, 5, -6, 7, -3, 9, -10] as const;
+
+  // ── Physics constants ─────────────────────────────────────────────────────
+  const BOB_FREQ_V = 0.7; // rad/s — vertical bob frequency
+  const BOB_AMP_V = 10; // px/s² force amplitude (vertical)
+  const BOB_FREQ_H = 0.45; // rad/s — horizontal drift frequency
+  const BOB_AMP_H = 2; // px/s² force amplitude (horizontal)
+  const LINEAR_DAMP = 0.03; // fraction of velocity lost per frame (not per second)
+  const ANGULAR_DAMP = 0.07; // same for rotation
+  const RESTITUTION = 0.2; // bounciness (0 = dead stop, 1 = perfectly elastic)
+  const SPRING_K = 120; // drag spring constant (px/s² per px of offset)
+  const MAX_DT = 0.05; // seconds — cap to prevent tunnelling on hidden tabs
+  const ANG_KICK = 2; // deg/s angular impulse added on collision
+  const TEXT_PAD = 1; // px padding added around text block collision rect
+  const TIDE_AMP = 250; // px/s² — tidal force amplitude from aurora flow field
+  const TOP_GUARD = 72; // px — keeps chips below the fixed nav header
+
+  // ── Physics state (plain JS — NOT $state, no reactivity overhead) ─────────
+  interface CS {
+    cx: number;
+    cy: number; // center position in container-local px
+    vx: number;
+    vy: number; // velocity px/s
+    rot: number;
+    rotV: number; // rotation deg, angular velocity deg/s
+    phase: number; // bobbing phase offset (0–2π), unique per chip
+    w: number;
+    h: number; // measured pixel size (AABB half-extents: w/2, h/2)
+    isDragged: boolean;
+  }
+
+  // containerEl is $state so $effect tracks it (triggers after bind:this fires)
+  let containerEl: HTMLDivElement | null = $state(null);
+
+  // chipElRefs is plain — populated synchronously by the assignRef action before $effect runs
+  const chipElRefs: (HTMLElement | null)[] = Array(CHIP_DEFS.length).fill(null);
+
+  const cs: CS[] = CHIP_DEFS.map((_, i) => ({
+    cx: 0,
+    cy: 0,
+    vx: 0,
+    vy: 0,
+    rot: INIT_ROTS[i],
+    rotV: 0,
+    phase: (i / CHIP_DEFS.length) * Math.PI * 2,
+    w: 60,
+    h: 30,
+    isDragged: false,
+  }));
+
+  let lastTime = 0;
+  let rafId = 0;
+  let pointer = { x: 0, y: 0 };
+  let grabOffset = { x: 0, y: 0 }; // pointer-to-center offset at grab time
+  let dragIdx = -1;
+  let textRects: { x: number; y: number; w: number; h: number }[] = [];
+
+  // ── Svelte action: collect chip element refs without triggering reactivity ──
+  function assignRef(el: HTMLElement, i: number) {
+    chipElRefs[i] = el;
+    return {
+      destroy() {
+        chipElRefs[i] = null;
+      },
+    };
+  }
+
+  // ── Measurement helpers ───────────────────────────────────────────────────
+  function measureSizes() {
+    chipElRefs.forEach((el, i) => {
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      cs[i].w = r.width;
+      cs[i].h = r.height;
+    });
+  }
+
+  function initPositions() {
+    if (!containerEl) return;
+    const cw = containerEl.offsetWidth;
+    const ch = containerEl.offsetHeight;
+    CHIP_DEFS.forEach((def, i) => {
+      cs[i].cy = ch * (def.topPct / 100);
+      cs[i].cx =
+        "left" in def.hPos
+          ? cw * ((def.hPos as { left: number }).left / 100)
+          : cw * (1 - (def.hPos as { right: number }).right / 100);
+    });
+    applyTransforms();
+  }
+
+  function measureTextRect() {
+    if (!containerEl || !textBlock) {
+      textRects = [];
+      return;
+    }
+    const cr = containerEl.getBoundingClientRect();
+    textRects = Array.from(textBlock.children).map((child) => {
+      const tr = child.getBoundingClientRect();
+      return {
+        x: tr.left - cr.left - TEXT_PAD,
+        y: tr.top - cr.top - TEXT_PAD,
+        w: tr.width + TEXT_PAD * 2,
+        h: tr.height + TEXT_PAD * 2,
+      };
+    });
+  }
+
+  // ── Collision functions ───────────────────────────────────────────────────
+  // ── Capsule helpers ────────────────────────────────────────────────────────
+  // Each pill is a capsule: a line segment with radius h/2.
+  // The segment runs from (-ext, 0) to (ext, 0) in local space, rotated by c.rot.
+  function capsuleEndpoints(c: CS): [number, number, number, number] {
+    const ext = Math.max((c.w - c.h) / 2, 0);
+    const rad = (c.rot * Math.PI) / 180;
+    const cos = Math.cos(rad),
+      sin = Math.sin(rad);
+    return [
+      c.cx - cos * ext,
+      c.cy - sin * ext, // endpoint A
+      c.cx + cos * ext,
+      c.cy + sin * ext, // endpoint B
+    ];
+  }
+
+  function capsuleRadius(c: CS): number {
+    return c.h / 2;
+  }
+
+  // Closest point on segment (px,py)-(qx,qy) to point (x,y)
+  function closestOnSeg(
+    px: number,
+    py: number,
+    qx: number,
+    qy: number,
+    x: number,
+    y: number,
+  ): [number, number] {
+    const dx = qx - px,
+      dy = qy - py;
+    const len2 = dx * dx + dy * dy;
+    if (len2 < 1e-8) return [px, py];
+    const t = Math.max(0, Math.min(1, ((x - px) * dx + (y - py) * dy) / len2));
+    return [px + t * dx, py + t * dy];
+  }
+
+  // Closest distance between two segments, returns closest points + dist²
+  function segSegClosest(
+    a0x: number,
+    a0y: number,
+    a1x: number,
+    a1y: number,
+    b0x: number,
+    b0y: number,
+    b1x: number,
+    b1y: number,
+  ): { cx: number; cy: number; dx: number; dy: number; dist2: number } {
+    // Sample all four endpoint-to-segment projections and pick the closest pair
+    let bestD2 = Infinity,
+      bestCx = 0,
+      bestCy = 0,
+      bestDx = 0,
+      bestDy = 0;
+    const check = (cx: number, cy: number, dx: number, dy: number) => {
+      const d2 = (dx - cx) * (dx - cx) + (dy - cy) * (dy - cy);
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        bestCx = cx;
+        bestCy = cy;
+        bestDx = dx;
+        bestDy = dy;
+      }
+    };
+    let [cx, cy] = closestOnSeg(b0x, b0y, b1x, b1y, a0x, a0y);
+    check(a0x, a0y, cx, cy);
+    [cx, cy] = closestOnSeg(b0x, b0y, b1x, b1y, a1x, a1y);
+    check(a1x, a1y, cx, cy);
+    [cx, cy] = closestOnSeg(a0x, a0y, a1x, a1y, b0x, b0y);
+    check(cx, cy, b0x, b0y);
+    [cx, cy] = closestOnSeg(a0x, a0y, a1x, a1y, b1x, b1y);
+    check(cx, cy, b1x, b1y);
+    return { cx: bestCx, cy: bestCy, dx: bestDx, dy: bestDy, dist2: bestD2 };
+  }
+
+  // ── Collision functions ───────────────────────────────────────────────────
+  function wallCollide(c: CS) {
+    if (!containerEl) return;
+    const cw = containerEl.offsetWidth;
+    const ch = containerEl.offsetHeight;
+    const r = capsuleRadius(c);
+    const [ax, ay, bx, by] = capsuleEndpoints(c);
+
+    // Check each endpoint against walls
+    const minX = Math.min(ax, bx) - r;
+    const maxX = Math.max(ax, bx) + r;
+    const minY = Math.min(ay, by) - r;
+    const maxY = Math.max(ay, by) + r;
+
+    if (minX < 0) {
+      c.cx -= minX;
+      c.vx = Math.abs(c.vx) * RESTITUTION;
+      c.rotV += ANG_KICK * (Math.random() * 2 - 1);
+    }
+    if (maxX > cw) {
+      c.cx -= maxX - cw;
+      c.vx = -Math.abs(c.vx) * RESTITUTION;
+      c.rotV += ANG_KICK * (Math.random() * 2 - 1);
+    }
+    if (minY < TOP_GUARD) {
+      c.cy += TOP_GUARD - minY;
+      c.vy = Math.abs(c.vy) * RESTITUTION;
+      c.rotV += ANG_KICK * (Math.random() * 2 - 1);
+    }
+    if (maxY > ch) {
+      c.cy -= maxY - ch;
+      c.vy = -Math.abs(c.vy) * RESTITUTION;
+      c.rotV += ANG_KICK * (Math.random() * 2 - 1);
+    }
+  }
+
+  function chipCollide(a: CS, b: CS) {
+    const [a0x, a0y, a1x, a1y] = capsuleEndpoints(a);
+    const [b0x, b0y, b1x, b1y] = capsuleEndpoints(b);
+    const minD = capsuleRadius(a) + capsuleRadius(b);
+
+    const {
+      cx: pax,
+      cy: pay,
+      dx: pbx,
+      dy: pby,
+      dist2,
+    } = segSegClosest(a0x, a0y, a1x, a1y, b0x, b0y, b1x, b1y);
+    if (dist2 >= minD * minD || dist2 < 1e-6) return;
+
+    const dist = Math.sqrt(dist2);
+    const nx = (pbx - pax) / dist;
+    const ny = (pby - pay) / dist;
+    const overlap = minD - dist;
+
+    if (!a.isDragged) {
+      a.cx -= nx * overlap * 0.5;
+      a.cy -= ny * overlap * 0.5;
+    }
+    if (!b.isDragged) {
+      b.cx += nx * overlap * 0.5;
+      b.cy += ny * overlap * 0.5;
+    }
+
+    const relV = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+    if (relV > 0) return;
+
+    const j = (-(1 + RESTITUTION) * relV) / 2;
+    if (!a.isDragged) {
+      a.vx -= j * nx;
+      a.vy -= j * ny;
+      a.rotV += ANG_KICK * Math.sign(a.vx || 1);
+    }
+    if (!b.isDragged) {
+      b.vx += j * nx;
+      b.vy += j * ny;
+      b.rotV += ANG_KICK * Math.sign(b.vx || 1);
+    }
+  }
+
+  function textCollide(c: CS) {
+    if (textRects.length === 0) return;
+    const r = capsuleRadius(c);
+    const [ax, ay, bx, by] = capsuleEndpoints(c);
+    const probes = [
+      [ax, ay],
+      [bx, by],
+      [c.cx, c.cy],
     ] as const;
 
-    const chips = [
-        { id: "dexcom", file: "dexcom.png", name: "Dexcom", top: "8%", left: "44%", rot: -4 },
-        { id: "loop", file: "loop.png", name: "Loop", top: "25%", left: "30%", rot: 6 },
-        { id: "trio", file: "trio.jpg", name: "Trio", top: "30%", right: "30%", rot: -8 },
-        { id: "libre", file: "libre.png", name: "FreeStyle Libre", top: "48%", left: "26%", rot: 5 },
-        { id: "nightscout", file: "nightscout.png", name: "Nightscout", top: "44%", right: "26%", rot: -6 },
-        { id: "tandem", file: "tandem.png", name: "Tandem", top: "70%", left: "20%", rot: 7 },
-        { id: "omnipod", file: "omnipod.png", name: "Omnipod", top: "67%", right: "18%", rot: -3 },
-        { id: "aaps", file: "aaps.png", name: "AAPS", top: "82%", right: "38%", rot: 9 },
-        { id: "xdrip", file: "xdrip.jpg", name: "xDrip+", top: "84%", left: "8%", rot: -10 },
-    ] as const;
+    for (const rect of textRects) {
+      for (const [ex, ey] of probes) {
+        const clampX = Math.max(rect.x, Math.min(rect.x + rect.w, ex));
+        const clampY = Math.max(rect.y, Math.min(rect.y + rect.h, ey));
+        const dx = ex - clampX;
+        const dy = ey - clampY;
+        const dist2 = dx * dx + dy * dy;
+        if (dist2 >= r * r || dist2 < 1e-6) continue;
 
-    const N = 56;
-    const W = 100;
-    const H = 38;
+        const dist = Math.sqrt(dist2);
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const push = r - dist;
 
-    function buildPath(kind: string): { line: string; fill: string } {
-        const pts: number[] = [];
-        for (let i = 0; i < N; i++) {
-            const t = i / (N - 1);
-            let v: number;
-            if (kind === "wave") v = 110 + 22 * Math.sin(t * 7) + 8 * Math.cos(t * 17);
-            else if (kind === "climb") v = 90 + t * 90 + 6 * Math.sin(t * 9);
-            else if (kind === "agp") v = 130 + 50 * Math.sin(t * Math.PI * 2 - 0.6) + 4 * Math.sin(t * 13);
-            else if (kind === "crest") v = 100 + 110 * Math.pow(Math.sin(t * Math.PI), 2) + 4 * Math.sin(t * 21);
-            else v = 120 + 14 * Math.sin(t * 5) + 3 * Math.sin(t * 31);
-            pts.push(v);
+        c.cx += nx * push;
+        c.cy += ny * push;
+
+        const dot = c.vx * nx + c.vy * ny;
+        if (dot < 0) {
+          c.vx -= (1 + RESTITUTION) * dot * nx;
+          c.vy -= (1 + RESTITUTION) * dot * ny;
         }
-        const line = pts
-            .map((v, i) => {
-                const x = (i / (N - 1)) * W;
-                const y = H - ((v - 40) / 220) * H;
-                return (i === 0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2);
-            })
-            .join(" ");
-        const fill = `${line} L ${W} ${H} L 0 ${H} Z`;
-        return { line, fill };
+        c.rotV += ANG_KICK * (Math.random() * 2 - 1);
+        return; // resolve one contact per frame
+      }
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  function applyTransforms() {
+    chipElRefs.forEach((el, i) => {
+      if (!el) return;
+      const c = cs[i];
+      // translate positions the top-left corner; transform-origin rotates around center
+      el.style.transform = `translate(${c.cx - c.w / 2}px, ${c.cy - c.h / 2}px) rotate(${c.rot}deg)`;
+      el.style.transformOrigin = `${c.w / 2}px ${c.h / 2}px`;
+    });
+  }
+
+  // ── Physics loop ──────────────────────────────────────────────────────────
+  function tick(now: number) {
+    const dt = Math.min((now - lastTime) / 1000, MAX_DT);
+    lastTime = now;
+    const t = now / 1000;
+    const cw = containerEl ? containerEl.offsetWidth : 0;
+    const ch = containerEl ? containerEl.offsetHeight : 0;
+
+    // Integrate forces
+    for (let i = 0; i < cs.length; i++) {
+      const c = cs[i];
+      if (c.isDragged) {
+        // Spring pull toward grab-adjusted pointer position
+        // (grabOffset keeps the chip stationary at pickup, no snap)
+        c.vx += (pointer.x - grabOffset.x - c.cx) * SPRING_K * dt;
+        c.vy += (pointer.y - grabOffset.y - c.cy) * SPRING_K * dt;
+      } else {
+        // Sine-wave bob forces — unique phase per chip so they desync naturally
+        c.vy += Math.sin(t * BOB_FREQ_V + c.phase) * BOB_AMP_V * dt;
+        c.vx += Math.sin(t * BOB_FREQ_H + c.phase * 1.3) * BOB_AMP_H * dt;
+        // Tidal force — flow vector from the same aurora noise field
+        if (cw > 0 && ch > 0) {
+          const flow = sampleFlow(c.cx, c.cy, cw, ch, t);
+          c.vx += (flow.rx - 0.5) * 2 * TIDE_AMP * dt;
+          c.vy += (flow.ry - 0.5) * 2 * TIDE_AMP * dt;
+        }
+      }
+      c.vx *= 1 - LINEAR_DAMP;
+      c.vy *= 1 - LINEAR_DAMP;
+      c.rotV *= 1 - ANGULAR_DAMP;
+      c.cx += c.vx * dt;
+      c.cy += c.vy * dt;
+      c.rot += c.rotV * dt;
     }
 
-    const chartPaths = charts.map((c) => buildPath(c.kind));
+    // Collisions
+    for (let i = 0; i < cs.length; i++)
+      if (!cs[i].isDragged) wallCollide(cs[i]);
+    for (let i = 0; i < cs.length - 1; i++)
+      for (let j = i + 1; j < cs.length; j++) chipCollide(cs[i], cs[j]);
+    for (let i = 0; i < cs.length; i++)
+      if (!cs[i].isDragged) textCollide(cs[i]);
 
-    // threshold y positions
-    const yHigh = H - ((180 - 40) / 220) * H;
-    const yLow = H - ((70 - 40) / 220) * H;
+    applyTransforms();
+    rafId = requestAnimationFrame(tick);
+  }
 
-    type Chip = (typeof chips)[number];
-    function chipStyle(c: Chip): string {
-        const parts: string[] = [`top:${c.top}`, `transform:rotate(${c.rot}deg)`];
-        if ("left" in c) parts.push(`left:${c.left}`);
-        if ("right" in c) parts.push(`right:${c.right}`);
-        return parts.join(";");
+  // ── Pointer / drag handlers ───────────────────────────────────────────────
+  function onPointerDown(e: PointerEvent, i: number) {
+    e.stopPropagation();
+    dragIdx = i;
+    cs[i].isDragged = true;
+    cs[i].vx = 0;
+    cs[i].vy = 0;
+    if (containerEl) {
+      const cr = containerEl.getBoundingClientRect();
+      pointer = { x: e.clientX - cr.left, y: e.clientY - cr.top };
+      // Record offset from pointer to chip center so the chip doesn't snap
+      grabOffset = { x: pointer.x - cs[i].cx, y: pointer.y - cs[i].cy };
     }
+    containerEl?.setPointerCapture(e.pointerId);
+  }
 
-    type Chart = (typeof charts)[number];
-    function chartStyle(c: Chart): string {
-        const parts: string[] = [`top:${c.top}`, `width:${c.width}px`, `transform:rotate(${c.rot}deg)`];
-        if ("left" in c) parts.push(`left:${c.left}`);
-        if ("right" in c) parts.push(`right:${c.right}`);
-        return parts.join(";");
+  function onPointerMove(e: PointerEvent) {
+    if (dragIdx < 0 || !containerEl) return;
+    const cr = containerEl.getBoundingClientRect();
+    pointer = { x: e.clientX - cr.left, y: e.clientY - cr.top };
+  }
+
+  function onPointerUp(_e: PointerEvent) {
+    if (dragIdx >= 0) {
+      cs[dragIdx].isDragged = false;
+      dragIdx = -1;
     }
+  }
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+  // Physics init — runs once when containerEl is set (bind:this fires on mount)
+  $effect(() => {
+    if (!containerEl) return;
+    measureSizes();
+    initPositions();
+    lastTime = performance.now();
+    rafId = requestAnimationFrame(tick);
+    const ro = new ResizeObserver(() => measureTextRect());
+    ro.observe(containerEl);
+    return () => {
+      cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
+  });
+
+  // Text rect — re-measures whenever the textBlock prop changes
+  // (parent's bind:this fires after its own mount, after this effect)
+  $effect(() => {
+    measureTextRect();
+  });
 </script>
 
-<div class="aurora-pool" aria-hidden="true">
-    {#each charts as chart, i}
-        {@const path = chartPaths[i]}
-        <div class="aurora-poolchart" style={chartStyle(chart)}>
-            <div class="hd">
-                <span>{chart.label}</span>
-                <span class="dot"></span>
-            </div>
-            <svg viewBox="0 0 {W} {H}" preserveAspectRatio="none">
-                <line x1="0" x2={W} y1={yHigh} y2={yHigh} class="thr" />
-                <line x1="0" x2={W} y1={yLow} y2={yLow} class="thr" />
-                <path d={path.fill} class="fill" />
-                <path d={path.line} class="line" />
-            </svg>
-            <div class="ax"><span>40</span><span>260 mg/dL</span></div>
+<div
+  class="absolute inset-0 overflow-hidden"
+  aria-hidden="true"
+  bind:this={containerEl}
+  onpointermove={onPointerMove}
+  onpointerup={onPointerUp}
+>
+  <!-- Mobile: static chip wrap (unchanged from original) -->
+  <div class="md:hidden absolute top-16 left-0 right-0 px-5">
+    <div class="flex flex-wrap gap-1.5 justify-center">
+      {#each CHIP_DEFS as def}
+        <div
+          class="flex items-center gap-1.5 bg-[oklch(0.10_0.028_261/85%)] border border-[oklch(1_0_0/20%)] rounded-full py-1 pr-2.5 pl-1 backdrop-blur-sm"
+        >
+          <img
+            src="/logos/{def.file}"
+            alt=""
+            class="size-4 rounded object-cover"
+          />
+          <span class="text-[10px] font-semibold text-white whitespace-nowrap"
+            >{def.name}</span
+          >
         </div>
-    {/each}
-
-    <div class="aurora-tirbar" style="top:38%;left:42%;transform:rotate(-4deg)">
-        <div class="hd"><span>14-DAY DISTRIBUTION</span><span class="dot"></span></div>
-        <div class="bar">
-            {#each [{ v: 1, c: "var(--glucose-very-low)" }, { v: 4, c: "var(--glucose-low)" }, { v: 30, c: "var(--glucose-tight-range)" }, { v: 40, c: "var(--glucose-in-range)" }, { v: 25, c: "var(--glucose-high)" }] as b}
-                <div style="flex:{b.v};background:{b.c}"></div>
-            {/each}
-        </div>
-        <div class="rows">
-            {#each [{ k: "Very Low", v: 1, c: "var(--glucose-very-low)" }, { k: "Low", v: 4, c: "var(--glucose-low)" }, { k: "TITR", v: 30, c: "var(--glucose-tight-range)" }, { k: "TIR", v: 40, c: "var(--glucose-in-range)" }, { k: "High", v: 25, c: "var(--glucose-high)" }] as b}
-                <div class="row">
-                    <span class="sw" style="background:{b.c}"></span>
-                    <span class="k">{b.k}</span>
-                    <span class="vv">{b.v}%</span>
-                </div>
-            {/each}
-        </div>
+      {/each}
     </div>
+  </div>
 
-    {#each chips as chip}
-        <div class="aurora-chip" style={chipStyle(chip)}>
-            <img src="/logos/{chip.file}" alt="" />
-            <span>{chip.name}</span>
-        </div>
-    {/each}
+  <!-- Desktop: physics-driven chips -->
+  <!--
+        Each chip starts at top:0 left:0 and is repositioned entirely by
+        applyTransforms() via el.style.transform each rAF frame.
+        pointer-events-auto + touch-none lets pointer events through despite
+        the aria-hidden parent being pointer-events-none in the original.
+    -->
+  {#each CHIP_DEFS as def, i}
+    <div
+      class="hidden md:flex absolute top-0 left-0 items-center gap-[7px]
+                   bg-[oklch(0.10_0.028_261/85%)] border border-[oklch(1_0_0/20%)]
+                   rounded-full py-[5px] pr-3 pl-1.5 backdrop-blur-[6px] mix-blend-screen
+                   pointer-events-auto cursor-grab active:cursor-grabbing select-none touch-none"
+      use:assignRef={i}
+      onpointerdown={(e) => onPointerDown(e, i)}
+      onpointerup={onPointerUp}
+    >
+      <img src="/logos/{def.file}" alt="" class="size-5 rounded object-cover" />
+      <span class="text-[11px] font-semibold text-white whitespace-nowrap"
+        >{def.name}</span
+      >
+    </div>
+  {/each}
 </div>
-
-<style>
-    .aurora-pool {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        overflow: hidden;
-    }
-
-    /* ── Mini chart card ── */
-    .aurora-poolchart {
-        position: absolute;
-        background: oklch(0.13 0.028 261 / 72%);
-        border: 1px solid oklch(1 0 0 / 12%);
-        border-radius: 10px;
-        padding: 8px 10px 6px;
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        filter: url(#aurora-water);
-        mix-blend-mode: screen;
-    }
-
-    .aurora-poolchart .hd {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 9px;
-        letter-spacing: 0.1em;
-        color: oklch(0.85 0.01 261);
-        margin-bottom: 5px;
-    }
-
-    .aurora-poolchart .hd .dot {
-        width: 5px;
-        height: 5px;
-        border-radius: 999px;
-        background: var(--glucose-in-range);
-        opacity: 0.7;
-    }
-
-    .aurora-poolchart svg {
-        width: 100%;
-        height: 38px;
-        display: block;
-        overflow: visible;
-    }
-
-    .aurora-poolchart .thr {
-        stroke: oklch(1 0 0 / 15%);
-        stroke-width: 0.5;
-        stroke-dasharray: 2 2;
-    }
-
-    .aurora-poolchart .fill {
-        fill: var(--glucose-in-range);
-        opacity: 0.12;
-    }
-
-    .aurora-poolchart .line {
-        fill: none;
-        stroke: var(--glucose-in-range);
-        stroke-width: 1.5;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-        opacity: 0.85;
-    }
-
-    .aurora-poolchart .ax {
-        display: flex;
-        justify-content: space-between;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 8px;
-        color: oklch(0.65 0.01 261);
-        margin-top: 3px;
-        font-variant-numeric: tabular-nums;
-    }
-
-    /* ── TIR bar ── */
-    .aurora-tirbar {
-        position: absolute;
-        width: 180px;
-        background: oklch(0.13 0.028 261 / 72%);
-        border: 1px solid oklch(1 0 0 / 12%);
-        border-radius: 10px;
-        padding: 8px 10px;
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        filter: url(#aurora-water);
-        mix-blend-mode: screen;
-    }
-
-    .aurora-tirbar .hd {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 9px;
-        letter-spacing: 0.1em;
-        color: oklch(0.85 0.01 261);
-        margin-bottom: 6px;
-    }
-
-    .aurora-tirbar .hd .dot {
-        width: 5px;
-        height: 5px;
-        border-radius: 999px;
-        background: var(--glucose-in-range);
-        opacity: 0.7;
-    }
-
-    .aurora-tirbar .bar {
-        display: flex;
-        height: 6px;
-        border-radius: 4px;
-        overflow: hidden;
-        gap: 1px;
-        margin-bottom: 8px;
-    }
-
-    .aurora-tirbar .rows {
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-    }
-
-    .aurora-tirbar .row {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        font-size: 9px;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    }
-
-    .aurora-tirbar .sw {
-        width: 8px;
-        height: 8px;
-        border-radius: 2px;
-        flex-shrink: 0;
-    }
-
-    .aurora-tirbar .k {
-        flex: 1;
-        color: oklch(0.75 0.01 261);
-    }
-
-    .aurora-tirbar .vv {
-        color: oklch(0.85 0.01 261);
-        font-variant-numeric: tabular-nums;
-    }
-
-    /* ── Connector chip ── */
-    .aurora-chip {
-        position: absolute;
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        background: oklch(0.13 0.028 261 / 60%);
-        border: 1px solid oklch(1 0 0 / 15%);
-        border-radius: 999px;
-        padding: 5px 12px 5px 6px;
-        backdrop-filter: blur(6px);
-        -webkit-backdrop-filter: blur(6px);
-        mix-blend-mode: screen;
-    }
-
-    .aurora-chip img {
-        width: 20px;
-        height: 20px;
-        border-radius: 4px;
-        object-fit: cover;
-    }
-
-    .aurora-chip span {
-        font-size: 11px;
-        font-weight: 500;
-        color: oklch(0.9 0.01 261);
-        white-space: nowrap;
-    }
-</style>

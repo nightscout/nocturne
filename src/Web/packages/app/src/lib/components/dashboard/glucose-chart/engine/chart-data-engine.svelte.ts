@@ -156,6 +156,8 @@ export interface ChartDataEngineOptions {
   externalPredictionData?: PredictionData | null;
   enablePredictions?: boolean;
   demoMode?: boolean;
+  /** Fired once when `serverChartData` first becomes non-null. */
+  onDataReady?: () => void;
 }
 
 /** All lookup functions for tooltip and inspection consumers */
@@ -460,6 +462,15 @@ export function createChartDataEngine(
     return () => {
       cancelled = true;
     };
+  });
+
+  // Notify caller once chart data is available (for gating playback, etc.)
+  let dataReadyFired = false;
+  $effect(() => {
+    if (serverChartData && !dataReadyFired) {
+      dataReadyFired = true;
+      options.onDataReady?.();
+    }
   });
 
   // Check prediction service availability on mount

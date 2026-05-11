@@ -4,12 +4,27 @@
     import { DEMO_ENABLED } from "$lib/config";
     import AuroraCanvas from "$lib/components/AuroraCanvas.svelte";
     import AuroraPool from "$lib/components/AuroraPool.svelte";
+    import FeaturePillars from "$lib/components/features/FeaturePillars.svelte";
     import { getCommunityData } from "$lib/data/portal.remote";
+
+    let textBlockEl: HTMLElement | null = $state(null);
 
     let communityData = $state<Awaited<ReturnType<typeof getCommunityData>> | null>(null);
     getCommunityData({})
         .then((d) => (communityData = d))
         .catch(() => {});
+
+    const MAX_AVATARS = 20;
+    let topContributors = $derived(
+        communityData
+            ? [...communityData.contributors]
+                  .sort((a, b) => b.contributions - a.contributions)
+                  .slice(0, MAX_AVATARS)
+            : []
+    );
+    let contributorOverflow = $derived(
+        communityData ? Math.max(0, communityData.contributors.length - MAX_AVATARS) : 0
+    );
 
     const connectors = [
         { file: "dexcom.png", name: "Dexcom" },
@@ -38,8 +53,8 @@
 </script>
 
 <!-- Hero -->
-<section class="aurora-hero-wrap">
-    <svg class="aurora-water-defs" aria-hidden="true">
+<section class="relative w-full overflow-hidden -mt-16">
+    <svg class="absolute size-0 overflow-hidden" aria-hidden="true">
         <defs>
             <filter id="aurora-water" x="-10%" y="-10%" width="120%" height="120%">
                 <feTurbulence type="fractalNoise" baseFrequency="0.012 0.018"
@@ -55,44 +70,47 @@
     </svg>
 
     <AuroraCanvas height={920} />
-    <div class="aurora-grain" aria-hidden="true"></div>
-    <AuroraPool />
-    <div class="aurora-fade" aria-hidden="true"></div>
+    <div class="grain-bg absolute inset-0 pointer-events-none opacity-35 mix-blend-overlay" aria-hidden="true"></div>
+    <AuroraPool textBlock={textBlockEl} />
+    <div class="absolute bottom-0 inset-x-0 h-[280px] pointer-events-none bg-gradient-to-b from-transparent to-background" aria-hidden="true"></div>
 
-    <div class="aurora-chrome">
-        <div class="aurora-stamp aurora-stamp-tl">
+    <div class="absolute inset-0 pt-16 pointer-events-none">
+        <div class="absolute top-[calc(4rem+20px)] left-6 flex flex-col gap-0.5 font-mono text-[9px] tracking-[0.12em] uppercase text-[oklch(0.6_0.01_261)]">
             <span>NCTRN / HOMEPAGE</span>
             <span>v0.4 &middot; public preview</span>
         </div>
-        <div class="aurora-stamp aurora-stamp-tr">
+        <div class="absolute top-[calc(4rem+20px)] right-6 flex flex-col gap-0.5 font-mono text-[9px] tracking-[0.12em] uppercase text-[oklch(0.6_0.01_261)] text-right">
             <span>5,250 d &middot; running</span>
             <span>22 connectors</span>
         </div>
 
-        <div class="aurora-hero-text">
-            <span class="aurora-eyebrow">
-                <span class="aurora-eyebrow-dot"></span>The new Nightscout API
+        <div
+            bind:this={textBlockEl}
+            class="absolute bottom-[200px] left-1/2 -translate-x-1/2 w-[min(760px,90vw)] text-center flex flex-col items-center gap-5"
+        >
+            <span class="inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.16em] uppercase text-[oklch(0.7_0.01_261)]">
+                <span class="eyebrow-dot size-1.5 rounded-full shrink-0 bg-glucose-in-range"></span>The new Nightscout API
             </span>
-            <h1 class="aurora-h1">
+            <h1 class="flex flex-col items-center text-[clamp(2.5rem,7vw,4.8rem)] font-bold leading-[1.06] tracking-[-0.025em] text-[oklch(0.97_0.005_261)] m-0 [text-shadow:0_2px_40px_oklch(0_0_0_/_60%)]">
                 <span>Every reading.</span>
-                <span><em>Every</em> source.</span>
+                <span><em class="text-glucose-in-range">Every</em> source.</span>
                 <span>One dashboard.</span>
             </h1>
-            <p class="aurora-lede">
+            <p class="text-[1.05rem] leading-[1.65] text-[oklch(0.74_0.015_261)] max-w-[540px] m-0 [text-shadow:0_1px_20px_oklch(0_0_0_/_50%)]">
                 Nocturne pulls every CGM, pump, and tracker you use into a single
                 self-hosted dashboard. Fast, multitenant, real-time, and built by
                 the diabetes community.
             </p>
-            <div class="aurora-ctas">
-                <Button href="/docs/installation" size="lg" class="gap-2 text-base aurora-btn-primary">
+            <div class="flex flex-wrap gap-3 justify-center pointer-events-auto">
+                <Button href="/docs/installation" size="lg" class="gap-2 text-base hero-btn-primary">
                     Get started <ArrowRight class="w-4 h-4" />
                 </Button>
                 {#if DEMO_ENABLED}
-                    <Button href="/demo" variant="ghost" size="lg" class="gap-2 text-base aurora-btn-ghost">
+                    <Button href="/demo" variant="ghost" size="lg" class="gap-2 text-base hero-btn-ghost">
                         <Play class="w-4 h-4" /> See a real day
                     </Button>
                 {:else}
-                    <Button href="/features" variant="ghost" size="lg" class="text-base aurora-btn-ghost">
+                    <Button href="/features" variant="ghost" size="lg" class="text-base hero-btn-ghost">
                         Explore features
                     </Button>
                 {/if}
@@ -102,36 +120,36 @@
 </section>
 
 <!-- 01 Manifesto -->
-<section class="aurora-section aurora-manifesto">
-    <div class="aurora-section-head">
-        <div class="aurora-section-label">&#167; 01 &mdash; Why this exists</div>
-        <h2>
+<section class="max-w-[1200px] mx-auto px-6 py-20 border-t border-border">
+    <div class="mb-[52px]">
+        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">&#167; 01 &mdash; Why this exists</div>
+        <h2 class="text-[clamp(1.6rem,3.5vw,2.5rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">
             The diabetes data stack has not moved in a decade.<br />
-            <em>This is the rewrite.</em>
+            <em class="text-glucose-in-range">This is the rewrite.</em>
         </h2>
     </div>
 
-    <div class="aurora-cols">
-        <div class="aurora-col">
-            <div class="aurora-col-num">01</div>
-            <h3>Drop-in Nightscout API</h3>
-            <p>
+    <div class="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-px bg-border border border-border rounded-xl overflow-hidden">
+        <div class="bg-background py-9 px-8 flex flex-col gap-3.5">
+            <div class="font-mono text-[26px] font-bold text-[oklch(1_0_0_/_7%)] leading-none tracking-[-0.02em]">01</div>
+            <h3 class="text-base font-semibold text-foreground m-0">Drop-in Nightscout API</h3>
+            <p class="text-sm leading-[1.65] text-muted-foreground m-0">
                 Full v1/v2/v3 compatibility. Every existing app, watch face, and
                 follower keeps working &mdash; migration is a connection-string change.
             </p>
         </div>
-        <div class="aurora-col">
-            <div class="aurora-col-num">02</div>
-            <h3>Multitenant, by default</h3>
-            <p>
+        <div class="bg-background py-9 px-8 flex flex-col gap-3.5">
+            <div class="font-mono text-[26px] font-bold text-[oklch(1_0_0_/_7%)] leading-none tracking-[-0.02em]">02</div>
+            <h3 class="text-base font-semibold text-foreground m-0">Multitenant, by default</h3>
+            <p class="text-sm leading-[1.65] text-muted-foreground m-0">
                 One install, many people. Run a household, a clinic, or a community
                 on a single deployment with isolated data and per-tenant settings.
             </p>
         </div>
-        <div class="aurora-col">
-            <div class="aurora-col-num">03</div>
-            <h3>Real-time, sub-second</h3>
-            <p>
+        <div class="bg-background py-9 px-8 flex flex-col gap-3.5">
+            <div class="font-mono text-[26px] font-bold text-[oklch(1_0_0_/_7%)] leading-none tracking-[-0.02em]">03</div>
+            <h3 class="text-base font-semibold text-foreground m-0">Real-time, sub-second</h3>
+            <p class="text-sm leading-[1.65] text-muted-foreground m-0">
                 WebSocket-first. New CGM readings arrive on every device the moment
                 they are written &mdash; no five-minute polling delay.
             </p>
@@ -140,48 +158,55 @@
 </section>
 
 <!-- 02 Connectors -->
-<section class="aurora-section aurora-connectors">
-    <div class="aurora-section-head">
-        <div class="aurora-section-label">&#167; 02 &mdash; What plugs in</div>
-        <h2>22 sources. <em>One API surface.</em></h2>
+<section class="max-w-[1200px] mx-auto px-6 py-20 border-t border-border">
+    <div class="mb-[52px]">
+        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">&#167; 02 &mdash; What plugs in</div>
+        <h2 class="text-[clamp(1.6rem,3.5vw,2.5rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">22 sources. <em class="text-glucose-in-range">One API surface.</em></h2>
     </div>
 
-    <div class="aurora-conn-strip">
+    <div class="w-full rounded-sm overflow-hidden mb-9 h-1.5">
         <AuroraCanvas height={6} intensity={1.2} speed={1.4} />
     </div>
 
-    <div class="aurora-marquee">
-        <div class="aurora-marquee-track">
+    <div class="marquee-mask overflow-hidden mb-6">
+        <div class="marquee-track flex w-max">
             {#each [...connectors, ...connectors] as c, i (i)}
-                <div class="aurora-marquee-cell">
-                    <img src="/logos/{c.file}" alt={c.name} />
-                    <span>{c.name}</span>
+                <div class="flex items-center gap-2 px-5 py-2.5 border-r border-border shrink-0">
+                    <img src="/logos/{c.file}" alt={c.name} class="size-6 rounded-[5px] object-cover" />
+                    <span class="text-[13px] font-medium text-muted-foreground whitespace-nowrap">{c.name}</span>
                 </div>
             {/each}
         </div>
     </div>
 
-    <div class="aurora-conn-foot">
+    <div class="flex gap-2.5 items-center font-mono text-[11px] text-muted-foreground">
         <span>+ a new connector per release on average</span>
         <span>&middot;</span>
         <span>requests welcome</span>
     </div>
 </section>
 
-<!-- 03 Install -->
-<section class="aurora-section aurora-install">
-    <div class="aurora-section-head">
-        <div class="aurora-section-label">&#167; 03 &mdash; Run it tonight</div>
-        <h2>Five minutes from <em>git clone</em> to a dashboard.</h2>
+<!-- 03 Features -->
+<FeaturePillars demoHeight={400} />
+
+<!-- 04 Install -->
+<section class="max-w-[1200px] mx-auto px-6 py-20 border-t border-border">
+    <div class="mb-[52px]">
+        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">&#167; 04 &mdash; Run it tonight</div>
+        <h2 class="text-[clamp(1.6rem,3.5vw,2.5rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Five minutes from <em class="text-glucose-in-range">git clone</em> to a dashboard.</h2>
     </div>
 
-    <div class="aurora-terminal">
-        <div class="aurora-terminal-head">
+    <div class="bg-[oklch(0.10_0.025_261)] border border-border rounded-xl overflow-hidden mb-9 max-w-[680px]">
+        <div class="flex items-center justify-between px-4 py-2.5 bg-[oklch(0.16_0.03_261)] border-b border-border font-mono text-[12px] text-muted-foreground">
             <span>~/nocturne</span>
-            <span class="aurora-terminal-dots"><i></i><i></i><i></i></span>
+            <span class="flex gap-[5px]">
+                <i class="block size-2.5 rounded-full bg-[oklch(1_0_0_/_15%)]"></i>
+                <i class="block size-2.5 rounded-full bg-[oklch(1_0_0_/_15%)]"></i>
+                <i class="block size-2.5 rounded-full bg-[oklch(1_0_0_/_15%)]"></i>
+            </span>
         </div>
         <pre
-            class="aurora-terminal-body"
+            class="p-5 font-mono text-[13px] leading-[1.7] text-[oklch(0.82_0.03_261)] m-0 whitespace-pre overflow-x-auto"
 >$ git clone https://github.com/nightscout/nocturne
 $ cd nocturne &amp;&amp; cp .env.example .env
 $ docker compose up -d
@@ -193,7 +218,7 @@ $ docker compose up -d
   &rarr; open http://localhost:5173</pre>
     </div>
 
-    <div class="aurora-install-ctas">
+    <div class="flex flex-wrap gap-3">
         <Button href="/docs/installation" size="lg" class="gap-2">
             Installation guide <ArrowRight class="w-4 h-4" />
         </Button>
@@ -205,407 +230,91 @@ $ docker compose up -d
 
 <!-- 04 Community -->
 {#if communityData}
-    <section class="aurora-section aurora-community">
-        <div class="aurora-section-head">
-            <div class="aurora-section-label">&#167; 04 &mdash; Community</div>
-            <h2>Built in the open. <em>Maintained by volunteers.</em></h2>
+    <section class="max-w-[1200px] mx-auto px-6 py-20 border-t border-border">
+        <div class="mb-[52px]">
+            <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">&#167; 05 &mdash; Community</div>
+            <h2 class="text-[clamp(1.6rem,3.5vw,2.5rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Built in the open. <em class="text-glucose-in-range">Maintained by volunteers.</em></h2>
         </div>
-        <div class="aurora-community-grid">
-            <div class="aurora-stat-card">
-                <div class="aurora-stat-num">{communityData.stars.toLocaleString()}</div>
-                <div class="aurora-stat-label">GitHub stars</div>
+
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-px bg-border border border-border rounded-xl overflow-hidden">
+            <div class="bg-background py-8 px-7 flex flex-col gap-1.5">
+                <div class="text-[2rem] font-bold tracking-[-0.03em] text-foreground [font-variant-numeric:tabular-nums]">{communityData.stars.toLocaleString()}</div>
+                <div class="text-[0.78rem] text-muted-foreground font-mono tracking-[0.05em] uppercase">GitHub stars</div>
             </div>
-            <div class="aurora-stat-card">
-                <div class="aurora-stat-num">{communityData.forks.toLocaleString()}</div>
-                <div class="aurora-stat-label">Forks</div>
-            </div>
-            <div class="aurora-stat-card">
-                <div class="aurora-stat-num">{communityData.contributors.toLocaleString()}</div>
-                <div class="aurora-stat-label">Contributors</div>
+            <div class="bg-background py-8 px-7 flex flex-col gap-1.5">
+                <div class="text-[2rem] font-bold tracking-[-0.03em] text-foreground [font-variant-numeric:tabular-nums]">{communityData.forks.toLocaleString()}</div>
+                <div class="text-[0.78rem] text-muted-foreground font-mono tracking-[0.05em] uppercase">Forks</div>
             </div>
             {#if communityData.latestRelease}
-                <div class="aurora-stat-card">
-                    <div class="aurora-stat-num">{communityData.latestRelease}</div>
-                    <div class="aurora-stat-label">Latest release</div>
+                <div class="bg-background py-8 px-7 flex flex-col gap-1.5">
+                    <div class="text-[2rem] font-bold tracking-[-0.03em] text-foreground [font-variant-numeric:tabular-nums]">{communityData.latestRelease}</div>
+                    <div class="text-[0.78rem] text-muted-foreground font-mono tracking-[0.05em] uppercase">Latest release</div>
                 </div>
             {/if}
+        </div>
+
+        <div class="flex items-center gap-4 mt-10">
+            <div class="flex items-center">
+                {#each topContributors as c (c.login)}
+                    <a
+                        href={c.html_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="{c.login} &middot; {c.contributions} commits"
+                        class="-ml-2.5 first:ml-0 relative block rounded-full border-2 border-background transition-transform duration-150 z-[1] hover:-translate-y-[3px] hover:scale-110 hover:z-10"
+                    >
+                        <img src="{c.avatar_url}&s=80" alt={c.login} width="36" height="36" loading="lazy" class="block size-9 rounded-full" />
+                    </a>
+                {/each}
+                {#if contributorOverflow > 0}
+                    <div class="-ml-2.5 size-9 rounded-full bg-muted border-2 border-background flex items-center justify-center text-[10px] font-semibold text-muted-foreground font-mono shrink-0">+{contributorOverflow}</div>
+                {/if}
+            </div>
+            <span class="font-mono text-[11px] tracking-[0.10em] uppercase text-muted-foreground whitespace-nowrap">
+                {communityData.contributors.length} contributors
+            </span>
         </div>
     </section>
 {/if}
 
 <style>
-    .aurora-hero-wrap {
-        position: relative;
-        width: 100%;
-        overflow: hidden;
-        margin-top: -4rem;
-    }
-
-    .aurora-water-defs {
-        position: absolute;
-        width: 0;
-        height: 0;
-        overflow: hidden;
-    }
-
-    .aurora-grain {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
+    /* SVG grain — data URI can't be expressed as a Tailwind utility */
+    .grain-bg {
         background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
         background-size: 200px 200px;
-        opacity: 0.35;
-        mix-blend-mode: overlay;
     }
 
-    .aurora-fade {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 280px;
-        background: linear-gradient(to bottom, transparent, var(--background));
-        pointer-events: none;
-    }
-
-    .aurora-chrome {
-        position: absolute;
-        inset: 0;
-        padding-top: 4rem;
-    }
-
-    .aurora-stamp {
-        position: absolute;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 9px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: oklch(0.6 0.01 261);
-        top: calc(4rem + 20px);
-    }
-
-    .aurora-stamp-tl { left: 24px; }
-    .aurora-stamp-tr { right: 24px; text-align: right; }
-
-    .aurora-hero-text {
-        position: absolute;
-        bottom: 200px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: min(760px, 90vw);
-        text-align: center;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 20px;
-    }
-
-    .aurora-eyebrow {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 11px;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: oklch(0.7 0.01 261);
-    }
-
-    .aurora-eyebrow-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: var(--glucose-in-range);
-        box-shadow: 0 0 0 3px color-mix(in oklch, var(--glucose-in-range), transparent 80%);
-        animation: aurora-pulse 2.4s ease-in-out infinite;
-        flex-shrink: 0;
-    }
-
+    /* Eyebrow dot — keyframe + color-mix box-shadow */
     @keyframes aurora-pulse {
         0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklch, var(--glucose-in-range), transparent 80%); }
         50%       { box-shadow: 0 0 0 7px color-mix(in oklch, var(--glucose-in-range), transparent 92%); }
     }
-
-    .aurora-h1 {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        font-size: clamp(2.5rem, 7vw, 4.8rem);
-        font-weight: 700;
-        line-height: 1.06;
-        letter-spacing: -0.025em;
-        color: oklch(0.97 0.005 261);
-        margin: 0;
-        text-shadow: 0 2px 40px oklch(0 0 0 / 60%);
+    .eyebrow-dot {
+        box-shadow: 0 0 0 3px color-mix(in oklch, var(--glucose-in-range), transparent 80%);
+        animation: aurora-pulse 2.4s ease-in-out infinite;
     }
 
-    .aurora-h1 em {
-        font-style: italic;
-        color: var(--glucose-in-range);
-    }
-
-    .aurora-lede {
-        font-size: 1.05rem;
-        line-height: 1.65;
-        color: oklch(0.74 0.015 261);
-        max-width: 540px;
-        margin: 0;
-        text-shadow: 0 1px 20px oklch(0 0 0 / 50%);
-    }
-
-    .aurora-ctas {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        justify-content: center;
-    }
-
-    :global(.aurora-btn-primary) {
-        background: oklch(0.96 0.005 261) !important;
-        color: oklch(0.13 0.028 261) !important;
-        box-shadow: 0 0 0 1px oklch(1 0 0 / 20%) !important;
-    }
-
-    :global(.aurora-btn-ghost) {
-        background: oklch(1 0 0 / 8%) !important;
-        color: oklch(0.92 0.01 261) !important;
-        border: 1px solid oklch(1 0 0 / 20%) !important;
-        backdrop-filter: blur(8px);
-    }
-
-    .aurora-section {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 80px 24px;
-    }
-
-    .aurora-section-head {
-        margin-bottom: 52px;
-    }
-
-    .aurora-section-label {
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 11px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-        margin-bottom: 16px;
-    }
-
-    .aurora-section-head h2 {
-        font-size: clamp(1.6rem, 3.5vw, 2.5rem);
-        font-weight: 700;
-        line-height: 1.2;
-        letter-spacing: -0.02em;
-        color: var(--foreground);
-        margin: 0;
-    }
-
-    .aurora-section-head h2 em {
-        font-style: italic;
-        color: var(--glucose-in-range);
-    }
-
-    .aurora-manifesto {
-        border-top: 1px solid var(--border);
-    }
-
-    .aurora-cols {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 1px;
-        background: var(--border);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    .aurora-col {
-        background: var(--background);
-        padding: 36px 32px;
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-    }
-
-    .aurora-col-num {
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 26px;
-        font-weight: 700;
-        color: oklch(1 0 0 / 7%);
-        line-height: 1;
-        letter-spacing: -0.02em;
-    }
-
-    .aurora-col h3 {
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--foreground);
-        margin: 0;
-    }
-
-    .aurora-col p {
-        font-size: 0.875rem;
-        line-height: 1.65;
-        color: var(--muted-foreground);
-        margin: 0;
-    }
-
-    .aurora-connectors {
-        border-top: 1px solid var(--border);
-    }
-
-    .aurora-conn-strip {
-        width: 100%;
-        border-radius: 2px;
-        overflow: hidden;
-        margin-bottom: 36px;
-        height: 6px;
-    }
-
-    .aurora-marquee {
-        overflow: hidden;
-        mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-        -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-        margin-bottom: 24px;
-    }
-
-    .aurora-marquee-track {
-        display: flex;
-        animation: aurora-scroll 40s linear infinite;
-        width: max-content;
-    }
-
+    /* Marquee — keyframe + vendor-prefixed mask */
     @keyframes aurora-scroll {
         from { transform: translateX(0); }
         to   { transform: translateX(-50%); }
     }
-
-    .aurora-marquee-cell {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 20px;
-        border-right: 1px solid var(--border);
-        flex-shrink: 0;
+    .marquee-track { animation: aurora-scroll 40s linear infinite; }
+    .marquee-mask {
+        mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+        -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
     }
 
-    .aurora-marquee-cell img {
-        width: 24px;
-        height: 24px;
-        border-radius: 5px;
-        object-fit: cover;
+    /* Hero CTAs — :global needed to pierce Button component */
+    :global(.hero-btn-primary) {
+        background: oklch(0.96 0.005 261) !important;
+        color: oklch(0.13 0.028 261) !important;
+        box-shadow: 0 0 0 1px oklch(1 0 0 / 20%) !important;
     }
-
-    .aurora-marquee-cell span {
-        font-size: 13px;
-        font-weight: 500;
-        color: var(--muted-foreground);
-        white-space: nowrap;
-    }
-
-    .aurora-conn-foot {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 11px;
-        color: var(--muted-foreground);
-    }
-
-    .aurora-install {
-        border-top: 1px solid var(--border);
-    }
-
-    .aurora-terminal {
-        background: oklch(0.10 0.025 261);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        overflow: hidden;
-        margin-bottom: 36px;
-        max-width: 680px;
-    }
-
-    .aurora-terminal-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 10px 16px;
-        background: oklch(0.16 0.03 261);
-        border-bottom: 1px solid var(--border);
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 12px;
-        color: var(--muted-foreground);
-    }
-
-    .aurora-terminal-dots {
-        display: flex;
-        gap: 5px;
-    }
-
-    .aurora-terminal-dots i {
-        display: block;
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: oklch(1 0 0 / 15%);
-    }
-
-    .aurora-terminal-body {
-        padding: 20px;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 13px;
-        line-height: 1.7;
-        color: oklch(0.82 0.03 261);
-        margin: 0;
-        white-space: pre;
-        overflow-x: auto;
-    }
-
-    .aurora-install-ctas {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-    }
-
-    .aurora-community {
-        border-top: 1px solid var(--border);
-    }
-
-    .aurora-community-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: 1px;
-        background: var(--border);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    .aurora-stat-card {
-        background: var(--background);
-        padding: 32px 28px;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-
-    .aurora-stat-num {
-        font-size: 2rem;
-        font-weight: 700;
-        letter-spacing: -0.03em;
-        color: var(--foreground);
-        font-variant-numeric: tabular-nums;
-    }
-
-    .aurora-stat-label {
-        font-size: 0.78rem;
-        color: var(--muted-foreground);
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
+    :global(.hero-btn-ghost) {
+        background: oklch(1 0 0 / 8%) !important;
+        color: oklch(0.92 0.01 261) !important;
+        border: 1px solid oklch(1 0 0 / 20%) !important;
+        backdrop-filter: blur(8px);
     }
 </style>

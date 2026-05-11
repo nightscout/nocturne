@@ -63,8 +63,10 @@ internal sealed class DataFetchStage(
 
         // Calculate reasonable limits based on the actual time range
         var rangeHours = (endTime - startTime) / (60.0 * 60 * 1000);
-        // At 5-min CGM intervals: ~12 entries/hour. Add 50% safety margin.
-        var entryLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 12 * 1.5));
+        // 3 sensors × 60 readings/hour (1-minute resolution) = 4 320 for a 24-hour window.
+        // Covers the realistic worst case of multiple simultaneous high-frequency sources
+        // without removing the limit entirely.
+        var entryLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 3 * 60));
         // Treatments are less frequent but include the buffer window
         var bufferMs = startTime - bufferStartTime;
         var treatmentRangeHours = (endTime - (startTime - bufferMs)) / (60.0 * 60 * 1000);

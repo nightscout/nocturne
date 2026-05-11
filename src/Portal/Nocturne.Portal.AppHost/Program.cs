@@ -3,6 +3,8 @@
 using Aspire.Hosting;
 using Aspire.Hosting.Publishing;
 using Microsoft.Extensions.Configuration;
+using Nocturne.Aspire.Hosting;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 // Add the Portal API service
@@ -27,21 +29,41 @@ if (demoEnabled)
 {
     Console.WriteLine("[Portal] Demo API enabled - adding demo instance");
 
-    // Add dedicated PostgreSQL for demo
+    var solutionRoot = Path.GetFullPath(
+        Path.Combine(builder.AppHostDirectory, "..", "..", "..")
+    );
+    var pgInitPath = Path.Combine(solutionRoot, "docs", "postgres", "container-init");
+    var dbName = "nocturne_demo";
+
+    // Non-privileged role passwords. The Postgres init script reads these via
+    // env vars and creates nocturne_migrator and nocturne_app at first start.
+    var demoMigratorPassword = builder.AddParameter("demo-migrator-password", "demo-migrator-dev", secret: true);
+    var demoAppPassword = builder.AddParameter("demo-app-password", "demo-app-dev", secret: true);
+    var demoWebPassword = builder.AddParameter("demo-web-password", "demo-web-dev", secret: true);
+
+    // Add dedicated PostgreSQL for demo with multi-role init script
     var demoPostgres = builder
         .AddPostgres("demo-postgres")
         .WithLifetime(ContainerLifetime.Persistent)
-        .WithDataVolume("demo-postgres-data");
+        .WithDataVolume("demo-postgres-data")
+        .WithBindMount(pgInitPath, "/docker-entrypoint-initdb.d", isReadOnly: true)
+        .WithEnvironment("POSTGRES_DB", dbName)
+        .WithEnvironment("NOCTURNE_MIGRATOR_PASSWORD", demoMigratorPassword)
+        .WithEnvironment("NOCTURNE_APP_PASSWORD", demoAppPassword)
+        .WithEnvironment("NOCTURNE_WEB_PASSWORD", demoWebPassword);
 
-    var demoDatabase = demoPostgres.AddDatabase("nocturne-postgres", "nocturne_demo");
+    var demoDatabase = demoPostgres.AddDatabase("demo-nocturne-postgres", dbName);
 
-    // Add Nocturne API in demo mode
+    // Add Nocturne API in demo mode.
     // Note: We pass launchProfileName: null to avoid port conflicts with the default
-    // launchSettings.json ports (1612/7209) which may already be in use by other instances
+    // launchSettings.json ports (1612/7209) which may already be in use by other instances.
+    // Do NOT use WithReference(demoDatabase) — that injects the bootstrap superuser connection
+    // string, bypassing the two-role RLS model. WithNocturneDatabase injects the correct
+    // nocturne_app and nocturne_migrator connection strings.
     demoApi = builder
         .AddProject<Projects.Nocturne_API>("demo-api", launchProfileName: null)
-        .WithReference(demoDatabase)
         .WaitFor(demoDatabase)
+        .WithNocturneDatabase(demoPostgres, dbName, demoAppPassword, demoMigratorPassword)
         .WithHttpsDeveloperCertificate()
         .WithHttpsEndpoint(name: "demo-api", port: 1622)
         .WithContainerBuildOptions(options =>
@@ -54,10 +76,10 @@ if (demoEnabled)
     // Add Demo Data Service
     var demoService = builder
         .AddProject<Projects.Nocturne_Services_Demo>("demo-service")
-        .WithReference(demoDatabase)
         .WaitFor(demoDatabase)
         .WaitFor(demoApi)
-        .WithHttpsEndpoint(name: "demo-service-https", port: 1624)
+        .WithNocturneDatabase(demoPostgres, dbName, demoAppPassword, demoMigratorPassword)
+        .WithHttpEndpoint(name: "demo-service-http", port: 1624)
         .WithContainerBuildOptions(options =>
         {
             options.TargetPlatform =
@@ -70,7 +92,7 @@ if (demoEnabled)
         .WithEnvironment("DemoMode__IntervalMinutes", "5")
         .WithEnvironment("DemoMode__ResetIntervalMinutes", "20");
 
-    demoApi.WithEnvironment("DemoService__Url", demoService.GetEndpoint("demo-service-https"));
+    demoApi.WithEnvironment("DemoService__Url", demoService.GetEndpoint("demo-service-http"));
 
     // Add Nocturne Web pointing to demo API
     demoWeb = builder
@@ -123,4 +145,4 @@ else
 #pragma warning restore ASPIRECERTIFICATES001
 
 var app = builder.Build();
-app.Run();
+await app.RunAsync();

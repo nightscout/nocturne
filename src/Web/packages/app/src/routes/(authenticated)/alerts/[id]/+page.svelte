@@ -55,6 +55,7 @@
     stripEditorFields,
     ensureCompositeRoot,
     defaultPayload,
+    buildBody,
     type RuleEditorState,
   } from "$lib/components/alerts/types";
 
@@ -70,6 +71,10 @@
 
   let state = $state<RuleEditorState>(parseRule(null));
   let seededId = $state<string | null>(null);
+  let savedBody = $state<ReturnType<typeof buildBody> | null>(null);
+  const isDirty = $derived(
+    isNew || savedBody === null || JSON.stringify(buildBody(state)) !== JSON.stringify(savedBody)
+  );
 
   // Queries — fire on the server during SSR, results land in cache for hydration.
   const rulesQuery = getRules();
@@ -112,6 +117,7 @@
     if (isNew) {
       untrack(() => {
         state = parseRule(null);
+        savedBody = null;
         seededId = ruleId;
       });
       return;
@@ -120,6 +126,7 @@
     if (rule === undefined) return;
     untrack(() => {
       state = parseRule(rule ?? null);
+      savedBody = buildBody(state);
       seededId = ruleId;
     });
   });
@@ -130,54 +137,13 @@
     saving = true;
     error = null;
     try {
-      // Reverse parseRule's wrap so single-leaf rules round-trip flat.
-      const flat = flattenSingleChildRoot(state.condition!);
-      const api = nodeToApi(flat);
-      // Strip the editor-only `_uid` before sending — it's a stable-key
-      // helper for {#each}, not part of the API contract.
-      const channelsBody = state.channels.map((c) => ({
-        channelType: c.channelType,
-        destination: c.destination || undefined,
-        destinationLabel: c.destinationLabel || undefined,
-      }));
-      const body = {
-        name: state.name,
-        description: state.description || undefined,
-        conditionType: api?.conditionType as AlertConditionType,
-        conditionParams: api?.conditionParams,
-        isEnabled: state.isEnabled,
-        sortOrder: state.sortOrder,
-        severity: state.severity,
-        allowThroughDnd: state.allowThroughDnd,
-        autoResolveEnabled: state.autoResolveEnabled,
-        // Auto-resolve persists as a full ConditionNode envelope. Flatten the
-        // editor's single-child AND wrapper before serialising so the wire
-        // shape doesn't grow a redundant composite for plain single-leaf
-        // resolves.
-        autoResolveParams: state.autoResolveCondition
-          ? stripEditorFields(
-              flattenSingleChildRoot(state.autoResolveCondition)
-            )
-          : undefined,
-        // Snooze conditions are wrapped in single-child AND groups during edit
-        // (the inline rule builder requires a composite root). Flatten + strip
-        // editor uids before serialising.
-        clientConfiguration: {
-          ...state.clientConfig,
-          snooze: {
-            ...state.clientConfig.snooze,
-            conditions: state.clientConfig.snooze.conditions.map((c) =>
-              stripEditorFields(flattenSingleChildRoot(c))
-            ),
-          },
-        },
-        channels: channelsBody,
-      };
+      const body = buildBody(state);
       if (isNew) {
-        const created = await createRule(body);
+        const created = await createRule(body as never);
         await goto(`/alerts/${created?.id ?? ""}`);
       } else {
-        await updateRule({ id: ruleId, request: body });
+        await updateRule({ id: ruleId, request: body as never });
+        savedBody = buildBody(state);
       }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -329,7 +295,7 @@
           Delete
         </Button>
       {/if}
-      <Button type="button" onclick={save} disabled={saving || loading}>
+      <Button type="button" onclick={save} disabled={saving || loading || !isDirty}>
         {#if saving}
           <Loader2 class="h-4 w-4 mr-2 animate-spin" />
         {:else}

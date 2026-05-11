@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using System.Linq;
 namespace Nocturne.API.Controllers.V4.Analytics;
 /// <summary>
 /// Controller providing retrospective (day-in-review) diabetes data.
@@ -540,9 +541,8 @@ public class RetrospectiveController : ControllerBase
     private static BasalData GetBasalRateAtTime(
         List<TempBasal> tempBasals, long targetTime, Func<long, double> scheduledRateAt)
     {
-        foreach (var tb in tempBasals)
+        foreach (var tb in tempBasals.Where(tb => tb.EndMills is not null))
         {
-            if (tb.EndMills is null) continue;
             if (targetTime >= tb.StartMills && targetTime < tb.EndMills)
                 return new BasalData { Rate = tb.Rate, IsTemp = true };
         }
