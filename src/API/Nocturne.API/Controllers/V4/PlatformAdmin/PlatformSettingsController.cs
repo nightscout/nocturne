@@ -20,6 +20,7 @@ public class PlatformSettingsController : ControllerBase
     /// Secrets are never returned — only which fields have been set.
     /// </summary>
     [HttpGet]
+    [ProducesResponseType(typeof(List<PlatformSettingsService.PlatformSettingsSummary>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll()
     {
         var results = await _service.GetAllAsync();
@@ -30,6 +31,8 @@ public class PlatformSettingsController : ControllerBase
     /// Returns a single platform setting category.
     /// </summary>
     [HttpGet("{category}")]
+    [ProducesResponseType(typeof(PlatformSettingsService.PlatformSettingsSummary), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(string category)
     {
         var result = await _service.GetAsync(category);
@@ -42,6 +45,8 @@ public class PlatformSettingsController : ControllerBase
     /// Returns restartRequired: true — the SvelteKit frontend must be restarted for changes to take effect.
     /// </summary>
     [HttpPut("{category}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> Upsert(string category, [FromBody] UpsertPlatformSettingsRequest request)
     {
         var (success, errors) = await _service.UpsertAsync(category, request.Enabled, request.Fields);
@@ -56,6 +61,7 @@ public class PlatformSettingsController : ControllerBase
     /// Requires platform admin + instance key authentication.
     /// </summary>
     [HttpGet("decrypted")]
+    [ProducesResponseType(typeof(List<PlatformSettingsService.PlatformCredentials>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllDecrypted()
     {
         var results = await _service.GetAllDecryptedAsync();

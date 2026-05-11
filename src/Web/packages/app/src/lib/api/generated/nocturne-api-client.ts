@@ -9408,7 +9408,7 @@ export class PlatformSettingsClient {
      * Returns all platform setting categories with enabled status and configured field names.
     Secrets are never returned — only which fields have been set.
      */
-    getAll(signal?: AbortSignal): Promise<FileResponse> {
+    getAll(signal?: AbortSignal): Promise<PlatformSettingsSummary[]> {
         let url_ = this.baseUrl + "/api/v4/admin/platform-settings";
         url_ = url_.replace(/[?&]$/, "");
 
@@ -9416,7 +9416,7 @@ export class PlatformSettingsClient {
             method: "GET",
             signal,
             headers: {
-                "Accept": "application/octet-stream"
+                "Accept": "application/json"
             }
         };
 
@@ -9425,32 +9425,27 @@ export class PlatformSettingsClient {
         });
     }
 
-    protected processGetAll(response: Response): Promise<FileResponse> {
+    protected processGetAll(response: Response): Promise<PlatformSettingsSummary[]> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PlatformSettingsSummary[];
+            return result200;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<PlatformSettingsSummary[]>(null as any);
     }
 
     /**
      * Returns a single platform setting category.
      */
-    get(category: string, signal?: AbortSignal): Promise<FileResponse> {
+    get(category: string, signal?: AbortSignal): Promise<PlatformSettingsSummary> {
         let url_ = this.baseUrl + "/api/v4/admin/platform-settings/{category}";
         if (category === undefined || category === null)
             throw new globalThis.Error("The parameter 'category' must be defined.");
@@ -9461,7 +9456,7 @@ export class PlatformSettingsClient {
             method: "GET",
             signal,
             headers: {
-                "Accept": "application/octet-stream"
+                "Accept": "application/json"
             }
         };
 
@@ -9470,33 +9465,34 @@ export class PlatformSettingsClient {
         });
     }
 
-    protected processGet(response: Response): Promise<FileResponse> {
+    protected processGet(response: Response): Promise<PlatformSettingsSummary> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PlatformSettingsSummary;
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<PlatformSettingsSummary>(null as any);
     }
 
     /**
      * Upserts platform settings for a category. Blank fields preserve existing values.
     Returns restartRequired: true — the SvelteKit frontend must be restarted for changes to take effect.
      */
-    upsert(category: string, request: UpsertPlatformSettingsRequest, signal?: AbortSignal): Promise<FileResponse> {
+    upsert(category: string, request: UpsertPlatformSettingsRequest, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/admin/platform-settings/{category}";
         if (category === undefined || category === null)
             throw new globalThis.Error("The parameter 'category' must be defined.");
@@ -9511,7 +9507,6 @@ export class PlatformSettingsClient {
             signal,
             headers: {
                 "Content-Type": "application/json",
-                "Accept": "application/octet-stream"
             }
         };
 
@@ -9520,26 +9515,25 @@ export class PlatformSettingsClient {
         });
     }
 
-    protected processUpsert(response: Response): Promise<FileResponse> {
+    protected processUpsert(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 422) {
+            return response.text().then((_responseText) => {
+            let result422: any = null;
+            result422 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result422);
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<void>(null as any);
     }
 
     /**
@@ -9547,7 +9541,7 @@ export class PlatformSettingsClient {
     Internal use only — called by the SvelteKit bot service on startup.
     Requires platform admin + instance key authentication.
      */
-    getAllDecrypted(signal?: AbortSignal): Promise<FileResponse> {
+    getAllDecrypted(signal?: AbortSignal): Promise<PlatformCredentials[]> {
         let url_ = this.baseUrl + "/api/v4/admin/platform-settings/decrypted";
         url_ = url_.replace(/[?&]$/, "");
 
@@ -9555,7 +9549,7 @@ export class PlatformSettingsClient {
             method: "GET",
             signal,
             headers: {
-                "Accept": "application/octet-stream"
+                "Accept": "application/json"
             }
         };
 
@@ -9564,26 +9558,21 @@ export class PlatformSettingsClient {
         });
     }
 
-    protected processGetAllDecrypted(response: Response): Promise<FileResponse> {
+    protected processGetAllDecrypted(response: Response): Promise<PlatformCredentials[]> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200 || status === 206) {
-            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
-            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
-            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
-            if (fileName) {
-                fileName = decodeURIComponent(fileName);
-            } else {
-                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
-                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
-            }
-            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PlatformCredentials[];
+            return result200;
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<FileResponse>(null as any);
+        return Promise.resolve<PlatformCredentials[]>(null as any);
     }
 }
 
@@ -27925,7 +27914,26 @@ export interface ApproveAccessRequestRequest {
     directPermissions?: string[] | undefined;
 }
 
+export interface PlatformSettingsSummary {
+    category?: string;
+    enabled?: boolean;
+    configuredFields?: string[];
+    fields?: FieldDefinition[];
+}
+
+export interface FieldDefinition {
+    name?: string;
+    label?: string;
+    required?: boolean;
+}
+
 export interface UpsertPlatformSettingsRequest {
+    enabled?: boolean;
+    fields?: { [key: string]: string; };
+}
+
+export interface PlatformCredentials {
+    category?: string;
     enabled?: boolean;
     fields?: { [key: string]: string; };
 }
