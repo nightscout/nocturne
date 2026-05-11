@@ -134,15 +134,7 @@ void main(){
 
 <canvas
     bind:this={canvasEl}
-    class="aurora-canvas {className}"
+    class="block w-full object-cover {className}"
     style="height: {height}px"
     aria-hidden="true"
 ></canvas>
-
-<style>
-    .aurora-canvas {
-        display: block;
-        width: 100%;
-        object-fit: cover;
-    }
-</style>

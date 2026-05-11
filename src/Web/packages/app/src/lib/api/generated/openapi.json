@@ -578,7 +578,7 @@
               }
             }
           },
-          "400": {
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -588,7 +588,7 @@
               }
             }
           },
-          "409": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -632,7 +632,7 @@
               }
             }
           },
-          "400": {
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -642,7 +642,7 @@
               }
             }
           },
-          "409": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -686,7 +686,7 @@
               }
             }
           },
-          "400": {
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -696,7 +696,7 @@
               }
             }
           },
-          "409": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -1389,7 +1389,7 @@
           "204": {
             "description": ""
           },
-          "400": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -1399,7 +1399,7 @@
               }
             }
           },
-          "404": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -2092,7 +2092,7 @@
           "204": {
             "description": ""
           },
-          "400": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -2102,7 +2102,7 @@
               }
             }
           },
-          "404": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -2743,7 +2743,7 @@
           "204": {
             "description": ""
           },
-          "400": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -2753,7 +2753,7 @@
               }
             }
           },
-          "404": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -3021,7 +3021,7 @@
           "x-position": 1
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "",
             "content": {
               "application/json": {
@@ -3031,7 +3031,7 @@
               }
             }
           },
-          "201": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -3280,7 +3280,7 @@
               }
             }
           },
-          "400": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -3290,7 +3290,7 @@
               }
             }
           },
-          "404": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -3330,7 +3330,7 @@
           "204": {
             "description": ""
           },
-          "400": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -3340,7 +3340,7 @@
               }
             }
           },
-          "404": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -9891,7 +9891,7 @@
               }
             }
           },
-          "400": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -9901,7 +9901,7 @@
               }
             }
           },
-          "404": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -10231,7 +10231,7 @@
           "204": {
             "description": ""
           },
-          "400": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -10241,7 +10241,7 @@
               }
             }
           },
-          "404": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -11744,7 +11744,7 @@
               }
             }
           },
-          "400": {
+          "403": {
             "description": "",
             "content": {
               "application/json": {
@@ -11754,7 +11754,7 @@
               }
             }
           },
-          "403": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -16171,7 +16171,7 @@
           "204": {
             "description": ""
           },
-          "400": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -16181,7 +16181,7 @@
               }
             }
           },
-          "404": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -20662,7 +20662,7 @@
               }
             }
           },
-          "400": {
+          "401": {
             "description": "",
             "content": {
               "application/json": {
@@ -20672,7 +20672,7 @@
               }
             }
           },
-          "401": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -22338,7 +22338,7 @@
               }
             }
           },
-          "400": {
+          "403": {
             "description": "",
             "content": {
               "application/json": {
@@ -22348,7 +22348,7 @@
               }
             }
           },
-          "403": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -22392,7 +22392,7 @@
               }
             }
           },
-          "400": {
+          "403": {
             "description": "",
             "content": {
               "application/json": {
@@ -22402,7 +22402,7 @@
               }
             }
           },
-          "403": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -22559,7 +22559,7 @@
               }
             }
           },
-          "400": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -22569,7 +22569,7 @@
               }
             }
           },
-          "404": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {
@@ -22613,7 +22613,7 @@
               }
             }
           },
-          "400": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -22623,7 +22623,7 @@
               }
             }
           },
-          "404": {
+          "400": {
             "description": "",
             "content": {
               "application/json": {

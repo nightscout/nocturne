@@ -27,6 +27,7 @@
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { getReportsData } from "$api/reports.remote";
+  import { ClinicalAssessmentLevel } from "$lib/api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
@@ -67,28 +68,28 @@
     color: string;
   } {
     switch (level) {
-      case "excellent":
+      case ClinicalAssessmentLevel.Excellent:
         return {
           grade: "A",
           label: "Excellent",
           description: "Outstanding glucose management!",
           color: "text-green-600",
         };
-      case "good":
+      case ClinicalAssessmentLevel.Good:
         return {
           grade: "B",
           label: "Good",
           description: "Strong management with room for fine-tuning.",
           color: "text-blue-600",
         };
-      case "needsAttention":
+      case ClinicalAssessmentLevel.NeedsAttention:
         return {
           grade: "C",
           label: "Needs Attention",
           description: "Some areas need focus. Your care team can help.",
           color: "text-orange-600",
         };
-      case "needsSignificantImprovement":
+      case ClinicalAssessmentLevel.NeedsSignificantImprovement:
         return {
           grade: "D",
           label: "Needs Improvement",

@@ -14,9 +14,16 @@ export default {
     // references) and 409 (resource conflict, e.g. referencing rules on
     // delete) with the server's response body so the FE can show a useful
     // message to the user. Falls through to a 500 for everything else.
+    //
+    // NSwag throws ProblemDetails directly (not wrapped in ApiException) for
+    // responses that declare a typed error schema, so the title/detail/errors
+    // fields live on `err` itself — not on `err.body` or `err.response`.
     on500: (functionName: string) =>
-      `const body = (err as any)?.body ?? (err as any)?.response;\n` +
-      `    const message = body?.message ?? body?.title ?? body?.detail;\n` +
+      `const e = err as any;\n` +
+      `    const body = e?.body ?? e?.response;\n` +
+      `    const errors = body?.errors ?? e?.errors;\n` +
+      `    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
+      `    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;\n` +
       `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');\n` +
       `    throw error(500, 'Failed to ${functionName}')`,
   },

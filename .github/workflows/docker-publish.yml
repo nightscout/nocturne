@@ -438,6 +438,5 @@ jobs:
           gh release create "$VERSION" \
             --generate-notes \
             ./release-output/docker-compose.yaml \
-            ./release-output/.env.example \
-            ./release-output/00-init.sh
+            ./release-output/.env.example
 

@@ -1,4 +1,5 @@
 import type { ConditionNode, ComparisonOperator, TrendBucket } from "./types";
+import { bg, bgLabel } from "$lib/utils/formatting";
 
 /**
  * Optional context for summarisation. The <c>resolveAlertName</c> hook lets the
@@ -7,8 +8,6 @@ import type { ConditionNode, ComparisonOperator, TrendBucket } from "./types";
  */
 export interface SummarizeContext {
 	resolveAlertName?: (id: string) => string | undefined;
-	/** Glucose unit for threshold rendering. Defaults to mg/dL. */
-	glucoseUnit?: "mg/dL" | "mmol/L";
 }
 
 /**
@@ -46,12 +45,12 @@ export function summarizeCondition(
 			const p = node.threshold;
 			if (!p) return "";
 			const op = p.direction === "below" ? "<" : ">";
-			return `BG ${op} ${p.value} ${ctx.glucoseUnit ?? "mg/dL"}`;
+			return `BG ${op} ${bg(p.value)} ${bgLabel()}`;
 		}
 		case "rate_of_change": {
 			const p = node.rate_of_change;
 			if (!p) return "";
-			return `BG ${p.direction} ≥ ${p.rate} mg/dL/min`;
+			return `BG ${p.direction} ≥ ${bg(p.rate)} ${bgLabel()}/min`;
 		}
 		case "staleness": {
 			const p = node.staleness;
@@ -61,7 +60,7 @@ export function summarizeCondition(
 		case "predicted": {
 			const p = node.predicted;
 			if (!p) return "";
-			return `Predicted BG ${opSymbol(p.operator)} ${p.value} ${ctx.glucoseUnit ?? "mg/dL"} in ${formatMinutes(p.within_minutes)}`;
+			return `Predicted BG ${opSymbol(p.operator)} ${bg(p.value)} ${bgLabel()} in ${formatMinutes(p.within_minutes)}`;
 		}
 		case "trend": {
 			const p = node.trend;

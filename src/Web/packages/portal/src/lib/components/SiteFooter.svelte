@@ -116,8 +116,7 @@
             class="mt-10 pt-6 border-t border-border/40 flex flex-col md:flex-row justify-between items-center gap-4"
         >
             <p class="text-sm text-muted-foreground">
-                &copy; {new Date().getFullYear()} Nocturne. Open source under MIT
-                license.
+                &copy; {new Date().getFullYear()} Nocturne. Open source under AGPL-3.0.
             </p>
             <div class="flex items-center gap-4">
                 <LanguageSelector compact />

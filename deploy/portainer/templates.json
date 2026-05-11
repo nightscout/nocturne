@@ -1,0 +1,129 @@
+{
+  "version": "2",
+  "templates": [
+    {
+      "type": 3,
+      "title": "Nocturne",
+      "description": "Nightscout-compatible diabetes management API with Row Level Security and multi-tenancy.",
+      "categories": ["diabetes", "nightscout", "healthcare"],
+      "platform": "linux",
+      "note": "After deployment, configure data connectors (Dexcom, LibreLinkUp, etc.) through the Nocturne UI.",
+      "repository": {
+        "url": "https://github.com/nightscout/nocturne",
+        "stackfile": "deploy/portainer/docker-compose.yaml"
+      },
+      "env": [
+        {
+          "name": "NOCTURNE_API_IMAGE",
+          "label": "API image",
+          "default": "ghcr.io/nightscout/nocturne/nocturne-api:latest"
+        },
+        {
+          "name": "NOCTURNE_WEB_IMAGE",
+          "label": "Web image",
+          "default": "ghcr.io/nightscout/nocturne/nocturne-web:latest"
+        },
+        {
+          "name": "NOCTURNE_API_PORT",
+          "label": "API port",
+          "default": "8080"
+        },
+        {
+          "name": "BASE_DOMAIN",
+          "label": "Base domain",
+          "description": "Your domain name, e.g. nocturne.example.com"
+        },
+        {
+          "name": "INSTANCE_KEY",
+          "label": "Instance key",
+          "description": "Minimum 12 characters — used for JWT signing and service authentication"
+        },
+        {
+          "name": "POSTGRES_USERNAME",
+          "label": "PostgreSQL bootstrap username",
+          "default": "nocturne"
+        },
+        {
+          "name": "POSTGRES_PASSWORD",
+          "label": "PostgreSQL bootstrap password",
+          "description": "Used only at first container start to create runtime roles"
+        },
+        {
+          "name": "POSTGRES_MIGRATOR_PASSWORD",
+          "label": "Migrator role password",
+          "description": "Password for nocturne_migrator — owns the schema, runs EF migrations"
+        },
+        {
+          "name": "POSTGRES_APP_PASSWORD",
+          "label": "App role password",
+          "description": "Password for nocturne_app — runtime role, cannot bypass Row Level Security"
+        },
+        {
+          "name": "POSTGRES_WEB_PASSWORD",
+          "label": "Web role password",
+          "description": "Password for nocturne_web — used by the SvelteKit bot state adapter"
+        },
+        {
+          "name": "DISCORD_BOT_TOKEN",
+          "label": "Discord — Bot token",
+          "description": "Optional. Leave blank to disable the Discord bot."
+        },
+        {
+          "name": "DISCORD_PUBLIC_KEY",
+          "label": "Discord — Public key",
+          "description": "Optional. Required if Discord bot token is set."
+        },
+        {
+          "name": "DISCORD_APPLICATION_ID",
+          "label": "Discord — Application ID",
+          "description": "Optional. Required if Discord bot token is set."
+        },
+        {
+          "name": "DISCORD_CLIENT_SECRET",
+          "label": "Discord — Client secret",
+          "description": "Optional. Required if Discord bot token is set."
+        },
+        {
+          "name": "TELEGRAM_BOT_TOKEN",
+          "label": "Telegram — Bot token",
+          "description": "Optional. Leave blank to disable the Telegram bot."
+        },
+        {
+          "name": "TELEGRAM_WEBHOOK_SECRET_TOKEN",
+          "label": "Telegram — Webhook secret token",
+          "description": "Optional. Required if Telegram bot token is set."
+        },
+        {
+          "name": "SLACK_BOT_TOKEN",
+          "label": "Slack — Bot token",
+          "description": "Optional. Leave blank to disable the Slack bot."
+        },
+        {
+          "name": "SLACK_SIGNING_SECRET",
+          "label": "Slack — Signing secret",
+          "description": "Optional. Required if Slack bot token is set."
+        },
+        {
+          "name": "WHATSAPP_ACCESS_TOKEN",
+          "label": "WhatsApp — Access token",
+          "description": "Optional. Leave blank to disable the WhatsApp bot."
+        },
+        {
+          "name": "WHATSAPP_VERIFY_TOKEN",
+          "label": "WhatsApp — Verify token",
+          "description": "Optional. Required if WhatsApp access token is set."
+        },
+        {
+          "name": "WHATSAPP_APP_SECRET",
+          "label": "WhatsApp — App secret",
+          "description": "Optional. Required if WhatsApp access token is set."
+        },
+        {
+          "name": "WHATSAPP_PHONE_NUMBER_ID",
+          "label": "WhatsApp — Phone number ID",
+          "description": "Optional. Required if WhatsApp access token is set."
+        }
+      ]
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import {
 	nodeFromApi,
 	nodeToApi,
 	parseRule,
+	buildBody,
 } from "./types";
 
 describe("defaultClientConfig", () => {
@@ -239,4 +240,69 @@ describe("parseRule", () => {
 		expect(state.clientConfig.snooze.defaultMinutes).toBe(15);
 	});
 
+});
+
+describe("buildBody", () => {
+	it("produces no _uid fields in any part of the output", () => {
+		const state = parseRule(null);
+		const body = buildBody(state);
+		const json = JSON.stringify(body);
+		expect(json).not.toContain("_uid");
+	});
+
+	it("two semantically-identical states with different _uids produce the same JSON", () => {
+		// parseRule stamps fresh _uids on every call, so two invocations with the
+		// same input will have different internal identities.
+		const state1 = parseRule({
+			name: "Low Alert",
+			conditionType: "threshold",
+			conditionParams: { direction: "below", value: 70 },
+		} as never);
+		const state2 = parseRule({
+			name: "Low Alert",
+			conditionType: "threshold",
+			conditionParams: { direction: "below", value: 70 },
+		} as never);
+		expect(JSON.stringify(buildBody(state1))).toBe(JSON.stringify(buildBody(state2)));
+	});
+
+	it("flattens a single-child composite root to a leaf", () => {
+		// parseRule always wraps leaf conditions in a single-child AND group;
+		// buildBody must flatten it back before sending.
+		const state = parseRule({
+			name: "Test",
+			conditionType: "threshold",
+			conditionParams: { direction: "above", value: 180 },
+		} as never);
+		const body = buildBody(state);
+		expect(body.conditionType).toBe("threshold");
+		expect(body.conditionParams).toEqual({ direction: "above", value: 180 });
+	});
+
+	it("converts empty description to undefined", () => {
+		const state = parseRule(null); // description defaults to ""
+		const body = buildBody(state);
+		expect(body.description).toBeUndefined();
+	});
+
+	it("sets autoResolveParams to undefined when autoResolveCondition is null", () => {
+		const state = parseRule(null);
+		expect(state.autoResolveCondition).toBeNull();
+		const body = buildBody(state);
+		expect(body.autoResolveParams).toBeUndefined();
+	});
+
+	it("strips _uid from channels", () => {
+		const state = parseRule({
+			name: "Test",
+			conditionType: "threshold",
+			conditionParams: { direction: "below", value: 70 },
+			channels: [
+				{ channelType: "web_push", destination: "", sortOrder: 0 },
+			],
+		} as never);
+		const body = buildBody(state);
+		const json = JSON.stringify(body.channels);
+		expect(json).not.toContain("_uid");
+	});
 });

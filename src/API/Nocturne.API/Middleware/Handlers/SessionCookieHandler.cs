@@ -77,14 +77,15 @@ public class SessionCookieHandler : IAuthHandler
                 return refreshResult;
             }
 
-            // Only clear cookies if we had an access token but refresh failed
-            // This indicates a definitive auth failure, not just "skip to next handler"
+            // Credentials were recognised (cookie present) but invalid — stop the chain.
+            // Returning Failure (not Skip) prevents dev-mode auto-auth from kicking in
+            // with the stale request cookies after we've already cleared the response cookies.
             _logger.LogDebug(
                 "Access token validation failed ({Error}) and refresh failed, clearing session cookies",
                 validationResult.ErrorCode
             );
             ClearSessionCookies(context);
-            return AuthResult.Skip();
+            return AuthResult.Failure("Session expired or revoked");
         }
 
         // No access token - check if we have a refresh token we can use
@@ -97,11 +98,14 @@ public class SessionCookieHandler : IAuthHandler
                 return refreshResult;
             }
 
-            // Had refresh token but it failed - clear cookies and skip
+            // Had refresh token but it failed - clear cookies.
+            // Return Failure so the chain stops here rather than falling through to
+            // dev-mode auto-auth (which would re-authenticate using the stale request cookies).
             _logger.LogDebug(
                 "No access token and refresh token validation failed, clearing session cookies"
             );
             ClearSessionCookies(context);
+            return AuthResult.Failure("Session expired or revoked");
         }
         // No cookies at all - just skip to next handler without clearing anything
 

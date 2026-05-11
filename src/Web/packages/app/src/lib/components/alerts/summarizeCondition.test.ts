@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { defaultPayload, type ConditionNode } from "./types";
 import { summarizeCondition } from "./summarizeCondition";
 import { LEAF_FACTS } from "./factCatalog";
+import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
 
 describe("summarizeCondition", () => {
 	it("returns a non-empty string for every fact-catalog leaf kind", () => {
@@ -34,9 +35,12 @@ describe("summarizeCondition", () => {
 	});
 
 	it("uses mmol/L when configured", () => {
-		expect(summarizeCondition(defaultPayload("threshold"), { glucoseUnit: "mmol/L" })).toBe(
-			"BG < 70 mmol/L",
-		);
+		glucoseUnits.current = "mmol";
+		try {
+			expect(summarizeCondition(defaultPayload("threshold"))).toBe("BG < 3.9 mmol/L");
+		} finally {
+			glucoseUnits.current = "mg/dl";
+		}
 	});
 
 	it("renders predicted with horizon", () => {

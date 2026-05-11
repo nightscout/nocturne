@@ -14,7 +14,7 @@ import {
   HaloDialArcElement,
   HaloDialCornerElement,
   type HaloDialConfig,
-} from "$lib/api";
+} from "../../../api/generated/nocturne-api-client";
 
 export {
   HaloDialColorMode,
