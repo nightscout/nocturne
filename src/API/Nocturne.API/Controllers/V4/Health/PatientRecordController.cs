@@ -62,7 +62,7 @@ public class PatientRecordController : ControllerBase
     /// Update the patient record
     /// </summary>
     [HttpPut]
-    [RemoteCommand(Invalidates = ["GetPatientRecord"])]
+    [RemoteForm(Invalidates = ["GetPatientRecord"])]
     [ProducesResponseType(typeof(PatientRecord), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientRecord>> UpdatePatientRecord(
         [FromBody] PatientRecord model,

@@ -17,7 +17,7 @@ export const getPatientRecord = query(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in patientRecord.getPatientRecord:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -25,12 +25,12 @@ export const getPatientRecord = query(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get patient record');
+    throw error(500, message ?? 'Failed to get patient record');
   }
 });
 
 /** Update the patient record */
-export const updatePatientRecord = command(PatientRecordSchema, async (request) => {
+export const updatePatientRecord = form(formCoerce(PatientRecordSchema) as any, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const result = await apiClient.patientRecord.updatePatientRecord(request as PatientRecord);
@@ -41,7 +41,7 @@ export const updatePatientRecord = command(PatientRecordSchema, async (request) 
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in patientRecord.updatePatientRecord:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -49,7 +49,7 @@ export const updatePatientRecord = command(PatientRecordSchema, async (request) 
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to update patient record');
+    throw error(500, message ?? 'Failed to update patient record');
   }
 });
 
@@ -61,7 +61,7 @@ export const getDevices = query(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in patientRecord.getDevices:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -69,7 +69,7 @@ export const getDevices = query(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get devices');
+    throw error(500, message ?? 'Failed to get devices');
   }
 });
 
@@ -85,7 +85,7 @@ export const createDevice = form(formCoerce(PatientDeviceSchema) as any, async (
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in patientRecord.createDevice:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -93,7 +93,7 @@ export const createDevice = form(formCoerce(PatientDeviceSchema) as any, async (
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to create device');
+    throw error(500, message ?? 'Failed to create device');
   }
 });
 
@@ -109,7 +109,7 @@ export const updateDevice = form(formCoerce(z.object({ id: z.string(), request: 
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in patientRecord.updateDevice:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -117,7 +117,7 @@ export const updateDevice = form(formCoerce(z.object({ id: z.string(), request: 
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to update device');
+    throw error(500, message ?? 'Failed to update device');
   }
 });
 
@@ -133,7 +133,7 @@ export const deleteDevice = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in patientRecord.deleteDevice:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -141,7 +141,7 @@ export const deleteDevice = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to delete device');
+    throw error(500, message ?? 'Failed to delete device');
   }
 });
 
@@ -153,7 +153,7 @@ export const getInsulins = query(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in patientRecord.getInsulins:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -161,7 +161,7 @@ export const getInsulins = query(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get insulins');
+    throw error(500, message ?? 'Failed to get insulins');
   }
 });
 
@@ -177,7 +177,7 @@ export const createInsulin = form(formCoerce(PatientInsulinSchema) as any, async
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in patientRecord.createInsulin:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -185,7 +185,7 @@ export const createInsulin = form(formCoerce(PatientInsulinSchema) as any, async
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to create insulin');
+    throw error(500, message ?? 'Failed to create insulin');
   }
 });
 
@@ -201,7 +201,7 @@ export const updateInsulin = form(formCoerce(z.object({ id: z.string(), request:
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in patientRecord.updateInsulin:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -209,7 +209,7 @@ export const updateInsulin = form(formCoerce(z.object({ id: z.string(), request:
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to update insulin');
+    throw error(500, message ?? 'Failed to update insulin');
   }
 });
 
@@ -225,7 +225,7 @@ export const deleteInsulin = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in patientRecord.deleteInsulin:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -233,6 +233,6 @@ export const deleteInsulin = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to delete insulin');
+    throw error(500, message ?? 'Failed to delete insulin');
   }
 });
