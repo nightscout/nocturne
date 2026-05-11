@@ -8574,6 +8574,126 @@
         "x-remote-type": "command"
       }
     },
+    "/api/v4/admin/platform-settings": {
+      "get": {
+        "tags": [
+          "Platform Settings"
+        ],
+        "summary": "Returns all platform setting categories with enabled status and configured field names.\nSecrets are never returned — only which fields have been set.",
+        "operationId": "PlatformSettings_GetAll",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/admin/platform-settings/{category}": {
+      "get": {
+        "tags": [
+          "Platform Settings"
+        ],
+        "summary": "Returns a single platform setting category.",
+        "operationId": "PlatformSettings_Get",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Platform Settings"
+        ],
+        "summary": "Upserts platform settings for a category. Blank fields preserve existing values.\nReturns restartRequired: true — the SvelteKit frontend must be restarted for changes to take effect.",
+        "operationId": "PlatformSettings_Upsert",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertPlatformSettingsRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/admin/platform-settings/decrypted": {
+      "get": {
+        "tags": [
+          "Platform Settings"
+        ],
+        "summary": "Returns decrypted credentials for all configured platforms.\nInternal use only — called by the SvelteKit bot service on startup.\nRequires platform admin + instance key authentication.",
+        "operationId": "PlatformSettings_GetAllDecrypted",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/admin/tenants": {
       "get": {
         "tags": [
@@ -32233,6 +32353,21 @@
             "type": "array",
             "nullable": true,
             "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UpsertPlatformSettingsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
               "type": "string"
             }
           }
