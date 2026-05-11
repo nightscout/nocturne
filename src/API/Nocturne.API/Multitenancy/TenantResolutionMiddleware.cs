@@ -62,6 +62,7 @@ public class TenantResolutionMiddleware
     private static readonly string[] TenantlessAllowedPrefixes =
     [
         "/api/auth/passkey/setup/",
+        "/api/v4/admin/platform-settings",
         "/api/v4/admin/tenants",
         "/api/v4/dev-only/",
         "/api/v4/platform/",
