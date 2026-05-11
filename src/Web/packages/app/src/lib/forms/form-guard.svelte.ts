@@ -119,26 +119,36 @@ export class FormGuard<T extends Record<string, unknown>> {
     invalid?.focus();
   }
 
-  enhance(callback?: () => void) {
-    return this.#options.form.enhance((result: any) => {
-      // Validate before submit
-      if (!this.validate()) {
-        this.focusInvalid();
-        return;
-      }
-
-      // On success, re-snapshot and reset state
-      if (result) {
-        const current = this.#options.initial();
-        if (current != null) {
-          this.#snapshot = structuredClone(current);
+  enhance(
+    callback?: (helpers: {
+      submit: () => Promise<void>;
+    }) => Promise<void>,
+  ) {
+    return this.#options.form.enhance(
+      async (helpers: { submit: () => Promise<void> }) => {
+        // 1. Validate BEFORE submit
+        if (!this.validate()) {
+          this.focusInvalid();
+          return;
         }
-        this.#submitted = true;
-        this.#touched = false;
-        this.#issues = [];
-      }
 
-      callback?.();
-    });
+        // 2. Submit
+        await helpers.submit();
+
+        // 3. On success, re-snapshot and reset state
+        if (this.#options.form.result) {
+          const updated = this.#options.initial();
+          if (updated != null) {
+            this.#snapshot = structuredClone(updated);
+          }
+          this.#submitted = true;
+          this.#touched = false;
+          this.#issues = [];
+        }
+
+        // 4. Consumer callback
+        await callback?.(helpers);
+      },
+    );
   }
 }
