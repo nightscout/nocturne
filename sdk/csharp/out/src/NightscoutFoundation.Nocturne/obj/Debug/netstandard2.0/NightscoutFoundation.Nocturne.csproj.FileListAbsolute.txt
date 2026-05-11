@@ -1,4 +1,0 @@
-C:\Users\rhysg\Documents\Github\nocturne\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\netstandard2.0\NightscoutFoundation.Nocturne.csproj.AssemblyReference.cache
-C:\Users\rhysg\Documents\Github\nocturne\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\netstandard2.0\NightscoutFoundation.Nocturne.GeneratedMSBuildEditorConfig.editorconfig
-C:\Users\rhysg\Documents\Github\nocturne\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\netstandard2.0\NightscoutFoundation.Nocturne.csproj.CoreCompileInputs.cache
-C:\Users\rhysg\Documents\Github\nocturne\sdk\csharp\out\src\NightscoutFoundation.Nocturne\obj\Debug\netstandard2.0\NightscoutFoundation.Nocturne.sourcelink.json
