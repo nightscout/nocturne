@@ -18,11 +18,15 @@
 
 \set ON_ERROR_STOP on
 
+-- Passwords come in via PostgreSQL session custom-GUCs set by run.sh
+-- before this file is sourced. psql's `:'var'` substitution doesn't reach
+-- inside dollar-quoted DO blocks (psql 14+), so we read from session
+-- settings instead.
 DO $$
 DECLARE
-    migrator_password text := :'migrator_password';
-    app_password text := :'app_password';
-    web_password text := :'web_password';
+    migrator_password text := current_setting('nocturne.migrator_password');
+    app_password text := current_setting('nocturne.app_password');
+    web_password text := current_setting('nocturne.web_password');
     current_db text := current_database();
 BEGIN
     -- nocturne_migrator: owns the schema, runs migrations

@@ -35,10 +35,17 @@ data:
     done
 
     echo "Running Nocturne role bootstrap against ${PGHOST}:${PGPORT}/${PGDATABASE} as ${PGUSER}"
-    exec psql \
-      -v ON_ERROR_STOP=1 \
-      -v migrator_password="$MIGRATOR_PASSWORD" \
-      -v app_password="$APP_PASSWORD" \
-      -v web_password="$WEB_PASSWORD" \
-      -f /scripts/bootstrap-roles.sql
+
+    # Pass passwords into the SQL via PostgreSQL session custom-GUCs.
+    # psql's `:'var'` substitution doesn't reach inside dollar-quoted DO
+    # blocks (psql 14+), so we prepend SET statements that the DO block
+    # then reads via current_setting('nocturne.<role>_password').
+    TMPSQL=$(mktemp) && trap 'rm -f "$TMPSQL"' EXIT
+    {
+      printf "SET nocturne.migrator_password TO %s;\n" "$(printf "'%s'" "$MIGRATOR_PASSWORD")"
+      printf "SET nocturne.app_password TO %s;\n"      "$(printf "'%s'" "$APP_PASSWORD")"
+      printf "SET nocturne.web_password TO %s;\n"      "$(printf "'%s'" "$WEB_PASSWORD")"
+      cat /scripts/bootstrap-roles.sql
+    } > "$TMPSQL"
+    exec psql -v ON_ERROR_STOP=1 -f "$TMPSQL"
 {{- end }}
