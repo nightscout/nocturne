@@ -207,6 +207,12 @@ public class NocturneDbContext : DbContext
     /// </summary>
     public DbSet<ConnectorConfigurationEntity> ConnectorConfigurations { get; set; }
 
+    /// <summary>
+    /// Gets or sets the PlatformSettings table for instance-wide platform configuration (not tenant-scoped).
+    /// Stores encrypted credentials for bot platforms (Discord, Slack, Telegram, WhatsApp) and future platform-level config.
+    /// </summary>
+    public DbSet<PlatformSettingsEntity> PlatformSettings { get; set; }
+
     // In-App Notification entities
 
     /// <summary>
@@ -1073,6 +1079,11 @@ public class NocturneDbContext : DbContext
             .HasDatabaseName("ix_connector_configurations_connector_name_tenant")
             .IsUnique();
 
+        modelBuilder.Entity<PlatformSettingsEntity>()
+            .HasIndex(ps => ps.Category)
+            .HasDatabaseName("ix_platform_settings_category")
+            .IsUnique();
+
         // InAppNotification indexes - optimized for user notification queries
         modelBuilder
             .Entity<InAppNotificationEntity>()
@@ -1850,6 +1861,11 @@ public class NocturneDbContext : DbContext
         modelBuilder
             .Entity<ConnectorConfigurationEntity>()
             .Property(c => c.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
+
+        modelBuilder
+            .Entity<PlatformSettingsEntity>()
+            .Property(ps => ps.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
 
         modelBuilder
