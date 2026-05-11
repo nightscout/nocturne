@@ -11,4 +11,11 @@ public interface IBasalRateResolver
     /// applying CCP percentage scaling when active.
     /// </summary>
     Task<double> GetBasalRateAsync(long timeMills, string? specProfile = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Pre-fetches all profile data for [fromMs, toMs] in a fixed number of DB queries
+    /// and returns a synchronous delegate that resolves any timestamp in that range without
+    /// further DB access. Use this instead of calling GetBasalRateAsync in a loop.
+    /// </summary>
+    Task<Func<long, double>> BuildResolverAsync(long fromMs, long toMs, CancellationToken ct = default);
 }
