@@ -91,8 +91,14 @@ internal sealed class BasalRateResolver : IBasalRateResolver
             if (!string.IsNullOrEmpty(therapy?.Timezone))
             {
                 try { tz = TimeZoneInfo.FindSystemTimeZoneById(therapy.Timezone); }
-                catch (TimeZoneNotFoundException) { }
-                catch (InvalidTimeZoneException) { }
+                catch (TimeZoneNotFoundException ex)
+                {
+                    _logger.LogWarning(ex, "Timezone '{Timezone}' for profile '{Profile}' not found on this system", therapy.Timezone, name);
+                }
+                catch (InvalidTimeZoneException ex)
+                {
+                    _logger.LogWarning(ex, "Timezone '{Timezone}' for profile '{Profile}' is invalid", therapy.Timezone, name);
+                }
             }
             timezones[name] = tz;
         }
@@ -102,16 +108,10 @@ internal sealed class BasalRateResolver : IBasalRateResolver
         {
             // Find the active span at timeMills.
             // Spans are in chronological order (guaranteed by GetActiveProfileSpansForRangeAsync);
-            // last match wins when spans abut exactly.
-            ProfileSpan? active = null;
-            foreach (var span in spans)
-            {
-                if (span.StartMills <= timeMills &&
-                    (!span.EndMills.HasValue || span.EndMills.Value > timeMills))
-                {
-                    active = span;
-                }
-            }
+            // LastOrDefault keeps the last match so abutting spans resolve to the later one.
+            var active = spans.LastOrDefault(span =>
+                span.StartMills <= timeMills &&
+                (!span.EndMills.HasValue || span.EndMills.Value > timeMills));
 
             var profileName  = active?.ProfileName ?? "Default";
             var adjustment   = active?.Adjustment;
