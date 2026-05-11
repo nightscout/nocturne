@@ -2739,6 +2739,50 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("passkey_credentials");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.PlatformSettingsEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("category");
+
+                    b.PrimitiveCollection<string>("ConfiguredFields")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("configured_fields");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("EncryptedJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("encrypted_json");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at");
+
+                    b.Property<DateTime>("SysUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category")
+                        .IsUnique()
+                        .HasDatabaseName("ix_platform_settings_category");
+
+                    b.ToTable("platform_settings");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ReadAccessLogEntity", b =>
                 {
                     b.Property<Guid>("Id")
