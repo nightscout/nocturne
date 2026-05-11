@@ -4,7 +4,7 @@ import { runWithContext, type BotRequestContext } from "@nocturne/bot";
 import { buildBotApiClient, buildScopedBotApiClient } from "$lib/server/bot/api-client";
 
 export const POST: RequestHandler = async ({ request, locals, fetch }) => {
-	const bot = getBot();
+	const bot = await getBot();
 
 	// Build the unscoped (apex) BotApiClient + a scoped factory closure that
 	// the bot package's requireLink helper will call once it resolves the
