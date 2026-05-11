@@ -164,6 +164,19 @@ The full set of configurable values is in [`values.yaml`](./values.yaml). Highli
 | `bootstrap.enabled` | If true, runs `bootstrap-roles.sql` as a Helm pre-install hook against your Postgres using `bootstrap.adminSecret`. |
 | `ingress.enabled` / `.host` / `.className` / `.tls` | Single-host ingress fronting the web service. Optional `ingress.api.externalPath` exposes the API on the same host. |
 | `api.replicaCount` / `web.replicaCount` | Replica counts (default 1 each). HPA support not yet wired. |
+| `{api,web,bootstrap}.image.digest` | Pin the image to an immutable content digest (see "Image pinning" below). |
+
+### Image pinning
+
+For deterministic pulls — useful when consuming a mutable tag like `:latest` in production, or when the chart's default `pullPolicy: IfNotPresent` would cause nodes to serve stale cached layers across rebuilds — set the component's `image.digest`:
+
+```yaml
+api:
+  image:
+    digest: "sha256:0fe69ae9befcbb09fddc59cc28cfa8c2453ec0dd4b6426e1ab7918e5f300d479"
+```
+
+When `digest` is set, `tag` is ignored and the rendered image reference is `<registry>/<repository>@<digest>`. Get the current `:latest` digest from the Packages UI (`https://github.com/orgs/nightscout/packages/container/nocturne%2Fnocturne-api/<version>?tag=latest`) or `docker buildx imagetools inspect`.
 
 ## Observability
 

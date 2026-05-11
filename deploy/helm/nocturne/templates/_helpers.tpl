@@ -66,23 +66,42 @@ app.kubernetes.io/component: web
 {{- end -}}
 {{- end -}}
 
-{{/* Image references */}}
+{{/*
+Image references.
+
+When `<component>.image.digest` is set, the image is referenced as
+`<registry>/<repository>@<digest>` (deterministic pull, immune to
+node-cache staleness on mutable tags like `:latest`). Otherwise falls
+back to `<registry>/<repository>:<tag>`.
+*/}}
 {{- define "nocturne.api.image" -}}
 {{- $reg := .Values.image.registry -}}
 {{- $repo := .Values.api.image.repository -}}
+{{- if .Values.api.image.digest -}}
+{{- printf "%s/%s@%s" $reg $repo .Values.api.image.digest -}}
+{{- else -}}
 {{- $tag := default .Chart.AppVersion .Values.api.image.tag -}}
 {{- printf "%s/%s:%s" $reg $repo $tag -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "nocturne.web.image" -}}
 {{- $reg := .Values.image.registry -}}
 {{- $repo := .Values.web.image.repository -}}
+{{- if .Values.web.image.digest -}}
+{{- printf "%s/%s@%s" $reg $repo .Values.web.image.digest -}}
+{{- else -}}
 {{- $tag := default .Chart.AppVersion .Values.web.image.tag -}}
 {{- printf "%s/%s:%s" $reg $repo $tag -}}
 {{- end -}}
+{{- end -}}
 
 {{- define "nocturne.bootstrap.image" -}}
+{{- if .Values.bootstrap.image.digest -}}
+{{- printf "%s/%s@%s" .Values.bootstrap.image.registry .Values.bootstrap.image.repository .Values.bootstrap.image.digest -}}
+{{- else -}}
 {{- printf "%s/%s:%s" .Values.bootstrap.image.registry .Values.bootstrap.image.repository .Values.bootstrap.image.tag -}}
+{{- end -}}
 {{- end -}}
 
 {{/* Name of the Secret holding the instance key */}}
