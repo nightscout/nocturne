@@ -12,6 +12,7 @@ namespace Nocturne.API.Controllers.V4.Health;
 /// Controller for activity data including exercise, heart rate, and step count records.
 /// </summary>
 [ApiController]
+[Tags("Health")]
 [Route("api/v4/[controller]")]
 [Authorize]
 [Produces("application/json")]

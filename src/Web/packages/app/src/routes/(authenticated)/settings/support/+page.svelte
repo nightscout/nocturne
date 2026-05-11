@@ -33,7 +33,7 @@
     GraduationCap,
   } from "lucide-svelte";
   import { getServicesOverview } from "$api/generated/services.generated.remote";
-  import type { ServicesOverview, SupportConfigResponse } from "$api";
+  import { getStatus } from "$api/generated/status.generated.remote";
   import { getSupportConfig } from "$lib/api/support.remote";
   import IssueCreatorDialog from "$lib/components/support/IssueCreatorDialog.svelte";
   import { getCoachMarkContext } from "@nocturne/coach";
@@ -48,13 +48,9 @@
   let dialogOpen = $state(false);
   let selectedTemplate = $state("bug");
 
-  let apiBaseUrl = $state<string | null>(null);
-
   const servicesOverviewQuery = getServicesOverview();
   const supportConfigQuery = getSupportConfig();
-
-  const services = $derived(servicesOverviewQuery.current as ServicesOverview | undefined);
-  const supportConfig = $derived(supportConfigQuery.current as SupportConfigResponse | undefined);
+  const statusQuery = getStatus();
 
   let useOperatorSupport = $state(false);
 
@@ -72,12 +68,6 @@
       resettingTutorials = false;
     }
   }
-
-  $effect(() => {
-    if (services?.apiEndpoint) {
-      apiBaseUrl = services.apiEndpoint.baseUrl || null;
-    }
-  });
 
   const communityLinks = $derived([
     {
@@ -174,10 +164,9 @@
     return JSON.stringify(report, null, 2);
   }
 
-  function handleSupportAction(template: string) {
+  function handleSupportAction(template: string, accountBillingMode?: string | null) {
     selectedTemplate = template;
-    useOperatorSupport =
-      template === "account" && supportConfig?.accountBilling?.mode === "api";
+    useOperatorSupport = template === "account" && accountBillingMode === "api";
     dialogOpen = true;
   }
 </script>
@@ -252,41 +241,43 @@
     </CardHeader>
     <CardContent class="space-y-4">
       <div class="grid gap-4 sm:grid-cols-2">
-        {#each supportOptions as option}
-          {#if option.template === "account" && supportConfig?.accountBilling?.mode === "redirect"}
-            <a
-              href={supportConfig.accountBilling.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
-            >
-              <div
-                class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
+        {#await supportConfigQuery then supportConfig}
+          {#each supportOptions as option}
+            {#if option.template === "account" && supportConfig?.accountBilling?.mode === "redirect"}
+              <a
+                href={supportConfig.accountBilling.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
               >
-                <ExternalLink class="h-6 w-6 text-primary" />
-              </div>
-              <span class="font-medium">{supportConfig.accountBilling.label ?? option.name}</span>
-              <p class="text-sm text-muted-foreground mt-1">
-                {option.description}
-              </p>
-            </a>
-          {:else}
-            <button
-              class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
-              onclick={() => handleSupportAction(option.template)}
-            >
-              <div
-                class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
+                <div
+                  class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
+                >
+                  <ExternalLink class="h-6 w-6 text-primary" />
+                </div>
+                <span class="font-medium">{supportConfig.accountBilling.label ?? option.name}</span>
+                <p class="text-sm text-muted-foreground mt-1">
+                  {option.description}
+                </p>
+              </a>
+            {:else}
+              <button
+                class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
+                onclick={() => handleSupportAction(option.template, supportConfig?.accountBilling?.mode)}
               >
-                <option.icon class="h-6 w-6 text-primary" />
-              </div>
-              <span class="font-medium">{option.name}</span>
-              <p class="text-sm text-muted-foreground mt-1">
-                {option.description}
-              </p>
-            </button>
-          {/if}
-        {/each}
+                <div
+                  class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
+                >
+                  <option.icon class="h-6 w-6 text-primary" />
+                </div>
+                <span class="font-medium">{option.name}</span>
+                <p class="text-sm text-muted-foreground mt-1">
+                  {option.description}
+                </p>
+              </button>
+            {/if}
+          {/each}
+        {/await}
       </div>
 
       <div class="flex justify-center pt-2">
@@ -431,12 +422,22 @@
       <CardTitle>About Nocturne</CardTitle>
     </CardHeader>
     <CardContent class="space-y-4">
-      {#if apiBaseUrl}
-        <div class="flex items-center justify-between py-2 border-b">
-          <span class="text-muted-foreground">API Endpoint</span>
-          <span class="font-mono text-sm">{apiBaseUrl}</span>
-        </div>
-      {/if}
+      {#await servicesOverviewQuery then services}
+        {#if services?.apiEndpoint?.baseUrl}
+          <div class="flex items-center justify-between py-2 border-b">
+            <span class="text-muted-foreground">API Endpoint</span>
+            <span class="font-mono text-sm">{services.apiEndpoint.baseUrl}</span>
+          </div>
+        {/if}
+      {/await}
+      {#await statusQuery then status}
+        {#if status?.head && status.head !== "unknown"}
+          <div class="flex items-center justify-between py-2 border-b">
+            <span class="text-muted-foreground">Commit</span>
+            <span class="font-mono text-sm">{status.head.slice(0, 7)}</span>
+          </div>
+        {/if}
+      {/await}
       <div class="flex items-center justify-between py-2 border-b">
         <span class="text-muted-foreground">License</span>
         <span>AGPL-3.0</span>

@@ -99,30 +99,27 @@
     ];
 </script>
 
-<div class="container mx-auto px-4 py-12">
-    <!-- Hero -->
-    <div class="text-center mb-16">
-        <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-            Frequently Asked Questions
+<div class="faq-wrap">
+    <!-- Page heading -->
+    <div class="page-hero">
+        <div class="page-label">FAQ</div>
+        <h1>
+            Common questions.<br />
+            <em>Straight answers.</em>
         </h1>
-        <p class="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Find answers to common questions about Nocturne, installation, migration,
-            and more.
+        <p>
+            Answers to frequent questions about Nocturne, installation, migration,
+            and the technology stack.
         </p>
     </div>
 
     <!-- FAQ Categories -->
-    <div class="max-w-3xl mx-auto space-y-12">
-        {#each faqCategories as category}
-            <section>
-                <h2 class="text-xl font-bold mb-6 flex items-center gap-3">
-                    <div
-                        class="w-10 h-10 rounded-lg {category.color} flex items-center justify-center"
-                    >
-                        <category.icon class="w-5 h-5" />
-                    </div>
-                    {category.title}
-                </h2>
+    <div class="faq-body">
+        {#each faqCategories as category, ci}
+            <section class="faq-category">
+                <div class="page-section-head">
+                    <div class="page-section-label">&#167; 0{ci + 1} &mdash; {category.title}</div>
+                </div>
 
                 <Accordion.Root type="multiple" class="space-y-3">
                     {#each category.questions as faq, index}
@@ -146,30 +143,102 @@
     </div>
 
     <!-- Still Have Questions -->
-    <section class="mt-20 text-center">
-        <div
-            class="max-w-xl mx-auto rounded-2xl border border-primary/20 bg-card/80 p-8"
-        >
-            <h2 class="text-2xl font-bold mb-4">Still Have Questions?</h2>
-            <p class="text-muted-foreground mb-6">
-                Check out the documentation for detailed guides, or visit GitHub
-                to ask the community.
-            </p>
-            <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button href="/docs" size="lg" class="gap-2">
-                    Browse Documentation
-                    <ArrowRight class="w-4 h-4" />
-                </Button>
-                <Button
-                    href="https://github.com/your-org/nocturne"
-                    variant="outline"
-                    size="lg"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
-                    Visit GitHub
-                </Button>
-            </div>
+    <section class="faq-cta">
+        <div class="page-section-label">Still have questions?</div>
+        <h2>Check the docs or ask the community.</h2>
+        <div class="flex flex-col sm:flex-row gap-4 mt-6">
+            <Button href="/docs" size="lg" class="gap-2">
+                Browse documentation
+                <ArrowRight class="w-4 h-4" />
+            </Button>
+            <Button
+                href="https://github.com/nightscout/nocturne"
+                variant="outline"
+                size="lg"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                Visit GitHub
+            </Button>
         </div>
     </section>
 </div>
+
+<style>
+    .faq-wrap {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 0 24px;
+    }
+
+    .page-hero {
+        padding: 80px 0 60px;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .page-label {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        margin-bottom: 16px;
+    }
+
+    .page-hero h1 {
+        font-size: clamp(2rem, 4vw, 3.2rem);
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.025em;
+        color: var(--foreground);
+        margin: 0 0 16px;
+    }
+
+    .page-hero h1 em {
+        font-style: italic;
+        color: var(--glucose-in-range);
+    }
+
+    .page-hero p {
+        font-size: 1rem;
+        line-height: 1.65;
+        color: var(--muted-foreground);
+        max-width: 520px;
+        margin: 0;
+    }
+
+    .faq-body {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .faq-category {
+        padding: 64px 0;
+        border-top: 1px solid var(--border);
+    }
+
+    .page-section-head {
+        margin-bottom: 32px;
+    }
+
+    .page-section-label {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+    }
+
+    .faq-cta {
+        border-top: 1px solid var(--border);
+        padding: 80px 0;
+    }
+
+    .faq-cta h2 {
+        font-size: clamp(1.4rem, 2.5vw, 2rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--foreground);
+        margin: 12px 0 0;
+    }
+</style>

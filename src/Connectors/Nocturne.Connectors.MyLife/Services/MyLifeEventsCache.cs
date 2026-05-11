@@ -21,6 +21,8 @@ public class MyLifeEventsCache(
         DateTime until,
         CancellationToken cancellationToken)
     {
+        until = FloorToMinute(until);
+
         logger.LogInformation(
             "MyLife GetEventsAsync called: since={Since:yyyy-MM-dd HH:mm}, until={Until:yyyy-MM-dd HH:mm}",
             since, until);
@@ -85,6 +87,9 @@ public class MyLifeEventsCache(
         _since = null;
         _until = null;
     }
+
+    private static DateTime FloorToMinute(DateTime dt) =>
+        new(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0, DateTimeKind.Utc);
 
     private bool IsCacheValid(DateTime since, DateTime until)
     {

@@ -39,6 +39,13 @@ public class TenantResolutionMiddleware
     /// </summary>
     private static readonly string[] TenantlessAllowedPaths =
     [
+        // Aspire ServiceDefaults health endpoints — must never be tenant-gated;
+        // they are used by Kubernetes liveness/readiness probes and external
+        // monitoring. Returning 503 on these when no tenant exists causes
+        // liveness probes to kill the pod, preventing first-time setup.
+        "/health",
+        "/alive",
+        "/ready",
         "/api/v4/me/tenants/validate-slug",
         "/api/v4/admin/tenants/validate-slug",
         "/api/metadata",

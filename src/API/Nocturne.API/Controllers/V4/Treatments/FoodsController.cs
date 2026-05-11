@@ -36,6 +36,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="ITreatmentFoodService"/>
 /// <seealso cref="Food"/>
 [ApiController]
+[Tags("Treatments")]
 [Route("api/v4/foods")]
 [ClientPropertyName("foodsV4")]
 public class FoodsController : ControllerBase

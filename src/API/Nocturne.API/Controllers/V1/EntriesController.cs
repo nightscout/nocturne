@@ -22,6 +22,7 @@ namespace Nocturne.API.Controllers.V1;
 /// <seealso cref="IProcessingStatusService"/>
 /// <seealso cref="IAlertOrchestrator"/>
 [ApiController]
+[Tags("V1")]
 [Route("api/v1/[controller]")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class EntriesController : ControllerBase

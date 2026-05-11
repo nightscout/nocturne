@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -5,6 +6,7 @@ using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -46,6 +48,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IDeviceService _deviceService;
     private readonly IProfileDecomposer _profileDecomposer;
+    private readonly IActiveProfileResolver _activeProfileResolver;
+    private readonly IPatientInsulinRepository _insulinRepo;
     private readonly ILogger<TreatmentDecomposer> _logger;
 
     /// <summary>
@@ -70,6 +74,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     /// <param name="treatmentFoodService">Service for preserving legacy <see cref="Treatment.FoodType"/> as a <see cref="TreatmentFood"/> entry.</param>
     /// <param name="deviceService">Service that resolves or creates canonical device references.</param>
     /// <param name="profileDecomposer">Decomposes inline profile JSON from profile switch treatments into V4 schedule records.</param>
+    /// <param name="activeProfileResolver">Resolves insulin context from profile switches active at a given timestamp.</param>
+    /// <param name="insulinRepo">Repository for patient insulin records, used as fallback for insulin context resolution.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public TreatmentDecomposer(
         NocturneDbContext dbContext,
@@ -84,6 +90,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         ITreatmentFoodService treatmentFoodService,
         IDeviceService deviceService,
         IProfileDecomposer profileDecomposer,
+        IActiveProfileResolver activeProfileResolver,
+        IPatientInsulinRepository insulinRepo,
         ILogger<TreatmentDecomposer> logger)
     {
         _dbContext = dbContext;
@@ -98,6 +106,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         _treatmentFoodService = treatmentFoodService;
         _deviceService = deviceService;
         _profileDecomposer = profileDecomposer;
+        _activeProfileResolver = activeProfileResolver;
+        _insulinRepo = insulinRepo;
         _logger = logger;
     }
 
@@ -502,6 +512,25 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
         model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
 
+        // Resolve insulin context: active profile switch → primary insulin → null
+        model.InsulinContext = await _activeProfileResolver.GetActiveInsulinContextAsync(treatment.Mills, ct);
+        if (model.InsulinContext is null)
+        {
+            var primaryInsulin = await _insulinRepo.GetPrimaryBolusInsulinAsync(ct);
+            if (primaryInsulin is not null)
+            {
+                model.InsulinContext = new V4Models.TreatmentInsulinContext
+                {
+                    PatientInsulinId = primaryInsulin.Id,
+                    InsulinName = primaryInsulin.Name,
+                    Dia = primaryInsulin.Dia,
+                    Peak = primaryInsulin.Peak,
+                    Curve = primaryInsulin.Curve,
+                    Concentration = primaryInsulin.Concentration,
+                };
+            }
+        }
+
         if (existing != null)
         {
             model.Id = existing.Id;
@@ -664,6 +693,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             SyncIdentifier = treatment.SyncIdentifier,
             InsulinType = treatment.InsulinType,
             Unabsorbed = treatment.Unabsorbed,
+            InsulinContext = ExtractAapsIcfg(treatment),
             DeviceId = null, // Resolved by caller via IDeviceService
             PumpRecordId = treatment.PumpId?.ToString(),
         };
@@ -847,6 +877,55 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         return string.Equals(appString, "AAPS", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Extracts AAPS v4 insulin configuration from the <c>icfg</c> JSON field in
+    /// <see cref="Treatment.AdditionalProperties"/> and converts it into a
+    /// <see cref="V4Models.TreatmentInsulinContext"/>.
+    /// </summary>
+    /// <returns>
+    /// A populated <see cref="V4Models.TreatmentInsulinContext"/> when the treatment carries a
+    /// valid <c>icfg</c> object with positive <c>insulinEndTime</c> and <c>insulinPeakTime</c>;
+    /// <c>null</c> otherwise.
+    /// </returns>
+    internal static V4Models.TreatmentInsulinContext? ExtractAapsIcfg(Treatment treatment)
+    {
+        if (treatment.AdditionalProperties is null
+            || !treatment.AdditionalProperties.TryGetValue("icfg", out var icfgRaw))
+            return null;
+
+        try
+        {
+            if (icfgRaw is not JsonElement icfgElement || icfgElement.ValueKind != JsonValueKind.Object)
+                return null;
+
+            var label = icfgElement.TryGetProperty("insulinLabel", out var lp) ? lp.GetString() ?? "" : "";
+            var endTimeMs = icfgElement.TryGetProperty("insulinEndTime", out var ep) ? ep.GetInt64() : 0L;
+            var peakTimeMs = icfgElement.TryGetProperty("insulinPeakTime", out var pp) ? pp.GetInt64() : 0L;
+            var concentrationRatio = icfgElement.TryGetProperty("concentration", out var cp) ? cp.GetDouble() : 1.0;
+
+            if (endTimeMs <= 0 || peakTimeMs <= 0)
+                return null;
+
+            return new V4Models.TreatmentInsulinContext
+            {
+                PatientInsulinId = Guid.Empty,
+                InsulinName = label,
+                Dia = Math.Round(endTimeMs / 3_600_000.0, 1),
+                Peak = (int)(peakTimeMs / 60_000),
+                Concentration = (int)Math.Round(concentrationRatio * 100),
+                Curve = "rapid-acting",
+            };
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
     private static bool IsTempBasal(string? eventType)
     {
         if (string.IsNullOrEmpty(eventType))
@@ -876,6 +955,16 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             metadata["enteredBy"] = treatment.EnteredBy;
 
         metadata["utcOffset"] = treatment.UtcOffset ?? 0;
+
+        var icfg = ExtractAapsIcfg(treatment);
+        if (icfg is not null)
+        {
+            metadata["insulinName"] = icfg.InsulinName;
+            metadata["insulinDia"] = icfg.Dia.ToString("F1", CultureInfo.InvariantCulture);
+            metadata["insulinPeak"] = icfg.Peak.ToString();
+            metadata["insulinConcentration"] = icfg.Concentration.ToString();
+            metadata["insulinCurve"] = icfg.Curve;
+        }
 
         return metadata.Count > 0 ? metadata : null;
     }
@@ -1131,6 +1220,65 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             }
         }
 
+        // Pre-pass: upsert profile switch StateSpans first (temp basals depend on them for insulin context)
+        var batchInsulinTimeline = new SortedDictionary<long, V4Models.TreatmentInsulinContext>();
+        foreach (var (treatment, isPs, _, _) in stateSpanTreatments.Where(t => t.IsProfileSwitch))
+        {
+            var spanResult = new V4Models.DecompositionResult { CorrelationId = batch.Id };
+            await DecomposeProfileSwitchAsync(treatment, spanResult, ct);
+            result.CreatedRecords.AddRange(spanResult.CreatedRecords);
+            result.UpdatedRecords.AddRange(spanResult.UpdatedRecords);
+
+            var icfg = ExtractAapsIcfg(treatment);
+            if (icfg is not null)
+                batchInsulinTimeline[treatment.Mills] = icfg;
+        }
+
+        // Resolve insulin context for each temp basal
+        // primaryInsulin is fetched at most once lazily if the third tier is ever needed.
+        V4Models.PatientInsulin? primaryInsulin = null;
+        var primaryInsulinFetched = false;
+
+        foreach (var tb in tempBasalList)
+        {
+            // Tier 1: batch-local profile switch timeline (avoids cache staleness).
+            // Walk the sorted keys in reverse to find the most-recent switch at or before StartMills.
+            V4Models.TreatmentInsulinContext? icfg = null;
+            var matchingKey = batchInsulinTimeline.Keys
+                .Reverse()
+                .FirstOrDefault(key => key <= tb.StartMills);
+            if (matchingKey != 0 || batchInsulinTimeline.ContainsKey(0))
+                icfg = batchInsulinTimeline[matchingKey];
+
+            // Tier 2: ActiveProfileResolver (covers profile switches from previous batches)
+            if (icfg is null)
+                icfg = await _activeProfileResolver.GetActiveInsulinContextAsync(tb.StartMills, ct);
+
+            // Tier 3: primary configured insulin — fetched once per batch, not per record
+            if (icfg is null)
+            {
+                if (!primaryInsulinFetched)
+                {
+                    primaryInsulin = await _insulinRepo.GetPrimaryBolusInsulinAsync(ct);
+                    primaryInsulinFetched = true;
+                }
+                if (primaryInsulin is not null)
+                {
+                    icfg = new V4Models.TreatmentInsulinContext
+                    {
+                        PatientInsulinId = primaryInsulin.Id,
+                        InsulinName = primaryInsulin.Name,
+                        Dia = primaryInsulin.Dia,
+                        Peak = primaryInsulin.Peak,
+                        Curve = primaryInsulin.Curve,
+                        Concentration = primaryInsulin.Concentration,
+                    };
+                }
+            }
+
+            tb.InsulinContext = icfg;
+        }
+
         // Bulk-insert all typed lists
         if (bolusList.Count > 0)
         {
@@ -1174,15 +1322,13 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             result.CreatedRecords.AddRange(created);
         }
 
-        // Upsert state spans individually (ProfileSwitch, Override, TemporaryTarget)
-        foreach (var (treatment, isPs, isOv, isTt) in stateSpanTreatments)
+        // Upsert remaining state spans (Override, TemporaryTarget — ProfileSwitch already done in pre-pass)
+        foreach (var (treatment, isPs, isOv, isTt) in stateSpanTreatments.Where(t => !t.IsProfileSwitch))
         {
             // Use a temporary result to collect records from helper methods
             var spanResult = new V4Models.DecompositionResult { CorrelationId = batch.Id };
 
-            if (isPs)
-                await DecomposeProfileSwitchAsync(treatment, spanResult, ct);
-            else if (isOv)
+            if (isOv)
                 await DecomposeOverrideAsync(treatment, spanResult, ct);
             else if (isTt)
                 await DecomposeTemporaryTargetAsync(treatment, spanResult, ct);

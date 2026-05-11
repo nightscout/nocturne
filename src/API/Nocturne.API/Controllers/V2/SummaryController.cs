@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V2;
 /// <seealso cref="ISummaryService"/>
 /// <seealso cref="SummaryResponse"/>
 [ApiController]
+[Tags("V2")]
 [Route("api/v2/summary")]
 [Produces("application/json")]
 [ClientPropertyName("v2Summary")]

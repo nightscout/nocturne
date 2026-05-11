@@ -16,6 +16,7 @@ namespace Nocturne.API.Controllers.V1;
 /// <seealso cref="DeviceStatusProjectionService"/>
 /// <seealso cref="ITreatmentService"/>
 [ApiController]
+[Tags("V1")]
 [Route("")]
 public class PebbleController : ControllerBase
 {

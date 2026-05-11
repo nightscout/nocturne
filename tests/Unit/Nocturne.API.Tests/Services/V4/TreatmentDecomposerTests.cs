@@ -1,9 +1,11 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4;
@@ -26,6 +28,8 @@ public class TreatmentDecomposerTests : IDisposable
     private readonly Mock<ITempBasalRepository> _tempBasalRepoMock;
     private readonly Mock<IDeviceService> _deviceServiceMock;
     private readonly Mock<IProfileDecomposer> _profileDecomposerMock;
+    private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock;
+    private readonly Mock<IPatientInsulinRepository> _insulinRepoMock;
     private readonly TreatmentDecomposer _decomposer;
 
     public TreatmentDecomposerTests()
@@ -45,6 +49,8 @@ public class TreatmentDecomposerTests : IDisposable
         _tempBasalRepoMock = new Mock<ITempBasalRepository>();
         _deviceServiceMock = new Mock<IDeviceService>();
         _profileDecomposerMock = new Mock<IProfileDecomposer>();
+        _activeProfileResolverMock = new Mock<IActiveProfileResolver>();
+        _insulinRepoMock = new Mock<IPatientInsulinRepository>();
 
         // Default: DeviceService returns null (no device resolved)
         _deviceServiceMock
@@ -59,6 +65,8 @@ public class TreatmentDecomposerTests : IDisposable
             _treatmentFoodServiceMock.Object,
             _deviceServiceMock.Object,
             _profileDecomposerMock.Object,
+            _activeProfileResolverMock.Object,
+            _insulinRepoMock.Object,
             NullLogger<TreatmentDecomposer>.Instance);
     }
 
@@ -2153,6 +2161,150 @@ public class TreatmentDecomposerTests : IDisposable
 
     #endregion
 
+    #region ExtractAapsIcfg
+
+    [Fact]
+    public void ExtractAapsIcfg_ValidIcfg_ReturnsContext()
+    {
+        // Arrange — Lyumjev U200 with 8.8h DIA, 45min peak
+        var icfgJson = JsonSerializer.SerializeToElement(new
+        {
+            insulinLabel = "Lyumjev 45m 8.8h U200",
+            insulinEndTime = 31680000L,   // 8.8 hours in ms
+            insulinPeakTime = 2700000L,   // 45 minutes in ms
+            concentration = 2.0
+        });
+
+        var treatment = new Treatment
+        {
+            Id = "icfg-valid",
+            Mills = 1700000000000,
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["icfg"] = icfgJson
+            }
+        };
+
+        // Act
+        var ctx = TreatmentDecomposer.ExtractAapsIcfg(treatment);
+
+        // Assert
+        ctx.Should().NotBeNull();
+        ctx!.InsulinName.Should().Be("Lyumjev 45m 8.8h U200");
+        ctx.Dia.Should().BeApproximately(8.8, 0.01);
+        ctx.Peak.Should().Be(45);
+        ctx.Concentration.Should().Be(200);
+        ctx.Curve.Should().Be("rapid-acting");
+        ctx.PatientInsulinId.Should().Be(Guid.Empty);
+    }
+
+    [Fact]
+    public void ExtractAapsIcfg_NoAdditionalProperties_ReturnsNull()
+    {
+        var treatment = new Treatment
+        {
+            Id = "icfg-no-props",
+            Mills = 1700000000000,
+            AdditionalProperties = null
+        };
+
+        TreatmentDecomposer.ExtractAapsIcfg(treatment).Should().BeNull();
+    }
+
+    [Fact]
+    public void ExtractAapsIcfg_MalformedIcfg_ReturnsNull()
+    {
+        // icfg is a string instead of an object
+        var icfgElement = JsonSerializer.SerializeToElement("not-json");
+
+        var treatment = new Treatment
+        {
+            Id = "icfg-malformed",
+            Mills = 1700000000000,
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["icfg"] = icfgElement
+            }
+        };
+
+        TreatmentDecomposer.ExtractAapsIcfg(treatment).Should().BeNull();
+    }
+
+    [Fact]
+    public void ExtractAapsIcfg_U40Concentration_ConvertsCorrectly()
+    {
+        var icfgJson = JsonSerializer.SerializeToElement(new
+        {
+            insulinLabel = "Insulin U40",
+            insulinEndTime = 12600000L,   // 3.5 hours
+            insulinPeakTime = 3300000L,   // 55 minutes
+            concentration = 0.4
+        });
+
+        var treatment = new Treatment
+        {
+            Id = "icfg-u40",
+            Mills = 1700000000000,
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["icfg"] = icfgJson
+            }
+        };
+
+        var ctx = TreatmentDecomposer.ExtractAapsIcfg(treatment);
+
+        ctx.Should().NotBeNull();
+        ctx!.Concentration.Should().Be(40);
+        ctx.Dia.Should().BeApproximately(3.5, 0.01);
+        ctx.Peak.Should().Be(55);
+    }
+
+    [Fact]
+    public async Task DecomposeProfileSwitch_WithAapsIcfg_StoresInMetadata()
+    {
+        // Arrange — Profile Switch with icfg in AdditionalProperties
+        var icfgJson = JsonSerializer.SerializeToElement(new
+        {
+            insulinLabel = "NovoRapid",
+            insulinEndTime = 12600000L,   // 3.5 hours
+            insulinPeakTime = 3300000L,   // 55 minutes
+            concentration = 1.0
+        });
+
+        var treatment = new Treatment
+        {
+            Id = "profile-switch-icfg",
+            EventType = "Profile Switch",
+            Mills = 1700000000000,
+            Profile = "Default",
+            EnteredBy = "AAPS",
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["icfg"] = icfgJson
+            }
+        };
+
+        StateSpan? capturedSpan = null;
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .Callback<StateSpan, CancellationToken>((ss, _) => capturedSpan = ss)
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => ss);
+
+        // Act
+        await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        capturedSpan.Should().NotBeNull();
+        capturedSpan!.Metadata.Should().NotBeNull();
+        capturedSpan.Metadata!["insulinName"].Should().Be("NovoRapid");
+        capturedSpan.Metadata["insulinDia"].Should().Be("3.5");
+        capturedSpan.Metadata["insulinPeak"].Should().Be("55");
+        capturedSpan.Metadata["insulinConcentration"].Should().Be("100");
+        capturedSpan.Metadata["insulinCurve"].Should().Be("rapid-acting");
+    }
+
+    #endregion
+
     #region Profile Switch with Inline ProfileJson
 
     [Fact]
@@ -2247,6 +2399,257 @@ public class TreatmentDecomposerTests : IDisposable
         _profileDecomposerMock.Verify(
             d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    #endregion
+
+    #region MapToBolus InsulinContext
+
+    [Fact]
+    public void MapToBolus_WithAapsIcfg_ExtractsInsulinContext()
+    {
+        // Arrange
+        var icfgJson = JsonSerializer.SerializeToElement(new
+        {
+            insulinLabel = "Lyumjev 45m 8.8h U200",
+            insulinEndTime = 31680000L,
+            insulinPeakTime = 2700000L,
+            concentration = 2.0
+        });
+
+        var treatment = new Treatment
+        {
+            Id = "bolus-icfg-1",
+            Mills = 1700000000000,
+            Insulin = 2.0,
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["icfg"] = icfgJson
+            }
+        };
+
+        // Act
+        var bolus = TreatmentDecomposer.MapToBolus(treatment, null);
+
+        // Assert
+        bolus.InsulinContext.Should().NotBeNull();
+        bolus.InsulinContext!.InsulinName.Should().Be("Lyumjev 45m 8.8h U200");
+        bolus.InsulinContext.Dia.Should().BeApproximately(8.8, 0.01);
+        bolus.InsulinContext.Peak.Should().Be(45);
+        bolus.InsulinContext.Concentration.Should().Be(200);
+        bolus.InsulinContext.Curve.Should().Be("rapid-acting");
+    }
+
+    [Fact]
+    public void MapToBolus_WithoutIcfg_InsulinContextRemainsNull()
+    {
+        // Arrange
+        var treatment = new Treatment
+        {
+            Id = "bolus-no-icfg",
+            Mills = 1700000000000,
+            Insulin = 2.0,
+        };
+
+        // Act
+        var bolus = TreatmentDecomposer.MapToBolus(treatment, null);
+
+        // Assert
+        bolus.InsulinContext.Should().BeNull();
+    }
+
+    #endregion
+
+    #region TempBasal InsulinContext Resolution
+
+    [Fact]
+    public async Task DecomposeTempBasal_Single_ResolvesFromActiveProfileSwitch()
+    {
+        // Arrange
+        var expectedContext = new V4Models.TreatmentInsulinContext
+        {
+            PatientInsulinId = Guid.Empty,
+            InsulinName = "Lyumjev U200",
+            Dia = 8.8,
+            Peak = 45,
+            Curve = "rapid-acting",
+            Concentration = 200,
+        };
+
+        _activeProfileResolverMock
+            .Setup(r => r.GetActiveInsulinContextAsync(1700000000000, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedContext);
+
+        _tempBasalRepoMock
+            .Setup(r => r.GetByLegacyIdAsync("tb-ps-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal?)null);
+        _tempBasalRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+
+        var treatment = new Treatment
+        {
+            Id = "tb-ps-1",
+            EventType = "Temp Basal",
+            Mills = 1700000000000,
+            Rate = 1.2,
+            Duration = 30,
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        var tempBasal = result.CreatedRecords.OfType<V4Models.TempBasal>().Single();
+        tempBasal.InsulinContext.Should().NotBeNull();
+        tempBasal.InsulinContext!.InsulinName.Should().Be("Lyumjev U200");
+        tempBasal.InsulinContext.Dia.Should().BeApproximately(8.8, 0.01);
+        tempBasal.InsulinContext.Peak.Should().Be(45);
+        tempBasal.InsulinContext.Concentration.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task DecomposeTempBasal_Single_FallsBackToPrimaryInsulin()
+    {
+        // Arrange — resolver returns null, primary insulin is configured
+        _activeProfileResolverMock
+            .Setup(r => r.GetActiveInsulinContextAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TreatmentInsulinContext?)null);
+
+        var primaryInsulinId = Guid.NewGuid();
+        _insulinRepoMock
+            .Setup(r => r.GetPrimaryBolusInsulinAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new V4Models.PatientInsulin
+            {
+                Id = primaryInsulinId,
+                Name = "Fiasp",
+                Dia = 5.0,
+                Peak = 55,
+                Curve = "ultra-rapid",
+                Concentration = 100,
+            });
+
+        _tempBasalRepoMock
+            .Setup(r => r.GetByLegacyIdAsync("tb-fallback-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal?)null);
+        _tempBasalRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+
+        var treatment = new Treatment
+        {
+            Id = "tb-fallback-1",
+            EventType = "Temp Basal",
+            Mills = 1700000000000,
+            Rate = 0.8,
+            Duration = 60,
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert
+        var tempBasal = result.CreatedRecords.OfType<V4Models.TempBasal>().Single();
+        tempBasal.InsulinContext.Should().NotBeNull();
+        tempBasal.InsulinContext!.PatientInsulinId.Should().Be(primaryInsulinId);
+        tempBasal.InsulinContext.InsulinName.Should().Be("Fiasp");
+        tempBasal.InsulinContext.Dia.Should().BeApproximately(5.0, 0.01);
+        tempBasal.InsulinContext.Peak.Should().Be(55);
+        tempBasal.InsulinContext.Curve.Should().Be("ultra-rapid");
+        tempBasal.InsulinContext.Concentration.Should().Be(100);
+    }
+
+    [Fact]
+    public async Task DecomposeTempBasal_Single_AllTiersReturnNull_InsulinContextIsNull()
+    {
+        // Arrange — no active profile switch, no primary insulin configured
+        _activeProfileResolverMock
+            .Setup(r => r.GetActiveInsulinContextAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TreatmentInsulinContext?)null);
+
+        _insulinRepoMock
+            .Setup(r => r.GetPrimaryBolusInsulinAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.PatientInsulin?)null);
+
+        _tempBasalRepoMock
+            .Setup(r => r.GetByLegacyIdAsync("tb-notiers-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal?)null);
+        _tempBasalRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+
+        var treatment = new Treatment
+        {
+            Id = "tb-notiers-1",
+            EventType = "Temp Basal",
+            Mills = 1700000000000,
+            Rate = 0.5,
+            Duration = 30,
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert — record is created but InsulinContext is null; IOB falls back to profile DIA
+        var tempBasal = result.CreatedRecords.OfType<V4Models.TempBasal>().Single();
+        tempBasal.InsulinContext.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeBatch_TempBasalAfterProfileSwitch_UsesProfileSwitchIcfg()
+    {
+        // Arrange — a batch with a profile switch at T=0 and a temp basal at T+5min
+        var icfgJson = JsonSerializer.SerializeToElement(new
+        {
+            insulinLabel = "Lyumjev 45m 8.8h U200",
+            insulinEndTime = 31680000L,
+            insulinPeakTime = 2700000L,
+            concentration = 2.0
+        });
+
+        var profileSwitchTreatment = new Treatment
+        {
+            Id = "ps-batch-1",
+            EventType = "Profile Switch",
+            Mills = 1700000000000,
+            Profile = "Day Profile",
+            Duration = 60,
+            EnteredBy = "AAPS",
+            AdditionalProperties = new Dictionary<string, object>
+            {
+                ["icfg"] = icfgJson
+            }
+        };
+
+        var tempBasalTreatment = new Treatment
+        {
+            Id = "tb-batch-1",
+            EventType = "Temp Basal",
+            Mills = 1700000000000 + (5 * 60 * 1000), // T+5min
+            Rate = 1.5,
+            Duration = 30,
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => ss);
+
+        _tempBasalRepoMock
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.TempBasal> list, CancellationToken _) => list.ToList());
+
+        // Act
+        var result = await _decomposer.DecomposeBatchAsync(
+            new List<Treatment> { profileSwitchTreatment, tempBasalTreatment });
+
+        // Assert
+        var tempBasal = result.CreatedRecords.OfType<V4Models.TempBasal>().Single();
+        tempBasal.InsulinContext.Should().NotBeNull();
+        tempBasal.InsulinContext!.InsulinName.Should().Be("Lyumjev 45m 8.8h U200");
+        tempBasal.InsulinContext.Dia.Should().BeApproximately(8.8, 0.01);
+        tempBasal.InsulinContext.Peak.Should().Be(45);
+        tempBasal.InsulinContext.Concentration.Should().Be(200);
+        tempBasal.InsulinContext.Curve.Should().Be("rapid-acting");
     }
 
     #endregion

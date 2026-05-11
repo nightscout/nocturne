@@ -11,6 +11,7 @@ namespace Nocturne.API.Controllers.V1;
 /// <seealso cref="IVersionService"/>
 /// <seealso cref="VersionsResponse"/>
 [ApiController]
+[Tags("V1")]
 [Route("api/[controller]")]
 public class VersionsController : ControllerBase
 {

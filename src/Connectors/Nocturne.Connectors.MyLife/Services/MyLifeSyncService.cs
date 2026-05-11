@@ -5,7 +5,7 @@ namespace Nocturne.Connectors.MyLife.Services;
 
 public class MyLifeSyncService(MyLifeSoapClient soapClient, ILogger<MyLifeSyncService> logger)
 {
-    public async Task<IReadOnlyList<MyLifeEvent>> FetchEventsAsync(
+    public virtual async Task<IReadOnlyList<MyLifeEvent>> FetchEventsAsync(
         string serviceUrl,
         string authToken,
         string patientId,

@@ -28,6 +28,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="BatteryStatistics"/>
 /// <seealso cref="ChargeCycle"/>
 [ApiController]
+[Tags("Devices")]
 [Route("api/v4/[controller]")]
 public class BatteryController : ControllerBase
 {

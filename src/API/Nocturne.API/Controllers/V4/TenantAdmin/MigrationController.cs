@@ -11,6 +11,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// <seealso cref="IMigrationJobService"/>
 /// <seealso cref="IConnectorConfigurationService"/>
 [ApiController]
+[Tags("TenantAdmin")]
 [Route("api/v4/migration")]
 public class MigrationController : ControllerBase
 {

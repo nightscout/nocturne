@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// <seealso cref="IOAuthGrantService"/>
 /// <seealso cref="IOAuthTokenService"/>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/account/connected-apps")]
 [Authorize]
 [Produces("application/json")]

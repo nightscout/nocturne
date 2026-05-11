@@ -19,6 +19,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// <seealso cref="ITenantService"/>
 /// <seealso cref="ITenantRoleService"/>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/member-invites")]
 [Produces("application/json")]
 public class MemberInviteController : ControllerBase

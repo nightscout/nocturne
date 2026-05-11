@@ -168,10 +168,13 @@ export function contextResource<T>(
   const { errorTitle = "Error Loading Data", dateParams } = options;
   const ctx = getResourceContext();
 
+  // Create the query in a $derived tracking context so reactive queries
+  // are never constructed inside an $effect (which would trigger a Svelte warning).
+  const query = $derived(queryFn());
+
   // Use $effect.pre to sync state BEFORE render
   $effect.pre(() => {
     if (ctx) {
-      const query = queryFn();
       ctx.loading = query.loading;
       ctx.error = query.error as Error | string | null | undefined;
       ctx.hasData = query.current !== undefined && query.current !== null;
@@ -182,16 +185,16 @@ export function contextResource<T>(
 
   const base = {
     get loading() {
-      return queryFn().loading;
+      return query.loading;
     },
     get error() {
-      return queryFn().error;
+      return query.error;
     },
     get current() {
-      return queryFn().current;
+      return query.current;
     },
     refresh() {
-      queryFn().refresh();
+      query.refresh();
     },
   };
 

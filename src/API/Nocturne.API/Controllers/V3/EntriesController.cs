@@ -20,6 +20,7 @@ namespace Nocturne.API.Controllers.V3;
 /// <seealso cref="Entry"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
+[Tags("V3")]
 [Route("api/v3/[controller]")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class EntriesController : BaseV3Controller<Entry>

@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V4;
 /// These operate without a resolved tenant context.
 /// </summary>
 [ApiController]
+[Tags("Platform")]
 [Route("api/v4/platform")]
 [Produces("application/json")]
 [Authorize]

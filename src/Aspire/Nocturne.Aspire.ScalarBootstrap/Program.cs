@@ -16,6 +16,8 @@ builder.Services.AddHttpForwarderWithServiceDiscovery();
 
 var app = builder.Build();
 
+app.UseStaticFiles();
+
 app.MapDefaultEndpoints();
 
 // HTML rewrite middleware. Forces identity encoding upstream so we can

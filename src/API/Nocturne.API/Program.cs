@@ -211,7 +211,6 @@ builder.Services.AddOpenApi("nocturne", options =>
             || ns == "Nocturne.API.Controllers";
     };
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
-    options.AddOperationTransformer<FolderBasedTagOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
@@ -233,7 +232,6 @@ builder.Services.AddOpenApi("nightscout", options =>
             || ns.EndsWith(".Controllers.V3", StringComparison.Ordinal);
     };
     options.AddOperationTransformer<SummaryToDescriptionOperationTransformer>();
-    options.AddOperationTransformer<FolderBasedTagOperationTransformer>();
     options.AddOperationTransformer<SecurityRequirementOperationTransformer>();
     options.AddDocumentTransformer<TagDescriptionDocumentTransformer>();
     options.AddDocumentTransformer<SecuritySchemeDocumentTransformer>();
@@ -322,11 +320,6 @@ app.UseCors();
 app.UseStaticFiles();
 app.UseForwardedHeaders();
 
-// Reject or redirect HTTP to HTTPS. Runs after UseForwardedHeaders (needs
-// X-Forwarded-Proto) but before routing, tenant resolution, and auth to
-// prevent WebAuthn failures and setup state corruption from insecure access.
-app.UseMiddleware<HttpsRequirementMiddleware>();
-
 // Strip .json suffixes before routing so /api/v1/treatments.json matches
 // the TreatmentsController route /api/v1/treatments. Must run before
 // UseRouting so the rewritten path is what the router sees.
@@ -407,6 +400,20 @@ app.MapScalarApiReference(options =>
     options.AddDocument("nocturne", "Nocturne API", isDefault: true);
     options.AddDocument("nightscout", "Nightscout API");
     options.AddHeadContent(MermaidLazyLoader.HeadContent);
+
+    // Pre-configure authentication so Scalar's "Authorize" UI works out of the box.
+    options
+        .AddPreferredSecuritySchemes("oauth2", "bearer", "apiSecret")
+        .AddAuthorizationCodeFlow("oauth2", flow =>
+        {
+            flow.ClientId = "scalar";
+            flow.Pkce = Pkce.Sha256;
+            flow.SelectedScopes = ["*"];
+        })
+        .AddApiKeyAuthentication("apiSecret", apiKey =>
+        {
+            apiKey.Value = string.Empty;
+        });
 });
 
 // Add root endpoint to serve a basic info page

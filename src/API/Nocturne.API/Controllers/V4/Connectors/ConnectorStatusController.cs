@@ -17,6 +17,7 @@ namespace Nocturne.API.Controllers.V4;
 /// <seealso cref="IConnectorHealthService"/>
 [Authorize]
 [ApiController]
+[Tags("Connectors")]
 [Route("api/v4/connectors")]
 public class ConnectorStatusController : ControllerBase
 {

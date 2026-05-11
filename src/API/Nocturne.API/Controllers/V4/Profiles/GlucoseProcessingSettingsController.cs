@@ -7,6 +7,7 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.API.Controllers.V4.Profiles;
 
 [ApiController]
+[Tags("Profiles")]
 [Route("api/v4/settings/glucose-processing")]
 [Authorize]
 public class GlucoseProcessingSettingsController(

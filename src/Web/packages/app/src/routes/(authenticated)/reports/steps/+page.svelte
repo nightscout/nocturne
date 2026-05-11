@@ -14,6 +14,8 @@
   import { getActogramData } from "$api/actogram.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { computeDayTotals, computeInitialOffset } from './steps.utils';
+  import { untrack } from 'svelte';
 
   const VISIBLE_DAYS = 14;
   const PADDING_DAYS = 14;
@@ -21,28 +23,26 @@
 
   const reportsParams = requireDateParamsContext(14);
 
-  const dateRangeMillis = $derived({
+  // Frozen at mount — does NOT react to reportsParams changes caused by actogram navigation.
+  // This prevents a re-fetch every time the user scrolls the actogram.
+  const fetchRange = {
     from: reportsParams.dateRangeMillis.from - PADDING_DAYS * MS_PER_DAY,
     to: reportsParams.dateRangeMillis.to + PADDING_DAYS * MS_PER_DAY,
-  });
+  };
 
   const actogramResource = contextResource(
     () =>
       getActogramData({
-        from: dateRangeMillis.from,
-        to: dateRangeMillis.to,
+        from: fetchRange.from,
+        to: fetchRange.to,
       }),
     { errorTitle: "Error Loading Step Count Report" }
   );
 
-  const stepCounts = $derived(actogramResource.current?.stepCounts ?? []);
-  const glucoseData = $derived(actogramResource.current?.glucoseData ?? []);
-  const thresholds = $derived(actogramResource.current?.thresholds);
-
   // Build day array from date range
   const days = $derived.by(() => {
-    const start = new Date(dateRangeMillis.from);
-    const end = new Date(dateRangeMillis.to);
+    const start = new Date(fetchRange.from);
+    const end = new Date(fetchRange.to);
     const startMidnight = new Date(
       start.getFullYear(),
       start.getMonth(),
@@ -65,29 +65,56 @@
     });
   });
 
+  const dayTotals = $derived(computeDayTotals(actogramResource.current?.stepCounts ?? [], days));
+
+  function formatDate(date: Date): string {
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  // Read once at mount — not reactive. Sets the starting scroll position from URL params.
+  // Uses local midnight from the days array to avoid UTC/local timezone mismatch.
+  const initialOffset = untrack(() => {
+    const targetDate = reportsParams.from;
+    const targetMs = targetDate
+      ? new Date(targetDate).setHours(0, 0, 0, 0)
+      : fetchRange.from;
+    return computeInitialOffset(days, targetMs, VISIBLE_DAYS);
+  });
+
   // Step data as ActogramPoints
   const stepPoints = $derived(
-    stepCounts.map((s) => ({ mills: s.mills, steps: s.metric }))
+    (actogramResource.current?.stepCounts ?? []).map((s) => ({ mills: s.mills, steps: s.metric }))
   );
 
   // BG data as GlucosePoints
   const bgPoints = $derived(
-    glucoseData.map((g) => ({ mills: g.mills, sgv: g.sgv, color: g.color }))
+    (actogramResource.current?.glucoseData ?? []).map((g) => ({ mills: g.mills, sgv: g.sgv, color: g.color }))
   );
 
-  // Summary statistics
-  const totalSteps = $derived(
-    stepCounts.reduce((sum, s) => sum + s.metric, 0)
+  // Summary statistics scoped to the currently visible period (not the padded fetch window)
+  const visibleStepCounts = $derived(
+    (actogramResource.current?.stepCounts ?? []).filter(
+      (s) =>
+        s.mills >= reportsParams.dateRangeMillis.from &&
+        s.mills <= reportsParams.dateRangeMillis.to + MS_PER_DAY - 1
+    )
   );
-  const dayCount = $derived(days.length);
+  const totalSteps = $derived(visibleStepCounts.reduce((sum, s) => sum + s.metric, 0));
+  const dayCount = $derived(
+    reportsParams.from && reportsParams.to
+      ? Math.round(
+          (new Date(reportsParams.to).getTime() - new Date(reportsParams.from).getTime()) /
+            MS_PER_DAY
+        ) + 1
+      : VISIBLE_DAYS
+  );
   const dailyAverage = $derived(
     dayCount > 0 ? Math.round(totalSteps / dayCount) : 0
   );
-  const maxStepsInHour = $derived(
-    stepCounts.length > 0
-      ? Math.max(...stepCounts.map((s) => s.metric))
-      : 1000
-  );
+  const maxStepsInHour = $derived.by(() => {
+    const counts = actogramResource.current?.stepCounts ?? [];
+    return counts.length > 0 ? Math.max(...counts.map((s) => s.metric)) : 1000;
+  });
   // Cap bar scale at a reasonable max
   const barScale = $derived(Math.max(maxStepsInHour, 1000));
 </script>
@@ -100,7 +127,8 @@
   />
 </svelte:head>
 
-{#if actogramResource.current}
+{#await actogramResource then actogramData}
+  {#if actogramData}
   <div class="container mx-auto space-y-6 px-4 py-6 max-w-7xl">
     <!-- Header -->
     <div>
@@ -174,11 +202,25 @@
           data={stepPoints}
           bgData={bgPoints}
           {days}
-          {thresholds}
-          rowHeight={48}
+          thresholds={actogramResource.current?.thresholds}
+          rowHeight={64}
           visibleCount={VISIBLE_DAYS}
-          initialOffset={PADDING_DAYS}
+          {initialOffset}
+          onVisibleRangeChange={(from, to) => {
+            reportsParams.setCustomRange(
+              `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`,
+              `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-${String(to.getDate()).padStart(2, '0')}`,
+            );
+          }}
         >
+          {#snippet rowLabel({ day })}
+            <div class="text-right pr-2">
+              <div class="text-xs text-muted-foreground">{formatDate(day)}</div>
+              <div class="text-xs font-medium tabular-nums">
+                {(dayTotals.get(day.getTime()) ?? 0).toLocaleString()} <span class="text-muted-foreground font-normal">steps</span>
+              </div>
+            </div>
+          {/snippet}
           {#snippet tooltipValue({ point })}
             {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
             <span class="text-muted-foreground">Steps</span>
@@ -203,4 +245,5 @@
       </CardContent>
     </Card>
   </div>
-{/if}
+  {/if}
+{/await}

@@ -8,6 +8,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// </summary>
 /// <seealso cref="IProcessingStatusService"/>
 [ApiController]
+[Tags("TenantAdmin")]
 [Route("api/v4/processing")]
 public class ProcessingController : ControllerBase
 {

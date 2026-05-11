@@ -135,6 +135,12 @@ public class TempBasalEntity : ITenantScoped, IAuditable
     public Guid? ApsSnapshotId { get; set; }
 
     /// <summary>
+    /// Snapshot of insulin pharmacokinetic settings at the time this temp basal was set (JSONB).
+    /// </summary>
+    [Column("insulin_context", TypeName = "jsonb")]
+    public string? InsulinContextJson { get; set; }
+
+    /// <summary>
     /// Catch-all JSONB column for fields not mapped to dedicated columns
     /// </summary>
     [Column("additional_properties", TypeName = "jsonb")]

@@ -6383,6 +6383,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("end_timestamp");
 
+                    b.Property<string>("InsulinContextJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("insulin_context");
+
                     b.Property<string>("LegacyId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")

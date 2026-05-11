@@ -90,6 +90,7 @@
 </script>
 
 {#if entries.length > 0 && xDomain}
+  <div class="h-full w-full">
   <Chart
     data={glucoseData}
     x={(d) => d.time}
@@ -113,4 +114,5 @@
       </Svg>
     {/snippet}
   </Chart>
+  </div>
 {/if}

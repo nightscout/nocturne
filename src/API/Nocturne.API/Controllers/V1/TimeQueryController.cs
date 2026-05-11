@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <seealso cref="ITimeQueryService"/>
 [ApiController]
+[Tags("V1")]
 [Route("api/v1")]
 public class TimeQueryController : ControllerBase
 {

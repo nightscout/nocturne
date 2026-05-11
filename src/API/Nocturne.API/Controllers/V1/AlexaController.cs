@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V1;
 /// <seealso cref="IAlexaService"/>
 /// <seealso cref="IAuthorizationService"/>
 [ApiController]
+[Tags("V1")]
 [Route("api/[controller]")]
 public class AlexaController : ControllerBase
 {

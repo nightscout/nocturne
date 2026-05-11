@@ -15,6 +15,7 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <seealso cref="INotificationV1Service"/>
 [ApiController]
+[Tags("V1")]
 [Route("api/v1")]
 [Produces("application/json")]
 [Authorize(Policy = PolicyNames.HasPermissions)]

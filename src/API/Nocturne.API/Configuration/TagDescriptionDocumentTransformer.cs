@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 using YamlDotNet.Serialization;
@@ -18,6 +19,15 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
     {
         _tagDiagrams = BuildTagDiagramMap(env);
     }
+
+    private static readonly Dictionary<string, string> DisplayNames = new()
+    {
+        ["PlatformAdmin"] = "Platform Admin",
+        ["TenantAdmin"] = "Tenant Admin",
+        ["V1"] = "Nightscout V1",
+        ["V2"] = "Nightscout V2",
+        ["V3"] = "Nightscout V3",
+    };
 
     private static readonly Dictionary<string, string> Descriptions = new()
     {
@@ -292,11 +302,19 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
                 description = sb.ToString().TrimEnd();
             }
 
-            tags.Add(new OpenApiTag
+            var tagObj = new OpenApiTag
             {
                 Name = tagName,
                 Description = description,
-            });
+            };
+
+            if (DisplayNames.TryGetValue(tagName, out var displayName))
+            {
+                tagObj.Extensions ??= new Dictionary<string, IOpenApiExtension>();
+                tagObj.Extensions["x-displayName"] = new JsonNodeExtension(JsonValue.Create(displayName));
+            }
+
+            tags.Add(tagObj);
         }
 
         document.Tags = tags;

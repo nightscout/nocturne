@@ -4,6 +4,7 @@ using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4;
@@ -45,6 +46,8 @@ public class TreatmentDecomposerNotesTests : IDisposable
             .ReturnsAsync((Guid?)null);
 
         var profileDecomposerMock = new Mock<IProfileDecomposer>();
+        var activeProfileResolverMock = new Mock<IActiveProfileResolver>();
+        var insulinRepoMock = new Mock<IPatientInsulinRepository>();
 
         _decomposer = new TreatmentDecomposer(
             _context,
@@ -54,6 +57,8 @@ public class TreatmentDecomposerNotesTests : IDisposable
             treatmentFoodServiceMock.Object,
             deviceServiceMock.Object,
             profileDecomposerMock.Object,
+            activeProfileResolverMock.Object,
+            insulinRepoMock.Object,
             NullLogger<TreatmentDecomposer>.Instance);
     }
 

@@ -18,6 +18,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="IApsSnapshotRepository"/>
 /// <seealso cref="ApsSnapshot"/>
 [ApiController]
+[Tags("Devices")]
 [Route("api/v4/device-status/aps")]
 [Authorize]
 [Produces("application/json")]

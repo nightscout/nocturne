@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { ArrowLeftRight, ArrowRight } from "lucide-svelte";
+  import { ArrowLeftRight, ArrowRight, CalendarDays } from "lucide-svelte";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import * as Popover from "$lib/components/ui/popover";
   import * as Select from "$lib/components/ui/select";
+  import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { getReportsData, type DateRangeInput } from "$api/reports.remote";
   import { bg, bgLabel } from "$lib/utils/formatting";
@@ -82,19 +84,32 @@
   ];
 
   let preset = $state<Preset>("last14-prior14");
+  let openPopover = $state<"a" | "b" | null>(null);
   let periods = $state<Periods>(computePreset("last14-prior14"));
+  /** The period values that queries are actually reading from. */
+  let committed = $state<Periods>(computePreset("last14-prior14"));
 
   function applyPreset(p: Preset) {
     preset = p;
-    if (p !== "custom") periods = computePreset(p);
+    if (p !== "custom") {
+      periods = computePreset(p);
+      committed = periods;
+    }
   }
 
   function swap() {
     periods = { a: periods.b, b: periods.a };
   }
 
-  const inputA = $derived<DateRangeInput>({ from: periods.a.from, to: periods.a.to });
-  const inputB = $derived<DateRangeInput>({ from: periods.b.from, to: periods.b.to });
+  const inputA = $derived<DateRangeInput>({ from: committed.a.from, to: committed.a.to });
+  const inputB = $derived<DateRangeInput>({ from: committed.b.from, to: committed.b.to });
+
+  const isDirty = $derived(
+    periods.a.from !== committed.a.from ||
+    periods.a.to !== committed.a.to ||
+    periods.b.from !== committed.b.from ||
+    periods.b.to !== committed.b.to
+  );
 
   // Call queries directly in reactive context — SvelteKit query() returns a
   // reactive QueryResult, not a Promise. Using $derived ensures the queries
@@ -373,6 +388,14 @@
           <ArrowLeftRight class="h-4 w-4" />
           Swap
         </Button>
+        <Button
+          size="sm"
+          disabled={!isDirty}
+          onclick={() => { committed = { ...periods }; }}
+          class="gap-2"
+        >
+          Load
+        </Button>
       </div>
 
       <div class="grid gap-4 md:grid-cols-2">
@@ -397,35 +420,39 @@
                 {daysBetween(p.from, p.to)}d
               </span>
             </div>
-            <div class="flex items-center gap-2">
-              <Input
-                type="date"
-                value={p.from}
-                max={p.to}
-                onchange={(e) => {
-                  preset = "custom";
-                  periods = {
-                    ...periods,
-                    [cfg.side]: { ...p, from: e.currentTarget.value },
-                  };
-                }}
-                class="h-8 text-xs"
-              />
-              <span class="text-xs text-muted-foreground">→</span>
-              <Input
-                type="date"
-                value={p.to}
-                min={p.from}
-                onchange={(e) => {
-                  preset = "custom";
-                  periods = {
-                    ...periods,
-                    [cfg.side]: { ...p, to: e.currentTarget.value },
-                  };
-                }}
-                class="h-8 text-xs"
-              />
-            </div>
+            <Popover.Root
+              open={openPopover === cfg.side}
+              onOpenChange={(v) => (openPopover = v ? cfg.side : null)}
+            >
+              <Popover.Trigger>
+                {#snippet child({ props }: { props: Record<string, unknown> })}
+                  <button
+                    {...props}
+                    class="flex w-full items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-xs text-left hover:bg-muted/40 transition-colors"
+                  >
+                    <CalendarDays class="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span class="font-mono">
+                      {rangeDisplay(p.from, p.to)}
+                    </span>
+                  </button>
+                {/snippet}
+              </Popover.Trigger>
+              <Popover.Content class="p-0 w-auto" align="start">
+                <GlucoseRangeCalendarPicker
+                  startDate={p.from}
+                  endDate={p.to}
+                  maxDate={fmtIso(new Date())}
+                  onRangeChange={(start, end) => {
+                    preset = "custom";
+                    periods = {
+                      ...periods,
+                      [cfg.side]: { ...p, from: start, to: end },
+                    };
+                    openPopover = null;
+                  }}
+                />
+              </Popover.Content>
+            </Popover.Root>
           </div>
         {/each}
       </div>

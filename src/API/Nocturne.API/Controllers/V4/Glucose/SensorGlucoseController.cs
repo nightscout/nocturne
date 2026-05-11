@@ -21,6 +21,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="V4CrudControllerBase{TModel, TCreateRequest, TUpdateRequest, TRepository}"/>
 [ApiController]
+[Tags("Glucose")]
 [Route("api/v4/glucose/sensor")]
 [Authorize]
 [Produces("application/json")]

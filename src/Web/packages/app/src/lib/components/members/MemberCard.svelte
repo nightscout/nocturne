@@ -49,6 +49,8 @@
 
   let editingRoleIds = $state<string[]>([]);
   let editingPermissions = $state<string[]>([]);
+  let originalRoleIds = $state<string[]>([]);
+  let originalPermissions = $state<string[]>([]);
   let showDirectPermissions = $state(false);
 
   /** Union of all permissions from the currently selected roles */
@@ -59,12 +61,6 @@
     })
   );
 
-  /** Original values for dirty checking */
-  const originalRoleIds = $derived(
-    (member.roles ?? []).map((r: any) => r.roleId as string)
-  );
-  const originalPermissions = $derived([...(member.directPermissions ?? [])]);
-
   const isDirty = $derived(
     JSON.stringify([...editingRoleIds].sort()) !== JSON.stringify([...originalRoleIds].sort()) ||
     JSON.stringify([...editingPermissions].sort()) !== JSON.stringify([...originalPermissions].sort())
@@ -72,8 +68,10 @@
 
   function toggleExpand() {
     if (!isExpanded) {
-      editingRoleIds = (member.roles ?? []).map((r: any) => r.roleId as string);
+      editingRoleIds = (member.roles ?? []).map((r) => r.roleId ?? '').filter(Boolean);
       editingPermissions = [...(member.directPermissions ?? [])];
+      originalRoleIds = [...editingRoleIds];
+      originalPermissions = [...editingPermissions];
       showDirectPermissions = false;
     }
     onToggleExpand();
@@ -92,6 +90,8 @@
   }
 
   function handleCancel() {
+    editingRoleIds = [...originalRoleIds];
+    editingPermissions = [...originalPermissions];
     onToggleExpand();
   }
 </script>

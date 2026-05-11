@@ -11,6 +11,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </summary>
 /// <seealso cref="ITrackerAlertService"/>
 [ApiController]
+[Tags("Monitoring")]
 [Authorize]
 [Route("api/v4/trackers/alerts")]
 public class TrackerAlertsController : ControllerBase

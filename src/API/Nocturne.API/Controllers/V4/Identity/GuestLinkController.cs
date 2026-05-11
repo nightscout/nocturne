@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// Manages temporary guest access links for read-only data sharing.
 /// </summary>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/guest-links")]
 [Produces("application/json")]
 public class GuestLinkController : ControllerBase

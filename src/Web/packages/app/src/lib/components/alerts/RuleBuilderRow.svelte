@@ -198,6 +198,7 @@
 {#if child.type === "composite"}
   <!-- Nested group: indented IFTTT block with eyebrow + actions row above -->
   <div
+    role="group"
     class="rounded-md border bg-background p-2 space-y-2 transition-colors"
     class:opacity-50={isDragSource}
     class:ring-2={isOverGroup}
@@ -266,6 +267,7 @@
 {:else}
   <!-- Leaf row (possibly wrapped in NOT/SUSTAINED) -->
   <div
+    role="listitem"
     class="group/row flex items-center gap-2 rounded-md border bg-background px-2 py-1.5 transition-opacity"
     class:opacity-50={isDragSource}
     draggable="true"

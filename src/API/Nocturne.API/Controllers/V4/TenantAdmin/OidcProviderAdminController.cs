@@ -21,6 +21,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// a provider before any passkeys exist.
 /// </remarks>
 [ApiController]
+[Tags("TenantAdmin")]
 [Route("api/v4/admin/oidc-providers")]
 [Produces("application/json")]
 [Authorize(Roles = "platform_admin")]

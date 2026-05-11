@@ -18,6 +18,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 /// <seealso cref="ISensitivityScheduleRepository"/>
 /// <seealso cref="ITargetRangeScheduleRepository"/>
 [ApiController]
+[Tags("Profiles")]
 [Route("api/v4/profile")]
 [Authorize]
 [Produces("application/json")]

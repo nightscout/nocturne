@@ -15,6 +15,7 @@ namespace Nocturne.API.Controllers.V2;
 /// </summary>
 /// <seealso cref="INotificationV2Service"/>
 [ApiController]
+[Tags("V2")]
 [Route("api/v2/notifications")]
 [Produces("application/json")]
 [ClientPropertyName("v2Notifications")]
