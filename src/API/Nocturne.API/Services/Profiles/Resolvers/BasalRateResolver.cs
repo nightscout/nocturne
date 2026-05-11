@@ -113,11 +113,8 @@ internal sealed class BasalRateResolver : IBasalRateResolver
                 }
             }
 
-            if (active is null)
-                return DefaultBasalRate;
-
-            var profileName  = active.ProfileName;
-            var adjustment   = active.Adjustment;
+            var profileName  = active?.ProfileName ?? "Default";
+            var adjustment   = active?.Adjustment;
             var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
 
             if (!schedules.TryGetValue(profileName, out var schedule) || schedule is null)

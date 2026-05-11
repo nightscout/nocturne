@@ -214,16 +214,17 @@ public class BasalRateResolverTests : IDisposable
         public async Task BoundaryTimestamp_AtSpanStartIsIncluded()
         {
             var schedule = MakeSchedule((0, 2.0));
-            _repo.Setup(r => r.GetActiveAtAsync(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            _repo.Setup(r => r.GetActiveAtAsync("Profile2", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(schedule);
+            // "Default" is NOT set up — returns null → DefaultBasalRate fallback
 
             var spanStart = MidnightMills + 3_600_000;
-            SetupSpans(new ProfileSpan("Default", spanStart, null, null));
+            SetupSpans(new ProfileSpan("Profile2", spanStart, null, null));
 
             var rateAt = await _sut.BuildResolverAsync(MidnightMills, EndOfDayMills);
 
-            rateAt(spanStart).Should().Be(2.0);      // exactly at start — included
-            rateAt(spanStart - 1).Should().Be(1.0);  // one ms before — no span → default
+            rateAt(spanStart).Should().Be(2.0);      // exactly at start — Profile2 active
+            rateAt(spanStart - 1).Should().Be(1.0);  // one ms before — no span, Default schedule null → DefaultBasalRate
         }
     }
 }
