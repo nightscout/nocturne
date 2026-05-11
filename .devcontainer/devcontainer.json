@@ -17,10 +17,19 @@
 		"ghcr.io/devcontainers/features/git:1": {}
 	},
 	"postCreateCommand": "dotnet tool install -g Aspire.Cli && dotnet restore && (cd src/Web && pnpm install)",
+	"postAttachCommand": {
+		"aspire": "pgrep -f 'aspire run' >/dev/null || nohup bash -lc 'cd /workspaces/nocturne && aspire run' > /tmp/aspire.log 2>&1 & disown; echo 'aspire run started in background; tail -f /tmp/aspire.log'"
+	},
 	"remoteEnv": {
 		"PATH": "${containerEnv:PATH}:/home/vscode/.dotnet/tools"
 	},
 	"forwardPorts": [1612],
+	"portsAttributes": {
+		"1612": {
+			"label": "Aspire gateway",
+			"onAutoForward": "openBrowser"
+		}
+	},
 	"remoteUser": "vscode",
 	"customizations": {
 		"vscode": {
