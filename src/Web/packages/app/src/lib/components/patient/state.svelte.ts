@@ -7,6 +7,17 @@ import {
   type InsulinFormulation,
   DiabetesType,
 } from "$api";
+import { FormGuard } from "$lib/forms";
+import { z } from "zod";
+
+const ClinicalFieldsSchema = z.object({
+  diabetesType: z.string().min(1, "Diabetes type is required"),
+  diabetesTypeOther: z.string().optional(),
+  diagnosisDate: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  preferredName: z.string().optional(),
+  pronouns: z.string().optional(),
+});
 
 /** Reactive clinical form state bound to the patient record API */
 export class ClinicalState {
@@ -16,14 +27,16 @@ export class ClinicalState {
   dateOfBirth = $state("");
   preferredName = $state("");
   pronouns = $state("");
-  saving = $state(false);
-  saveError = $state<string | null>(null);
 
   readonly #record = patientRemote.getPatientRecord();
+  readonly form = patientRemote.updatePatientRecord;
+  readonly guard: FormGuard<z.infer<typeof ClinicalFieldsSchema>>;
 
-  get isValid() { return !!this.diabetesType; }
+  /** Expose record for hidden form inputs (id, createdAt, etc.) */
+  get record() { return this.#record.current; }
 
-  constructor() {
+  constructor(el: () => HTMLFormElement | null) {
+    // Sync fields from server when record loads
     $effect(() => {
       const r = this.#record.current;
       if (r) {
@@ -39,36 +52,46 @@ export class ClinicalState {
         this.pronouns = r.pronouns ?? "";
       }
     });
-  }
 
-  save = async (): Promise<boolean> => {
-    this.saving = true;
-    this.saveError = null;
-    try {
-      const current = this.#record.current;
-      await patientRemote.updatePatientRecord({
-        id: current?.id,
-        avatarUrl: current?.avatarUrl,
-        createdAt: current?.createdAt instanceof Date ? current.createdAt.toISOString() : current?.createdAt,
-        modifiedAt: current?.modifiedAt instanceof Date ? current.modifiedAt.toISOString() : current?.modifiedAt,
-        diabetesType: (this.diabetesType as DiabetesType) || undefined,
-        diabetesTypeOther:
-          this.diabetesType === DiabetesType.Other
-            ? this.diabetesTypeOther
-            : undefined,
-        diagnosisDate: this.diagnosisDate || undefined,
-        dateOfBirth: this.dateOfBirth || undefined,
-        preferredName: this.preferredName || undefined,
-        pronouns: this.pronouns || undefined,
-      });
-      return true;
-    } catch {
-      this.saveError = "Something went wrong. Please try again.";
-      return false;
-    } finally {
-      this.saving = false;
-    }
-  };
+    this.guard = new FormGuard({
+      form: this.form,
+      schema: ClinicalFieldsSchema,
+      el,
+      initial: () => {
+        const r = this.#record.current;
+        if (!r) return null;
+        return {
+          diabetesType: r.diabetesType ?? "",
+          diabetesTypeOther: r.diabetesTypeOther ?? "",
+          diagnosisDate: r.diagnosisDate
+            ? new Date(r.diagnosisDate).toISOString().split("T")[0]
+            : "",
+          dateOfBirth: r.dateOfBirth
+            ? new Date(r.dateOfBirth).toISOString().split("T")[0]
+            : "",
+          preferredName: r.preferredName ?? "",
+          pronouns: r.pronouns ?? "",
+        };
+      },
+      values: () => ({
+        diabetesType: this.diabetesType,
+        diabetesTypeOther: this.diabetesType === DiabetesType.Other ? this.diabetesTypeOther : "",
+        diagnosisDate: this.diagnosisDate,
+        dateOfBirth: this.dateOfBirth,
+        preferredName: this.preferredName,
+        pronouns: this.pronouns,
+      }),
+      navBlockMessage: "You have unsaved changes. Leave anyway?",
+      onreset: (snapshot) => {
+        this.diabetesType = snapshot.diabetesType;
+        this.diabetesTypeOther = snapshot.diabetesTypeOther ?? "";
+        this.diagnosisDate = snapshot.diagnosisDate ?? "";
+        this.dateOfBirth = snapshot.dateOfBirth ?? "";
+        this.preferredName = snapshot.preferredName ?? "";
+        this.pronouns = snapshot.pronouns ?? "";
+      },
+    });
+  }
 }
 
 /** Reactive device list state with CRUD */
