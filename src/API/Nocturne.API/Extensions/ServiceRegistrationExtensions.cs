@@ -713,6 +713,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IDeduplicationService, DeduplicationService>();
         services.AddSingleton<ISecretEncryptionService, SecretEncryptionService>();
         services.AddScoped<IConnectorConfigurationService, ConnectorConfigurationService>();
+        services.AddScoped<PlatformSettingsService>();
         services.AddScoped<IConnectorSyncService, ConnectorSyncService>();
 
         // Connector runtime
