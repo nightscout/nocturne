@@ -280,9 +280,10 @@ public class ActiveProfileResolverTests : IDisposable
             var result = await _sut.GetActiveProfileSpansForRangeAsync(MorningMills, EveningMills);
 
             result.Should().HaveCount(1);
-            result[0].Adjustment.Should().NotBeNull();
-            result[0].Adjustment!.Percentage.Should().Be(80.0);
-            result[0].Adjustment.TimeshiftMs.Should().Be(1_800_000); // 0.5 hours in ms
+            var adj = result[0].Adjustment;
+            adj.Should().NotBeNull();
+            adj!.Percentage.Should().Be(80.0);
+            adj.TimeshiftMs.Should().Be(1_800_000); // 0.5 hours in ms
         }
 
         [Fact]
