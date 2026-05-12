@@ -481,6 +481,9 @@ public static class ServiceRegistrationExtensions
         >();
         services.AddScoped<IClockFaceService, ClockFaceService>();
         services.AddScoped<IWidgetSummaryService, WidgetSummaryService>();
+        // Basal series builder (used by chart data pipeline and reports endpoint)
+        services.AddScoped<IBasalSeriesBuilder, BasalSeriesBuilder>();
+
         // Chart data pipeline stages (order matters!)
         services.AddScoped<ProfileLoadStage>();
         services.AddScoped<DataFetchStage>();
