@@ -1045,13 +1045,14 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         var result = new V4Models.DecompositionResult { CorrelationId = batch.Id };
 
         // Typed collection lists for bulk insert
-        var bolusList = new List<V4Models.Bolus>();
-        var carbList = new List<V4Models.CarbIntake>();
-        var bgCheckList = new List<V4Models.BGCheck>();
-        var noteList = new List<V4Models.Note>();
-        var bolusCalcList = new List<V4Models.BolusCalculation>();
-        var deviceEventList = new List<V4Models.DeviceEvent>();
-        var tempBasalList = new List<V4Models.TempBasal>();
+        var estimatedPerType = Math.Max(1, treatments.Count / 4);
+        var bolusList = new List<V4Models.Bolus>(estimatedPerType);
+        var carbList = new List<V4Models.CarbIntake>(estimatedPerType);
+        var bgCheckList = new List<V4Models.BGCheck>(estimatedPerType);
+        var noteList = new List<V4Models.Note>(estimatedPerType);
+        var bolusCalcList = new List<V4Models.BolusCalculation>(estimatedPerType);
+        var deviceEventList = new List<V4Models.DeviceEvent>(estimatedPerType);
+        var tempBasalList = new List<V4Models.TempBasal>(estimatedPerType);
 
         // State span treatments are upserted individually (idempotent semantics)
         var stateSpanTreatments = new List<(Treatment Treatment, bool IsProfileSwitch, bool IsOverride, bool IsTemporaryTarget)>();
