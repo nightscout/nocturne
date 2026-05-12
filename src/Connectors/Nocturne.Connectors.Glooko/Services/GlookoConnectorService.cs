@@ -289,16 +289,17 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             var from = request.From.HasValue
                 ? _timeMapper.ToGlookoTime(request.From.Value)
-                : (DateTime?)null;
+                : _timeMapper.ToGlookoTime(DateTime.UtcNow.AddDays(-1));
+            var to = _timeMapper.ToGlookoTime(DateTime.UtcNow);
 
             await ReportMessageAsync(progressReporter, SyncMessageType.FetchingData,
-                new() { ["from"] = (from ?? DateTime.UtcNow.AddMonths(-6)).ToString("MMM dd"), ["to"] = DateTime.UtcNow.ToString("MMM dd") },
+                new() { ["from"] = from.ToString("MMM dd"), ["to"] = to.ToString("MMM dd") },
                 cancellationToken);
 
             // Fetch + map: V2 or V3 path fills the same data structure
             var syncData = _config.UseV3Api
-                ? await FetchAndMapViaV3Async(from)
-                : await FetchAndMapViaV2Async(from);
+                ? await FetchAndMapViaV3Async(from, to)
+                : await FetchAndMapViaV2Async(from, to);
 
             if (syncData == null)
             {
@@ -361,9 +362,9 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     /// <summary>
     ///     Fetches from all V2 endpoints and maps to the common <see cref="GlookoSyncData"/> structure.
     /// </summary>
-    private async Task<GlookoSyncData?> FetchAndMapViaV2Async(DateTime? from)
+    private async Task<GlookoSyncData?> FetchAndMapViaV2Async(DateTime fromDate, DateTime toDate)
     {
-        var batchData = await FetchBatchDataAsync(from);
+        var batchData = await FetchBatchDataAsync(fromDate, toDate);
         if (batchData == null) return null;
 
         var (boluses, carbs, batches) = _v4TreatmentMapper.MapBatchData(batchData);
@@ -392,17 +393,17 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     /// <summary>
     ///     Fetches from V3 graph/data and histories endpoints, maps to the common <see cref="GlookoSyncData"/> structure.
     /// </summary>
-    private async Task<GlookoSyncData?> FetchAndMapViaV3Async(DateTime? from)
+    private async Task<GlookoSyncData?> FetchAndMapViaV3Async(DateTime fromDate, DateTime toDate)
     {
         _logger.LogInformation("[{ConnectorSource}] Fetching data from v3 API...", ConnectorSource);
 
-        var v3Data = await FetchV3GraphDataAsync(from);
+        var v3Data = await FetchV3GraphDataAsync(fromDate, toDate);
         if (v3Data == null) return null;
 
         GlookoV3HistoriesResponse? v3Histories = null;
         try
         {
-            v3Histories = await FetchV3HistoriesAsync(from);
+            v3Histories = await FetchV3HistoriesAsync(fromDate, toDate);
         }
         catch (Exception histEx)
         {
@@ -431,7 +432,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         {
             try
             {
-                v2Foods = await FetchV2FoodsAsync(from);
+                v2Foods = await FetchV2FoodsAsync(fromDate, toDate);
             }
             catch (Exception v2Ex)
             {
@@ -664,15 +665,12 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     /// <summary>
     ///     Fetches comprehensive batch data from all v2 Glooko endpoints.
     /// </summary>
-    public async Task<GlookoBatchData?> FetchBatchDataAsync(DateTime? since = null)
+    public async Task<GlookoBatchData?> FetchBatchDataAsync(DateTime fromDate, DateTime toDate)
     {
         try
         {
             var patientCode = EnsureAuthenticatedAndGetCode();
             if (patientCode == null) return null;
-
-            var fromDate = since ?? _timeMapper.ToGlookoTime(DateTime.UtcNow.AddDays(-1));
-            var toDate = _timeMapper.ToGlookoTime(DateTime.UtcNow);
 
             _logger.LogInformation("Fetching comprehensive Glooko data from {From:yyyy-MM-dd} to {To:yyyy-MM-dd}", fromDate, toDate);
 
@@ -770,15 +768,12 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     ///     Fetches only the V2 foods endpoint. Used by the V3 sync path to get
     ///     rich food metadata (externalId, brand) that V3 histories doesn't provide.
     /// </summary>
-    public async Task<GlookoFood[]?> FetchV2FoodsAsync(DateTime? since = null)
+    public async Task<GlookoFood[]?> FetchV2FoodsAsync(DateTime fromDate, DateTime toDate)
     {
         try
         {
             var patientCode = EnsureAuthenticatedAndGetCode();
             if (patientCode == null) return null;
-
-            var fromDate = since ?? _timeMapper.ToGlookoTime(DateTime.UtcNow.AddDays(-1));
-            var toDate = _timeMapper.ToGlookoTime(DateTime.UtcNow);
 
             var url = ConstructV2Url(GlookoConstants.FoodsPath, fromDate, toDate);
             var result = await FetchFromGlookoEndpointWithRetry(url);
@@ -835,7 +830,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     /// <summary>
     ///     Fetches data from v3 graph/data API — single call for all data types.
     /// </summary>
-    public async Task<GlookoV3GraphResponse?> FetchV3GraphDataAsync(DateTime? since = null)
+    public async Task<GlookoV3GraphResponse?> FetchV3GraphDataAsync(DateTime fromDate, DateTime toDate)
     {
         try
         {
@@ -843,9 +838,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             if (patientCode == null) return null;
 
             if (string.IsNullOrEmpty(_meterUnits)) await FetchV3UserProfileAsync();
-
-            var fromDate = since ?? _timeMapper.ToGlookoTime(DateTime.UtcNow.AddDays(-1));
-            var toDate = _timeMapper.ToGlookoTime(DateTime.UtcNow);
 
             var url = ConstructV3GraphUrl(fromDate, toDate);
             _logger.LogInformation("[{ConnectorSource}] Fetching v3 graph data from {StartDate:yyyy-MM-dd} to {EndDate:yyyy-MM-dd}",
@@ -932,15 +924,12 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     ///     Fetches rich history data from the v3 users/summary/histories API.
     ///     Contains meals with per-food nutritional data, medications, exercises, etc.
     /// </summary>
-    public async Task<GlookoV3HistoriesResponse?> FetchV3HistoriesAsync(DateTime? since = null)
+    public async Task<GlookoV3HistoriesResponse?> FetchV3HistoriesAsync(DateTime fromDate, DateTime toDate)
     {
         try
         {
             var patientCode = EnsureAuthenticatedAndGetCode();
             if (patientCode == null) return null;
-
-            var fromDate = since ?? _timeMapper.ToGlookoTime(DateTime.UtcNow.AddDays(-1));
-            var toDate = _timeMapper.ToGlookoTime(DateTime.UtcNow);
 
             var url = $"{GlookoConstants.V3HistoriesPath}?patient={patientCode}"
                     + $"&startDate={fromDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
