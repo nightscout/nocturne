@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Helpers;
 using Nocturne.API.Multitenancy;
 
 namespace Nocturne.API.Middleware;
@@ -25,12 +26,12 @@ namespace Nocturne.API.Middleware;
 /// </para>
 /// </remarks>
 /// <seealso cref="Multitenancy.TenantResolutionMiddleware"/>
-/// <seealso cref="MultitenancyConfiguration"/>
+/// <seealso cref="BaseDomainOptions"/>
 public partial class OidcCallbackRedirectMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<OidcCallbackRedirectMiddleware> _logger;
-    private readonly MultitenancyConfiguration _config;
+    private readonly BaseDomainOptions _config;
 
     private static readonly string[] CallbackPaths =
     [
@@ -43,11 +44,11 @@ public partial class OidcCallbackRedirectMiddleware
     /// </summary>
     /// <param name="next">The next middleware in the pipeline.</param>
     /// <param name="logger">Logger for redirect diagnostics.</param>
-    /// <param name="config">Multitenancy configuration providing the base domain.</param>
+    /// <param name="config">Base domain configuration.</param>
     public OidcCallbackRedirectMiddleware(
         RequestDelegate next,
         ILogger<OidcCallbackRedirectMiddleware> logger,
-        IOptions<MultitenancyConfiguration> config)
+        IOptions<BaseDomainOptions> config)
     {
         _next = next;
         _logger = logger;
@@ -121,15 +122,7 @@ public partial class OidcCallbackRedirectMiddleware
     {
         try
         {
-            // Restore base64 padding
-            var padded = (encoded.Length % 4) switch
-            {
-                2 => encoded + "==",
-                3 => encoded + "=",
-                _ => encoded,
-            };
-
-            var bytes = Convert.FromBase64String(padded.Replace("-", "+").Replace("_", "/"));
+            var bytes = Base64Url.Decode(encoded);
             var json = Encoding.UTF8.GetString(bytes);
 
             using var doc = JsonDocument.Parse(json);

@@ -23,6 +23,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="ConnectorFoodEntry"/>
 /// <seealso cref="MealMatchingController"/>
 [ApiController]
+[Tags("Treatments")]
 [Route("api/v4/connector-food-entries")]
 public class ConnectorFoodEntriesController : ControllerBase
 {

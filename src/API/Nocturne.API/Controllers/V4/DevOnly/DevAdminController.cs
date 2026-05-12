@@ -6,8 +6,10 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Models.DevOnly;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Controllers.V4.DevOnly;
@@ -934,6 +936,67 @@ public class DevAdminController : ControllerBase
         });
     }
 
+    // ── Seed Tenant (E2E test bootstrap) ────────────────────────────────
+
+    /// <summary>
+    /// Create a tenant, owner subject, owner membership, and a session in one call.
+    /// Used exclusively by the E2E test suite to bypass passkey/OIDC ceremonies.
+    /// </summary>
+    [HttpPost("seed-tenant")]
+    public async Task<ActionResult<DevSeedTenantResponse>> SeedTenant(
+        [FromBody] DevSeedTenantRequest request,
+        [FromServices] ISessionService sessionService,
+        [FromServices] ISubjectService subjectService,
+        CancellationToken ct)
+    {
+        var sanitizedSlugForLog = (request.Slug ?? string.Empty)
+            .Replace("\r", string.Empty)
+            .Replace("\n", string.Empty);
+        _logger.LogInformation("Dev seed-tenant: slug={Slug}", sanitizedSlugForLog);
+
+        var validation = await _tenantService.ValidateSlugAsync(request.Slug, ct);
+        if (!validation.IsValid)
+            return BadRequest(new { error = validation.Message });
+
+        // 1. Tenant (seeds roles, public subject, OAuth clients)
+        var tenant = await _tenantService.CreateWithoutOwnerAsync(
+            request.Slug, request.DisplayName, ct: ct);
+
+        // 2. Owner subject
+        var subjectResult = await subjectService.CreateSubjectAsync(new Subject
+        {
+            Id = Guid.CreateVersion7(),
+            Name = request.OwnerUsername,
+            Type = SubjectType.User,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+        });
+
+        // 3. Owner membership with full permissions
+        await SetTenantGuc(tenant.Id, ct);
+        var ownerRole = await _db.TenantRoles
+            .Where(r => r.TenantId == tenant.Id && r.IsSystem && r.Slug == TenantPermissions.SeedRoles.Owner)
+            .FirstAsync(ct);
+
+        await _tenantService.AddMemberAsync(
+            tenant.Id, subjectResult.Subject.Id, [ownerRole.Id], ct: ct);
+
+        // 4. Session
+        var sessionContext = new SessionContext(
+            DeviceDescription: "e2e-test",
+            IpAddress: "127.0.0.1",
+            UserAgent: "Nocturne.E2E.Tests");
+        var tokens = await sessionService.IssueSessionAsync(
+            subjectResult.Subject.Id, sessionContext, ct);
+
+        return Ok(new DevSeedTenantResponse(
+            tenant.Id,
+            subjectResult.Subject.Id,
+            tokens.AccessToken,
+            tokens.RefreshToken,
+            tokens.ExpiresInSeconds));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private async Task SetTenantGuc(Guid tenantId, CancellationToken ct)
@@ -946,6 +1009,15 @@ public class DevAdminController : ControllerBase
 }
 
 public record DevCreateTenantRequest(string Slug, string DisplayName);
+
+public record DevSeedTenantRequest(string Slug, string DisplayName, string OwnerUsername);
+
+public record DevSeedTenantResponse(
+    Guid TenantId,
+    Guid SubjectId,
+    string AccessToken,
+    string RefreshToken,
+    int ExpiresInSeconds);
 
 public record DevTenantSummaryDto(
     Guid Id,

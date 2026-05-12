@@ -4,7 +4,8 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Windows.Widgets.Providers;
-using NightscoutFoundation.Nocturne.Model;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Widget;
 using Nocturne.Widget.Contracts;
 using Nocturne.Widget.Contracts.Helpers;
 

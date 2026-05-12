@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
+using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V3;
 
@@ -11,6 +12,7 @@ namespace Nocturne.API.Controllers.V3;
 /// <seealso cref="IVersionService"/>
 /// <seealso cref="VersionResponse"/>
 [ApiController]
+[Tags("V3 Version")]
 [Route("api/v3/[controller]")]
 public class VersionController : ControllerBase
 {
@@ -33,6 +35,7 @@ public class VersionController : ControllerBase
     /// </remarks>
     /// <response code="200">Version information (always returns 200).</response>
     [HttpGet]
+    [RemoteQuery]
     [NightscoutEndpoint("/api/v3/version")]
     [ProducesResponseType(typeof(VersionResponse), 200)]
     public async Task<ActionResult<VersionResponse>> GetVersion()

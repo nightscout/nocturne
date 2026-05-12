@@ -197,8 +197,8 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IPasskeyService, PasskeyService>();
         services.AddScoped<IRecoveryCodeService, RecoveryCodeService>();
         services.AddScoped<ITotpService, TotpService>();
-        // Derive WebAuthn RP config from the multitenancy base domain (single source of truth)
-        var baseDomain = configuration["Multitenancy:BaseDomain"] ?? "localhost:1612";
+        // Derive WebAuthn RP config from the base domain (single source of truth)
+        var baseDomain = configuration[BaseDomainOptions.ConfigKey] ?? "localhost:1612";
         var rpId = baseDomain.Split(':')[0]; // hostname without port
         var origin = $"https://{baseDomain}";
         services.AddFido2(options =>
@@ -208,9 +208,9 @@ public static class ServiceRegistrationExtensions
             options.Origins = new HashSet<string> { origin };
         });
 
-        // Multitenancy
-        services.Configure<MultitenancyConfiguration>(
-            configuration.GetSection(MultitenancyConfiguration.SectionName)
+        // Base domain (used by tenant resolution, OIDC redirects, etc.)
+        services.Configure<BaseDomainOptions>(opts =>
+            opts.BaseDomain = configuration[BaseDomainOptions.ConfigKey] ?? ""
         );
 
         // Operator (SaaS platform policy)
@@ -713,6 +713,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IDeduplicationService, DeduplicationService>();
         services.AddSingleton<ISecretEncryptionService, SecretEncryptionService>();
         services.AddScoped<IConnectorConfigurationService, ConnectorConfigurationService>();
+        services.AddScoped<PlatformSettingsService>();
         services.AddScoped<IConnectorSyncService, ConnectorSyncService>();
 
         // Connector runtime

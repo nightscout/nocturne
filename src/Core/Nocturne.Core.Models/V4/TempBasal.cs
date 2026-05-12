@@ -128,6 +128,13 @@ public class TempBasal
     public Guid? ApsSnapshotId { get; set; }
 
     /// <summary>
+    /// Snapshot of the insulin pharmacokinetic settings active when this temp basal was set.
+    /// Used by the IOB calculator for per-insulin basal IOB decay curves.
+    /// When null, falls back to profile-level DIA.
+    /// </summary>
+    public TreatmentInsulinContext? InsulinContext { get; set; }
+
+    /// <summary>
     /// Catch-all for fields not mapped to dedicated columns
     /// </summary>
     public Dictionary<string, object?>? AdditionalProperties { get; set; }

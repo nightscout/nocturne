@@ -93,7 +93,7 @@ public static class DevSnapshotCommandExtensions
             await File.WriteAllTextAsync(snapshotPath, prettyJson, context.CancellationToken);
 
             logger.LogInformation("Dev snapshot exported to {Path}", snapshotPath);
-            return CommandResults.Success();
+            return CommandResults.Success($"Exported to {snapshotPath}", "");
         }
         catch (Exception ex)
         {
@@ -134,7 +134,7 @@ public static class DevSnapshotCommandExtensions
             response.EnsureSuccessStatusCode();
 
             logger.LogInformation("Dev snapshot imported successfully");
-            return CommandResults.Success();
+            return CommandResults.Success("Snapshot imported", "");
         }
         catch (Exception ex)
         {
@@ -164,7 +164,7 @@ public static class DevSnapshotCommandExtensions
             response.EnsureSuccessStatusCode();
 
             logger.LogInformation("Connector sync triggered successfully");
-            return CommandResults.Success();
+            return CommandResults.Success("Connector sync triggered", "");
         }
         catch (Exception ex)
         {

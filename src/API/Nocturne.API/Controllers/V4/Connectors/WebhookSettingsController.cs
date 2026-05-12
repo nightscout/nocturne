@@ -17,6 +17,7 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 /// <seealso cref="WebhookRequestSender"/>
 /// <seealso cref="WebhookNotificationSettings"/>
 [ApiController]
+[Tags("Connectors")]
 [Route("api/v4/ui-settings/notifications/webhooks")]
 public class WebhookSettingsController(
     WebhookRequestSender requestSender,

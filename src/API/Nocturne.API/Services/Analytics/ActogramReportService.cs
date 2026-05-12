@@ -9,11 +9,14 @@ namespace Nocturne.API.Services.Analytics;
 
 /// <inheritdoc cref="IActogramReportService"/>
 /// <remarks>
-/// Fans the four required queries (glucose, sleep state spans, step counts,
-/// heart rates) out in parallel against per-request scoped resolvers. Threshold
-/// resolution mirrors <c>ProfileLoadStage</c>: very-low/very-high are fixed,
-/// low/high come from the active profile at the requested end time, with
-/// 70/180 fallbacks when no therapy settings exist yet.
+/// Issues the required queries (glucose, sleep state spans, step counts,
+/// heart rates) sequentially: every dependency resolves through the same
+/// per-request scoped <c>NocturneDbContext</c>, and EF Core's
+/// <c>ConcurrencyDetector</c> rejects parallel operations on a single
+/// context with <c>InvalidOperationException</c>. Threshold resolution
+/// mirrors <c>ProfileLoadStage</c>: very-low/very-high are fixed, low/high
+/// come from the active profile at the requested end time, with 70/180
+/// fallbacks when no therapy settings exist yet.
 /// </remarks>
 public sealed class ActogramReportService : IActogramReportService
 {
@@ -66,7 +69,12 @@ public sealed class ActogramReportService : IActogramReportService
         var rangeHours = Math.Max(1, (endTime - startTime) / (60.0 * 60 * 1000));
         var glucoseLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 12 * 1.5));
 
-        var glucoseTask = _sensorGlucoseRepository.GetAsync(
+        // Sequential awaits: every query below resolves through the same
+        // per-request scoped NocturneDbContext, and EF Core's ConcurrencyDetector
+        // rejects overlapping operations on a single context. Npgsql also
+        // serializes commands per connection, so Task.WhenAll buys no real
+        // throughput here even when it doesn't crash.
+        var glucoseRecords = await _sensorGlucoseRepository.GetAsync(
             from: fromDt,
             to: toDt,
             device: null,
@@ -77,7 +85,7 @@ public sealed class ActogramReportService : IActogramReportService
             ct: cancellationToken
         );
 
-        var sleepTask = _stateSpanService.GetStateSpansAsync(
+        var sleepRecords = await _stateSpanService.GetStateSpansAsync(
             category: StateSpanCategory.Sleep,
             from: fromDt,
             to: toDt,
@@ -86,29 +94,27 @@ public sealed class ActogramReportService : IActogramReportService
             cancellationToken: cancellationToken
         );
 
-        var stepsTask = _stepCountService.GetStepCountsByDateRangeAsync(
+        var stepRecords = await _stepCountService.GetStepCountsByDateRangeAsync(
             fromDt,
             toDt,
             cancellationToken
         );
 
-        var heartRatesTask = _heartRateService.GetHeartRatesByDateRangeAsync(
+        var heartRateRecords = await _heartRateService.GetHeartRatesByDateRangeAsync(
             fromDt,
             toDt,
             cancellationToken
         );
 
-        var thresholdsTask = BuildThresholdsAsync(endTime, cancellationToken);
-
-        await Task.WhenAll(glucoseTask, sleepTask, stepsTask, heartRatesTask, thresholdsTask);
+        var thresholdsRaw = await BuildThresholdsAsync(endTime, cancellationToken);
 
         var (glucoseData, glucoseYMax) = ChartDataService.BuildGlucoseData(
-            (await glucoseTask).ToList()
+            glucoseRecords.ToList()
         );
 
-        var thresholds = (await thresholdsTask) with { GlucoseYMax = glucoseYMax };
+        var thresholds = thresholdsRaw with { GlucoseYMax = glucoseYMax };
 
-        var heartRates = (await heartRatesTask)
+        var heartRates = heartRateRecords
             .Select(h => new HeartRatePointDto
             {
                 Time = h.Mills,
@@ -116,7 +122,7 @@ public sealed class ActogramReportService : IActogramReportService
             })
             .ToList();
 
-        var stepCounts = (await stepsTask)
+        var stepCounts = stepRecords
             .Select(s => new StepBubbleDto
             {
                 Time = s.Mills,
@@ -124,7 +130,7 @@ public sealed class ActogramReportService : IActogramReportService
             })
             .ToList();
 
-        var sleepSpans = (await sleepTask)
+        var sleepSpans = sleepRecords
             .Select(s => new ActogramSleepSpan
             {
                 StartMills = s.StartMills,

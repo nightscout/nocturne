@@ -11,6 +11,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// </summary>
 /// <seealso cref="IDiscrepancyAnalysisRepository"/>
 [ApiController]
+[Tags("TenantAdmin")]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
 public class DiscrepancyController : ControllerBase

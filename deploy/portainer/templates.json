@@ -1,0 +1,64 @@
+{
+  "version": "2",
+  "templates": [
+    {
+      "type": 3,
+      "title": "Nocturne",
+      "description": "Nightscout-compatible diabetes management API with Row Level Security and multi-tenancy.",
+      "categories": ["diabetes", "nightscout", "healthcare"],
+      "platform": "linux",
+      "note": "After deployment, configure data connectors (Dexcom, LibreLinkUp, etc.) and chat bot integrations (Discord, Slack, Telegram, WhatsApp) through Settings → Administration in the Nocturne UI. Bot credentials are encrypted at rest.",
+      "repository": {
+        "url": "https://github.com/nightscout/nocturne",
+        "stackfile": "deploy/portainer/docker-compose.yaml"
+      },
+      "env": [
+        {
+          "name": "NOCTURNE_API_IMAGE",
+          "label": "API image",
+          "default": "ghcr.io/nightscout/nocturne/nocturne-api:latest"
+        },
+        {
+          "name": "NOCTURNE_WEB_IMAGE",
+          "label": "Web image",
+          "default": "ghcr.io/nightscout/nocturne/nocturne-web:latest"
+        },
+        {
+          "name": "NOCTURNE_API_PORT",
+          "label": "API port",
+          "default": "8080"
+        },
+        {
+          "name": "BASE_DOMAIN",
+          "label": "Base domain",
+          "description": "Your domain name, e.g. nocturne.example.com"
+        },
+        {
+          "name": "INSTANCE_KEY",
+          "label": "Instance key",
+          "description": "Minimum 12 characters — used for JWT signing and service authentication"
+        },
+        {
+          "name": "POSTGRES_USERNAME",
+          "label": "PostgreSQL bootstrap username",
+          "default": "nocturne"
+        },
+        {
+          "name": "POSTGRES_PASSWORD",
+          "label": "PostgreSQL bootstrap password",
+          "description": "Used only at first container start to create runtime roles"
+        },
+        {
+          "name": "POSTGRES_MIGRATOR_PASSWORD",
+          "label": "Migrator role password",
+          "description": "Password for nocturne_migrator — owns the schema, runs EF migrations"
+        },
+        {
+          "name": "POSTGRES_APP_PASSWORD",
+          "label": "App role password",
+          "description": "Password for nocturne_app — runtime role, cannot bypass Row Level Security"
+        }
+      ]
+    }
+  ]
+}

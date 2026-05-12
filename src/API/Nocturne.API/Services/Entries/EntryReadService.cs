@@ -125,7 +125,7 @@ public class EntryReadService : IEntryStore
         int count, int skip, bool descending, CancellationToken ct)
     {
         // Single-type query: push limit/offset directly to the database
-        var results = await _sgRepo.GetAsync(from, to, device: null, source, count, skip, descending, false, ct);
+        var results = await _sgRepo.GetAsync(from, to, device: null, source, count, skip, descending, false, null, null, ct);
         return ExcludeDemoIfNeeded(results, excludeDemo).Select(EntryProjection.FromSensorGlucose).ToList();
     }
 
@@ -155,7 +155,7 @@ public class EntryReadService : IEntryStore
         var fetchCount = count + skip;
 
         // Sequential to avoid DbContext thread-safety issues with scoped lifetime
-        var sgResults = await _sgRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, false, ct);
+        var sgResults = await _sgRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, false, null, null, ct);
         var mgResults = await _mgRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, ct);
         var calResults = await _calRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, ct);
 

@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { onMount } from "svelte";
   import type {
     AvailableConnector,
     ConnectorConfigurationResponse,
@@ -65,6 +64,8 @@
     showCapabilities?: boolean;
     /** Override primary action. Default: "save-and-sync" for setup, "save-only" for manage */
     primaryAction?: "save-and-sync" | "save-only";
+    /** Whether to show .env variable name hints in the config form. False for non-platform-admin users. */
+    showEnvVarHints?: boolean;
     /** Extra UI after config form */
     extras?: Snippet<
       [{ connector: AvailableConnector; isActive: boolean; isSaving: boolean }]
@@ -83,35 +84,84 @@
     showDangerZone = false,
     showCapabilities = false,
     primaryAction = connectorId ? "save-only" : "save-and-sync",
+    showEnvVarHints = true,
     extras,
     resultActions,
   }: Props = $props();
 
   // --- State machine ---
   type Step = "selection" | "configuring" | "syncing" | "results";
-  const resolvedInitialStep: Step = connectorId != null ? "configuring" : "selection";
-  let step = $state<Step>(resolvedInitialStep);
+  let step = $state<Step>(connectorId != null ? "configuring" : "selection");
 
-  // --- Data ---
-  let servicesOverview = $state<ServicesOverview | null>(null);
-  let connectorInfo = $state<AvailableConnector | null>(null);
-  let schema = $state<JsonSchema | null>(null);
-  let existingConfig = $state<ConnectorConfigurationResponse | null>(null);
-  let effectiveConfig = $state<Record<string, unknown> | null>(null);
+  // --- User-selected connector (when picking from the grid) ---
+  let manuallySelectedId = $state<string | undefined>(undefined);
+  const activeId = $derived(manuallySelectedId ?? connectorId);
+
+  // --- Reactive queries ---
+  const servicesOverviewQuery = getServicesOverview();
+  const schemaQuery = $derived(activeId ? getConnectorSchema(activeId) : null);
+  const configQuery = $derived(activeId ? getConnectorConfiguration(activeId) : null);
+  const effectiveConfigQuery = $derived(activeId ? getConnectorEffectiveConfig(activeId) : null);
+  const dataSummaryQuery = $derived(activeId ? getConnectorDataSummary(activeId) : null);
+  const capabilitiesQuery = $derived(activeId ? getConnectorCapabilities(activeId) : null);
+  const statusQuery = getAllConnectorStatus();
+
+  // --- Derived data from queries ---
+  const servicesOverview = $derived(servicesOverviewQuery.current);
+
+  const connectorInfo = $derived(
+    activeId && servicesOverview
+      ? servicesOverview.availableConnectors?.find(
+          (c) => c.id?.toLowerCase() === activeId!.toLowerCase()
+        ) ?? null
+      : null
+  );
+
+  const schema = $derived(
+    schemaQuery?.current && activeId
+      ? normalizeConnectorJsonSchema(schemaQuery.current, activeId)
+      : null
+  );
+
+  const existingConfig = $derived((configQuery?.current ?? null) as ConnectorConfigurationResponse | null);
+  const effectiveConfig = $derived((effectiveConfigQuery?.current ?? null) as Record<string, unknown> | null);
+  const dataSummary = $derived((dataSummaryQuery?.current ?? null) as ConnectorDataSummary | null);
+  const connectorCapabilities = $derived((capabilitiesQuery?.current ?? null) as ConnectorCapabilities | null);
+
+  const connectorStatus = $derived.by(() => {
+    const statuses = statusQuery.current;
+    if (!statuses || !activeId) return null;
+    return (statuses as ConnectorStatusInfo[]).find(
+      (s) => s.connectorName?.toLowerCase() === activeId!.toLowerCase()
+    ) ?? null;
+  });
+
+  // --- User-editable state ---
   let configuration = $state<Record<string, unknown>>({});
   let secrets = $state<Record<string, string>>({});
-  let connectorStatus = $state<ConnectorStatusInfo | null>(null);
-  let dataSummary = $state<ConnectorDataSummary | null>(null);
-  let connectorCapabilities = $state<ConnectorCapabilities | null>(null);
   let syncResult = $state<SyncResult | null>(null);
 
   // --- UI state ---
-  let isLoading = $state(true);
   let isSaving = $state(false);
-  let error = $state<string | null>(null);
   let saveMessage = $state<{ type: "success" | "error"; text: string } | null>(
     null
   );
+
+  // --- Loading / error derived from queries ---
+  const isLoading = $derived.by(() => {
+    if (step === "selection") return servicesOverviewQuery.loading;
+    // In configure mode, we need overview + schema at minimum
+    if (servicesOverviewQuery.loading) return true;
+    if (activeId && (schemaQuery?.loading ?? true)) return true;
+    return false;
+  });
+
+  const error = $derived.by(() => {
+    if (servicesOverviewQuery.error) return "Failed to load available connectors";
+    if (activeId && !servicesOverviewQuery.loading && connectorInfo === null) return `Connector "${activeId}" not found`;
+    if (schemaQuery?.error) return "Failed to load connector configuration";
+    return null;
+  });
 
   // --- Derived ---
   const displayName = $derived(connectorInfo?.name || connectorId || "");
@@ -127,105 +177,20 @@
   );
   const hasData = $derived(dataSummary && (dataSummary.total ?? 0) > 0);
 
-  // --- Lifecycle ---
-  onMount(async () => {
-    if (connectorId) {
-      await loadConnectorData(connectorId);
+  // --- Initialize configuration when server data loads or changes ---
+  $effect(() => {
+    const config = existingConfig;
+    const s = schema;
+    if (!s) return;
+
+    const configData = config?.configuration?.rootElement ?? config?.configuration;
+    if (configData && typeof configData === "object" && Object.keys(configData).length > 0) {
+      configuration = { ...configData };
     } else {
-      await loadSelectionData();
+      configuration = getDefaultsFromSchema(s);
     }
+    secrets = {};
   });
-
-  // --- Data loading ---
-  async function loadSelectionData() {
-    isLoading = true;
-    error = null;
-    try {
-      servicesOverview = (await getServicesOverview()) as ServicesOverview;
-    } catch (e) {
-      error =
-        e instanceof Error ? e.message : "Failed to load available connectors";
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  async function loadConnectorData(id: string) {
-    isLoading = true;
-    error = null;
-
-    try {
-      // If we don't have the overview yet, load it to find connector info
-      if (!servicesOverview) {
-        servicesOverview = await getServicesOverview();
-      }
-
-      connectorInfo =
-        servicesOverview?.availableConnectors?.find(
-          (c) => c.id?.toLowerCase() === id.toLowerCase()
-        ) ?? null;
-
-      if (!connectorInfo) {
-        error = `Connector "${id}" not found`;
-        return;
-      }
-
-      const [
-        schemaResult,
-        configResult,
-        effectiveResult,
-        summaryResult,
-        capabilitiesResult,
-      ] = await Promise.all([
-        getConnectorSchema(connectorInfo.id!),
-        getConnectorConfiguration(connectorInfo.id!).catch(() => null),
-        getConnectorEffectiveConfig(connectorInfo.id!).catch(() => null),
-        getConnectorDataSummary(connectorInfo.id!).catch(() => null),
-        getConnectorCapabilities(connectorInfo.id!).catch(() => null),
-      ]);
-
-      schema = normalizeConnectorJsonSchema(schemaResult, connectorInfo.id!);
-      existingConfig = configResult;
-      effectiveConfig = effectiveResult;
-      dataSummary = summaryResult;
-      connectorCapabilities = capabilitiesResult;
-
-      try {
-        const statuses = await getAllConnectorStatus();
-        connectorStatus =
-          statuses?.find(
-            (s: ConnectorStatusInfo) =>
-              s.connectorName?.toLowerCase() ===
-              connectorInfo!.id?.toLowerCase()
-          ) ?? null;
-      } catch {
-        connectorStatus = null;
-      }
-
-      // Initialize configuration with existing values or defaults
-      const configData =
-        existingConfig?.configuration?.rootElement ??
-        existingConfig?.configuration;
-      if (
-        configData &&
-        typeof configData === "object" &&
-        Object.keys(configData).length > 0
-      ) {
-        configuration = { ...configData };
-      } else {
-        configuration = getDefaultsFromSchema(schema);
-      }
-
-      secrets = {};
-    } catch (e) {
-      error =
-        e instanceof Error
-          ? e.message
-          : "Failed to load connector configuration";
-    } finally {
-      isLoading = false;
-    }
-  }
 
   function getDefaultsFromSchema(s: JsonSchema): Record<string, unknown> {
     const defaults: Record<string, unknown> = {};
@@ -239,9 +204,9 @@
 
   // --- Selection ---
   async function selectConnector(connector: AvailableConnector) {
-    connectorInfo = connector;
+    manuallySelectedId = connector.id;
     step = "configuring";
-    await loadConnectorData(connector.id!);
+    // Reactive queries auto-fetch when activeId changes
   }
 
   // --- Configuration save ---
@@ -272,7 +237,6 @@
       }
 
       saveMessage = { type: "success", text: "Configuration saved" };
-      await loadConnectorData(connectorInfo.id);
     } catch (e) {
       saveMessage = {
         type: "error",
@@ -299,7 +263,6 @@
         type: "success",
         text: active ? "Connector enabled" : "Connector disabled",
       };
-      await loadConnectorData(connectorInfo.id);
     } catch (e) {
       saveMessage = {
         type: "error",
@@ -320,17 +283,11 @@
 
   function resetToSelection() {
     step = "selection";
-    connectorInfo = null;
-    schema = null;
-    existingConfig = null;
-    effectiveConfig = null;
+    manuallySelectedId = undefined;
+    // Reactive queries auto-clean when activeId becomes undefined
     configuration = {};
     secrets = {};
-    connectorStatus = null;
-    dataSummary = null;
-    connectorCapabilities = null;
     syncResult = null;
-    error = null;
     saveMessage = null;
   }
 </script>
@@ -435,6 +392,7 @@
           bind:secrets
           {effectiveConfig}
           {hasSecrets}
+          {showEnvVarHints}
           onSave={handleSave}
         />
       {:else}
@@ -484,7 +442,7 @@
               >
               <div class="flex flex-wrap gap-1 justify-end">
                 {#if connectorCapabilities.supportedDataTypes && connectorCapabilities.supportedDataTypes.length > 0}
-                  {#each connectorCapabilities.supportedDataTypes as dataType}
+                  {#each connectorCapabilities.supportedDataTypes as dataType (dataType)}
                     <Badge variant="outline" class="text-xs">
                       {dataType}
                     </Badge>
@@ -562,12 +520,7 @@
           hasData={hasData ?? false}
           {dataSummary}
           onConfigDeleted={onCancel}
-          onDataDeleted={() => {
-            // Refresh data summary after deletion
-            if (connectorInfo?.id) {
-              loadConnectorData(connectorInfo.id);
-            }
-          }}
+          onDataDeleted={() => {}}
         />
       {/if}
 

@@ -87,11 +87,24 @@ public class DataSourceInfo
     public string Icon { get; set; } = string.Empty;
 
     /// <summary>
+    /// If this data source is from a server connector, the connector's identifier.
+    /// Null for uploader apps and unknown sources.
+    /// </summary>
+    [JsonPropertyName("connectorId")]
+    public string? ConnectorId { get; set; }
+
+    /// <summary>
+    /// When the connector last successfully completed a sync.
+    /// Null for non-connector data sources.
+    /// </summary>
+    [JsonPropertyName("lastSuccessfulSync")]
+    public DateTimeOffset? LastSuccessfulSync { get; set; }
+
+    /// <summary>
     /// Whether this source is currently considered healthy (received data recently)
     /// </summary>
     [JsonPropertyName("isHealthy")]
-    public bool IsHealthy =>
-        Status == "active" || (MinutesSinceLastData.HasValue && MinutesSinceLastData.Value < 15);
+    public bool IsHealthy => Status == "active";
 }
 
 /// <summary>

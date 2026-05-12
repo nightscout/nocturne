@@ -19,6 +19,7 @@ namespace Nocturne.API.Controllers.V4.Health;
 /// </remarks>
 /// <seealso cref="IStepCountService"/>
 [ApiController]
+[Tags("Health")]
 [Route("api/v4/[controller]")]
 [Authorize]
 [Produces("application/json")]

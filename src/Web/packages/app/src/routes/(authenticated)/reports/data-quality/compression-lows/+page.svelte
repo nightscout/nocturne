@@ -475,6 +475,8 @@
 													<GlucoseTrack />
 													<BasalTrack />
 													<IobCobTrack />
+												{/snippet}
+												{#snippet overlays(_ctx)}
 													<ChartTooltip />
 												{/snippet}
 											</GlucoseChartShell>

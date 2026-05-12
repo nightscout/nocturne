@@ -569,6 +569,38 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
+    /// <summary>
+    ///     Reusable helper that checks whether a data type is active, publishes a batch of records,
+    ///     updates the <see cref="SyncResult"/> counts, and logs the outcome.
+    /// </summary>
+    protected async Task PublishRecordTypeAsync<T>(
+        SyncResult result,
+        SyncDataType dataType,
+        HashSet<SyncDataType> activeTypes,
+        List<T> records,
+        Func<List<T>, TConfig, CancellationToken, Task<bool>> publishFunc,
+        TConfig config,
+        CancellationToken cancellationToken,
+        string? context = null) where T : class
+    {
+        if (!activeTypes.Contains(dataType) || records.Count == 0) return;
+
+        var success = await publishFunc(records, config, cancellationToken);
+        result.ItemsSynced.TryGetValue(dataType, out var prev);
+        result.ItemsSynced[dataType] = prev + records.Count;
+        if (!success)
+        {
+            result.Success = false;
+            result.Errors.Add($"{dataType} publish failed");
+        }
+        else
+        {
+            var ctx = context != null ? $" from {context}" : "";
+            _logger.LogInformation("Synced {Count} {Type} records{Context}",
+                records.Count, dataType, ctx);
+        }
+    }
+
     #region V4 Publishing Methods
 
     /// <summary>

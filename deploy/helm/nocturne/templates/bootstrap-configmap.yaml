@@ -1,0 +1,51 @@
+{{- if .Values.bootstrap.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nocturne.bootstrap.fullname" . }}
+  labels: {{- include "nocturne.labels" . | nindent 4 }}
+  {{- if not .Values.postgresql.enabled }}
+  # External mode only — see bootstrap-job.yaml for rationale.
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  {{- end }}
+data:
+  bootstrap-roles.sql: |-
+{{ .Files.Get "files/bootstrap-roles.sql" | indent 4 }}
+  run.sh: |-
+    #!/bin/sh
+    set -eu
+    : "${PGHOST:?PGHOST is required}"
+    : "${PGPORT:?PGPORT is required}"
+    : "${PGDATABASE:?PGDATABASE is required}"
+    : "${PGUSER:?PGUSER is required}"
+    : "${PGPASSWORD:?PGPASSWORD is required}"
+    : "${MIGRATOR_PASSWORD:?MIGRATOR_PASSWORD is required}"
+    : "${APP_PASSWORD:?APP_PASSWORD is required}"
+    : "${WEB_PASSWORD:?WEB_PASSWORD is required}"
+
+    # Wait for postgres to accept connections. In bundled mode the Job is
+    # applied alongside the postgres StatefulSet, so it may start before
+    # postgres is ready; in external mode this should pass on first try.
+    until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER"; do
+      echo "Waiting for postgres at ${PGHOST}:${PGPORT} ..."
+      sleep 2
+    done
+
+    echo "Running Nocturne role bootstrap against ${PGHOST}:${PGPORT}/${PGDATABASE} as ${PGUSER}"
+
+    # Pass passwords into the SQL via PostgreSQL session custom-GUCs.
+    # psql's `:'var'` substitution doesn't reach inside dollar-quoted DO
+    # blocks (psql 14+), so we prepend SET statements that the DO block
+    # then reads via current_setting('nocturne.<role>_password').
+    TMPSQL=$(mktemp) && trap 'rm -f "$TMPSQL"' EXIT
+    {
+      printf "SET nocturne.migrator_password TO %s;\n" "$(printf "'%s'" "$MIGRATOR_PASSWORD")"
+      printf "SET nocturne.app_password TO %s;\n"      "$(printf "'%s'" "$APP_PASSWORD")"
+      printf "SET nocturne.web_password TO %s;\n"      "$(printf "'%s'" "$WEB_PASSWORD")"
+      cat /scripts/bootstrap-roles.sql
+    } > "$TMPSQL"
+    exec psql -v ON_ERROR_STOP=1 -f "$TMPSQL"
+{{- end }}

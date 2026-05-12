@@ -16,11 +16,14 @@
 
     // Data categories (readwrite takes precedence over read)
     const dataCategories: { name: string; read: string; readwrite: string }[] = [
-      { name: "Blood Glucose", read: "entries.read", readwrite: "entries.readwrite" },
+      { name: "Blood Glucose", read: "glucose.read", readwrite: "glucose.readwrite" },
       { name: "Treatments", read: "treatments.read", readwrite: "treatments.readwrite" },
-      { name: "Devices", read: "devicestatus.read", readwrite: "devicestatus.readwrite" },
-      { name: "Profile", read: "profile.read", readwrite: "profile.readwrite" },
-      { name: "Notifications", read: "notifications.read", readwrite: "notifications.readwrite" },
+      { name: "Device Status", read: "devices.read", readwrite: "devices.readwrite" },
+      { name: "Heart Rate", read: "heartrate.read", readwrite: "heartrate.readwrite" },
+      { name: "Step Count", read: "stepcount.read", readwrite: "stepcount.readwrite" },
+      { name: "Food & Meals", read: "food.read", readwrite: "food.readwrite" },
+      { name: "Treatment Profile", read: "therapy.read", readwrite: "therapy.readwrite" },
+      { name: "Alerts", read: "alerts.read", readwrite: "alerts.readwrite" },
     ];
 
     for (const cat of dataCategories) {
@@ -33,8 +36,8 @@
 
     // Read-only categories
     const readOnlyCategories: { name: string; atom: string }[] = [
+      { name: "Statistics", atom: "statistics.read" },
       { name: "Reports", atom: "reports.read" },
-      { name: "Health", atom: "health.read" },
       { name: "Identity", atom: "identity.read" },
     ];
 
@@ -51,6 +54,7 @@
       { name: "Manage Members", atom: "members.manage" },
       { name: "Tenant Settings", atom: "tenant.settings" },
       { name: "Manage Sharing", atom: "sharing.manage" },
+      { name: "Guest Links", atom: "sharing.guest" },
     ];
 
     for (const perm of adminPermissions) {

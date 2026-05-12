@@ -9,12 +9,8 @@
             <!-- Brand -->
             <div class="md:col-span-1">
                 <a href="/" class="flex items-center gap-2.5 mb-4">
-                    <div
-                        class="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center"
-                    >
-                        <span class="text-primary font-bold">N</span>
-                    </div>
-                    <span class="text-lg font-semibold">Nocturne</span>
+                    <img src="/logos/nocturne.png" alt="Nocturne" class="w-8 h-8" />
+                    <span class="text-lg font-semibold font-brand">Nocturne</span>
                 </a>
                 <p class="text-sm text-muted-foreground">
                     Open source diabetes data management with full Nightscout
@@ -116,8 +112,7 @@
             class="mt-10 pt-6 border-t border-border/40 flex flex-col md:flex-row justify-between items-center gap-4"
         >
             <p class="text-sm text-muted-foreground">
-                &copy; {new Date().getFullYear()} Nocturne. Open source under MIT
-                license.
+                &copy; {new Date().getFullYear()} Nocturne. Open source under AGPL-3.0.
             </p>
             <div class="flex items-center gap-4">
                 <LanguageSelector compact />

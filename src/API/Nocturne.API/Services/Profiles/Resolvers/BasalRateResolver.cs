@@ -65,6 +65,76 @@ internal sealed class BasalRateResolver : IBasalRateResolver
         return value;
     }
 
+    public async Task<Func<long, double>> BuildResolverAsync(
+        long fromMs, long toMs, CancellationToken ct = default)
+    {
+        // 1. One query for all profile spans covering the range.
+        var spans = await _activeProfileResolver.GetActiveProfileSpansForRangeAsync(fromMs, toMs, ct);
+
+        // 2. Pre-fetch schedule + timezone per distinct profile (typically just "Default").
+        //    Fetch at range start — same convention as BasalSegmentService.
+        var rangeStart = DateTimeOffset.FromUnixTimeMilliseconds(fromMs).UtcDateTime;
+
+        var distinctProfiles = spans.Select(s => s.ProfileName).Distinct().ToList();
+        if (distinctProfiles.Count == 0)
+            distinctProfiles.Add("Default");
+
+        var schedules = new Dictionary<string, Core.Models.V4.BasalSchedule?>(StringComparer.OrdinalIgnoreCase);
+        var timezones = new Dictionary<string, TimeZoneInfo?>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in distinctProfiles)
+        {
+            schedules[name] = await GetCachedScheduleAsync(name, rangeStart, ct);
+
+            var therapy = await _therapyRepo.GetActiveAtAsync(name, rangeStart, ct);
+            TimeZoneInfo? tz = null;
+            if (!string.IsNullOrEmpty(therapy?.Timezone))
+            {
+                try { tz = TimeZoneInfo.FindSystemTimeZoneById(therapy.Timezone); }
+                catch (TimeZoneNotFoundException ex)
+                {
+                    _logger.LogWarning(ex, "Timezone '{Timezone}' for profile '{Profile}' not found on this system", therapy.Timezone, name);
+                }
+                catch (InvalidTimeZoneException ex)
+                {
+                    _logger.LogWarning(ex, "Timezone '{Timezone}' for profile '{Profile}' is invalid", therapy.Timezone, name);
+                }
+            }
+            timezones[name] = tz;
+        }
+
+        // Closure over pre-fetched data — no DB access inside.
+        return timeMills =>
+        {
+            // Find the active span at timeMills.
+            // Spans are in chronological order (guaranteed by GetActiveProfileSpansForRangeAsync);
+            // LastOrDefault keeps the last match so abutting spans resolve to the later one.
+            var active = spans.LastOrDefault(span =>
+                span.StartMills <= timeMills &&
+                (!span.EndMills.HasValue || span.EndMills.Value > timeMills));
+
+            var profileName  = active?.ProfileName ?? "Default";
+            var adjustment   = active?.Adjustment;
+            var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
+
+            if (!schedules.TryGetValue(profileName, out var schedule) || schedule is null)
+                return DefaultBasalRate;
+
+            var tz  = timezones.GetValueOrDefault(profileName);
+            var dto = DateTimeOffset.FromUnixTimeMilliseconds(shiftedMills);
+            if (tz is not null)
+                dto = TimeZoneInfo.ConvertTime(dto, tz);
+
+            var secondsFromMidnight = (int)dto.TimeOfDay.TotalSeconds;
+            var value = ScheduleResolution.FindValueAtTime(schedule.Entries, secondsFromMidnight)
+                ?? DefaultBasalRate;
+
+            return adjustment is not null
+                ? value * adjustment.Percentage / 100.0
+                : value;
+        };
+    }
+
     private async Task<Core.Models.V4.BasalSchedule?> GetCachedScheduleAsync(
         string profileName, DateTime timestamp, CancellationToken ct)
     {

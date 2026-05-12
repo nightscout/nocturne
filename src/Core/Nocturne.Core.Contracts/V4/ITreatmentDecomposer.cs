@@ -28,6 +28,18 @@ public interface ITreatmentDecomposer
     Task<DecompositionResult> DecomposeAsync(Treatment treatment, CancellationToken ct = default);
 
     /// <summary>
+    /// Decomposes a batch of legacy Treatments into v4 records using bulk-insert operations,
+    /// eliminating per-record DB round-trips. State span treatments (TempBasal, ProfileSwitch,
+    /// Override, TemporaryTarget) are upserted individually since they require idempotent semantics.
+    /// Bolus-to-BolusCalculation linking is performed in a post-insert pass.
+    /// </summary>
+    /// <param name="treatments">The batch of legacy Treatments to decompose.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A single <see cref="DecompositionResult"/> containing all created v4 records.</returns>
+    Task<DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
+
+    /// <summary>
     /// Deletes all v4 records that were decomposed from a legacy Treatment with the given ID.
     /// </summary>
     /// <param name="legacyId">The legacy Treatment ID</param>

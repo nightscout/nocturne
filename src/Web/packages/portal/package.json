@@ -17,6 +17,7 @@
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
 		"@tailwindcss/vite": "^4.1.17",
 		"@types/eslint": "^9.6.1",
+		"@typescript/native-preview": "7.0.0-dev.20260504.1",
 		"bits-ui": "^2.14.4",
 		"clsx": "^2.1.1",
 		"formsnap": "^2.0.1",

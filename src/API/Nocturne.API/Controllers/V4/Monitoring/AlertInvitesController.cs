@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </summary>
 /// <seealso cref="NocturneDbContext"/>
 [ApiController]
+[Tags("Monitoring")]
 [Route("api/v4/alert-invites")]
 public class AlertInvitesController : ControllerBase
 {

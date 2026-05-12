@@ -85,4 +85,14 @@ public interface IUploaderSnapshotRepository : IV4Repository<UploaderSnapshot>
     /// when <c>null</c>, returns the absolute latest snapshot per the lowest-battery rule.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<UploaderSnapshot?> GetLatestAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk-insert <see cref="UploaderSnapshot"/> records with batch-level and DB-level deduplication by LegacyId.
+    /// </summary>
+    /// <param name="records">Records to insert.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The records that were actually inserted (duplicates excluded).</returns>
+    Task<IEnumerable<UploaderSnapshot>> BulkCreateAsync(
+        IEnumerable<UploaderSnapshot> records,
+        CancellationToken ct = default);
 }

@@ -15,6 +15,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// <seealso cref="ChatIdentityService"/>
 /// <seealso cref="ITenantAccessor"/>
 [ApiController]
+[Tags("Identity")]
 [Authorize]
 [Route("api/v4/chat-identity")]
 public class ChatIdentityController : ControllerBase

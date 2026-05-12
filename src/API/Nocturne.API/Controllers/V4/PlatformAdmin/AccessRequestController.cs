@@ -24,6 +24,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 /// <seealso cref="ISubjectService"/>
 /// <seealso cref="ITenantService"/>
 [ApiController]
+[Tags("PlatformAdmin")]
 [Route("api/v4/admin/access-requests")]
 [Authorize(Roles = "platform_admin")]
 [AllowDuringSetup]

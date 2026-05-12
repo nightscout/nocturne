@@ -188,7 +188,7 @@ public class MetadataController : ControllerBase
     [RemoteQuery]
     [ProducesResponseType(typeof(MultitenancyInfo), 200)]
     public ActionResult<MultitenancyInfo> GetMultitenancyInfo(
-        [FromServices] IOptions<MultitenancyConfiguration> config,
+        [FromServices] IOptions<BaseDomainOptions> config,
         [FromServices] IOptions<OperatorConfiguration> operatorConfig,
         [FromServices] ITenantAccessor tenantAccessor)
     {

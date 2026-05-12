@@ -73,10 +73,8 @@ public class BGCheckRepository : IBGCheckRepository
             query = query.Where(e => e.LegacyId == null);
 
         // Exclude non-primary duplicates from cross-connector deduplication
-        var nonPrimaryIds = _context.LinkedRecords
-            .Where(lr => lr.RecordType == "bgcheck" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        query = query.Where(b => !nonPrimaryIds.Contains(b.Id));
+        query = query.Where(b => !_context.LinkedRecords
+            .Any(lr => lr.RecordType == "bgcheck" && !lr.IsPrimary && lr.RecordId == b.Id));
 
         query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
@@ -251,34 +249,20 @@ public class BGCheckRepository : IBGCheckRepository
         }
 
         // Insert-time deduplication: link saved records to canonical groups
-        foreach (var entity in entities)
+        try
         {
-            try
-            {
-                var criteria = new MatchCriteria
-                {
-                    GlucoseValue = entity.Glucose,
-                    GlucoseTolerance = 1.0
-                };
+            var dedupInputs = entities.Select(e => new DeduplicationInput(
+                RecordId: e.Id,
+                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                DataSource: e.DataSource ?? "unknown",
+                Criteria: new MatchCriteria { GlucoseValue = e.Glucose, GlucoseTolerance = 1.0 }
+            )).ToList();
 
-                var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
-                    RecordType.BGCheck,
-                    new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    criteria,
-                    ct);
-
-                await _deduplicationService.LinkRecordAsync(
-                    canonicalId,
-                    RecordType.BGCheck,
-                    entity.Id,
-                    new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    entity.DataSource ?? "unknown",
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to deduplicate BGCheck {Id}", entity.Id);
-            }
+            await _deduplicationService.DeduplicateBatchAsync(RecordType.BGCheck, dedupInputs, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BGCheck", entities.Count);
         }
 
         return entities.Select(BGCheckMapper.ToDomainModel);

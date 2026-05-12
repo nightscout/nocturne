@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Nocturne.Aspire.Host;
 using Nocturne.Aspire.Hosting;
+using Nocturne.Aspire.Scalar;
 using Nocturne.Core.Constants;
 using Scalar.Aspire;
 using Yarp.ReverseProxy.Transforms;
@@ -134,7 +135,25 @@ class Program
                 postgres.WithPgAdmin();
             }
 
-            postgres.PublishAsDockerComposeService((_, _) => { });
+            postgres.PublishAsDockerComposeService(
+                (_, service) =>
+                {
+                    // Rewrite the init-scripts bind-mount source to a relative
+                    // path. Without this, Aspire emits the dev-machine absolute
+                    // path as a generated NOCTURNE_POSTGRES_SERVER_BINDMOUNT_0
+                    // env var, which then has to be renamed in the release
+                    // bundle. Hardcoding ./init in compose.yaml lets users drop
+                    // 00-init.sh into ./init/ next to compose and removes the
+                    // env var entirely.
+                    var initVolume = service.Volumes.FirstOrDefault(v =>
+                        v.Target == "/docker-entrypoint-initdb.d"
+                    );
+                    if (initVolume != null)
+                    {
+                        initVolume.Source = "./init";
+                    }
+                }
+            );
 
             managedDatabase = postgres.AddDatabase(ServiceNames.PostgreSql, dbName);
             postgresServer = postgres;
@@ -191,9 +210,10 @@ class Program
         );
         var discordClientSecret = builder.AddParameter("discord-client-secret", "", secret: true);
 
-        // Public base domain used by the bot package to build /connect and OAuth2
-        // redirect URLs. Production should set this to e.g. "nocturne.run" via user-secrets.
-        var publicBaseDomain = builder.AddParameter("public-base-domain", "");
+        // Platform base domain — the single hostname all services derive URLs from.
+        // Production should set this to e.g. "nocturne.run" via user-secrets.
+        // Injected as "BaseDomain" into both the API and SvelteKit.
+        var baseDomain = builder.AddParameter("base-domain", "");
 
         // Chat platform credentials. All optional — a deployment that only
         // uses Discord shouldn't need to supply Telegram/Slack/WhatsApp
@@ -275,34 +295,42 @@ class Program
         // ------------------------------------------------------------------
         // Demo data service (optional)
         // ------------------------------------------------------------------
-        var demoService = builder.AddDemoService<Projects.Nocturne_Services_Demo>(
-            api,
-            managedDatabase,
-            options => { }
+        var includeDemoService = builder.Configuration.GetValue(
+            "Aspire:OptionalServices:DemoService:Enabled",
+            true
         );
 
-        if (demoService != null)
+        if (includeDemoService)
         {
-            if (
-                managedDatabase != null
-                && postgresServer != null
-                && postgresAppPassword != null
-                && postgresMigratorPassword != null
-            )
+            var demoService = builder.AddDemoService<Projects.Nocturne_Services_Demo>(
+                api,
+                managedDatabase,
+                options => { }
+            );
+
+            if (demoService != null)
             {
-                demoService.WithNocturneDatabase(
-                    postgresServer,
-                    dbName,
-                    postgresAppPassword,
-                    postgresMigratorPassword
-                );
-            }
-            else if (remoteAppConnectionString != null && remoteMigratorConnectionString != null)
-            {
-                demoService.WithNocturneRemoteDatabase(
-                    remoteAppConnectionString,
-                    remoteMigratorConnectionString
-                );
+                if (
+                    managedDatabase != null
+                    && postgresServer != null
+                    && postgresAppPassword != null
+                    && postgresMigratorPassword != null
+                )
+                {
+                    demoService.WithNocturneDatabase(
+                        postgresServer,
+                        dbName,
+                        postgresAppPassword,
+                        postgresMigratorPassword
+                    );
+                }
+                else if (remoteAppConnectionString != null && remoteMigratorConnectionString != null)
+                {
+                    demoService.WithNocturneRemoteDatabase(
+                        remoteAppConnectionString,
+                        remoteMigratorConnectionString
+                    );
+                }
             }
         }
 
@@ -324,7 +352,7 @@ class Program
                 .WithEnvironment("DISCORD_PUBLIC_KEY", discordPublicKey)
                 .WithEnvironment("DISCORD_APPLICATION_ID", discordApplicationId)
                 .WithEnvironment("DISCORD_CLIENT_SECRET", discordClientSecret)
-                .WithEnvironment("PUBLIC_BASE_DOMAIN", publicBaseDomain)
+                .WithEnvironment("BASE_DOMAIN", baseDomain)
                 // NOTE: BOT_LINK_HMAC_SECRET is not injected — oauth-state.ts
                 // reuses INSTANCE_KEY (already wired above) to sign the
                 // Discord OAuth2 state parameter. See src/Web/packages/app/
@@ -387,10 +415,11 @@ class Program
 
             // SvelteKit needs ORIGIN when running behind a reverse proxy so SSR
             // constructs URLs with the public domain instead of the container hostname.
-            // Derive from PUBLIC_BASE_DOMAIN (bare host or host:port).
-            dockerWeb.WithEnvironment("ORIGIN", ReferenceExpression.Create(
-                $"https://{publicBaseDomain}"
-            ));
+            // Derive from BaseDomain (bare host or host:port).
+            dockerWeb.WithEnvironment(
+                "ORIGIN",
+                ReferenceExpression.Create($"https://{baseDomain}")
+            );
 
             if (postgresServer != null && postgresWebPassword != null)
             {
@@ -413,25 +442,30 @@ class Program
         // Scalar API reference (optional)
         // ------------------------------------------------------------------
         IResourceBuilder<IResourceWithEndpoints>? scalar = null;
+        IResourceBuilder<IResourceWithEndpoints>? scalarBootstrap = null;
         if (includeScalar)
         {
-            scalar = builder
-                .AddScalarApiReference(options =>
-                {
-                    options.WithTheme(ScalarTheme.Mars);
-                    options.EnablePersistentAuthentication();
-                    options.AddPreferredSecuritySchemes("oauth2");
-                    options.AddAuthorizationCodeFlow(
-                        "oauth2",
-                        flow =>
-                        {
-                            flow.WithAuthorizationUrl("/api/oauth/authorize");
-                            flow.WithTokenUrl("/api/oauth/token");
-                            flow.WithPkce(Pkce.Sha256);
-                            flow.WithSelectedScopes(["*"]);
-                        }
-                    );
-                })
+            var scalarResource = builder
+                .AddScalarApiReference(
+                    "scalar",
+                    options =>
+                    {
+                        options.WithTheme(ScalarTheme.Mars);
+                        options.WithCustomCss(NocturneScalarTheme.Build(solutionRoot));
+                        options.EnablePersistentAuthentication();
+                        options.AddPreferredSecuritySchemes("oauth2");
+                        options.AddAuthorizationCodeFlow(
+                            "oauth2",
+                            flow =>
+                            {
+                                flow.WithAuthorizationUrl("/api/oauth/authorize");
+                                flow.WithTokenUrl("/api/oauth/token");
+                                flow.WithPkce(Pkce.Sha256);
+                                flow.WithSelectedScopes(["*"]);
+                            }
+                        );
+                    }
+                )
                 .WithApiReference(
                     api,
                     options =>
@@ -441,8 +475,23 @@ class Program
                             .AddDocument("nightscout", "Nightscout API")
                             .WithOpenApiRoutePattern("/openapi/{documentName}.json");
                     }
+                );
+
+            scalar = scalarResource;
+
+            // Tiny ASP.NET reverse proxy that fronts the Scalar.Aspire
+            // sidecar and splices MermaidLazyLoader.HeadContent into the
+            // Scalar HTML head. Needed because Scalar.Aspire 0.8.x has no
+            // head-content hook and Aspire.Hosting.Yarp can't do body
+            // rewriting (JSON-config transforms only).
+            scalarBootstrap = builder
+                .AddProject<Projects.Nocturne_Aspire_ScalarBootstrap>(
+                    "scalar-bootstrap",
+                    launchProfileName: null
                 )
-;
+                .WithHttpEndpoint(name: "http")
+                .WithReference(scalarResource)
+                .WaitFor(scalarResource);
         }
 
         // ------------------------------------------------------------------
@@ -489,7 +538,8 @@ class Program
         // "transport close" disconnects.
         gateway.WithEnvironment(
             "REVERSEPROXY__CLUSTERS__cluster_nocturne-web__HTTPREQUEST__ACTIVITYTIMEOUT",
-            "00:05:00");
+            "00:05:00"
+        );
 
         // In dev mode, YARP is the TLS-terminating edge proxy — it must Set
         // the X-Forwarded-* headers from its own connection info. In publish
@@ -514,6 +564,10 @@ class Program
                 yarp.AddRoute("/api/oauth/{**catch-all}", api.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
+                // Dev-only admin endpoints → API (not remote functions)
+                yarp.AddRoute("/api/v4/dev-only/{**catch-all}", api.GetEndpoint("http"))
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+
                 // Bot webhooks, remote functions → web
                 yarp.AddRoute("/api/{**catch-all}", webEndpoints.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
@@ -525,9 +579,13 @@ class Program
                 // API docs (Scalar UI)
                 // When the Scalar Aspire container is running (dev with OAuth PKCE),
                 // proxy to it. Otherwise, the API serves Scalar natively.
-                if (scalar != null)
+                if (scalarBootstrap != null && scalar != null)
                 {
-                    yarp.AddRoute("/scalar/{**catch-all}", scalar.GetEndpoint("http"))
+                    // /scalar/* goes via the bootstrap (HTML rewriter), which
+                    // forwards to the Scalar sidecar. /scalar-proxy/* skips
+                    // the rewriter — those are runtime API requests proxied
+                    // by Scalar back to the API and can be large.
+                    yarp.AddRoute("/scalar/{**catch-all}", scalarBootstrap.GetEndpoint("http"))
                         .WithTransformPathRemovePrefix("/scalar")
                         .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
                     yarp.AddRoute("/scalar-proxy/{**catch-all}", scalar.GetEndpoint("http"))
@@ -556,25 +614,28 @@ class Program
         // Aspire dashboard instead of the raw localhost endpoint.
         if (builder.ExecutionContext.IsRunMode && !string.IsNullOrEmpty(customDomain))
         {
-            gateway.WithUrlForEndpoint("https", url =>
-            {
-                url.DisplayText = customDomain;
-                url.Url = url.Endpoint!.Port == 443
-                    ? $"https://{customDomain}"
-                    : $"https://{customDomain}:{url.Endpoint.Port}";
-            });
+            gateway.WithUrlForEndpoint(
+                "https",
+                url =>
+                {
+                    url.DisplayText = customDomain;
+                    url.Url =
+                        url.Endpoint!.Port == 443
+                            ? $"https://{customDomain}"
+                            : $"https://{customDomain}:{url.Endpoint.Port}";
+                }
+            );
         }
 
-        // Inject Multitenancy:BaseDomain into the API so it can derive the
-        // WebAuthn RP ID and build correct URLs. In run mode, derive from the
-        // gateway's live HTTPS endpoint. In publish mode, use the
-        // public-base-domain parameter (set via env var / user-secrets).
-        // Note: consumers expect a bare host:port (e.g. "localhost:1612"),
+        // Inject BaseDomain into the API and web so they can derive WebAuthn RP ID,
+        // tenant URLs, bot links, etc. In run mode, derive from the gateway's live
+        // HTTPS endpoint. In publish mode, use the base-domain parameter.
+        // Consumers expect a bare host:port (e.g. "localhost:1612"),
         // not a full URL — they prepend the scheme themselves.
         if (!builder.ExecutionContext.IsRunMode)
         {
             // Publish mode: inject from the user-supplied parameter
-            api.WithEnvironment("Multitenancy__BaseDomain", publicBaseDomain);
+            api.WithEnvironment("BASE_DOMAIN", baseDomain);
         }
 
         if (builder.ExecutionContext.IsRunMode)
@@ -586,11 +647,11 @@ class Program
                     $"{gatewayEndpoint.Property(EndpointProperty.Host)}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
                 );
 
-            // Inject Multitenancy:BaseDomain into the API (single source of truth)
-            api.WithEnvironment("Multitenancy__BaseDomain", baseDomainExpr);
+            // Single source of truth for both API and web
+            api.WithEnvironment("BASE_DOMAIN", baseDomainExpr);
 
             ((IResourceBuilder<IResourceWithEnvironment>)web).WithEnvironment(
-                "PUBLIC_BASE_DOMAIN",
+                "BASE_DOMAIN",
                 baseDomainExpr
             );
 
@@ -610,9 +671,12 @@ class Program
             }
             else
             {
-                web.WithUrl(ReferenceExpression.Create(
-                    $"https://{gatewayEndpoint.Property(EndpointProperty.Host)}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
-                ), "Gateway");
+                web.WithUrl(
+                    ReferenceExpression.Create(
+                        $"https://{gatewayEndpoint.Property(EndpointProperty.Host)}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
+                    ),
+                    "Gateway"
+                );
             }
 
             // Warn if custom domain doesn't resolve

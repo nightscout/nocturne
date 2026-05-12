@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 /// </summary>
 /// <seealso cref="IUISettingsService"/>
 [ApiController]
+[Tags("Profiles")]
 [Route("api/v4/ui-settings")]
 [ClientPropertyName("uiSettings")]
 public class UISettingsController : ControllerBase

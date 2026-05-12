@@ -1,0 +1,235 @@
+# Default values for the Nocturne Helm chart.
+# This is v0 / alpha — external Postgres only, single-replica, opinionated defaults.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  registry: ghcr.io
+  # Set per-component below; these are shared defaults.
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+api:
+  image:
+    repository: nightscout/nocturne/nocturne-api
+    tag: ""              # defaults to .Chart.AppVersion
+    digest: ""           # e.g. "sha256:0fe69ae..." — when set, takes
+                         # precedence over `tag` and the image is
+                         # referenced as <repo>@<digest> for deterministic
+                         # pulls (immune to node-cache staleness on
+                         # mutable tags like :latest).
+  replicaCount: 1
+  containerPort: 8080    # .NET DefaultContainer default; matches HTTP_PORTS env below
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 0   # 0 disables; otherwise e.g. 80
+  pdb:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: 0    # 0 disables; set when minAvailable is unset
+
+web:
+  image:
+    repository: nightscout/nocturne/nocturne-web
+    tag: ""              # defaults to .Chart.AppVersion
+    digest: ""           # see api.image.digest for semantics
+  replicaCount: 1
+  containerPort: 5173    # Dockerfile.web ENV PORT=5173
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 0
+  pdb:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: 0
+
+# Public base URL the deployment is reachable at (e.g. https://nocturne.example.com).
+# Used by the API for OIDC redirects, invite links, and the BaseUrl config key.
+# Also used as the web container's NOCTURNE_API_URL when ingress.enabled=true and
+# api.externalUrl is empty.
+baseUrl: ""
+
+# Shared instance key (HMAC for JWT signing, shared between API and Web).
+# Provide either an existing Secret OR a literal value (NOT both).
+instanceKey:
+  existingSecret: ""           # name of a Secret containing key `instance-key`
+  existingSecretKey: instance-key
+  value: ""                    # literal — only for quick local trials; prefer existingSecret
+
+# Postgres connection details. Bring-your-own only in v0.
+# Three roles are required (see https://github.com/nightscout/nocturne/blob/main/docs/postgres/bootstrap-roles.sql);
+# the chart's bootstrap Job (below) creates them for you.
+externalDatabase:
+  host: ""                     # e.g. postgres.databases.svc.cluster.local
+  port: 5432
+  database: nocturne
+  sslMode: prefer              # prefer | require | disable
+  # Names of existing Secrets containing each role's password under key `password`
+  # (override `existingSecretKey` if your Secret uses a different key).
+  appSecret:
+    existingSecret: ""
+    existingSecretKey: password
+  migratorSecret:
+    existingSecret: ""
+    existingSecretKey: password
+  webSecret:
+    existingSecret: ""         # optional in v0 (web only needs DB if bot adapters are used)
+    existingSecretKey: password
+
+# Bootstrap Job: creates the three Postgres roles before API/Web start.
+# Runs as a Helm pre-install/pre-upgrade hook. Idempotent — safe to re-run.
+# Disable if you cannot grant superuser/CREATEROLE to a Kubernetes secret
+# (managed Postgres) and prefer to run the SQL yourself.
+bootstrap:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: postgres
+    tag: "17-alpine"
+    digest: ""           # see api.image.digest for semantics
+    pullPolicy: IfNotPresent
+  # Secret with admin credentials. Required when bootstrap.enabled=true.
+  # Must contain key `password`. Username defaults to `postgres` unless overridden.
+  adminSecret:
+    existingSecret: ""
+    existingSecretUsernameKey: username       # optional; falls back to bootstrap.adminUser
+    existingSecretPasswordKey: password
+  adminUser: postgres
+  resources: {}
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: ""                      # required when enabled=true; defaults to baseUrl host
+  # By default, only the web service is exposed at the host. The API is reached
+  # internally via cluster DNS. Set api.externalPath to expose API at /api etc.
+  api:
+    externalPath: ""            # e.g. "/api" to also expose API on the same host
+  tls:
+    enabled: false
+    secretName: ""              # existing TLS secret; cert-manager users add annotations above
+
+# Bundled Postgres via the Bitnami `postgresql` subchart.
+#
+# When enabled, the chart deploys an in-cluster PostgreSQL StatefulSet, a
+# chart-managed Secret holding all four passwords (postgres superuser plus
+# nocturne_app / nocturne_migrator / nocturne_web), and runs the existing
+# bootstrap-roles.sql as a post-install/post-upgrade hook against it. The API
+# Deployment gets a wait-for-postgres initContainer that blocks until the
+# nocturne_app role is reachable.
+#
+# DO NOT use bundled mode AND set externalDatabase.host — the chart will fail
+# the render. Toggle bundled→external in either direction is supported only
+# with `postgresql.uninstallAcknowledge: true` to avoid silent data loss.
+#
+# GitOps users (Argo CD / Flux): set `postgresql.auth.existingSecret` and
+# pre-create the Secret yourself. The default lookup-based password generation
+# is non-idempotent under `helm template | kubectl apply`.
+postgresql:
+  enabled: false
+  # When existingSecret is unset (default), Bitnami auto-generates its
+  # postgres-password into <release>-postgresql. The chart creates a
+  # separate Secret <release>-nocturne-db with the three Nocturne role
+  # passwords (app/migrator/web). To BYO all credentials, set
+  # existingSecret to a Secret containing both the Bitnami keys
+  # (postgres-password, password, replication-password) AND the three
+  # nocturne keys (app-password, migrator-password, web-password).
+  auth:
+    existingSecret: ""
+    secretKeys:
+      adminPasswordKey: postgres-password
+    database: nocturne
+    username: nocturne_bootstrap   # Bitnami creates this user but the chart does not use it
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+      # See `postgresql.persistence.retainOnUninstall` below
+      storageClass: ""
+  architecture: standalone
+  metrics:
+    enabled: false
+  # Annotate the PVC so `helm uninstall` does not delete it. Default keep —
+  # safer for a stateful database, surprises users who expect clean uninstall.
+  persistence:
+    retainOnUninstall: true
+  # Set to true to allow toggling postgresql.enabled in either direction —
+  # acknowledges that data on disk may be lost or stranded.
+  uninstallAcknowledge: false
+  # Strict ordering for the API initContainer: psql -U nocturne_app probe.
+  # Set to false to use only pg_isready (lighter, but pods may briefly
+  # CrashLoopBackOff until the bootstrap Job finishes).
+  waitForBootstrap: true
+
+# OpenTelemetry / observability.
+#
+# Nocturne's API uses Aspire ServiceDefaults' OTLP push exporter, gated on
+# OTEL_EXPORTER_OTLP_ENDPOINT. There is no Prometheus /metrics endpoint —
+# scrape-based monitoring is not supported until upstream adds it. To use
+# Prometheus + Grafana, run an OpenTelemetry Collector with an `otlp` receiver
+# and a `prometheus` / `prometheusremotewrite` exporter; point the chart's
+# observability.otlp.endpoint at the collector.
+#
+# The web container has no OpenTelemetry SDK and is not instrumented here.
+observability:
+  otlp:
+    enabled: false
+    endpoint: ""                # e.g. http://otel-collector.observability.svc:4317
+    protocol: grpc              # grpc | http/protobuf
+    serviceName: ""             # default: <release>-nocturne-api
+    # Extra OTEL_RESOURCE_ATTRIBUTES merged with chart-injected k8s.* attrs
+    resourceAttributes: {}      # e.g. { deployment.environment: production }
+    # Pull OTEL_EXPORTER_OTLP_HEADERS from a Secret (e.g. for collector auth tokens)
+    headersSecretRef:
+      name: ""
+      key: headers
+    # Pass-through extra OTEL_* env vars (e.g. OTEL_EXPORTER_OTLP_INSECURE,
+    # OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_LOG_LEVEL, etc.)
+    extraEnv: {}
+  prometheus:
+    serviceMonitor:
+      # Reserved — does not currently render anything. Will activate when
+      # upstream Nocturne exposes a /metrics endpoint.
+      enabled: false
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: false   # API may write to temp paths; tighten in a later iteration

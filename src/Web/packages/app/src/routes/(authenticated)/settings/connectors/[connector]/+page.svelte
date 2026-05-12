@@ -41,6 +41,7 @@
     showDangerZone
     showCapabilities
     primaryAction="save-only"
+    showEnvVarHints={page.data.isPlatformAdmin === true}
     onCancel={() => goto("/settings/connectors")}
   >
     {#snippet extras()}

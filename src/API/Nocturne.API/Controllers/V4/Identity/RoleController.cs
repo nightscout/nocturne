@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// </remarks>
 /// <seealso cref="ITenantRoleService"/>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/roles")]
 [Produces("application/json")]
 public class RoleController : ControllerBase

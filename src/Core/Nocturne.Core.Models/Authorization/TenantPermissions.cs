@@ -4,41 +4,60 @@ namespace Nocturne.Core.Models.Authorization;
 /// Permission atoms for the tenant RBAC system.
 /// Uses the resource.action format compatible with <see cref="OAuthScopes"/>.
 /// </summary>
+/// <seealso cref="TenantPermission"/>
 /// <seealso cref="OAuthScopes"/>
 /// <seealso cref="Role"/>
 /// <seealso cref="ScopeTranslator"/>
 public static class TenantPermissions
 {
-    // Data permissions (existing OAuth scopes)
+    // Patient Record
 
     /// <summary>Read-only access to glucose entries within the tenant.</summary>
-    public const string EntriesRead = "entries.read";
+    public const string GlucoseRead = "glucose.read";
     /// <summary>Read and write access to glucose entries within the tenant.</summary>
-    public const string EntriesReadWrite = "entries.readwrite";
+    public const string GlucoseReadWrite = "glucose.readwrite";
     /// <summary>Read-only access to treatments within the tenant.</summary>
     public const string TreatmentsRead = "treatments.read";
     /// <summary>Read and write access to treatments within the tenant.</summary>
     public const string TreatmentsReadWrite = "treatments.readwrite";
-    /// <summary>Read-only access to device status records within the tenant.</summary>
-    public const string DeviceStatusRead = "devicestatus.read";
-    /// <summary>Read and write access to device status records within the tenant.</summary>
-    public const string DeviceStatusReadWrite = "devicestatus.readwrite";
-    /// <summary>Read-only access to user profiles within the tenant.</summary>
-    public const string ProfileRead = "profile.read";
-    /// <summary>Read and write access to user profiles within the tenant.</summary>
-    public const string ProfileReadWrite = "profile.readwrite";
-    /// <summary>Read-only access to notification settings within the tenant.</summary>
-    public const string NotificationsRead = "notifications.read";
-    /// <summary>Read and write access to notification settings within the tenant.</summary>
-    public const string NotificationsReadWrite = "notifications.readwrite";
+    /// <summary>Read-only access to device records within the tenant.</summary>
+    public const string DevicesRead = "devices.read";
+    /// <summary>Read and write access to device records within the tenant.</summary>
+    public const string DevicesReadWrite = "devices.readwrite";
+    /// <summary>Read-only access to heart rate data within the tenant.</summary>
+    public const string HeartRateRead = "heartrate.read";
+    /// <summary>Read and write access to heart rate data within the tenant.</summary>
+    public const string HeartRateReadWrite = "heartrate.readwrite";
+    /// <summary>Read-only access to step count data within the tenant.</summary>
+    public const string StepCountRead = "stepcount.read";
+    /// <summary>Read and write access to step count data within the tenant.</summary>
+    public const string StepCountReadWrite = "stepcount.readwrite";
+    /// <summary>Read-only access to food records within the tenant.</summary>
+    public const string FoodRead = "food.read";
+    /// <summary>Read and write access to food records within the tenant.</summary>
+    public const string FoodReadWrite = "food.readwrite";
+    /// <summary>Read-only access to aggregated statistics within the tenant.</summary>
+    public const string StatisticsRead = "statistics.read";
     /// <summary>Read-only access to generated reports within the tenant.</summary>
     public const string ReportsRead = "reports.read";
-    /// <summary>Read-only access to aggregated health data within the tenant.</summary>
-    public const string HealthRead = "health.read";
+
+    // Therapy Settings
+
+    /// <summary>Read-only access to therapy settings within the tenant.</summary>
+    public const string TherapyRead = "therapy.read";
+    /// <summary>Read and write access to therapy settings within the tenant.</summary>
+    public const string TherapyReadWrite = "therapy.readwrite";
+    /// <summary>Read-only access to alert settings within the tenant.</summary>
+    public const string AlertsRead = "alerts.read";
+    /// <summary>Read and write access to alert settings within the tenant.</summary>
+    public const string AlertsReadWrite = "alerts.readwrite";
+
+    // Account
+
     /// <summary>Read-only access to identity information within the tenant.</summary>
     public const string IdentityRead = "identity.read";
 
-    // Feature/admin permissions (new)
+    // Administration
 
     /// <summary>Permission to create, edit, and delete tenant roles.</summary>
     public const string RolesManage = "roles.manage";
@@ -50,12 +69,18 @@ public static class TenantPermissions
     public const string TenantSettings = "tenant.settings";
     /// <summary>Permission to manage sharing and follower grants.</summary>
     public const string SharingManage = "sharing.manage";
+    /// <summary>Permission to create temporary guest access links.</summary>
+    public const string SharingGuest = "sharing.guest";
+
+    // Audit
+
     /// <summary>Read-only access to the mutation audit log.</summary>
     public const string AuditRead = "audit.read";
     /// <summary>Permission to manage audit settings (retention, export).</summary>
     public const string AuditManage = "audit.manage";
-    /// <summary>Permission to create temporary guest access links.</summary>
-    public const string SharingGuest = "sharing.guest";
+
+    // Superuser
+
     /// <summary>Superuser permission that satisfies all other permissions.</summary>
     public const string Superuser = "*";
 
@@ -64,22 +89,25 @@ public static class TenantPermissions
     /// </summary>
     public static readonly HashSet<string> All =
     [
-        EntriesRead, EntriesReadWrite,
+        GlucoseRead, GlucoseReadWrite,
         TreatmentsRead, TreatmentsReadWrite,
-        DeviceStatusRead, DeviceStatusReadWrite,
-        ProfileRead, ProfileReadWrite,
-        NotificationsRead, NotificationsReadWrite,
+        DevicesRead, DevicesReadWrite,
+        HeartRateRead, HeartRateReadWrite,
+        StepCountRead, StepCountReadWrite,
+        FoodRead, FoodReadWrite,
+        StatisticsRead,
         ReportsRead,
-        HealthRead,
+        TherapyRead, TherapyReadWrite,
+        AlertsRead, AlertsReadWrite,
         IdentityRead,
         RolesManage,
         MembersInvite,
         MembersManage,
         TenantSettings,
         SharingManage,
+        SharingGuest,
         AuditRead,
         AuditManage,
-        SharingGuest,
     ];
 
     /// <summary>
@@ -90,8 +118,8 @@ public static class TenantPermissions
         public const string Owner = "owner";
         public const string Admin = "admin";
         public const string Caretaker = "caretaker";
-        public const string Follower = "follower";
-        public const string Readable = "readable";
+        public const string Viewer = "viewer";
+        public const string Clinician = "clinician";
         public const string Denied = "denied";
     }
 
@@ -103,23 +131,29 @@ public static class TenantPermissions
         [SeedRoles.Owner] = [Superuser],
         [SeedRoles.Admin] =
         [
-            EntriesReadWrite, TreatmentsReadWrite, DeviceStatusReadWrite,
-            ProfileReadWrite, NotificationsReadWrite, ReportsRead,
-            HealthRead, IdentityRead,
+            GlucoseReadWrite, TreatmentsReadWrite, DevicesReadWrite,
+            HeartRateReadWrite, StepCountReadWrite, FoodReadWrite,
+            StatisticsRead, ReportsRead,
+            TherapyReadWrite, AlertsReadWrite,
+            IdentityRead,
             MembersInvite, MembersManage, TenantSettings, RolesManage, SharingManage, SharingGuest,
             AuditRead,
         ],
         [SeedRoles.Caretaker] =
         [
-            EntriesRead, TreatmentsReadWrite, DeviceStatusRead,
-            ProfileRead, NotificationsRead, ReportsRead, HealthRead,
+            GlucoseRead, TreatmentsReadWrite, DevicesRead,
+            FoodRead, HeartRateRead, StepCountRead,
+            StatisticsRead, ReportsRead,
+            TherapyRead, AlertsReadWrite,
         ],
-        [SeedRoles.Follower] = [EntriesRead, HealthRead],
-        [SeedRoles.Readable] =
+        [SeedRoles.Clinician] =
         [
-            EntriesRead, TreatmentsRead, DeviceStatusRead,
-            ProfileRead, HealthRead,
+            GlucoseRead, TreatmentsRead, DevicesRead,
+            FoodRead, HeartRateRead, StepCountRead,
+            StatisticsRead, ReportsRead,
+            TherapyRead, AlertsRead,
         ],
+        [SeedRoles.Viewer] = [GlucoseRead, StatisticsRead],
         [SeedRoles.Denied] = [],
     };
 
@@ -131,8 +165,8 @@ public static class TenantPermissions
         [SeedRoles.Owner] = "Owner",
         [SeedRoles.Admin] = "Administrator",
         [SeedRoles.Caretaker] = "Caretaker",
-        [SeedRoles.Follower] = "Follower",
-        [SeedRoles.Readable] = "Readable",
+        [SeedRoles.Viewer] = "Viewer",
+        [SeedRoles.Clinician] = "Clinician",
         [SeedRoles.Denied] = "Denied",
     };
 

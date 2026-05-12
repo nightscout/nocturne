@@ -23,6 +23,19 @@ public interface IActivityDecomposer
     Task<DecompositionResult> DecomposeAsync(Activity activity, CancellationToken ct = default);
 
     /// <summary>
+    /// Decomposes a batch of legacy Activities into dedicated v4 models, using bulk insert.
+    /// Heart rate records are bulk-inserted into the heart_rates table, step counts into step_counts,
+    /// and regular activities are bulk-created as StateSpans.
+    /// </summary>
+    /// <param name="activities">The legacy Activities to decompose</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>
+    /// A <see cref="DecompositionResult"/> containing all created V4 records across all activities.
+    /// </returns>
+    Task<DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<Activity> activities, CancellationToken ct = default);
+
+    /// <summary>
     /// Deletes all dedicated records that were decomposed from a legacy Activity with the given ID.
     /// </summary>
     /// <returns>Total number of records deleted across heart_rates and step_counts tables</returns>

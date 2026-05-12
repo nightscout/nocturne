@@ -27,6 +27,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="IWidgetSummaryService"/>
 /// <seealso cref="V4SummaryResponse"/>
 [ApiController]
+[Tags("Analytics")]
 [Route("api/v4/summary")]
 [Produces("application/json")]
 public class SummaryController : ControllerBase

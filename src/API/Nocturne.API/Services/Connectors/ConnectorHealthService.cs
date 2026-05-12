@@ -43,10 +43,17 @@ public class ConnectorHealthService(
         var connectors = GetConnectorDefinitions();
         logger.LogDebug("Getting status for all {Count} connectors", connectors.Count);
 
+        // Fetch config status for all connectors in one query (provides HasSecrets, HasDatabaseConfig)
+        var allConfigStatuses = await connectorConfigService.GetAllConnectorStatusAsync(cancellationToken);
+        var configStatusByName = allConfigStatuses.ToDictionary(
+            s => s.ConnectorName,
+            StringComparer.OrdinalIgnoreCase);
+
         var results = new List<ConnectorStatusDto>();
         foreach (var connector in connectors)
         {
-            var status = await GetConnectorStatusWithDbStatsAsync(connector, cancellationToken);
+            configStatusByName.TryGetValue(connector.Id, out var configStatus);
+            var status = await GetConnectorStatusWithDbStatsAsync(connector, configStatus, cancellationToken);
             results.Add(status);
         }
 
@@ -61,6 +68,7 @@ public class ConnectorHealthService(
 
     private async Task<ConnectorStatusDto> GetConnectorStatusWithDbStatsAsync(
         ConnectorDefinition connector,
+        ConnectorStatusInfo? configStatus,
         CancellationToken cancellationToken
     )
     {
@@ -75,6 +83,9 @@ public class ConnectorHealthService(
             $"Parameters:Connectors:{connector.ConfigKey}:Enabled"
         );
         var enabledConfig = envEnabled == false ? false : (dbConfig?.IsActive ?? envEnabled);
+
+        var hasDatabaseConfig = configStatus?.HasDatabaseConfig ?? dbConfig != null;
+        var hasSecrets = configStatus?.HasSecrets ?? false;
 
         // Extract health state from the same config
         ConnectorHealthStateDto? healthState = null;
@@ -124,6 +135,9 @@ public class ConnectorHealthService(
                 LastEntryTime = dbStats.LastItemTime,
                 EntriesLast24Hours = dbStats.ItemsLast24Hours,
                 State = "Disabled",
+                IsEnabled = false,
+                HasDatabaseConfig = hasDatabaseConfig,
+                HasSecrets = hasSecrets,
                 IsHealthy = false,
                 StateMessage = healthState?.LastErrorMessage,
                 LastSyncAttempt = healthState?.LastSyncAttempt,
@@ -172,6 +186,9 @@ public class ConnectorHealthService(
             Id = connector.Id,
             Name = connector.Id,
             Status = state,
+            IsEnabled = isEnabled,
+            HasDatabaseConfig = hasDatabaseConfig,
+            HasSecrets = hasSecrets,
             IsHealthy = healthy,
             State = state,
             StateMessage = healthState?.LastErrorMessage,

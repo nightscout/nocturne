@@ -120,7 +120,7 @@ public class OAuthGrantServiceTests : IDisposable
             ClientEntityId = clientEntityId ?? _testClientEntityId,
             SubjectId = subjectId ?? _ownerSubjectId,
             GrantType = grantType,
-            Scopes = scopes ?? new List<string> { "entries.read" },
+            Scopes = scopes ?? new List<string> { "glucose.read" },
             Label = label,
             RevokedAt = revokedAt,
             CreatedAt = DateTime.UtcNow,
@@ -236,14 +236,14 @@ public class OAuthGrantServiceTests : IDisposable
         await SeedClientAsync(db);
         await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
         var grantId = await SeedGrantAsync(db,
-            scopes: new List<string> { "entries.read" });
+            scopes: new List<string> { "glucose.read" });
 
         var service = CreateService(db);
         var result = await service.UpdateGrantAsync(grantId, _ownerSubjectId,
-            scopes: new[] { "entries.read", "treatments.readwrite" });
+            scopes: new[] { "glucose.read", "treatments.readwrite" });
 
         Assert.NotNull(result);
-        Assert.Contains("entries.read", result.Scopes);
+        Assert.Contains("glucose.read", result.Scopes);
         Assert.Contains("treatments.readwrite", result.Scopes);
     }
 

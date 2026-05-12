@@ -19,6 +19,8 @@
     onSelectionChange?: (domain: [Date, Date] | null) => void;
     showTimeAxis?: boolean;
     tracks: Snippet<[GlucoseChartContext]>;
+    /** HTML overlays rendered after Svg but inside Chart (tooltips, etc.) */
+    overlays?: Snippet<[GlucoseChartContext]>;
   }
 
   const {
@@ -32,6 +34,7 @@
     onSelectionChange,
     showTimeAxis = true,
     tracks,
+    overlays,
   }: Props = $props();
 
   let chartHeight = $state(0);
@@ -114,6 +117,10 @@
           />
         {/if}
       </Svg>
+
+      {#if chartHeight > 0}
+        {@render overlays?.(ctx)}
+      {/if}
 
       {#if onSelectionChange}
         <BrushContext

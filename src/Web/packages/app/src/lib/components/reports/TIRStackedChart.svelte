@@ -151,6 +151,36 @@
     }));
   });
 
+  /**
+   * Spreads label Y positions apart so adjacent labels are at least minGap px
+   * apart. Input positions are in SVG Y coords (larger Y = lower on screen),
+   * ordered bottom-to-top: [veryLow, low, target, high, veryHigh].
+   */
+  function spreadLabelPositions(rawYs: number[], minGap: number, height: number): number[] {
+    const ys = [...rawYs];
+    for (let pass = 0; pass < 10; pass++) {
+      for (let i = 1; i < ys.length; i++) {
+        if (ys[i - 1] - ys[i] < minGap) {
+          const center = (ys[i - 1] + ys[i]) / 2;
+          ys[i - 1] = center + minGap / 2;
+          ys[i] = center - minGap / 2;
+        }
+      }
+      for (let i = ys.length - 2; i >= 0; i--) {
+        if (ys[i] - ys[i + 1] < minGap) {
+          const center = (ys[i] + ys[i + 1]) / 2;
+          ys[i] = center + minGap / 2;
+          ys[i + 1] = center - minGap / 2;
+        }
+      }
+    }
+    const margin = 6;
+    for (let i = 0; i < ys.length; i++) {
+      ys[i] = Math.max(margin, Math.min(height - margin, ys[i]));
+    }
+    return ys;
+  }
+
   // Padding based on orientation and options
   const chartPadding = $derived.by(() => {
     if (orientation === "horizontal") {
@@ -190,23 +220,13 @@
       tooltip={{ mode: "band" }}
     >
       {#snippet children({ context })}
-        {@const targetSegment = stackedData.find((s) => s.range === "target")}
-        {@const targetMid = targetSegment
-          ? (targetSegment.y0 + targetSegment.y1) / 2
-          : totalDisplaySize / 2}
-        {@const targetY =
-          context.height - (targetMid / totalDisplaySize) * context.height}
-        {@const labelOffset = Math.min(
-          compact ? 18 : 24,
-          context.height * 0.18,
-        )}
-        {@const labelYByRange = {
-          veryLow: targetY + labelOffset * 2,
-          low: targetY + labelOffset,
-          target: targetY,
-          high: targetY - labelOffset,
-          veryHigh: targetY - labelOffset * 2,
-        }}
+        {@const rawLabelYs = rangeKeys.map((key) => {
+          const seg = stackedData.find((s) => s.range === key)!;
+          const midpoint = (seg.y0 + seg.y1) / 2;
+          return context.height - (midpoint / totalDisplaySize) * context.height;
+        })}
+        {@const spreadYs = spreadLabelPositions(rawLabelYs, compact ? 16 : 20, context.height)}
+        {@const labelYByRange = Object.fromEntries(rangeKeys.map((key, i) => [key, spreadYs[i]])) as Record<RangeKey, number>}
         <Svg>
           <!-- Bar segments: filled for value > 0, dotted outline for 0% -->
           <Bars>

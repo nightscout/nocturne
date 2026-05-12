@@ -148,7 +148,7 @@
             </div>
           </div>
           <div>
-            <span class="text-muted-foreground">Last Seen</span>
+            <span class="text-muted-foreground">Last Record Received</span>
             <p class="mt-1 font-medium">
               {formatLastSeen(selectedDataSource.lastSeen)}
             </p>

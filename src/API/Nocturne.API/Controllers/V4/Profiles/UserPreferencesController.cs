@@ -12,6 +12,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 /// </summary>
 /// <seealso cref="NocturneDbContext"/>
 [ApiController]
+[Tags("Profiles")]
 [Route("api/v4/user/preferences")]
 public class UserPreferencesController : ControllerBase
 {

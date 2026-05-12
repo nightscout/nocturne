@@ -44,6 +44,8 @@
     effectiveConfig?: Record<string, unknown> | null;
     /** Whether secrets are configured (from API) */
     hasSecrets?: boolean;
+    /** Whether to show the .env variable name hints. False for non-platform-admin users. */
+    showEnvVarHints?: boolean;
     onSave: (config: Record<string, unknown>, secrets: Record<string, string>) => Promise<void>;
   }
 
@@ -53,6 +55,7 @@
     secrets = $bindable({}),
     effectiveConfig = null,
     hasSecrets = false,
+    showEnvVarHints = true,
     onSave,
   }: Props = $props();
 
@@ -314,7 +317,7 @@
               {meta.description}
             </p>
           {/if}
-          {#if propSchema["x-envVar"]}
+          {#if propSchema["x-envVar"] && showEnvVarHints}
             <p class="text-xs text-muted-foreground/70">
               <code class="bg-muted px-1 rounded">
                 {propSchema["x-envVar"]}
@@ -365,7 +368,7 @@
       {#if meta.description}
         <p class="text-sm text-muted-foreground">{meta.description}</p>
       {/if}
-      {#if propSchema["x-envVar"]}
+      {#if propSchema["x-envVar"] && showEnvVarHints}
         <p class="text-xs text-muted-foreground/70">
           <code class="bg-muted px-1 rounded">{propSchema["x-envVar"]}</code>
         </p>
@@ -421,7 +424,7 @@
           {/if}
         </p>
       {/if}
-      {#if propSchema["x-envVar"]}
+      {#if propSchema["x-envVar"] && showEnvVarHints}
         <p class="text-xs text-muted-foreground/70">
           <code class="bg-muted px-1 rounded">{propSchema["x-envVar"]}</code>
         </p>
@@ -459,7 +462,7 @@
       {#if meta.description}
         <p class="text-sm text-muted-foreground">{meta.description}</p>
       {/if}
-      {#if propSchema["x-envVar"]}
+      {#if propSchema["x-envVar"] && showEnvVarHints}
         <p class="text-xs text-muted-foreground/70">
           <code class="bg-muted px-1 rounded">{propSchema["x-envVar"]}</code>
         </p>
@@ -581,7 +584,7 @@
                 {secretMeta.description}
               </p>
             {/if}
-            {#if propSchema["x-envVar"]}
+            {#if propSchema["x-envVar"] && showEnvVarHints}
               <p class="text-xs text-muted-foreground/70">
                 Environment variable: <code class="bg-muted px-1 rounded">
                   {propSchema["x-envVar"]}

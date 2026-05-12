@@ -737,14 +737,13 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     /// <param name="values">Collection of numeric values</param>
     /// <returns>Mean value rounded to one decimal place</returns>
-    public double CalculateMean(IEnumerable<double> values)
+    public double CalculateMean(IList<double> values)
     {
-        var valuesList = values.ToList();
-        if (!valuesList.Any())
+        if (values.Count == 0)
             return 0;
 
-        var sum = valuesList.Sum();
-        return Math.Round((sum / valuesList.Count) * 10) / 10;
+        var sum = values.Sum();
+        return Math.Round((sum / values.Count) * 10) / 10;
     }
 
     /// <summary>
@@ -753,23 +752,22 @@ public class StatisticsService : IStatisticsService
     /// <param name="sortedValues">Pre-sorted collection of values</param>
     /// <param name="percentile">Percentile to calculate (0-100)</param>
     /// <returns>Value at the specified percentile</returns>
-    public double CalculatePercentile(IEnumerable<double> sortedValues, double percentile)
+    public double CalculatePercentile(IList<double> sortedValues, double percentile)
     {
-        var sorted = sortedValues.ToList();
-        if (!sorted.Any())
+        if (sortedValues.Count == 0)
             return 0;
 
-        var index = (percentile / 100) * (sorted.Count - 1);
+        var index = (percentile / 100) * (sortedValues.Count - 1);
         var lower = (int)Math.Floor(index);
         var upper = (int)Math.Ceiling(index);
 
         if (lower == upper)
         {
-            return sorted[lower];
+            return sortedValues[lower];
         }
 
         var weight = index - lower;
-        return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+        return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
     }
 
     /// <summary>
@@ -1232,19 +1230,18 @@ public class StatisticsService : IStatisticsService
             };
         }
 
-        // Count readings in each range
-        var veryLowCount = glucoseValues.Count(v => v < thresholds.VeryLow);
-        var lowCount = glucoseValues.Count(v => v >= thresholds.VeryLow && v < thresholds.Low);
-        var targetCount = glucoseValues.Count(v =>
-            v >= thresholds.TargetBottom && v <= thresholds.TargetTop
-        );
-        var tightTargetCount = glucoseValues.Count(v =>
-            v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop
-        );
-        var highCount = glucoseValues.Count(v =>
-            v > thresholds.TargetTop && v <= thresholds.VeryHigh
-        );
-        var veryHighCount = glucoseValues.Count(v => v > thresholds.VeryHigh);
+        // Single-pass counting across all ranges
+        int veryLowCount = 0, lowCount = 0, targetCount = 0, tightTargetCount = 0, highCount = 0, veryHighCount = 0;
+        foreach (var v in glucoseValues)
+        {
+            if (v < thresholds.VeryLow) veryLowCount++;
+            else if (v < thresholds.Low) lowCount++;
+            else if (v > thresholds.VeryHigh) veryHighCount++;
+            else if (v > thresholds.TargetTop) highCount++;
+            // Target and tight-target overlap, so count both independently
+            if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop) targetCount++;
+            if (v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop) tightTargetCount++;
+        }
 
         // Calculate percentages
         var percentages = new TimeInRangePercentages
@@ -1273,11 +1270,15 @@ public class StatisticsService : IStatisticsService
         var episodes = CalculateEpisodes(glucoseValues, thresholds);
 
         // Calculate per-range detailed statistics
-        var lowValues = glucoseValues.Where(v => v < thresholds.Low).ToList();
-        var targetValues = glucoseValues
-            .Where(v => v >= thresholds.TargetBottom && v <= thresholds.TargetTop)
-            .ToList();
-        var highValues = glucoseValues.Where(v => v > thresholds.TargetTop).ToList();
+        var lowValues = new List<double>(veryLowCount + lowCount);
+        var targetValues = new List<double>(targetCount);
+        var highValues = new List<double>(highCount + veryHighCount);
+        foreach (var v in glucoseValues)
+        {
+            if (v < thresholds.Low) lowValues.Add(v);
+            else if (v > thresholds.TargetTop) highValues.Add(v);
+            if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop) targetValues.Add(v);
+        }
 
         var rangeStats = new TimeInRangeDetailedStats
         {
@@ -1450,7 +1451,8 @@ public class StatisticsService : IStatisticsService
     /// <returns>Estimated HbA1C as a formatted string</returns>
     public string CalculateEstimatedHbA1C(IEnumerable<double> values)
     {
-        var mean = CalculateMean(values);
+        var valuesList = values as IList<double> ?? values.ToList();
+        var mean = CalculateMean(valuesList);
         if (mean == 0)
             return "0.0";
         var a1c = (mean + 46.7) / 28.7;
@@ -1473,7 +1475,7 @@ public class StatisticsService : IStatisticsService
         // Initialize all 24 hours
         for (int hour = 0; hour < 24; hour++)
         {
-            hourlyGroups[hour] = new List<SensorGlucose>();
+            hourlyGroups[hour] = new List<SensorGlucose>(entriesList.Count / 24 + 1);
         }
 
         // Group entries by hour (only if we have entries)

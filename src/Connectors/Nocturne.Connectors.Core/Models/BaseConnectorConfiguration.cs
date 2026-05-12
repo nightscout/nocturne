@@ -89,6 +89,18 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     [ConnectorProperty(ConnectorPropertyKey.SyncFood, DefaultValue = "true")]
     public bool SyncFood { get; set; } = true;
 
+    /// <summary>
+    ///     Override for active threshold (minutes). 0 = use connector default.
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.ActiveThresholdMinutes)]
+    public int ActiveThresholdMinutes { get; set; } = 0;
+
+    /// <summary>
+    ///     Override for stale threshold (minutes). 0 = use connector default.
+    /// </summary>
+    [ConnectorProperty(ConnectorPropertyKey.StaleThresholdMinutes)]
+    public int StaleThresholdMinutes { get; set; } = 0;
+
     public bool IsDataTypeEnabled(SyncDataType type) => type switch
     {
         SyncDataType.Glucose => SyncGlucose,

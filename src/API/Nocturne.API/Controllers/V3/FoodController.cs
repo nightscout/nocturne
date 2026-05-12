@@ -17,6 +17,7 @@ namespace Nocturne.API.Controllers.V3;
 /// <seealso cref="Food"/>
 /// <seealso cref="BaseV3Controller{T}"/>
 [ApiController]
+[Tags("V3")]
 [Route("api/v3/[controller]")]
 [Authorize(Policy = PolicyNames.HasPermissions)]
 public class FoodController : BaseV3Controller<Food>

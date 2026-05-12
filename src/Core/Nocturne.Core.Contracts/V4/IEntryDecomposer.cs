@@ -41,4 +41,18 @@ public interface IEntryDecomposer
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Total number of records deleted across all V4 tables.</returns>
     Task<long> BulkDeleteAsync(string? find, CancellationToken ct = default);
+
+    /// <summary>
+    /// Decomposes a batch of legacy entries into v4 records using bulk-insert,
+    /// eliminating per-entry round-trips. All entries share a single
+    /// <see cref="DecompositionResult.CorrelationId"/>.
+    /// </summary>
+    /// <param name="entries">The legacy entries to decompose.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// A <see cref="DecompositionResult"/> whose <see cref="DecompositionResult.CreatedRecords"/>
+    /// contains all bulk-inserted v4 records. Entries with unrecognised types are skipped.
+    /// </returns>
+    Task<DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<Entry> entries, CancellationToken ct = default);
 }

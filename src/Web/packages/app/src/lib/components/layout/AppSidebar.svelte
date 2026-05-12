@@ -113,7 +113,7 @@
    * subdomain-based multitenancy is active (baseDomain is set).
    */
   async function loadTenantTargets() {
-    if (!baseDomain) return;
+    if (!baseDomain || isGuestSession) return;
     try {
       const tenants = await getMyTenants();
       totalTenantCount = (tenants ?? []).length;

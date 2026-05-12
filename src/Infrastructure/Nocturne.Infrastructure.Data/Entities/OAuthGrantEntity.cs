@@ -47,7 +47,7 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable
     public string GrantType { get; set; } = OAuthGrantTypes.App;
 
     /// <summary>
-    /// Granted scopes (stored as JSON string array, e.g. ["entries.read", "treatments.readwrite"])
+    /// Granted scopes (stored as JSON string array, e.g. ["glucose.read", "treatments.readwrite"])
     /// </summary>
     [Required]
     [Column("scopes")]
@@ -90,6 +90,13 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable
     /// </summary>
     [Column("revoked_at")]
     public DateTime? RevokedAt { get; set; }
+
+    /// <summary>
+    /// When this grant was dismissed from the UI by the user.
+    /// Only applicable to terminal-state grants (revoked or expired).
+    /// </summary>
+    [Column("dismissed_at")]
+    public DateTime? DismissedAt { get; set; }
 
     /// <summary>
     /// When this grant expires. Only used for guest grants (creation + 48h).

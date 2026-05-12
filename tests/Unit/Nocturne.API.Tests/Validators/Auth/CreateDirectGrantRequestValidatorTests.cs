@@ -13,7 +13,7 @@ public class CreateDirectGrantRequestValidatorTests
     private static CreateDirectGrantRequest ValidRequest() => new()
     {
         Label = "My API Token",
-        Scopes = [OAuthScopes.EntriesRead],
+        Scopes = [OAuthScopes.GlucoseRead],
     };
 
     [Fact]
@@ -75,7 +75,7 @@ public class CreateDirectGrantRequestValidatorTests
     public void Valid_scopes_pass()
     {
         var request = ValidRequest();
-        request.Scopes = [OAuthScopes.EntriesRead, OAuthScopes.TreatmentsReadWrite, OAuthScopes.FullAccess];
+        request.Scopes = [OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsReadWrite, OAuthScopes.FullAccess];
         var result = _validator.TestValidate(request);
         result.ShouldNotHaveAnyValidationErrors();
     }

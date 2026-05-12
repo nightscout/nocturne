@@ -15,6 +15,7 @@
     aaps: "png",
     dexcom: "png",
     discord: "png",
+    eversense: "png",
     github: "png",
     glooko: "png",
     glucotracker: "png",
@@ -40,6 +41,7 @@
     myfitnesspal: "jpg",
     tidepool: "jpg",
     trio: "jpg",
+    twiist: "png",
     xdrip: "jpg",
     xdrip4ios: "jpg",
   };
@@ -52,4 +54,9 @@
   });
 </script>
 
-<img src={src} alt="" class="object-cover rounded-[inherit] {className}" draggable="false" />
+<img
+  {src}
+  alt=""
+  class="object-cover rounded-[inherit] {className}"
+  draggable="false"
+/>

@@ -3,6 +3,8 @@
   import * as Select from "$lib/components/ui/select";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { Switch } from "$lib/components/ui/switch";
+  import { bg, bgLabel, convertFromDisplayUnits } from "$lib/utils/formatting";
+  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {
     type ConditionNode,
     type ComparisonOperator,
@@ -164,17 +166,18 @@
     </Select.Root>
     <Input
       type="number"
+      step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
       class="h-7 w-20 px-2 text-right text-xs tabular-nums"
-      value={node.threshold.value ?? 0}
+      value={bg(node.threshold.value ?? 0)}
       oninput={(e) => {
         if (node.threshold)
-          node.threshold.value = parseNumber(
-            e.currentTarget.value,
-            node.threshold.value ?? 0,
+          node.threshold.value = convertFromDisplayUnits(
+            parseNumber(e.currentTarget.value, bg(node.threshold.value ?? 0) as number),
+            glucoseUnits.current,
           );
       }}
     />
-    <span class="text-xs text-muted-foreground">mg/dL</span>
+    <span class="text-xs text-muted-foreground">{bgLabel()}</span>
   {:else if node.type === "predicted" && node.predicted}
     <Select.Root
       type="single"
@@ -194,17 +197,18 @@
     </Select.Root>
     <Input
       type="number"
+      step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
       class="h-7 w-20 px-2 text-right text-xs tabular-nums"
-      value={node.predicted.value ?? 0}
+      value={bg(node.predicted.value ?? 0)}
       oninput={(e) => {
         if (node.predicted)
-          node.predicted.value = parseNumber(
-            e.currentTarget.value,
-            node.predicted.value ?? 0,
+          node.predicted.value = convertFromDisplayUnits(
+            parseNumber(e.currentTarget.value, bg(node.predicted.value ?? 0) as number),
+            glucoseUnits.current,
           );
       }}
     />
-    <span class="text-xs text-muted-foreground">mg/dL within</span>
+    <span class="text-xs text-muted-foreground">{bgLabel()} within</span>
     <Input
       type="number"
       min="1"
@@ -239,18 +243,18 @@
     <span class="text-xs text-muted-foreground">≥</span>
     <Input
       type="number"
-      step="0.1"
+      step={glucoseUnits.current === "mmol" ? "0.01" : "0.1"}
       class="h-7 w-20 px-2 text-right text-xs tabular-nums"
-      value={node.rate_of_change.rate ?? 0}
+      value={bg(node.rate_of_change.rate ?? 0)}
       oninput={(e) => {
         if (node.rate_of_change)
-          node.rate_of_change.rate = parseNumber(
-            e.currentTarget.value,
-            node.rate_of_change.rate ?? 0,
+          node.rate_of_change.rate = convertFromDisplayUnits(
+            parseNumber(e.currentTarget.value, bg(node.rate_of_change.rate ?? 0) as number),
+            glucoseUnits.current,
           );
       }}
     />
-    <span class="text-xs text-muted-foreground">mg/dL/min</span>
+    <span class="text-xs text-muted-foreground">{bgLabel()}/min</span>
   {:else if node.type === "trend" && node.trend}
     <Select.Root
       type="single"

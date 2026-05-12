@@ -169,7 +169,7 @@ export const getProvidersInfo = query(async () => {
 /**
  * Refresh the current session tokens
  */
-export const refreshSession = query(async () => {
+export const refreshSession = command(async () => {
   const event = getRequestEvent();
   if (!event) {
     return { success: false };
@@ -180,41 +180,12 @@ export const refreshSession = query(async () => {
   try {
     const result = await api.oidc.refresh();
 
-    // Update cookies if new tokens are returned
-    if (result.accessToken) {
-      const isSecure = event.url.protocol === "https:";
-      const refreshMaxAge = result.refreshExpiresIn || 60 * 60 * 24 * 7;
-
-      event.cookies.set(AUTH_COOKIE_NAMES.accessToken, result.accessToken, {
-        path: "/",
-        httpOnly: true,
-        secure: isSecure,
-        sameSite: "lax",
-        maxAge: result.expiresIn || 3600,
-      });
-
-      // Save the rotated refresh token — the API revokes the old one on
-      // each use when RotateRefreshTokens is enabled (the default), so we
-      // must persist the new token or the next refresh will fail.
-      if (result.refreshToken) {
-        event.cookies.set(AUTH_COOKIE_NAMES.refreshToken, result.refreshToken, {
-          path: "/",
-          httpOnly: true,
-          secure: isSecure,
-          sameSite: "lax",
-          maxAge: refreshMaxAge,
-        });
-      }
-
-      // Match refresh token lifetime so frontend stays authenticated across refreshes
-      event.cookies.set("IsAuthenticated", "true", {
-        path: "/",
-        httpOnly: false,
-        secure: isSecure,
-        sameSite: "lax",
-        maxAge: refreshMaxAge,
-      });
-    }
+    // Cookie propagation is handled automatically by propagateAuthCookies
+    // (configured via responseCookies in the API client factory). The API's
+    // Set-Cookie headers include the correct Domain attribute (e.g.
+    // ".nocturne.run") so cookies update in-place rather than creating
+    // duplicate domain-scoped cookies that lead to stale/revoked tokens
+    // being sent on subsequent requests.
 
     return {
       success: true,
@@ -229,7 +200,7 @@ export const refreshSession = query(async () => {
 /**
  * Logout and clear session cookies
  */
-export const logoutSession = query(z.string().optional(), async (_providerId) => {
+export const logoutSession = command(z.string().optional(), async (_providerId) => {
   const event = getRequestEvent();
   if (!event) {
     return { success: false };
@@ -262,6 +233,12 @@ export const logoutSession = query(z.string().optional(), async (_providerId) =>
 /**
  * Set auth cookies after successful passkey login.
  * Called from the client after the passkey completion endpoint returns tokens.
+ *
+ * The passkey completion API response already sets auth cookies on the browser
+ * via Set-Cookie headers (with the correct Domain attribute). This command
+ * validates the session server-side so that propagateAuthCookies can forward
+ * any rotated tokens with the proper domain, avoiding duplicate cookies that
+ * would cause stale/revoked tokens to linger on the parent domain.
  */
 export const setAuthCookies = command(
   z.object({
@@ -270,42 +247,22 @@ export const setAuthCookies = command(
     expiresIn: z.number().optional(),
     refreshExpiresIn: z.number().optional(),
   }),
-  async (data) => {
+  async () => {
     const event = getRequestEvent();
     if (!event) {
       return { success: false };
     }
 
-    const isSecure = event.url.protocol === "https:";
-
-    event.cookies.set(AUTH_COOKIE_NAMES.accessToken, data.accessToken, {
-      path: "/",
-      httpOnly: true,
-      secure: isSecure,
-      sameSite: "lax",
-      maxAge: data.expiresIn || 3600,
-    });
-
-    const refreshMaxAge = data.refreshExpiresIn || 60 * 60 * 24 * 7;
-
-    if (data.refreshToken) {
-      event.cookies.set(AUTH_COOKIE_NAMES.refreshToken, data.refreshToken, {
-        path: "/",
-        httpOnly: true,
-        secure: isSecure,
-        sameSite: "lax",
-        maxAge: refreshMaxAge,
-      });
+    // The browser already has auth cookies from the passkey API's Set-Cookie
+    // headers (forwarded through YARP). Calling getSession() validates the
+    // session and lets propagateAuthCookies forward any Set-Cookie headers
+    // from the API with the correct Domain attribute.
+    const api = getApiClient();
+    try {
+      const session = await api.oidc.getSession();
+      return { success: session?.isAuthenticated ?? false };
+    } catch {
+      return { success: false };
     }
-
-    event.cookies.set("IsAuthenticated", "true", {
-      path: "/",
-      httpOnly: false,
-      secure: isSecure,
-      sameSite: "lax",
-      maxAge: refreshMaxAge,
-    });
-
-    return { success: true };
   }
 );

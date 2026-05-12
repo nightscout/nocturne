@@ -299,7 +299,7 @@
 
 <!-- Create Token Dialog -->
 <Dialog.Root bind:open={showCreateDialog}>
-  <Dialog.Content class="max-w-lg">
+  <Dialog.Content class="max-w-lg max-h-[90vh] overflow-y-auto">
     {#if createdToken}
       <!-- Token created - show the value -->
       <Dialog.Header>

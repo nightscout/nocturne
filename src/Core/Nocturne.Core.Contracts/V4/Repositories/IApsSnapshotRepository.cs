@@ -105,4 +105,14 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <param name="asOf">When non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<decimal?> GetLatestSensitivityRatioAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk-insert <see cref="ApsSnapshot"/> records with batch-level and DB-level deduplication by LegacyId.
+    /// </summary>
+    /// <param name="records">Records to insert.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The records that were actually inserted (duplicates excluded).</returns>
+    Task<IEnumerable<ApsSnapshot>> BulkCreateAsync(
+        IEnumerable<ApsSnapshot> records,
+        CancellationToken ct = default);
 }

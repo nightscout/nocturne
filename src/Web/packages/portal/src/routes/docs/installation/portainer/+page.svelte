@@ -1,122 +1,122 @@
 <script lang="ts">
-    import DockerComposeYaml from "$lib/components/docs/DockerComposeYaml.svelte";
-    import EnvVarReference from "$lib/components/docs/EnvVarReference.svelte";
-    import VerificationSteps from "$lib/components/docs/VerificationSteps.svelte";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
+    import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
+    import CopyButton from "$lib/components/docs/CopyButton.svelte";
     import { Info } from "@lucide/svelte";
+
+    const templateUrl = "https://raw.githubusercontent.com/nightscout/nocturne/main/deploy/portainer/templates.json";
 </script>
 
 <div class="max-w-3xl">
     <h1 class="text-4xl font-bold tracking-tight mb-4">Portainer</h1>
     <p class="text-lg text-muted-foreground mb-8">
-        Deploy Nocturne using the Portainer web interface. No SSH or command-line access required.
+        Deploy Nocturne using the Portainer web interface. No command-line access required.
     </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Prerequisites</h2>
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-8">
         <li>A running Portainer instance (Community or Business Edition)</li>
-        <li>Access to a Docker environment in Portainer</li>
+        <li>Docker Engine 24+ and Docker Compose 2.23.1+</li>
         <li>A domain name (recommended) or static IP address</li>
     </ul>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 1: Create a new stack</h2>
+    <h2 class="text-2xl font-bold mt-8 mb-4">Option 1: App Template (recommended)</h2>
+    <p class="text-muted-foreground mb-6">
+        The Nocturne app template lets you deploy directly from Portainer's template gallery with
+        a guided form for all configuration values.
+    </p>
+
+    <h3 class="text-xl font-semibold mt-6 mb-3">Step 1: Add the template URL</h3>
+    <p class="text-muted-foreground mb-4">
+        In Portainer, go to <strong class="text-foreground">Settings → App Templates</strong> and
+        set the URL to:
+    </p>
+    <div class="flex items-center gap-2 rounded-lg bg-muted/50 border border-border/60 mb-4">
+        <pre class="flex-1 p-3 text-sm overflow-x-auto"><code>{templateUrl}</code></pre>
+        <div class="mr-3">
+            <CopyButton text={templateUrl} label="Copy URL to clipboard" />
+        </div>
+    </div>
+    <p class="text-muted-foreground mb-8">
+        Click <strong class="text-foreground">Save settings</strong>.
+    </p>
+
+    <h3 class="text-xl font-semibold mt-6 mb-3">Step 2: Deploy from the template</h3>
     <ol class="list-decimal list-inside space-y-3 text-muted-foreground mb-8">
         <li>
-            <strong class="text-foreground">Navigate to Stacks</strong>
-            <p class="ml-6 mt-1">
-                In the Portainer sidebar, click <strong class="text-foreground">Stacks</strong>,
-                then click <strong class="text-foreground">Add stack</strong>.
-            </p>
+            Navigate to <strong class="text-foreground">App Templates</strong> in the sidebar.
         </li>
         <li>
-            <strong class="text-foreground">Name your stack</strong>
-            <p class="ml-6 mt-1">
-                Enter <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">nocturne</code>
-                as the stack name.
-            </p>
+            Find <strong class="text-foreground">Nocturne</strong> in the list and click it.
         </li>
         <li>
-            <strong class="text-foreground">Select "Web editor"</strong>
-            <p class="ml-6 mt-1">
-                Choose the Web editor option to paste the compose file directly.
-            </p>
+            Fill in the configuration form. Set a strong password for each PostgreSQL role and a
+            unique <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">INSTANCE_KEY</code>
+            (minimum 12 characters). Use the generator below for each secret field.
+        </li>
+        <li class="list-none -ml-5">
+            <PasswordGenerator label="password" />
+        </li>
+        <li>
+            Click <strong class="text-foreground">Deploy the stack</strong>.
         </li>
     </ol>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 2: Paste the compose configuration</h2>
-    <p class="text-muted-foreground mb-4">
-        Copy the following Docker Compose configuration and paste it into the Portainer web editor.
-        The minimal configuration includes PostgreSQL, the Nocturne API, and Watchtower for
-        automatic updates.
-    </p>
-
-    <div class="p-4 rounded-lg border border-blue-500/30 bg-blue-500/5 mb-4 not-prose">
+    <div class="p-4 rounded-lg border border-blue-500/30 bg-blue-500/5 mb-8 not-prose">
         <div class="flex items-start gap-3">
             <Info class="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
             <p class="text-sm text-muted-foreground">
-                <strong class="text-blue-700 dark:text-blue-400">Only paste the docker-compose.yml content.</strong>
-                The .env variables will be configured separately in Portainer's environment
-                variables section below.
+                <strong class="text-blue-700 dark:text-blue-400">Bot integrations are optional.</strong>
+                Leave Discord, Telegram, Slack, and WhatsApp fields blank if you don't need them.
+                They can be configured later by updating the stack.
             </p>
         </div>
     </div>
 
-    <DockerComposeYaml minimal />
-
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 3: Configure environment variables</h2>
+    <h2 class="text-2xl font-bold mt-8 mb-4">Option 2: Manual deployment</h2>
     <p class="text-muted-foreground mb-4">
-        Scroll down to the <strong class="text-foreground">Environment variables</strong> section
-        in Portainer. Click <strong class="text-foreground">Advanced mode</strong> and add the
-        following variables, one per line in <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">KEY=VALUE</code> format:
+        If you prefer to configure the stack manually, download
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.yaml</code>
+        and <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env.example</code> from the
+        <a href="https://github.com/nightscout/nocturne/releases/latest" class="text-primary hover:underline">
+            latest GitHub Release
+        </a>, then:
     </p>
-
-    <pre class="p-4 rounded-lg bg-muted/50 border border-border/60 text-sm overflow-x-auto mb-4"><code>POSTGRES_USERNAME=nocturne
-POSTGRES_PASSWORD=change-me-to-a-secure-password
-INSTANCE_KEY=change-me-min-12-characters
-NOCTURNE_API_PORT=8443
-NOCTURNE_API_IMAGE=ghcr.io/nightscout/nocturne-api:latest</code></pre>
-
-    <p class="text-muted-foreground mb-4">
-        Make sure to replace the placeholder values with your own secure passwords and secrets.
-    </p>
-
-    <EnvVarReference coreOnly />
-
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 4: Deploy the stack</h2>
     <ol class="list-decimal list-inside space-y-3 text-muted-foreground mb-8">
         <li>
-            <strong class="text-foreground">Review your configuration</strong>
-            <p class="ml-6 mt-1">
-                Double-check the compose content and environment variables are correct.
-            </p>
+            In Portainer, go to <strong class="text-foreground">Stacks → Add stack</strong>.
+            Name it <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">nocturne</code>
+            and select <strong class="text-foreground">Web editor</strong>.
         </li>
         <li>
-            <strong class="text-foreground">Click "Deploy the stack"</strong>
-            <p class="ml-6 mt-1">
-                Portainer will pull the Docker images and start all services. This may take
-                a few minutes on first deployment.
-            </p>
+            Paste the contents of <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.yaml</code>
+            into the editor.
         </li>
         <li>
-            <strong class="text-foreground">Monitor the deployment</strong>
-            <p class="ml-6 mt-1">
-                The stack details page will show the status of each container. Wait until all
-                containers show as <strong class="text-foreground">Running</strong>.
-            </p>
+            Scroll to <strong class="text-foreground">Environment variables</strong>, click
+            <strong class="text-foreground">Advanced mode</strong>, and paste your values from
+            <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env.example</code>
+            in <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">KEY=VALUE</code> format.
+        </li>
+        <li>
+            Click <strong class="text-foreground">Deploy the stack</strong>.
         </li>
     </ol>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Step 5: Verify the installation</h2>
+    <h2 class="text-2xl font-bold mt-8 mb-4">Verify the installation</h2>
     <p class="text-muted-foreground mb-4">
-        You can check the container logs directly in Portainer by clicking on any container
-        in your stack, or from the command line:
+        In Portainer, navigate to your <strong class="text-foreground">nocturne</strong> stack.
+        All containers should show as <strong class="text-foreground">Running</strong>. Click any
+        container to view its logs and check for errors.
     </p>
-    <VerificationSteps />
+    <p class="text-muted-foreground mb-8">
+        Once running, the stack is accessible on port
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">8080</code> of your host.
+    </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Updating</h2>
     <p class="text-muted-foreground mb-4">
-        Watchtower is included in the stack and will automatically check for image updates
-        once per day. To update manually through Portainer:
+        Watchtower is included and checks for image updates daily. To update manually in Portainer:
     </p>
     <ol class="list-decimal list-inside space-y-2 text-muted-foreground mb-8">
         <li>Navigate to your <strong class="text-foreground">nocturne</strong> stack</li>
@@ -126,13 +126,10 @@ NOCTURNE_API_IMAGE=ghcr.io/nightscout/nocturne-api:latest</code></pre>
         <li>Click <strong class="text-foreground">Update</strong></li>
     </ol>
 
-    <h2 class="text-2xl font-bold mt-8 mb-4">Adding Connectors</h2>
-    <p class="text-muted-foreground mb-4">
-        To add data source connectors (Dexcom, LibreLinkUp, etc.), edit your stack in Portainer
-        and add the connector services to the compose configuration. You will also need to add the
-        connector-specific environment variables. See the
-        <a href="/docs/configuration" class="text-primary hover:underline">Configuration Guide</a>
-        for details.
+    <h2 class="text-2xl font-bold mt-8 mb-4">Connectors</h2>
+    <p class="text-muted-foreground mb-8">
+        Data source connectors (Dexcom, LibreLinkUp, Glooko, etc.) are configured through the
+        Nocturne UI after deployment — no compose changes required.
     </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Next Steps</h2>

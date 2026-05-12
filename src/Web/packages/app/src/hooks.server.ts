@@ -34,6 +34,17 @@ function getOriginalHost(request: Request): string | null {
 }
 
 /**
+ * Get the original client-facing protocol from the request.
+ * When behind a TLS-terminating reverse proxy (YARP), the internal request
+ * is plain HTTP but X-Forwarded-Proto carries the original scheme. We must
+ * forward this to internal API calls so the API's HTTPS enforcement
+ * middleware treats them as secure.
+ */
+function getOriginalProto(request: Request): string {
+  return request.headers.get("x-forwarded-proto") ?? (request.url.startsWith("https") ? "https" : "http");
+}
+
+/**
  * Cookie set during setup to carry the tenant slug while the user is still
  * on the apex domain. httpOnly, 1-hour TTL, cleaned up by markSetupComplete.
  * Read by hooks that create API clients so they can prepend the slug to
@@ -99,6 +110,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
           Cookie: `nocturne-guest-session=${guestSessionCookie}`,
         };
         if (forwardedHost) headers["X-Forwarded-Host"] = forwardedHost;
+        headers["X-Forwarded-Proto"] = getOriginalProto(event.request);
 
         const hashedKey = getHashedInstanceKey();
         if (hashedKey) headers["X-Instance-Key"] = hashedKey;
@@ -133,11 +145,13 @@ const authHandle: Handle = async ({ event, resolve }) => {
     // the browser, so rotated refresh tokens don't silently disappear.
     const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
     const forwardedHost = getEffectiveHost(event.request, event.cookies);
+    const authExtraHeaders: Record<string, string> = { "X-Forwarded-Proto": getOriginalProto(event.request) };
+    if (forwardedHost) authExtraHeaders["X-Forwarded-Host"] = forwardedHost;
     const apiClient = createServerApiClient(apiBaseUrl, fetch, {
       accessToken,
       refreshToken,
       hashedInstanceKey: getHashedInstanceKey(),
-      extraHeaders: forwardedHost ? { "X-Forwarded-Host": forwardedHost } : undefined,
+      extraHeaders: authExtraHeaders,
       responseCookies: event.cookies,
     });
 
@@ -209,9 +223,11 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
   try {
     if (!event.locals.siteSecurityChecked) {
       const probeHost = getEffectiveHost(event.request, event.cookies);
+      const probeHeaders: Record<string, string> = { "X-Forwarded-Proto": getOriginalProto(event.request) };
+      if (probeHost) probeHeaders["X-Forwarded-Host"] = probeHost;
       const apiClient = createServerApiClient(apiBaseUrl, fetch, {
         hashedInstanceKey: getHashedInstanceKey(),
-        extraHeaders: probeHost ? { "X-Forwarded-Host": probeHost } : undefined,
+        extraHeaders: probeHeaders,
       });
 
       const status = await apiClient.status.getStatus();
@@ -309,6 +325,7 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
     if (effectiveHost) {
       headers.set("X-Forwarded-Host", effectiveHost);
     }
+    headers.set("X-Forwarded-Proto", getOriginalProto(event.request));
     if (hashedInstanceKey) {
       headers.set("X-Instance-Key", hashedInstanceKey);
     }
@@ -365,7 +382,9 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
   const guestSessionToken = event.cookies.get("nocturne-guest-session");
 
-  const extraHeaders: Record<string, string> = {};
+  const extraHeaders: Record<string, string> = {
+    "X-Forwarded-Proto": getOriginalProto(event.request),
+  };
 
   // Forward the original Host for tenant resolution behind reverse proxies.
   const effectiveHost = getEffectiveHost(event.request, event.cookies);

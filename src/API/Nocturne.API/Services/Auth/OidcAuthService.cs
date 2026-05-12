@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.Authorization;
@@ -799,20 +800,8 @@ public class OidcAuthService : IOidcAuthService
         }
 
         var payload = parts[1];
-        // Pad base64 if needed
-        switch (payload.Length % 4)
-        {
-            case 2:
-                payload += "==";
-                break;
-            case 3:
-                payload += "=";
-                break;
-        }
 
-        var json = Encoding.UTF8.GetString(
-            Convert.FromBase64String(payload.Replace('-', '+').Replace('_', '/'))
-        );
+        var json = Encoding.UTF8.GetString(Base64Url.Decode(payload));
 
         var claims = JsonSerializer.Deserialize<OidcIdTokenClaims>(
             json,
@@ -830,7 +819,7 @@ public class OidcAuthService : IOidcAuthService
     private static string GenerateRandomString(int length)
     {
         var bytes = RandomNumberGenerator.GetBytes(length);
-        return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        return Base64Url.Encode(bytes);
     }
 
     /// <summary>
@@ -842,7 +831,7 @@ public class OidcAuthService : IOidcAuthService
     {
         var json = JsonSerializer.Serialize(data);
         var bytes = Encoding.UTF8.GetBytes(json);
-        return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        return Base64Url.Encode(bytes);
     }
 
     /// <summary>
@@ -853,18 +842,7 @@ public class OidcAuthService : IOidcAuthService
     /// <exception cref="InvalidOperationException">Thrown when the state cannot be deserialised.</exception>
     private static OidcStateData DecodeState(string encoded)
     {
-        // Restore base64 padding
-        switch (encoded.Length % 4)
-        {
-            case 2:
-                encoded += "==";
-                break;
-            case 3:
-                encoded += "=";
-                break;
-        }
-
-        var bytes = Convert.FromBase64String(encoded.Replace("-", "+").Replace("_", "/"));
+        var bytes = Base64Url.Decode(encoded);
         var json = Encoding.UTF8.GetString(bytes);
 
         return JsonSerializer.Deserialize<OidcStateData>(json)

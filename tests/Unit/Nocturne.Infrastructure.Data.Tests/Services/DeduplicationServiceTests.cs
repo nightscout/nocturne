@@ -271,9 +271,9 @@ public class DeduplicationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeduplicateAllAsync_ShouldNotGroupTempBasals_WithDifferentOrigins()
+    public async Task DeduplicateAllAsync_ShouldGroupTempBasals_WithDifferentOrigins()
     {
-        // Arrange
+        // Arrange — origin should NOT prevent cross-connector deduplication
         await using var context = new NocturneDbContext(_contextOptions);
         context.TenantId = TestTenantId;
         var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
@@ -291,7 +291,7 @@ public class DeduplicationServiceTests : IDisposable
         var algorithmBasal = CreateTestTempBasalEntity(
             startTimestamp: timestamp.AddSeconds(5),
             rate: 1.2, // Same rate
-            origin: "Algorithm", // Different origin
+            origin: "Algorithm", // Different origin — should still group
             dataSource: "mylife-connector"
         );
 
@@ -308,8 +308,8 @@ public class DeduplicationServiceTests : IDisposable
             .Where(lr => lr.RecordType == "tempbasal")
             .ToListAsync();
         linkedRecords.Should().HaveCount(2);
-        linkedRecords.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(2,
-            "temp basals with different origins should not be grouped");
+        linkedRecords.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1,
+            "temp basals with different origins but same rate should be grouped for cross-connector dedup");
     }
 
     [Fact]
@@ -389,6 +389,309 @@ public class DeduplicationServiceTests : IDisposable
 
     #endregion
 
+    #region Batch Deduplication Tests
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_LinksAllRecordsWithDistinctTimestamps()
+    {
+        // Arrange
+        await using var context = new NocturneDbContext(_contextOptions);
+        context.TenantId = TestTenantId;
+        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new Mock<ILogger<DeduplicationService>>();
+        var service = new DeduplicationService(context, scopeFactory, logger.Object);
+
+        var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+
+        var tb1 = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.0, origin: "Scheduled", dataSource: "test-connector");
+        var tb2 = CreateTestTempBasalEntity(startTimestamp: baseTime.AddMinutes(2), rate: 1.5, origin: "Scheduled", dataSource: "test-connector");
+        var tb3 = CreateTestTempBasalEntity(startTimestamp: baseTime.AddMinutes(4), rate: 2.0, origin: "Scheduled", dataSource: "test-connector");
+
+        context.TempBasals.AddRange(tb1, tb2, tb3);
+        await context.SaveChangesAsync();
+
+        var inputs = new List<DeduplicationInput>
+        {
+            ToDeduplicationInput(tb1),
+            ToDeduplicationInput(tb2),
+            ToDeduplicationInput(tb3)
+        };
+
+        // Act
+        var result = await service.DeduplicateBatchAsync(RecordType.TempBasal, inputs);
+
+        // Assert
+        result.Processed.Should().Be(3);
+        result.GroupsCreated.Should().Be(3);
+        result.RecordsLinked.Should().Be(3);
+
+        var linkedRecords = await context.LinkedRecords.ToListAsync();
+        linkedRecords.Should().HaveCount(3);
+        linkedRecords.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_GroupsDuplicatesWithinTimeWindow()
+    {
+        // Arrange
+        await using var context = new NocturneDbContext(_contextOptions);
+        context.TenantId = TestTenantId;
+        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new Mock<ILogger<DeduplicationService>>();
+        var service = new DeduplicationService(context, scopeFactory, logger.Object);
+
+        var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+
+        var tb1 = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.5, origin: "Scheduled", dataSource: "glooko-connector");
+        var tb2 = CreateTestTempBasalEntity(startTimestamp: baseTime.AddSeconds(5), rate: 1.5, origin: "Scheduled", dataSource: "mylife-connector");
+
+        context.TempBasals.AddRange(tb1, tb2);
+        await context.SaveChangesAsync();
+
+        var inputs = new List<DeduplicationInput>
+        {
+            ToDeduplicationInput(tb1),
+            ToDeduplicationInput(tb2)
+        };
+
+        // Act
+        var result = await service.DeduplicateBatchAsync(RecordType.TempBasal, inputs);
+
+        // Assert
+        result.DuplicateGroups.Should().BeGreaterThanOrEqualTo(1);
+
+        var linkedRecords = await context.LinkedRecords.ToListAsync();
+        linkedRecords.Should().HaveCount(2);
+        linkedRecords.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1,
+            "both temp basals should share the same canonical ID");
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_SkipsAlreadyLinkedRecords()
+    {
+        // Arrange
+        await using var context = new NocturneDbContext(_contextOptions);
+        context.TenantId = TestTenantId;
+        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new Mock<ILogger<DeduplicationService>>();
+        var service = new DeduplicationService(context, scopeFactory, logger.Object);
+
+        var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+        var tb = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.2, origin: "Scheduled", dataSource: "test-connector");
+
+        context.TempBasals.Add(tb);
+        await context.SaveChangesAsync();
+
+        // Manually add a linked record for it
+        context.LinkedRecords.Add(new LinkedRecordEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TestTenantId,
+            CanonicalId = Guid.CreateVersion7(),
+            RecordType = "tempbasal",
+            RecordId = tb.Id,
+            SourceTimestamp = new DateTimeOffset(tb.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            DataSource = tb.DataSource,
+            IsPrimary = true,
+            SysCreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var inputs = new List<DeduplicationInput> { ToDeduplicationInput(tb) };
+
+        // Act
+        var result = await service.DeduplicateBatchAsync(RecordType.TempBasal, inputs);
+
+        // Assert
+        result.RecordsLinked.Should().Be(0, "no new links should be created for already-linked records");
+
+        var linkedRecords = await context.LinkedRecords.ToListAsync();
+        linkedRecords.Should().HaveCount(1, "still only the original linked record");
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_HandlesIntraBatchDedup()
+    {
+        // Arrange
+        await using var context = new NocturneDbContext(_contextOptions);
+        context.TenantId = TestTenantId;
+        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new Mock<ILogger<DeduplicationService>>();
+        var service = new DeduplicationService(context, scopeFactory, logger.Object);
+
+        var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+
+        // Same timestamp and same rate — duplicates within the batch
+        var tb1 = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.5, origin: "Scheduled", dataSource: "glooko-connector");
+        var tb2 = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.5, origin: "Scheduled", dataSource: "mylife-connector");
+
+        context.TempBasals.AddRange(tb1, tb2);
+        await context.SaveChangesAsync();
+
+        var inputs = new List<DeduplicationInput>
+        {
+            ToDeduplicationInput(tb1),
+            ToDeduplicationInput(tb2)
+        };
+
+        // Act
+        var result = await service.DeduplicateBatchAsync(RecordType.TempBasal, inputs);
+
+        // Assert
+        var linkedRecords = await context.LinkedRecords.ToListAsync();
+        linkedRecords.Should().HaveCount(2);
+        linkedRecords.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1,
+            "both records should share the same canonical ID");
+        linkedRecords.Count(lr => lr.IsPrimary).Should().Be(1,
+            "exactly one record should be marked as primary");
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_MatchesExistingCanonicalGroups()
+    {
+        // Arrange
+        await using var context = new NocturneDbContext(_contextOptions);
+        context.TenantId = TestTenantId;
+        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new Mock<ILogger<DeduplicationService>>();
+        var service = new DeduplicationService(context, scopeFactory, logger.Object);
+
+        var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+
+        // First record — creates a canonical group
+        var tbA = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.5, origin: "Scheduled", dataSource: "glooko-connector");
+        context.TempBasals.Add(tbA);
+        await context.SaveChangesAsync();
+
+        var inputsA = new List<DeduplicationInput> { ToDeduplicationInput(tbA) };
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, inputsA);
+
+        // Second record — within 30s of A, same rate, should match A's canonical group
+        var tbB = CreateTestTempBasalEntity(startTimestamp: baseTime.AddSeconds(10), rate: 1.5, origin: "Scheduled", dataSource: "mylife-connector");
+        context.TempBasals.Add(tbB);
+        await context.SaveChangesAsync();
+
+        var inputsB = new List<DeduplicationInput> { ToDeduplicationInput(tbB) };
+
+        // Act
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, inputsB);
+
+        // Assert
+        var linkedRecords = await context.LinkedRecords.ToListAsync();
+        linkedRecords.Should().HaveCount(2);
+        linkedRecords.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(1,
+            "B should be linked to A's existing canonical group");
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_DoesNotPromoteToPrimary_WhenCanonicalAlreadyExists()
+    {
+        await using var context = new NocturneDbContext(_contextOptions);
+        context.TenantId = TestTenantId;
+        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new Mock<ILogger<DeduplicationService>>();
+        var service = new DeduplicationService(context, scopeFactory, logger.Object);
+
+        var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+
+        var tbA = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.5, origin: "Scheduled", dataSource: "glooko-connector");
+        context.TempBasals.Add(tbA);
+        await context.SaveChangesAsync();
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, new List<DeduplicationInput> { ToDeduplicationInput(tbA) });
+
+        var tbB = CreateTestTempBasalEntity(startTimestamp: baseTime.AddSeconds(10), rate: 1.5, origin: "Scheduled", dataSource: "mylife-connector");
+        context.TempBasals.Add(tbB);
+        await context.SaveChangesAsync();
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, new List<DeduplicationInput> { ToDeduplicationInput(tbB) });
+
+        var linked = await context.LinkedRecords.OrderBy(lr => lr.SourceTimestamp).ToListAsync();
+        linked.Should().HaveCount(2);
+        linked[0].RecordId.Should().Be(tbA.Id);
+        linked[0].IsPrimary.Should().BeTrue("A is the only member when first inserted");
+        linked[1].RecordId.Should().Be(tbB.Id);
+        linked[1].IsPrimary.Should().BeFalse("primary is sticky — B joining A's existing canonical does not promote B");
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_HandlesMixedBatch_NewExistingAndIntraBatch()
+    {
+        await using var context = new NocturneDbContext(_contextOptions);
+        context.TenantId = TestTenantId;
+        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new Mock<ILogger<DeduplicationService>>();
+        var service = new DeduplicationService(context, scopeFactory, logger.Object);
+
+        var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+
+        // Seed: pre-existing canonical group via prior batch
+        var existing = CreateTestTempBasalEntity(startTimestamp: baseTime, rate: 1.5, origin: "Scheduled", dataSource: "glooko-connector");
+        context.TempBasals.Add(existing);
+        await context.SaveChangesAsync();
+        await service.DeduplicateBatchAsync(RecordType.TempBasal, new List<DeduplicationInput> { ToDeduplicationInput(existing) });
+
+        // New batch:
+        //   tbMatchExisting: matches existing canonical → joins it, IsPrimary=false
+        //   tbNew1 + tbNew2: same time + rate → intra-batch dedup → one canonical, one primary
+        //   tbStandalone: distinct time + rate → new canonical, IsPrimary=true
+        var tbMatchExisting = CreateTestTempBasalEntity(startTimestamp: baseTime.AddSeconds(5), rate: 1.5, origin: "Scheduled", dataSource: "mylife-connector");
+        var tbNew1 = CreateTestTempBasalEntity(startTimestamp: baseTime.AddMinutes(10), rate: 2.0, origin: "Scheduled", dataSource: "glooko-connector");
+        var tbNew2 = CreateTestTempBasalEntity(startTimestamp: baseTime.AddMinutes(10).AddSeconds(2), rate: 2.0, origin: "Scheduled", dataSource: "mylife-connector");
+        var tbStandalone = CreateTestTempBasalEntity(startTimestamp: baseTime.AddMinutes(20), rate: 0.5, origin: "Scheduled", dataSource: "glooko-connector");
+
+        context.TempBasals.AddRange(tbMatchExisting, tbNew1, tbNew2, tbStandalone);
+        await context.SaveChangesAsync();
+
+        var inputs = new List<DeduplicationInput>
+        {
+            ToDeduplicationInput(tbMatchExisting),
+            ToDeduplicationInput(tbNew1),
+            ToDeduplicationInput(tbNew2),
+            ToDeduplicationInput(tbStandalone),
+        };
+
+        var result = await service.DeduplicateBatchAsync(RecordType.TempBasal, inputs);
+
+        result.Processed.Should().Be(4);
+        result.RecordsLinked.Should().Be(4);
+        result.GroupsCreated.Should().Be(2, "tbNew1+tbNew2 share one new canonical; tbStandalone is another new canonical");
+
+        var linked = await context.LinkedRecords.ToListAsync();
+        linked.Should().HaveCount(5, "1 seed + 4 new");
+
+        var canonicalCounts = linked.GroupBy(lr => lr.CanonicalId).ToDictionary(g => g.Key, g => g.ToList());
+        canonicalCounts.Should().HaveCount(3, "existing + intra-batch group + standalone");
+
+        foreach (var (canonicalId, members) in canonicalCounts)
+        {
+            members.Count(m => m.IsPrimary).Should().Be(1, $"canonical {canonicalId} should have exactly one primary");
+        }
+
+        var matchExistingLink = linked.Single(lr => lr.RecordId == tbMatchExisting.Id);
+        matchExistingLink.IsPrimary.Should().BeFalse("joining existing canonical never promotes");
+    }
+
+    [Fact]
+    public async Task DeduplicateBatchAsync_ReturnsEmptyResultForEmptyBatch()
+    {
+        // Arrange
+        await using var context = new NocturneDbContext(_contextOptions);
+        context.TenantId = TestTenantId;
+        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new Mock<ILogger<DeduplicationService>>();
+        var service = new DeduplicationService(context, scopeFactory, logger.Object);
+
+        // Act
+        var result = await service.DeduplicateBatchAsync(RecordType.TempBasal, new List<DeduplicationInput>());
+
+        // Assert
+        result.Processed.Should().Be(0);
+        result.GroupsCreated.Should().Be(0);
+        result.RecordsLinked.Should().Be(0);
+        result.DuplicateGroups.Should().Be(0);
+    }
+
+    #endregion
+
     #region Test Helper Methods
 
     private static StateSpan CreateTestStateSpan(
@@ -414,6 +717,15 @@ public class DeduplicationServiceTests : IDisposable
                 { "origin", "Manual" }
             }
         };
+    }
+
+    private static DeduplicationInput ToDeduplicationInput(TempBasalEntity entity)
+    {
+        return new DeduplicationInput(
+            RecordId: entity.Id,
+            Mills: new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            DataSource: entity.DataSource ?? "unknown",
+            Criteria: new MatchCriteria { Rate = entity.Rate, RateTolerance = 0.05 });
     }
 
     private static TempBasalEntity CreateTestTempBasalEntity(

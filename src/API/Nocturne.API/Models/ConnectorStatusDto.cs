@@ -70,6 +70,21 @@ public class ConnectorStatusDto
     public DateTime? LastErrorAt { get; set; }
 
     /// <summary>
+    /// Whether the connector is enabled in configuration.
+    /// </summary>
+    public bool IsEnabled { get; set; }
+
+    /// <summary>
+    /// Whether a configuration exists in the database.
+    /// </summary>
+    public bool HasDatabaseConfig { get; set; }
+
+    /// <summary>
+    /// Whether the connector has secrets configured.
+    /// </summary>
+    public bool HasSecrets { get; set; }
+
+    /// <summary>
     /// Breakdown of total items processed by data type
     /// Keys are data type names (e.g., "Glucose", "Treatments", "Food")
     /// </summary>

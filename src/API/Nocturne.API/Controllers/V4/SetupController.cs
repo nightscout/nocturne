@@ -27,6 +27,7 @@ namespace Nocturne.API.Controllers.V4;
 /// Step 2: Create the owner account for that tenant (POST /api/v4/setup/owner/*).
 /// </summary>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/setup")]
 [Produces("application/json")]
 [AllowAnonymous]
@@ -88,9 +89,7 @@ public partial class SetupController : ControllerBase
     {
         await using var context = await _dbFactory.CreateDbContextAsync(ct);
 
-        // Check for tenants that have real members with credentials (passkey or OIDC).
-        // The multitenancy migration seeds a 'default' tenant for backfilling, which
-        // has no members and should not block fresh setup.
+        // Block if any tenant already has a member with credentials (passkey or OIDC).
         var hasConfiguredTenant = await context.TenantMembers
             .AnyAsync(m =>
                 context.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||

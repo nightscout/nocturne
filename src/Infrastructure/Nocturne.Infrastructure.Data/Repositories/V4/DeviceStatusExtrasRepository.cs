@@ -70,4 +70,52 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
             .Where(e => e.CorrelationId == correlationId)
             .ExecuteDeleteAsync(ct);
     }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<DeviceStatusExtras>> BulkCreateAsync(
+        IEnumerable<DeviceStatusExtras> records,
+        CancellationToken ct = default)
+    {
+        var entities = records.Select(DeviceStatusExtrasMapper.ToEntity).ToList();
+        if (entities.Count == 0)
+            return [];
+
+        // Batch-level dedup: keep first occurrence per CorrelationId
+        entities = entities
+            .GroupBy(e => e.CorrelationId)
+            .Select(g => g.First())
+            .ToList();
+
+        // DB-level dedup: filter out records whose CorrelationId already exists
+        var correlationIds = entities
+            .Select(e => e.CorrelationId)
+            .ToHashSet();
+
+        if (correlationIds.Count > 0)
+        {
+            var existingIds = await _context
+                .DeviceStatusExtras.AsNoTracking()
+                .Where(e => correlationIds.Contains(e.CorrelationId))
+                .Select(e => e.CorrelationId)
+                .ToListAsync(ct);
+
+            var existingSet = existingIds.ToHashSet();
+            entities = entities
+                .Where(e => !existingSet.Contains(e.CorrelationId))
+                .ToList();
+        }
+
+        if (entities.Count == 0)
+            return [];
+
+        const int batchSize = 500;
+        foreach (var batch in entities.Chunk(batchSize))
+        {
+            _context.DeviceStatusExtras.AddRange(batch);
+            await _context.SaveChangesAsync(ct);
+            _context.ChangeTracker.Clear();
+        }
+
+        return entities.Select(DeviceStatusExtrasMapper.ToDomainModel);
+    }
 }

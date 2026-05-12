@@ -303,6 +303,8 @@
             {#if backgroundChart.chartConfig?.showTrackers ?? false}
               <TrackerMarkers />
             {/if}
+          {/snippet}
+          {#snippet overlays(_ctx)}
             <ChartTooltip />
           {/snippet}
         </GlucoseChartShell>
@@ -362,6 +364,8 @@
                       {#if element.chartConfig?.showTrackers ?? false}
                         <TrackerMarkers />
                       {/if}
+                    {/snippet}
+                    {#snippet overlays(_ctx)}
                       <ChartTooltip />
                     {/snippet}
                   </GlucoseChartShell>

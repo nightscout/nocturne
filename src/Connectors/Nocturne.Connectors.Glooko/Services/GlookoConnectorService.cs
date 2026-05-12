@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Mappers;
 using Nocturne.Connectors.Glooko.Models;
@@ -102,7 +103,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             throw new InvalidOperationException(
                 "Not authenticated with Glooko. Call AuthenticateAsync first.");
 
-        var code = _tokenProvider.UserData?.UserLogin?.GlookoCode;
+        var code = _tokenProvider.UserData?.GlookoCode;
         if (code == null)
             _logger.LogWarning("Missing Glooko user code, cannot fetch data");
 
@@ -198,7 +199,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
     private string ConstructV2Url(string endpoint, DateTime startDate, DateTime endDate)
     {
-        var patientCode = _tokenProvider.UserData?.UserLogin?.GlookoCode;
+        var patientCode = _tokenProvider.UserData?.GlookoCode;
         var maxCount = Math.Max(1, (int)Math.Ceiling((endDate - startDate).TotalMinutes / 5));
 
         return $"{endpoint}?patient={patientCode}"
@@ -211,7 +212,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
     private string ConstructV3GraphUrl(DateTime startDate, DateTime endDate)
     {
-        var patientCode = _tokenProvider.UserData?.UserLogin?.GlookoCode;
+        var patientCode = _tokenProvider.UserData?.GlookoCode;
 
         var series = _config.V3IncludeCgmBackfill
             ? GlookoConstants.V3GraphSeries.Concat(GlookoConstants.V3CgmBackfillSeries)
@@ -255,288 +256,56 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     return result;
                 }
 
-            // Compute active types: intersection of requested and enabled types
             if (!request.DataTypes.Any())
                 request.DataTypes = SupportedDataTypes;
             var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
             var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
 
-            // Convert real UTC (from database) back to Glooko's fake-UTC format
-            // for API requests. Glooko timestamps are labeled as UTC but are actually
-            // local time, so we reverse the timezone correction applied during inbound processing.
             var from = request.From.HasValue
                 ? _timeMapper.ToGlookoTime(request.From.Value)
-                : (DateTime?)null;
+                : _timeMapper.ToGlookoTime(DateTime.UtcNow.AddMonths(-6));
+            var to = _timeMapper.ToGlookoTime(DateTime.UtcNow);
 
-            await ReportMessageAsync(progressReporter, SyncMessageType.FetchingData,
-                new() { ["from"] = (from ?? DateTime.UtcNow.AddMonths(-6)).ToString("MMM dd"), ["to"] = DateTime.UtcNow.ToString("MMM dd") },
-                cancellationToken);
+            var chunks = DateChunker.Chunk(from, to, TimeSpan.FromDays(14)).ToList();
 
-            var batchData = await FetchBatchDataAsync(from);
+            _logger.LogInformation(
+                "[{ConnectorSource}] Syncing {From:yyyy-MM-dd} to {To:yyyy-MM-dd} in {ChunkCount} chunk(s)",
+                ConnectorSource, from, to, chunks.Count);
 
-            if (batchData == null)
+            for (var i = 0; i < chunks.Count; i++)
             {
-                result.Success = false;
-                result.Message = "Failed to fetch data";
-                result.Errors.Add("No data returned from Glooko");
-                return result;
-            }
+                var (chunkFrom, chunkTo) = chunks[i];
 
-            // Fetch V3 data once upfront if needed for any data type
-            GlookoV3GraphResponse? v3Data = null;
-            var needsV3Data = _config.UseV3Api && (
-                activeTypes.Contains(SyncDataType.Boluses) ||
-                activeTypes.Contains(SyncDataType.CarbIntake) ||
-                activeTypes.Contains(SyncDataType.StateSpans) ||
-                activeTypes.Contains(SyncDataType.DeviceEvents) ||
-                (_config.V3IncludeCgmBackfill && activeTypes.Contains(SyncDataType.Glucose))
-            );
-
-            if (needsV3Data)
-            {
-                try
-                {
-                    _logger.LogInformation("[{ConnectorSource}] Fetching additional data from v3 API...", ConnectorSource);
-                    v3Data = await FetchV3GraphDataAsync(from);
-                }
-                catch (Exception v3Ex)
-                {
-                    _logger.LogWarning(v3Ex, "[{ConnectorSource}] V3 API fetch failed, continuing with v2 data only", ConnectorSource);
-                }
-            }
-
-            // 1. Process Glucose
-            await ReportMessageAsync(progressReporter, SyncMessageType.ProcessingDataType,
-                new() { ["dataType"] = SyncDataType.Glucose.ToString() }, cancellationToken);
-
-            if (activeTypes.Contains(SyncDataType.Glucose))
-            {
-                var sensorGlucose = _sensorGlucoseMapper.TransformBatchDataToSensorGlucose(batchData).ToList();
-                if (sensorGlucose.Count > 0)
-                {
-                    var success = await PublishSensorGlucoseDataAsync(sensorGlucose, config, cancellationToken);
-                    if (success)
+                await ReportMessageAsync(progressReporter, SyncMessageType.FetchingData,
+                    new()
                     {
-                        result.ItemsSynced[SyncDataType.Glucose] = sensorGlucose.Count;
-                        result.LastEntryTimes[SyncDataType.Glucose] = DateTimeOffset
-                            .FromUnixTimeMilliseconds(sensorGlucose.Max(s => s.Mills)).UtcDateTime;
+                        ["from"] = chunkFrom.ToString("MMM dd"),
+                        ["to"] = chunkTo.ToString("MMM dd"),
+                        ["chunk"] = $"{i + 1}/{chunks.Count}",
+                    },
+                    cancellationToken);
 
-                        await ReportMessageAsync(progressReporter, SyncMessageType.PublishingDataType,
-                            new() { ["dataType"] = SyncDataType.Glucose.ToString(), ["count"] = sensorGlucose.Count.ToString() },
-                            cancellationToken);
-                    }
-                }
+                var chunkSuccess = _config.UseV3Api
+                    ? await FetchAndMapViaV3Async(chunkFrom, chunkTo, activeTypes, result, config, cancellationToken)
+                    : await FetchAndMapViaV2Async(chunkFrom, chunkTo, activeTypes, result, config, cancellationToken);
 
-                // V3 CGM backfill
-                if (_config.V3IncludeCgmBackfill && v3Data != null)
+                if (!chunkSuccess)
                 {
-                    var v3Glucose = _sensorGlucoseMapper.TransformV3ToSensorGlucose(v3Data, _meterUnits).ToList();
-                    if (v3Glucose.Count > 0)
-                    {
-                        await PublishSensorGlucoseDataAsync(v3Glucose, config, cancellationToken);
-                        _logger.LogInformation("[{ConnectorSource}] Published {Count} CGM backfill sensor glucose from v3",
-                            ConnectorSource, v3Glucose.Count);
-                    }
+                    _logger.LogWarning(
+                        "[{ConnectorSource}] Chunk {Chunk}/{Total} ({From:yyyy-MM-dd} to {To:yyyy-MM-dd}) failed, stopping sync",
+                        ConnectorSource, i + 1, chunks.Count, chunkFrom, chunkTo);
+                    result.Success = false;
+                    result.Message = "Sync failed during data fetch";
+                    result.Errors.Add($"Chunk {i + 1}/{chunks.Count} failed ({chunkFrom:yyyy-MM-dd} to {chunkTo:yyyy-MM-dd})");
+                    break;
                 }
 
-                // V2 meter readings → BGCheck records
-                var bgChecks = _sensorGlucoseMapper.TransformBatchDataToBGChecks(batchData).ToList();
-                if (bgChecks.Count > 0)
-                {
-                    if (await PublishBGCheckDataAsync(bgChecks, config, cancellationToken))
-                    {
-                        _logger.LogInformation("[{ConnectorSource}] Published {Count} BG checks from meter readings",
-                            ConnectorSource, bgChecks.Count);
-                    }
-                }
+                _logger.LogInformation(
+                    "[{ConnectorSource}] Completed chunk {Chunk}/{Total} ({From:yyyy-MM-dd} to {To:yyyy-MM-dd})",
+                    ConnectorSource, i + 1, chunks.Count, chunkFrom, chunkTo);
             }
 
-            // 2. Process Treatments (boluses, carb intake)
-            var allBoluses = new List<Bolus>();
-            var allCarbs = new List<CarbIntake>();
-            var allDeviceEvents = new List<DeviceEvent>();
-            var allBatches = new List<DecompositionBatch>();
-
-            if (_config.UseV3Api && v3Data != null)
-            {
-                var (v3Boluses, v3BolusCarbIntakes, v3Batches) = _v4TreatmentMapper.MapV3Boluses(v3Data);
-                allBoluses.AddRange(v3Boluses);
-                allCarbs.AddRange(v3BolusCarbIntakes);
-                allBatches.AddRange(v3Batches);
-
-                // V2 standalone food records have no V3 equivalent — create CarbIntake records
-                allCarbs.AddRange(_v4TreatmentMapper.MapFoodsToCarbIntakes(batchData));
-                allDeviceEvents.AddRange(_v4TreatmentMapper.MapV3DeviceEvents(v3Data));
-            }
-            else
-            {
-                var (v2Boluses, v2Carbs, v2Batches) = _v4TreatmentMapper.MapBatchData(batchData);
-                allBoluses.AddRange(v2Boluses);
-                allCarbs.AddRange(v2Carbs);
-                allBatches.AddRange(v2Batches);
-            }
-
-            // Persist decomposition batches before V4 records (FK constraint)
-            if (allBatches.Count > 0)
-                await PublishDecompositionBatchesAsync(allBatches, config, cancellationToken);
-
-            // Publish boluses
-            await ReportMessageAsync(progressReporter, SyncMessageType.ProcessingDataType,
-                new() { ["dataType"] = SyncDataType.Boluses.ToString() }, cancellationToken);
-
-            if (activeTypes.Contains(SyncDataType.Boluses) && allBoluses.Count > 0)
-            {
-                if (await PublishBolusDataAsync(allBoluses, config, cancellationToken))
-                {
-                    result.ItemsSynced[SyncDataType.Boluses] = allBoluses.Count;
-                    _logger.LogInformation("[{ConnectorSource}] Published {Count} boluses", ConnectorSource, allBoluses.Count);
-                    await ReportMessageAsync(progressReporter, SyncMessageType.PublishingDataType,
-                        new() { ["dataType"] = SyncDataType.Boluses.ToString(), ["count"] = allBoluses.Count.ToString() }, cancellationToken);
-                }
-            }
-
-            // Publish carb intakes
-            await ReportMessageAsync(progressReporter, SyncMessageType.ProcessingDataType,
-                new() { ["dataType"] = SyncDataType.CarbIntake.ToString() }, cancellationToken);
-
-            if (activeTypes.Contains(SyncDataType.CarbIntake) && allCarbs.Count > 0)
-            {
-                if (await PublishCarbIntakeDataAsync(allCarbs, config, cancellationToken))
-                {
-                    result.ItemsSynced[SyncDataType.CarbIntake] = allCarbs.Count;
-                    _logger.LogInformation("[{ConnectorSource}] Published {Count} carb intakes", ConnectorSource, allCarbs.Count);
-                    await ReportMessageAsync(progressReporter, SyncMessageType.PublishingDataType,
-                        new() { ["dataType"] = SyncDataType.CarbIntake.ToString(), ["count"] = allCarbs.Count.ToString() }, cancellationToken);
-                }
-            }
-
-            // Publish V2 food records as connector food entries (creates Food catalog + ConnectorFoodEntry records)
-            if (_config.UseV3Api && batchData.Foods is { Length: > 0 })
-            {
-                var foodEntryImports = _v4TreatmentMapper.MapFoodsToConnectorEntries(batchData);
-                if (foodEntryImports.Count > 0 && _connectorPublisher is { IsAvailable: true })
-                {
-                    var importedEntries = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
-                        foodEntryImports, ConnectorSource, cancellationToken);
-
-                    if (importedEntries is { Count: > 0 })
-                    {
-                        _logger.LogInformation(
-                            "[{ConnectorSource}] Published {Count} food entries to connector food catalog",
-                            ConnectorSource, importedEntries.Count);
-
-                        // Attribute food entries to CarbIntakes using the Glooko guid correlation:
-                        // ConnectorFoodEntry.ExternalEntryId == food.Guid
-                        // CarbIntake.LegacyId == "glooko_food_{food.Guid}"
-                        // Only process Pending entries (newly created this sync); already-matched
-                        // entries from previous syncs are skipped to avoid FK errors from
-                        // in-memory CarbIntake IDs that don't match the persisted DB IDs.
-                        if (_mealMatchingService != null && allCarbs.Count > 0)
-                        {
-                            var pendingEntries = importedEntries
-                                .Where(e => e.Status == ConnectorFoodEntryStatus.Pending)
-                                .ToList();
-
-                            if (pendingEntries.Count > 0)
-                            {
-                                var carbsByLegacyId = allCarbs
-                                    .Where(ci => ci.LegacyId != null)
-                                    .ToDictionary(ci => ci.LegacyId!, StringComparer.OrdinalIgnoreCase);
-
-                                foreach (var entry in pendingEntries)
-                                {
-                                    var legacyKey = $"glooko_food_{entry.ExternalEntryId}";
-                                    if (!carbsByLegacyId.TryGetValue(legacyKey, out var carbIntake))
-                                        continue;
-
-                                    try
-                                    {
-                                        await _mealMatchingService.AcceptMatchAsync(
-                                            entry.Id, carbIntake.Id, entry.Carbs, timeOffsetMinutes: 0, cancellationToken);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        _logger.LogWarning(ex,
-                                            "[{ConnectorSource}] Failed to attribute food entry {FoodEntryId} to CarbIntake {CarbIntakeId}",
-                                            ConnectorSource, entry.Id, carbIntake.Id);
-                                    }
-                                }
-
-                                _logger.LogInformation(
-                                    "[{ConnectorSource}] Attributed {Count} food entries to carb intakes",
-                                    ConnectorSource, pendingEntries.Count);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 3. Process DeviceEvents
-            await ReportMessageAsync(progressReporter, SyncMessageType.ProcessingDataType,
-                new() { ["dataType"] = SyncDataType.DeviceEvents.ToString() }, cancellationToken);
-
-            if (activeTypes.Contains(SyncDataType.DeviceEvents))
-            {
-                var deviceEventCount = 0;
-
-                if (allDeviceEvents.Count > 0 && await PublishDeviceEventDataAsync(allDeviceEvents, config, cancellationToken))
-                {
-                    deviceEventCount += allDeviceEvents.Count;
-                    _logger.LogInformation("[{ConnectorSource}] Published {Count} device events", ConnectorSource, allDeviceEvents.Count);
-                }
-
-                if (v3Data != null)
-                {
-                    var systemEvents = _systemEventMapper.TransformV3ToSystemEvents(v3Data);
-                    if (systemEvents.Any() && await PublishSystemEventDataAsync(systemEvents, config, cancellationToken))
-                    {
-                        deviceEventCount += systemEvents.Count;
-                        _logger.LogInformation("[{ConnectorSource}] Published {Count} system events from v3", ConnectorSource, systemEvents.Count);
-                    }
-                }
-
-                if (deviceEventCount > 0)
-                    result.ItemsSynced[SyncDataType.DeviceEvents] = deviceEventCount;
-            }
-
-            // 4. Process StateSpans and TempBasals
-            await ReportMessageAsync(progressReporter, SyncMessageType.ProcessingDataType,
-                new() { ["dataType"] = SyncDataType.StateSpans.ToString() }, cancellationToken);
-
-            if (activeTypes.Contains(SyncDataType.StateSpans))
-            {
-                var tempBasalCount = 0;
-
-                if (v3Data != null)
-                {
-                    var stateSpans = _stateSpanMapper.TransformV3ToStateSpans(v3Data);
-                    if (stateSpans.Any() && await PublishStateSpanDataAsync(stateSpans, config, cancellationToken))
-                        _logger.LogInformation("[{ConnectorSource}] Published {Count} state spans from v3", ConnectorSource, stateSpans.Count);
-
-                    var v3TempBasals = _tempBasalMapper.TransformV3ToTempBasals(v3Data);
-                    if (v3TempBasals.Any() && await PublishTempBasalDataAsync(v3TempBasals, config, cancellationToken))
-                    {
-                        tempBasalCount += v3TempBasals.Count;
-                        _logger.LogInformation("[{ConnectorSource}] Published {Count} temp basals from v3", ConnectorSource, v3TempBasals.Count);
-                    }
-                }
-
-                var v2StateSpans = _stateSpanMapper.TransformV2ToStateSpans(batchData);
-                if (v2StateSpans.Any() && await PublishStateSpanDataAsync(v2StateSpans, config, cancellationToken))
-                    _logger.LogInformation("[{ConnectorSource}] Published {Count} state spans from v2", ConnectorSource, v2StateSpans.Count);
-
-                var v2TempBasals = _tempBasalMapper.TransformV2ToTempBasals(batchData);
-                if (v2TempBasals.Any() && await PublishTempBasalDataAsync(v2TempBasals, config, cancellationToken))
-                {
-                    tempBasalCount += v2TempBasals.Count;
-                    _logger.LogInformation("[{ConnectorSource}] Published {Count} temp basals from v2", ConnectorSource, v2TempBasals.Count);
-                }
-
-                if (tempBasalCount > 0)
-                    result.ItemsSynced[SyncDataType.StateSpans] = tempBasalCount;
-            }
-
-            // 5. Process Profiles
+            // Profiles (V3 device settings — used in both modes, no V2 equivalent)
             await ReportMessageAsync(progressReporter, SyncMessageType.ProcessingDataType,
                 new() { ["dataType"] = SyncDataType.Profiles.ToString() }, cancellationToken);
 
@@ -581,20 +350,281 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         }
     }
 
-    // ── V2 batch data ───────────────────────────────────────────────────
+    // ── V2 fetch + map ──────────────────────────────────────────────────
+
+    /// <summary>
+    ///     Fetches from all V2 endpoints, maps each record type, and publishes inline.
+    /// </summary>
+    private async Task<bool> FetchAndMapViaV2Async(
+        DateTime fromDate,
+        DateTime toDate,
+        HashSet<SyncDataType> activeTypes,
+        SyncResult result,
+        GlookoConnectorConfiguration config,
+        CancellationToken cancellationToken)
+    {
+        var batchData = await FetchBatchDataAsync(fromDate, toDate);
+        if (batchData == null) return false;
+
+        // 1. Glucose
+        var sensorGlucose = _sensorGlucoseMapper.TransformBatchDataToSensorGlucose(batchData).ToList();
+        await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
+            sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken);
+        UpdateLastEntryTime(result, SyncDataType.Glucose, sensorGlucose);
+
+        var bgChecks = _sensorGlucoseMapper.TransformBatchDataToBGChecks(batchData).ToList();
+        await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
+            bgChecks, PublishBGCheckDataAsync, config, cancellationToken);
+
+        // 2. Treatments (FK order: batches → boluses → carbs+foods)
+        var (boluses, carbs, batches) = _v4TreatmentMapper.MapBatchData(batchData);
+
+        if (batches.Count > 0)
+            await PublishDecompositionBatchesAsync(batches, config, cancellationToken);
+
+        await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
+            boluses, PublishBolusDataAsync, config, cancellationToken);
+
+        await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
+            carbs, PublishCarbIntakeDataAsync, config, cancellationToken);
+
+        // 3. Foods + attribution (coupled with carbs)
+        var foodEntryImports = batchData.Foods is { Length: > 0 }
+            ? _v4TreatmentMapper.MapFoodsToConnectorEntries(batchData) : [];
+        Func<string, string?> foodResolver = externalEntryId => $"glooko_food_{externalEntryId}";
+        await PublishFoodEntriesAndAttributeAsync(
+            foodEntryImports, carbs, foodResolver, config, cancellationToken);
+
+        // 4. State spans + temp basals (old code only counted temp basals in ItemsSynced)
+        if (activeTypes.Contains(SyncDataType.StateSpans))
+        {
+            var stateSpans = _stateSpanMapper.TransformV2ToStateSpans(batchData);
+            if (stateSpans.Count > 0)
+                await PublishStateSpanDataAsync(stateSpans, config, cancellationToken);
+
+            var tempBasals = _tempBasalMapper.TransformV2ToTempBasals(batchData);
+            if (tempBasals.Count > 0 && await PublishTempBasalDataAsync(tempBasals, config, cancellationToken))
+                result.ItemsSynced[SyncDataType.StateSpans] = tempBasals.Count;
+        }
+
+        return true;
+    }
+
+    // ── V3 fetch + map ──────────────────────────────────────────────────
+
+    /// <summary>
+    ///     Fetches from V3 graph/data and histories endpoints, maps each record type, and publishes inline.
+    /// </summary>
+    private async Task<bool> FetchAndMapViaV3Async(
+        DateTime fromDate,
+        DateTime toDate,
+        HashSet<SyncDataType> activeTypes,
+        SyncResult result,
+        GlookoConnectorConfiguration config,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("[{ConnectorSource}] Fetching data from v3 API...", ConnectorSource);
+
+        var v3Data = await FetchV3GraphDataAsync(fromDate, toDate);
+        if (v3Data == null) return false;
+
+        GlookoV3HistoriesResponse? v3Histories = null;
+        try { v3Histories = await FetchV3HistoriesAsync(fromDate, toDate); }
+        catch (Exception histEx)
+        {
+            _logger.LogWarning(histEx, "[{ConnectorSource}] V3 histories fetch failed, meal data will be unavailable", ConnectorSource);
+        }
+
+        // 1. Glucose
+        if (_config.V3IncludeCgmBackfill)
+        {
+            var sensorGlucose = _sensorGlucoseMapper.TransformV3ToSensorGlucose(v3Data, _meterUnits).ToList();
+            await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,
+                sensorGlucose, PublishSensorGlucoseDataAsync, config, cancellationToken);
+            UpdateLastEntryTime(result, SyncDataType.Glucose, sensorGlucose);
+        }
+
+        var bgChecks = _sensorGlucoseMapper.TransformV3ToBGChecks(v3Data, _meterUnits).ToList();
+        await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
+            bgChecks, PublishBGCheckDataAsync, config, cancellationToken);
+
+        // 2. Treatments (FK order: batches → boluses → carbs+foods)
+        var (v3Boluses, v3BolusCarbIntakes, v3Batches) = _v4TreatmentMapper.MapV3Boluses(v3Data);
+
+        // Carbs: bolus wizard + history meals (preferred) or carbAll (fallback)
+        var allCarbs = new List<CarbIntake>(v3BolusCarbIntakes);
+        var historyMealCarbs = v3Histories?.Histories != null
+            ? _v4TreatmentMapper.MapV3HistoryMealsToCarbIntakes(v3Histories) : [];
+
+        if (historyMealCarbs.Count > 0)
+            allCarbs.AddRange(historyMealCarbs);
+        else
+            allCarbs.AddRange(_v4TreatmentMapper.MapV3CarbAll(v3Data));
+
+        if (v3Batches.Count > 0)
+            await PublishDecompositionBatchesAsync(v3Batches, config, cancellationToken);
+
+        await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
+            v3Boluses, PublishBolusDataAsync, config, cancellationToken);
+
+        await PublishRecordTypeAsync(result, SyncDataType.CarbIntake, activeTypes,
+            allCarbs, PublishCarbIntakeDataAsync, config, cancellationToken);
+
+        // 3. Foods + attribution (coupled with carbs)
+        GlookoFood[]? v2Foods = null;
+        if (historyMealCarbs.Count > 0)
+        {
+            try { v2Foods = await FetchV2FoodsAsync(fromDate, toDate); }
+            catch (Exception v2Ex)
+            {
+                _logger.LogWarning(v2Ex, "[{ConnectorSource}] V2 foods fetch failed, food entries will lack externalId/brand metadata", ConnectorSource);
+            }
+        }
+
+        var foodEntryImports = historyMealCarbs.Count > 0 && v3Histories?.Histories != null
+            ? _v4TreatmentMapper.MapV3HistoryMealsToConnectorEntries(v3Histories, v2Foods) : [];
+
+        // Build food resolver
+        Func<string, string?>? foodResolver = null;
+        if (historyMealCarbs.Count > 0 && v3Histories?.Histories != null)
+        {
+            var foodGuidToMealGuid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var meal in GlookoV4TreatmentMapper.ExtractMeals(v3Histories))
+            {
+                if (meal.SoftDeleted == true || string.IsNullOrEmpty(meal.Guid) || meal.Foods == null) continue;
+                foreach (var food in meal.Foods)
+                {
+                    if (food.SoftDeleted != true && !string.IsNullOrEmpty(food.Guid))
+                        foodGuidToMealGuid.TryAdd(food.Guid, meal.Guid!);
+                }
+            }
+
+            foodResolver = externalEntryId =>
+                foodGuidToMealGuid.TryGetValue(externalEntryId, out var mealGuid)
+                    ? $"glooko_v3meal_{mealGuid}" : null;
+        }
+
+        await PublishFoodEntriesAndAttributeAsync(
+            foodEntryImports, allCarbs, foodResolver, config, cancellationToken);
+
+        // 4. State spans + temp basals (old code only counted temp basals in ItemsSynced)
+        if (activeTypes.Contains(SyncDataType.StateSpans))
+        {
+            var stateSpans = _stateSpanMapper.TransformV3ToStateSpans(v3Data);
+            if (stateSpans.Count > 0)
+                await PublishStateSpanDataAsync(stateSpans, config, cancellationToken);
+
+            var tempBasals = _tempBasalMapper.TransformV3ToTempBasals(v3Data);
+            if (tempBasals.Count > 0 && await PublishTempBasalDataAsync(tempBasals, config, cancellationToken))
+                result.ItemsSynced[SyncDataType.StateSpans] = tempBasals.Count;
+        }
+
+        // 5. Device events + system events (summed into single ItemsSynced entry)
+        if (activeTypes.Contains(SyncDataType.DeviceEvents))
+        {
+            var deviceEventCount = 0;
+
+            var deviceEvents = _v4TreatmentMapper.MapV3DeviceEvents(v3Data);
+            if (deviceEvents.Count > 0 && await PublishDeviceEventDataAsync(deviceEvents, config, cancellationToken))
+                deviceEventCount += deviceEvents.Count;
+
+            var systemEvents = _systemEventMapper.TransformV3ToSystemEvents(v3Data);
+            if (systemEvents.Count > 0 && await PublishSystemEventDataAsync(systemEvents, config, cancellationToken))
+                deviceEventCount += systemEvents.Count;
+
+            if (deviceEventCount > 0)
+                result.ItemsSynced[SyncDataType.DeviceEvents] = deviceEventCount;
+        }
+
+        return true;
+    }
+
+    // ── Food attribution helper ────────────────────────────────────────
+
+    /// <summary>
+    ///     Publishes food catalog entries and attributes them to carb intakes via the meal matching service.
+    /// </summary>
+    private async Task PublishFoodEntriesAndAttributeAsync(
+        List<ConnectorFoodEntryImport> foodEntryImports,
+        List<CarbIntake> carbIntakes,
+        Func<string, string?>? foodEntryToCarbLegacyId,
+        GlookoConnectorConfiguration config,
+        CancellationToken cancellationToken)
+    {
+        if (foodEntryImports.Count == 0 || _connectorPublisher is not { IsAvailable: true })
+            return;
+
+        var importedEntries = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
+            foodEntryImports, ConnectorSource, cancellationToken);
+
+        if (importedEntries is not { Count: > 0 })
+            return;
+
+        _logger.LogInformation("[{ConnectorSource}] Published {Count} food entries to connector food catalog",
+            ConnectorSource, importedEntries.Count);
+
+        if (_mealMatchingService == null || carbIntakes.Count == 0 || foodEntryToCarbLegacyId == null)
+            return;
+
+        var pendingEntries = importedEntries
+            .Where(e => e.Status == ConnectorFoodEntryStatus.Pending)
+            .ToList();
+
+        if (pendingEntries.Count == 0) return;
+
+        var carbsByLegacyId = carbIntakes
+            .Where(ci => ci.LegacyId != null)
+            .ToDictionary(ci => ci.LegacyId!, StringComparer.OrdinalIgnoreCase);
+
+        var attributedCount = 0;
+
+        foreach (var entry in pendingEntries)
+        {
+            var legacyKey = foodEntryToCarbLegacyId(entry.ExternalEntryId);
+            if (legacyKey == null || !carbsByLegacyId.TryGetValue(legacyKey, out var carbIntake))
+                continue;
+
+            try
+            {
+                await _mealMatchingService.AcceptMatchAsync(
+                    entry.Id, carbIntake.Id, entry.Carbs, timeOffsetMinutes: 0, cancellationToken);
+                attributedCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "[{ConnectorSource}] Failed to attribute food entry {FoodEntryId} to CarbIntake {CarbIntakeId}",
+                    ConnectorSource, entry.Id, carbIntake.Id);
+            }
+        }
+
+        _logger.LogInformation("[{ConnectorSource}] Attributed {Count}/{Total} food entries to carb intakes",
+            ConnectorSource, attributedCount, pendingEntries.Count);
+    }
+
+    /// <summary>
+    ///     Updates <see cref="SyncResult.LastEntryTimes"/> with the most recent glucose timestamp,
+    ///     keeping the max across multiple chunks.
+    /// </summary>
+    private static void UpdateLastEntryTime(SyncResult result, SyncDataType dataType, List<SensorGlucose> records)
+    {
+        if (records.Count == 0) return;
+        var maxTime = DateTimeOffset.FromUnixTimeMilliseconds(records.Max(s => s.Mills)).UtcDateTime;
+        if (!result.LastEntryTimes.TryGetValue(dataType, out var existing) || maxTime > existing)
+            result.LastEntryTimes[dataType] = maxTime;
+    }
+
+    // ── V2 batch data fetching ──────────────────────────────────────────
 
     /// <summary>
     ///     Fetches comprehensive batch data from all v2 Glooko endpoints.
     /// </summary>
-    public async Task<GlookoBatchData?> FetchBatchDataAsync(DateTime? since = null)
+    public async Task<GlookoBatchData?> FetchBatchDataAsync(DateTime fromDate, DateTime toDate)
     {
         try
         {
             var patientCode = EnsureAuthenticatedAndGetCode();
             if (patientCode == null) return null;
-
-            var fromDate = since ?? _timeMapper.ToGlookoTime(DateTime.UtcNow.AddDays(-1));
-            var toDate = _timeMapper.ToGlookoTime(DateTime.UtcNow);
 
             _logger.LogInformation("Fetching comprehensive Glooko data from {From:yyyy-MM-dd} to {To:yyyy-MM-dd}", fromDate, toDate);
 
@@ -686,7 +716,39 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         }
     }
 
-    // ── V3 API methods ──────────────────────────────────────────────────
+    // ── V3 data fetching ────────────────────────────────────────────────
+
+    /// <summary>
+    ///     Fetches only the V2 foods endpoint. Used by the V3 sync path to get
+    ///     rich food metadata (externalId, brand) that V3 histories doesn't provide.
+    /// </summary>
+    public async Task<GlookoFood[]?> FetchV2FoodsAsync(DateTime fromDate, DateTime toDate)
+    {
+        try
+        {
+            var patientCode = EnsureAuthenticatedAndGetCode();
+            if (patientCode == null) return null;
+
+            var url = ConstructV2Url(GlookoConstants.FoodsPath, fromDate, toDate);
+            var result = await FetchFromGlookoEndpointWithRetry(url);
+            if (!result.HasValue) return null;
+
+            if (result.Value.TryGetProperty("foods", out var el))
+            {
+                var foods = JsonSerializer.Deserialize<GlookoFood[]>(el.GetRawText()) ?? [];
+                _logger.LogInformation("[{ConnectorSource}] Fetched {Count} V2 food records for metadata enrichment",
+                    ConnectorSource, foods.Length);
+                return foods;
+            }
+
+            return [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[{ConnectorSource}] Failed to fetch V2 foods for metadata enrichment", ConnectorSource);
+            return null;
+        }
+    }
 
     private string? _meterUnits;
 
@@ -722,18 +784,14 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     /// <summary>
     ///     Fetches data from v3 graph/data API — single call for all data types.
     /// </summary>
-    public async Task<GlookoV3GraphResponse?> FetchV3GraphDataAsync(DateTime? since = null)
+    public async Task<GlookoV3GraphResponse?> FetchV3GraphDataAsync(DateTime fromDate, DateTime toDate)
     {
         try
         {
             var patientCode = EnsureAuthenticatedAndGetCode();
             if (patientCode == null) return null;
 
-            // Ensure we have meter units
             if (string.IsNullOrEmpty(_meterUnits)) await FetchV3UserProfileAsync();
-
-            var fromDate = since ?? _timeMapper.ToGlookoTime(DateTime.UtcNow.AddDays(-1));
-            var toDate = _timeMapper.ToGlookoTime(DateTime.UtcNow);
 
             var url = ConstructV3GraphUrl(fromDate, toDate);
             _logger.LogInformation("[{ConnectorSource}] Fetching v3 graph data from {StartDate:yyyy-MM-dd} to {EndDate:yyyy-MM-dd}",
@@ -745,20 +803,34 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             var graphData = JsonSerializer.Deserialize<GlookoV3GraphResponse>(result.Value.GetRawText());
 
             if (graphData?.Series != null)
+            {
+                var s = graphData.Series;
                 _logger.LogInformation(
                     "[{ConnectorSource}] Fetched v3 graph data: "
-                    + "AutomaticBolus={AutoBolus}, DeliveredBolus={Bolus}, "
-                    + "PumpAlarm={Alarms}, ReservoirChange={Reservoir}, SetSiteChange={SetSite}, "
-                    + "CgmReadings={Cgm}",
+                    + "Cgm={Cgm}, Bg={Bg}, "
+                    + "DeliveredBolus={DeliveredBolus}, AutomaticBolus={AutoBolus}, InjectionBolus={InjectionBolus}, "
+                    + "GkInsulinBasal={GkBasal}, GkInsulinBolus={GkBolus}, "
+                    + "CarbAll={Carbs}, "
+                    + "ScheduledBasal={SchedBasal}, TemporaryBasal={TempBasal}, SuspendBasal={Suspend}, LgsPlgs={LgsPlgs}, "
+                    + "PumpAlarm={Alarms}, ReservoirChange={Reservoir}, SetSiteChange={SetSite}, ProfileChange={Profile}",
                     ConnectorSource,
-                    graphData.Series.AutomaticBolus?.Length ?? 0,
-                    graphData.Series.DeliveredBolus?.Length ?? 0,
-                    graphData.Series.PumpAlarm?.Length ?? 0,
-                    graphData.Series.ReservoirChange?.Length ?? 0,
-                    graphData.Series.SetSiteChange?.Length ?? 0,
-                    (graphData.Series.CgmHigh?.Length ?? 0)
-                    + (graphData.Series.CgmNormal?.Length ?? 0)
-                    + (graphData.Series.CgmLow?.Length ?? 0));
+                    (s.CgmHigh?.Length ?? 0) + (s.CgmNormal?.Length ?? 0) + (s.CgmLow?.Length ?? 0),
+                    (s.BgHigh?.Length ?? 0) + (s.BgNormal?.Length ?? 0) + (s.BgLow?.Length ?? 0),
+                    s.DeliveredBolus?.Length ?? 0,
+                    s.AutomaticBolus?.Length ?? 0,
+                    s.InjectionBolus?.Length ?? 0,
+                    s.GkInsulinBasal?.Length ?? 0,
+                    s.GkInsulinBolus?.Length ?? 0,
+                    s.CarbAll?.Length ?? 0,
+                    s.ScheduledBasal?.Length ?? 0,
+                    s.TemporaryBasal?.Length ?? 0,
+                    s.SuspendBasal?.Length ?? 0,
+                    s.LgsPlgs?.Length ?? 0,
+                    s.PumpAlarm?.Length ?? 0,
+                    s.ReservoirChange?.Length ?? 0,
+                    s.SetSiteChange?.Length ?? 0,
+                    s.ProfileChange?.Length ?? 0);
+            }
 
             return graphData;
         }
@@ -798,6 +870,48 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching Glooko v3 device settings");
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     Fetches rich history data from the v3 users/summary/histories API.
+    ///     Contains meals with per-food nutritional data, medications, exercises, etc.
+    /// </summary>
+    public async Task<GlookoV3HistoriesResponse?> FetchV3HistoriesAsync(DateTime fromDate, DateTime toDate)
+    {
+        try
+        {
+            var patientCode = EnsureAuthenticatedAndGetCode();
+            if (patientCode == null) return null;
+
+            var url = $"{GlookoConstants.V3HistoriesPath}?patient={patientCode}"
+                    + $"&startDate={fromDate:yyyy-MM-ddTHH:mm:ss.fffZ}"
+                    + $"&endDate={toDate:yyyy-MM-ddTHH:mm:ss.fffZ}";
+
+            _logger.LogInformation("[{ConnectorSource}] Fetching v3 histories from {StartDate:yyyy-MM-dd} to {EndDate:yyyy-MM-dd}",
+                ConnectorSource, fromDate, toDate);
+
+            var result = await FetchFromGlookoEndpointWithRetry(url);
+            if (!result.HasValue) return null;
+
+            var historiesData = JsonSerializer.Deserialize<GlookoV3HistoriesResponse>(result.Value.GetRawText());
+
+            var entryCount = historiesData?.Histories?.Length ?? 0;
+            var meals = GlookoV4TreatmentMapper.ExtractMeals(historiesData!).ToList();
+            var mealCount = meals.Count;
+            var foodCount = meals.Sum(m => m.Foods?.Length ?? 0);
+            var mealsWithCarbs = meals.Count(m => (m.Carbs ?? 0) > 0);
+
+            _logger.LogInformation(
+                "[{ConnectorSource}] Fetched v3 histories: {EntryCount} entries, {MealCount} meals ({MealsWithCarbs} with carbs), {FoodCount} food items",
+                ConnectorSource, entryCount, mealCount, mealsWithCarbs, foodCount);
+
+            return historiesData;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching Glooko v3 histories");
             return null;
         }
     }

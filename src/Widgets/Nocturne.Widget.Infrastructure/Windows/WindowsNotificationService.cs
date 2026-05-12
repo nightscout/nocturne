@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Toolkit.Uwp.Notifications;
-using NightscoutFoundation.Nocturne.Model;
+using Nocturne.Core.Models;
 using Nocturne.Widget.Contracts;
 
 namespace Nocturne.Widget.Infrastructure.Windows;

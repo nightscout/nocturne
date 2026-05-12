@@ -54,7 +54,6 @@ public class OAuthGrantService : IOAuthGrantService
             // Merge scopes: union of existing and new
             var mergedScopes = existingGrant.Scopes
                 .Union(scopes)
-                .Distinct()
                 .OrderBy(s => s)
                 .ToList();
 

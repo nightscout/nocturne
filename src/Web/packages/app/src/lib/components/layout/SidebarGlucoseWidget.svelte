@@ -63,19 +63,34 @@
       <HaloDial configOverride={haloDialConfig.current} />
     </div>
   {:else}
-    <div class="px-2">
-      <GlucoseChartShell
-        engine={sidebarEngine}
-        legend={sidebarLegend}
-        heightClass="h-[200px]"
-        showTimeAxis={false}
-        padding={{ left: 0, right: 0, top: 8, bottom: 0 }}
+    <div class="flex flex-col justify-center gap-2">
+      <GlucoseValueIndicator
+        displayValue={displayBG}
+        rawBgMgdl={rawCurrentBG}
+        {isLoading}
+        {isStale}
+        {isDisconnected}
+        size="lg"
+        class="text-lg"
+      />
+      <div
+        class="px-2 border border-sidebar-border hover:border-sidebar-ring rounded"
       >
-        {#snippet tracks(_ctx)}
-          <ThresholdRules />
-          <GlucoseTrack showAxis={false} />
-        {/snippet}
-      </GlucoseChartShell>
+        <a href="/">
+          <GlucoseChartShell
+            engine={sidebarEngine}
+            legend={sidebarLegend}
+            heightClass="h-[120px]"
+            showTimeAxis={false}
+            padding={{ left: 0, right: 0, top: 8, bottom: 0 }}
+          >
+            {#snippet tracks(_ctx)}
+              <ThresholdRules />
+              <GlucoseTrack showAxis={false} />
+            {/snippet}
+          </GlucoseChartShell>
+        </a>
+      </div>
     </div>
   {/if}
 </div>

@@ -110,25 +110,7 @@ Add one line per tenant slug you want to use. Hosts files don't support wildcard
 aspire start
 ```
 
-Aspire will automatically generate a wildcard TLS certificate for `*.nocturne.test`, install the mkcert CA into your system trust store, and configure the YARP gateway to use it. Access the app at `https://demo.nocturne.test:1612`.
-
-## Data Connectors
-
-Nocturne includes native connectors for popular diabetes platforms:
-
-| Connector            | Description                          | Status    |
-| -------------------- | ------------------------------------ | --------- |
-| **Dexcom Share**     | Dexcom CGM data via Share API        | Supported |
-| **Glooko**           | Comprehensive diabetes data platform | Supported |
-| **LibreLinkUp**      | FreeStyle Libre glucose readings     | Supported |
-| **MiniMed CareLink** | Medtronic pump and sensor data       | Supported |
-| **MyFitnessPal**     | Food and nutrition tracking          | Supported |
-| **Nightscout**       | Nightscout-to-Nightscout sync        | Supported |
-| **MyLife**           | Syncing for MyLife / CamAPS FX       | Supported |
-
-### Using Connectors
-
-Configure connector credentials via [.NET user secrets](https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets) in the Aspire host project. Configured connectors start automatically with `aspire start`.
+Aspire will automatically generate a wildcard TLS certificate for `*.nocturne.test`, install the mkcert CA into your system trust store, and configure the YARP gateway to use it. Access the app at `https://nocturne.test`.
 
 ## Production Deployment (Docker Compose)
 
@@ -136,16 +118,13 @@ The easiest way to deploy Nocturne is with the production Docker Compose bundle.
 
 ### Using a release
 
-Download `docker-compose.yaml`, `.env.example`, and `00-init.sh` from the [latest release](https://github.com/nightscout/nocturne/releases).
+Download `docker-compose.yaml` and `.env.example` from the [latest release](https://github.com/nightscout/nocturne/releases).
 
 ```bash
 # 1. Copy the env template and fill in your passwords and domain
 cp .env.example .env
 
-# 2. Place the init script where the compose expects it
-mkdir -p init && mv 00-init.sh init/
-
-# 3. Start Nocturne
+# 2. Start Nocturne
 docker compose up -d
 ```
 

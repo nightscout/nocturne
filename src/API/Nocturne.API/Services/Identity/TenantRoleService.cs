@@ -147,7 +147,6 @@ public partial class TenantRoleService(NocturneDbContext context) : ITenantRoleS
                     .Where(mr => mr.TenantRoleId != roleId)
                     .SelectMany(mr => mr.TenantRole.Permissions)
                     .Union(member.DirectPermissions ?? [])
-                    .Distinct()
                     .ToList();
 
                 if (remainingPermissions.Count == 0)
@@ -214,7 +213,6 @@ public partial class TenantRoleService(NocturneDbContext context) : ITenantRoleS
 
         return rolePermissions
             .Union(directPermissions)
-            .Distinct()
             .ToList();
     }
 

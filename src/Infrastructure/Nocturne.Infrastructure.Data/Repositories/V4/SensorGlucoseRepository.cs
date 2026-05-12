@@ -53,6 +53,8 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     /// <param name="offset">The number of records to skip.</param>
     /// <param name="descending">Whether to sort by timestamp in descending order.</param>
     /// <param name="nativeOnly">Whether to return only native records.</param>
+    /// <param name="afterTimestamp">Keyset cursor timestamp. When paired with <paramref name="afterId"/>, replaces offset-based pagination.</param>
+    /// <param name="afterId">Keyset cursor record ID (tiebreaker). When paired with <paramref name="afterTimestamp"/>, replaces offset-based pagination.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of sensor glucose records.</returns>
     public async Task<IEnumerable<SensorGlucose>> GetAsync(
@@ -64,6 +66,8 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         int offset = 0,
         bool descending = true,
         bool nativeOnly = false,
+        DateTime? afterTimestamp = null,
+        Guid? afterId = null,
         CancellationToken ct = default
     )
     {
@@ -80,13 +84,30 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
             query = query.Where(e => e.LegacyId == null);
 
         // Exclude non-primary duplicates from cross-connector deduplication
-        var nonPrimaryIds = _context.LinkedRecords
-            .Where(lr => lr.RecordType == "sensorglucose" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        query = query.Where(b => !nonPrimaryIds.Contains(b.Id));
+        query = query.Where(b => !_context.LinkedRecords
+            .Any(lr => lr.RecordType == "sensorglucose" && !lr.IsPrimary && lr.RecordId == b.Id));
 
-        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
-        var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
+        // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
+        // that seeks directly to the cursor position. O(limit) vs O(offset + limit).
+        if (afterTimestamp.HasValue && afterId.HasValue)
+        {
+            query = descending
+                ? query.Where(e => e.Timestamp < afterTimestamp.Value
+                    || (e.Timestamp == afterTimestamp.Value && e.Id < afterId.Value))
+                : query.Where(e => e.Timestamp > afterTimestamp.Value
+                    || (e.Timestamp == afterTimestamp.Value && e.Id > afterId.Value));
+        }
+
+        query = descending
+            ? query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
+            : query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id);
+
+        if (!afterTimestamp.HasValue || !afterId.HasValue)
+        {
+            query = query.Skip(offset);
+        }
+
+        var entities = await query.Take(limit).ToListAsync(ct);
         return entities.Select(SensorGlucoseMapper.ToDomainModel);
     }
 
@@ -272,34 +293,20 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         }
 
         // Insert-time deduplication: link saved records to canonical groups
-        foreach (var entity in entities)
+        try
         {
-            try
-            {
-                var criteria = new MatchCriteria
-                {
-                    GlucoseValue = entity.Mgdl,
-                    GlucoseTolerance = 1.0
-                };
+            var dedupInputs = entities.Select(e => new DeduplicationInput(
+                RecordId: e.Id,
+                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                DataSource: e.DataSource ?? "unknown",
+                Criteria: new MatchCriteria { GlucoseValue = e.Mgdl, GlucoseTolerance = 1.0 }
+            )).ToList();
 
-                var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
-                    RecordType.SensorGlucose,
-                    new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    criteria,
-                    ct);
-
-                await _deduplicationService.LinkRecordAsync(
-                    canonicalId,
-                    RecordType.SensorGlucose,
-                    entity.Id,
-                    new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    entity.DataSource ?? "unknown",
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to deduplicate SensorGlucose {Id}", entity.Id);
-            }
+            await _deduplicationService.DeduplicateBatchAsync(RecordType.SensorGlucose, dedupInputs, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", entities.Count);
         }
 
         return entities.Select(SensorGlucoseMapper.ToDomainModel);

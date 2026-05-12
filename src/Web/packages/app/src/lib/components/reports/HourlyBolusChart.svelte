@@ -57,7 +57,7 @@
             },
           },
         }}
-        padding={{ top: 4, right: 4, bottom: 20, left: 24 }}
+        padding={{ top: 4, right: 20, bottom: 20, left: 20 }}
       />
     </div>
   {:else}

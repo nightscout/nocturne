@@ -12,6 +12,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// </summary>
 /// <seealso cref="IInAppNotificationService"/>
 [ApiController]
+[Tags("Monitoring")]
 [Route("api/v4/notifications")]
 public class NotificationsController : ControllerBase
 {

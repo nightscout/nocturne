@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V3;
 /// <seealso cref="IStatusService"/>
 /// <seealso cref="V3StatusResponse"/>
 [ApiController]
+[Tags("V3")]
 [Route("api/v3/[controller]")]
 public class StatusController : ControllerBase
 {

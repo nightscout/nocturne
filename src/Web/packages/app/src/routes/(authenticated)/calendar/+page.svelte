@@ -66,7 +66,7 @@
   });
 
   // Query responses
-  const punchCardQuery = getPunchCardData(dateRangeInput);
+  const punchCardQuery = $derived(getPunchCardData(dateRangeInput));
   const trackersQuery = getActiveInstances();
   const historyQuery = getInstanceHistory({ limit: 100 });
   const definitionsQuery = getDefinitions({});
@@ -137,6 +137,19 @@
     "November",
     "December",
   ];
+
+  // Reactive loading/error states for query results
+  const punchCardLoading = $derived(punchCardQuery.loading);
+  const punchCardError = $derived(punchCardQuery.error);
+  const activeTrackers = $derived(trackersQuery.current ?? []);
+  const historyTrackers = $derived(historyQuery.current ?? []);
+  const definitions = $derived(definitionsQuery.current ?? []);
+  const trackersLoading = $derived(
+    trackersQuery.loading || historyQuery.loading || definitionsQuery.loading
+  );
+  const trackersError = $derived(
+    trackersQuery.error || historyQuery.error || definitionsQuery.error
+  );
 
   const daysData = $derived.by(() => {
     const currentData = punchCardQuery.current;
@@ -339,6 +352,10 @@
     isCompletionDialogOpen = true;
   }
 
+  const trackerEvents = $derived(
+    buildTrackerEvents(activeTrackers, historyTrackers)
+  );
+
   function handleCompletionDialogClose() {
     isCompletionDialogOpen = false;
     completingInstance = null;
@@ -355,9 +372,27 @@
   }
 </script>
 
-{#await punchCardQuery}
+{#if punchCardLoading}
   <CalendarSkeleton />
-{:then}
+{:else if punchCardError}
+  <div class="flex items-center justify-center h-full p-6">
+    <Card.Root class="max-w-md border-destructive">
+      <Card.Content class="py-8">
+        <div class="text-center">
+          <p class="font-medium text-destructive">
+            Failed to load calendar data
+          </p>
+          <p class="text-sm text-muted-foreground mt-1">
+            {punchCardError instanceof Error ? punchCardError.message : "An error occurred"}
+          </p>
+          <Button class="mt-4" onclick={() => window.location.reload()}>
+            Try Again
+          </Button>
+        </div>
+      </Card.Content>
+    </Card.Root>
+  </div>
+{:else}
   <div class="flex flex-col h-full">
     <div
       {@attach coachmark({
@@ -380,7 +415,7 @@
       />
     </div>
 
-    {#await Promise.all([trackersQuery, historyQuery, definitionsQuery])}
+    {#if trackersLoading}
       <div class="flex-1 p-4">
         <Card.Root class="h-full">
           <Card.Content class="p-4 h-full flex items-center justify-center">
@@ -388,11 +423,27 @@
           </Card.Content>
         </Card.Root>
       </div>
-    {:then [activeTrackers, historyTrackers, definitions]}
-      {@const trackerEvents = buildTrackerEvents(
-        activeTrackers ?? [],
-        historyTrackers ?? []
-      )}
+    {:else if trackersError}
+      <div class="flex-1 p-4">
+        <Card.Root class="h-full">
+          <Card.Content class="p-4 h-full flex flex-col">
+            <div class="grid grid-cols-7 gap-1 mb-2">
+              {#each DAY_NAMES as dayName}
+                <div
+                  class="text-center text-sm font-medium text-muted-foreground py-2"
+                >
+                  {dayName}
+                </div>
+              {/each}
+            </div>
+            <div class="text-center text-muted-foreground py-8">
+              <p>Could not load tracker data</p>
+              <p class="text-sm">Calendar view is still available</p>
+            </div>
+          </Card.Content>
+        </Card.Root>
+      </div>
+    {:else}
       <div class="flex-1 p-4">
         <Card.Root class="h-full">
           <Card.Content class="p-4 h-full flex flex-col">
@@ -424,7 +475,7 @@
                       {currentYear}
                       {currentMonth}
                       {trackerEvents}
-                      definitions={definitions ?? []}
+                      {definitions}
                       bind:openPopoverId
                       {units}
                       {unitLabel}
@@ -445,47 +496,9 @@
           </Card.Content>
         </Card.Root>
       </div>
-    {:catch}
-      <div class="flex-1 p-4">
-        <Card.Root class="h-full">
-          <Card.Content class="p-4 h-full flex flex-col">
-            <div class="grid grid-cols-7 gap-1 mb-2">
-              {#each DAY_NAMES as dayName}
-                <div
-                  class="text-center text-sm font-medium text-muted-foreground py-2"
-                >
-                  {dayName}
-                </div>
-              {/each}
-            </div>
-            <div class="text-center text-muted-foreground py-8">
-              <p>Could not load tracker data</p>
-              <p class="text-sm">Calendar view is still available</p>
-            </div>
-          </Card.Content>
-        </Card.Root>
-      </div>
-    {/await}
+    {/if}
   </div>
-{:catch error}
-  <div class="flex items-center justify-center h-full p-6">
-    <Card.Root class="max-w-md border-destructive">
-      <Card.Content class="py-8">
-        <div class="text-center">
-          <p class="font-medium text-destructive">
-            Failed to load calendar data
-          </p>
-          <p class="text-sm text-muted-foreground mt-1">
-            {error instanceof Error ? error.message : "An error occurred"}
-          </p>
-          <Button class="mt-4" onclick={() => window.location.reload()}>
-            Try Again
-          </Button>
-        </div>
-      </Card.Content>
-    </Card.Root>
-  </div>
-{/await}
+{/if}
 
 <TrackerCompletionDialog
   bind:open={isCompletionDialogOpen}

@@ -21,6 +21,7 @@ namespace Nocturne.API.Controllers.V4.Health;
 /// <seealso cref="IPatientRecordRepository"/>
 /// <seealso cref="IPatientDeviceRepository"/>
 [ApiController]
+[Tags("Health")]
 [Route("api/v4/patient-record")]
 [Authorize]
 [Produces("application/json")]
@@ -61,7 +62,7 @@ public class PatientRecordController : ControllerBase
     /// Update the patient record
     /// </summary>
     [HttpPut]
-    [RemoteCommand(Invalidates = ["GetPatientRecord"])]
+    [RemoteForm(Invalidates = ["GetPatientRecord"])]
     [ProducesResponseType(typeof(PatientRecord), StatusCodes.Status200OK)]
     public async Task<ActionResult<PatientRecord>> UpdatePatientRecord(
         [FromBody] PatientRecord model,

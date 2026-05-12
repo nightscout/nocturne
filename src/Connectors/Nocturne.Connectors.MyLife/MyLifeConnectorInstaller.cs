@@ -43,7 +43,6 @@ public class MyLifeConnectorInstaller : IConnectorInstaller
 
         services.AddSingleton<MyLifeSyncService>();
         services.AddSingleton<MyLifeEventProcessor>();
-        services.AddSingleton<MyLifeEventsCache>();
 
         services.AddScoped<IConnectorSyncExecutor, MyLifeSyncExecutor>();
     }

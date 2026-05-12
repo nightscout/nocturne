@@ -16,8 +16,7 @@ internal sealed class EnumMemberValueConverter<TEnum>()
     where TEnum : struct, Enum
 {
     private static readonly Dictionary<TEnum, string> ToStringMap = BuildToStringMap();
-    private static readonly Dictionary<string, TEnum> FromStringMap =
-        ToStringMap.ToDictionary(kv => kv.Value, kv => kv.Key, StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, TEnum> FromStringMap = BuildFromStringMap();
 
     private static Dictionary<TEnum, string> BuildToStringMap()
     {
@@ -28,6 +27,26 @@ internal sealed class EnumMemberValueConverter<TEnum>()
             var attr = field.GetCustomAttribute<EnumMemberAttribute>();
             map[value] = attr?.Value ?? value.ToString();
         }
+        return map;
+    }
+
+    private static Dictionary<string, TEnum> BuildFromStringMap()
+    {
+        var map = new Dictionary<string, TEnum>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in typeof(TEnum).GetFields(BindingFlags.Public | BindingFlags.Static))
+        {
+            var value = (TEnum)field.GetValue(null)!;
+            // Add both the member name and the EnumMember value so lookups
+            // succeed even when attribute reflection fails at runtime.
+            map.TryAdd(field.Name, value);
+            var attr = field.GetCustomAttribute<EnumMemberAttribute>();
+            if (attr?.Value is { } attrValue)
+                map.TryAdd(attrValue, value);
+        }
+        // Also include whatever ToStringMap resolved (covers edge cases where
+        // ToStringMap and FromStringMap disagree about attribute availability).
+        foreach (var kv in ToStringMap)
+            map.TryAdd(kv.Value, kv.Key);
         return map;
     }
 

@@ -102,4 +102,14 @@ public interface ICalibrationRepository : IV4Repository<Calibration>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk-insert <see cref="Calibration"/> records with batch-level and DB-level deduplication by LegacyId.
+    /// </summary>
+    /// <param name="records">Records to insert.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The records that were actually inserted (duplicates excluded).</returns>
+    Task<IEnumerable<Calibration>> BulkCreateAsync(
+        IEnumerable<Calibration> records,
+        CancellationToken ct = default);
 }

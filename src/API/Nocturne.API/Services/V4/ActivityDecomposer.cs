@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -19,13 +20,19 @@ namespace Nocturne.API.Services.V4;
 public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 {
     private readonly NocturneDbContext _dbContext;
+    private readonly IStateSpanRepository _stateSpanRepository;
     private readonly ILogger<ActivityDecomposer> _logger;
 
     /// <param name="dbContext">EF Core context used for direct entity read/write operations.</param>
+    /// <param name="stateSpanRepository">Repository for bulk-creating regular activities as StateSpans.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
-    public ActivityDecomposer(NocturneDbContext dbContext, ILogger<ActivityDecomposer> logger)
+    public ActivityDecomposer(
+        NocturneDbContext dbContext,
+        IStateSpanRepository stateSpanRepository,
+        ILogger<ActivityDecomposer> logger)
     {
         _dbContext = dbContext;
+        _stateSpanRepository = stateSpanRepository;
         _logger = logger;
     }
 
@@ -97,6 +104,117 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
                 activity.Id
             );
         }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public async Task<DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<Activity> activities, CancellationToken ct = default)
+    {
+        if (activities.Count == 0)
+            return new DecompositionResult();
+
+        var batch = new DecompositionBatchEntity
+        {
+            TenantId = _dbContext.TenantId,
+            Source = "activity_decomposer_batch",
+            SourceRecordId = null,
+            CreatedAt = DateTime.UtcNow,
+        };
+        _dbContext.DecompositionBatches.Add(batch);
+        await _dbContext.SaveChangesAsync(ct);
+
+        var result = new DecompositionResult { CorrelationId = batch.Id };
+
+        var heartRateList = new List<HeartRate>();
+        var stepCountList = new List<StepCount>();
+        var regularActivities = new List<Activity>();
+
+        foreach (var activity in activities)
+        {
+            if (IsHeartRate(activity))
+                heartRateList.Add(MapToHeartRate(activity));
+            else if (IsStepCount(activity))
+                stepCountList.Add(MapToStepCount(activity));
+            else
+                regularActivities.Add(activity);
+        }
+
+        if (heartRateList.Count > 0)
+        {
+            // Filter out records that already exist by OriginalId to avoid duplicates on re-migration
+            var hrOriginalIds = heartRateList
+                .Where(hr => hr.Id != null)
+                .Select(hr => hr.Id!)
+                .ToHashSet();
+
+            var existingHrIds = hrOriginalIds.Count > 0
+                ? (await _dbContext.HeartRates
+                    .Where(h => h.OriginalId != null && hrOriginalIds.Contains(h.OriginalId))
+                    .Select(h => h.OriginalId!)
+                    .ToListAsync(ct))
+                    .ToHashSet()
+                : new HashSet<string>();
+
+            var newHeartRates = heartRateList
+                .Where(hr => hr.Id == null || !existingHrIds.Contains(hr.Id))
+                .ToList();
+
+            if (newHeartRates.Count > 0)
+            {
+                var entities = newHeartRates.Select(HeartRateMapper.ToEntity).ToList();
+                await _dbContext.HeartRates.AddRangeAsync(entities, ct);
+                await _dbContext.SaveChangesAsync(ct);
+                result.CreatedRecords.AddRange(entities.Select(HeartRateMapper.ToDomainModel));
+            }
+
+            if (existingHrIds.Count > 0)
+                _logger.LogDebug("Skipped {Count} duplicate heart rate records by OriginalId", existingHrIds.Count);
+        }
+
+        if (stepCountList.Count > 0)
+        {
+            // Filter out records that already exist by OriginalId to avoid duplicates on re-migration
+            var scOriginalIds = stepCountList
+                .Where(sc => sc.Id != null)
+                .Select(sc => sc.Id!)
+                .ToHashSet();
+
+            var existingScIds = scOriginalIds.Count > 0
+                ? (await _dbContext.StepCounts
+                    .Where(s => s.OriginalId != null && scOriginalIds.Contains(s.OriginalId))
+                    .Select(s => s.OriginalId!)
+                    .ToListAsync(ct))
+                    .ToHashSet()
+                : new HashSet<string>();
+
+            var newStepCounts = stepCountList
+                .Where(sc => sc.Id == null || !existingScIds.Contains(sc.Id))
+                .ToList();
+
+            if (newStepCounts.Count > 0)
+            {
+                var entities = newStepCounts.Select(StepCountMapper.ToEntity).ToList();
+                await _dbContext.StepCounts.AddRangeAsync(entities, ct);
+                await _dbContext.SaveChangesAsync(ct);
+                result.CreatedRecords.AddRange(entities.Select(StepCountMapper.ToDomainModel));
+            }
+
+            if (existingScIds.Count > 0)
+                _logger.LogDebug("Skipped {Count} duplicate step count records by OriginalId", existingScIds.Count);
+        }
+
+        if (regularActivities.Count > 0)
+        {
+            var stateSpans = regularActivities.Select(ActivityStateSpanMapper.ToStateSpan).ToList();
+            var created = await _stateSpanRepository.CreateActivitiesAsStateSpansAsync(stateSpans, ct);
+            result.CreatedRecords.AddRange(created.Select(s => ActivityStateSpanMapper.ToActivity(s)!));
+        }
+
+        _logger.LogDebug(
+            "Batch-decomposed {Count} activities ({HeartRate} HR, {StepCount} steps, {Regular} regular)",
+            activities.Count, heartRateList.Count, stepCountList.Count, regularActivities.Count);
 
         return result;
     }

@@ -175,6 +175,88 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     }
 
     /// <inheritdoc />
+    public async Task<DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<Entry> entries, CancellationToken ct = default)
+    {
+        if (entries.Count == 0)
+            return new DecompositionResult();
+
+        var batch = new DecompositionBatchEntity
+        {
+            TenantId = _dbContext.TenantId,
+            Source = "entry_decomposer_batch",
+            SourceRecordId = null,
+            CreatedAt = DateTime.UtcNow,
+        };
+        _dbContext.DecompositionBatches.Add(batch);
+        await _dbContext.SaveChangesAsync(ct);
+
+        var result = new DecompositionResult { CorrelationId = batch.Id };
+
+        var sgvList = new List<SensorGlucose>();
+        var mbgList = new List<MeterGlucose>();
+        var calList = new List<Calibration>();
+
+        foreach (var entry in entries)
+        {
+            switch (entry.Type?.ToLowerInvariant())
+            {
+                case "sgv":
+                {
+                    var model = MapToSensorGlucose(entry, batch.Id);
+
+                    string? gpHint = null;
+                    double? smoothedHint = null;
+                    double? unsmoothedHint = null;
+
+                    if (entry.AdditionalProperties is { } props)
+                    {
+                        if (TryGetString(props, "glucoseProcessing", out var gpStr))
+                            gpHint = gpStr;
+                        if (TryGetDouble(props, "smoothedMgdl", out var sm))
+                            smoothedHint = sm;
+                        if (TryGetDouble(props, "unsmoothedMgdl", out var um))
+                            unsmoothedHint = um;
+                    }
+
+                    await _glucoseResolver.ResolveAsync(model, gpHint, smoothedHint, unsmoothedHint, ct);
+                    sgvList.Add(model);
+                    break;
+                }
+                case "mbg":
+                    mbgList.Add(MapToMeterGlucose(entry, batch.Id));
+                    break;
+                case "cal":
+                    calList.Add(MapToCalibration(entry, batch.Id));
+                    break;
+                default:
+                    _logger.LogDebug("Skipping entry with unknown type: {Type}", entry.Type);
+                    break;
+            }
+        }
+
+        if (sgvList.Count > 0)
+        {
+            var created = await _sensorGlucoseRepository.BulkCreateAsync(sgvList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        if (mbgList.Count > 0)
+        {
+            var created = await _meterGlucoseRepository.BulkCreateAsync(mbgList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        if (calList.Count > 0)
+        {
+            var created = await _calibrationRepository.BulkCreateAsync(calList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc />
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
         var deleted = 0;

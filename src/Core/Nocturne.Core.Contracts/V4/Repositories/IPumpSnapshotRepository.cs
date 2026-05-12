@@ -96,4 +96,14 @@ public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
     /// <param name="to">Inclusive end, or <c>null</c> for no upper bound.</param>
     /// <param name="ct">Cancellation token.</param>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk-insert <see cref="PumpSnapshot"/> records with batch-level and DB-level deduplication by LegacyId.
+    /// </summary>
+    /// <param name="records">Records to insert.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The records that were actually inserted (duplicates excluded).</returns>
+    Task<IEnumerable<PumpSnapshot>> BulkCreateAsync(
+        IEnumerable<PumpSnapshot> records,
+        CancellationToken ct = default);
 }

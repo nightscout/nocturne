@@ -11,6 +11,7 @@
     setAuthCookies,
   } from "$routes/(unauthenticated)/auth/auth.remote";
   import { setupOwnerOidc, validateSetupUsername } from "../setup.remote";
+  import { Debounced } from "runed";
   import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
   import OidcProviderButtons from "$lib/components/auth/OidcProviderButtons.svelte";
   import { Button } from "$lib/components/ui/button";
@@ -48,38 +49,55 @@
   let usernameError = $state<string | null>(null);
   let usernameValid = $state(false);
   let validatingUsername = $state(false);
-  let validationTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  function onUsernameInput() {
+  const normalizedUsername = $derived(username.trim().toLowerCase());
+  const debouncedUsername = new Debounced(() => normalizedUsername, 400);
+
+  const usernameValidation = $derived.by(() => {
+    const value = debouncedUsername.current;
+    if (!value || value.length < 3) return null;
+    return validateSetupUsername({ username: value });
+  });
+
+  $effect(() => {
+    const value = normalizedUsername;
+
     usernameError = null;
     usernameValid = false;
 
-    if (validationTimeout) clearTimeout(validationTimeout);
-
-    const value = username.trim().toLowerCase();
-    if (!value || value.length < 3) {
-      if (value.length > 0) usernameError = "Username must be at least 3 characters";
+    if (!value) return;
+    if (value.length < 3) {
+      usernameError = "Username must be at least 3 characters";
       return;
     }
 
-    validatingUsername = true;
-    validationTimeout = setTimeout(async () => {
-      try {
-        const result = await validateSetupUsername({ username: value });
-        if (result?.isValid) {
-          usernameValid = true;
-          usernameError = null;
-        } else {
-          usernameValid = false;
-          usernameError = result?.message ?? "Invalid username";
-        }
-      } catch {
-        usernameError = "Could not validate username";
-      } finally {
-        validatingUsername = false;
-      }
-    }, 400);
-  }
+    if (debouncedUsername.current !== value) {
+      validatingUsername = true;
+      return;
+    }
+
+    const result = usernameValidation;
+    if (!result) return;
+
+    if (result.loading) {
+      validatingUsername = true;
+      return;
+    }
+
+    validatingUsername = false;
+
+    if (result.error) {
+      usernameError = "Could not validate username";
+      return;
+    }
+
+    const data = result.current;
+    if (data?.isValid) {
+      usernameValid = true;
+    } else {
+      usernameError = data?.message ?? "Invalid username";
+    }
+  });
 
   const canSubmit = $derived(
     displayName.trim().length > 0 && usernameValid,
@@ -233,7 +251,6 @@
             type="text"
             placeholder="your-username"
             bind:value={username}
-            oninput={onUsernameInput}
             disabled={isRedirecting || isRegistering}
           />
           {#if validatingUsername}

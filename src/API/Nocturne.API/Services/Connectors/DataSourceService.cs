@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Models;
@@ -40,6 +41,163 @@ public class DataSourceService : IDataSourceService
         _logger = logger;
     }
 
+    private record TableStats(long Count, int CountLast24H, DateTime Latest, DateTime? Oldest);
+
+    private static void ApplyStatus(DataSourceInfo info, DateTimeOffset now, int activeMinutes, int staleMinutes)
+    {
+        var minutesSinceLast = info.LastSeen.HasValue
+            ? (int)(now - info.LastSeen.Value).TotalMinutes
+            : int.MaxValue;
+        info.MinutesSinceLastData = minutesSinceLast;
+        info.Status = minutesSinceLast switch
+        {
+            _ when minutesSinceLast < activeMinutes => "active",
+            _ when minutesSinceLast < staleMinutes => "stale",
+            _ => "inactive",
+        };
+    }
+
+    private (int activeMinutes, int staleMinutes) ResolveThresholds(
+        string? connectorDataSourceId,
+        Dictionary<string, (int active, int stale)>? configOverrides)
+    {
+        const int defaultActive = 15;
+        const int defaultStale = 60;
+
+        if (connectorDataSourceId == null)
+            return (defaultActive, defaultStale);
+
+        if (configOverrides != null &&
+            configOverrides.TryGetValue(connectorDataSourceId, out var overrides))
+        {
+            var active = overrides.active > 0 ? overrides.active : 0;
+            var stale = overrides.stale > 0 ? overrides.stale : 0;
+
+            if (active > 0 || stale > 0)
+            {
+                var meta = ConnectorMetadataService.GetByDataSourceId(connectorDataSourceId);
+                return (
+                    active > 0 ? active : meta?.DefaultActiveThresholdMinutes ?? defaultActive,
+                    stale > 0 ? stale : meta?.DefaultStaleThresholdMinutes ?? defaultStale);
+            }
+        }
+
+        var connectorMeta = ConnectorMetadataService.GetByDataSourceId(connectorDataSourceId);
+        if (connectorMeta != null)
+            return (connectorMeta.DefaultActiveThresholdMinutes, connectorMeta.DefaultStaleThresholdMinutes);
+
+        return (defaultActive, defaultStale);
+    }
+
+    private async Task<Dictionary<string, (int active, int stale)>> LoadThresholdOverridesAsync(
+        CancellationToken ct)
+    {
+        var configs = await _context.ConnectorConfigurations
+            .AsNoTracking()
+            .Select(c => new { c.ConnectorName, c.ConfigurationJson })
+            .ToListAsync(ct);
+
+        var result = new Dictionary<string, (int active, int stale)>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var config in configs)
+        {
+            var meta = ConnectorMetadataService.GetByConnectorId(config.ConnectorName);
+            if (meta == null || string.IsNullOrEmpty(meta.DataSourceId)) continue;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(config.ConfigurationJson);
+                var root = doc.RootElement;
+
+                var active = root.TryGetProperty("activeThresholdMinutes", out var aProp) && aProp.TryGetInt32(out var a) ? a : 0;
+                var stale = root.TryGetProperty("staleThresholdMinutes", out var sProp) && sProp.TryGetInt32(out var s) ? s : 0;
+
+                result[meta.DataSourceId] = (active, stale);
+            }
+            catch
+            {
+                // Invalid JSON — skip
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<Dictionary<string, TableStats>> GetNonGlucoseStatsAsync(
+        DateTime thirtyDaysAgo, DateTime last24HoursDate, CancellationToken ct)
+    {
+        var result = new Dictionary<string, TableStats>(StringComparer.OrdinalIgnoreCase);
+
+        void Merge(string? key, long count, int count24h, DateTime latest, DateTime? oldest)
+        {
+            if (string.IsNullOrEmpty(key) || count == 0) return;
+            if (result.TryGetValue(key, out var existing))
+            {
+                result[key] = new TableStats(
+                    existing.Count + count,
+                    existing.CountLast24H + count24h,
+                    latest > existing.Latest ? latest : existing.Latest,
+                    oldest.HasValue && (!existing.Oldest.HasValue || oldest.Value < existing.Oldest.Value)
+                        ? oldest : existing.Oldest);
+            }
+            else
+            {
+                result[key] = new TableStats(count, count24h, latest, oldest);
+            }
+        }
+
+        var mgStats = await _context.MeterGlucose
+            .Where(mg => mg.Timestamp >= thirtyDaysAgo)
+            .GroupBy(mg => mg.DataSource ?? mg.Device)
+            .Select(g => new { Key = g.Key, Count = g.LongCount(), Count24H = g.Count(x => x.Timestamp >= last24HoursDate), Latest = g.Max(x => x.Timestamp), Oldest = (DateTime?)g.Min(x => x.Timestamp) })
+            .ToListAsync(ct);
+        foreach (var s in mgStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest);
+
+        var bolusStats = await _context.Boluses
+            .Where(b => b.Timestamp >= thirtyDaysAgo)
+            .GroupBy(b => b.DataSource ?? b.Device)
+            .Select(g => new { Key = g.Key, Count = g.LongCount(), Count24H = g.Count(x => x.Timestamp >= last24HoursDate), Latest = g.Max(x => x.Timestamp), Oldest = (DateTime?)g.Min(x => x.Timestamp) })
+            .ToListAsync(ct);
+        foreach (var s in bolusStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest);
+
+        var carbStats = await _context.CarbIntakes
+            .Where(c => c.Timestamp >= thirtyDaysAgo)
+            .GroupBy(c => c.DataSource ?? c.Device)
+            .Select(g => new { Key = g.Key, Count = g.LongCount(), Count24H = g.Count(x => x.Timestamp >= last24HoursDate), Latest = g.Max(x => x.Timestamp), Oldest = (DateTime?)g.Min(x => x.Timestamp) })
+            .ToListAsync(ct);
+        foreach (var s in carbStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest);
+
+        var bgStats = await _context.BGChecks
+            .Where(b => b.Timestamp >= thirtyDaysAgo)
+            .GroupBy(b => b.DataSource ?? b.Device)
+            .Select(g => new { Key = g.Key, Count = g.LongCount(), Count24H = g.Count(x => x.Timestamp >= last24HoursDate), Latest = g.Max(x => x.Timestamp), Oldest = (DateTime?)g.Min(x => x.Timestamp) })
+            .ToListAsync(ct);
+        foreach (var s in bgStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest);
+
+        var noteStats = await _context.Notes
+            .Where(n => n.Timestamp >= thirtyDaysAgo)
+            .GroupBy(n => n.DataSource ?? n.Device)
+            .Select(g => new { Key = g.Key, Count = g.LongCount(), Count24H = g.Count(x => x.Timestamp >= last24HoursDate), Latest = g.Max(x => x.Timestamp), Oldest = (DateTime?)g.Min(x => x.Timestamp) })
+            .ToListAsync(ct);
+        foreach (var s in noteStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest);
+
+        var deStats = await _context.DeviceEvents
+            .Where(de => de.Timestamp >= thirtyDaysAgo)
+            .GroupBy(de => de.DataSource ?? de.Device)
+            .Select(g => new { Key = g.Key, Count = g.LongCount(), Count24H = g.Count(x => x.Timestamp >= last24HoursDate), Latest = g.Max(x => x.Timestamp), Oldest = (DateTime?)g.Min(x => x.Timestamp) })
+            .ToListAsync(ct);
+        foreach (var s in deStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest);
+
+        var ssStats = await _context.StateSpans
+            .Where(s => s.StartTimestamp >= thirtyDaysAgo)
+            .GroupBy(s => s.Source)
+            .Select(g => new { Key = g.Key, Count = g.LongCount(), Count24H = g.Count(x => x.StartTimestamp >= last24HoursDate), Latest = g.Max(x => x.StartTimestamp), Oldest = (DateTime?)g.Min(x => x.StartTimestamp) })
+            .ToListAsync(ct);
+        foreach (var s in ssStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest);
+
+        return result;
+    }
+
     /// <inheritdoc />
     public async Task<List<DataSourceInfo>> GetActiveDataSourcesAsync(
         CancellationToken cancellationToken = default
@@ -68,16 +226,26 @@ public class DataSourceService : IDataSourceService
             .ToListAsync(cancellationToken);
 
         // Also check APS snapshots for devices that might not have entries
-        var thirtyDaysAgo = now.AddDays(-30).UtcDateTime;
         var deviceStatusDevices = await _context
             .ApsSnapshots.Where(ds =>
-                ds.Timestamp >= thirtyDaysAgo && ds.Device != null && ds.Device != ""
+                ds.Timestamp >= thirtyDaysAgoDate && ds.Device != null && ds.Device != ""
             )
             .GroupBy(ds => ds.Device)
             .Select(g => new { Device = g.Key!, LastMills = new DateTimeOffset(g.Max(ds => ds.Timestamp), TimeSpan.Zero).ToUnixTimeMilliseconds() })
             .ToListAsync(cancellationToken);
 
+        // Batch-aggregate non-glucose tables
+        var nonGlucoseStats = await GetNonGlucoseStatsAsync(thirtyDaysAgoDate, last24HoursDate, cancellationToken);
+
+        // Load user threshold overrides and connector configs for LastSuccessfulSync
+        var thresholdOverrides = await LoadThresholdOverridesAsync(cancellationToken);
+        var connectorConfigs = await _context.ConnectorConfigurations
+            .AsNoTracking()
+            .Select(c => new { c.ConnectorName, c.LastSuccessfulSync })
+            .ToListAsync(cancellationToken);
+
         var dataSources = new List<DataSourceInfo>();
+        var processedNonGlucoseKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var device in entryDevices)
         {
@@ -95,15 +263,55 @@ public class DataSourceService : IDataSourceService
                 info.LastSeen = DateTimeOffset.FromUnixTimeMilliseconds(dsDevice.LastMills);
             }
 
-            // Calculate status
-            var minutesSinceLast = (int)(now - info.LastSeen.Value).TotalMinutes;
-            info.MinutesSinceLastData = minutesSinceLast;
-            info.Status = minutesSinceLast switch
+            // Set ConnectorId if this is a connector data source
+            var connectorKey = device.DataSource ?? device.Device;
+            var connectorMeta = ConnectorMetadataService.GetByDataSourceId(connectorKey);
+            if (connectorMeta != null)
             {
-                < 15 => "active",
-                < 60 => "stale",
-                _ => "inactive",
-            };
+                info.ConnectorId = connectorMeta.ConnectorName.ToLowerInvariant();
+                var connConfig = connectorConfigs.FirstOrDefault(c =>
+                    c.ConnectorName.Equals(connectorMeta.ConnectorName, StringComparison.OrdinalIgnoreCase));
+                if (connConfig?.LastSuccessfulSync != null)
+                    info.LastSuccessfulSync = new DateTimeOffset(connConfig.LastSuccessfulSync.Value, TimeSpan.Zero);
+            }
+
+            // Merge non-glucose stats
+            var mergeKey = device.DataSource ?? device.Device;
+            if (nonGlucoseStats.TryGetValue(mergeKey, out var ngStats))
+            {
+                info.TotalEntries += ngStats.Count;
+                info.EntriesLast24Hours += ngStats.CountLast24H;
+                var ngLastSeen = new DateTimeOffset(ngStats.Latest, TimeSpan.Zero);
+                if (ngLastSeen > info.LastSeen)
+                    info.LastSeen = ngLastSeen;
+                if (ngStats.Oldest.HasValue)
+                {
+                    var ngFirstSeen = new DateTimeOffset(ngStats.Oldest.Value, TimeSpan.Zero);
+                    if (!info.FirstSeen.HasValue || ngFirstSeen < info.FirstSeen)
+                        info.FirstSeen = ngFirstSeen;
+                }
+                processedNonGlucoseKeys.Add(mergeKey);
+            }
+            // Also try matching by Device field
+            if (mergeKey != device.Device && nonGlucoseStats.TryGetValue(device.Device, out var ngDeviceStats))
+            {
+                info.TotalEntries += ngDeviceStats.Count;
+                info.EntriesLast24Hours += ngDeviceStats.CountLast24H;
+                var ngLastSeen = new DateTimeOffset(ngDeviceStats.Latest, TimeSpan.Zero);
+                if (ngLastSeen > info.LastSeen)
+                    info.LastSeen = ngLastSeen;
+                if (ngDeviceStats.Oldest.HasValue)
+                {
+                    var ngFirstSeen = new DateTimeOffset(ngDeviceStats.Oldest.Value, TimeSpan.Zero);
+                    if (!info.FirstSeen.HasValue || ngFirstSeen < info.FirstSeen)
+                        info.FirstSeen = ngFirstSeen;
+                }
+                processedNonGlucoseKeys.Add(device.Device);
+            }
+
+            // Apply status with resolved thresholds
+            var (activeMinutes, staleMinutes) = ResolveThresholds(connectorKey, thresholdOverrides);
+            ApplyStatus(info, now, activeMinutes, staleMinutes);
 
             dataSources.Add(info);
         }
@@ -119,17 +327,49 @@ public class DataSourceService : IDataSourceService
                 info.TotalEntries = 0;
                 info.EntriesLast24Hours = 0;
 
-                var minutesSinceLast = (int)(now - info.LastSeen.Value).TotalMinutes;
-                info.MinutesSinceLastData = minutesSinceLast;
-                info.Status = minutesSinceLast switch
+                // Merge non-glucose stats if available
+                if (nonGlucoseStats.TryGetValue(dsDevice.Device, out var ngStats))
                 {
-                    < 15 => "active",
-                    < 60 => "stale",
-                    _ => "inactive",
-                };
+                    info.TotalEntries = ngStats.Count;
+                    info.EntriesLast24Hours = ngStats.CountLast24H;
+                    var ngLastSeen = new DateTimeOffset(ngStats.Latest, TimeSpan.Zero);
+                    if (ngLastSeen > info.LastSeen)
+                        info.LastSeen = ngLastSeen;
+                    processedNonGlucoseKeys.Add(dsDevice.Device);
+                }
+
+                var (activeMinutes, staleMinutes) = ResolveThresholds(dsDevice.Device, thresholdOverrides);
+                ApplyStatus(info, now, activeMinutes, staleMinutes);
 
                 dataSources.Add(info);
             }
+        }
+
+        // Add data sources found only in non-glucose tables
+        foreach (var (key, stats) in nonGlucoseStats)
+        {
+            if (processedNonGlucoseKeys.Contains(key)) continue;
+
+            var info = CreateDataSourceInfo(key, key);
+            info.LastSeen = new DateTimeOffset(stats.Latest, TimeSpan.Zero);
+            info.FirstSeen = stats.Oldest.HasValue ? new DateTimeOffset(stats.Oldest.Value, TimeSpan.Zero) : info.LastSeen;
+            info.TotalEntries = stats.Count;
+            info.EntriesLast24Hours = stats.CountLast24H;
+
+            var connectorMeta = ConnectorMetadataService.GetByDataSourceId(key);
+            if (connectorMeta != null)
+            {
+                info.ConnectorId = connectorMeta.ConnectorName.ToLowerInvariant();
+                var connConfig = connectorConfigs.FirstOrDefault(c =>
+                    c.ConnectorName.Equals(connectorMeta.ConnectorName, StringComparison.OrdinalIgnoreCase));
+                if (connConfig?.LastSuccessfulSync != null)
+                    info.LastSuccessfulSync = new DateTimeOffset(connConfig.LastSuccessfulSync.Value, TimeSpan.Zero);
+            }
+
+            var (activeMinutes, staleMinutes) = ResolveThresholds(key, thresholdOverrides);
+            ApplyStatus(info, now, activeMinutes, staleMinutes);
+
+            dataSources.Add(info);
         }
 
         return dataSources.OrderByDescending(d => d.LastSeen).ToList();

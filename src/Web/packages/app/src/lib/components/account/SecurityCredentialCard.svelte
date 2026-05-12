@@ -47,7 +47,7 @@
     <div class="flex items-center justify-between">
       <div>
         <Card.Title class="flex items-center gap-2">
-          <svelte:component this={Icon} class="h-5 w-5" />
+          <Icon class="h-5 w-5" />
           {title}
         </Card.Title>
         <Card.Description>
@@ -76,7 +76,7 @@
         <div
           class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
         >
-          <svelte:component this={Icon} class="h-6 w-6 text-muted-foreground" />
+          <Icon class="h-6 w-6 text-muted-foreground" />
         </div>
         <p class="text-sm text-muted-foreground max-w-sm">
           No {title.toLowerCase()} registered. Add one to enable additional sign-in

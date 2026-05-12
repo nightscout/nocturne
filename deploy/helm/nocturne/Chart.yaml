@@ -1,0 +1,16 @@
+apiVersion: v2
+name: nocturne
+description: Nocturne — modern Nightscout for diabetes data, on Kubernetes.
+type: application
+version: 0.1.0-alpha.9
+appVersion: "latest"
+kubeVersion: ">=1.27.0-0"
+home: https://github.com/nightscout/nocturne
+sources:
+  - https://github.com/nightscout/nocturne
+maintainers: []
+dependencies:
+  - name: postgresql
+    version: "16.x.x"
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: postgresql.enabled

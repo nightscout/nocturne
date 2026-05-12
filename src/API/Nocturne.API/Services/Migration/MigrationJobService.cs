@@ -6,6 +6,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Migration;
@@ -458,10 +459,12 @@ internal class MigrationJob
         // Build the list of collections to migrate
         var allCollections = new (string name, Func<HttpClient, NocturneDbContext, CancellationToken, Task> migrate)[]
         {
+            ("entries", MigrateEntriesViaApiAsync),
             ("treatments", MigrateTreatmentsViaApiAsync),
             ("devicestatus", MigrateDeviceStatusViaApiAsync),
             ("profile", MigrateProfilesViaApiAsync),
             ("food", MigrateFoodViaApiAsync),
+            ("activity", MigrateActivityViaApiAsync),
         };
 
         var collectionsToMigrate = allCollections
@@ -559,16 +562,151 @@ internal class MigrationJob
         };
     }
 
-    private Task MigrateTreatmentsViaApiAsync(
+    private async Task MigrateEntriesViaApiAsync(
         HttpClient httpClient,
         NocturneDbContext dbContext,
         CancellationToken ct
     )
     {
-        // Legacy treatments table has been dropped; treatment migration is a no-op.
-        // Treatments are now stored exclusively in V4 granular tables.
-        _logger.LogInformation("Skipping legacy treatments migration (table dropped)");
-        return Task.CompletedTask;
+        _currentOperation = "Migrating entries";
+        const string collectionName = "entries";
+        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing)
+            ? existing.TotalDocuments : 0;
+
+        var totalMigrated = 0L;
+        var totalFailed = 0L;
+        DateTime? currentTo = null;
+        const int pageSize = 10000;
+
+        using var scope = _serviceProvider.CreateScope();
+        var decomposer = scope.ServiceProvider.GetRequiredService<IEntryDecomposer>();
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var url = $"/api/v1/entries.json?count={pageSize}";
+            if (currentTo.HasValue)
+            {
+                var toMs = new DateTimeOffset(currentTo.Value, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                url += $"&find[date][$lte]={toMs}";
+            }
+
+            var response = await httpClient.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Failed to fetch entries: {StatusCode}", response.StatusCode);
+                break;
+            }
+
+            var content = await response.Content.ReadAsStringAsync(ct);
+            var entries = System.Text.Json.JsonSerializer.Deserialize<Entry[]>(content) ?? [];
+
+            if (entries.Length == 0) break;
+
+            try
+            {
+                await decomposer.DecomposeBatchAsync(entries, ct);
+                totalMigrated += entries.Length;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to decompose entries page");
+                totalFailed += entries.Length;
+            }
+
+            UpdateCollectionProgress(collectionName,
+                Math.Max(knownTotal, totalMigrated + totalFailed),
+                totalMigrated, totalFailed, false);
+            UpdateOverallProgress();
+
+            if (entries.Length < pageSize) break;
+
+            var oldestMs = entries.Min(e => e.Mills);
+            if (oldestMs <= 0) break;
+
+            var oldestDate = DateTimeOffset.FromUnixTimeMilliseconds(oldestMs).UtcDateTime;
+            if (currentTo.HasValue && oldestDate >= currentTo.Value) break;
+            currentTo = oldestDate.AddMilliseconds(-1);
+        }
+
+        UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
+            totalMigrated, totalFailed, true);
+        UpdateOverallProgress();
+        _logger.LogInformation("Migrated {Count} entries via API", totalMigrated);
+    }
+
+    private async Task MigrateTreatmentsViaApiAsync(
+        HttpClient httpClient,
+        NocturneDbContext dbContext,
+        CancellationToken ct
+    )
+    {
+        _currentOperation = "Migrating treatments";
+        const string collectionName = "treatments";
+        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing)
+            ? existing.TotalDocuments : 0;
+
+        var totalMigrated = 0L;
+        var totalFailed = 0L;
+        DateTime? currentTo = null;
+        const int pageSize = 10000;
+
+        using var scope = _serviceProvider.CreateScope();
+        var decomposer = scope.ServiceProvider.GetRequiredService<ITreatmentDecomposer>();
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var url = $"/api/v1/treatments.json?count={pageSize}";
+            if (currentTo.HasValue)
+                url += $"&find[created_at][$lte]={currentTo.Value.ToUniversalTime():o}";
+
+            var response = await httpClient.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Failed to fetch treatments: {StatusCode}", response.StatusCode);
+                break;
+            }
+
+            var content = await response.Content.ReadAsStringAsync(ct);
+            var treatments = System.Text.Json.JsonSerializer.Deserialize<Treatment[]>(content) ?? [];
+
+            if (treatments.Length == 0) break;
+
+            try
+            {
+                await decomposer.DecomposeBatchAsync(treatments, ct);
+                totalMigrated += treatments.Length;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to decompose treatments page");
+                totalFailed += treatments.Length;
+            }
+
+            UpdateCollectionProgress(collectionName,
+                Math.Max(knownTotal, totalMigrated + totalFailed),
+                totalMigrated, totalFailed, false);
+            UpdateOverallProgress();
+
+            if (treatments.Length < pageSize) break;
+
+            var oldestDate = treatments
+                .Select(t => DateTimeOffset.TryParse(t.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
+                .Where(dt => dt.HasValue)
+                .Min();
+
+            if (!oldestDate.HasValue) break;
+            if (currentTo.HasValue && oldestDate.Value >= currentTo.Value) break;
+            currentTo = oldestDate.Value.AddMilliseconds(-1);
+        }
+
+        UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
+            totalMigrated, totalFailed, true);
+        UpdateOverallProgress();
+        _logger.LogInformation("Migrated {Count} treatments via API", totalMigrated);
     }
 
     private async Task MigrateDeviceStatusViaApiAsync(
@@ -578,56 +716,69 @@ internal class MigrationJob
     )
     {
         _currentOperation = "Migrating device statuses";
-        var collectionName = "devicestatus";
-        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing) ? existing.TotalDocuments : 0;
+        const string collectionName = "devicestatus";
+        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing)
+            ? existing.TotalDocuments : 0;
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
+        DateTime? currentTo = null;
+        const int pageSize = 10000;
 
-        try
+        using var scope = _serviceProvider.CreateScope();
+        var decomposer = scope.ServiceProvider.GetRequiredService<IDeviceStatusDecomposer>();
+
+        while (true)
         {
-            var response = await httpClient.GetAsync("/api/v1/devicestatus.json?count=10000", ct);
+            ct.ThrowIfCancellationRequested();
+
+            var url = $"/api/v1/devicestatus.json?count={pageSize}";
+            if (currentTo.HasValue)
+                url += $"&find[created_at][$lte]={currentTo.Value.ToUniversalTime():o}";
+
+            var response = await httpClient.GetAsync(url, ct);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError("Failed to fetch device statuses: {StatusCode}", response.StatusCode);
-                return;
+                break;
             }
 
             var content = await response.Content.ReadAsStringAsync(ct);
             var statuses = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus[]>(content) ?? [];
 
-            if (knownTotal == 0) knownTotal = statuses.Length;
-            UpdateCollectionProgress(collectionName, knownTotal, 0, 0, false);
-            UpdateOverallProgress();
+            if (statuses.Length == 0) break;
 
-            using var scope = _serviceProvider.CreateScope();
-            var decomposer = scope.ServiceProvider.GetRequiredService<Core.Contracts.V4.IDeviceStatusDecomposer>();
-
-            foreach (var status in statuses)
+            try
             {
-                ct.ThrowIfCancellationRequested();
-
-                try
-                {
-                    await decomposer.DecomposeAsync(status, ct);
-                    totalMigrated++;
-                    UpdateCollectionProgress(collectionName, knownTotal, totalMigrated, totalFailed, false);
-                    UpdateOverallProgress();
-                }
-                catch
-                {
-                    totalFailed++;
-                }
+                await decomposer.DecomposeBatchAsync(statuses, ct);
+                totalMigrated += statuses.Length;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to decompose device status page");
+                totalFailed += statuses.Length;
             }
 
-            UpdateCollectionProgress(collectionName, knownTotal, totalMigrated, totalFailed, true);
+            UpdateCollectionProgress(collectionName,
+                Math.Max(knownTotal, totalMigrated + totalFailed),
+                totalMigrated, totalFailed, false);
             UpdateOverallProgress();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error migrating device statuses via API");
+
+            if (statuses.Length < pageSize) break;
+
+            var oldestDate = statuses
+                .Select(d => DateTimeOffset.TryParse(d.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
+                .Where(dt => dt.HasValue)
+                .Min();
+
+            if (!oldestDate.HasValue) break;
+            if (currentTo.HasValue && oldestDate.Value >= currentTo.Value) break;
+            currentTo = oldestDate.Value.AddMilliseconds(-1);
         }
 
+        UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
+            totalMigrated, totalFailed, true);
+        UpdateOverallProgress();
         _logger.LogInformation("Migrated {Count} device statuses via API", totalMigrated);
     }
 
@@ -701,71 +852,89 @@ internal class MigrationJob
     )
     {
         _currentOperation = "Migrating food";
-        var collectionName = "food";
+        const string collectionName = "food";
+        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing)
+            ? existing.TotalDocuments : 0;
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
+        var totalSkipped = 0;
+        const int pageSize = 10000;
 
         try
         {
-            var response = await httpClient.GetAsync("/api/v1/food.json", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Failed to fetch food: {StatusCode}", response.StatusCode);
-                return;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
-            var foods = System.Text.Json.JsonSerializer.Deserialize<Food[]>(content) ?? [];
-
-            UpdateCollectionProgress(collectionName, foods.Length, 0, 0, false);
-            UpdateOverallProgress();
-
-            foreach (var food in foods)
+            while (true)
             {
                 ct.ThrowIfCancellationRequested();
 
-                try
-                {
-                    var exists = await dbContext.Foods.AnyAsync(
-                        f => f.Name == (food.Name ?? "") && f.Type == (food.Type ?? "food"),
-                        ct
-                    );
+                var url = $"/api/v1/food.json?count={pageSize}&skip={totalSkipped}";
 
-                    if (!exists)
-                    {
-                        dbContext.Foods.Add(
-                            new Infrastructure.Data.Entities.FoodEntity
-                            {
-                                Id = Guid.CreateVersion7(),
-                                Type = food.Type ?? "food",
-                                Category = food.Category ?? "",
-                                Subcategory = food.Subcategory ?? "",
-                                Name = food.Name ?? "",
-                                Portion = food.Portion,
-                                Carbs = food.Carbs,
-                                Fat = food.Fat,
-                                Protein = food.Protein,
-                                Energy = food.Energy,
-                                Gi = (Infrastructure.Data.Entities.GlycemicIndex)(food.Gi > 0 ? food.Gi : 2),
-                                Unit = food.Unit ?? "g",
-                                Foods = food.Foods != null ? System.Text.Json.JsonSerializer.Serialize(food.Foods) : null,
-                                HideAfterUse = food.HideAfterUse,
-                                Hidden = food.Hidden,
-                                Position = food.Position,
-                            }
-                        );
-                    }
-                    totalMigrated++;
-                }
-                catch
+                var response = await httpClient.GetAsync(url, ct);
+                if (!response.IsSuccessStatusCode)
                 {
-                    totalFailed++;
+                    _logger.LogError("Failed to fetch food: {StatusCode}", response.StatusCode);
+                    break;
                 }
+
+                var content = await response.Content.ReadAsStringAsync(ct);
+                var foods = System.Text.Json.JsonSerializer.Deserialize<Food[]>(content) ?? [];
+
+                if (foods.Length == 0) break;
+
+                foreach (var food in foods)
+                {
+                    try
+                    {
+                        var exists = await dbContext.Foods.AnyAsync(
+                            f => f.Name == (food.Name ?? "") && f.Type == (food.Type ?? "food"),
+                            ct
+                        );
+
+                        if (!exists)
+                        {
+                            dbContext.Foods.Add(
+                                new Infrastructure.Data.Entities.FoodEntity
+                                {
+                                    Id = Guid.CreateVersion7(),
+                                    Type = food.Type ?? "food",
+                                    Category = food.Category ?? "",
+                                    Subcategory = food.Subcategory ?? "",
+                                    Name = food.Name ?? "",
+                                    Portion = food.Portion,
+                                    Carbs = food.Carbs,
+                                    Fat = food.Fat,
+                                    Protein = food.Protein,
+                                    Energy = food.Energy,
+                                    Gi = (Infrastructure.Data.Entities.GlycemicIndex)(food.Gi > 0 ? food.Gi : 2),
+                                    Unit = food.Unit ?? "g",
+                                    Foods = food.Foods != null ? System.Text.Json.JsonSerializer.Serialize(food.Foods) : null,
+                                    HideAfterUse = food.HideAfterUse,
+                                    Hidden = food.Hidden,
+                                    Position = food.Position,
+                                }
+                            );
+                        }
+                        totalMigrated++;
+                    }
+                    catch
+                    {
+                        totalFailed++;
+                    }
+                }
+
+                await dbContext.SaveChangesAsync(ct);
+                totalSkipped += foods.Length;
+
+                UpdateCollectionProgress(collectionName,
+                    Math.Max(knownTotal, totalSkipped),
+                    totalMigrated, totalFailed, false);
+                UpdateOverallProgress();
+
+                if (foods.Length < pageSize) break;
             }
 
-            await dbContext.SaveChangesAsync(ct);
-            UpdateCollectionProgress(collectionName, foods.Length, totalMigrated, totalFailed, true);
+            UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
+                totalMigrated, totalFailed, true);
             UpdateOverallProgress();
         }
         catch (Exception ex)
@@ -774,6 +943,79 @@ internal class MigrationJob
         }
 
         _logger.LogInformation("Migrated {Count} food items via API", totalMigrated);
+    }
+
+    private async Task MigrateActivityViaApiAsync(
+        HttpClient httpClient,
+        NocturneDbContext dbContext,
+        CancellationToken ct
+    )
+    {
+        _currentOperation = "Migrating activities";
+        const string collectionName = "activity";
+        var knownTotal = _collectionProgress.TryGetValue(collectionName, out var existing)
+            ? existing.TotalDocuments : 0;
+
+        var totalMigrated = 0L;
+        var totalFailed = 0L;
+        DateTime? currentTo = null;
+        const int pageSize = 10000;
+
+        using var scope = _serviceProvider.CreateScope();
+        var decomposer = scope.ServiceProvider.GetRequiredService<IActivityDecomposer>();
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var url = $"/api/v1/activity.json?count={pageSize}";
+            if (currentTo.HasValue)
+                url += $"&find[created_at][$lte]={currentTo.Value.ToUniversalTime():o}";
+
+            var response = await httpClient.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Failed to fetch activities: {StatusCode}", response.StatusCode);
+                break;
+            }
+
+            var content = await response.Content.ReadAsStringAsync(ct);
+            var activities = System.Text.Json.JsonSerializer.Deserialize<Activity[]>(content) ?? [];
+
+            if (activities.Length == 0) break;
+
+            try
+            {
+                await decomposer.DecomposeBatchAsync(activities, ct);
+                totalMigrated += activities.Length;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to decompose activity page");
+                totalFailed += activities.Length;
+            }
+
+            UpdateCollectionProgress(collectionName,
+                Math.Max(knownTotal, totalMigrated + totalFailed),
+                totalMigrated, totalFailed, false);
+            UpdateOverallProgress();
+
+            if (activities.Length < pageSize) break;
+
+            var oldestDate = activities
+                .Select(a => DateTimeOffset.TryParse(a.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
+                .Where(dt => dt.HasValue)
+                .Min();
+
+            if (!oldestDate.HasValue) break;
+            if (currentTo.HasValue && oldestDate.Value >= currentTo.Value) break;
+            currentTo = oldestDate.Value.AddMilliseconds(-1);
+        }
+
+        UpdateCollectionProgress(collectionName, Math.Max(knownTotal, totalMigrated + totalFailed),
+            totalMigrated, totalFailed, true);
+        UpdateOverallProgress();
+        _logger.LogInformation("Migrated {Count} activities via API", totalMigrated);
     }
 
     private async Task ExecuteMongoMigrationAsync(CancellationToken ct)
@@ -925,7 +1167,8 @@ internal class MigrationJob
         CancellationToken ct
     )
     {
-        // Legacy treatments table has been dropped; BSON treatment import is a no-op.
+        // MongoDB BSON treatment decomposition is not yet implemented (MongoDB mode is out of scope).
+        // The API migration path handles treatments via ITreatmentDecomposer.DecomposeBatchAsync.
         return Task.CompletedTask;
     }
 

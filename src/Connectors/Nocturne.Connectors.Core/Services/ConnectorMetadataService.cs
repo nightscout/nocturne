@@ -123,7 +123,9 @@ public static class ConnectorMetadataService
                             Icon = attr.Icon,
                             Category = attr.Category,
                             Description = attr.Description,
-                            ServiceName = attr.ServiceName
+                            ServiceName = attr.ServiceName,
+                            DefaultActiveThresholdMinutes = attr.DefaultActiveThresholdMinutes,
+                            DefaultStaleThresholdMinutes = attr.DefaultStaleThresholdMinutes
                         };
 
                         ConnectorsByDataSourceId[attr.DataSourceId] = info;
@@ -153,6 +155,8 @@ public static class ConnectorMetadataService
         public ConnectorCategory Category { get; init; } = ConnectorCategory.Other;
         public string Description { get; init; } = string.Empty;
         public string ServiceName { get; set; } = string.Empty;
+        public int DefaultActiveThresholdMinutes { get; init; } = 15;
+        public int DefaultStaleThresholdMinutes { get; init; } = 60;
 
         /// <summary>
         ///     Converts this connector info to an AvailableService for UI consumption.

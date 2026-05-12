@@ -10,6 +10,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 /// </summary>
 /// <seealso cref="IMyFitnessPalMatchingSettingsService"/>
 [ApiController]
+[Tags("Profiles")]
 [Route("api/v4/connectors/myfitnesspal/settings")]
 public class MyFitnessPalSettingsController : ControllerBase
 {

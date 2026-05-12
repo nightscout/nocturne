@@ -31,6 +31,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="IConnectorFoodEntryRepository"/>
 /// <seealso cref="IInAppNotificationService"/>
 [ApiController]
+[Tags("Treatments")]
 [Route("api/v4/meal-matching")]
 [Authorize]
 public class MealMatchingController : ControllerBase

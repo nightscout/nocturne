@@ -202,7 +202,8 @@ public class IobCalculator(
             return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
         }
 
-        var dia = therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult();
+        var dia = tempBasal.InsulinContext?.Dia
+            ?? therapySettings.GetDIAAsync(currentTime, null).GetAwaiter().GetResult();
 
         var scheduledBasalRate = tempBasal.ScheduledRate
             ?? basalRate.GetBasalRateAsync(tempBasal.StartMills, null).GetAwaiter().GetResult();

@@ -1,11 +1,14 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.MyLife.Models;
 
 namespace Nocturne.Connectors.MyLife.Services;
 
+public record MyLifeMonthBatch(string Month, IReadOnlyList<MyLifeEvent> Events);
+
 public class MyLifeSyncService(MyLifeSoapClient soapClient, ILogger<MyLifeSyncService> logger)
 {
-    public async Task<IReadOnlyList<MyLifeEvent>> FetchEventsAsync(
+    public virtual async Task<IReadOnlyList<MyLifeEvent>> FetchEventsAsync(
         string serviceUrl,
         string authToken,
         string patientId,
@@ -13,12 +16,30 @@ public class MyLifeSyncService(MyLifeSoapClient soapClient, ILogger<MyLifeSyncSe
         DateTime until,
         CancellationToken cancellationToken)
     {
+        var results = new List<MyLifeEvent>();
+        await foreach (var batch in FetchEventsPerMonthAsync(
+            serviceUrl, authToken, patientId, since, until, cancellationToken))
+        {
+            results.AddRange(batch.Events);
+        }
+
+        logger.LogInformation("MyLife total events fetched: {Count}", results.Count);
+        return results;
+    }
+
+    public virtual async IAsyncEnumerable<MyLifeMonthBatch> FetchEventsPerMonthAsync(
+        string serviceUrl,
+        string authToken,
+        string patientId,
+        DateTime since,
+        DateTime until,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         var months = BuildMonths(since, until);
         logger.LogInformation(
             "MyLife fetching months: [{Months}] (since={Since:yyyy-MM-dd}, until={Until:yyyy-MM-dd})",
             string.Join(", ", months), since, until);
 
-        var results = new List<MyLifeEvent>();
         foreach (var month in months)
         {
             logger.LogDebug("MyLife fetching month {Month}", month);
@@ -46,11 +67,8 @@ public class MyLifeSyncService(MyLifeSoapClient soapClient, ILogger<MyLifeSyncSe
 
             var events = MyLifeArchiveReader.ReadEvents(decrypted);
             logger.LogInformation("MyLife month {Month} returned {Count} events", month, events.Count);
-            results.AddRange(events);
+            yield return new MyLifeMonthBatch(month, events);
         }
-
-        logger.LogInformation("MyLife total events fetched: {Count}", results.Count);
-        return results;
     }
 
     public async Task<IReadOnlyList<MyLifePumpSettingsReadout>> FetchPumpSettingsAsync(

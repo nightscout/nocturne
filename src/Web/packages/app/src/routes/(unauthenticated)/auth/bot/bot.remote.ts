@@ -15,7 +15,7 @@ import { z } from "zod";
 export const getBotAuthorizeContext = query(async () => {
   const { url, locals } = getRequestEvent();
 
-  const baseDomain = process.env.PUBLIC_BASE_DOMAIN;
+  const baseDomain = process.env.BASE_DOMAIN;
   if (baseDomain) {
     const currentHost = url.host.toLowerCase();
     const expectedApex = baseDomain.toLowerCase();
@@ -37,7 +37,7 @@ export const getBotAuthorizeContext = query(async () => {
 
 /**
  * Build the redirect URL for the slug-prompt flow.
- * Needs process.env.PUBLIC_BASE_DOMAIN which is server-only.
+ * Needs process.env.BASE_DOMAIN which is server-only.
  */
 export const buildTenantRedirectUrl = query(
   z.object({
@@ -51,9 +51,9 @@ export const buildTenantRedirectUrl = query(
       return { error: "Please enter a valid instance slug (letters, digits, hyphens)." };
     }
 
-    const baseDomain = process.env.PUBLIC_BASE_DOMAIN;
+    const baseDomain = process.env.BASE_DOMAIN;
     if (!baseDomain) {
-      return { error: "Server misconfigured: PUBLIC_BASE_DOMAIN not set." };
+      return { error: "Server misconfigured: BASE_DOMAIN not set." };
     }
 
     return {

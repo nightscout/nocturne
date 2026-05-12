@@ -12,6 +12,13 @@
     predictionEnabled,
     predictionDisplayMode,
     glucoseChartLookback,
+    chartLineColorMode,
+    chartLineColor,
+    chartPointColorMode,
+    chartPointColor,
+    chartShowPoints,
+    chartAreaMode,
+    chartAreaOpacity,
   } from "$lib/stores/appearance-store.svelte";
   import type { PredictionDisplayMode } from "$lib/stores/appearance-store.svelte";
   import PredictionSettings from "../PredictionSettings.svelte";
@@ -332,7 +339,15 @@
           <BasalTrack />
           <SwimLaneTrack />
           <ThresholdRules />
-          <GlucoseTrack />
+          <GlucoseTrack
+            lineColorMode={chartLineColorMode.current}
+            lineColor={chartLineColor.current}
+            pointColorMode={chartPointColorMode.current}
+            pointColor={chartPointColor.current}
+            showPoints={chartShowPoints.current}
+            areaMode={chartAreaMode.current}
+            areaOpacity={chartAreaOpacity.current}
+          />
           {#if effectiveShowPredictions}
             <PredictionTrack />
           {/if}
@@ -341,6 +356,8 @@
           <SystemEventMarkers />
           <TrackerMarkers />
           <ChartHighlight />
+        {/snippet}
+        {#snippet overlays(_ctx)}
           <ChartTooltip />
         {/snippet}
       </GlucoseChartShell>

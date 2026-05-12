@@ -105,6 +105,21 @@ public class BolusHandlerDecompositionBatchTests
     }
 
     [Fact]
+    public void MapRecords_WithPrebuiltContext_ProducesIdenticalResults()
+    {
+        var events = new[] { CreateBolusEvent(insulin: 2.5, carbs: 30) };
+        var eventList = events.ToList();
+
+        var expected = _processor.MapRecords(eventList, false, false, 0);
+
+        var context = MyLifeContext.Create(eventList, false, false, 0);
+        var actual = _processor.MapRecords(eventList, context);
+
+        actual.Boluses.Should().HaveCount(expected.Boluses.Count);
+        actual.DecompositionBatches.Should().HaveCount(expected.DecompositionBatches.Count);
+    }
+
+    [Fact]
     public void MapRecords_DecompositionBatchIds_AreAllDistinct()
     {
         var events = new[]

@@ -125,7 +125,7 @@ public class GlookoV3GlucoseDataPoint : GlookoV3DataPointBase
     public string? MealTag { get; set; }
 
     /// <summary>
-    ///     Internal Glooko value (scaled)
+    ///     Internal Glooko value (mg/dL × 100)
     /// </summary>
     [JsonPropertyName("value")]
     public long Value { get; set; }
@@ -135,6 +135,18 @@ public class GlookoV3GlucoseDataPoint : GlookoV3DataPointBase
     /// </summary>
     [JsonPropertyName("calculated")]
     public bool Calculated { get; set; }
+
+    /// <summary>
+    ///     Glooko internal record ID (MongoDB ObjectId)
+    /// </summary>
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    /// <summary>
+    ///     Reading type (e.g., "meter" for BGM)
+    /// </summary>
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
 }
 
 /// <summary>
@@ -184,9 +196,51 @@ public class GlookoV3BolusData
 /// </summary>
 public class GlookoV3InsulinDataPoint : GlookoV3DataPointBase
 {
-    [JsonPropertyName("y")] public double? Y { get; set; }
+    /// <summary>
+    ///     Insulin units (graph Y-axis value)
+    /// </summary>
+    [JsonPropertyName("y")]
+    public double? Y { get; set; }
 
-    [JsonPropertyName("label")] public string? Label { get; set; }
+    /// <summary>
+    ///     Insulin units (explicit value field, same as Y)
+    /// </summary>
+    [JsonPropertyName("value")]
+    public double? Value { get; set; }
+
+    /// <summary>
+    ///     Insulin name (e.g., "Admelog®", "Tresiba®U100")
+    /// </summary>
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    /// <summary>
+    ///     Label (alternative name field used in some responses)
+    /// </summary>
+    [JsonPropertyName("label")]
+    public string? Label { get; set; }
+
+    /// <summary>
+    ///     Unit of measurement (e.g., "units")
+    /// </summary>
+    [JsonPropertyName("units")]
+    public string? Units { get; set; }
+
+    /// <summary>
+    ///     Whether the insulin was actually delivered (false for pen/injection records)
+    /// </summary>
+    [JsonPropertyName("delivered")]
+    public bool? Delivered { get; set; }
+
+    /// <summary>
+    ///     Gets the insulin dose, preferring Value, then Y.
+    /// </summary>
+    public double ActualUnits => Value ?? Y ?? 0;
+
+    /// <summary>
+    ///     Gets the insulin name, preferring Name, then Label.
+    /// </summary>
+    public string? InsulinName => Name ?? Label;
 }
 
 /// <summary>

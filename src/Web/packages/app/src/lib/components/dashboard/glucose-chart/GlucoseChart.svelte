@@ -10,6 +10,15 @@
   } from "./engine/chart-data-engine.svelte";
   import { createPointInspection } from "./engine/point-inspection.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import {
+    chartLineColorMode,
+    chartLineColor,
+    chartPointColorMode,
+    chartPointColor,
+    chartShowPoints,
+    chartAreaMode,
+    chartAreaOpacity,
+  } from "$lib/stores/appearance-store.svelte";
   import { getEntryByTreatmentId } from "$api/entries.remote";
 
   // Shell & tracks
@@ -210,7 +219,15 @@
     <BasalTrack />
     <SwimLaneTrack />
     <ThresholdRules />
-    <GlucoseTrack />
+    <GlucoseTrack
+      lineColorMode={chartLineColorMode.current}
+      lineColor={chartLineColor.current}
+      pointColorMode={chartPointColorMode.current}
+      pointColor={chartPointColor.current}
+      showPoints={chartShowPoints.current}
+      areaMode={chartAreaMode.current}
+      areaOpacity={chartAreaOpacity.current}
+    />
     {#if enablePredictions !== false}
       <PredictionTrack />
     {/if}
@@ -224,6 +241,8 @@
     <TrackerMarkers />
     {@render annotations?.(ctx)}
     <ChartHighlight />
+  {/snippet}
+  {#snippet overlays(_ctx)}
     <ChartTooltip {tooltipExtras} />
   {/snippet}
 </GlucoseChartShell>

@@ -4,11 +4,8 @@
     import MilestoneCard from "$lib/components/MilestoneCard.svelte";
     import {
         Milestone,
-        Circle,
-        CheckCircle2,
-        Calendar,
-        ExternalLink,
         GitPullRequest,
+        ExternalLink,
         AlertCircle,
         Loader2,
         RefreshCw,
@@ -30,7 +27,6 @@
         }
     }
 
-    // Initial load
     loadRoadmap();
 
     function getMilestoneStatus(milestone: RoadmapMilestone): "completed" | "in-progress" | "upcoming" {
@@ -39,7 +35,6 @@
         return "upcoming";
     }
 
-    // Group milestones by status
     function groupMilestones(milestones: RoadmapMilestone[]) {
         const inProgress = milestones.filter(m => getMilestoneStatus(m) === "in-progress");
         const upcoming = milestones.filter(m => getMilestoneStatus(m) === "upcoming");
@@ -50,17 +45,19 @@
     let grouped = $derived(groupMilestones(roadmapData));
 </script>
 
-<div class="container mx-auto px-4 py-12">
-    <!-- Hero -->
-    <div class="text-center mb-12">
-        <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-            Roadmap
+<div class="max-w-[900px] mx-auto px-6">
+    <!-- Page heading -->
+    <div class="pt-20 pb-[60px] border-b border-border">
+        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">Roadmap</div>
+        <h1 class="text-[clamp(2rem,4vw,3.2rem)] font-bold leading-[1.15] tracking-[-0.025em] text-foreground m-0 mb-4">
+            What's next.<br />
+            <em class="text-glucose-in-range">What's done.</em>
         </h1>
-        <p class="text-lg text-muted-foreground max-w-2xl mx-auto mb-6">
-            Track the development progress of Nocturne. See what we're working on,
-            what's coming next, and what's been completed.
+        <p class="text-base leading-[1.65] text-muted-foreground max-w-[520px] m-0 mb-6">
+            Track Nocturne's development milestones. See what's shipping,
+            what's in progress, and what's already shipped.
         </p>
-        <div class="flex justify-center gap-4">
+        <div class="flex gap-3 items-center">
             <Button
                 href="https://github.com/nightscout/nocturne/issues"
                 target="_blank"
@@ -86,39 +83,38 @@
     </div>
 
     {#if loading}
-        <div class="flex flex-col items-center justify-center py-20">
-            <Loader2 class="w-8 h-8 animate-spin text-primary mb-4" />
-            <p class="text-muted-foreground">Loading roadmap from GitHub...</p>
+        <div class="flex flex-col items-center justify-center gap-3 py-[100px] text-muted-foreground text-[0.9375rem]">
+            <Loader2 class="w-6 h-6 animate-spin text-primary" />
+            <p>Loading milestones from GitHub&hellip;</p>
         </div>
     {:else if error}
-        <div class="flex flex-col items-center justify-center py-20">
-            <div class="w-16 h-16 rounded-full bg-destructive/15 flex items-center justify-center mb-4">
-                <AlertCircle class="w-8 h-8 text-destructive" />
+        <div class="flex flex-col items-center justify-center gap-3 py-[100px] text-muted-foreground text-[0.9375rem]">
+            <div
+                class="size-10 rounded-full flex items-center justify-center text-destructive"
+                style="background:color-mix(in oklab, var(--destructive) 15%, transparent)"
+            >
+                <AlertCircle class="w-5 h-5" />
             </div>
-            <p class="text-destructive font-medium mb-2">Failed to load roadmap</p>
-            <p class="text-sm text-muted-foreground mb-4">{error}</p>
-            <Button onclick={loadRoadmap} variant="outline" size="sm">
-                Try Again
-            </Button>
+            <p class="font-semibold text-foreground m-0">Failed to load roadmap</p>
+            <p class="m-0 text-sm">{error}</p>
+            <Button onclick={loadRoadmap} variant="outline" size="sm">Try again</Button>
         </div>
     {:else if roadmapData.length === 0}
-        <div class="flex flex-col items-center justify-center py-20">
-            <div class="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                <Milestone class="w-8 h-8 text-muted-foreground" />
+        <div class="flex flex-col items-center justify-center gap-3 py-[100px] text-muted-foreground text-[0.9375rem]">
+            <div class="size-10 rounded-full bg-muted flex items-center justify-center">
+                <Milestone class="w-5 h-5 text-muted-foreground" />
             </div>
-            <p class="text-muted-foreground">No milestones found</p>
+            <p class="m-0 text-sm">No milestones found.</p>
         </div>
     {:else}
         <!-- In Progress -->
         {#if grouped.inProgress.length > 0}
-            <section class="mb-12">
-                <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-                    <div class="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
-                        <Circle class="w-4 h-4 text-blue-500" />
-                    </div>
-                    In Progress
-                </h2>
-                <div class="grid gap-6">
+            <section class="py-16 border-t border-border">
+                <div class="mb-8">
+                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-2.5">01 &mdash; In Progress</div>
+                    <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Currently <em class="text-glucose-in-range">building.</em></h2>
+                </div>
+                <div class="grid gap-4">
                     {#each grouped.inProgress as milestone}
                         <MilestoneCard {milestone} status={getMilestoneStatus(milestone)} />
                     {/each}
@@ -128,14 +124,12 @@
 
         <!-- Upcoming -->
         {#if grouped.upcoming.length > 0}
-            <section class="mb-12">
-                <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-                    <div class="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
-                        <Calendar class="w-4 h-4 text-muted-foreground" />
-                    </div>
-                    Upcoming
-                </h2>
-                <div class="grid gap-6">
+            <section class="py-16 border-t border-border">
+                <div class="mb-8">
+                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-2.5">0{grouped.inProgress.length > 0 ? 2 : 1} &mdash; Upcoming</div>
+                    <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">On the <em class="text-glucose-in-range">horizon.</em></h2>
+                </div>
+                <div class="grid gap-4">
                     {#each grouped.upcoming as milestone}
                         <MilestoneCard {milestone} status={getMilestoneStatus(milestone)} />
                     {/each}
@@ -145,14 +139,12 @@
 
         <!-- Completed -->
         {#if grouped.completed.length > 0}
-            <section class="mb-12">
-                <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-                    <div class="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center">
-                        <CheckCircle2 class="w-4 h-4 text-green-500" />
-                    </div>
-                    Completed
-                </h2>
-                <div class="grid gap-6">
+            <section class="py-16 border-t border-border">
+                <div class="mb-8">
+                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-2.5">0{[grouped.inProgress.length > 0, grouped.upcoming.length > 0].filter(Boolean).length + 1} &mdash; Completed</div>
+                    <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Already <em class="text-glucose-in-range">shipped.</em></h2>
+                </div>
+                <div class="grid gap-4">
                     {#each grouped.completed as milestone}
                         <MilestoneCard {milestone} status={getMilestoneStatus(milestone)} />
                     {/each}

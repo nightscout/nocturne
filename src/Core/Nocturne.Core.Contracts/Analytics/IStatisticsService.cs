@@ -27,7 +27,7 @@ public interface IStatisticsService
     /// </summary>
     /// <param name="values">Numeric values to average.</param>
     /// <returns>Arithmetic mean.</returns>
-    double CalculateMean(IEnumerable<double> values);
+    double CalculateMean(IList<double> values);
 
     /// <summary>
     /// Calculate a specific percentile from pre-sorted values.
@@ -35,7 +35,7 @@ public interface IStatisticsService
     /// <param name="sortedValues">Values sorted in ascending order.</param>
     /// <param name="percentile">Percentile to calculate (0-100).</param>
     /// <returns>The value at the requested percentile.</returns>
-    double CalculatePercentile(IEnumerable<double> sortedValues, double percentile);
+    double CalculatePercentile(IList<double> sortedValues, double percentile);
 
     /// <summary>
     /// Extract glucose values in mg/dL from <see cref="SensorGlucose"/> entries.

@@ -39,6 +39,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="IBolusRepository"/>
 /// <seealso cref="ITreatmentFoodService"/>
 [ApiController]
+[Tags("Treatments")]
 [Route("api/v4/nutrition")]
 [Authorize]
 [Produces("application/json")]

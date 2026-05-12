@@ -39,11 +39,11 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 
 	const clientId = process.env.DISCORD_APPLICATION_ID;
 	const clientSecret = process.env.DISCORD_CLIENT_SECRET;
-	const baseDomain = process.env.PUBLIC_BASE_DOMAIN;
+	const baseDomain = process.env.BASE_DOMAIN;
 	if (!clientId || !clientSecret || !baseDomain) {
 		throw error(
 			500,
-			"Discord OAuth2 not configured. Set DISCORD_APPLICATION_ID, DISCORD_CLIENT_SECRET, and PUBLIC_BASE_DOMAIN.",
+			"Discord OAuth2 not configured. Set DISCORD_APPLICATION_ID, DISCORD_CLIENT_SECRET, and BASE_DOMAIN.",
 		);
 	}
 
@@ -95,6 +95,7 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 	}
 	const apiClient = createServerApiClient(apiBaseUrl, fetch, {
 		hashedInstanceKey: getHashedInstanceKey(),
+		extraHeaders: { "X-Forwarded-Proto": "https" },
 	});
 
 	const pendingResponse = await apiClient.chatIdentityDirectory.createPending({

@@ -7,7 +7,11 @@
 //
 // Requires: .NET 10 SDK, Aspire CLI
 
+#:package YamlDotNet
+
 using System.Diagnostics;
+using System.Text;
+using YamlDotNet.RepresentationModel;
 
 var repoRoot = Directory.GetCurrentDirectory();
 var outputDir = args.Length > 0 ? Path.GetFullPath(args[0]) : Path.Combine(repoRoot, "release-output");
@@ -51,35 +55,34 @@ try
         return 1;
     }
 
-    // Post-process compose: rename ugly auto-generated env var names
-    var envVarRenames = new Dictionary<string, string>
-    {
-        ["NOCTURNE_POSTGRES_SERVER_BINDMOUNT_0"] = "POSTGRES_INIT_DIR",
-    };
+    // Inline the init script via docker compose configs so the compose is
+    // self-contained — no bind mounts, compatible with Portainer CE.
+    var initScriptSource = Path.Combine(repoRoot, "docs", "postgres", "container-init", "00-init.sh");
+    var composeYaml = File.ReadAllText(composePath);
+    var processedCompose = InlineInitScript(composeYaml, initScriptSource);
 
-    var composeContent = File.ReadAllText(composePath);
-    foreach (var (oldName, newName) in envVarRenames)
-    {
-        composeContent = composeContent.Replace(oldName, newName);
-    }
-    File.WriteAllText(Path.Combine(outputDir, "docker-compose.yaml"), composeContent);
-    Console.WriteLine($"[publish-release] Wrote {Path.Combine(outputDir, "docker-compose.yaml")}");
+    var composeOutputPath = Path.Combine(outputDir, "docker-compose.yaml");
+    File.WriteAllText(composeOutputPath, processedCompose);
+    Console.WriteLine($"[publish-release] Wrote {composeOutputPath}");
 
     // Generate .env.example from aspire-generated .env
     var aspireEnvPath = Path.Combine(tempDir, ".env");
-    GenerateEnvExample(aspireEnvPath, Path.Combine(outputDir, ".env.example"), envVarRenames);
-    Console.WriteLine($"[publish-release] Wrote {Path.Combine(outputDir, ".env.example")}");
+    var envExampleOutputPath = Path.Combine(outputDir, ".env.example");
+    GenerateEnvExample(aspireEnvPath, envExampleOutputPath);
+    Console.WriteLine($"[publish-release] Wrote {envExampleOutputPath}");
 
-    // Copy init script
-    var initScriptSource = Path.Combine(repoRoot, "docs", "postgres", "container-init", "00-init.sh");
-    File.Copy(initScriptSource, Path.Combine(outputDir, "00-init.sh"), overwrite: true);
-    Console.WriteLine($"[publish-release] Wrote {Path.Combine(outputDir, "00-init.sh")}");
+    // Write processed compose and .env.example to deploy/portainer/ in the repo
+    // so they can be committed and used directly from the repository.
+    var deployPortainerDir = Path.Combine(repoRoot, "deploy", "portainer");
+    Directory.CreateDirectory(deployPortainerDir);
+    File.WriteAllText(Path.Combine(deployPortainerDir, "docker-compose.yaml"), processedCompose);
+    File.Copy(envExampleOutputPath, Path.Combine(deployPortainerDir, ".env.example"), overwrite: true);
+    Console.WriteLine($"[publish-release] Updated deploy/portainer/ (commit these before tagging)");
 
     Console.WriteLine();
     Console.WriteLine("[publish-release] Done! Output files:");
-    Console.WriteLine($"  {Path.Combine(outputDir, "docker-compose.yaml")}");
-    Console.WriteLine($"  {Path.Combine(outputDir, ".env.example")}");
-    Console.WriteLine($"  {Path.Combine(outputDir, "00-init.sh")}");
+    Console.WriteLine($"  {composeOutputPath}");
+    Console.WriteLine($"  {envExampleOutputPath}");
 
     return 0;
 }
@@ -89,10 +92,92 @@ finally
         Directory.Delete(tempDir, recursive: true);
 }
 
+// Replaces the ./init bind-mount on nocturne-postgres-server with a docker
+// compose configs entry that inlines the init script content directly.
+// This makes the compose self-contained and compatible with Portainer CE.
+static string InlineInitScript(string composeYaml, string initScriptPath)
+{
+    if (!File.Exists(initScriptPath))
+        throw new FileNotFoundException(
+            $"[publish-release] Init script not found at: {initScriptPath}", initScriptPath);
+
+    var initScriptContent = File.ReadAllText(initScriptPath);
+
+    var yaml = new YamlStream();
+    using (var reader = new StringReader(composeYaml))
+        yaml.Load(reader);
+
+    var root = (YamlMappingNode)yaml.Documents[0].RootNode;
+
+    // Locate the postgres service
+    var services = (YamlMappingNode)root["services"];
+    YamlMappingNode? postgresService = null;
+    foreach (var entry in services)
+    {
+        var key = ((YamlScalarNode)entry.Key).Value ?? "";
+        if (key.Contains("postgres", StringComparison.OrdinalIgnoreCase))
+        {
+            postgresService = (YamlMappingNode)entry.Value;
+            break;
+        }
+    }
+
+    if (postgresService is null)
+        throw new InvalidOperationException("Could not find postgres service in docker-compose.yaml");
+
+    // Remove the ./init bind-mount from the postgres service volumes
+    if (postgresService.Children.TryGetValue("volumes", out var volumesNode))
+    {
+        var volumesList = (YamlSequenceNode)volumesNode;
+        YamlNode? bindMountEntry = null;
+        foreach (var item in volumesList)
+        {
+            if (item is YamlMappingNode volumeMap
+                && volumeMap.Children.TryGetValue("source", out var sourceNode)
+                && ((YamlScalarNode)sourceNode).Value == "./init")
+            {
+                bindMountEntry = item;
+                break;
+            }
+        }
+        if (bindMountEntry is null)
+            throw new InvalidOperationException(
+                "[publish-release] Could not find './init' bind-mount in postgres service volumes. " +
+                "Has the Aspire output format changed?");
+        volumesList.Children.Remove(bindMountEntry);
+    }
+
+    // Add configs reference to the postgres service
+    var configsRef = new YamlSequenceNode(
+        new YamlMappingNode(
+            new YamlScalarNode("source"), new YamlScalarNode("nocturne-init"),
+            new YamlScalarNode("target"), new YamlScalarNode("/docker-entrypoint-initdb.d/00-init.sh"),
+            new YamlScalarNode("mode"), new YamlScalarNode("493") { Style = YamlDotNet.Core.ScalarStyle.Plain }
+        )
+    );
+    postgresService.Children[new YamlScalarNode("configs")] = configsRef;
+
+    // Add top-level configs key with inlined script content
+    var configContent = new YamlMappingNode();
+    configContent.Children[new YamlScalarNode("content")] = new YamlScalarNode(initScriptContent)
+    {
+        Style = YamlDotNet.Core.ScalarStyle.Literal,
+    };
+    var topLevelConfigs = new YamlMappingNode();
+    topLevelConfigs.Children[new YamlScalarNode("nocturne-init")] = configContent;
+    root.Children[new YamlScalarNode("configs")] = topLevelConfigs;
+
+    // Serialize back to YAML
+    var sb = new StringBuilder();
+    using (var writer = new StringWriter(sb))
+        yaml.Save(writer, assignAnchors: false);
+
+    return sb.ToString();
+}
+
 static void GenerateEnvExample(
     string aspireEnvPath,
-    string outputPath,
-    Dictionary<string, string> renames)
+    string outputPath)
 {
     // Known defaults for non-secret values
     var defaults = new Dictionary<string, string>
@@ -101,8 +186,6 @@ static void GenerateEnvExample(
         ["NOCTURNE_WEB_IMAGE"] = "ghcr.io/nightscout/nocturne/nocturne-web:latest",
         ["NOCTURNE_API_PORT"] = "8080",
         ["POSTGRES_USERNAME"] = "nocturne",
-        ["POSTGRES_INIT_DIR"] = "./init",
-        ["NOCTURNE_POSTGRES_SERVER_BINDMOUNT_0"] = "./init",
     };
 
     // Secret vars -- leave blank
@@ -118,16 +201,24 @@ static void GenerateEnvExample(
     // Required config (not secrets, but must be set)
     var requiredConfig = new HashSet<string>
     {
-        "PUBLIC_BASE_DOMAIN",
+        "BASE_DOMAIN",
     };
 
-    // Optional vars
+    // Optional vars (all bot integration config — leave blank if not using)
     var optional = new HashSet<string>
     {
         "DISCORD_BOT_TOKEN",
+        "DISCORD_APPLICATION_ID",
+        "DISCORD_CLIENT_SECRET",
+        "DISCORD_PUBLIC_KEY",
         "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_WEBHOOK_SECRET_TOKEN",
         "SLACK_BOT_TOKEN",
+        "SLACK_SIGNING_SECRET",
         "WHATSAPP_ACCESS_TOKEN",
+        "WHATSAPP_APP_SECRET",
+        "WHATSAPP_PHONE_NUMBER_ID",
+        "WHATSAPP_VERIFY_TOKEN",
     };
 
     using var writer = new StreamWriter(outputPath);
@@ -155,18 +246,21 @@ static void GenerateEnvExample(
             if (eqIndex < 0) continue;
 
             var name = line[..eqIndex];
-            var renamedName = renames.GetValueOrDefault(name, name);
 
-            if (!seenVars.Add(renamedName)) continue;
+            if (!seenVars.Add(name)) continue;
 
-            if (secrets.Contains(renamedName))
-                secretVars.Add((renamedName, ""));
-            else if (requiredConfig.Contains(renamedName))
-                requiredConfigVars.Add((renamedName, ""));
-            else if (optional.Contains(renamedName))
-                optionalVars.Add((renamedName, defaults.GetValueOrDefault(renamedName, "")));
+            // Skip Aspire internal bind-mount placeholder vars — they're meaningless
+            // to users after the init script has been inlined via configs.content.
+            if (name.Contains("_BINDMOUNT_", StringComparison.OrdinalIgnoreCase)) continue;
+
+            if (secrets.Contains(name))
+                secretVars.Add((name, ""));
+            else if (requiredConfig.Contains(name))
+                requiredConfigVars.Add((name, ""));
+            else if (optional.Contains(name))
+                optionalVars.Add((name, defaults.GetValueOrDefault(name, "")));
             else
-                configVars.Add((renamedName, defaults.GetValueOrDefault(renamedName, defaults.GetValueOrDefault(name, ""))));
+                configVars.Add((name, defaults.GetValueOrDefault(name, "")));
         }
 
         writer.WriteLine("# -- Configuration ---------------------------------------------");
@@ -195,9 +289,8 @@ static void GenerateEnvExample(
         writer.WriteLine("NOCTURNE_WEB_IMAGE=ghcr.io/nightscout/nocturne/nocturne-web:latest");
         writer.WriteLine("NOCTURNE_API_PORT=8080");
         writer.WriteLine("POSTGRES_USERNAME=nocturne");
-        writer.WriteLine("POSTGRES_INIT_DIR=./init");
         writer.WriteLine();
-        writer.WriteLine("PUBLIC_BASE_DOMAIN=");
+        writer.WriteLine("BASE_DOMAIN=");
         writer.WriteLine("POSTGRES_PASSWORD=");
         writer.WriteLine("POSTGRES_MIGRATOR_PASSWORD=");
         writer.WriteLine("POSTGRES_APP_PASSWORD=");

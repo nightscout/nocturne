@@ -106,11 +106,19 @@ public class GlookoBolus
 
 public class GlookoCgmReading
 {
-    [JsonPropertyName("timestamp")] public string Timestamp { get; set; } = string.Empty;
+    [JsonPropertyName("display_time")] public string Timestamp { get; set; } = string.Empty;
 
-    [JsonPropertyName("value")] public double Value { get; set; }
+    /// <summary>
+    /// Glucose value in mg/dL × 100 (integer encoding for 2-decimal precision).
+    /// Must be divided by 100 to get actual mg/dL.
+    /// </summary>
+    [JsonPropertyName("bg_value")] public double Value { get; set; }
 
     [JsonPropertyName("trend")] public string? Trend { get; set; }
+
+    [JsonPropertyName("guid")] public string? Guid { get; set; }
+
+    [JsonPropertyName("soft_deleted")] public bool? SoftDeleted { get; set; }
 }
 
 public class GlookoSuspendBasal

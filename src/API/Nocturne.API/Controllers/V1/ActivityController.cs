@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <seealso cref="IActivityService"/>
 [ApiController]
+[Tags("V1")]
 [Route("api/v1/[controller]")]
 [Produces("application/json")]
 [Authorize(Policy = PolicyNames.HasPermissions)]

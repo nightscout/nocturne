@@ -106,6 +106,7 @@
     }
     let active = true;
     getPredictions({})
+      .run()
       .then((data) => {
         if (active) predictions = data;
       })

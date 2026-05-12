@@ -15,6 +15,7 @@ namespace Nocturne.API.Controllers.V4.Audit;
 /// Endpoints for querying mutation and read audit logs and managing audit configuration.
 /// </summary>
 [ApiController]
+[Tags("Platform")]
 [Route("api/v4/audit")]
 [Produces("application/json")]
 public class AuditController : ControllerBase

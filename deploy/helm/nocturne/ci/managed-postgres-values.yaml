@@ -1,0 +1,22 @@
+# Managed Postgres (RDS / Cloud SQL / Neon) — bootstrap Job disabled.
+# User runs bootstrap-roles.sql out of band.
+
+baseUrl: https://nocturne.example.com
+
+instanceKey:
+  existingSecret: nocturne-instance-key
+
+externalDatabase:
+  host: nocturne-prod.abcdef.us-east-1.rds.amazonaws.com
+  port: 5432
+  database: nocturne
+  sslMode: require
+  appSecret:
+    existingSecret: nocturne-db-app
+  migratorSecret:
+    existingSecret: nocturne-db-migrator
+  webSecret:
+    existingSecret: nocturne-db-web
+
+bootstrap:
+  enabled: false

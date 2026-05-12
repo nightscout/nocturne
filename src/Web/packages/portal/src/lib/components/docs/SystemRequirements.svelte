@@ -25,7 +25,7 @@
             </tr>
             <tr>
                 <td class="py-2 pr-4">Docker Compose</td>
-                <td class="py-2 pr-4">2.0+</td>
+                <td class="py-2 pr-4">2.23.1+</td>
                 <td class="py-2">Latest</td>
             </tr>
         </tbody>

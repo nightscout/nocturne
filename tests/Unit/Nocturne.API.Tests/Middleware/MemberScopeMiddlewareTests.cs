@@ -22,7 +22,7 @@ public class MemberScopeMiddlewareTests
             AuthType = AuthType.ApiKey,
             SubjectId = _subjectId,
             TenantId = _tenantId,
-            Scopes = ["entries.read"],
+            Scopes = ["glucose.read"],
         });
 
         // Act
@@ -31,7 +31,7 @@ public class MemberScopeMiddlewareTests
         // Assert: should NOT have superuser wildcard
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
         grantedScopes.Should().NotBeNull();
-        grantedScopes.Should().Contain("entries.read");
+        grantedScopes.Should().Contain("glucose.read");
         grantedScopes.Should().NotContain("*");
         grantedScopes.Should().NotContain("treatments.readwrite");
 
@@ -102,7 +102,7 @@ public class MemberScopeMiddlewareTests
             AuthType = AuthType.ApiKey,
             SubjectId = _subjectId,
             TenantId = _tenantId,
-            Scopes = ["entries.read", "treatments.readwrite"],
+            Scopes = ["glucose.read", "treatments.readwrite"],
         });
 
         // Act
@@ -111,10 +111,10 @@ public class MemberScopeMiddlewareTests
         // Assert
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
         grantedScopes.Should().NotBeNull();
-        grantedScopes.Should().Contain("entries.read");
+        grantedScopes.Should().Contain("glucose.read");
         grantedScopes.Should().Contain("treatments.readwrite");
         grantedScopes.Should().NotContain("*");
-        grantedScopes.Should().NotContain("profile.read");
+        grantedScopes.Should().NotContain("therapy.read");
 
         var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
         permissionTrie.Should().NotBeNull();

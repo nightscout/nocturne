@@ -18,6 +18,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// <seealso cref="IUploaderSnapshotRepository"/>
 /// <seealso cref="UploaderSnapshot"/>
 [ApiController]
+[Tags("Devices")]
 [Route("api/v4/device-status/uploader")]
 [Authorize]
 [Produces("application/json")]

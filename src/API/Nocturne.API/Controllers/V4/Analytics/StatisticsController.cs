@@ -37,6 +37,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="ITempBasalRepository"/>
 /// <seealso cref="IAidMetricsService"/>
 [ApiController]
+[Tags("Analytics")]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
 [Authorize]
@@ -1240,12 +1241,14 @@ public class StatisticsController : ControllerBase
 
             // Fill in ScheduledRate on temp basals that don't have it
             // (e.g. MyLife/CamAPS algorithm adjustments)
+            var startMs = new DateTimeOffset(startDt, TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var endMs   = new DateTimeOffset(endDt,   TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var rateAt  = await _basalRateResolver.BuildResolverAsync(startMs, endMs);
+
             foreach (var tb in tempBasals)
             {
                 if (!tb.ScheduledRate.HasValue && tb.Origin != TempBasalOrigin.Scheduled)
-                {
-                    tb.ScheduledRate = await _basalRateResolver.GetBasalRateAsync(tb.StartMills);
-                }
+                    tb.ScheduledRate = rateAt(tb.StartMills);
             }
 
             var result = _statisticsService.CalculateInsulinDeliveryStatistics(

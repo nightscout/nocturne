@@ -93,6 +93,89 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         return result;
     }
 
+    /// <inheritdoc />
+    public async Task<V4Models.DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<Profile> profiles, CancellationToken ct = default)
+    {
+        if (profiles.Count == 0)
+            return new V4Models.DecompositionResult();
+
+        var batch = new DecompositionBatchEntity
+        {
+            TenantId = _dbContext.TenantId,
+            Source = "profile_decomposer_batch",
+            SourceRecordId = null,
+            CreatedAt = DateTime.UtcNow,
+        };
+        _dbContext.DecompositionBatches.Add(batch);
+        await _dbContext.SaveChangesAsync(ct);
+
+        var result = new V4Models.DecompositionResult { CorrelationId = batch.Id };
+
+        var therapySettingsList = new List<V4Models.TherapySettings>();
+        var basalScheduleList = new List<V4Models.BasalSchedule>();
+        var carbRatioScheduleList = new List<V4Models.CarbRatioSchedule>();
+        var sensitivityScheduleList = new List<V4Models.SensitivitySchedule>();
+        var targetRangeScheduleList = new List<V4Models.TargetRangeSchedule>();
+
+        foreach (var profile in profiles)
+        {
+            if (profile.Store.Count == 0)
+            {
+                _logger.LogWarning("Profile {Id} has no store entries, skipping", profile.Id);
+                continue;
+            }
+
+            foreach (var (storeName, profileData) in profile.Store)
+            {
+                var legacyId = $"{profile.Id}:{storeName}";
+                var isDefault = string.Equals(storeName, profile.DefaultProfile, StringComparison.OrdinalIgnoreCase);
+
+                therapySettingsList.Add(MapToTherapySettings(profile, profileData, storeName, legacyId, isDefault, batch.Id));
+                basalScheduleList.Add(MapToBasalSchedule(profile, profileData, storeName, legacyId, batch.Id));
+                carbRatioScheduleList.Add(MapToCarbRatioSchedule(profile, profileData, storeName, legacyId, batch.Id));
+                sensitivityScheduleList.Add(MapToSensitivitySchedule(profile, profileData, storeName, legacyId, batch.Id));
+                targetRangeScheduleList.Add(MapToTargetRangeSchedule(profile, profileData, storeName, legacyId, batch.Id));
+            }
+        }
+
+        if (therapySettingsList.Count > 0)
+        {
+            var created = await _therapySettingsRepo.BulkCreateAsync(therapySettingsList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        if (basalScheduleList.Count > 0)
+        {
+            var created = await _basalScheduleRepo.BulkCreateAsync(basalScheduleList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        if (carbRatioScheduleList.Count > 0)
+        {
+            var created = await _carbRatioScheduleRepo.BulkCreateAsync(carbRatioScheduleList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        if (sensitivityScheduleList.Count > 0)
+        {
+            var created = await _sensitivityScheduleRepo.BulkCreateAsync(sensitivityScheduleList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        if (targetRangeScheduleList.Count > 0)
+        {
+            var created = await _targetRangeScheduleRepo.BulkCreateAsync(targetRangeScheduleList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        _logger.LogDebug(
+            "Batch-decomposed {ProfileCount} profiles into {RecordCount} V4 records",
+            profiles.Count, result.CreatedRecords.Count);
+
+        return result;
+    }
+
     #region Decomposition Methods
 
     private async Task DecomposeTherapySettingsAsync(

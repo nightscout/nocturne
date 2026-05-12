@@ -35,10 +35,6 @@
     { errorTitle: "Error Loading Sleep Report" }
   );
 
-  const sleepSpans = $derived(actogramResource.current?.sleepSpans ?? []);
-  const glucoseData = $derived(actogramResource.current?.glucoseData ?? []);
-  const thresholds = $derived(actogramResource.current?.thresholds);
-
   // Build day array from date range
   const days = $derived.by(() => {
     const start = new Date(dateRangeMillis.from);
@@ -68,7 +64,7 @@
   // Convert sleep spans into ActogramPoints (use midpoint of each span)
   // Each point carries startMills and endMills for rectangle rendering
   const sleepPoints = $derived(
-    sleepSpans.map((s) => ({
+    (actogramResource.current?.sleepSpans ?? []).map((s) => ({
       mills: s.startMills,
       startMills: s.startMills,
       endMills: s.endMills,
@@ -78,19 +74,19 @@
 
   // BG data as GlucosePoints
   const bgPoints = $derived(
-    glucoseData.map((g) => ({ mills: g.mills, sgv: g.sgv, color: g.color }))
+    (actogramResource.current?.glucoseData ?? []).map((g) => ({ mills: g.mills, sgv: g.sgv, color: g.color }))
   );
 
   // Summary statistics
   const totalSleepMs = $derived(
-    sleepSpans.reduce((sum, s) => sum + (s.endMills - s.startMills), 0)
+    (actogramResource.current?.sleepSpans ?? []).reduce((sum, s) => sum + (s.endMills - s.startMills), 0)
   );
   const avgSleepHours = $derived(
     days.length > 0
       ? totalSleepMs / days.length / (1000 * 60 * 60)
       : 0
   );
-  const totalNights = $derived(sleepSpans.length);
+  const totalNights = $derived((actogramResource.current?.sleepSpans ?? []).length);
 
   function formatHoursMinutes(hours: number): string {
     const h = Math.floor(hours);
@@ -118,7 +114,8 @@
   />
 </svelte:head>
 
-{#if actogramResource.current}
+{#await actogramResource then actogramData}
+  {#if actogramData}
   <div class="container mx-auto space-y-6 px-4 py-6 max-w-7xl">
     <!-- Header -->
     <div>
@@ -191,7 +188,7 @@
           data={sleepPoints}
           bgData={bgPoints}
           {days}
-          {thresholds}
+          thresholds={actogramResource.current?.thresholds}
           rowHeight={48}
           visibleCount={VISIBLE_DAYS}
           initialOffset={PADDING_DAYS}
@@ -226,4 +223,5 @@
       </CardContent>
     </Card>
   </div>
-{/if}
+  {/if}
+{/await}

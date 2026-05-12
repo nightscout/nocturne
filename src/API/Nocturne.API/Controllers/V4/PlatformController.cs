@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V4;
 /// These operate without a resolved tenant context.
 /// </summary>
 [ApiController]
+[Tags("Platform")]
 [Route("api/v4/platform")]
 [Produces("application/json")]
 [Authorize]
@@ -21,16 +22,16 @@ public class PlatformController : ControllerBase
 {
     private readonly ITenantService _tenantService;
     private readonly OperatorConfiguration _config;
-    private readonly MultitenancyConfiguration _multitenancyConfig;
+    private readonly BaseDomainOptions _baseDomainOptions;
 
     public PlatformController(
         ITenantService tenantService,
         IOptions<OperatorConfiguration> config,
-        IOptions<MultitenancyConfiguration> multitenancyConfig)
+        IOptions<BaseDomainOptions> baseDomainOptions)
     {
         _tenantService = tenantService;
         _config = config.Value;
-        _multitenancyConfig = multitenancyConfig.Value;
+        _baseDomainOptions = baseDomainOptions.Value;
     }
 
     /// <summary>
@@ -93,7 +94,7 @@ public class PlatformController : ControllerBase
     {
         return Ok(new TransitionStatusDto(
             MultitenancyEnabled: true,
-            BaseDomain: _multitenancyConfig.BaseDomain,
+            BaseDomain: _baseDomainOptions.BaseDomain,
             Message: "Apps connect via subdomain URLs."));
     }
 }

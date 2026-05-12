@@ -3,6 +3,7 @@
   import { Label } from "$lib/components/ui/label";
   import { Button } from "$lib/components/ui/button";
   import { Check, Loader2, AlertTriangle, ArrowRight } from "lucide-svelte";
+  import { Debounced } from "runed";
   import { setupTenant, validateSetupSlug, setSetupTenantSlug } from "../setup.remote";
 
   let {
@@ -19,39 +20,60 @@
   let submitting = $state(false);
   let submitError = $state<string | null>(null);
 
-  // Debounced slug validation
-  let validationTimeout: ReturnType<typeof setTimeout> | null = null;
+  const normalizedSlug = $derived(slug.trim().toLowerCase());
+  const debouncedSlug = new Debounced(() => normalizedSlug, 400);
 
-  function onSlugInput() {
+  // Validate slug when debounced value settles
+  const slugValidation = $derived.by(() => {
+    const value = debouncedSlug.current;
+
+    if (!value || value.length < 3) return null;
+
+    return validateSetupSlug({ slug: value });
+  });
+
+  // Sync validation result into local state
+  $effect(() => {
+    const value = normalizedSlug;
+
+    // Reset on every keystroke
     slugError = null;
     slugValid = false;
 
-    if (validationTimeout) clearTimeout(validationTimeout);
-
-    const value = slug.trim().toLowerCase();
-    if (!value || value.length < 3) {
-      if (value.length > 0) slugError = "Slug must be at least 3 characters";
+    if (!value) return;
+    if (value.length < 3) {
+      slugError = "Slug must be at least 3 characters";
       return;
     }
 
-    validating = true;
-    validationTimeout = setTimeout(async () => {
-      try {
-        const result = await validateSetupSlug({ slug: value });
-        if (result?.isValid) {
-          slugValid = true;
-          slugError = null;
-        } else {
-          slugValid = false;
-          slugError = result?.message ?? "Invalid slug";
-        }
-      } catch {
-        slugError = "Could not validate slug";
-      } finally {
-        validating = false;
-      }
-    }, 400);
-  }
+    // Still waiting for debounce to settle
+    if (debouncedSlug.current !== value) {
+      validating = true;
+      return;
+    }
+
+    const result = slugValidation;
+    if (!result) return;
+
+    if (result.loading) {
+      validating = true;
+      return;
+    }
+
+    validating = false;
+
+    if (result.error) {
+      slugError = "Could not validate slug";
+      return;
+    }
+
+    const data = result.current;
+    if (data?.isValid) {
+      slugValid = true;
+    } else {
+      slugError = data?.message ?? "Invalid slug";
+    }
+  });
 
   async function handleSubmit() {
     if (!slugValid || !displayName.trim()) return;
@@ -59,7 +81,6 @@
     submitError = null;
 
     try {
-      const normalizedSlug = slug.trim().toLowerCase();
       await setupTenant({
         slug: normalizedSlug,
         displayName: displayName.trim(),
@@ -116,7 +137,6 @@
       <Input
         id="setup-slug"
         bind:value={slug}
-        oninput={onSlugInput}
         placeholder="my-instance"
         class="font-mono bg-white/5 border-white/10 text-white placeholder:text-white/25 {slugError
           ? 'border-red-500/50'

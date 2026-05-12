@@ -35,7 +35,8 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         return await _context
-            .TrackerDefinitions.Include(d => d.NotificationThresholds)
+            .TrackerDefinitions.AsNoTracking()
+            .Include(d => d.NotificationThresholds)
             .Where(d => d.UserId == userId || d.Visibility == TrackerVisibility.Public)
             .OrderBy(d => d.Name)
             .ToListAsync(cancellationToken);
@@ -51,7 +52,8 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         return await _context
-            .TrackerDefinitions.Include(d => d.NotificationThresholds)
+            .TrackerDefinitions.AsNoTracking()
+            .Include(d => d.NotificationThresholds)
             .OrderBy(d => d.Name)
             .ToListAsync(cancellationToken);
     }
@@ -70,7 +72,8 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         return await _context
-            .TrackerDefinitions.Include(d => d.NotificationThresholds)
+            .TrackerDefinitions.AsNoTracking()
+            .Include(d => d.NotificationThresholds)
             .Where(d => (d.UserId == userId || d.Visibility == TrackerVisibility.Public) && d.Category == category)
             .OrderBy(d => d.Name)
             .ToListAsync(cancellationToken);
@@ -88,7 +91,8 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         return await _context
-            .TrackerDefinitions.Where(d => d.UserId == userId && d.IsFavorite)
+            .TrackerDefinitions.AsNoTracking()
+            .Where(d => d.UserId == userId && d.IsFavorite)
             .OrderBy(d => d.Name)
             .ToArrayAsync(cancellationToken);
     }
@@ -105,7 +109,8 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         return await _context
-            .TrackerDefinitions.Include(d => d.NotificationThresholds)
+            .TrackerDefinitions.AsNoTracking()
+            .Include(d => d.NotificationThresholds)
             .FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
     }
 
@@ -243,7 +248,8 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         return await _context
-            .TrackerInstances.Include(i => i.Definition)
+            .TrackerInstances.AsNoTracking()
+            .Include(i => i.Definition)
             .Where(i => ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt == null)
             .OrderByDescending(i => i.StartedAt)
             .ToArrayAsync(cancellationToken);
@@ -261,7 +267,8 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         return await _context
-            .TrackerInstances.Include(i => i.Definition)
+            .TrackerInstances.AsNoTracking()
+            .Include(i => i.Definition)
             .Where(i => i.DefinitionId == definitionId && i.CompletedAt == null)
             .OrderByDescending(i => i.StartedAt)
             .ToListAsync(cancellationToken);
@@ -281,7 +288,8 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         return await _context
-            .TrackerInstances.Include(i => i.Definition)
+            .TrackerInstances.AsNoTracking()
+            .Include(i => i.Definition)
             .Where(i => i.UserId == userId && i.CompletedAt != null)
             .OrderByDescending(i => i.CompletedAt)
             .Take(limit)
@@ -305,7 +313,8 @@ public class TrackerRepository : ITrackerRepository
     {
         // Get active instances with lifespan defined
         var instances = await _context
-            .TrackerInstances.Include(i => i.Definition)
+            .TrackerInstances.AsNoTracking()
+            .Include(i => i.Definition)
             .Where(i =>
                 ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt == null && i.Definition.LifespanHours != null
             )
@@ -333,7 +342,8 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         return await _context
-            .TrackerInstances.Include(i => i.Definition)
+            .TrackerInstances.AsNoTracking()
+            .Include(i => i.Definition)
             .FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
     }
 
@@ -481,7 +491,8 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         return await _context
-            .TrackerPresets.Include(p => p.Definition)
+            .TrackerPresets.AsNoTracking()
+            .Include(p => p.Definition)
             .Where(p => p.UserId == userId)
             .OrderBy(p => p.Name)
             .ToArrayAsync(cancellationToken);
@@ -499,7 +510,8 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         return await _context
-            .TrackerPresets.Include(p => p.Definition)
+            .TrackerPresets.AsNoTracking()
+            .Include(p => p.Definition)
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 

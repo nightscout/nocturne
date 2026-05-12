@@ -31,8 +31,6 @@ internal sealed class MyLifeStateSpanMapper
         int tempBasalConsolidationWindowMinutes
     )
     {
-        // Create a context - we reuse the treatment context for consistency
-        // with the temp basal consolidation logic
         var eventList = events.ToList();
         var context = MyLifeContext.Create(
             eventList,
@@ -41,15 +39,28 @@ internal sealed class MyLifeStateSpanMapper
             tempBasalConsolidationWindowMinutes
         );
 
+        return MapTempBasals(eventList, context);
+    }
+
+    /// <summary>
+    ///     Maps MyLife events to TempBasal records using a pre-built context. This allows building
+    ///     context from a wider event set (e.g. for cross-month consolidation) while only iterating
+    ///     a subset for output.
+    /// </summary>
+    internal static IEnumerable<TempBasal> MapTempBasals(
+        IReadOnlyList<MyLifeEvent> events,
+        MyLifeContext context
+    )
+    {
         // When BasalRate (17) events exist, skip Basal (22) events to avoid
         // double-counting. BasalRate events are the authoritative rate source
         // for algorithm pumps (CamAPS); Basal events are redundant delivery
         // confirmations that overlap with the same time periods.
-        var hasBasalRateEvents = eventList.Any(e =>
+        var hasBasalRateEvents = events.Any(e =>
             !e.Deleted && e.EventTypeId == MyLifeEventType.BasalRate);
 
         var tempBasals = new List<TempBasal>();
-        foreach (var ev in eventList)
+        foreach (var ev in events)
         {
             if (ev.Deleted)
                 continue;

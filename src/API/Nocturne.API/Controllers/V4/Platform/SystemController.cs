@@ -16,6 +16,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 /// </remarks>
 /// <seealso cref="BotHealthService"/>
 [ApiController]
+[Tags("Platform")]
 [Authorize]
 [Route("api/v4/system")]
 public class SystemController(BotHealthService botHealth) : ControllerBase

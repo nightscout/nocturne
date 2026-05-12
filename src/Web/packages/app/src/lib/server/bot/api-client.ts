@@ -99,7 +99,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
  * the target tenant.
  *
  * Mechanism: constructs a fresh ApiClient whose X-Forwarded-Host is
- * `<tenantSlug>.<publicBaseDomain-without-port>`, which causes the
+ * `<tenantSlug>.<baseDomain-without-port>`, which causes the
  * TenantResolutionMiddleware on the API side to resolve to the correct tenant.
  */
 export function buildScopedBotApiClient(
@@ -111,10 +111,10 @@ export function buildScopedBotApiClient(
     throw new Error("API base URL not configured");
   }
 
-  const baseDomain = process.env.PUBLIC_BASE_DOMAIN;
+  const baseDomain = process.env.BASE_DOMAIN;
   if (!baseDomain) {
     throw new Error(
-      "PUBLIC_BASE_DOMAIN is required to build scoped bot api client",
+      "BASE_DOMAIN is required to build scoped bot api client",
     );
   }
 
@@ -124,7 +124,7 @@ export function buildScopedBotApiClient(
 
   const scopedApiClient = createServerApiClient(apiBaseUrl, fetchFn, {
     hashedInstanceKey: getHashedInstanceKey(),
-    extraHeaders: { "X-Forwarded-Host": hostHeader },
+    extraHeaders: { "X-Forwarded-Host": hostHeader, "X-Forwarded-Proto": "https" },
   });
 
   return buildBotApiClient(scopedApiClient);

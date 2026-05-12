@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nocturne.api.fullname" . }}
+  labels:
+    {{- include "nocturne.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- if not .Values.api.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "nocturne.api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "nocturne.api.selectorLabels" . | nindent 8 }}
+      {{- with .Values.api.podAnnotations }}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "nocturne.serviceAccountName" . }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.postgresql.enabled }}
+      # Bundled mode: gate API startup on the bootstrap Job creating
+      # nocturne_app. Loops pg_isready, then a strict psql -U nocturne_app
+      # probe (when waitForBootstrap=true) so we don't proceed until the
+      # role exists.
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ include "nocturne.bootstrap.image" . }}
+          imagePullPolicy: {{ .Values.bootstrap.image.pullPolicy }}
+          # postgres:17-alpine doesn't declare a non-root USER; provide one
+          # explicitly so it satisfies pod-level runAsNonRoot. Users can
+          # override via containerSecurityContext.runAsUser if needed.
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              until pg_isready -h "$PGHOST" -p "$PGPORT" -U postgres; do
+                echo "Waiting for postgres at $PGHOST:$PGPORT ..."; sleep 2
+              done
+              {{- if .Values.postgresql.waitForBootstrap }}
+              until PGPASSWORD="$APP_PASSWORD" psql -h "$PGHOST" -p "$PGPORT" \
+                  -U nocturne_app -d "$PGDATABASE" -c 'SELECT 1' >/dev/null 2>&1; do
+                echo "Waiting for nocturne_app role + database ..."; sleep 2
+              done
+              echo "Postgres ready."
+              {{- end }}
+          env:
+            - name: PGHOST
+              value: {{ include "nocturne.db.host" . | quote }}
+            - name: PGPORT
+              value: {{ include "nocturne.db.port" . | quote }}
+            - name: PGDATABASE
+              value: {{ include "nocturne.db.database" . | quote }}
+            {{- if .Values.postgresql.waitForBootstrap }}
+            - name: APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "app") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "app") }}
+            {{- end }}
+      {{- end }}
+      containers:
+        - name: api
+          image: {{ include "nocturne.api.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.containerPort }}
+              protocol: TCP
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            - name: ASPNETCORE_FORWARDEDHEADERS_ENABLED
+              value: "true"
+            - name: HTTP_PORTS
+              value: {{ .Values.api.containerPort | quote }}
+            - name: ASPNETCORE_URLS
+              value: "http://+:{{ .Values.api.containerPort }}"
+            {{- if .Values.baseUrl }}
+            - name: BaseUrl
+              value: {{ .Values.baseUrl | quote }}
+            {{- end }}
+            - name: INSTANCE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.instanceKeySecretName" . }}
+                  key: {{ include "nocturne.instanceKeySecretKey" . }}
+            # Database connection — host/port/name/sslMode resolve via helpers
+            # (bundled or external mode); password mounted from per-role Secret.
+            - name: __DB_HOST
+              value: {{ include "nocturne.db.host" . | quote }}
+            - name: __DB_PORT
+              value: {{ include "nocturne.db.port" . | quote }}
+            - name: __DB_NAME
+              value: {{ include "nocturne.db.database" . | quote }}
+            - name: __DB_SSLMODE
+              value: {{ include "nocturne.db.sslMode" . | quote }}
+            - name: __DB_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "app") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "app") }}
+            - name: __DB_MIGRATOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "migrator") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "migrator") }}
+            # .NET reads ConnectionStrings:<key> from env vars named
+            # ConnectionStrings__<key>. The key contains a dash, which is fine
+            # in env var names.
+            - name: ConnectionStrings__nocturne-postgres
+              value: "Host=$(__DB_HOST);Port=$(__DB_PORT);Database=$(__DB_NAME);Username=nocturne_app;Password=$(__DB_APP_PASSWORD);SslMode=$(__DB_SSLMODE)"
+            - name: ConnectionStrings__nocturne-postgres-migrator
+              value: "Host=$(__DB_HOST);Port=$(__DB_PORT);Database=$(__DB_NAME);Username=nocturne_migrator;Password=$(__DB_MIGRATOR_PASSWORD);SslMode=$(__DB_SSLMODE)"
+            {{- include "nocturne.observability.api.env" . | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /alive
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}

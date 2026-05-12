@@ -242,7 +242,7 @@ export const getTimeSpansData = query(
 
     try {
       // Fetch all state span categories in parallel
-      const [pumpModeSpans, profileSpans, tempBasalSpans, overrideSpans, activitySpans] =
+      const [pumpModeRes, profileRes, tempBasalRes, overrideRes, activityRes] =
         await Promise.all([
           apiClient.stateSpans.getPumpModes(startOfRange, endOfRange),
           apiClient.stateSpans.getProfiles(startOfRange, endOfRange),
@@ -251,32 +251,38 @@ export const getTimeSpansData = query(
           apiClient.stateSpans.getActivities(startOfRange, endOfRange),
         ]);
 
+      const pumpModeSpans = pumpModeRes?.data ?? [];
+      const profileSpans = profileRes?.data ?? [];
+      const tempBasalSpans = tempBasalRes?.data ?? [];
+      const overrideSpans = overrideRes?.data ?? [];
+      const activitySpans = activityRes?.data ?? [];
+
       return {
         pumpModeSpans: processSpans(
-          pumpModeSpans ?? [],
+          pumpModeSpans,
           startTime,
           endTime,
           getPumpModeColor
         ),
         profileSpans: processSpans(
-          profileSpans ?? [],
+          profileSpans,
           startTime,
           endTime,
           getProfileColor
         ),
         tempBasalSpans: processBasalSpans(
-          tempBasalSpans ?? [],
+          tempBasalSpans,
           startTime,
           endTime,
           getTempBasalColor
         ),
         overrideSpans: processSpans(
-          overrideSpans ?? [],
+          overrideSpans,
           startTime,
           endTime,
           getOverrideColor
         ),
-        activitySpans: (activitySpans ?? [])
+        activitySpans: activitySpans
           .filter((span: StateSpan) => {
             const spanStart = span.startMills ?? 0;
             const spanEnd = span.endMills ?? endTime;

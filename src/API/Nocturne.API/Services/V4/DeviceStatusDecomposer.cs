@@ -126,48 +126,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
     private async Task DecomposeApsFromOpenApsAsync(
         DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, Guid? pumpDeviceId, CancellationToken ct)
     {
-        var command = ds.OpenAps!.Enacted ?? ds.OpenAps.Suggested;
-        var predBGs = command?.PredBGs;
-        var apsSystem = DetectOpenApsVariant(ds);
-
-        var model = new V4Models.ApsSnapshot
-        {
-            Timestamp = ResolveTimestamp(ds),
-            UtcOffset = ds.UtcOffset,
-            Device = ds.Device,
-            LegacyId = legacyId,
-            AidAlgorithm = apsSystem,
-            Iob = ds.OpenAps.Iob?.Iob,
-            BasalIob = ds.OpenAps.Iob?.BasalIob,
-            BolusIob = ds.OpenAps.Iob?.BolusIob,
-            Cob = ds.OpenAps.Cob ?? command?.COB,
-            CurrentBg = command?.Bg,
-            EventualBg = command?.EventualBG,
-            TargetBg = command?.TargetBG,
-            RecommendedBolus = command?.InsulinReq,
-            SensitivityRatio = command?.SensitivityRatio,
-            Enacted = ds.OpenAps.Enacted != null
-                && (ds.OpenAps.Enacted.Received == true || ds.OpenAps.Enacted.Recieved == true),
-            EnactedRate = ds.OpenAps.Enacted?.Rate,
-            EnactedDuration = ds.OpenAps.Enacted?.Duration,
-            EnactedBolusVolume = ds.OpenAps.Enacted?.Smb is > 0
-                ? ds.OpenAps.Enacted.Smb
-                : ds.OpenAps.Enacted?.Units,
-            SuggestedJson = SerializeOrNull(ds.OpenAps.Suggested),
-            EnactedJson = SerializeOrNull(ds.OpenAps.Enacted),
-            // Trio uses oref multi-curve predictions exclusively; PredictedDefaultJson
-            // is reserved for Loop's single combined curve. OpenAPS/AAPS duplicate IOB
-            // into the default slot for backwards compatibility.
-            PredictedDefaultJson = apsSystem == V4Models.AidAlgorithm.Trio
-                ? null
-                : SerializeOrNull(predBGs?.IOB),
-            PredictedIobJson = SerializeOrNull(predBGs?.IOB),
-            PredictedZtJson = SerializeOrNull(predBGs?.ZT),
-            PredictedCobJson = SerializeOrNull(predBGs?.COB),
-            PredictedUamJson = SerializeOrNull(predBGs?.UAM),
-            PredictedStartTimestamp = ParseTimestampToDateTime(command?.Timestamp),
-            AidVersion = ds.OpenAps?.Version,
-        };
+        var model = MapToApsSnapshotFromOpenAps(ds, legacyId, result.CorrelationId);
 
         model.DeviceId = pumpDeviceId;
         model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct);
@@ -178,32 +137,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
     private async Task DecomposeApsFromLoopAsync(
         DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, Guid? pumpDeviceId, CancellationToken ct)
     {
-        var model = new V4Models.ApsSnapshot
-        {
-            Timestamp = ResolveTimestamp(ds),
-            UtcOffset = ds.UtcOffset,
-            Device = ds.Device,
-            LegacyId = legacyId,
-            AidAlgorithm = V4Models.AidAlgorithm.Loop,
-            Iob = ds.Loop!.Iob?.Iob,
-            BasalIob = ds.Loop.Iob?.BasalIob,
-            BolusIob = null,
-            Cob = ds.Loop.Cob?.Cob,
-            CurrentBg = ds.Loop.Predicted?.Values?.FirstOrDefault(),
-            EventualBg = ds.Loop.Predicted?.Values?.LastOrDefault(),
-            RecommendedBolus = ds.Loop.RecommendedBolus,
-            Enacted = ds.Loop.Enacted?.Received == true,
-            EnactedRate = ds.Loop.Enacted?.Rate,
-            EnactedDuration = ds.Loop.Enacted?.Duration,
-            EnactedBolusVolume = ds.Loop.Enacted?.BolusVolume,
-            SuggestedJson = SerializeOrNull(ds.Loop.Recommended),
-            EnactedJson = SerializeOrNull(ds.Loop.Enacted),
-            PredictedDefaultJson = SerializeOrNull(ds.Loop.Predicted?.Values),
-            PredictedStartTimestamp = ParseTimestampToDateTime(ds.Loop.Predicted?.StartDate),
-            LoopJson = SerializeOrNull(ds.Loop),
-            // Loop's version is captured from the device string (e.g. "Loop/3.0"), not from the Loop data object
-            AidVersion = null,
-        };
+        var model = MapToApsSnapshotFromLoop(ds, legacyId, result.CorrelationId);
 
         model.DeviceId = pumpDeviceId;
         model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct);
@@ -240,28 +174,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
     private async Task<Guid?> DecomposePumpAsync(
         DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, CancellationToken ct)
     {
-        var model = new V4Models.PumpSnapshot
-        {
-            Timestamp = ResolveTimestamp(ds),
-            UtcOffset = ds.UtcOffset,
-            Device = ds.Device,
-            LegacyId = legacyId,
-            Manufacturer = ds.Pump!.Manufacturer,
-            Model = ds.Pump.Model,
-            Reservoir = ds.Pump.Reservoir,
-            ReservoirDisplay = ds.Pump.ReservoirDisplayOverride,
-            BatteryPercent = ds.Pump.Battery?.Percent,
-            BatteryVoltage = ds.Pump.Battery?.Voltage,
-            Bolusing = ds.Pump.Status?.Bolusing,
-            Suspended = ds.Pump.Status?.Suspended,
-            PumpStatus = ds.Pump.Status?.Status,
-            Clock = ds.Pump.Clock,
-            Iob = ds.Pump.Iob?.Iob,
-            BolusIob = ds.Pump.Iob?.BolusIob,
-            AdditionalProperties = ds.Pump.Extended is { Count: > 0 }
-                ? ds.Pump.Extended.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
-                : null,
-        };
+        var model = MapToPumpSnapshot(ds, legacyId, result.CorrelationId);
 
         model.DeviceId = await _deviceService.ResolveAsync(
             V4Models.DeviceCategory.InsulinPump,
@@ -381,19 +294,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
     private async Task DecomposeUploaderAsync(
         DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, CancellationToken ct)
     {
-        var model = new V4Models.UploaderSnapshot
-        {
-            Timestamp = ResolveTimestamp(ds),
-            UtcOffset = ds.UtcOffset,
-            Device = ds.Device,
-            LegacyId = legacyId,
-            Name = ds.Uploader?.Name,
-            Battery = ds.Uploader?.Battery ?? ds.UploaderBattery,
-            BatteryVoltage = ds.Uploader?.BatteryVoltage,
-            IsCharging = ds.IsCharging,
-            Temperature = ds.Uploader?.Temperature,
-            Type = ds.Uploader?.Type,
-        };
+        var model = MapToUploaderSnapshot(ds, legacyId, result.CorrelationId);
 
         model.DeviceId = await _deviceService.ResolveAsync(
             V4Models.DeviceCategory.Uploader,
@@ -493,6 +394,333 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
         result.CreatedRecords.Add(created);
         _logger.LogDebug("Created DeviceStatusExtras with {Count} keys for correlation {CorrelationId}",
             extras.Count, result.CorrelationId);
+    }
+
+    #endregion
+
+    #region Batch Decomposition
+
+    /// <inheritdoc />
+    public async Task<V4Models.DecompositionResult> DecomposeBatchAsync(
+        IReadOnlyList<DeviceStatus> statuses, CancellationToken ct = default)
+    {
+        if (statuses.Count == 0)
+            return new V4Models.DecompositionResult();
+
+        var batch = new DecompositionBatchEntity
+        {
+            TenantId = _dbContext.TenantId,
+            Source = "device_status_decomposer_batch",
+            SourceRecordId = null,
+            CreatedAt = DateTime.UtcNow,
+        };
+        _dbContext.DecompositionBatches.Add(batch);
+        await _dbContext.SaveChangesAsync(ct);
+
+        var result = new V4Models.DecompositionResult
+        {
+            CorrelationId = batch.Id
+        };
+
+        var apsList = new List<V4Models.ApsSnapshot>();
+        var pumpList = new List<V4Models.PumpSnapshot>();
+        var uploaderList = new List<V4Models.UploaderSnapshot>();
+        var extrasList = new List<V4Models.DeviceStatusExtras>();
+        var overrideSpans = new List<StateSpan>();
+
+        foreach (var ds in statuses)
+        {
+            // AAPS sends "date" instead of "mills" — normalize before decomposition
+            if (ds.Mills == 0 && ds.Date is > 0)
+                ds.Mills = ds.Date.Value;
+
+            var legacyId = ds.Id;
+
+            Guid? pumpDeviceId = null;
+
+            if (ds.Pump != null)
+            {
+                var pumpModel = MapToPumpSnapshot(ds, legacyId, batch.Id);
+
+                pumpModel.DeviceId = await _deviceService.ResolveAsync(
+                    V4Models.DeviceCategory.InsulinPump,
+                    ds.Pump.Manufacturer,
+                    ds.Pump.Model,
+                    ds.Mills, ct);
+                pumpModel.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpModel.DeviceId, ds.Mills, ct);
+
+                pumpDeviceId = pumpModel.DeviceId;
+                pumpList.Add(pumpModel);
+            }
+
+            if (ds.OpenAps != null)
+            {
+                var apsModel = MapToApsSnapshotFromOpenAps(ds, legacyId, batch.Id);
+                apsModel.DeviceId = pumpDeviceId;
+                apsModel.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct);
+                apsList.Add(apsModel);
+            }
+            else if (ds.Loop != null)
+            {
+                var apsModel = MapToApsSnapshotFromLoop(ds, legacyId, batch.Id);
+                apsModel.DeviceId = pumpDeviceId;
+                apsModel.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct);
+                apsList.Add(apsModel);
+            }
+
+            if (ds.Uploader != null || ds.UploaderBattery.HasValue)
+            {
+                var uploaderModel = MapToUploaderSnapshot(ds, legacyId, batch.Id);
+                uploaderModel.DeviceId = await _deviceService.ResolveAsync(
+                    V4Models.DeviceCategory.Uploader,
+                    ds.Uploader?.Name,
+                    ds.Uploader?.Type ?? "unknown",
+                    ds.Mills, ct);
+                uploaderList.Add(uploaderModel);
+            }
+
+            if (ds.Override is { Active: true })
+            {
+                var timestamp = ResolveTimestamp(ds);
+                var stateSpan = new StateSpan
+                {
+                    Category = StateSpanCategory.Override,
+                    State = OverrideState.Custom.ToString(),
+                    StartTimestamp = timestamp,
+                    EndTimestamp = ds.Override.Duration is > 0
+                        ? timestamp.AddMinutes(ds.Override.Duration.Value)
+                        : null,
+                    Source = ds.Device,
+                    OriginalId = legacyId,
+                    Metadata = BuildOverrideMetadata(ds.Override),
+                };
+                overrideSpans.Add(stateSpan);
+            }
+
+            CollectExtras(ds, batch.Id, extrasList);
+        }
+
+        // Bulk-insert all snapshot types
+        if (apsList.Count > 0)
+        {
+            var created = await _apsRepo.BulkCreateAsync(apsList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        if (pumpList.Count > 0)
+        {
+            var created = await _pumpRepo.BulkCreateAsync(pumpList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        if (uploaderList.Count > 0)
+        {
+            var created = await _uploaderRepo.BulkCreateAsync(uploaderList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        if (extrasList.Count > 0)
+        {
+            var created = await _extrasRepo.BulkCreateAsync(extrasList, ct);
+            result.CreatedRecords.AddRange(created);
+        }
+
+        // Upsert override state spans individually — IStateSpanService only exposes
+        // single-item UpsertStateSpanAsync; BulkUpsertAsync lives on IStateSpanRepository
+        // (returns count, not the upserted entities) and overrides are rare in practice.
+        foreach (var span in overrideSpans)
+        {
+            var upserted = await _stateSpanService.UpsertStateSpanAsync(span, ct);
+            result.CreatedRecords.Add(upserted);
+        }
+
+        // Post-insert pump suspension pass: sequential, order-dependent
+        if (pumpList.Count > 0)
+        {
+            var persistedPumps = result.CreatedRecords.OfType<V4Models.PumpSnapshot>()
+                .OrderBy(p => p.Timestamp)
+                .ToList();
+
+            for (var i = 0; i < persistedPumps.Count; i++)
+            {
+                var pumpSnapshot = persistedPumps[i];
+                // Find the original DeviceStatus that produced this pump snapshot
+                var ds = statuses.FirstOrDefault(s => s.Id == pumpSnapshot.LegacyId);
+                if (ds != null)
+                {
+                    await DecomposePumpSuspensionAsync(ds, pumpSnapshot, result, ct);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Collects extras from a DeviceStatus into the provided list without persisting.
+    /// </summary>
+    private static void CollectExtras(
+        DeviceStatus ds, Guid correlationId, List<V4Models.DeviceStatusExtras> extrasList)
+    {
+        var extras = new Dictionary<string, object?>();
+
+        if (ds.XDripJs != null)
+            extras["xdripjs"] = ds.XDripJs;
+        if (ds.RadioAdapter != null)
+            extras["radioAdapter"] = ds.RadioAdapter;
+        if (ds.Connect != null)
+            extras["connect"] = ds.Connect;
+        if (ds.Cgm != null)
+            extras["cgm"] = ds.Cgm;
+        if (ds.Meter != null)
+            extras["meter"] = ds.Meter;
+        if (ds.InsulinPen != null)
+            extras["insulinPen"] = ds.InsulinPen;
+        if (ds.MmTune != null)
+            extras["mmtune"] = ds.MmTune;
+
+        if (ds.ExtensionData != null)
+        {
+            foreach (var kvp in ds.ExtensionData)
+                extras[kvp.Key] = kvp.Value;
+        }
+
+        if (extras.Count == 0)
+            return;
+
+        extrasList.Add(new V4Models.DeviceStatusExtras
+        {
+            CorrelationId = correlationId,
+            Timestamp = ResolveTimestamp(ds),
+            Extras = extras,
+        });
+    }
+
+    #endregion
+
+    #region Mapping Helpers
+
+    private static V4Models.ApsSnapshot MapToApsSnapshotFromOpenAps(
+        DeviceStatus ds, string? legacyId, Guid? correlationId)
+    {
+        var command = ds.OpenAps!.Enacted ?? ds.OpenAps.Suggested;
+        var predBGs = command?.PredBGs;
+        var apsSystem = DetectOpenApsVariant(ds);
+
+        return new V4Models.ApsSnapshot
+        {
+            Timestamp = ResolveTimestamp(ds),
+            UtcOffset = ds.UtcOffset,
+            Device = ds.Device,
+            LegacyId = legacyId,
+            CorrelationId = correlationId,
+            AidAlgorithm = apsSystem,
+            Iob = ds.OpenAps.Iob?.Iob,
+            BasalIob = ds.OpenAps.Iob?.BasalIob,
+            BolusIob = ds.OpenAps.Iob?.BolusIob,
+            Cob = ds.OpenAps.Cob ?? command?.COB,
+            CurrentBg = command?.Bg,
+            EventualBg = command?.EventualBG,
+            TargetBg = command?.TargetBG,
+            RecommendedBolus = command?.InsulinReq,
+            SensitivityRatio = command?.SensitivityRatio,
+            Enacted = ds.OpenAps.Enacted != null
+                && (ds.OpenAps.Enacted.Received == true || ds.OpenAps.Enacted.Recieved == true),
+            EnactedRate = ds.OpenAps.Enacted?.Rate,
+            EnactedDuration = ds.OpenAps.Enacted?.Duration,
+            EnactedBolusVolume = ds.OpenAps.Enacted?.Smb is > 0
+                ? ds.OpenAps.Enacted.Smb
+                : ds.OpenAps.Enacted?.Units,
+            SuggestedJson = SerializeOrNull(ds.OpenAps.Suggested),
+            EnactedJson = SerializeOrNull(ds.OpenAps.Enacted),
+            PredictedDefaultJson = apsSystem == V4Models.AidAlgorithm.Trio
+                ? null
+                : SerializeOrNull(predBGs?.IOB),
+            PredictedIobJson = SerializeOrNull(predBGs?.IOB),
+            PredictedZtJson = SerializeOrNull(predBGs?.ZT),
+            PredictedCobJson = SerializeOrNull(predBGs?.COB),
+            PredictedUamJson = SerializeOrNull(predBGs?.UAM),
+            PredictedStartTimestamp = ParseTimestampToDateTime(command?.Timestamp),
+            AidVersion = ds.OpenAps?.Version,
+        };
+    }
+
+    private static V4Models.ApsSnapshot MapToApsSnapshotFromLoop(
+        DeviceStatus ds, string? legacyId, Guid? correlationId)
+    {
+        return new V4Models.ApsSnapshot
+        {
+            Timestamp = ResolveTimestamp(ds),
+            UtcOffset = ds.UtcOffset,
+            Device = ds.Device,
+            LegacyId = legacyId,
+            CorrelationId = correlationId,
+            AidAlgorithm = V4Models.AidAlgorithm.Loop,
+            Iob = ds.Loop!.Iob?.Iob,
+            BasalIob = ds.Loop.Iob?.BasalIob,
+            BolusIob = null,
+            Cob = ds.Loop.Cob?.Cob,
+            CurrentBg = ds.Loop.Predicted?.Values?.FirstOrDefault(),
+            EventualBg = ds.Loop.Predicted?.Values?.LastOrDefault(),
+            RecommendedBolus = ds.Loop.RecommendedBolus,
+            Enacted = ds.Loop.Enacted?.Received == true,
+            EnactedRate = ds.Loop.Enacted?.Rate,
+            EnactedDuration = ds.Loop.Enacted?.Duration,
+            EnactedBolusVolume = ds.Loop.Enacted?.BolusVolume,
+            SuggestedJson = SerializeOrNull(ds.Loop.Recommended),
+            EnactedJson = SerializeOrNull(ds.Loop.Enacted),
+            PredictedDefaultJson = SerializeOrNull(ds.Loop.Predicted?.Values),
+            PredictedStartTimestamp = ParseTimestampToDateTime(ds.Loop.Predicted?.StartDate),
+            LoopJson = SerializeOrNull(ds.Loop),
+            AidVersion = null,
+        };
+    }
+
+    private static V4Models.PumpSnapshot MapToPumpSnapshot(
+        DeviceStatus ds, string? legacyId, Guid? correlationId)
+    {
+        return new V4Models.PumpSnapshot
+        {
+            Timestamp = ResolveTimestamp(ds),
+            UtcOffset = ds.UtcOffset,
+            Device = ds.Device,
+            LegacyId = legacyId,
+            CorrelationId = correlationId,
+            Manufacturer = ds.Pump!.Manufacturer,
+            Model = ds.Pump.Model,
+            Reservoir = ds.Pump.Reservoir,
+            ReservoirDisplay = ds.Pump.ReservoirDisplayOverride,
+            BatteryPercent = ds.Pump.Battery?.Percent,
+            BatteryVoltage = ds.Pump.Battery?.Voltage,
+            Bolusing = ds.Pump.Status?.Bolusing,
+            Suspended = ds.Pump.Status?.Suspended,
+            PumpStatus = ds.Pump.Status?.Status,
+            Clock = ds.Pump.Clock,
+            Iob = ds.Pump.Iob?.Iob,
+            BolusIob = ds.Pump.Iob?.BolusIob,
+            AdditionalProperties = ds.Pump.Extended is { Count: > 0 }
+                ? ds.Pump.Extended.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value)
+                : null,
+        };
+    }
+
+    private static V4Models.UploaderSnapshot MapToUploaderSnapshot(
+        DeviceStatus ds, string? legacyId, Guid? correlationId)
+    {
+        return new V4Models.UploaderSnapshot
+        {
+            Timestamp = ResolveTimestamp(ds),
+            UtcOffset = ds.UtcOffset,
+            Device = ds.Device,
+            LegacyId = legacyId,
+            CorrelationId = correlationId,
+            Name = ds.Uploader?.Name,
+            Battery = ds.Uploader?.Battery ?? ds.UploaderBattery,
+            BatteryVoltage = ds.Uploader?.BatteryVoltage,
+            IsCharging = ds.IsCharging,
+            Temperature = ds.Uploader?.Temperature,
+            Type = ds.Uploader?.Type,
+        };
     }
 
     #endregion

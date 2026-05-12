@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getAllConnectorStatus } from "$api/generated/configurations.generated.remote";
+  import { getStatus as getConnectorStatuses } from "$api/generated/connectorStatus.generated.remote";
   import {
     getServicesOverview,
     getConnectorCapabilities,
@@ -8,7 +8,7 @@
     ServicesOverview,
     UploaderApp,
     DataSourceInfo,
-    ConnectorStatusInfo,
+    ConnectorStatusDto,
     SyncRequest,
     AvailableConnector,
     ConnectorCapabilities,
@@ -62,12 +62,12 @@
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
   const servicesOverviewQuery = getServicesOverview();
-  const connectorStatusesQuery = getAllConnectorStatus();
+  const connectorStatusesQuery = getConnectorStatuses();
 
   const servicesOverview = $derived<ServicesOverview | null>(
     servicesOverviewQuery.current ?? null,
   );
-  const connectorStatuses = $derived<ConnectorStatusInfo[]>(
+  const connectorStatuses = $derived<ConnectorStatusDto[]>(
     connectorStatusesQuery.current ?? [],
   );
   const isLoading = $derived(
@@ -230,7 +230,7 @@
       const apiClient = getApiClient();
 
       for (const connector of connectorsToSync) {
-        const connectorId = connector.connectorName;
+        const connectorId = connector.id;
         if (!connectorId) continue;
 
         const start = performance.now();

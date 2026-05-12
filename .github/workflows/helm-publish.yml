@@ -1,0 +1,115 @@
+name: Publish Helm chart
+
+# Publishes deploy/helm/nocturne to oci://ghcr.io/nightscout/charts on:
+#   - any branch push touching chart files or this workflow
+#   - tags `v*` (note: tag pushes are also filtered by `paths:` — if a tag's
+#     commit didn't touch chart files, use `workflow_dispatch` to publish)
+#   - manual dispatch
+#
+# Version selection:
+#   - tag `v*`              → strip `v` prefix          (no `latest`)
+#   - main / master push    → Chart.yaml `version:`     + `latest`
+#   - any other branch push → `<Chart.yaml version>-<short-sha>` (immutable)
+#
+# After the first successful publish, set the `charts/nocturne` package to
+# Public at https://github.com/orgs/nightscout/packages — required for
+# anonymous `helm pull` and ArgoCD reads.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths:
+      - 'deploy/helm/**'
+      - '.github/workflows/helm-publish.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_NAMESPACE: nightscout/charts
+  CHART_PATH: deploy/helm/nocturne
+  CHART_NAME: nocturne
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Compute publish version
+        id: version
+        run: |
+          set -euo pipefail
+          CHART_VERSION=$(yq '.version' "$CHART_PATH/Chart.yaml")
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            EXTRA_TAGS=""
+          elif [[ "${GITHUB_REF}" == refs/heads/main || "${GITHUB_REF}" == refs/heads/master ]]; then
+            VERSION="${CHART_VERSION}"
+            EXTRA_TAGS="latest"
+          else
+            SHORT_SHA="${GITHUB_SHA:0:7}"
+            VERSION="${CHART_VERSION}-${SHORT_SHA}"
+            EXTRA_TAGS=""
+          fi
+          echo "version=$VERSION"          | tee -a "$GITHUB_OUTPUT"
+          echo "extra_tags=$EXTRA_TAGS"    | tee -a "$GITHUB_OUTPUT"
+
+      - name: Resolve chart dependencies
+        run: |
+          set -euo pipefail
+          helm dependency update "$CHART_PATH"
+          # `helm package` needs subcharts as directories, but `dependency update`
+          # leaves them as .tgz files. Extract each so packaging picks them up.
+          for tgz in "$CHART_PATH"/charts/*.tgz; do
+            tar xzf "$tgz" -C "$CHART_PATH/charts/"
+          done
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login "$REGISTRY" --username "${{ github.actor }}" --password-stdin
+
+      - name: Package and push primary version
+        run: |
+          set -euo pipefail
+          helm package "$CHART_PATH" --version "${{ steps.version.outputs.version }}" --destination .
+          helm push "${CHART_NAME}-${{ steps.version.outputs.version }}.tgz" "oci://${REGISTRY}/${REGISTRY_NAMESPACE}"
+
+      - name: Package and push additional tags
+        if: steps.version.outputs.extra_tags != ''
+        run: |
+          set -euo pipefail
+          # OCI helm tags are derived from the chart tarball's --version, so we
+          # repackage with each additional tag value and push separately.
+          for TAG in ${{ steps.version.outputs.extra_tags }}; do
+            helm package "$CHART_PATH" --version "$TAG" --destination .
+            helm push "${CHART_NAME}-${TAG}.tgz" "oci://${REGISTRY}/${REGISTRY_NAMESPACE}"
+          done
+
+      - name: Summary
+        run: |
+          {
+            echo "## Published chart"
+            echo ""
+            echo "- \`oci://${REGISTRY}/${REGISTRY_NAMESPACE}/${CHART_NAME}:${{ steps.version.outputs.version }}\`"
+            if [ -n "${{ steps.version.outputs.extra_tags }}" ]; then
+              for TAG in ${{ steps.version.outputs.extra_tags }}; do
+                echo "- \`oci://${REGISTRY}/${REGISTRY_NAMESPACE}/${CHART_NAME}:${TAG}\`"
+              done
+            fi
+            echo ""
+            echo "Install:"
+            echo ""
+            echo "\`\`\`bash"
+            echo "helm install nocturne oci://${REGISTRY}/${REGISTRY_NAMESPACE}/${CHART_NAME} \\"
+            echo "  --version ${{ steps.version.outputs.version }} \\"
+            echo "  --namespace nocturne --create-namespace -f my-values.yaml"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"

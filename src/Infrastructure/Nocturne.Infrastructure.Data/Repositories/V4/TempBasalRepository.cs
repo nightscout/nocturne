@@ -75,10 +75,8 @@ public class TempBasalRepository : ITempBasalRepository
             query = query.Where(e => e.DataSource == source);
 
         // Exclude non-primary duplicates from cross-connector deduplication
-        var nonPrimaryIds = _context.LinkedRecords
-            .Where(lr => lr.RecordType == "tempbasal" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        query = query.Where(b => !nonPrimaryIds.Contains(b.Id));
+        query = query.Where(b => !_context.LinkedRecords
+            .Any(lr => lr.RecordType == "tempbasal" && !lr.IsPrimary && lr.RecordId == b.Id));
 
         query = descending
             ? query.OrderByDescending(e => e.StartTimestamp)
@@ -238,36 +236,20 @@ public class TempBasalRepository : ITempBasalRepository
         }
 
         // Cross-connector deduplication: link saved records to canonical groups
-        foreach (var entity in entities)
+        try
         {
-            try
-            {
-                var criteria = new MatchCriteria
-                {
-                    Rate = entity.Rate,
-                    RateTolerance = 0.05
-                };
+            var dedupInputs = entities.Select(e => new DeduplicationInput(
+                RecordId: e.Id,
+                Mills: new DateTimeOffset(e.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                DataSource: e.DataSource ?? "unknown",
+                Criteria: new MatchCriteria { Rate = e.Rate, RateTolerance = 0.05 }
+            )).ToList();
 
-                var mills = new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
-
-                var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
-                    RecordType.TempBasal,
-                    mills,
-                    criteria,
-                    ct);
-
-                await _deduplicationService.LinkRecordAsync(
-                    canonicalId,
-                    RecordType.TempBasal,
-                    entity.Id,
-                    mills,
-                    entity.DataSource ?? "unknown",
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to deduplicate TempBasal {Id}", entity.Id);
-            }
+            await _deduplicationService.DeduplicateBatchAsync(RecordType.TempBasal, dedupInputs, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "TempBasal", entities.Count);
         }
 
         return entities.Select(TempBasalMapper.ToDomainModel);
@@ -296,14 +278,11 @@ public class TempBasalRepository : ITempBasalRepository
     /// <inheritdoc />
     public async Task<TempBasal?> GetActiveAtAsync(DateTime at, CancellationToken ct = default)
     {
-        var nonPrimaryIds = _context.LinkedRecords
-            .Where(lr => lr.RecordType == "tempbasal" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-
         var entity = await _context.TempBasals
             .AsNoTracking()
             .Where(t => t.StartTimestamp <= at && (t.EndTimestamp == null || t.EndTimestamp > at))
-            .Where(t => !nonPrimaryIds.Contains(t.Id))
+            .Where(t => !_context.LinkedRecords
+                .Any(lr => lr.RecordType == "tempbasal" && !lr.IsPrimary && lr.RecordId == t.Id))
             .OrderByDescending(t => t.StartTimestamp)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : TempBasalMapper.ToDomainModel(entity);

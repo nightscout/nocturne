@@ -726,7 +726,7 @@ public class TenantIsolationTests
         (string slug, Guid id, bool active)[]? tenants = null,
         string baseDomain = "nocturnecgm.com")
     {
-        var config = Options.Create(new MultitenancyConfiguration
+        var config = Options.Create(new BaseDomainOptions
         {
             BaseDomain = baseDomain
         });

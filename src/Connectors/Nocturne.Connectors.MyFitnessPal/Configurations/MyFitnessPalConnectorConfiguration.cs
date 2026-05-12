@@ -17,6 +17,8 @@ namespace Nocturne.Connectors.MyFitnessPal.Configurations;
     SupportsHistoricalSync = true,
     MaxHistoricalDays = 365,
     SupportsManualSync = true,
+    DefaultActiveThresholdMinutes = 180,
+    DefaultStaleThresholdMinutes = 360,
     SupportedDataTypes = [SyncDataType.Food]
 )]
 public class MyFitnessPalConnectorConfiguration : BaseConnectorConfiguration

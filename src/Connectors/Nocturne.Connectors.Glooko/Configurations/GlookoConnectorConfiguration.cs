@@ -19,6 +19,8 @@ namespace Nocturne.Connectors.Glooko.Configurations;
     "Glooko",
     SupportsHistoricalSync = true,
     SupportsManualSync = true,
+    DefaultActiveThresholdMinutes = 180,
+    DefaultStaleThresholdMinutes = 360,
     SupportedDataTypes = [
         SyncDataType.Glucose,
         SyncDataType.Boluses,

@@ -58,7 +58,7 @@ export type DateRangeInput = {
 export function useDateParams(defaultDays = 7) {
   // showDefaults: true ensures all params are shown in URL, not just non-default ones
   // This is critical because runed by default omits params that match schema defaults
-  const params = useSearchParams(ReportsParamsSchema, { showDefaults: true });
+  const params = useSearchParams(ReportsParamsSchema, { showDefaults: true, noScroll: true });
 
   // Track initialization to prevent infinite loops
   let initialized = $state(false);

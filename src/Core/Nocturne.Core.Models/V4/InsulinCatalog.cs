@@ -10,11 +10,21 @@ public static class InsulinCatalog
         // Rapid-acting
         new() { Id = "humalog",      Name = "Humalog (Insulin Lispro)",      Category = InsulinCategory.RapidActing, DefaultDia = 4.0, DefaultPeak = 75,  Curve = "rapid-acting", Concentration = 100 },
         new() { Id = "humalog-u200", Name = "Humalog U200 (Insulin Lispro)", Category = InsulinCategory.RapidActing, DefaultDia = 4.0, DefaultPeak = 75,  Curve = "rapid-acting", Concentration = 200 },
+        new() { Id = "admelog",      Name = "Admelog (Insulin Lispro)",      Category = InsulinCategory.RapidActing, DefaultDia = 4.0, DefaultPeak = 75,  Curve = "rapid-acting", Concentration = 100 },
         new() { Id = "novorapid",    Name = "NovoRapid (Insulin Aspart)",    Category = InsulinCategory.RapidActing, DefaultDia = 4.0, DefaultPeak = 75,  Curve = "rapid-acting", Concentration = 100 },
         new() { Id = "apidra",       Name = "Apidra (Insulin Glulisine)",    Category = InsulinCategory.RapidActing, DefaultDia = 4.0, DefaultPeak = 75,  Curve = "rapid-acting", Concentration = 100 },
         new() { Id = "fiasp",        Name = "Fiasp (Faster Aspart)",         Category = InsulinCategory.RapidActing, DefaultDia = 3.5, DefaultPeak = 55,  Curve = "ultra-rapid",  Concentration = 100 },
         new() { Id = "lyumjev",      Name = "Lyumjev (URLi Lispro)",         Category = InsulinCategory.RapidActing, DefaultDia = 3.5, DefaultPeak = 55,  Curve = "ultra-rapid",  Concentration = 100 },
         new() { Id = "lyumjev-u200", Name = "Lyumjev U200 (URLi Lispro)",    Category = InsulinCategory.RapidActing, DefaultDia = 3.5, DefaultPeak = 55,  Curve = "ultra-rapid",  Concentration = 200 },
+
+        // Diluted rapid-acting (pediatric / very low basal)
+        new() { Id = "humalog-u10",   Name = "Humalog U10 (Insulin Lispro)",   Category = InsulinCategory.RapidActing, DefaultDia = 4.0, DefaultPeak = 75, Curve = "rapid-acting", Concentration = 10 },
+        new() { Id = "humalog-u40",   Name = "Humalog U40 (Insulin Lispro)",   Category = InsulinCategory.RapidActing, DefaultDia = 4.0, DefaultPeak = 75, Curve = "rapid-acting", Concentration = 40 },
+        new() { Id = "humalog-u50",   Name = "Humalog U50 (Insulin Lispro)",   Category = InsulinCategory.RapidActing, DefaultDia = 4.0, DefaultPeak = 75, Curve = "rapid-acting", Concentration = 50 },
+        new() { Id = "novorapid-u10", Name = "NovoRapid U10 (Insulin Aspart)", Category = InsulinCategory.RapidActing, DefaultDia = 4.0, DefaultPeak = 75, Curve = "rapid-acting", Concentration = 10 },
+        new() { Id = "novorapid-u40", Name = "NovoRapid U40 (Insulin Aspart)", Category = InsulinCategory.RapidActing, DefaultDia = 4.0, DefaultPeak = 75, Curve = "rapid-acting", Concentration = 40 },
+        new() { Id = "novorapid-u50", Name = "NovoRapid U50 (Insulin Aspart)", Category = InsulinCategory.RapidActing, DefaultDia = 4.0, DefaultPeak = 75, Curve = "rapid-acting", Concentration = 50 },
+        new() { Id = "fiasp-u10",     Name = "Fiasp U10 (Faster Aspart)",      Category = InsulinCategory.RapidActing, DefaultDia = 3.5, DefaultPeak = 55, Curve = "ultra-rapid",  Concentration = 10 },
 
         // Short-acting
         new() { Id = "humulin-r",      Name = "Humulin R (Regular)",      Category = InsulinCategory.ShortActing, DefaultDia = 5.0, DefaultPeak = 90,  Curve = "bilinear", Concentration = 100 },

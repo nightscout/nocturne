@@ -102,4 +102,14 @@ public interface IMeterGlucoseRepository : IV4Repository<MeterGlucose>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk-insert <see cref="MeterGlucose"/> records with batch-level and DB-level deduplication by LegacyId.
+    /// </summary>
+    /// <param name="records">Records to insert.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The records that were actually inserted (duplicates excluded).</returns>
+    Task<IEnumerable<MeterGlucose>> BulkCreateAsync(
+        IEnumerable<MeterGlucose> records,
+        CancellationToken ct = default);
 }

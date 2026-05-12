@@ -17,7 +17,7 @@ export const getDiscordConfig = query(async () => {
   const discordApplicationId = process.env.DISCORD_APPLICATION_ID ?? null;
   const isOauthConfigured =
     !!process.env.DISCORD_APPLICATION_ID && !!process.env.DISCORD_CLIENT_SECRET;
-  const baseDomain = process.env.PUBLIC_BASE_DOMAIN ?? null;
+  const baseDomain = process.env.BASE_DOMAIN ?? null;
 
   return {
     discordApplicationId,
@@ -35,7 +35,7 @@ export const initiateDiscordLink = command(async () => {
   const { url } = getRequestEvent();
 
   const clientId = process.env.DISCORD_APPLICATION_ID;
-  const baseDomain = process.env.PUBLIC_BASE_DOMAIN;
+  const baseDomain = process.env.BASE_DOMAIN;
   if (!clientId || !baseDomain) {
     return { error: "Discord OAuth2 is not configured on this server." };
   }

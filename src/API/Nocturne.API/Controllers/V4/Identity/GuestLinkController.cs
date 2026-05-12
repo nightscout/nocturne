@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// Manages temporary guest access links for read-only data sharing.
 /// </summary>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/guest-links")]
 [Produces("application/json")]
 public class GuestLinkController : ControllerBase
@@ -84,7 +85,9 @@ public class GuestLinkController : ControllerBase
     [Authorize]
     [RemoteQuery]
     [ProducesResponseType(typeof(IReadOnlyList<GuestLinkInfo>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetGuestLinks(CancellationToken ct)
+    public async Task<IActionResult> GetGuestLinks(
+        [FromQuery] bool includeDismissed = false,
+        CancellationToken ct = default)
     {
         var auth = HttpContext.GetAuthContext();
         if (auth is not { IsAuthenticated: true })
@@ -94,7 +97,7 @@ public class GuestLinkController : ControllerBase
         if (effectiveSubjectId is null)
             return Unauthorized();
 
-        var links = await _guestLinkService.GetGuestLinksAsync(effectiveSubjectId.Value, ct);
+        var links = await _guestLinkService.GetGuestLinksAsync(effectiveSubjectId.Value, includeDismissed, ct);
         return Ok(links);
     }
 
@@ -113,6 +116,27 @@ public class GuestLinkController : ControllerBase
             return Unauthorized();
 
         var result = await _guestLinkService.RevokeAsync(grantId, auth.SubjectId.Value, ct);
+        if (!result)
+            return NotFound();
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Dismiss a terminal (revoked or expired) guest link from the UI.
+    /// </summary>
+    [HttpPatch("{grantId:guid}/dismiss")]
+    [Authorize]
+    [RemoteCommand(Invalidates = ["GetGuestLinks"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DismissGuestLink(Guid grantId, CancellationToken ct)
+    {
+        var auth = HttpContext.GetAuthContext();
+        if (auth is not { IsAuthenticated: true, SubjectId: not null })
+            return Unauthorized();
+
+        var result = await _guestLinkService.DismissAsync(grantId, auth.SubjectId.Value, ct);
         if (!result)
             return NotFound();
 

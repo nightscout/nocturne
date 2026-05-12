@@ -8,7 +8,7 @@
         <li>Configure your data connectors (Dexcom, LibreLinkUp, Glooko, etc.) via the admin panel</li>
         <li>Set up a reverse proxy (Nginx, Caddy, Traefik) for HTTPS</li>
         <li>Point your CGM app or loop system to your new Nocturne instance</li>
-        <li>Enable Watchtower for automatic updates (included in the default compose)</li>
+        <li>Watchtower is included and checks for image updates daily — no action required</li>
     </ul>
 
     <div class="flex gap-4 not-prose">

@@ -81,8 +81,7 @@ The Google sign-in button will appear on your login page immediately.
 4. You should be redirected back to Nocturne and signed in
 
 <Callout type="tip" title="Multiple tenants">
-  The OIDC provider configuration is per-tenant. If you run multiple tenants
-  on the same Nocturne instance, each tenant can have its own Google credentials,
-  or you can reuse the same Client ID across tenants by adding each tenant's
-  callback URL to the authorized redirect URIs in Google Cloud Console.
+  OIDC providers are platform-wide — all tenants on the same Nocturne instance
+  share the same provider configuration. You only need to register one callback URL
+  in Google Cloud Console regardless of how many tenants you run.
 </Callout>

@@ -13,6 +13,7 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 /// </summary>
 /// <seealso cref="IConnectorConfigurationService"/>
 [ApiController]
+[Tags("Connectors")]
 [Route("api/v4/connectors/config")]
 [Authorize]
 public class ConfigurationController : ControllerBase
@@ -258,7 +259,7 @@ public class ConfigurationController : ControllerBase
             if (propSchema.TryGetProperty("enum", out var enumProp) && configProp.Value.ValueKind == JsonValueKind.String)
             {
                 var actualValue = configProp.Value.GetString();
-                var validValues = enumProp.EnumerateArray().Select(v => v.GetString()).ToList();
+                var validValues = enumProp.EnumerateArray().Select(v => v.GetString()).ToHashSet();
                 if (!validValues.Contains(actualValue))
                 {
                     errors.Add($"Field '{configProp.Name}' value '{actualValue}' is not one of: {string.Join(", ", validValues)}");

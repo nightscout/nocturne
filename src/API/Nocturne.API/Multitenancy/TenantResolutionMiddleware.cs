@@ -17,14 +17,14 @@ public class TenantResolutionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<TenantResolutionMiddleware> _logger;
-    private readonly MultitenancyConfiguration _config;
+    private readonly BaseDomainOptions _config;
     private readonly IMemoryCache _cache;
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
 
     public TenantResolutionMiddleware(
         RequestDelegate next,
         ILogger<TenantResolutionMiddleware> logger,
-        IOptions<MultitenancyConfiguration> config,
+        IOptions<BaseDomainOptions> config,
         IMemoryCache cache)
     {
         _next = next;
@@ -39,6 +39,13 @@ public class TenantResolutionMiddleware
     /// </summary>
     private static readonly string[] TenantlessAllowedPaths =
     [
+        // Aspire ServiceDefaults health endpoints — must never be tenant-gated;
+        // they are used by Kubernetes liveness/readiness probes and external
+        // monitoring. Returning 503 on these when no tenant exists causes
+        // liveness probes to kill the pod, preventing first-time setup.
+        "/health",
+        "/alive",
+        "/ready",
         "/api/v4/me/tenants/validate-slug",
         "/api/v4/admin/tenants/validate-slug",
         "/api/metadata",
@@ -55,6 +62,7 @@ public class TenantResolutionMiddleware
     private static readonly string[] TenantlessAllowedPrefixes =
     [
         "/api/auth/passkey/setup/",
+        "/api/v4/admin/platform-settings",
         "/api/v4/admin/tenants",
         "/api/v4/dev-only/",
         "/api/v4/platform/",

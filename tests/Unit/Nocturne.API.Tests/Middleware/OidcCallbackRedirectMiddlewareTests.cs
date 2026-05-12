@@ -12,7 +12,7 @@ namespace Nocturne.API.Tests.Middleware;
 
 public class OidcCallbackRedirectMiddlewareTests
 {
-    private readonly MultitenancyConfiguration _config = new() { BaseDomain = "nocturne.run" };
+    private readonly BaseDomainOptions _config = new() { BaseDomain = "nocturne.run" };
 
     private OidcCallbackRedirectMiddleware CreateMiddleware(RequestDelegate? next = null)
     {
@@ -120,7 +120,7 @@ public class OidcCallbackRedirectMiddlewareTests
     public async Task Passes_through_when_multitenancy_not_configured()
     {
         var called = false;
-        var config = new MultitenancyConfiguration { BaseDomain = null };
+        var config = new BaseDomainOptions { BaseDomain = null };
         var middleware = new OidcCallbackRedirectMiddleware(
             _ => { called = true; return Task.CompletedTask; },
             NullLogger<OidcCallbackRedirectMiddleware>.Instance,

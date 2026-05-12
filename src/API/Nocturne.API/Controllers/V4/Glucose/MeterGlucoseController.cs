@@ -22,6 +22,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 /// <seealso cref="UpsertMeterGlucoseRequest"/>
 /// <seealso cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>
 [ApiController]
+[Tags("Glucose")]
 [Route("api/v4/glucose/meter")]
 [Authorize]
 [Produces("application/json")]

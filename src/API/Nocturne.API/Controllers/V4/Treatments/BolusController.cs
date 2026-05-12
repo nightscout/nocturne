@@ -25,6 +25,7 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <seealso cref="CreateBolusRequest"/>
 /// <seealso cref="UpdateBolusRequest"/>
 [ApiController]
+[Tags("Treatments")]
 [Route("api/v4/insulin/boluses")]
 [Authorize]
 [Produces("application/json")]

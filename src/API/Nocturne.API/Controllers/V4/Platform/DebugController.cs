@@ -11,6 +11,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 /// Provides query debugging and MongoDB query inspection capabilities
 /// </summary>
 [ApiController]
+[Tags("Platform")]
 [Route("api/v4/debug")]
 [Produces("application/json")]
 [Authorize]

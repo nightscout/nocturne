@@ -19,26 +19,11 @@
     Wrench,
   } from "lucide-svelte";
   import type {
-    ConnectorStatusInfo,
     ConnectorCapabilities,
     SyncRequest,
     SyncResult,
   } from "$lib/api/generated/nocturne-api-client";
-
-  interface ConnectorStatusWithDescription extends ConnectorStatusInfo {
-    id?: string;
-    name?: string;
-    description?: string;
-    state?: string;
-    stateMessage?: string;
-    isHealthy?: boolean;
-    status?: string;
-    totalEntries?: number;
-    entriesLast24Hours?: number;
-    lastEntryTime?: Date;
-    totalItemsBreakdown?: { [key: string]: number };
-    itemsLast24HoursBreakdown?: { [key: string]: number };
-  }
+  import type { ConnectorStatusWithDescription } from "./ServerConnectorsCard.svelte";
 
   let {
     open = $bindable(false),
@@ -87,7 +72,7 @@
   }
 
   async function triggerGranularSync() {
-    const connectorId = selectedConnector?.id ?? selectedConnector?.connectorName;
+    const connectorId = selectedConnector?.id;
     if (!connectorId) return;
 
     const supportsHistoricalSync =
@@ -127,7 +112,7 @@
   }
 
   async function triggerFoodOnlySync() {
-    const connectorId = selectedConnector?.id ?? selectedConnector?.connectorName;
+    const connectorId = selectedConnector?.id;
     if (!connectorId) return;
     isFoodOnlySyncing = true;
     foodOnlySyncResult = null;
@@ -206,7 +191,7 @@
           {:else}
             <Badge variant="destructive">
               <AlertCircle class="h-3 w-3 mr-1" />
-              {selectedConnector.status}
+              {selectedConnector.stateMessage ?? selectedConnector.state ?? "Error"}
             </Badge>
           {/if}
         </div>
@@ -332,6 +317,26 @@
                 </span>
                 <span class="font-medium">
                   {formatLastSeen(selectedConnector.lastEntryTime)}
+                </span>
+              </div>
+            {/if}
+            {#if selectedConnector.lastSuccessfulSync}
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-muted-foreground">
+                  Last successful sync
+                </span>
+                <span class="font-medium">
+                  {formatLastSeen(selectedConnector.lastSuccessfulSync)}
+                </span>
+              </div>
+            {/if}
+            {#if !selectedConnector.isHealthy && selectedConnector.lastSyncAttempt}
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-muted-foreground">
+                  Last sync attempt
+                </span>
+                <span class="font-medium text-destructive">
+                  {formatLastSeen(selectedConnector.lastSyncAttempt)}
                 </span>
               </div>
             {/if}

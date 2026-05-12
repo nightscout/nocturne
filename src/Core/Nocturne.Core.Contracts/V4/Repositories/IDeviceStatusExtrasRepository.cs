@@ -26,4 +26,14 @@ public interface IDeviceStatusExtrasRepository
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk-insert <see cref="DeviceStatusExtras"/> records with batch-level and DB-level deduplication by CorrelationId.
+    /// </summary>
+    /// <param name="records">Records to insert.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The records that were actually inserted (duplicates excluded).</returns>
+    Task<IEnumerable<DeviceStatusExtras>> BulkCreateAsync(
+        IEnumerable<DeviceStatusExtras> records,
+        CancellationToken ct = default);
 }

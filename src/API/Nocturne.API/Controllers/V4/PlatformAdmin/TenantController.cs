@@ -20,6 +20,7 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 /// </remarks>
 /// <seealso cref="ITenantService"/>
 [ApiController]
+[Tags("PlatformAdmin")]
 [Route("api/v4/admin/tenants")]
 [Produces("application/json")]
 [Authorize(Roles = "platform_admin")]

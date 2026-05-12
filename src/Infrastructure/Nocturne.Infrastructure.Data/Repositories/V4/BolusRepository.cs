@@ -54,6 +54,8 @@ public class BolusRepository : IBolusRepository
     /// <param name="descending">Whether to sort by timestamp in descending order.</param>
     /// <param name="nativeOnly">Whether to return only native records.</param>
     /// <param name="kind">Optional bolus kind filter.</param>
+    /// <param name="afterTimestamp">Keyset cursor timestamp. When paired with <paramref name="afterId"/>, replaces offset-based pagination.</param>
+    /// <param name="afterId">Keyset cursor record ID (tiebreaker). When paired with <paramref name="afterTimestamp"/>, replaces offset-based pagination.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of bolus records.</returns>
     public async Task<IEnumerable<Bolus>> GetAsync(
@@ -66,6 +68,8 @@ public class BolusRepository : IBolusRepository
         bool descending = true,
         bool nativeOnly = false,
         BolusKind? kind = null,
+        DateTime? afterTimestamp = null,
+        Guid? afterId = null,
         CancellationToken ct = default
     )
     {
@@ -84,13 +88,30 @@ public class BolusRepository : IBolusRepository
             query = query.Where(e => e.BolusKind == kind.Value.ToString());
 
         // Exclude non-primary duplicates from cross-connector deduplication
-        var nonPrimaryIds = _context.LinkedRecords
-            .Where(lr => lr.RecordType == "bolus" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        query = query.Where(b => !nonPrimaryIds.Contains(b.Id));
+        query = query.Where(b => !_context.LinkedRecords
+            .Any(lr => lr.RecordType == "bolus" && !lr.IsPrimary && lr.RecordId == b.Id));
 
-        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
-        var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
+        // Keyset cursor — when provided, replaces OFFSET with a WHERE clause
+        // that seeks directly to the cursor position. O(limit) vs O(offset + limit).
+        if (afterTimestamp.HasValue && afterId.HasValue)
+        {
+            query = descending
+                ? query.Where(e => e.Timestamp < afterTimestamp.Value
+                    || (e.Timestamp == afterTimestamp.Value && e.Id < afterId.Value))
+                : query.Where(e => e.Timestamp > afterTimestamp.Value
+                    || (e.Timestamp == afterTimestamp.Value && e.Id > afterId.Value));
+        }
+
+        query = descending
+            ? query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
+            : query.OrderBy(e => e.Timestamp).ThenBy(e => e.Id);
+
+        if (!afterTimestamp.HasValue || !afterId.HasValue)
+        {
+            query = query.Skip(offset);
+        }
+
+        var entities = await query.Take(limit).ToListAsync(ct);
         return entities.Select(BolusMapper.ToDomainModel);
     }
 
@@ -355,34 +376,20 @@ public class BolusRepository : IBolusRepository
             // Insert-time deduplication: link saved records to canonical groups.
             // Only runs on newly inserted entities — updated-in-place rows were
             // already linked when first inserted.
-            foreach (var entity in entities)
+            try
             {
-                try
-                {
-                    var criteria = new MatchCriteria
-                    {
-                        Insulin = entity.Insulin,
-                        InsulinTolerance = 0.05
-                    };
+                var dedupInputs = entities.Select(e => new DeduplicationInput(
+                    RecordId: e.Id,
+                    Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    DataSource: e.DataSource ?? "unknown",
+                    Criteria: new MatchCriteria { Insulin = e.Insulin, InsulinTolerance = 0.05 }
+                )).ToList();
 
-                    var canonicalId = await _deduplicationService.GetOrCreateCanonicalIdAsync(
-                        RecordType.Bolus,
-                        new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        criteria,
-                        ct);
-
-                    await _deduplicationService.LinkRecordAsync(
-                        canonicalId,
-                        RecordType.Bolus,
-                        entity.Id,
-                        new DateTimeOffset(entity.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        entity.DataSource ?? "unknown",
-                        ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to deduplicate Bolus {Id}", entity.Id);
-                }
+                await _deduplicationService.DeduplicateBatchAsync(RecordType.Bolus, dedupInputs, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Bolus", entities.Count);
             }
         }
 

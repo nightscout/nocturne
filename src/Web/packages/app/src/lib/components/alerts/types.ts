@@ -502,6 +502,48 @@ export function nodeToApi(
 	return { conditionType: node.type, conditionParams: params ?? {} };
 }
 
+/**
+ * Serialise the editor's {@link RuleEditorState} into the wire-format body
+ * shared by {@link CreateAlertRuleRequest} and {@link UpdateAlertRuleRequest}.
+ *
+ * Strips `_uid` markers and flattens single-child composite roots so the output
+ * is identical for any two semantically-equal editor states regardless of their
+ * internal identity markers. Use this both for the actual save call and for
+ * dirty detection (compare `JSON.stringify` of current vs. saved body).
+ */
+export function buildBody(state: RuleEditorState) {
+	const flat = flattenSingleChildRoot(state.condition!);
+	const api = nodeToApi(flat);
+	return {
+		name: state.name,
+		description: state.description || undefined,
+		conditionType: api?.conditionType as AlertConditionType,
+		conditionParams: api?.conditionParams,
+		isEnabled: state.isEnabled,
+		sortOrder: state.sortOrder,
+		severity: state.severity,
+		allowThroughDnd: state.allowThroughDnd,
+		autoResolveEnabled: state.autoResolveEnabled,
+		autoResolveParams: state.autoResolveCondition
+			? stripEditorFields(flattenSingleChildRoot(state.autoResolveCondition))
+			: undefined,
+		clientConfiguration: {
+			...state.clientConfig,
+			snooze: {
+				...state.clientConfig.snooze,
+				conditions: state.clientConfig.snooze.conditions.map((c) =>
+					stripEditorFields(flattenSingleChildRoot(c))
+				),
+			},
+		},
+		channels: state.channels.map((c) => ({
+			channelType: c.channelType,
+			destination: c.destination || undefined,
+			destinationLabel: c.destinationLabel || undefined,
+		})),
+	};
+}
+
 // ---------------------------------------------------------------------------
 // Existing client-config / schedule shapes (unchanged)
 // ---------------------------------------------------------------------------

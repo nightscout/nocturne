@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using System.Linq;
 namespace Nocturne.API.Controllers.V4.Analytics;
 /// <summary>
 /// Controller providing retrospective (day-in-review) diabetes data.
@@ -30,6 +31,7 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="IBasalRateResolver"/>
 [ApiController]
+[Tags("Analytics")]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
 public class RetrospectiveController : ControllerBase
@@ -270,6 +272,7 @@ public class RetrospectiveController : ControllerBase
                 .Where(d => d.Mills >= startMills && d.Mills <= endMills)
                 .ToList() ?? new List<DeviceStatus>();
             // Calculate data points at each interval
+            var rateAt = await _basalRateResolver.BuildResolverAsync(startMills, endMills, cancellationToken);
             var dataPoints = new List<RetrospectiveDataPoint>();
             var totalIntervals = (24 * 60) / intervalMinutes;
             for (int i = 0; i < totalIntervals; i++)
@@ -292,7 +295,7 @@ public class RetrospectiveController : ControllerBase
                 // Get glucose at this time
                 var glucose = GetGlucoseAtTime(entryList, pointTime);
                 // Get basal rate
-                var basal = await GetBasalRateAtTimeAsync(tempBasals, pointTime);
+                var basal = GetBasalRateAtTime(tempBasals, pointTime, rateAt);
                 dataPoints.Add(new RetrospectiveDataPoint
                 {
                     Time = pointTime,
@@ -305,8 +308,8 @@ public class RetrospectiveController : ControllerBase
                     BolusIob = Math.Round(iobResult.Iob - (iobResult.BasalIob ?? 0), 3),
                     BasalIob = Math.Round(iobResult.BasalIob ?? 0, 3),
                     Cob = Math.Round(cobResult.Cob, 1),
-                    BasalRate = basal?.Rate ?? 0,
-                    IsTemp = basal?.IsTemp ?? false
+                    BasalRate = basal.Rate,
+                    IsTemp = basal.IsTemp
                 });
             }
             var response = new RetrospectiveTimelineResponse
@@ -364,21 +367,22 @@ public class RetrospectiveController : ControllerBase
                 limit: 2000, offset: 0, descending: false, ct: cancellationToken
             )).ToList();
             // Generate basal timeline
+            var rateAt = await _basalRateResolver.BuildResolverAsync(startMills, endMills, cancellationToken);
             var dataPoints = new List<BasalDataPoint>();
             var totalIntervals = (24 * 60) / intervalMinutes;
             for (int i = 0; i < totalIntervals; i++)
             {
                 var pointTime = startMills + (i * intervalMinutes * 60 * 1000);
                 var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(pointTime);
-                var basal = await GetBasalRateAtTimeAsync(tempBasals, pointTime);
+                var basal = GetBasalRateAtTime(tempBasals, pointTime, rateAt);
                 dataPoints.Add(new BasalDataPoint
                 {
                     Time = pointTime,
                     Hour = timestamp.Hour,
                     Minute = timestamp.Minute,
                     TimeLabel = timestamp.ToString("HH:mm"),
-                    Rate = basal?.Rate ?? await GetScheduledBasalRateAsync(pointTime),
-                    IsTemp = basal?.IsTemp ?? false
+                    Rate = basal.Rate,
+                    IsTemp = basal.IsTemp
                 });
             }
             var response = new BasalTimelineResponse
@@ -528,6 +532,21 @@ public class RetrospectiveController : ControllerBase
         {
             return 0.8; // Default basal rate if profile not available
         }
+    }
+    /// <summary>
+    /// Synchronous variant for use inside loops where the scheduled-rate delegate has been
+    /// pre-built via BuildResolverAsync. The async GetBasalRateAtTimeAsync is kept for the
+    /// single-point GetRetrospectiveData endpoint.
+    /// </summary>
+    private static BasalData GetBasalRateAtTime(
+        List<TempBasal> tempBasals, long targetTime, Func<long, double> scheduledRateAt)
+    {
+        foreach (var tb in tempBasals.Where(tb => tb.EndMills is not null))
+        {
+            if (targetTime >= tb.StartMills && targetTime < tb.EndMills)
+                return new BasalData { Rate = tb.Rate, IsTemp = true };
+        }
+        return new BasalData { Rate = scheduledRateAt(targetTime), IsTemp = false };
     }
     #endregion
 }

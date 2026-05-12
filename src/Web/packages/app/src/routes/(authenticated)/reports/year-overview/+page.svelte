@@ -1,10 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { browser } from "$app/environment";
-  import {
-    Loader2,
-    CalendarDays,
-  } from "lucide-svelte";
+  import { Loader2, CalendarDays } from "lucide-svelte";
   import { scaleThreshold, scaleLinear } from "d3-scale";
   import { Button } from "$lib/components/ui/button";
   import {
@@ -24,6 +21,7 @@
   import { getUnitLabel } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getDateParamsContext } from "$lib/hooks/date-params.svelte";
+  import { untrack, tick } from "svelte";
   import { fade } from "svelte/transition";
 
   const reportsParams = getDateParamsContext();
@@ -44,7 +42,13 @@
   let selectedDay = $state<CalendarDatum | null>(null);
   let sentinelElements: Record<number, HTMLDivElement | undefined> = $state({});
 
-  type HeatmapMetric = "avgGlucose" | "tir" | "bolus" | "basal" | "tdd" | "carbs";
+  type HeatmapMetric =
+    | "avgGlucose"
+    | "tir"
+    | "bolus"
+    | "basal"
+    | "tdd"
+    | "carbs";
 
   const METRIC_OPTIONS: { value: HeatmapMetric; label: string }[] = [
     { value: "avgGlucose", label: "Avg Glucose" },
@@ -88,7 +92,10 @@
       "var(--glucose-very-high)",
     ]);
 
-  /** Multi-hue heatmap scale — maximises perceptual distinction in the 70–250 range */
+  /**
+   * Multi-hue heatmap scale — maximises perceptual distinction in the 70–250
+   * range
+   */
   const HEATMAP_DOMAIN = [40, 54, 70, 100, 140, 180, 220, 260, 350];
   const HEATMAP_COLORS = [
     "#2563eb", // blue-600   — critically low
@@ -115,7 +122,10 @@
   }
 
   /** CSS variable names for each metric's hue */
-  const METRIC_CSS_VARS: Record<Exclude<HeatmapMetric, "avgGlucose">, string> = {
+  const METRIC_CSS_VARS: Record<
+    Exclude<HeatmapMetric, "avgGlucose">,
+    string
+  > = {
     tir: "--chart-2",
     bolus: "--chart-1",
     basal: "--chart-3",
@@ -130,12 +140,24 @@
       for (const day of days) {
         let val: number | undefined | null;
         switch (metric) {
-          case "bolus": val = day.totalBolusUnits; break;
-          case "basal": val = day.totalBasalUnits; break;
-          case "tdd": val = day.totalDailyDose; break;
-          case "carbs": val = day.totalCarbs; break;
-          case "tir": val = day.timeInRangePercent; break;
-          default: val = day.averageGlucoseMgdl; break;
+          case "bolus":
+            val = day.totalBolusUnits;
+            break;
+          case "basal":
+            val = day.totalBasalUnits;
+            break;
+          case "tdd":
+            val = day.totalDailyDose;
+            break;
+          case "carbs":
+            val = day.totalCarbs;
+            break;
+          case "tir":
+            val = day.timeInRangePercent;
+            break;
+          default:
+            val = day.averageGlucoseMgdl;
+            break;
         }
         if (val != null && val > max) max = val;
       }
@@ -143,7 +165,10 @@
     return max || 1;
   }
 
-  /** Memoized max for current metric — recomputed only when metric or data changes */
+  /**
+   * Memoized max for current metric — recomputed only when metric or data
+   * changes
+   */
   const metricMaxCached = $derived.by(() => {
     // Depend on yearData and selectedMetric
     void yearData;
@@ -155,16 +180,26 @@
   /** Get cell value for the selected metric */
   function getMetricCellValue(data: CalendarDatum): number | null {
     switch (selectedMetric) {
-      case "tir": return data.timeInRangePercent;
-      case "bolus": return data.totalBolusUnits;
-      case "basal": return data.totalBasalUnits;
-      case "tdd": return data.totalDailyDose;
-      case "carbs": return data.totalCarbs;
-      default: return null;
+      case "tir":
+        return data.timeInRangePercent;
+      case "bolus":
+        return data.totalBolusUnits;
+      case "basal":
+        return data.totalBasalUnits;
+      case "tdd":
+        return data.totalDailyDose;
+      case "carbs":
+        return data.totalCarbs;
+      default:
+        return null;
     }
   }
 
-  function getIntensityFill(value: number, maxVal: number, cssVarName: string): string {
+  function getIntensityFill(
+    value: number,
+    maxVal: number,
+    cssVarName: string
+  ): string {
     const intensity = Math.min(value / maxVal, 1);
     // Scale from 15% opacity (min visible) to 100%
     const alpha = 0.15 + intensity * 0.85;
@@ -187,7 +222,8 @@
     }
 
     const maxVal = metricMaxCached;
-    const cssVar = METRIC_CSS_VARS[selectedMetric as Exclude<HeatmapMetric, "avgGlucose">];
+    const cssVar =
+      METRIC_CSS_VARS[selectedMetric as Exclude<HeatmapMetric, "avgGlucose">];
     return getIntensityFill(metricValue, maxVal, cssVar);
   }
 
@@ -222,46 +258,15 @@
     if (metadataLoading) return;
     metadataLoading = true;
     try {
-      const result = getAvailableYears();
-      await waitForQuery(result);
-      availableYears = result.current?.years ?? [];
-      availableDataSources = result.current?.availableDataSources ?? [];
+      const result = await getAvailableYears().run();
+      availableYears = result.years ?? [];
+      availableDataSources = result.availableDataSources ?? [];
       metadataLoaded = true;
     } catch (err) {
       console.error("Failed to load available years:", err);
     } finally {
       metadataLoading = false;
     }
-  }
-
-  function waitForQuery<T>(query: {
-    loading: boolean;
-    current: T | undefined;
-    error: unknown;
-  }): Promise<T> {
-    return new Promise((resolve, reject) => {
-      if (!query.loading && query.current !== undefined) {
-        resolve(query.current);
-        return;
-      }
-      if (!query.loading && query.error) {
-        reject(query.error);
-        return;
-      }
-      const interval = setInterval(() => {
-        if (!query.loading && query.current !== undefined) {
-          clearInterval(interval);
-          resolve(query.current);
-        } else if (!query.loading && query.error) {
-          clearInterval(interval);
-          reject(query.error);
-        }
-      }, 50);
-      setTimeout(() => {
-        clearInterval(interval);
-        reject(new Error("Query timed out"));
-      }, 30000);
-    });
   }
 
   async function loadYearData(year: number) {
@@ -273,9 +278,8 @@
       if (selectedDataSources.length > 0) {
         params.dataSources = selectedDataSources;
       }
-      const result = getDailySummary(params);
-      await waitForQuery(result);
-      const days = result.current?.days ?? [];
+      const result = await getDailySummary(params).run();
+      const days = result.days ?? [];
       yearData = new Map([...yearData, [year, days]]);
       loadGriTimeline(year);
     } catch (err) {
@@ -290,13 +294,12 @@
   async function loadGriTimeline(year: number) {
     if (griTimelineData.has(year)) return;
     try {
-      const result = getGriTimeline({
+      const result = await getGriTimeline({
         year,
         dataSources:
           selectedDataSources.length > 0 ? selectedDataSources : undefined,
-      });
-      await waitForQuery(result);
-      const periods = result.current?.periods ?? [];
+      }).run();
+      const periods = result.periods ?? [];
       griTimelineData = new Map([...griTimelineData, [year, periods]]);
     } catch (err) {
       console.error(`Failed to load GRI timeline for year ${year}:`, err);
@@ -443,9 +446,11 @@
   });
 
   $effect(() => {
-    void sentinelElements;
+    void sortedYears;
     if (browser && metadataLoaded) {
-      setupObserver();
+      tick().then(() => {
+        untrack(() => setupObserver());
+      });
     }
     return () => {
       observer?.disconnect();
@@ -454,8 +459,8 @@
 
   // Re-fetch when data source filter changes
   $effect(() => {
-    const currentKey = selectedDataSources.sort().join(",");
-    const prevKey = prevDataSources.sort().join(",");
+    const currentKey = [...selectedDataSources].sort().join(",");
+    const prevKey = [...prevDataSources].sort().join(",");
     if (currentKey !== prevKey && metadataLoaded) {
       prevDataSources = [...selectedDataSources];
       clearAndReload();

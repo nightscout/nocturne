@@ -291,6 +291,7 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
     /// <summary>
     /// Maps V3 bolus series (DeliveredBolus, AutomaticBolus, InjectionBolus) to Bolus and CarbIntake records.
+    /// TODO: Add code to deal with manual insulin, informed in gkInsulinBasal, gkInsulinBolus, gkInsulinPremixed, gkInsulinOther
     /// </summary>
     public (List<Bolus> boluses, List<CarbIntake> carbs, List<DecompositionBatch> batches) MapV3Boluses(GlookoV3GraphResponse graphData)
     {
@@ -385,6 +386,55 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     }
 
     /// <summary>
+    /// Maps V3 carbAll series to CarbIntake records.
+    /// These are standalone carb entries from the graph data (meals logged without a bolus wizard,
+    /// or quick carb entries). Complements carbs extracted from bolus.Data.CarbsInput in MapV3Boluses.
+    /// </summary>
+    public List<CarbIntake> MapV3CarbAll(GlookoV3GraphResponse graphData)
+    {
+        var carbs = new List<CarbIntake>();
+
+        if (graphData?.Series?.CarbAll == null)
+            return carbs;
+
+        foreach (var point in graphData.Series.CarbAll)
+        {
+            try
+            {
+                var carbValue = point.ActualCarbs ?? 0;
+                if (carbValue <= 0) continue;
+
+                var rawTimestamp = DateTimeOffset.FromUnixTimeSeconds(point.X).UtcDateTime;
+                var correctedTimestamp = _timeMapper.GetCorrectedGlookoTime(point.X);
+                var now = DateTime.UtcNow;
+
+                carbs.Add(new CarbIntake
+                {
+                    Id = Guid.CreateVersion7(),
+                    Timestamp = correctedTimestamp,
+                    LegacyId = GenerateLegacyId("v3_carball", rawTimestamp, $"carbs:{carbValue}"),
+                    Device = _connectorSource,
+                    DataSource = _connectorSource,
+                    Carbs = carbValue,
+                    CreatedAt = now,
+                    ModifiedAt = now
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 carbAll record at X={X}",
+                    _connectorSource, point.X);
+            }
+        }
+
+        _logger.LogInformation(
+            "[{ConnectorSource}] Transformed {Count} carb intakes from v3 carbAll series",
+            _connectorSource, carbs.Count);
+
+        return carbs;
+    }
+
+    /// <summary>
     /// Maps V3 consumable change series (ReservoirChange, SetSiteChange) to DeviceEvent records.
     /// PumpAlarms are skipped here — they are handled by GlookoSystemEventMapper.
     /// </summary>
@@ -462,6 +512,237 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             _connectorSource, deviceEvents.Count);
 
         return deviceEvents;
+    }
+
+    // ── V3 Histories: Meals → CarbIntake + ConnectorFoodEntryImport ────
+
+    /// <summary>
+    /// Maps V3 history meals to CarbIntake records.
+    /// Each meal becomes one CarbIntake using the meal-level totals.
+    /// Uses the meal guid for stable LegacyId correlation with food entries.
+    /// </summary>
+    public List<CarbIntake> MapV3HistoryMealsToCarbIntakes(GlookoV3HistoriesResponse historiesData)
+    {
+        var carbs = new List<CarbIntake>();
+        if (historiesData?.Histories == null) return carbs;
+
+        foreach (var meal in ExtractMeals(historiesData))
+        {
+            try
+            {
+                if (meal.SoftDeleted == true) continue;
+
+                var totalCarbs = meal.Carbs ?? 0;
+                if (totalCarbs <= 0) continue;
+
+                var timestamp = ParseHistoryTimestamp(meal.Timestamp);
+                if (timestamp == null) continue;
+
+                var legacyId = !string.IsNullOrEmpty(meal.Guid)
+                    ? $"glooko_v3meal_{meal.Guid}"
+                    : GenerateLegacyId("v3meal", timestamp.Value, $"carbs:{totalCarbs}");
+
+                var now = DateTime.UtcNow;
+                carbs.Add(new CarbIntake
+                {
+                    Id = Guid.CreateVersion7(),
+                    Timestamp = timestamp.Value,
+                    LegacyId = legacyId,
+                    Device = _connectorSource,
+                    DataSource = _connectorSource,
+                    Carbs = totalCarbs,
+                    CreatedAt = now,
+                    ModifiedAt = now
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 history meal", _connectorSource);
+            }
+        }
+
+        _logger.LogInformation(
+            "[{ConnectorSource}] Transformed {Count} carb intakes from v3 history meals",
+            _connectorSource, carbs.Count);
+
+        return carbs;
+    }
+
+    /// <summary>
+    /// Maps V3 history meals to ConnectorFoodEntryImport records for the food catalog pipeline.
+    /// Each food item within a meal becomes a separate ConnectorFoodEntryImport.
+    /// The ExternalEntryId uses the food guid for deduplication; the meal guid is preserved
+    /// in the MealName field for correlation with the CarbIntake record.
+    /// When V2 foods are provided, they are used to enrich the food entries with
+    /// externalId (Nutritionix ID) and brand data that V3 histories doesn't include.
+    /// </summary>
+    public List<ConnectorFoodEntryImport> MapV3HistoryMealsToConnectorEntries(
+        GlookoV3HistoriesResponse historiesData,
+        GlookoFood[]? v2Foods = null)
+    {
+        var results = new List<ConnectorFoodEntryImport>();
+        if (historiesData?.Histories == null) return results;
+
+        // Build a lookup from V2 food guid → V2 food record for metadata enrichment
+        var v2FoodByGuid = new Dictionary<string, GlookoFood>(StringComparer.OrdinalIgnoreCase);
+        if (v2Foods != null)
+        {
+            foreach (var f in v2Foods)
+            {
+                if (!string.IsNullOrEmpty(f.Guid) && f.SoftDeleted != true)
+                    v2FoodByGuid.TryAdd(f.Guid, f);
+            }
+        }
+
+        foreach (var meal in ExtractMeals(historiesData))
+        {
+            try
+            {
+                if (meal.SoftDeleted == true) continue;
+
+                var timestamp = ParseHistoryTimestamp(meal.Timestamp);
+                if (timestamp == null) continue;
+
+                if (meal.Foods == null || meal.Foods.Length == 0) continue;
+
+                var mealLabel = meal.MealType ?? "Meal";
+
+                foreach (var food in meal.Foods)
+                {
+                    try
+                    {
+                        if (food.SoftDeleted == true) continue;
+
+                        // Try to enrich with V2 food metadata (externalId, brand)
+                        var v2Match = food.Guid != null && v2FoodByGuid.TryGetValue(food.Guid, out var v2)
+                            ? v2
+                            : null;
+
+                        var carbValue = food.Carbs ?? 0;
+
+                        var externalEntryId = food.Guid ?? $"v3meal_{meal.Guid}_{food.Name}";
+
+                        // ExternalFoodId: prefer V2 externalId (Nutritionix ID) for proper deduplication,
+                        // fall back to food name when V2 data is unavailable
+                        var externalFoodId = v2Match?.ExternalId ?? food.ExternalId ?? food.Name ?? string.Empty;
+
+                        var servingQty = food.ServingQuantity ?? 1;
+                        var numServings = food.NumberOfServings ?? 1;
+                        var portions = servingQty * numServings;
+                        if (portions <= 0) portions = 1;
+
+                        results.Add(new ConnectorFoodEntryImport
+                        {
+                            ConnectorSource = _connectorSource,
+                            ExternalEntryId = externalEntryId,
+                            ExternalFoodId = externalFoodId,
+                            ConsumedAt = new DateTimeOffset(timestamp.Value, TimeSpan.Zero),
+                            MealName = mealLabel,
+                            Carbs = (decimal)carbValue,
+                            Protein = (decimal)(food.Protein ?? 0),
+                            Fat = (decimal)(food.Fat ?? 0),
+                            Energy = (decimal)(food.Calories ?? 0),
+                            Servings = (decimal)portions,
+                            ServingDescription = BuildV3ServingDescription(food),
+                            Food = BuildMergedFoodImport(food, v2Match, externalFoodId),
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 history food item '{FoodName}'",
+                            _connectorSource, food.Name);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[{ConnectorSource}] Error mapping V3 history meal", _connectorSource);
+            }
+        }
+
+        var enrichedCount = results.Count(r => !string.IsNullOrEmpty(r.Food?.BrandName) || r.ExternalFoodId != r.Food?.Name);
+        _logger.LogInformation(
+            "[{ConnectorSource}] Transformed {Count} food entries from v3 history meals ({Enriched} enriched with v2 metadata)",
+            _connectorSource, results.Count, enrichedCount);
+
+        return results;
+    }
+
+    /// <summary>
+    /// Builds a ConnectorFoodImport for the food catalog, merging V3 history food data
+    /// with V2 food metadata (externalId, brand) when available.
+    /// </summary>
+    private static ConnectorFoodImport? BuildMergedFoodImport(
+        GlookoV3HistoryFood food, GlookoFood? v2Match, string externalFoodId)
+    {
+        if (string.IsNullOrEmpty(food.Name))
+            return null;
+
+        return new ConnectorFoodImport
+        {
+            ExternalId = externalFoodId,
+            Name = food.Name,
+            BrandName = v2Match?.Brand ?? food.Brand,
+            Carbs = (decimal)(food.Carbs ?? 0),
+            Protein = (decimal)(food.Protein ?? 0),
+            Fat = (decimal)(food.Fat ?? 0),
+            Energy = (decimal)(food.Calories ?? 0),
+            Portion = (decimal)(food.ServingQuantity ?? 1),
+            Unit = food.ServingUnit,
+        };
+    }
+
+    /// <summary>
+    /// Builds a human-readable serving description from V3 history food data.
+    /// </summary>
+    private static string? BuildV3ServingDescription(GlookoV3HistoryFood food)
+    {
+        var qty = food.ServingQuantity;
+        var unit = food.ServingUnit;
+        var numServings = food.NumberOfServings;
+
+        if (qty == null && string.IsNullOrEmpty(unit)) return null;
+
+        var parts = new List<string>();
+        if (qty.HasValue) parts.Add(qty.Value.ToString("G"));
+        if (!string.IsNullOrEmpty(unit)) parts.Add(unit);
+        if (numServings is > 0 and not 1) parts.Add($"x{numServings.Value:G}");
+
+        return parts.Count > 0 ? string.Join(" ", parts) : null;
+    }
+
+    /// <summary>
+    /// Parses a V3 histories timestamp string and applies timezone correction.
+    /// V3 histories timestamps follow the same pattern as V2: labeled as UTC but actually local time.
+    /// </summary>
+    private DateTime? ParseHistoryTimestamp(string? timestamp)
+    {
+        if (string.IsNullOrWhiteSpace(timestamp)) return null;
+
+        if (!DateTime.TryParse(timestamp, out var parsedDate))
+        {
+            logger.LogWarning("Failed to parse V3 history timestamp: '{Timestamp}'", timestamp);
+            return null;
+        }
+
+        // V3 histories timestamps are in the same fake-UTC format as V2
+        return _timeMapper.GetCorrectedGlookoTime(parsedDate.ToUniversalTime());
+    }
+
+    /// <summary>
+    /// Extracts meal items from the flat V3 histories list.
+    /// The histories array contains typed entries; this filters for type == "meals"
+    /// and returns the meal data from each entry's Item property.
+    /// </summary>
+    public static IEnumerable<GlookoV3HistoryMeal> ExtractMeals(GlookoV3HistoriesResponse historiesData)
+    {
+        if (historiesData?.Histories == null) yield break;
+
+        foreach (var entry in historiesData.Histories)
+        {
+            if (entry.Type == "meals" && entry.Item != null && entry.SoftDeleted != true)
+                yield return entry.Item;
+        }
     }
 
     private static string GenerateLegacyId(string eventType, DateTime timestamp, string? additionalData = null)

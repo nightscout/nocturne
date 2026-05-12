@@ -155,7 +155,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             Id = id ?? _testGrantId,
             ClientEntityId = _testClientEntityId,
             SubjectId = _testSubjectId,
-            Scopes = new List<string> { "entries.read" },
+            Scopes = new List<string> { "glucose.read" },
             GrantType = "app",
             CreatedAt = DateTime.UtcNow,
         });
@@ -183,7 +183,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             ClientId = clientId ?? TestClientId,
             DeviceCodeHash = deviceCodeHash ?? TestDeviceCodeHash,
             UserCode = userCode ?? "ABCD1234",
-            Scopes = scopes ?? new List<string> { "entries.read" },
+            Scopes = scopes ?? new List<string> { "glucose.read" },
             ExpiresAt = expiresAt ?? DateTime.UtcNow.AddMinutes(15),
             ApprovedAt = approvedAt,
             DeniedAt = deniedAt,
@@ -209,7 +209,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         // Act
         var result = await service.CreateDeviceCodeAsync(
             TestClientId,
-            new List<string> { "entries.read" });
+            new List<string> { "glucose.read" });
 
         // Assert
         Assert.Equal(TestDeviceCode, result.DeviceCode);
@@ -223,7 +223,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             .FirstOrDefaultAsync(d => d.DeviceCodeHash == TestDeviceCodeHash);
         Assert.NotNull(entity);
         Assert.Equal(TestClientId, entity.ClientId);
-        Assert.Contains("entries.read", entity.Scopes);
+        Assert.Contains("glucose.read", entity.Scopes);
         Assert.True(entity.ExpiresAt > DateTime.UtcNow);
     }
 
@@ -237,7 +237,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         // Act
         var result = await service.CreateDeviceCodeAsync(
             TestClientId,
-            new List<string> { "entries.read" });
+            new List<string> { "glucose.read" });
 
         // Assert - verify XXXX-YYYY format using only the reduced alphabet
         // Alphabet: BCDFGHJKMNPQRSTVWXYZ23456789 (no vowels, no ambiguous chars)
@@ -256,7 +256,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         // Arrange
         using var db = CreateDbContext();
         await SeedDeviceCodeAsync(db, userCode: "TESTCD01",
-            scopes: new List<string> { "entries.read", "treatments.readwrite" });
+            scopes: new List<string> { "glucose.read", "treatments.readwrite" });
 
         var service = CreateService(db);
 
@@ -269,7 +269,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
         Assert.Equal(TestClientId, info.ClientId);
         Assert.Equal("Test App", info.ClientDisplayName);
         Assert.False(info.IsKnownClient);
-        Assert.Contains("entries.read", info.Scopes);
+        Assert.Contains("glucose.read", info.Scopes);
         Assert.Contains("treatments.readwrite", info.Scopes);
         Assert.False(info.IsExpired);
         Assert.False(info.IsApproved);
@@ -595,7 +595,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
             Id = grantId,
             ClientEntityId = clientEntityId ?? _testClientEntityId,
             SubjectId = subjectId ?? _testSubjectId,
-            Scopes = scopes ?? new List<string> { "entries.read" },
+            Scopes = scopes ?? new List<string> { "glucose.read" },
             GrantType = "app",
             CreatedAt = DateTime.UtcNow,
             RevokedAt = revokedAt,
@@ -628,7 +628,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
             ClientId = clientId ?? TestClientId,
             DeviceCodeHash = deviceCodeHash ?? TestDeviceCodeHash,
             UserCode = userCode ?? "ABCD1234",
-            Scopes = scopes ?? new List<string> { "entries.read" },
+            Scopes = scopes ?? new List<string> { "glucose.read" },
             ExpiresAt = expiresAt ?? DateTime.UtcNow.AddMinutes(15),
             ApprovedAt = approvedAt,
             DeniedAt = deniedAt,

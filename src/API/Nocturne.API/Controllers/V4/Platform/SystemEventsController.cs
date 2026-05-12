@@ -10,6 +10,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 /// </summary>
 /// <seealso cref="ISystemEventRepository"/>
 [ApiController]
+[Tags("Platform")]
 [Route("api/v4/system-events")]
 [Authorize]
 public class SystemEventsController : ControllerBase

@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { ArrowRight, ArrowLeft, Sprout, Cable } from "lucide-svelte";
+  import { ArrowRight, ArrowLeft, Sprout, Cable, ShieldAlert } from "lucide-svelte";
   import { Button } from "$lib/components/ui/button";
-  import Github from "lucide-svelte/icons/github";
   import { markSetupComplete } from "./setup.remote";
+  import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import {
     getServicesOverview,
@@ -34,9 +35,16 @@
   // - Subjects exist but not authenticated → redirect to /auth/login
   // - Authenticated → show onboarding wizard
 
+  // ── HTTPS guard ─────────────────────────────────────────────────────
+  const httpsRequired = $derived(
+    browser && window.location.protocol !== "https:" && !window.location.hostname.match(/^(localhost|127\.0\.0\.1|::1|\[::1\])$/)
+  );
+
   // ── Setup phase (pre-auth) ──────────────────────────────────────────
   let accountCreated = $state(false);
-  const setupRequired = $derived(!accountCreated && page.data?.setupRequired === true);
+  const setupRequired = $derived(
+    !accountCreated && page.data?.setupRequired === true
+  );
 
   const SETUP_STEPS = [
     { id: "tenant", label: "Name your instance", short: "Instance" },
@@ -48,11 +56,12 @@
   let setupStepIndex = $state(page.data?.tenantExists === true ? 1 : 0);
   const setupStep = $derived(SETUP_STEPS[setupStepIndex]);
   const setupProgressPct = $derived(
-    SETUP_STEPS.length <= 1 ? 100 : (setupStepIndex / (SETUP_STEPS.length - 1)) * 100
+    SETUP_STEPS.length <= 1
+      ? 100
+      : (setupStepIndex / (SETUP_STEPS.length - 1)) * 100
   );
 
-  function handleTenantCreated(slug: string) {
-    tenantSlug = slug;
+  function handleTenantCreated(_slug: string) {
     setupStepIndex = 1;
   }
 
@@ -85,26 +94,29 @@
   // ── State ───────────────────────────────────────────────────────────
   let path = $state<"fresh" | "migration">("fresh");
   let stepIndex = $state(0);
-  let tenantSlug = $state<string | null>(null);
   let selectedConnectorId = $state<string | null>(null);
   let selectedUploader = $state<UploaderApp | null>(null);
   // ── Reactive service queries (auto-activate when setup completes) ──
   // query() returns reactive objects anchored to this component's lifecycle.
   // They cannot be awaited in event handlers — must live in $derived context.
   const servicesQuery = $derived(!setupRequired ? getServicesOverview() : null);
-  const dataSourcesQuery = $derived(!setupRequired ? getActiveDataSources() : null);
+  const dataSourcesQuery = $derived(
+    !setupRequired ? getActiveDataSources() : null
+  );
   const uploaderSetupQuery = $derived(
     selectedUploader?.id ? getUploaderSetup(selectedUploader.id) : null
   );
 
   const servicesData = $derived(servicesQuery?.current ?? null);
-  const activeDataSources = $derived<DataSourceInfo[]>(dataSourcesQuery?.current ?? []);
+  const activeDataSources = $derived<DataSourceInfo[]>(
+    dataSourcesQuery?.current ?? []
+  );
   const uploaderSetupResponse = $derived(uploaderSetupQuery?.current ?? null);
   const servicesLoading = $derived(
     servicesQuery == null ||
-    servicesQuery.current === undefined ||
-    dataSourcesQuery == null ||
-    dataSourcesQuery.current === undefined
+      servicesQuery.current === undefined ||
+      dataSourcesQuery == null ||
+      dataSourcesQuery.current === undefined
   );
   let importProgress = $state(0);
   let migrationJobId = $state<string | undefined>(undefined);
@@ -342,7 +354,21 @@
   <main
     class="relative z-10 px-8 py-12 pb-16 max-[900px]:px-5 max-[900px]:py-7 max-[900px]:pb-10"
   >
-    {#if setupRequired}
+    {#if httpsRequired}
+      <div class="w-full max-w-lg mx-auto text-center py-20">
+        <div class="rounded-2xl border border-red-500/20 bg-red-500/5 p-8">
+          <ShieldAlert class="mx-auto mb-4 h-12 w-12 text-red-400" />
+          <h2 class="text-xl font-semibold text-white mb-3">HTTPS Required</h2>
+          <p class="text-white/60 text-sm leading-relaxed">
+            Nocturne requires a secure connection. Please access this site
+            using <strong class="text-white">https://</strong> instead of http://.
+          </p>
+          <p class="text-white/40 text-xs mt-4">
+            Passkey authentication and secure cookies require HTTPS to function.
+          </p>
+        </div>
+      </div>
+    {:else if setupRequired}
       <!-- ═══ Pre-auth setup: tenant identity → account creation ═══ -->
       <div
         class="w-full max-w-280 mx-auto grid grid-cols-[320px_1fr] gap-14 items-start max-[900px]:grid-cols-1 max-[900px]:gap-6"
@@ -512,7 +538,9 @@
                       </em>
                       .
                     </h1>
-                    <p class="max-w-140 text-base leading-relaxed text-white/50">
+                    <p
+                      class="max-w-140 text-base leading-relaxed text-white/50"
+                    >
                       Enter your credentials and we'll start syncing your data.
                     </p>
                   </div>
@@ -539,7 +567,9 @@
                       </em>
                       .
                     </h1>
-                    <p class="max-w-140 text-base leading-relaxed text-white/50">
+                    <p
+                      class="max-w-140 text-base leading-relaxed text-white/50"
+                    >
                       Follow the steps below to connect your phone app to
                       Nocturne.
                     </p>
@@ -567,7 +597,11 @@
                 onComplete={handleImportComplete}
               />
             {:else if currentStep?.id === "finish"}
-              <Finish {path} onEnterDashboard={handleEnterDashboard} onNavigateWithCoach={handleNavigateWithCoach} />
+              <Finish
+                {path}
+                onEnterDashboard={handleEnterDashboard}
+                onNavigateWithCoach={handleNavigateWithCoach}
+              />
             {/if}
           </div>
 
@@ -633,7 +667,7 @@
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Github class="h-3.5 w-3.5" />
+        <AppLogo icon="github" />
         Source
       </a>
     </div>

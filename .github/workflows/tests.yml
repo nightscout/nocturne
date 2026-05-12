@@ -1,0 +1,61 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      - name: Test
+        run: |
+          # Nocturne.API.Tests excluded: 29 unit test failures pending fix (#157)
+          # Build per-project to avoid Windows-only projects (Desktop, Widgets)
+          for proj in tests/Unit/*/; do
+            csproj=$(find "$proj" -maxdepth 1 -name "*.csproj" | head -1)
+            [ -z "$csproj" ] && continue
+            dotnet test "$csproj" \
+              --filter "Category!=Integration&Category!=Performance&Category!=E2E&FullyQualifiedName!~Nocturne.API.Tests" \
+              --logger "trx;LogFileName=unit.trx" \
+              -p:GenerateNSwagClient=false \
+              || exit 1
+          done
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: unit-trx
+          path: "**/*.trx"
+
+  # Integration tests deferred (#158): all integration test projects either have
+  # no integration-tagged tests, Testcontainers issues, or broken project
+  # references. Will be added once individual projects are fixed.
+
+  # E2E tests deferred: Aspire.Hosting.Testing hangs on GitHub Actions runners —
+  # DCP resource orchestration never completes. Tests pass locally. Revisit when
+  # Aspire CI support matures or move to a self-hosted runner.

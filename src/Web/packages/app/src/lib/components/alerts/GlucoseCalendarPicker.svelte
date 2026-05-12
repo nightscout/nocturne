@@ -20,9 +20,8 @@
   } from "@internationalized/date";
   import { ChevronLeft, ChevronRight } from "lucide-svelte";
   import { Button } from "$lib/components/ui/button";
-  import { cn } from "$lib/utils";
-  import GlucoseSparkline from "$lib/components/calendar/GlucoseSparkline.svelte";
   import { getPunchCardData } from "$api/generated/statistics.generated.remote";
+  import GlucosePickerCell from "$lib/components/alerts/GlucosePickerCell.svelte";
 
   interface Props {
     /** Currently-selected date, or undefined for the "Last 24 hours" sentinel. */
@@ -151,44 +150,16 @@
     {#each gridDays as { date, inMonth } (dateKey(date))}
       {@const entries = entriesByDate[dateKey(date)] ?? []}
       {@const future = isFuture(date)}
-      {@const selected = isSelected(date)}
-      {@const isToday = isTodayCell(date)}
-      <button
-        type="button"
+      <GlucosePickerCell
+        {date}
+        {entries}
+        {inMonth}
         disabled={future}
+        selected={isSelected(date)}
+        isToday={isTodayCell(date)}
+        {locale}
         onclick={() => pick(date)}
-        aria-label={date.toDate(tz).toLocaleDateString(locale, {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })}
-        aria-pressed={selected}
-        class={cn(
-          "relative h-16 rounded-md border bg-background overflow-hidden transition-colors",
-          "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset",
-          inMonth ? "border-border/60" : "border-transparent opacity-40",
-          future && "cursor-not-allowed opacity-30",
-          !future && "hover:bg-muted/40",
-          selected && "ring-2 ring-primary border-primary",
-          isToday && !selected && "ring-1 ring-primary/60"
-        )}
-      >
-        <span
-          class={cn(
-            "absolute top-1 left-1.5 text-[10px] font-medium z-10 tabular-nums",
-            inMonth ? "text-foreground" : "text-muted-foreground",
-            selected && "text-primary"
-          )}
-        >
-          {date.day}
-        </span>
-        {#if entries.length > 0}
-          <div class="absolute inset-0 pt-3.5 pointer-events-none">
-            <GlucoseSparkline {entries} />
-          </div>
-        {/if}
-      </button>
+      />
     {/each}
   </div>
 {/snippet}

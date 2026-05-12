@@ -79,7 +79,6 @@ public static class TenantCommandExtensions
         ExecuteCommandContext context)
     {
         var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
-        var interactionService = context.ServiceProvider.GetRequiredService<IInteractionService>();
 
         try
         {
@@ -99,13 +98,7 @@ public static class TenantCommandExtensions
                 JsonOptions, context.CancellationToken);
 
             if (tenants is null or { Count: 0 })
-            {
-                await interactionService.PromptConfirmationAsync(
-                    "Tenants",
-                    "No tenants found.",
-                    new MessageBoxInteractionOptions { ShowSecondaryButton = false });
-                return CommandResults.Success();
-            }
+                return CommandResults.Success("No tenants found", "");
 
             var md = new StringBuilder();
 
@@ -146,16 +139,14 @@ public static class TenantCommandExtensions
                 md.AppendLine();
             }
 
-            await interactionService.PromptConfirmationAsync(
-                $"Tenants ({tenants.Count})",
-                md.ToString(),
-                new MessageBoxInteractionOptions
+            return CommandResults.Success(
+                $"{tenants.Count} tenant(s)",
+                new CommandResultData
                 {
-                    ShowSecondaryButton = false,
-                    EnableMessageMarkdown = true,
+                    Value = md.ToString(),
+                    Format = CommandResultFormat.Markdown,
+                    DisplayImmediately = true,
                 });
-
-            return CommandResults.Success();
         }
         catch (Exception ex)
         {
@@ -264,7 +255,7 @@ public static class TenantCommandExtensions
 
             logger.LogInformation("Tenant '{Slug}' deleted successfully", selected.Slug);
 
-            return CommandResults.Success();
+            return CommandResults.Success($"Tenant '{selected.Slug}' deleted", "");
         }
         catch (Exception ex)
         {
@@ -379,7 +370,10 @@ public static class TenantCommandExtensions
                     slug);
             }
 
-            return CommandResults.Success();
+            var message = initWithSnapshot && snapshotSlugs.Contains(slug)
+                ? $"Tenant '{slug}' created with snapshot data"
+                : $"Tenant '{slug}' created";
+            return CommandResults.Success(message, "");
         }
         catch (Exception ex)
         {

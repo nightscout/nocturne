@@ -19,6 +19,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 /// <seealso cref="ITenantService"/>
 /// <seealso cref="ITenantRoleService"/>
 [ApiController]
+[Tags("Identity")]
 [Route("api/v4/member-invites")]
 [Produces("application/json")]
 public class MemberInviteController : ControllerBase
@@ -120,7 +121,7 @@ public class MemberInviteController : ControllerBase
             return NotFound();
 
         var followers = tenant.Members
-            .Where(m => m.Roles.Any(r => r.Slug == TenantPermissions.SeedRoles.Follower))
+            .Where(m => m.Roles.Any(r => r.Slug == TenantPermissions.SeedRoles.Viewer))
             .ToList();
 
         return Ok(followers);

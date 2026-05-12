@@ -1,0 +1,123 @@
+{{- if .Values.bootstrap.enabled -}}
+{{- $bundled := .Values.postgresql.enabled -}}
+{{- if and $bundled .Values.externalDatabase.host -}}
+{{- fail "Set EITHER postgresql.enabled OR externalDatabase.host, not both" -}}
+{{- end -}}
+{{- if not $bundled -}}
+{{- if not .Values.bootstrap.adminSecret.existingSecret -}}
+{{- fail "bootstrap.adminSecret.existingSecret must be set when bootstrap.enabled=true (or set bootstrap.enabled=false to run bootstrap-roles.sql manually)" -}}
+{{- end -}}
+{{- if not .Values.externalDatabase.host -}}
+{{- fail "externalDatabase.host is required when postgresql.enabled=false" -}}
+{{- end -}}
+{{- if not .Values.externalDatabase.appSecret.existingSecret -}}
+{{- fail "externalDatabase.appSecret.existingSecret is required" -}}
+{{- end -}}
+{{- if not .Values.externalDatabase.migratorSecret.existingSecret -}}
+{{- fail "externalDatabase.migratorSecret.existingSecret is required" -}}
+{{- end -}}
+{{- if not .Values.externalDatabase.webSecret.existingSecret -}}
+{{- fail "externalDatabase.webSecret.existingSecret is required (web role is created even if bots are disabled)" -}}
+{{- end -}}
+{{- end -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nocturne.bootstrap.fullname" . }}
+  labels: {{- include "nocturne.labels" . | nindent 4 }}
+  {{- if not $bundled }}
+  # External mode: pre-install hook so the bootstrap runs before API/Web.
+  # In bundled mode we deliberately emit NO helm.sh annotations — the Job
+  # is a regular Sync-phase resource alongside the postgres StatefulSet,
+  # and run.sh's pg_isready loop handles the timing. ArgoCD treats any
+  # helm.sh/hook* annotation as a hook marker, so even
+  # `hook-delete-policy: hook-succeeded` alone causes it to be parsed as
+  # a (typeless) hook and skipped during normal sync. k8s' built-in
+  # ttlSecondsAfterFinished handles cleanup instead.
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  {{- end }}
+spec:
+  backoffLimit: {{ .Values.bootstrap.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.bootstrap.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels: {{- include "nocturne.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "nocturne.serviceAccountName" . }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bootstrap
+          image: {{ include "nocturne.bootstrap.image" . }}
+          imagePullPolicy: {{ .Values.bootstrap.image.pullPolicy }}
+          # postgres:17-alpine doesn't declare a non-root USER; provide one
+          # so it satisfies pod-level runAsNonRoot.
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command: ["/bin/sh", "/scripts/run.sh"]
+          env:
+            - name: PGHOST
+              value: {{ include "nocturne.db.host" . | quote }}
+            - name: PGPORT
+              value: {{ include "nocturne.db.port" . | quote }}
+            - name: PGDATABASE
+              value: {{ include "nocturne.db.database" . | quote }}
+            {{- if $bundled }}
+            - name: PGUSER
+              value: "postgres"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.bundledPostgresSuperSecret" . }}
+                  key: {{ include "nocturne.bundledPostgresSuperKey" . }}
+            {{- else }}
+            - name: PGUSER
+              {{- if .Values.bootstrap.adminSecret.existingSecretUsernameKey }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.bootstrap.adminSecret.existingSecret }}
+                  key: {{ .Values.bootstrap.adminSecret.existingSecretUsernameKey }}
+                  optional: true
+              {{- else }}
+              value: {{ .Values.bootstrap.adminUser | quote }}
+              {{- end }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.bootstrap.adminSecret.existingSecret }}
+                  key: {{ .Values.bootstrap.adminSecret.existingSecretPasswordKey }}
+            {{- end }}
+            - name: MIGRATOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "migrator") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "migrator") }}
+            - name: APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "app") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "app") }}
+            - name: WEB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.db.passwordSecret" (dict "ctx" . "role" "web") }}
+                  key: {{ include "nocturne.db.passwordKey" (dict "ctx" . "role" "web") }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          resources: {{- toYaml .Values.bootstrap.resources | nindent 12 }}
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "nocturne.bootstrap.fullname" . }}
+            defaultMode: 0555
+{{- end }}

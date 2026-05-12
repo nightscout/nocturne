@@ -125,4 +125,16 @@ public class ConnectorRegistrationAttribute(
     ///     Supported data types for this connector.
     /// </summary>
     public SyncDataType[] SupportedDataTypes { get; set; } = [SyncDataType.Glucose];
+
+    /// <summary>
+    ///     Default minutes without data before status changes from active to stale.
+    ///     Real-time connectors (CGM) use 15; batch connectors use 180.
+    /// </summary>
+    public int DefaultActiveThresholdMinutes { get; set; } = 15;
+
+    /// <summary>
+    ///     Default minutes without data before status changes from stale to inactive.
+    ///     Real-time connectors use 60; batch connectors use 360.
+    /// </summary>
+    public int DefaultStaleThresholdMinutes { get; set; } = 60;
 }

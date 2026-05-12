@@ -19,11 +19,15 @@
                 },
                 {
                     question: "Is Nocturne free?",
-                    answer: "Yes! Nocturne is completely free and open source under the MIT license. You can use it, modify it, and contribute to it without any cost.",
+                    answer: "Nocturne is free and open source under the AGPL-3.0 license. You can self-host it, modify it, and contribute to it at no cost. A commercial license is also available for organisations that need to integrate Nocturne without the AGPL's source-disclosure requirements.",
                 },
                 {
                     question: "Who is Nocturne for?",
                     answer: "Nocturne is for anyone who uses Nightscout or wants to self-host their diabetes data. Whether you're using a DIY closed loop system, want to share your glucose data with caregivers, or just want to track your data independently, Nocturne can help.",
+                },
+                {
+                    question: "How does the licensing work?",
+                    answer: "Nocturne is dual-licensed. For individuals and community self-hosters, it is available under the AGPL-3.0 — free to use, modify, and self-host, with the requirement that any modifications you distribute are also open source. For organisations that need to integrate Nocturne into proprietary products or services without those source-disclosure obligations — such as clinics, device manufacturers, or diabetes management platforms — a commercial license is available. This model lets us build a sustainable revenue stream with partnering organisations while fully protecting the rights of individual users and the broader diabetes community.",
                 },
             ],
         },
@@ -99,30 +103,27 @@
     ];
 </script>
 
-<div class="container mx-auto px-4 py-12">
-    <!-- Hero -->
-    <div class="text-center mb-16">
-        <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-            Frequently Asked Questions
+<div class="max-w-[900px] mx-auto px-6">
+    <!-- Page heading -->
+    <div class="pt-20 pb-[60px] border-b border-border">
+        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">FAQ</div>
+        <h1 class="text-[clamp(2rem,4vw,3.2rem)] font-bold leading-[1.15] tracking-[-0.025em] text-foreground m-0 mb-4">
+            Common questions.<br />
+            <em class="text-glucose-in-range">Straight answers.</em>
         </h1>
-        <p class="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Find answers to common questions about Nocturne, installation, migration,
-            and more.
+        <p class="text-base leading-[1.65] text-muted-foreground max-w-[520px] m-0">
+            Answers to frequent questions about Nocturne, installation, migration,
+            and the technology stack.
         </p>
     </div>
 
     <!-- FAQ Categories -->
-    <div class="max-w-3xl mx-auto space-y-12">
-        {#each faqCategories as category}
-            <section>
-                <h2 class="text-xl font-bold mb-6 flex items-center gap-3">
-                    <div
-                        class="w-10 h-10 rounded-lg {category.color} flex items-center justify-center"
-                    >
-                        <category.icon class="w-5 h-5" />
-                    </div>
-                    {category.title}
-                </h2>
+    <div class="flex flex-col">
+        {#each faqCategories as category, ci}
+            <section class="py-16 border-t border-border">
+                <div class="mb-8">
+                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground">0{ci + 1} &mdash; {category.title}</div>
+                </div>
 
                 <Accordion.Root type="multiple" class="space-y-3">
                     {#each category.questions as faq, index}
@@ -146,30 +147,23 @@
     </div>
 
     <!-- Still Have Questions -->
-    <section class="mt-20 text-center">
-        <div
-            class="max-w-xl mx-auto rounded-2xl border border-primary/20 bg-card/80 p-8"
-        >
-            <h2 class="text-2xl font-bold mb-4">Still Have Questions?</h2>
-            <p class="text-muted-foreground mb-6">
-                Check out the documentation for detailed guides, or visit GitHub
-                to ask the community.
-            </p>
-            <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button href="/docs" size="lg" class="gap-2">
-                    Browse Documentation
-                    <ArrowRight class="w-4 h-4" />
-                </Button>
-                <Button
-                    href="https://github.com/your-org/nocturne"
-                    variant="outline"
-                    size="lg"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
-                    Visit GitHub
-                </Button>
-            </div>
+    <section class="border-t border-border py-20">
+        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground">Still have questions?</div>
+        <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold tracking-[-0.02em] text-foreground mt-3">Check the docs or ask the community.</h2>
+        <div class="flex flex-col sm:flex-row gap-4 mt-6">
+            <Button href="/docs" size="lg" class="gap-2">
+                Browse documentation
+                <ArrowRight class="w-4 h-4" />
+            </Button>
+            <Button
+                href="https://github.com/nightscout/nocturne"
+                variant="outline"
+                size="lg"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                Visit GitHub
+            </Button>
         </div>
     </section>
 </div>

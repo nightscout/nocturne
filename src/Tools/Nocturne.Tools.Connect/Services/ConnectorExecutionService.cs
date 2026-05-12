@@ -522,21 +522,17 @@ public class ConnectorExecutionService(
             sessionStore,
             _loggerFactory.CreateLogger<MyLifeAuthTokenProvider>()
         );
-        var eventsCache = new MyLifeEventsCache(
-            sessionStore,
-            new MyLifeSyncService(soapClient, _loggerFactory.CreateLogger<MyLifeSyncService>()),
-            _loggerFactory.CreateLogger<MyLifeEventsCache>()
-        );
+        var syncService = new MyLifeSyncService(soapClient, _loggerFactory.CreateLogger<MyLifeSyncService>());
         var eventProcessor = new MyLifeEventProcessor();
         var service = new MyLifeConnectorService(
             new HttpClient(),
             Options.Create(config),
             _loggerFactory.CreateLogger<MyLifeConnectorService>(),
             tokenProvider,
-            eventsCache,
             eventProcessor,
             sessionStore,
-            null!
+            syncService,
+            null
         );
         return new ConnectorServiceWrapper<MyLifeConnectorConfiguration>(service);
     }

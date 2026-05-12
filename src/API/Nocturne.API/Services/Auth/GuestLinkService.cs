@@ -22,14 +22,14 @@ public class GuestLinkService : IGuestLinkService
 
     private static readonly HashSet<string> AllowedGuestScopes = new(StringComparer.OrdinalIgnoreCase)
     {
-        OAuthScopes.EntriesRead, OAuthScopes.TreatmentsRead, OAuthScopes.DeviceStatusRead,
-        OAuthScopes.ProfileRead, OAuthScopes.HeartRateRead, OAuthScopes.StepCountRead,
-        OAuthScopes.NotificationsRead, OAuthScopes.ReportsRead, OAuthScopes.IdentityRead,
+        OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead, OAuthScopes.DevicesRead,
+        OAuthScopes.TherapyRead, OAuthScopes.HeartRateRead, OAuthScopes.StepCountRead,
+        OAuthScopes.AlertsRead, OAuthScopes.ReportsRead, OAuthScopes.IdentityRead,
         OAuthScopes.HealthRead,
     };
 
     private static readonly List<string> DefaultScopes =
-        [OAuthScopes.HealthRead, OAuthScopes.ProfileRead, OAuthScopes.ReportsRead];
+        [OAuthScopes.HealthRead, OAuthScopes.TherapyRead, OAuthScopes.ReportsRead];
 
     private readonly NocturneDbContext _dbContext;
     private readonly ILogger<GuestLinkService> _logger;
@@ -168,10 +168,16 @@ public class GuestLinkService : IGuestLinkService
     /// <inheritdoc />
     public async Task<IReadOnlyList<GuestLinkInfo>> GetGuestLinksAsync(
         Guid dataOwnerSubjectId,
+        bool includeDismissed = false,
         CancellationToken ct = default)
     {
-        var grants = await _dbContext.OAuthGrants
-            .Where(g => g.SubjectId == dataOwnerSubjectId && g.GrantType == OAuthGrantTypes.Guest)
+        var query = _dbContext.OAuthGrants
+            .Where(g => g.SubjectId == dataOwnerSubjectId && g.GrantType == OAuthGrantTypes.Guest);
+
+        if (!includeDismissed)
+            query = query.Where(g => g.DismissedAt == null);
+
+        var grants = await query
             .OrderByDescending(g => g.CreatedAt)
             .ToListAsync(ct);
 
@@ -201,6 +207,43 @@ public class GuestLinkService : IGuestLinkService
         await _dbContext.SaveChangesAsync(ct);
 
         _logger.LogInformation("Guest link {GrantId} revoked by {RequestingSubjectId}", grantId, requestingSubjectId);
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> DismissAsync(Guid grantId, Guid requestingSubjectId, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+
+        var grant = await _dbContext.OAuthGrants
+            .FirstOrDefaultAsync(g =>
+                g.Id == grantId
+                && g.GrantType == OAuthGrantTypes.Guest
+                && g.DismissedAt == null, ct);
+
+        if (grant is null) return false;
+
+        if (grant.SubjectId != requestingSubjectId && grant.CreatedBySubjectId != requestingSubjectId)
+        {
+            _logger.LogWarning(
+                "Subject {RequestingSubjectId} attempted to dismiss guest grant {GrantId} owned by {SubjectId}",
+                requestingSubjectId, grantId, grant.SubjectId);
+            return false;
+        }
+
+        var isTerminal = grant.RevokedAt.HasValue || grant.ExpiresAt <= now;
+        if (!isTerminal)
+        {
+            _logger.LogWarning(
+                "Subject {RequestingSubjectId} attempted to dismiss non-terminal guest grant {GrantId}",
+                requestingSubjectId, grantId);
+            return false;
+        }
+
+        grant.DismissedAt = now;
+        await _dbContext.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Guest link {GrantId} dismissed by {RequestingSubjectId}", grantId, requestingSubjectId);
         return true;
     }
 
@@ -265,6 +308,7 @@ public class GuestLinkService : IGuestLinkService
             ActivatedAt = entity.ActivatedAt,
             ActivatedIp = entity.ActivatedIp,
             RevokedAt = entity.RevokedAt,
+            DismissedAt = entity.DismissedAt,
             Status = status,
         };
     }

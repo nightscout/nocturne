@@ -30,6 +30,10 @@ public enum ConnectorPropertyKey
     SyncActivity,
     SyncFood,
 
+    // Status thresholds
+    ActiveThresholdMinutes,
+    StaleThresholdMinutes,
+
     // Common credentials
     Username,
     Password,

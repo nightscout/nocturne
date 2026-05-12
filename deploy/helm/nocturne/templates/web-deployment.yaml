@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nocturne.web.fullname" . }}
+  labels:
+    {{- include "nocturne.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  {{- if not .Values.web.autoscaling.enabled }}
+  replicas: {{ .Values.web.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "nocturne.web.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "nocturne.web.selectorLabels" . | nindent 8 }}
+      {{- with .Values.web.podAnnotations }}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "nocturne.serviceAccountName" . }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: web
+          image: {{ include "nocturne.web.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Dockerfile.web (the published image) doesn't declare a non-root
+          # USER; provide one explicitly so it satisfies pod-level
+          # runAsNonRoot. Users can override via containerSecurityContext.
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.web.containerPort }}
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: {{ .Values.web.containerPort | quote }}
+            - name: NOCTURNE_API_URL
+              value: {{ include "nocturne.api.internalUrl" . | quote }}
+            {{- if .Values.baseUrl }}
+            - name: PUBLIC_BASE_DOMAIN
+              value: {{ .Values.baseUrl | quote }}
+            {{- end }}
+            - name: INSTANCE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nocturne.instanceKeySecretName" . }}
+                  key: {{ include "nocturne.instanceKeySecretKey" . }}
+          # No documented HTTP health endpoint on the web container in v0; using TCP probe.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources: {{- toYaml .Values.web.resources | nindent 12 }}
+      {{- with .Values.web.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.web.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.web.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}

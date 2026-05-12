@@ -15,8 +15,8 @@ public sealed class ScalarExtensionsDocumentTransformer : IOpenApiDocumentTransf
     {
         ["Authentication & Identity"] = ["Authentication", "OIDC Discovery", "Identity"],
         ["Health Data"] = ["Glucose", "Treatments", "Health", "Devices", "State Spans"],
-        ["Insights & Alerting"] = ["Analytics", "Monitoring"],
-        ["Configuration"] = ["Profiles", "Connectors", "Metadata"],
+        ["Insights & Alerting"] = ["Analytics", "Current Therapy State", "Monitoring"],
+        ["Configuration"] = ["Profiles", "Coach Marks", "Connectors", "Metadata"],
         ["Administration"] = ["Platform", "PlatformAdmin", "TenantAdmin"],
     };
 
