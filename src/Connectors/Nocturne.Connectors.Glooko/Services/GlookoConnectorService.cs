@@ -17,19 +17,6 @@ using Nocturne.Core.Models.V4;
 namespace Nocturne.Connectors.Glooko.Services;
 
 /// <summary>
-///     Lightweight context for food-to-carb attribution within a sync chunk.
-/// </summary>
-internal sealed class GlookoFoodContext
-{
-    /// <summary>
-    ///     Resolves a food entry's ExternalEntryId to the LegacyId of the CarbIntake it belongs to.
-    ///     V2: direct mapping (glooko_food_{externalEntryId}).
-    ///     V3: food guid → meal guid → glooko_v3meal_{mealGuid}.
-    /// </summary>
-    public Func<string, string?>? FoodEntryToCarbLegacyId { get; set; }
-}
-
-/// <summary>
 ///     Connector service for Glooko data source.
 ///     Based on the original nightscout-connect Glooko implementation.
 /// </summary>
@@ -382,14 +369,17 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         await PublishFoodEntriesAndAttributeAsync(
             foodEntryImports, carbs, foodResolver, config, cancellationToken);
 
-        // 4. State spans + temp basals
-        var stateSpans = _stateSpanMapper.TransformV2ToStateSpans(batchData);
-        await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-            stateSpans, PublishStateSpanDataAsync, config, cancellationToken);
+        // 4. State spans + temp basals (old code only counted temp basals in ItemsSynced)
+        if (activeTypes.Contains(SyncDataType.StateSpans))
+        {
+            var stateSpans = _stateSpanMapper.TransformV2ToStateSpans(batchData);
+            if (stateSpans.Count > 0)
+                await PublishStateSpanDataAsync(stateSpans, config, cancellationToken);
 
-        var tempBasals = _tempBasalMapper.TransformV2ToTempBasals(batchData);
-        await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-            tempBasals, PublishTempBasalDataAsync, config, cancellationToken);
+            var tempBasals = _tempBasalMapper.TransformV2ToTempBasals(batchData);
+            if (tempBasals.Count > 0 && await PublishTempBasalDataAsync(tempBasals, config, cancellationToken))
+                result.ItemsSynced[SyncDataType.StateSpans] = tempBasals.Count;
+        }
 
         return true;
     }
@@ -489,23 +479,34 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         await PublishFoodEntriesAndAttributeAsync(
             foodEntryImports, allCarbs, foodResolver, config, cancellationToken);
 
-        // 4. State spans + temp basals
-        var stateSpans = _stateSpanMapper.TransformV3ToStateSpans(v3Data);
-        await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-            stateSpans, PublishStateSpanDataAsync, config, cancellationToken);
+        // 4. State spans + temp basals (old code only counted temp basals in ItemsSynced)
+        if (activeTypes.Contains(SyncDataType.StateSpans))
+        {
+            var stateSpans = _stateSpanMapper.TransformV3ToStateSpans(v3Data);
+            if (stateSpans.Count > 0)
+                await PublishStateSpanDataAsync(stateSpans, config, cancellationToken);
 
-        var tempBasals = _tempBasalMapper.TransformV3ToTempBasals(v3Data);
-        await PublishRecordTypeAsync(result, SyncDataType.StateSpans, activeTypes,
-            tempBasals, PublishTempBasalDataAsync, config, cancellationToken);
+            var tempBasals = _tempBasalMapper.TransformV3ToTempBasals(v3Data);
+            if (tempBasals.Count > 0 && await PublishTempBasalDataAsync(tempBasals, config, cancellationToken))
+                result.ItemsSynced[SyncDataType.StateSpans] = tempBasals.Count;
+        }
 
-        // 5. Device events + system events
-        var deviceEvents = _v4TreatmentMapper.MapV3DeviceEvents(v3Data);
-        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-            deviceEvents, PublishDeviceEventDataAsync, config, cancellationToken);
+        // 5. Device events + system events (summed into single ItemsSynced entry)
+        if (activeTypes.Contains(SyncDataType.DeviceEvents))
+        {
+            var deviceEventCount = 0;
 
-        var systemEvents = _systemEventMapper.TransformV3ToSystemEvents(v3Data);
-        await PublishRecordTypeAsync(result, SyncDataType.DeviceEvents, activeTypes,
-            systemEvents, PublishSystemEventDataAsync, config, cancellationToken);
+            var deviceEvents = _v4TreatmentMapper.MapV3DeviceEvents(v3Data);
+            if (deviceEvents.Count > 0 && await PublishDeviceEventDataAsync(deviceEvents, config, cancellationToken))
+                deviceEventCount += deviceEvents.Count;
+
+            var systemEvents = _systemEventMapper.TransformV3ToSystemEvents(v3Data);
+            if (systemEvents.Count > 0 && await PublishSystemEventDataAsync(systemEvents, config, cancellationToken))
+                deviceEventCount += systemEvents.Count;
+
+            if (deviceEventCount > 0)
+                result.ItemsSynced[SyncDataType.DeviceEvents] = deviceEventCount;
+        }
 
         return true;
     }
