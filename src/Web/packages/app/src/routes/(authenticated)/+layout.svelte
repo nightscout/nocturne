@@ -95,9 +95,10 @@
     }
   }
 
-  // Initialize realtime and title/favicon services
+  // Initialize realtime and title/favicon services for users authorized to
+  // view glucose data (authenticated with read permissions, or public site visitors).
   $effect(() => {
-    if (data.isAuthenticated) {
+    if (data.canViewRealtimeData) {
       realtimeStore.initialize();
       titleFaviconService.initialize();
     }
