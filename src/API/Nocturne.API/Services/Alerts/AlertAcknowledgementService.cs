@@ -60,7 +60,7 @@ internal sealed class AlertAcknowledgementService(
             return;
         }
 
-        var excursionIds = excursions.Select(e => e.Id).ToList();
+        var excursionIds = excursions.Select(e => e.Id).ToHashSet();
         var instances = await db.AlertInstances
             .Where(i => excursionIds.Contains(i.AlertExcursionId) && i.ResolvedAt == null)
             .ToListAsync(ct);
