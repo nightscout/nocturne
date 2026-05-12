@@ -737,14 +737,13 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     /// <param name="values">Collection of numeric values</param>
     /// <returns>Mean value rounded to one decimal place</returns>
-    public double CalculateMean(IEnumerable<double> values)
+    public double CalculateMean(IList<double> values)
     {
-        var valuesList = values.ToList();
-        if (!valuesList.Any())
+        if (values.Count == 0)
             return 0;
 
-        var sum = valuesList.Sum();
-        return Math.Round((sum / valuesList.Count) * 10) / 10;
+        var sum = values.Sum();
+        return Math.Round((sum / values.Count) * 10) / 10;
     }
 
     /// <summary>
@@ -753,23 +752,22 @@ public class StatisticsService : IStatisticsService
     /// <param name="sortedValues">Pre-sorted collection of values</param>
     /// <param name="percentile">Percentile to calculate (0-100)</param>
     /// <returns>Value at the specified percentile</returns>
-    public double CalculatePercentile(IEnumerable<double> sortedValues, double percentile)
+    public double CalculatePercentile(IList<double> sortedValues, double percentile)
     {
-        var sorted = sortedValues.ToList();
-        if (!sorted.Any())
+        if (sortedValues.Count == 0)
             return 0;
 
-        var index = (percentile / 100) * (sorted.Count - 1);
+        var index = (percentile / 100) * (sortedValues.Count - 1);
         var lower = (int)Math.Floor(index);
         var upper = (int)Math.Ceiling(index);
 
         if (lower == upper)
         {
-            return sorted[lower];
+            return sortedValues[lower];
         }
 
         var weight = index - lower;
-        return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+        return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
     }
 
     /// <summary>
@@ -1453,7 +1451,8 @@ public class StatisticsService : IStatisticsService
     /// <returns>Estimated HbA1C as a formatted string</returns>
     public string CalculateEstimatedHbA1C(IEnumerable<double> values)
     {
-        var mean = CalculateMean(values);
+        var valuesList = values as IList<double> ?? values.ToList();
+        var mean = CalculateMean(valuesList);
         if (mean == 0)
             return "0.0";
         var a1c = (mean + 46.7) / 28.7;
