@@ -22,8 +22,6 @@ const schema = z.object({
   age: z.number().min(0, "Age must be non-negative"),
 });
 
-type FormValues = z.infer<typeof schema>;
-
 function createMockForm() {
   let enhanceCallback: any;
   const submitSpy = vi.fn();
