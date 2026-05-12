@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Helpers;
 using Nocturne.API.Multitenancy;
 
 namespace Nocturne.API.Middleware;
@@ -121,15 +122,7 @@ public partial class OidcCallbackRedirectMiddleware
     {
         try
         {
-            // Restore base64 padding
-            var padded = (encoded.Length % 4) switch
-            {
-                2 => encoded + "==",
-                3 => encoded + "=",
-                _ => encoded,
-            };
-
-            var bytes = Convert.FromBase64String(padded.Replace("-", "+").Replace("_", "/"));
+            var bytes = Base64Url.Decode(encoded);
             var json = Encoding.UTF8.GetString(bytes);
 
             using var doc = JsonDocument.Parse(json);
