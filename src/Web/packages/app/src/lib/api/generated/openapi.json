@@ -8595,7 +8595,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       }
     },
     "/api/v4/admin/platform-settings/{category}": {
@@ -8637,7 +8638,8 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "query"
       },
       "put": {
         "tags": [
@@ -8682,7 +8684,50 @@
               }
             }
           }
-        }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAll",
+          "Get"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Platform Settings"
+        ],
+        "summary": "Deletes platform settings for a category, removing all stored credentials.",
+        "operationId": "PlatformSettings_Delete",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAll",
+          "Get"
+        ]
       }
     },
     "/api/v4/admin/platform-settings/decrypted": {
@@ -8690,7 +8735,7 @@
         "tags": [
           "Platform Settings"
         ],
-        "summary": "Returns decrypted credentials for all configured platforms.\nInternal use only — called by the SvelteKit bot service on startup.\nRequires platform admin + instance key authentication.",
+        "summary": "Returns decrypted credentials for all configured platforms.\nRestricted to instance-key authentication only (server-to-server).",
         "operationId": "PlatformSettings_GetAllDecrypted",
         "responses": {
           "200": {

@@ -6,6 +6,23 @@ using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services;
 
+public record FieldDefinition(string Name, string Label, bool Required);
+
+public class PlatformSettingsSummary
+{
+    public string Category { get; init; } = string.Empty;
+    public bool Enabled { get; init; }
+    public List<string> ConfiguredFields { get; init; } = [];
+    public List<FieldDefinition> Fields { get; init; } = [];
+}
+
+public class PlatformCredentials
+{
+    public string Category { get; init; } = string.Empty;
+    public bool Enabled { get; init; }
+    public Dictionary<string, string> Fields { get; init; } = new();
+}
+
 public class PlatformSettingsService
 {
     private readonly NocturneDbContext _db;
@@ -55,6 +72,11 @@ public class PlatformSettingsService
 
     public static bool IsValidCategory(string category) => CategorySchemas.ContainsKey(category);
 
+    private static HashSet<string> GetValidFieldNames(string category)
+        => CategorySchemas.TryGetValue(category, out var fields)
+            ? fields.Select(f => f.Name).ToHashSet()
+            : [];
+
     public async Task<List<PlatformSettingsSummary>> GetAllAsync()
     {
         var entities = await _db.PlatformSettings.AsNoTracking().ToListAsync();
@@ -87,16 +109,19 @@ public class PlatformSettingsService
 
     /// <summary>
     /// Returns all decrypted platform credentials for bot initialization.
-    /// Secrets are never exposed in API responses — only via this internal method.
+    /// Only callable via instance-key auth (server-to-server).
     /// </summary>
     public async Task<List<PlatformCredentials>> GetAllDecryptedAsync()
     {
+        if (!_encryption.IsConfigured)
+            return [];
+
         var entities = await _db.PlatformSettings.AsNoTracking().ToListAsync();
         var results = new List<PlatformCredentials>();
         foreach (var entity in entities)
         {
             var decrypted = new Dictionary<string, string>();
-            if (entity.EncryptedJson != "{}" && _encryption.IsConfigured)
+            if (entity.EncryptedJson != "{}")
             {
                 var encrypted = JsonSerializer.Deserialize<Dictionary<string, string>>(
                     entity.EncryptedJson, JsonOptions) ?? [];
@@ -118,14 +143,18 @@ public class PlatformSettingsService
         if (!IsValidCategory(category))
             return (false, new() { ["category"] = "Unknown category" });
 
+        if (!_encryption.IsConfigured)
+            return (false, new() { ["_"] = "Instance encryption key is not configured. Set the instance key before saving credentials." });
+
         var schema = CategorySchemas[category];
+        var validFieldNames = GetValidFieldNames(category);
 
         var entity = await _db.PlatformSettings
             .FirstOrDefaultAsync(e => e.Category == category);
 
         // Merge: non-empty incoming fields overwrite, empty fields preserve existing
         var existing = new Dictionary<string, string>();
-        if (entity is not null && entity.EncryptedJson != "{}" && _encryption.IsConfigured)
+        if (entity is not null && entity.EncryptedJson != "{}")
         {
             var enc = JsonSerializer.Deserialize<Dictionary<string, string>>(
                 entity.EncryptedJson, JsonOptions) ?? [];
@@ -135,6 +164,9 @@ public class PlatformSettingsService
         var merged = new Dictionary<string, string>(existing);
         foreach (var (key, value) in fields)
         {
+            if (!validFieldNames.Contains(key))
+                continue; // Strip unknown keys
+
             if (!string.IsNullOrWhiteSpace(value))
                 merged[key] = value;
         }
@@ -154,9 +186,7 @@ public class PlatformSettingsService
             return (false, errors);
 
         // Encrypt all fields
-        var encrypted = _encryption.IsConfigured
-            ? _encryption.EncryptSecrets(merged)
-            : merged;
+        var encrypted = _encryption.EncryptSecrets(merged);
         var encryptedJson = JsonSerializer.Serialize(encrypted, JsonOptions);
         var configuredFields = merged
             .Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
@@ -179,27 +209,25 @@ public class PlatformSettingsService
             entity.Enabled = enabled;
             entity.EncryptedJson = encryptedJson;
             entity.ConfiguredFields = configuredFields;
-            entity.SysUpdatedAt = DateTime.UtcNow;
         }
 
         await _db.SaveChangesAsync();
         return (true, null);
     }
 
-    public record FieldDefinition(string Name, string Label, bool Required);
-
-    public class PlatformSettingsSummary
+    public async Task<bool> DeleteAsync(string category)
     {
-        public string Category { get; init; } = string.Empty;
-        public bool Enabled { get; init; }
-        public List<string> ConfiguredFields { get; init; } = [];
-        public List<FieldDefinition> Fields { get; init; } = [];
-    }
+        if (!IsValidCategory(category))
+            return false;
 
-    public class PlatformCredentials
-    {
-        public string Category { get; init; } = string.Empty;
-        public bool Enabled { get; init; }
-        public Dictionary<string, string> Fields { get; init; } = new();
+        var entity = await _db.PlatformSettings
+            .FirstOrDefaultAsync(e => e.Category == category);
+
+        if (entity is null)
+            return false;
+
+        _db.PlatformSettings.Remove(entity);
+        await _db.SaveChangesAsync();
+        return true;
     }
 }

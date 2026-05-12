@@ -3154,6 +3154,14 @@ public class NocturneDbContext : DbContext
                 }
                 tenantMemberEntity.SysUpdatedAt = utcNow;
             }
+            else if (entry.Entity is PlatformSettingsEntity platformSettingsEntity)
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    platformSettingsEntity.SysCreatedAt = utcNow;
+                }
+                platformSettingsEntity.SysUpdatedAt = utcNow;
+            }
         }
     }
 

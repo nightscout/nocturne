@@ -25,7 +25,7 @@
   import * as grantsRemote from "$lib/data/oauth.remote";
   import * as oidcRemote from "./oidc-providers.remote";
   import * as adminSubjectsRemote from "./admin-subjects.remote";
-  import * as platformSettingsRemote from "./platform-settings.remote";
+  import * as platformSettingsRemote from "$lib/api/generated/platformSettings.generated.remote";
   import IntegrationsTabContent from "$lib/components/admin/IntegrationsTabContent.svelte";
   import type { PageProps } from "./$types";
   import UsersTabContent from "$lib/components/admin/UsersTabContent.svelte";
@@ -210,7 +210,7 @@
       const [rols, grantsList, platformSettingsList] = await Promise.all([
         rolesRemote.getRoles(),
         loadAllGrants(),
-        platformSettingsRemote.getPlatformSettings(),
+        platformSettingsRemote.getAll(),
       ]);
       await loadOidcData();
       roles = rols || [];
@@ -376,8 +376,14 @@
   // ============================================================================
 
   async function handlePlatformSettingsSave(category: string, enabled: boolean, fields: Record<string, string>) {
-    await platformSettingsRemote.upsertPlatformSettings({ category, enabled, fields });
-    const updated = await platformSettingsRemote.getPlatformSettings();
+    await platformSettingsRemote.upsert({ category, request: { enabled, fields } });
+    const updated = await platformSettingsRemote.getAll();
+    if (updated) platformSettings = updated;
+  }
+
+  async function handlePlatformSettingsDelete(category: string) {
+    await platformSettingsRemote.remove(category);
+    const updated = await platformSettingsRemote.getAll();
     if (updated) platformSettings = updated;
   }
 
@@ -492,6 +498,7 @@
       <IntegrationsTabContent
         platforms={platformSettings}
         onSave={handlePlatformSettingsSave}
+        onDelete={handlePlatformSettingsDelete}
       />
     </Tabs.Root>
   {/if}

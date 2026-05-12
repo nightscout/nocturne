@@ -68,6 +68,7 @@ import {
   PasskeyClient,
   PatientRecordClient,
   PlatformClient,
+  PlatformSettingsClient,
   PredictionClient,
   ProcessingClient,
   ProfileClient,
@@ -168,6 +169,7 @@ export class ApiClient {
   public readonly passkey: PasskeyClient;
   public readonly patientRecord: PatientRecordClient;
   public readonly platform: PlatformClient;
+  public readonly platformSettings: PlatformSettingsClient;
   public readonly predictions: PredictionClient;
   public readonly processing: ProcessingClient;
   public readonly profile: ProfileClient;
@@ -268,6 +270,7 @@ export class ApiClient {
     this.passkey = new PasskeyClient(apiBaseUrl, http);
     this.patientRecord = new PatientRecordClient(apiBaseUrl, http);
     this.platform = new PlatformClient(apiBaseUrl, http);
+    this.platformSettings = new PlatformSettingsClient(apiBaseUrl, http);
     this.predictions = new PredictionClient(apiBaseUrl, http);
     this.processing = new ProcessingClient(apiBaseUrl, http);
     this.profile = new ProfileClient(apiBaseUrl, http);

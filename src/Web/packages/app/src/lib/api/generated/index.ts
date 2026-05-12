@@ -27,6 +27,7 @@ export * from './services.generated.remote';
 export * from './supports.generated.remote';
 export * from './systems.generated.remote';
 export * from './accessRequests.generated.remote';
+export { upsert } from './platformSettings.generated.remote';
 export { addMember, removeMember, listInvites, provision, getMemberCredentials, attachOidcIdentity, removePasskeyCredential, removeOidcIdentity } from './tenants.generated.remote';
 export * from './alertCustomSounds.generated.remote';
 export { validateInvite, redeemInvite } from './alertInvites.generated.remote';
@@ -34,7 +35,7 @@ export * from './alertReplays.generated.remote';
 export * from './alertRules.generated.remote';
 export * from './alerts.generated.remote';
 export * from './notifications.generated.remote';
-export { get } from './tenantAlertSettings.generated.remote';
+// './tenantAlertSettings.generated.remote' - all exports collide, import directly
 export * from './trackers.generated.remote';
 export * from './chatIdentities.generated.remote';
 // './connectedApps.generated.remote' - all exports collide, import directly

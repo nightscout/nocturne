@@ -9537,9 +9537,51 @@ export class PlatformSettingsClient {
     }
 
     /**
+     * Deletes platform settings for a category, removing all stored credentials.
+     */
+    delete(category: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/admin/platform-settings/{category}";
+        if (category === undefined || category === null)
+            throw new globalThis.Error("The parameter 'category' must be defined.");
+        url_ = url_.replace("{category}", encodeURIComponent("" + category));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDelete(_response);
+        });
+    }
+
+    protected processDelete(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
      * Returns decrypted credentials for all configured platforms.
-    Internal use only — called by the SvelteKit bot service on startup.
-    Requires platform admin + instance key authentication.
+    Restricted to instance-key authentication only (server-to-server).
      */
     getAllDecrypted(signal?: AbortSignal): Promise<PlatformCredentials[]> {
         let url_ = this.baseUrl + "/api/v4/admin/platform-settings/decrypted";

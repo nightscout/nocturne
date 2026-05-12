@@ -37,30 +37,61 @@ async function fetchDbCredentials(): Promise<Map<string, ApiPlatformCredentials>
 	}
 }
 
-function buildPlatformConfig(
-	category: string,
-	dbCredentials: Map<string, ApiPlatformCredentials> | null,
-	envFallback: () => boolean,
-): PlatformCredentials | boolean {
-	const db = dbCredentials?.get(category);
-	if (db !== undefined) {
-		// DB row exists — DB is source of truth for this platform
-		if (!db.enabled) return false;
-		const fields = db.fields ?? {};
-		return {
+type PlatformConfigBuilder = {
+	fromDb: (fields: Record<string, string>) => PlatformCredentials;
+	fromEnv: () => boolean;
+};
+
+const platformBuilders: Record<string, PlatformConfigBuilder> = {
+	discord: {
+		fromDb: (fields) => ({
 			enabled: true,
 			botToken: fields["botToken"],
 			publicKey: fields["publicKey"],
 			applicationId: fields["applicationId"],
+		}),
+		fromEnv: () => !!env.DISCORD_BOT_TOKEN,
+	},
+	slack: {
+		fromDb: (fields) => ({
+			enabled: true,
+			botToken: fields["botToken"],
 			signingSecret: fields["signingSecret"],
+		}),
+		fromEnv: () => !!(env.SLACK_BOT_TOKEN && env.SLACK_SIGNING_SECRET),
+	},
+	telegram: {
+		fromDb: (fields) => ({
+			enabled: true,
+			botToken: fields["botToken"],
+		}),
+		fromEnv: () => !!env.TELEGRAM_BOT_TOKEN,
+	},
+	whatsapp: {
+		fromDb: (fields) => ({
+			enabled: true,
 			accessToken: fields["accessToken"],
 			appSecret: fields["appSecret"],
 			phoneNumberId: fields["phoneNumberId"],
 			verifyToken: fields["verifyToken"],
-		};
+		}),
+		fromEnv: () => false, // WhatsApp has no env var fallback
+	},
+};
+
+function buildPlatformConfig(
+	category: string,
+	dbCredentials: Map<string, ApiPlatformCredentials> | null,
+): PlatformCredentials | boolean {
+	const builder = platformBuilders[category];
+	if (!builder) return false;
+
+	const db = dbCredentials?.get(category);
+	if (db !== undefined) {
+		if (!db.enabled) return false;
+		return builder.fromDb(db.fields ?? {});
 	}
-	// No DB row — fall back to env vars
-	return envFallback();
+	return builder.fromEnv();
 }
 
 async function initBot(): Promise<Bot> {
@@ -68,10 +99,10 @@ async function initBot(): Promise<Bot> {
 
 	const options: BotOptions = {
 		platforms: {
-			discord: buildPlatformConfig("discord", dbCredentials, () => !!env.DISCORD_BOT_TOKEN),
-			slack: buildPlatformConfig("slack", dbCredentials, () => !!(env.SLACK_BOT_TOKEN && env.SLACK_SIGNING_SECRET)),
-			telegram: buildPlatformConfig("telegram", dbCredentials, () => !!env.TELEGRAM_BOT_TOKEN),
-			whatsapp: buildPlatformConfig("whatsapp", dbCredentials, () => false), // WhatsApp has no env var fallback
+			discord: buildPlatformConfig("discord", dbCredentials),
+			slack: buildPlatformConfig("slack", dbCredentials),
+			telegram: buildPlatformConfig("telegram", dbCredentials),
+			whatsapp: buildPlatformConfig("whatsapp", dbCredentials),
 		},
 		// The bot adapter expects a postgresql:// URL, not the .NET-style
 		// ConnectionStrings__nocturne-postgres value (which is

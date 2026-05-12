@@ -11,7 +11,8 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Switch } from "$lib/components/ui/switch";
-  import { Eye, EyeOff, Bot } from "lucide-svelte";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Bot, Trash2 } from "lucide-svelte";
   import { toast } from "svelte-sonner";
   import type { PlatformSettingsSummary } from "$api";
 
@@ -22,34 +23,33 @@
     whatsapp: "WhatsApp",
   };
 
-  let { platforms, onSave } = $props<{
+  let { platforms, onSave, onDelete } = $props<{
     platforms: PlatformSettingsSummary[];
     onSave: (
       category: string,
       enabled: boolean,
       fields: Record<string, string>
     ) => Promise<void>;
+    onDelete: (category: string) => Promise<void>;
   }>();
 
   type PlatformState = {
     enabled: boolean;
     fieldValues: Record<string, string>;
-    showField: Record<string, boolean>;
     saving: boolean;
+    deleting: boolean;
   };
 
   function buildInitialState(platform: PlatformSettingsSummary): PlatformState {
     const fieldValues: Record<string, string> = {};
-    const showField: Record<string, boolean> = {};
     for (const field of platform.fields ?? []) {
       fieldValues[field.name ?? ""] = "";
-      showField[field.name ?? ""] = false;
     }
     return {
       enabled: platform.enabled ?? false,
       fieldValues,
-      showField,
       saving: false,
+      deleting: false,
     };
   }
 
@@ -59,6 +59,10 @@
     )
   );
 
+  function hasAnyConfiguredFields(platform: PlatformSettingsSummary): boolean {
+    return (platform.configuredFields ?? []).length > 0;
+  }
+
   async function handleSave(platform: PlatformSettingsSummary) {
     const category = platform.category ?? "";
     const state = states[category];
@@ -67,11 +71,38 @@
     state.saving = true;
     try {
       await onSave(category, state.enabled, state.fieldValues);
+      // Clear field values after successful save (secrets are stored, not echoed)
+      for (const key of Object.keys(state.fieldValues)) {
+        state.fieldValues[key] = "";
+      }
       toast.success("Settings saved. Restart the frontend for changes to take effect.");
     } catch {
       toast.error("Failed to save settings");
     } finally {
       state.saving = false;
+    }
+  }
+
+  async function handleDelete(platform: PlatformSettingsSummary) {
+    const category = platform.category ?? "";
+    const displayName = DISPLAY_NAMES[category] ?? category;
+    if (!confirm(`Remove all ${displayName} credentials? This cannot be undone.`)) return;
+
+    const state = states[category];
+    if (!state) return;
+
+    state.deleting = true;
+    try {
+      await onDelete(category);
+      state.enabled = false;
+      for (const key of Object.keys(state.fieldValues)) {
+        state.fieldValues[key] = "";
+      }
+      toast.success(`${displayName} configuration removed.`);
+    } catch {
+      toast.error("Failed to remove settings");
+    } finally {
+      state.deleting = false;
     }
   }
 </script>
@@ -82,6 +113,7 @@
       {@const category = platform.category ?? ""}
       {@const state = states[category]}
       {@const displayName = DISPLAY_NAMES[category] ?? category}
+      {@const isConfigured = hasAnyConfiguredFields(platform)}
       <Card>
         <CardHeader class="flex flex-row items-center justify-between">
           <div class="flex items-center gap-3">
@@ -89,6 +121,9 @@
               <Bot class="h-5 w-5" />
             </div>
             <CardTitle>{displayName}</CardTitle>
+            {#if isConfigured}
+              <Badge variant="secondary">Configured</Badge>
+            {/if}
           </div>
           <div class="flex items-center gap-2">
             <Label for="switch-{category}" class="text-sm text-muted-foreground">
@@ -105,36 +140,39 @@
           <div class="space-y-4">
             {#each platform.fields ?? [] as field (field.name)}
               {@const name = field.name ?? ""}
-              {@const isConfigured = (platform.configuredFields ?? []).includes(name)}
+              {@const fieldConfigured = (platform.configuredFields ?? []).includes(name)}
               <div class="space-y-1.5">
-                <Label for="field-{category}-{name}">{field.label ?? name}</Label>
-                <div class="relative">
-                  <Input
-                    id="field-{category}-{name}"
-                    type={state.showField[name] ? "text" : "password"}
-                    placeholder={isConfigured ? "Configured" : "Not set"}
-                    bind:value={state.fieldValues[name]}
-                    class="pr-10"
-                  />
-                  <button
-                    type="button"
-                    class="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
-                    onclick={() => (state.showField[name] = !state.showField[name])}
-                    aria-label={state.showField[name] ? "Hide field" : "Show field"}
-                  >
-                    {#if state.showField[name]}
-                      <EyeOff class="h-4 w-4" />
-                    {:else}
-                      <Eye class="h-4 w-4" />
-                    {/if}
-                  </button>
+                <div class="flex items-center gap-2">
+                  <Label for="field-{category}-{name}">{field.label ?? name}</Label>
+                  {#if fieldConfigured}
+                    <Badge variant="outline" class="text-xs">Set</Badge>
+                  {/if}
                 </div>
+                <Input
+                  id="field-{category}-{name}"
+                  type="password"
+                  placeholder={fieldConfigured ? "Leave blank to keep current value" : "Not set"}
+                  bind:value={state.fieldValues[name]}
+                />
               </div>
             {/each}
           </div>
         </CardContent>
-        <CardFooter class="flex justify-end">
-          <Button onclick={() => handleSave(platform)} disabled={state.saving}>
+        <CardFooter class="flex justify-between">
+          {#if isConfigured}
+            <Button
+              variant="destructive"
+              size="sm"
+              onclick={() => handleDelete(platform)}
+              disabled={state.deleting || state.saving}
+            >
+              <Trash2 class="h-4 w-4 mr-1.5" />
+              {state.deleting ? "Removing..." : "Remove"}
+            </Button>
+          {:else}
+            <div></div>
+          {/if}
+          <Button onclick={() => handleSave(platform)} disabled={state.saving || state.deleting}>
             {state.saving ? "Saving..." : "Save"}
           </Button>
         </CardFooter>

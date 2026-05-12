@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Services;
+using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -20,7 +22,8 @@ public class PlatformSettingsController : ControllerBase
     /// Secrets are never returned — only which fields have been set.
     /// </summary>
     [HttpGet]
-    [ProducesResponseType(typeof(List<PlatformSettingsService.PlatformSettingsSummary>), StatusCodes.Status200OK)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(List<PlatformSettingsSummary>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll()
     {
         var results = await _service.GetAllAsync();
@@ -31,7 +34,8 @@ public class PlatformSettingsController : ControllerBase
     /// Returns a single platform setting category.
     /// </summary>
     [HttpGet("{category}")]
-    [ProducesResponseType(typeof(PlatformSettingsService.PlatformSettingsSummary), StatusCodes.Status200OK)]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(PlatformSettingsSummary), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Get(string category)
     {
@@ -45,6 +49,7 @@ public class PlatformSettingsController : ControllerBase
     /// Returns restartRequired: true — the SvelteKit frontend must be restarted for changes to take effect.
     /// </summary>
     [HttpPut("{category}")]
+    [RemoteCommand(Invalidates = ["GetAll", "Get"])]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> Upsert(string category, [FromBody] UpsertPlatformSettingsRequest request)
@@ -56,12 +61,26 @@ public class PlatformSettingsController : ControllerBase
     }
 
     /// <summary>
+    /// Deletes platform settings for a category, removing all stored credentials.
+    /// </summary>
+    [HttpDelete("{category}")]
+    [RemoteCommand(Invalidates = ["GetAll", "Get"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(string category)
+    {
+        var deleted = await _service.DeleteAsync(category);
+        if (!deleted) return NotFound();
+        return NoContent();
+    }
+
+    /// <summary>
     /// Returns decrypted credentials for all configured platforms.
-    /// Internal use only — called by the SvelteKit bot service on startup.
-    /// Requires platform admin + instance key authentication.
+    /// Restricted to instance-key authentication only (server-to-server).
     /// </summary>
     [HttpGet("decrypted")]
-    [ProducesResponseType(typeof(List<PlatformSettingsService.PlatformCredentials>), StatusCodes.Status200OK)]
+    [RequireInstanceKeyAuth]
+    [ProducesResponseType(typeof(List<PlatformCredentials>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAllDecrypted()
     {
         var results = await _service.GetAllDecryptedAsync();

@@ -35,9 +35,9 @@ public class PlatformSettingsEntity
 
     /// <summary>UTC timestamp when this record was created.</summary>
     [Column("sys_created_at")]
-    public DateTime SysCreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime SysCreatedAt { get; set; }
 
     /// <summary>UTC timestamp when this record was last updated.</summary>
     [Column("sys_updated_at")]
-    public DateTime SysUpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime SysUpdatedAt { get; set; }
 }
