@@ -20,7 +20,7 @@
 
 {#if visible}
   <ChartClipPath>
-    {#each markers as marker (marker.time.getTime())}
+    {#each markers as marker, i (marker.treatmentId ?? `${marker.time.getTime()}-${i}`)}
       {@const xPos = chartCtx.xScale(marker.time)}
       {@const yPos = chartCtx.yScale(medianY)}
       <DeviceEventMarker

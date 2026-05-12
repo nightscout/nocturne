@@ -125,7 +125,7 @@
   </div>
 
   <!-- Rows -->
-  {#each visibleDataRows as dataRow, i (dataRow.day.getTime())}
+  {#each visibleDataRows as dataRow, i (`${dataRow.day.getTime()}-${i}`)}
     <div
       class="flex items-center"
       style:height="{rowHeight}px"
