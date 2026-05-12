@@ -1232,19 +1232,18 @@ public class StatisticsService : IStatisticsService
             };
         }
 
-        // Count readings in each range
-        var veryLowCount = glucoseValues.Count(v => v < thresholds.VeryLow);
-        var lowCount = glucoseValues.Count(v => v >= thresholds.VeryLow && v < thresholds.Low);
-        var targetCount = glucoseValues.Count(v =>
-            v >= thresholds.TargetBottom && v <= thresholds.TargetTop
-        );
-        var tightTargetCount = glucoseValues.Count(v =>
-            v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop
-        );
-        var highCount = glucoseValues.Count(v =>
-            v > thresholds.TargetTop && v <= thresholds.VeryHigh
-        );
-        var veryHighCount = glucoseValues.Count(v => v > thresholds.VeryHigh);
+        // Single-pass counting across all ranges
+        int veryLowCount = 0, lowCount = 0, targetCount = 0, tightTargetCount = 0, highCount = 0, veryHighCount = 0;
+        foreach (var v in glucoseValues)
+        {
+            if (v < thresholds.VeryLow) veryLowCount++;
+            else if (v < thresholds.Low) lowCount++;
+            else if (v > thresholds.VeryHigh) veryHighCount++;
+            else if (v > thresholds.TargetTop) highCount++;
+            // Target and tight-target overlap, so count both independently
+            if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop) targetCount++;
+            if (v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop) tightTargetCount++;
+        }
 
         // Calculate percentages
         var percentages = new TimeInRangePercentages
@@ -1273,11 +1272,15 @@ public class StatisticsService : IStatisticsService
         var episodes = CalculateEpisodes(glucoseValues, thresholds);
 
         // Calculate per-range detailed statistics
-        var lowValues = glucoseValues.Where(v => v < thresholds.Low).ToList();
-        var targetValues = glucoseValues
-            .Where(v => v >= thresholds.TargetBottom && v <= thresholds.TargetTop)
-            .ToList();
-        var highValues = glucoseValues.Where(v => v > thresholds.TargetTop).ToList();
+        var lowValues = new List<double>(veryLowCount + lowCount);
+        var targetValues = new List<double>(targetCount);
+        var highValues = new List<double>(highCount + veryHighCount);
+        foreach (var v in glucoseValues)
+        {
+            if (v < thresholds.Low) lowValues.Add(v);
+            else if (v > thresholds.TargetTop) highValues.Add(v);
+            if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop) targetValues.Add(v);
+        }
 
         var rangeStats = new TimeInRangeDetailedStats
         {
