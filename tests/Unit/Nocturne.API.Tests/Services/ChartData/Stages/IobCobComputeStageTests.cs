@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
+using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
@@ -17,8 +18,7 @@ public class IobCobComputeStageTests
 {
     private readonly Mock<IIobCalculator> _mockIobCalculator = new();
     private readonly Mock<ICobCalculator> _mockCobCalculator = new();
-    private readonly Mock<ITherapySettingsResolver> _mockTherapySettings = new();
-    private readonly Mock<IBasalRateResolver> _mockBasalRateResolver = new();
+    private readonly Mock<IBasalSeriesBuilder> _mockBasalSeriesBuilder = new();
     private readonly Mock<ITherapyTimelineResolver> _mockTherapyTimelineResolver = new();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly IobCobComputeStage _stage;
@@ -28,7 +28,24 @@ public class IobCobComputeStageTests
 
     public IobCobComputeStageTests()
     {
-        _mockTherapySettings.Setup(p => p.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _mockBasalSeriesBuilder
+            .Setup(b => b.BuildAsync(
+                It.IsAny<List<TempBasal>>(),
+                It.IsAny<long>(),
+                It.IsAny<long>(),
+                It.IsAny<double>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((List<TempBasal> _, long start, long _, double rate, CancellationToken _) =>
+                new List<BasalPoint>
+                {
+                    new()
+                    {
+                        Timestamp = start,
+                        Rate = rate,
+                        ScheduledRate = rate,
+                        Origin = BasalDeliveryOrigin.Inferred,
+                    },
+                });
 
         var defaultSnapshot = new TherapySnapshot(
             dia: 3.0,
@@ -48,8 +65,7 @@ public class IobCobComputeStageTests
         _stage = new IobCobComputeStage(
             _mockIobCalculator.Object,
             _mockCobCalculator.Object,
-            _mockTherapySettings.Object,
-            _mockBasalRateResolver.Object,
+            _mockBasalSeriesBuilder.Object,
             _mockTherapyTimelineResolver.Object,
             _cache,
             MockTenantAccessor.Create().Object,

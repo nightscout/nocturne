@@ -192,7 +192,7 @@ public class ChartDataService : IChartDataService
         return tempBasals
             .Select(tb =>
             {
-                var origin = MapTempBasalOrigin(tb.Origin);
+                var origin = BasalSeriesBuilder.MapTempBasalOrigin(tb.Origin);
                 return new BasalDeliverySpanDto
                 {
                     Id = tb.LegacyId ?? tb.Id.ToString(),
@@ -226,21 +226,6 @@ public class ChartDataService : IChartDataService
             })
             .ToList();
     }
-
-    /// <summary>
-    /// Maps a TempBasalOrigin enum value to the corresponding BasalDeliveryOrigin enum value.
-    /// Both enums have identical members (Algorithm, Scheduled, Manual, Suspended, Inferred).
-    /// </summary>
-    internal static BasalDeliveryOrigin MapTempBasalOrigin(TempBasalOrigin origin) =>
-        origin switch
-        {
-            TempBasalOrigin.Algorithm => BasalDeliveryOrigin.Algorithm,
-            TempBasalOrigin.Scheduled => BasalDeliveryOrigin.Scheduled,
-            TempBasalOrigin.Manual => BasalDeliveryOrigin.Manual,
-            TempBasalOrigin.Suspended => BasalDeliveryOrigin.Suspended,
-            TempBasalOrigin.Inferred => BasalDeliveryOrigin.Inferred,
-            _ => BasalDeliveryOrigin.Scheduled,
-        };
 
     internal static List<SystemEventMarkerDto> MapSystemEvents(
         IEnumerable<SystemEvent>? systemEvents
