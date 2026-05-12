@@ -29,6 +29,24 @@ function sharedLogos(): Plugin {
   };
 }
 
+function sharedFonts(): Plugin {
+  return {
+    name: 'shared-fonts',
+    buildStart() {
+      const src = resolve(__dirname, '../app/static/fonts');
+      if (!existsSync(src)) {
+        this.warn(`shared-fonts: source not found at ${src}; skipping font copy`);
+        return;
+      }
+      const dest = resolve(__dirname, 'static/fonts');
+      if (existsSync(dest)) {
+        rmSync(dest, { recursive: true, force: true });
+      }
+      cpSync(src, dest, { recursive: true });
+    }
+  };
+}
+
 function releaseAssets(): Plugin {
   return {
     name: 'release-assets',
@@ -61,6 +79,7 @@ function releaseAssets(): Plugin {
 export default defineConfig({
   plugins: [
     sharedLogos(),
+    sharedFonts(),
     releaseAssets(),
     tailwindcss(),
     lingo({
@@ -74,6 +93,9 @@ export default defineConfig({
     host: "0.0.0.0",
     port: parseInt(process.env.PORT || "5173", 10),
     strictPort: true,
+    fs: {
+      allow: [resolve(__dirname, 'src/lib/release')],
+    },
   },
   ssr: {
     noExternal: ['@nocturne/app', '@nocturne/ui', '@nocturne/cms', 'lucide-svelte']

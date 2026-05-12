@@ -15,7 +15,7 @@ export const getMyTenants = query(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in myTenants.getMyTenants:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -23,7 +23,7 @@ export const getMyTenants = query(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get my tenants');
+    throw error(500, message ?? 'Failed to get my tenants');
   }
 });
 
@@ -38,7 +38,7 @@ export const createTenant = command(CreateMyTenantRequestSchema, async (request)
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in myTenants.createTenant:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -46,7 +46,7 @@ export const createTenant = command(CreateMyTenantRequestSchema, async (request)
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to create tenant');
+    throw error(500, message ?? 'Failed to create tenant');
   }
 });
 
@@ -57,7 +57,7 @@ export const validateSlug = query(z.object({ slug: z.string().optional() }).opti
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in myTenants.validateSlug:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -65,6 +65,6 @@ export const validateSlug = query(z.object({ slug: z.string().optional() }).opti
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to validate slug');
+    throw error(500, message ?? 'Failed to validate slug');
   }
 });

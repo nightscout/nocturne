@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.API.Services.Auth;
@@ -343,7 +344,7 @@ public class JwtService : IJwtService
     public string GenerateRefreshToken()
     {
         var randomBytes = RandomNumberGenerator.GetBytes(_options.RefreshTokenLengthBytes);
-        return Convert.ToBase64String(randomBytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        return Base64Url.Encode(randomBytes);
     }
 
     /// <inheritdoc />

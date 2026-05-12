@@ -76,7 +76,7 @@ public class GuestLinkServiceTests : IDisposable
     {
         var act = () => _service.CreateGuestLinkAsync(
             _dataOwnerId, _creatorId, "Bad Scopes", "https://example.com",
-            [OAuthScopes.EntriesReadWrite]);
+            [OAuthScopes.GlucoseReadWrite]);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*not allowed*");
@@ -102,7 +102,7 @@ public class GuestLinkServiceTests : IDisposable
         var result = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Defaults", "https://example.com");
 
         result.Info.Scopes.Should().Contain(OAuthScopes.HealthRead);
-        result.Info.Scopes.Should().Contain(OAuthScopes.ProfileRead);
+        result.Info.Scopes.Should().Contain(OAuthScopes.TherapyRead);
         result.Info.Scopes.Should().Contain(OAuthScopes.ReportsRead);
         result.Info.Scopes.Should().NotContain(s => s.Contains("readwrite", StringComparison.OrdinalIgnoreCase));
     }
@@ -226,6 +226,120 @@ public class GuestLinkServiceTests : IDisposable
             .IgnoreQueryFilters()
             .FirstAsync(g => g.Id == created.Info.Id);
         grant.RevokedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DismissAsync_RevokedLink_SetsDismissedAt()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Revoked Dismiss", "https://example.com");
+        await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
+
+        var result = await _service.DismissAsync(created.Info.Id, _dataOwnerId);
+
+        result.Should().BeTrue();
+
+        var grant = await _dbContext.OAuthGrants
+            .IgnoreQueryFilters()
+            .FirstAsync(g => g.Id == created.Info.Id);
+        grant.DismissedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DismissAsync_ExpiredLink_SetsDismissedAt()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Expired Dismiss", "https://example.com");
+
+        // Force expiration by backdating ExpiresAt
+        var grant = await _dbContext.OAuthGrants
+            .IgnoreQueryFilters()
+            .FirstAsync(g => g.Id == created.Info.Id);
+        grant.ExpiresAt = DateTime.UtcNow.AddHours(-1);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _service.DismissAsync(created.Info.Id, _dataOwnerId);
+
+        result.Should().BeTrue();
+
+        await _dbContext.Entry(grant).ReloadAsync();
+        grant.DismissedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DismissAsync_ActiveLink_ReturnsFalse()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Active No Dismiss", "https://example.com");
+        await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+
+        var result = await _service.DismissAsync(created.Info.Id, _dataOwnerId);
+
+        result.Should().BeFalse();
+
+        var grant = await _dbContext.OAuthGrants
+            .IgnoreQueryFilters()
+            .FirstAsync(g => g.Id == created.Info.Id);
+        grant.DismissedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DismissAsync_PendingLink_ReturnsFalse()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Pending No Dismiss", "https://example.com");
+
+        var result = await _service.DismissAsync(created.Info.Id, _dataOwnerId);
+
+        result.Should().BeFalse();
+
+        var grant = await _dbContext.OAuthGrants
+            .IgnoreQueryFilters()
+            .FirstAsync(g => g.Id == created.Info.Id);
+        grant.DismissedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DismissAsync_WrongOwner_ReturnsFalse()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Wrong Owner Dismiss", "https://example.com");
+        await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
+        var strangerId = Guid.CreateVersion7();
+
+        var result = await _service.DismissAsync(created.Info.Id, strangerId);
+
+        result.Should().BeFalse();
+
+        var grant = await _dbContext.OAuthGrants
+            .IgnoreQueryFilters()
+            .FirstAsync(g => g.Id == created.Info.Id);
+        grant.DismissedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetGuestLinksAsync_ExcludesDismissedByDefault()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Dismissed Link", "https://example.com");
+        await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
+        await _service.DismissAsync(created.Info.Id, _dataOwnerId);
+
+        var undismissed = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Visible Link", "https://example.com");
+
+        var links = await _service.GetGuestLinksAsync(_dataOwnerId);
+
+        links.Should().ContainSingle(l => l.Id == undismissed.Info.Id);
+        links.Should().NotContain(l => l.Id == created.Info.Id);
+    }
+
+    [Fact]
+    public async Task GetGuestLinksAsync_IncludesDismissedWhenRequested()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Dismissed Link 2", "https://example.com");
+        await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
+        await _service.DismissAsync(created.Info.Id, _dataOwnerId);
+
+        var undismissed = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Visible Link 2", "https://example.com");
+
+        var links = await _service.GetGuestLinksAsync(_dataOwnerId, includeDismissed: true);
+
+        links.Should().Contain(l => l.Id == created.Info.Id);
+        links.Should().Contain(l => l.Id == undismissed.Info.Id);
     }
 
     public void Dispose() => _dbContext.Dispose();

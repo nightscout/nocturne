@@ -29,7 +29,7 @@ public class FoodRepository : IFoodRepository
     /// <returns>A collection of all food entries.</returns>
     public async Task<IEnumerable<Food>> GetFoodAsync(CancellationToken cancellationToken = default)
     {
-        var entities = await _context.Foods.OrderBy(f => f.Name).ToListAsync(cancellationToken);
+        var entities = await _context.Foods.AsNoTracking().OrderBy(f => f.Name).ToListAsync(cancellationToken);
 
         return entities.Select(FoodMapper.ToDomainModel);
     }
@@ -46,7 +46,7 @@ public class FoodRepository : IFoodRepository
     )
     {
         // Try to find by original ID first (MongoDB ObjectId)
-        var entity = await _context.Foods.FirstOrDefaultAsync(
+        var entity = await _context.Foods.AsNoTracking().FirstOrDefaultAsync(
             f => f.OriginalId == id,
             cancellationToken
         );
@@ -54,7 +54,7 @@ public class FoodRepository : IFoodRepository
         // If not found by original ID, try by GUID
         if (entity == null && Guid.TryParse(id, out var guid))
         {
-            entity = await _context.Foods.FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
+            entity = await _context.Foods.AsNoTracking().FirstOrDefaultAsync(f => f.Id == guid, cancellationToken);
         }
 
         return entity != null ? FoodMapper.ToDomainModel(entity) : null;
@@ -72,7 +72,8 @@ public class FoodRepository : IFoodRepository
     )
     {
         var entities = await _context
-            .Foods.Where(f => f.Type == type)
+            .Foods.AsNoTracking()
+            .Where(f => f.Type == type)
             .OrderBy(f => f.Name)
             .ToListAsync(cancellationToken);
 
@@ -96,7 +97,7 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Foods.AsQueryable();
+        var query = _context.Foods.AsNoTracking().AsQueryable();
 
         // Apply find query filter if specified
         if (!string.IsNullOrEmpty(findQuery))
@@ -137,7 +138,7 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Foods.AsQueryable();
+        var query = _context.Foods.AsNoTracking().AsQueryable();
 
         // Apply type filter if specified
         if (!string.IsNullOrEmpty(type))
@@ -324,7 +325,7 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Foods.AsQueryable();
+        var query = _context.Foods.AsNoTracking().AsQueryable();
 
         // Apply find query filter if specified
         if (!string.IsNullOrEmpty(findQuery))
@@ -353,7 +354,7 @@ public class FoodRepository : IFoodRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Foods.AsQueryable();
+        var query = _context.Foods.AsNoTracking().AsQueryable();
 
         // Apply type filter if specified
         if (!string.IsNullOrEmpty(type))

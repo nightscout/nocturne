@@ -1,4 +1,4 @@
-using NightscoutFoundation.Nocturne.Model;
+using Nocturne.Core.Models.Widget;
 
 namespace Nocturne.Widget.Contracts;
 

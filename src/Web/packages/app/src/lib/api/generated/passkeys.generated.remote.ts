@@ -17,7 +17,7 @@ export const registerOptions = command(PasskeyRegisterOptionsRequestSchema, asyn
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.registerOptions:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -25,7 +25,7 @@ export const registerOptions = command(PasskeyRegisterOptionsRequestSchema, asyn
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to register options');
+    throw error(500, message ?? 'Failed to register options');
   }
 });
 
@@ -41,7 +41,7 @@ export const registerComplete = command(PasskeyRegisterCompleteRequestSchema, as
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.registerComplete:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -49,7 +49,7 @@ export const registerComplete = command(PasskeyRegisterCompleteRequestSchema, as
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to register complete');
+    throw error(500, message ?? 'Failed to register complete');
   }
 });
 
@@ -62,7 +62,7 @@ export const discoverableLoginOptions = command(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.discoverableLoginOptions:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -70,7 +70,7 @@ export const discoverableLoginOptions = command(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to discoverable login options');
+    throw error(500, message ?? 'Failed to discoverable login options');
   }
 });
 
@@ -83,7 +83,7 @@ export const loginOptions = command(PasskeyLoginOptionsRequestSchema, async (req
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.loginOptions:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -91,7 +91,7 @@ export const loginOptions = command(PasskeyLoginOptionsRequestSchema, async (req
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to login options');
+    throw error(500, message ?? 'Failed to login options');
   }
 });
 
@@ -104,7 +104,7 @@ export const loginComplete = command(PasskeyLoginCompleteRequestSchema, async (r
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.loginComplete:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -112,7 +112,7 @@ export const loginComplete = command(PasskeyLoginCompleteRequestSchema, async (r
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to login complete');
+    throw error(500, message ?? 'Failed to login complete');
   }
 });
 
@@ -125,7 +125,7 @@ export const recoveryVerify = command(RecoveryVerifyRequestSchema, async (reques
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.recoveryVerify:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -133,7 +133,7 @@ export const recoveryVerify = command(RecoveryVerifyRequestSchema, async (reques
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to recovery verify');
+    throw error(500, message ?? 'Failed to recovery verify');
   }
 });
 
@@ -145,7 +145,7 @@ export const listCredentials = query(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.listCredentials:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -153,7 +153,7 @@ export const listCredentials = query(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to list credentials');
+    throw error(500, message ?? 'Failed to list credentials');
   }
 });
 
@@ -169,7 +169,7 @@ export const removeCredential = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.removeCredential:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -177,7 +177,7 @@ export const removeCredential = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to remove credential');
+    throw error(500, message ?? 'Failed to remove credential');
   }
 });
 
@@ -193,7 +193,7 @@ export const regenerateRecoveryCodes = command(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.regenerateRecoveryCodes:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -201,7 +201,7 @@ export const regenerateRecoveryCodes = command(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to regenerate recovery codes');
+    throw error(500, message ?? 'Failed to regenerate recovery codes');
   }
 });
 
@@ -213,7 +213,7 @@ export const getRecoveryStatus = query(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.getRecoveryStatus:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -221,7 +221,7 @@ export const getRecoveryStatus = query(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get recovery status');
+    throw error(500, message ?? 'Failed to get recovery status');
   }
 });
 
@@ -234,7 +234,7 @@ export const getAuthStatus = query(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.getAuthStatus:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -242,7 +242,7 @@ export const getAuthStatus = query(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get auth status');
+    throw error(500, message ?? 'Failed to get auth status');
   }
 });
 
@@ -258,7 +258,7 @@ export const completeOnboarding = command(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.completeOnboarding:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -266,7 +266,7 @@ export const completeOnboarding = command(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to complete onboarding');
+    throw error(500, message ?? 'Failed to complete onboarding');
   }
 });
 
@@ -281,7 +281,7 @@ export const setupOptions = command(SetupOptionsRequestSchema, async (request) =
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.setupOptions:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -289,7 +289,7 @@ export const setupOptions = command(SetupOptionsRequestSchema, async (request) =
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to setup options');
+    throw error(500, message ?? 'Failed to setup options');
   }
 });
 
@@ -304,7 +304,7 @@ export const setupComplete = command(SetupCompleteRequestSchema, async (request)
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.setupComplete:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -312,7 +312,7 @@ export const setupComplete = command(SetupCompleteRequestSchema, async (request)
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to setup complete');
+    throw error(500, message ?? 'Failed to setup complete');
   }
 });
 
@@ -327,7 +327,7 @@ export const accessRequestOptions = command(AccessRequestOptionsRequestSchema, a
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.accessRequestOptions:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -335,7 +335,7 @@ export const accessRequestOptions = command(AccessRequestOptionsRequestSchema, a
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to access request options');
+    throw error(500, message ?? 'Failed to access request options');
   }
 });
 
@@ -350,7 +350,7 @@ export const accessRequestComplete = command(AccessRequestCompleteRequestSchema,
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.accessRequestComplete:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -358,7 +358,7 @@ export const accessRequestComplete = command(AccessRequestCompleteRequestSchema,
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to access request complete');
+    throw error(500, message ?? 'Failed to access request complete');
   }
 });
 
@@ -372,7 +372,7 @@ export const inviteOptions = command(InviteOptionsRequestSchema, async (request)
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.inviteOptions:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -380,7 +380,7 @@ export const inviteOptions = command(InviteOptionsRequestSchema, async (request)
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to invite options');
+    throw error(500, message ?? 'Failed to invite options');
   }
 });
 
@@ -394,7 +394,7 @@ export const inviteComplete = command(InviteCompleteRequestSchema, async (reques
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in passkey.inviteComplete:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -402,6 +402,6 @@ export const inviteComplete = command(InviteCompleteRequestSchema, async (reques
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to invite complete');
+    throw error(500, message ?? 'Failed to invite complete');
   }
 });

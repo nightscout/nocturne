@@ -97,7 +97,7 @@ public class MemberInviteServiceTests : IDisposable
             TenantId = _tenantId,
             Name = "Follower",
             Slug = "follower",
-            Permissions = [TenantPermissions.EntriesRead, TenantPermissions.HealthRead],
+            Permissions = [TenantPermissions.GlucoseRead, TenantPermissions.StatisticsRead],
             IsSystem = true,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
@@ -152,13 +152,13 @@ public class MemberInviteServiceTests : IDisposable
             _tenantId,
             _creatorSubjectId,
             [],
-            directPermissions: [TenantPermissions.EntriesRead]);
+            directPermissions: [TenantPermissions.GlucoseRead]);
 
         result.Token.Should().Be(FakeToken);
 
         var entity = await _dbContext.MemberInvites.FirstOrDefaultAsync();
         entity.Should().NotBeNull();
-        entity!.DirectPermissions.Should().Contain(TenantPermissions.EntriesRead);
+        entity!.DirectPermissions.Should().Contain(TenantPermissions.GlucoseRead);
     }
 
     [Fact]

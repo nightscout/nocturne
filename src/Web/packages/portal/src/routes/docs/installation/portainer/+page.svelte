@@ -1,6 +1,7 @@
 <script lang="ts">
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
     import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
+    import CopyButton from "$lib/components/docs/CopyButton.svelte";
     import { Info } from "@lucide/svelte";
 
     const templateUrl = "https://raw.githubusercontent.com/nightscout/nocturne/main/deploy/portainer/templates.json";
@@ -30,7 +31,12 @@
         In Portainer, go to <strong class="text-foreground">Settings → App Templates</strong> and
         set the URL to:
     </p>
-    <pre class="p-3 rounded-lg bg-muted/50 border border-border/60 text-sm overflow-x-auto mb-4"><code>{templateUrl}</code></pre>
+    <div class="flex items-center gap-2 rounded-lg bg-muted/50 border border-border/60 mb-4">
+        <pre class="flex-1 p-3 text-sm overflow-x-auto"><code>{templateUrl}</code></pre>
+        <div class="mr-3">
+            <CopyButton text={templateUrl} label="Copy URL to clipboard" />
+        </div>
+    </div>
     <p class="text-muted-foreground mb-8">
         Click <strong class="text-foreground">Save settings</strong>.
     </p>

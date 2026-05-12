@@ -17,7 +17,7 @@ export const getFoods = query(z.object({ find: z.string().optional(), count: z.n
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in foodsV4.getFoods:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -25,7 +25,7 @@ export const getFoods = query(z.object({ find: z.string().optional(), count: z.n
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get foods');
+    throw error(500, message ?? 'Failed to get foods');
   }
 });
 
@@ -43,7 +43,7 @@ export const createFood = command(FoodSchema, async (request) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in foodsV4.createFood:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -51,7 +51,7 @@ export const createFood = command(FoodSchema, async (request) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to create food');
+    throw error(500, message ?? 'Failed to create food');
   }
 });
 
@@ -63,7 +63,7 @@ export const getFood = query(z.string(), async (foodId) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in foodsV4.getFood:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -71,7 +71,7 @@ export const getFood = query(z.string(), async (foodId) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get food');
+    throw error(500, message ?? 'Failed to get food');
   }
 });
 
@@ -90,7 +90,7 @@ export const updateFood = command(z.object({ foodId: z.string(), request: FoodSc
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in foodsV4.updateFood:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -98,7 +98,7 @@ export const updateFood = command(z.object({ foodId: z.string(), request: FoodSc
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to update food');
+    throw error(500, message ?? 'Failed to update food');
   }
 });
 
@@ -115,7 +115,7 @@ export const deleteFood = command(z.object({ foodId: z.string(), attributionMode
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in foodsV4.deleteFood:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -123,7 +123,7 @@ export const deleteFood = command(z.object({ foodId: z.string(), attributionMode
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to delete food');
+    throw error(500, message ?? 'Failed to delete food');
   }
 });
 
@@ -135,7 +135,7 @@ export const getFavorites = query(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in foodsV4.getFavorites:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -143,7 +143,7 @@ export const getFavorites = query(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get favorites');
+    throw error(500, message ?? 'Failed to get favorites');
   }
 });
 
@@ -159,7 +159,7 @@ export const addFavorite = command(z.string(), async (foodId) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in foodsV4.addFavorite:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -167,7 +167,7 @@ export const addFavorite = command(z.string(), async (foodId) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to add favorite');
+    throw error(500, message ?? 'Failed to add favorite');
   }
 });
 
@@ -183,7 +183,7 @@ export const removeFavorite = command(z.string(), async (foodId) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in foodsV4.removeFavorite:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -191,7 +191,7 @@ export const removeFavorite = command(z.string(), async (foodId) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to remove favorite');
+    throw error(500, message ?? 'Failed to remove favorite');
   }
 });
 
@@ -203,7 +203,7 @@ export const getRecentFoods = query(z.object({ limit: z.number().optional() }).o
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in foodsV4.getRecentFoods:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -211,7 +211,7 @@ export const getRecentFoods = query(z.object({ limit: z.number().optional() }).o
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get recent foods');
+    throw error(500, message ?? 'Failed to get recent foods');
   }
 });
 
@@ -223,7 +223,7 @@ export const getFoodAttributionCount = query(z.string(), async (foodId) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in foodsV4.getFoodAttributionCount:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -231,6 +231,6 @@ export const getFoodAttributionCount = query(z.string(), async (foodId) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get food attribution count');
+    throw error(500, message ?? 'Failed to get food attribution count');
   }
 });

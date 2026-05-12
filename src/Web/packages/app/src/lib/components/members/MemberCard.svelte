@@ -31,6 +31,7 @@
     currentSubjectId?: string;
     onToggleExpand: () => void;
     onSaveRoles: (roleIds: string[], permissions: string[]) => void;
+    onSaveLimitTo24Hours?: (limitTo24Hours: boolean) => void;
     onRemove: () => void;
   }
 
@@ -44,6 +45,7 @@
     currentSubjectId,
     onToggleExpand,
     onSaveRoles,
+    onSaveLimitTo24Hours,
     onRemove,
   }: Props = $props();
 
@@ -51,6 +53,8 @@
   let editingPermissions = $state<string[]>([]);
   let originalRoleIds = $state<string[]>([]);
   let originalPermissions = $state<string[]>([]);
+  let editingLimitTo24Hours = $state(false);
+  let originalLimitTo24Hours = $state(false);
   let showDirectPermissions = $state(false);
 
   /** Union of all permissions from the currently selected roles */
@@ -63,7 +67,8 @@
 
   const isDirty = $derived(
     JSON.stringify([...editingRoleIds].sort()) !== JSON.stringify([...originalRoleIds].sort()) ||
-    JSON.stringify([...editingPermissions].sort()) !== JSON.stringify([...originalPermissions].sort())
+    JSON.stringify([...editingPermissions].sort()) !== JSON.stringify([...originalPermissions].sort()) ||
+    editingLimitTo24Hours !== originalLimitTo24Hours
   );
 
   function toggleExpand() {
@@ -72,6 +77,8 @@
       editingPermissions = [...(member.directPermissions ?? [])];
       originalRoleIds = [...editingRoleIds];
       originalPermissions = [...editingPermissions];
+      editingLimitTo24Hours = member.limitTo24Hours ?? false;
+      originalLimitTo24Hours = member.limitTo24Hours ?? false;
       showDirectPermissions = false;
     }
     onToggleExpand();
@@ -87,11 +94,15 @@
 
   function handleSave() {
     onSaveRoles(editingRoleIds, editingPermissions);
+    if (editingLimitTo24Hours !== originalLimitTo24Hours && onSaveLimitTo24Hours) {
+      onSaveLimitTo24Hours(editingLimitTo24Hours);
+    }
   }
 
   function handleCancel() {
     editingRoleIds = [...originalRoleIds];
     editingPermissions = [...originalPermissions];
+    editingLimitTo24Hours = originalLimitTo24Hours;
     onToggleExpand();
   }
 </script>
@@ -252,6 +263,27 @@
           </div>
         </Collapsible.Content>
       </Collapsible.Root>
+
+      <Separator />
+
+      <div class="flex items-start gap-2 rounded-md border p-3 bg-muted/30">
+        <Checkbox
+          id="member-limit-24h-{member.subjectId}"
+          checked={editingLimitTo24Hours}
+          onCheckedChange={(checked) => { editingLimitTo24Hours = checked === true; }}
+        />
+        <div class="flex-1">
+          <label
+            for="member-limit-24h-{member.subjectId}"
+            class="text-sm font-medium cursor-pointer select-none"
+          >
+            Only last 24 hours
+          </label>
+          <p class="text-xs text-muted-foreground mt-0.5">
+            Restrict this member to only the most recent 24 hours of data.
+          </p>
+        </div>
+      </div>
 
       <!-- Cancel / Save - only when dirty -->
       {#if isDirty}

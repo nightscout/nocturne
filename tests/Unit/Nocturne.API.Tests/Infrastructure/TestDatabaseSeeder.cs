@@ -88,9 +88,9 @@ public static class TestDatabaseSeeder
         {
             Id = readableRoleId,
             TenantId = TenantId,
-            Name = "Readable",
-            Slug = TenantPermissions.SeedRoles.Readable,
-            Permissions = TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Readable],
+            Name = "Clinician",
+            Slug = TenantPermissions.SeedRoles.Clinician,
+            Permissions = TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Clinician],
             IsSystem = true,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,

@@ -16,7 +16,7 @@ export const getRules = query(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in alertRules.getRules:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -24,7 +24,7 @@ export const getRules = query(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get rules');
+    throw error(500, message ?? 'Failed to get rules');
   }
 });
 
@@ -40,7 +40,7 @@ export const createRule = command(CreateAlertRuleRequestSchema, async (request) 
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in alertRules.createRule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -48,7 +48,7 @@ export const createRule = command(CreateAlertRuleRequestSchema, async (request) 
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to create rule');
+    throw error(500, message ?? 'Failed to create rule');
   }
 });
 
@@ -60,7 +60,7 @@ export const getRule = query(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in alertRules.getRule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -68,7 +68,7 @@ export const getRule = query(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get rule');
+    throw error(500, message ?? 'Failed to get rule');
   }
 });
 
@@ -85,7 +85,7 @@ export const updateRule = command(z.object({ id: z.string(), request: UpdateAler
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in alertRules.updateRule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -93,7 +93,7 @@ export const updateRule = command(z.object({ id: z.string(), request: UpdateAler
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to update rule');
+    throw error(500, message ?? 'Failed to update rule');
   }
 });
 
@@ -109,7 +109,7 @@ export const deleteRule = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in alertRules.deleteRule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -117,7 +117,7 @@ export const deleteRule = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to delete rule');
+    throw error(500, message ?? 'Failed to delete rule');
   }
 });
 
@@ -134,7 +134,7 @@ export const toggleRule = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in alertRules.toggleRule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -142,7 +142,7 @@ export const toggleRule = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to toggle rule');
+    throw error(500, message ?? 'Failed to toggle rule');
   }
 });
 
@@ -157,7 +157,7 @@ export const testFire = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in alertRules.testFire:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -165,7 +165,7 @@ export const testFire = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to test fire');
+    throw error(500, message ?? 'Failed to test fire');
   }
 });
 
@@ -179,7 +179,7 @@ export const testFireDryRun = command(TestFireDryRunRequestSchema, async (reques
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in alertRules.testFireDryRun:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -187,6 +187,6 @@ export const testFireDryRun = command(TestFireDryRunRequestSchema, async (reques
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to test fire dry run');
+    throw error(500, message ?? 'Failed to test fire dry run');
   }
 });

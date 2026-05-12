@@ -122,7 +122,7 @@
 <!-- 01 Manifesto -->
 <section class="max-w-[1200px] mx-auto px-6 py-20 border-t border-border">
     <div class="mb-[52px]">
-        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">&#167; 01 &mdash; Why this exists</div>
+        <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-4">01 &mdash; Why this exists</div>
         <h2 class="text-[clamp(1.6rem,3.5vw,2.5rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">
             The diabetes data stack has not moved in a decade.<br />
             <em class="text-glucose-in-range">This is the rewrite.</em>
@@ -160,7 +160,7 @@
 <!-- 02 Connectors -->
 <section class="max-w-[1200px] mx-auto px-6 py-20 border-t border-border">
     <div class="mb-[52px]">
-        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">&#167; 02 &mdash; What plugs in</div>
+        <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-4">02 &mdash; What plugs in</div>
         <h2 class="text-[clamp(1.6rem,3.5vw,2.5rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">22 sources. <em class="text-glucose-in-range">One API surface.</em></h2>
     </div>
 
@@ -192,7 +192,7 @@
 <!-- 04 Install -->
 <section class="max-w-[1200px] mx-auto px-6 py-20 border-t border-border">
     <div class="mb-[52px]">
-        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">&#167; 04 &mdash; Run it tonight</div>
+        <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-4">04 &mdash; Run it tonight</div>
         <h2 class="text-[clamp(1.6rem,3.5vw,2.5rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Five minutes from <em class="text-glucose-in-range">git clone</em> to a dashboard.</h2>
     </div>
 
@@ -232,7 +232,7 @@ $ docker compose up -d
 {#if communityData}
     <section class="max-w-[1200px] mx-auto px-6 py-20 border-t border-border">
         <div class="mb-[52px]">
-            <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">&#167; 05 &mdash; Community</div>
+            <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-4">05 &mdash; Community</div>
             <h2 class="text-[clamp(1.6rem,3.5vw,2.5rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Built in the open. <em class="text-glucose-in-range">Maintained by volunteers.</em></h2>
         </div>
 

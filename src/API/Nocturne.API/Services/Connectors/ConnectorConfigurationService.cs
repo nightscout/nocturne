@@ -81,9 +81,10 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string connectorName,
         CancellationToken ct = default)
     {
+        var connectorNameLower = connectorName.ToLowerInvariant();
         var entity = await _context.ConnectorConfigurations
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, ct);
 
         if (entity == null)
         {
@@ -119,8 +120,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string? modifiedBy = null,
         CancellationToken ct = default)
     {
+        var connectorNameLower = connectorName.ToLowerInvariant();
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, ct);
 
         var configJson = configuration.RootElement.GetRawText();
 
@@ -182,8 +184,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 "Secret encryption is not configured. Ensure api-secret is set in configuration.");
         }
 
+        var connectorNameLower = connectorName.ToLowerInvariant();
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, ct);
 
         var encryptedSecrets = _encryptionService.EncryptSecrets(secrets);
         var secretsJson = JsonSerializer.Serialize(encryptedSecrets, _jsonOptions);
@@ -301,9 +304,10 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             return new Dictionary<string, string>();
         }
 
+        var connectorNameLower = connectorName.ToLowerInvariant();
         var entity = await _context.ConnectorConfigurations
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, ct);
 
         if (entity == null || string.IsNullOrEmpty(entity.SecretsJson) || entity.SecretsJson == "{}")
         {
@@ -405,8 +409,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         string? modifiedBy = null,
         CancellationToken ct = default)
     {
+        var connectorNameLower = connectorName.ToLowerInvariant();
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, ct);
 
         // Create the config JSON with the enabled field
         var configWithEnabled = CreateConfigWithEnabled(entity?.ConfigurationJson ?? "{}", isActive);
@@ -467,8 +472,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     /// <inheritdoc />
     public async Task<bool> DeleteConfigurationAsync(string connectorName, CancellationToken ct = default)
     {
+        var connectorNameLower = connectorName.ToLowerInvariant();
         var entity = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, ct);
 
         if (entity == null)
         {
@@ -833,9 +839,10 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         CancellationToken ct = default
     )
     {
+        var connectorNameLower = connectorName.ToLowerInvariant();
         var config = await _context.ConnectorConfigurations
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, ct);
 
         if (config == null)
             return null;
@@ -866,8 +873,9 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         CancellationToken ct = default
     )
     {
+        var connectorNameLower = connectorName.ToLowerInvariant();
         var config = await _context.ConnectorConfigurations
-            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorName.ToLower(), ct);
+            .FirstOrDefaultAsync(c => c.ConnectorName.ToLower() == connectorNameLower, ct);
 
         if (config == null)
         {

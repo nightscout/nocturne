@@ -18,7 +18,7 @@ export const getProfileSummary = query(z.object({ from: z.coerce.date().optional
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getProfileSummary:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -26,7 +26,7 @@ export const getProfileSummary = query(z.object({ from: z.coerce.date().optional
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get profile summary');
+    throw error(500, message ?? 'Failed to get profile summary');
   }
 });
 
@@ -38,7 +38,7 @@ export const getTherapySettings = query(z.object({ from: z.coerce.date().optiona
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getTherapySettings:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -46,7 +46,7 @@ export const getTherapySettings = query(z.object({ from: z.coerce.date().optiona
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get therapy settings');
+    throw error(500, message ?? 'Failed to get therapy settings');
   }
 });
 
@@ -63,7 +63,7 @@ export const createTherapySettings = form(formCoerce(TherapySettingsSchema) as a
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.createTherapySettings:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -71,7 +71,7 @@ export const createTherapySettings = form(formCoerce(TherapySettingsSchema) as a
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to create therapy settings');
+    throw error(500, message ?? 'Failed to create therapy settings');
   }
 });
 
@@ -83,7 +83,7 @@ export const getTherapySettingsByName = query(z.string(), async (profileName) =>
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getTherapySettingsByName:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -91,7 +91,7 @@ export const getTherapySettingsByName = query(z.string(), async (profileName) =>
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get therapy settings by name');
+    throw error(500, message ?? 'Failed to get therapy settings by name');
   }
 });
 
@@ -103,7 +103,7 @@ export const getTherapySettingsById = query(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getTherapySettingsById:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -111,7 +111,7 @@ export const getTherapySettingsById = query(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get therapy settings by id');
+    throw error(500, message ?? 'Failed to get therapy settings by id');
   }
 });
 
@@ -129,7 +129,7 @@ export const updateTherapySettings = form(formCoerce(z.object({ id: z.string(), 
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.updateTherapySettings:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -137,7 +137,7 @@ export const updateTherapySettings = form(formCoerce(z.object({ id: z.string(), 
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to update therapy settings');
+    throw error(500, message ?? 'Failed to update therapy settings');
   }
 });
 
@@ -154,7 +154,7 @@ export const deleteTherapySettings = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.deleteTherapySettings:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -162,7 +162,7 @@ export const deleteTherapySettings = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to delete therapy settings');
+    throw error(500, message ?? 'Failed to delete therapy settings');
   }
 });
 
@@ -174,7 +174,7 @@ export const getBasalSchedulesByName = query(z.string(), async (profileName) => 
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getBasalSchedulesByName:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -182,7 +182,7 @@ export const getBasalSchedulesByName = query(z.string(), async (profileName) => 
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get basal schedules by name');
+    throw error(500, message ?? 'Failed to get basal schedules by name');
   }
 });
 
@@ -194,7 +194,7 @@ export const getBasalScheduleById = query(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getBasalScheduleById:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -202,7 +202,7 @@ export const getBasalScheduleById = query(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get basal schedule by id');
+    throw error(500, message ?? 'Failed to get basal schedule by id');
   }
 });
 
@@ -218,7 +218,7 @@ export const createBasalSchedule = form(formCoerce(BasalScheduleSchema) as any, 
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.createBasalSchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -226,7 +226,7 @@ export const createBasalSchedule = form(formCoerce(BasalScheduleSchema) as any, 
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to create basal schedule');
+    throw error(500, message ?? 'Failed to create basal schedule');
   }
 });
 
@@ -243,7 +243,7 @@ export const updateBasalSchedule = form(formCoerce(z.object({ id: z.string(), re
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.updateBasalSchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -251,7 +251,7 @@ export const updateBasalSchedule = form(formCoerce(z.object({ id: z.string(), re
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to update basal schedule');
+    throw error(500, message ?? 'Failed to update basal schedule');
   }
 });
 
@@ -267,7 +267,7 @@ export const deleteBasalSchedule = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.deleteBasalSchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -275,7 +275,7 @@ export const deleteBasalSchedule = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to delete basal schedule');
+    throw error(500, message ?? 'Failed to delete basal schedule');
   }
 });
 
@@ -287,7 +287,7 @@ export const getCarbRatioSchedulesByName = query(z.string(), async (profileName)
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getCarbRatioSchedulesByName:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -295,7 +295,7 @@ export const getCarbRatioSchedulesByName = query(z.string(), async (profileName)
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get carb ratio schedules by name');
+    throw error(500, message ?? 'Failed to get carb ratio schedules by name');
   }
 });
 
@@ -307,7 +307,7 @@ export const getCarbRatioScheduleById = query(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getCarbRatioScheduleById:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -315,7 +315,7 @@ export const getCarbRatioScheduleById = query(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get carb ratio schedule by id');
+    throw error(500, message ?? 'Failed to get carb ratio schedule by id');
   }
 });
 
@@ -331,7 +331,7 @@ export const createCarbRatioSchedule = command(CarbRatioScheduleSchema, async (r
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.createCarbRatioSchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -339,7 +339,7 @@ export const createCarbRatioSchedule = command(CarbRatioScheduleSchema, async (r
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to create carb ratio schedule');
+    throw error(500, message ?? 'Failed to create carb ratio schedule');
   }
 });
 
@@ -356,7 +356,7 @@ export const updateCarbRatioSchedule = command(z.object({ id: z.string(), reques
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.updateCarbRatioSchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -364,7 +364,7 @@ export const updateCarbRatioSchedule = command(z.object({ id: z.string(), reques
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to update carb ratio schedule');
+    throw error(500, message ?? 'Failed to update carb ratio schedule');
   }
 });
 
@@ -380,7 +380,7 @@ export const deleteCarbRatioSchedule = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.deleteCarbRatioSchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -388,7 +388,7 @@ export const deleteCarbRatioSchedule = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to delete carb ratio schedule');
+    throw error(500, message ?? 'Failed to delete carb ratio schedule');
   }
 });
 
@@ -400,7 +400,7 @@ export const getSensitivitySchedulesByName = query(z.string(), async (profileNam
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getSensitivitySchedulesByName:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -408,7 +408,7 @@ export const getSensitivitySchedulesByName = query(z.string(), async (profileNam
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get sensitivity schedules by name');
+    throw error(500, message ?? 'Failed to get sensitivity schedules by name');
   }
 });
 
@@ -420,7 +420,7 @@ export const getSensitivityScheduleById = query(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getSensitivityScheduleById:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -428,7 +428,7 @@ export const getSensitivityScheduleById = query(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get sensitivity schedule by id');
+    throw error(500, message ?? 'Failed to get sensitivity schedule by id');
   }
 });
 
@@ -444,7 +444,7 @@ export const createSensitivitySchedule = command(SensitivityScheduleSchema, asyn
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.createSensitivitySchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -452,7 +452,7 @@ export const createSensitivitySchedule = command(SensitivityScheduleSchema, asyn
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to create sensitivity schedule');
+    throw error(500, message ?? 'Failed to create sensitivity schedule');
   }
 });
 
@@ -469,7 +469,7 @@ export const updateSensitivitySchedule = command(z.object({ id: z.string(), requ
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.updateSensitivitySchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -477,7 +477,7 @@ export const updateSensitivitySchedule = command(z.object({ id: z.string(), requ
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to update sensitivity schedule');
+    throw error(500, message ?? 'Failed to update sensitivity schedule');
   }
 });
 
@@ -493,7 +493,7 @@ export const deleteSensitivitySchedule = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.deleteSensitivitySchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -501,7 +501,7 @@ export const deleteSensitivitySchedule = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to delete sensitivity schedule');
+    throw error(500, message ?? 'Failed to delete sensitivity schedule');
   }
 });
 
@@ -513,7 +513,7 @@ export const getTargetRangeSchedulesByName = query(z.string(), async (profileNam
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getTargetRangeSchedulesByName:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -521,7 +521,7 @@ export const getTargetRangeSchedulesByName = query(z.string(), async (profileNam
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get target range schedules by name');
+    throw error(500, message ?? 'Failed to get target range schedules by name');
   }
 });
 
@@ -533,7 +533,7 @@ export const getTargetRangeScheduleById = query(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getTargetRangeScheduleById:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -541,7 +541,7 @@ export const getTargetRangeScheduleById = query(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get target range schedule by id');
+    throw error(500, message ?? 'Failed to get target range schedule by id');
   }
 });
 
@@ -557,7 +557,7 @@ export const createTargetRangeSchedule = command(TargetRangeScheduleSchema, asyn
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.createTargetRangeSchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -565,7 +565,7 @@ export const createTargetRangeSchedule = command(TargetRangeScheduleSchema, asyn
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to create target range schedule');
+    throw error(500, message ?? 'Failed to create target range schedule');
   }
 });
 
@@ -582,7 +582,7 @@ export const updateTargetRangeSchedule = command(z.object({ id: z.string(), requ
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.updateTargetRangeSchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -590,7 +590,7 @@ export const updateTargetRangeSchedule = command(z.object({ id: z.string(), requ
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to update target range schedule');
+    throw error(500, message ?? 'Failed to update target range schedule');
   }
 });
 
@@ -606,7 +606,7 @@ export const deleteTargetRangeSchedule = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.deleteTargetRangeSchedule:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -614,6 +614,6 @@ export const deleteTargetRangeSchedule = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to delete target range schedule');
+    throw error(500, message ?? 'Failed to delete target range schedule');
   }
 });

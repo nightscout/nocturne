@@ -17,7 +17,7 @@ export const createTenant = command(SetupTenantRequestSchema, async (request) =>
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in setup.createTenant:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -25,7 +25,7 @@ export const createTenant = command(SetupTenantRequestSchema, async (request) =>
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to create tenant');
+    throw error(500, message ?? 'Failed to create tenant');
   }
 });
 
@@ -37,7 +37,7 @@ export const validateUsername = query(z.object({ username: z.string().optional()
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in setup.validateUsername:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -45,7 +45,7 @@ export const validateUsername = query(z.object({ username: z.string().optional()
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to validate username');
+    throw error(500, message ?? 'Failed to validate username');
   }
 });
 
@@ -59,7 +59,7 @@ export const ownerOptions = command(SetupOwnerOptionsRequestSchema, async (reque
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in setup.ownerOptions:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -67,7 +67,7 @@ export const ownerOptions = command(SetupOwnerOptionsRequestSchema, async (reque
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to owner options');
+    throw error(500, message ?? 'Failed to owner options');
   }
 });
 
@@ -81,7 +81,7 @@ export const ownerComplete = command(SetupOwnerCompleteRequestSchema, async (req
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in setup.ownerComplete:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -89,7 +89,7 @@ export const ownerComplete = command(SetupOwnerCompleteRequestSchema, async (req
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to owner complete');
+    throw error(500, message ?? 'Failed to owner complete');
   }
 });
 
@@ -103,7 +103,7 @@ export const ownerOidc = command(SetupOwnerOidcRequestSchema, async (request) =>
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in setup.ownerOidc:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -111,6 +111,6 @@ export const ownerOidc = command(SetupOwnerOidcRequestSchema, async (request) =>
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to owner oidc');
+    throw error(500, message ?? 'Failed to owner oidc');
   }
 });

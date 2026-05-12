@@ -1,0 +1,82 @@
+name: Commit Generated API Client
+
+on:
+  push:
+    branches: [main]
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  NODE_VERSION: "24"
+  PNPM_VERSION: "9"
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+          cache-dependency-path: src/Web/pnpm-lock.yaml
+
+      - name: Install web dependencies
+        working-directory: src/Web
+        run: pnpm install --frozen-lockfile
+
+      - name: Build bridge package
+        working-directory: src/Web/packages/bridge
+        run: pnpm run build
+
+      - name: Restore .NET dependencies
+        run: dotnet restore
+
+      - name: Generate API client
+        working-directory: src/API/Nocturne.API
+        run: dotnet build -c Release
+
+      - name: Verify generated API client files
+        run: |
+          GENERATED_DIR="src/Web/packages/app/src/lib/api/generated"
+          MISSING=()
+
+          for f in passkeys patientRecords chartDatas profiles alerts; do
+            if [ ! -f "$GENERATED_DIR/${f}.generated.remote.ts" ]; then
+              MISSING+=("$f")
+            fi
+          done
+
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "::error::Missing generated remote files: ${MISSING[*]}"
+            ls -la "$GENERATED_DIR/"*.generated.remote.ts 2>/dev/null || echo "No generated remote files found"
+            exit 1
+          fi
+
+          REMOTE_COUNT=$(find "$GENERATED_DIR" -name "*.generated.remote.ts" | wc -l)
+          echo "Generated API client files found ($REMOTE_COUNT remote files)"
+          if [ "$REMOTE_COUNT" -lt 40 ]; then
+            echo "::error::Expected at least 40 generated remote files but found only $REMOTE_COUNT"
+            exit 1
+          fi
+
+      - name: Commit generated files
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: regenerate API client [skip ci]"
+          file_pattern: "src/Web/packages/app/src/lib/api/generated/**"

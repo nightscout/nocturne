@@ -31,7 +31,7 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entities = await _context.Settings.OrderBy(s => s.Key).ToListAsync(cancellationToken);
+        var entities = await _context.Settings.AsNoTracking().OrderBy(s => s.Key).ToListAsync(cancellationToken);
 
         return entities.Select(SettingsMapper.ToDomainModel);
     }
@@ -53,7 +53,7 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Settings.AsQueryable();
+        var query = _context.Settings.AsNoTracking().AsQueryable();
 
         // Apply find query filter if specified
         if (!string.IsNullOrEmpty(findQuery))
@@ -87,7 +87,7 @@ public class SettingsRepository : ISettingsRepository
     )
     {
         // Try to find by original ID first (MongoDB ObjectId)
-        var entity = await _context.Settings.FirstOrDefaultAsync(
+        var entity = await _context.Settings.AsNoTracking().FirstOrDefaultAsync(
             s => s.OriginalId == id,
             cancellationToken
         );
@@ -95,7 +95,7 @@ public class SettingsRepository : ISettingsRepository
         // If not found by original ID, try by GUID
         if (entity == null && Guid.TryParse(id, out var guid))
         {
-            entity = await _context.Settings.FirstOrDefaultAsync(
+            entity = await _context.Settings.AsNoTracking().FirstOrDefaultAsync(
                 s => s.Id == guid,
                 cancellationToken
             );
@@ -115,7 +115,7 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context.Settings.FirstOrDefaultAsync(
+        var entity = await _context.Settings.AsNoTracking().FirstOrDefaultAsync(
             s => s.Key == key,
             cancellationToken
         );
@@ -288,7 +288,7 @@ public class SettingsRepository : ISettingsRepository
         CancellationToken cancellationToken = default
     )
     {
-        var query = _context.Settings.AsQueryable();
+        var query = _context.Settings.AsNoTracking().AsQueryable();
 
         // Apply find query filter if specified
         if (!string.IsNullOrEmpty(findQuery))

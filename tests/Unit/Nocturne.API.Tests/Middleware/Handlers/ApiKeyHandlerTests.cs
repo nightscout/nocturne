@@ -86,7 +86,7 @@ public class ApiKeyHandlerTests : IDisposable
                 TenantId = _testTenantId,
                 GrantType = OAuthGrantTypes.Direct,
                 TokenHash = tokenHash,
-                Scopes = ["entries.read", "treatments.readwrite"],
+                Scopes = ["glucose.read", "treatments.readwrite"],
                 CreatedAt = DateTime.UtcNow,
             });
             await ctx.SaveChangesAsync();
@@ -101,7 +101,7 @@ public class ApiKeyHandlerTests : IDisposable
         Assert.NotNull(result.AuthContext);
         Assert.Equal(AuthType.ApiKey, result.AuthContext!.AuthType);
         Assert.Equal(_subjectId, result.AuthContext.SubjectId);
-        Assert.Contains("entries.read", result.AuthContext.Scopes);
+        Assert.Contains("glucose.read", result.AuthContext.Scopes);
         Assert.Contains("treatments.readwrite", result.AuthContext.Scopes);
     }
 
@@ -120,7 +120,7 @@ public class ApiKeyHandlerTests : IDisposable
                 TenantId = _testTenantId,
                 GrantType = OAuthGrantTypes.Direct,
                 LegacySecretHash = sha1Hash,
-                Scopes = ["entries.read"],
+                Scopes = ["glucose.read"],
                 CreatedAt = DateTime.UtcNow,
             });
             await ctx.SaveChangesAsync();
@@ -135,7 +135,7 @@ public class ApiKeyHandlerTests : IDisposable
         Assert.NotNull(result.AuthContext);
         Assert.Equal(AuthType.ApiKey, result.AuthContext!.AuthType);
         Assert.Equal(_subjectId, result.AuthContext.SubjectId);
-        Assert.Contains("entries.read", result.AuthContext.Scopes);
+        Assert.Contains("glucose.read", result.AuthContext.Scopes);
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public class ApiKeyHandlerTests : IDisposable
                 TenantId = _testTenantId,
                 GrantType = OAuthGrantTypes.Direct,
                 TokenHash = tokenHash,
-                Scopes = ["entries.read"],
+                Scopes = ["glucose.read"],
                 CreatedAt = DateTime.UtcNow,
                 RevokedAt = DateTime.UtcNow,
             });
@@ -209,7 +209,7 @@ public class ApiKeyHandlerTests : IDisposable
                 TenantId = _testTenantId,
                 GrantType = OAuthGrantTypes.Direct,
                 TokenHash = tokenHash,
-                Scopes = ["entries.read"],
+                Scopes = ["glucose.read"],
                 CreatedAt = DateTime.UtcNow,
             });
             await ctx.SaveChangesAsync();
@@ -222,7 +222,7 @@ public class ApiKeyHandlerTests : IDisposable
 
         Assert.True(result.Succeeded);
         Assert.Single(result.AuthContext!.Scopes);
-        Assert.Equal("entries.read", result.AuthContext.Scopes[0]);
+        Assert.Equal("glucose.read", result.AuthContext.Scopes[0]);
         Assert.DoesNotContain("*", result.AuthContext.Permissions);
     }
 
@@ -241,7 +241,7 @@ public class ApiKeyHandlerTests : IDisposable
                 TenantId = _testTenantId,
                 GrantType = OAuthGrantTypes.Direct,
                 TokenHash = tokenHash,
-                Scopes = ["entries.read", "treatments.read"],
+                Scopes = ["glucose.read", "treatments.read"],
                 CreatedAt = DateTime.UtcNow,
             });
             await ctx.SaveChangesAsync();

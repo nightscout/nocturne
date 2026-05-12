@@ -111,7 +111,7 @@
         {#if grouped.inProgress.length > 0}
             <section class="py-16 border-t border-border">
                 <div class="mb-8">
-                    <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-2.5">&#167; 01 &mdash; In Progress</div>
+                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-2.5">01 &mdash; In Progress</div>
                     <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Currently <em class="text-glucose-in-range">building.</em></h2>
                 </div>
                 <div class="grid gap-4">
@@ -126,7 +126,7 @@
         {#if grouped.upcoming.length > 0}
             <section class="py-16 border-t border-border">
                 <div class="mb-8">
-                    <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-2.5">&#167; 0{grouped.inProgress.length > 0 ? 2 : 1} &mdash; Upcoming</div>
+                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-2.5">0{grouped.inProgress.length > 0 ? 2 : 1} &mdash; Upcoming</div>
                     <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">On the <em class="text-glucose-in-range">horizon.</em></h2>
                 </div>
                 <div class="grid gap-4">
@@ -141,7 +141,7 @@
         {#if grouped.completed.length > 0}
             <section class="py-16 border-t border-border">
                 <div class="mb-8">
-                    <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-2.5">&#167; 0{[grouped.inProgress.length > 0, grouped.upcoming.length > 0].filter(Boolean).length + 1} &mdash; Completed</div>
+                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground mb-2.5">0{[grouped.inProgress.length > 0, grouped.upcoming.length > 0].filter(Boolean).length + 1} &mdash; Completed</div>
                     <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold leading-[1.2] tracking-[-0.02em] text-foreground m-0">Already <em class="text-glucose-in-range">shipped.</em></h2>
                 </div>
                 <div class="grid gap-4">

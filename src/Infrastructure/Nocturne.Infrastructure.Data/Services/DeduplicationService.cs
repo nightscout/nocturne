@@ -328,7 +328,7 @@ public class DeduplicationService : IDeduplicationService
         // Check if this should be the primary record (earliest timestamp)
         var existingInGroup = await _context.LinkedRecords
             .Where(lr => lr.CanonicalId == canonicalId)
-            .OrderBy(lr => lr.SourceTimestamp)
+            .OrderBy(static lr => lr.SourceTimestamp)
             .FirstOrDefaultAsync(cancellationToken);
 
         var isPrimary = existingInGroup == null || mills < existingInGroup.SourceTimestamp;
@@ -702,7 +702,7 @@ public class DeduplicationService : IDeduplicationService
     {
         var entities = await _context.LinkedRecords
             .Where(lr => lr.CanonicalId == canonicalId)
-            .OrderBy(lr => lr.SourceTimestamp)
+            .OrderBy(static lr => lr.SourceTimestamp)
             .ToListAsync(cancellationToken);
 
         return entities.Select(e => new LinkedRecord
@@ -754,7 +754,7 @@ public class DeduplicationService : IDeduplicationService
     {
         var linkedRecords = await _context.LinkedRecords
             .Where(lr => lr.CanonicalId == canonicalId && lr.RecordType == "statespan")
-            .OrderBy(lr => lr.SourceTimestamp)
+            .OrderBy(static lr => lr.SourceTimestamp)
             .ToListAsync(cancellationToken);
 
         if (linkedRecords.Count == 0)
@@ -770,7 +770,7 @@ public class DeduplicationService : IDeduplicationService
 
         // Sort by timestamp to get primary first
         var sortedStateSpans = stateSpans
-            .OrderBy(s => s.StartTimestamp)
+            .OrderBy(static s => s.StartTimestamp)
             .Select(StateSpanMapper.ToDomainModel)
             .ToList();
 

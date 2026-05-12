@@ -1,4 +1,6 @@
 # Logos are copied from packages/app/static/logos at build/dev time
 static/logos/
+# Fonts are copied from packages/app/static/fonts at build/dev time
+static/fonts/
 # Release assets are copied from deploy/portainer at build/dev time
 src/lib/release/

@@ -86,7 +86,7 @@ public class DirectGrantControllerTests : IDisposable
         var request = new CreateDirectGrantRequest
         {
             Label = "Test Token",
-            Scopes = ["entries.read"],
+            Scopes = ["glucose.read"],
         };
 
         var result = await _controller.Create(request);
@@ -95,7 +95,7 @@ public class DirectGrantControllerTests : IDisposable
         var response = Assert.IsType<CreateDirectGrantResponse>(okResult.Value);
         Assert.StartsWith("noc_", response.Token);
         Assert.Equal("Test Token", response.Label);
-        Assert.Contains("entries.read", response.Scopes);
+        Assert.Contains("glucose.read", response.Scopes);
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public class DirectGrantControllerTests : IDisposable
         var request = new CreateDirectGrantRequest
         {
             Label = "Hash Test",
-            Scopes = ["entries.read"],
+            Scopes = ["glucose.read"],
         };
 
         var result = await _controller.Create(request);
@@ -127,7 +127,7 @@ public class DirectGrantControllerTests : IDisposable
         var request = new CreateDirectGrantRequest
         {
             Label = "",
-            Scopes = ["entries.read"],
+            Scopes = ["glucose.read"],
         };
 
         var result = await _controller.Create(request);
@@ -174,7 +174,7 @@ public class DirectGrantControllerTests : IDisposable
         var request = new CreateDirectGrantRequest
         {
             Label = "Test",
-            Scopes = ["entries.read"],
+            Scopes = ["glucose.read"],
         };
 
         var result = await _controller.Create(request);
@@ -192,7 +192,7 @@ public class DirectGrantControllerTests : IDisposable
             Id = Guid.CreateVersion7(),
             SubjectId = _subjectId,
             GrantType = OAuthGrantTypes.Direct,
-            Scopes = ["entries.read"],
+            Scopes = ["glucose.read"],
             Label = "Active",
             TokenHash = "hash1",
             CreatedAt = DateTime.UtcNow,
@@ -202,7 +202,7 @@ public class DirectGrantControllerTests : IDisposable
             Id = Guid.CreateVersion7(),
             SubjectId = _subjectId,
             GrantType = OAuthGrantTypes.Direct,
-            Scopes = ["entries.read"],
+            Scopes = ["glucose.read"],
             Label = "Revoked",
             TokenHash = "hash2",
             CreatedAt = DateTime.UtcNow,
@@ -226,7 +226,7 @@ public class DirectGrantControllerTests : IDisposable
             Id = Guid.CreateVersion7(),
             SubjectId = _subjectId,
             GrantType = OAuthGrantTypes.Direct,
-            Scopes = ["entries.read"],
+            Scopes = ["glucose.read"],
             Label = "Test",
             TokenHash = "somehash",
             CreatedAt = DateTime.UtcNow,
@@ -252,7 +252,7 @@ public class DirectGrantControllerTests : IDisposable
             Id = grantId,
             SubjectId = _subjectId,
             GrantType = OAuthGrantTypes.Direct,
-            Scopes = ["entries.read"],
+            Scopes = ["glucose.read"],
             Label = "ToRevoke",
             TokenHash = "hashrevoke",
             CreatedAt = DateTime.UtcNow,
@@ -286,7 +286,7 @@ public class DirectGrantControllerTests : IDisposable
             Id = grantId,
             SubjectId = _subjectId,
             GrantType = OAuthGrantTypes.Direct,
-            Scopes = ["entries.read"],
+            Scopes = ["glucose.read"],
             Label = "AlreadyRevoked",
             TokenHash = "hashalreadyrevoked",
             CreatedAt = DateTime.UtcNow,

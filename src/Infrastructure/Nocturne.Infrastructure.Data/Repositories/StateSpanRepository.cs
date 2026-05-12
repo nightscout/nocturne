@@ -115,7 +115,7 @@ public class StateSpanRepository : IStateSpanRepository
         string? source,
         bool? active)
     {
-        var query = _context.StateSpans.AsQueryable();
+        var query = _context.StateSpans.AsNoTracking().AsQueryable();
 
         if (category.HasValue)
             query = query.Where(s => s.Category == category.Value.ToString());
@@ -141,10 +141,8 @@ public class StateSpanRepository : IStateSpanRepository
         }
 
         // Exclude non-primary duplicates from cross-connector deduplication
-        var nonPrimaryIds = _context.LinkedRecords
-            .Where(lr => lr.RecordType == "statespan" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-        query = query.Where(s => !nonPrimaryIds.Contains(s.Id));
+        query = query.Where(s => !_context.LinkedRecords
+            .Any(lr => lr.RecordType == "statespan" && !lr.IsPrimary && lr.RecordId == s.Id));
 
         return query;
     }
@@ -160,14 +158,14 @@ public class StateSpanRepository : IStateSpanRepository
         CancellationToken cancellationToken = default
     )
     {
-        var entity = await _context.StateSpans.FirstOrDefaultAsync(
+        var entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
             s => s.OriginalId == id,
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
-            entity = await _context.StateSpans.FirstOrDefaultAsync(
+            entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
                 s => s.Id == guidId,
                 cancellationToken
             );
@@ -375,13 +373,11 @@ public class StateSpanRepository : IStateSpanRepository
     public async Task<PumpModeState?> GetCurrentPumpModeAsync(CancellationToken cancellationToken = default)
     {
         var pumpModeCategory = nameof(StateSpanCategory.PumpMode);
-        var nonPrimaryIds = _context.LinkedRecords
-            .Where(lr => lr.RecordType == "statespan" && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
 
-        var latest = await _context.StateSpans
+        var latest = await _context.StateSpans.AsNoTracking()
             .Where(s => s.Category == pumpModeCategory && s.EndTimestamp == null)
-            .Where(s => !nonPrimaryIds.Contains(s.Id))
+            .Where(s => !_context.LinkedRecords
+                .Any(lr => lr.RecordType == "statespan" && !lr.IsPrimary && lr.RecordId == s.Id))
             .OrderByDescending(s => s.StartTimestamp)
             .ThenByDescending(s => s.Id)
             .Select(s => s.State)
@@ -454,7 +450,7 @@ public class StateSpanRepository : IStateSpanRepository
     {
         var categoryStrings = categories.Select(c => c.ToString()).ToList();
 
-        var query = _context.StateSpans.Where(s => categoryStrings.Contains(s.Category));
+        var query = _context.StateSpans.AsNoTracking().Where(s => categoryStrings.Contains(s.Category));
 
         if (from.HasValue)
             query = query.Where(s => s.EndTimestamp == null || s.EndTimestamp >= from.Value);
@@ -504,7 +500,7 @@ public class StateSpanRepository : IStateSpanRepository
             .ActivityCategories.Select(c => c.ToString())
             .ToList();
 
-        var query = _context.StateSpans.Where(s => activityCategories.Contains(s.Category));
+        var query = _context.StateSpans.AsNoTracking().Where(s => activityCategories.Contains(s.Category));
 
         // Filter by type/state if provided
         if (!string.IsNullOrEmpty(type))
@@ -534,14 +530,14 @@ public class StateSpanRepository : IStateSpanRepository
             .ActivityCategories.Select(c => c.ToString())
             .ToList();
 
-        var entity = await _context.StateSpans.FirstOrDefaultAsync(
+        var entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
             s => s.OriginalId == id && activityCategories.Contains(s.Category),
             cancellationToken
         );
 
         if (entity == null && Guid.TryParse(id, out var guidId))
         {
-            entity = await _context.StateSpans.FirstOrDefaultAsync(
+            entity = await _context.StateSpans.AsNoTracking().FirstOrDefaultAsync(
                 s => s.Id == guidId && activityCategories.Contains(s.Category),
                 cancellationToken
             );

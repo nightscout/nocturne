@@ -79,7 +79,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task GetMutations_WithoutAuditRead_Returns403()
     {
-        var controller = CreateController(Scopes("entries.read"));
+        var controller = CreateController(Scopes("glucose.read"));
 
         var result = await controller.GetMutationAuditLog(
             DateTime.UtcNow.AddDays(-1), DateTime.UtcNow);
@@ -124,7 +124,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task GetReads_WithoutPermission_Returns403()
     {
-        var controller = CreateController(Scopes("entries.read"));
+        var controller = CreateController(Scopes("glucose.read"));
 
         var result = await controller.GetReadAccessAuditLog(
             DateTime.UtcNow.AddDays(-1), DateTime.UtcNow);
@@ -146,7 +146,7 @@ public class AuditControllerTests : IDisposable
     [Fact]
     public async Task GetConfig_WithoutAuditRead_Returns403()
     {
-        var controller = CreateController(Scopes("entries.read"));
+        var controller = CreateController(Scopes("glucose.read"));
 
         var result = await controller.GetAuditConfig(CancellationToken.None);
 

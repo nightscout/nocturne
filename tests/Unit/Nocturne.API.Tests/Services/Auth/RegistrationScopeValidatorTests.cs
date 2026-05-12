@@ -9,14 +9,14 @@ public class RegistrationScopeValidatorTests
     [Fact]
     public void ValidateScopes_AllValid_ReturnsNull()
     {
-        RegistrationScopeValidator.ValidateScopes("entries.read treatments.read")
+        RegistrationScopeValidator.ValidateScopes("glucose.read treatments.read")
             .Should().BeNull();
     }
 
     [Fact]
     public void ValidateScopes_UnknownScope_ReturnsList()
     {
-        var result = RegistrationScopeValidator.ValidateScopes("entries.read evil.scope");
+        var result = RegistrationScopeValidator.ValidateScopes("glucose.read evil.scope");
         result.Should().NotBeNull();
         result.Should().Contain("evil.scope");
     }

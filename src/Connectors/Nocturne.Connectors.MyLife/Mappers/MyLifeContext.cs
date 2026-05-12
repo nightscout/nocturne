@@ -8,7 +8,7 @@ namespace Nocturne.Connectors.MyLife.Mappers;
 /// <summary>
 /// Context for mapping operations, tracking carb consolidation and temp basal correlation.
 /// </summary>
-internal sealed class MyLifeContext
+public sealed class MyLifeContext
 {
     private MyLifeContext(
         Dictionary<string, double> bolusCarbMatches,
@@ -41,7 +41,7 @@ internal sealed class MyLifeContext
     internal bool EnableMealCarbConsolidation { get; }
     internal bool EnableTempBasalConsolidation { get; }
 
-    internal static MyLifeContext Create(
+    public static MyLifeContext Create(
         IEnumerable<MyLifeEvent> events,
         bool enableMealCarbConsolidation,
         bool enableTempBasalConsolidation,

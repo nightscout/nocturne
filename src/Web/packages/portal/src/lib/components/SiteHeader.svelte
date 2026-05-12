@@ -35,12 +35,8 @@
                 href="/"
                 class="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
             >
-                <div
-                    class="w-9 h-9 rounded-lg bg-primary/20 flex items-center justify-center"
-                >
-                    <span class="text-primary font-bold text-lg">N</span>
-                </div>
-                <span class="text-xl font-semibold">Nocturne</span>
+                <img src="/logos/nocturne.png" alt="Nocturne" class="w-9 h-9" />
+                <span class="text-xl font-semibold font-brand">Nocturne</span>
             </a>
 
             <!-- Desktop Navigation -->

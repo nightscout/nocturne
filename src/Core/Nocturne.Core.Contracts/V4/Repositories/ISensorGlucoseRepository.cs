@@ -38,6 +38,8 @@ public interface ISensorGlucoseRepository : IV4Repository<SensorGlucose>
         int offset = 0,
         bool descending = true,
         bool nativeOnly = false,
+        DateTime? afterTimestamp = null,
+        Guid? afterId = null,
         CancellationToken ct = default
     );
 
@@ -45,7 +47,7 @@ public interface ISensorGlucoseRepository : IV4Repository<SensorGlucose>
     Task<IEnumerable<SensorGlucose>> IV4Repository<SensorGlucose>.GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, CancellationToken ct)
-        => GetAsync(from, to, device, source, limit, offset, descending, false, ct);
+        => GetAsync(from, to, device, source, limit, offset, descending, false, null, null, ct);
 
     /// <summary>Returns a single <see cref="SensorGlucose"/> by its UUID v7, or <c>null</c> if not found.</summary>
     /// <param name="id">UUID v7 record identifier.</param>

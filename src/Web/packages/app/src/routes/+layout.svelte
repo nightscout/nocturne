@@ -1,6 +1,7 @@
 <script lang="ts">
   import "../app.css";
   import { ModeWatcher } from "mode-watcher";
+  import NavigationProgress from "$lib/components/ui/NavigationProgress.svelte";
   import * as alarmState from "$lib/stores/alarm-state.svelte";
   import AlarmActiveView from "$lib/components/settings/alarm-preview/AlarmActiveView.svelte";
   import EmergencyOverlay from "$lib/components/settings/alarm-preview/EmergencyOverlay.svelte";
@@ -32,6 +33,7 @@
 </script>
 
 <ModeWatcher />
+<NavigationProgress />
 
 {#if isEmergencyView && activeAlarm}
   <EmergencyOverlay

@@ -104,9 +104,9 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
         grant.Label.Should().Be("Nightscout (migrated)");
         grant.TokenHash.Should().BeNull();
         grant.SubjectId.Should().Be(_subjectId);
-        grant.Scopes.Should().Contain("entries.readwrite");
+        grant.Scopes.Should().Contain("glucose.readwrite");
         grant.Scopes.Should().Contain("treatments.readwrite");
-        grant.Scopes.Should().Contain("devicestatus.readwrite");
+        grant.Scopes.Should().Contain("devices.readwrite");
         grant.RevokedAt.Should().BeNull();
     }
 

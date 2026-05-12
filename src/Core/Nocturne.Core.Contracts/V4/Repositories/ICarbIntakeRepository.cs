@@ -36,6 +36,8 @@ public interface ICarbIntakeRepository : IV4Repository<CarbIntake>
         int offset = 0,
         bool descending = true,
         bool nativeOnly = false,
+        DateTime? afterTimestamp = null,
+        Guid? afterId = null,
         CancellationToken ct = default
     );
 
@@ -43,7 +45,7 @@ public interface ICarbIntakeRepository : IV4Repository<CarbIntake>
     Task<IEnumerable<CarbIntake>> IV4Repository<CarbIntake>.GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, CancellationToken ct)
-        => GetAsync(from, to, device, source, limit, offset, descending, false, ct);
+        => GetAsync(from, to, device, source, limit, offset, descending, false, null, null, ct);
 
     /// <summary>Returns a single <see cref="CarbIntake"/> by its UUID v7, or <c>null</c> if not found.</summary>
     /// <param name="id">UUID v7 record identifier.</param>

@@ -20,9 +20,9 @@ public static class ScopeTranslator
     private static readonly Dictionary<string, string[]> TrieToScopes = new(StringComparer.OrdinalIgnoreCase)
     {
         // Entries
-        ["api:entries:read"] = [OAuthScopes.EntriesRead],
-        ["api:entries:create"] = [OAuthScopes.EntriesReadWrite],
-        ["api:entries:update"] = [OAuthScopes.EntriesReadWrite],
+        ["api:entries:read"] = [OAuthScopes.GlucoseRead],
+        ["api:entries:create"] = [OAuthScopes.GlucoseReadWrite],
+        ["api:entries:update"] = [OAuthScopes.GlucoseReadWrite],
         ["api:entries:delete"] = [OAuthScopes.FullAccess],
 
         // Treatments
@@ -32,9 +32,9 @@ public static class ScopeTranslator
         ["api:treatments:delete"] = [OAuthScopes.FullAccess],
 
         // Device status
-        ["api:devicestatus:read"] = [OAuthScopes.DeviceStatusRead],
-        ["api:devicestatus:create"] = [OAuthScopes.DeviceStatusReadWrite],
-        ["api:devicestatus:update"] = [OAuthScopes.DeviceStatusReadWrite],
+        ["api:devicestatus:read"] = [OAuthScopes.DevicesRead],
+        ["api:devicestatus:create"] = [OAuthScopes.DevicesReadWrite],
+        ["api:devicestatus:update"] = [OAuthScopes.DevicesReadWrite],
         ["api:devicestatus:delete"] = [OAuthScopes.FullAccess],
 
         // Food
@@ -44,40 +44,40 @@ public static class ScopeTranslator
         ["api:food:delete"] = [OAuthScopes.FullAccess],
 
         // Profile
-        ["api:profile:read"] = [OAuthScopes.ProfileRead],
-        ["api:profile:create"] = [OAuthScopes.ProfileReadWrite],
-        ["api:profile:update"] = [OAuthScopes.ProfileReadWrite],
+        ["api:profile:read"] = [OAuthScopes.TherapyRead],
+        ["api:profile:create"] = [OAuthScopes.TherapyReadWrite],
+        ["api:profile:update"] = [OAuthScopes.TherapyReadWrite],
         ["api:profile:delete"] = [OAuthScopes.FullAccess],
 
         // Wildcard reads
         ["api:*:read"] = [
-            OAuthScopes.EntriesRead,
+            OAuthScopes.GlucoseRead,
             OAuthScopes.TreatmentsRead,
-            OAuthScopes.DeviceStatusRead,
-            OAuthScopes.ProfileRead,
+            OAuthScopes.DevicesRead,
+            OAuthScopes.TherapyRead,
             OAuthScopes.FoodRead,
-            OAuthScopes.NotificationsRead,
+            OAuthScopes.AlertsRead,
             OAuthScopes.ReportsRead,
             OAuthScopes.IdentityRead,
         ],
 
         // Wildcard writes
         ["api:*:create"] = [
-            OAuthScopes.EntriesReadWrite,
+            OAuthScopes.GlucoseReadWrite,
             OAuthScopes.TreatmentsReadWrite,
-            OAuthScopes.DeviceStatusReadWrite,
-            OAuthScopes.ProfileReadWrite,
+            OAuthScopes.DevicesReadWrite,
+            OAuthScopes.TherapyReadWrite,
             OAuthScopes.FoodReadWrite,
-            OAuthScopes.NotificationsReadWrite,
+            OAuthScopes.AlertsReadWrite,
             OAuthScopes.SharingReadWrite,
         ],
         ["api:*:update"] = [
-            OAuthScopes.EntriesReadWrite,
+            OAuthScopes.GlucoseReadWrite,
             OAuthScopes.TreatmentsReadWrite,
-            OAuthScopes.DeviceStatusReadWrite,
-            OAuthScopes.ProfileReadWrite,
+            OAuthScopes.DevicesReadWrite,
+            OAuthScopes.TherapyReadWrite,
             OAuthScopes.FoodReadWrite,
-            OAuthScopes.NotificationsReadWrite,
+            OAuthScopes.AlertsReadWrite,
             OAuthScopes.SharingReadWrite,
         ],
         ["api:*:delete"] = [OAuthScopes.FullAccess],
@@ -89,12 +89,12 @@ public static class ScopeTranslator
         // Named roles
         ["admin"] = [OAuthScopes.FullAccess],
         ["readable"] = [
-            OAuthScopes.EntriesRead,
+            OAuthScopes.GlucoseRead,
             OAuthScopes.TreatmentsRead,
-            OAuthScopes.DeviceStatusRead,
-            OAuthScopes.ProfileRead,
+            OAuthScopes.DevicesRead,
+            OAuthScopes.TherapyRead,
             OAuthScopes.FoodRead,
-            OAuthScopes.NotificationsRead,
+            OAuthScopes.AlertsRead,
             OAuthScopes.ReportsRead,
             OAuthScopes.IdentityRead,
         ],
@@ -141,10 +141,10 @@ public static class ScopeTranslator
                     permissions.Add("*");
                     return permissions; // * covers everything
 
-                case OAuthScopes.EntriesRead:
+                case OAuthScopes.GlucoseRead:
                     permissions.Add("api:entries:read");
                     break;
-                case OAuthScopes.EntriesReadWrite:
+                case OAuthScopes.GlucoseReadWrite:
                     permissions.Add("api:entries:read");
                     permissions.Add("api:entries:create");
                     permissions.Add("api:entries:update");
@@ -159,10 +159,10 @@ public static class ScopeTranslator
                     permissions.Add("api:treatments:update");
                     break;
 
-                case OAuthScopes.DeviceStatusRead:
+                case OAuthScopes.DevicesRead:
                     permissions.Add("api:devicestatus:read");
                     break;
-                case OAuthScopes.DeviceStatusReadWrite:
+                case OAuthScopes.DevicesReadWrite:
                     permissions.Add("api:devicestatus:read");
                     permissions.Add("api:devicestatus:create");
                     permissions.Add("api:devicestatus:update");
@@ -177,19 +177,19 @@ public static class ScopeTranslator
                     permissions.Add("api:food:update");
                     break;
 
-                case OAuthScopes.ProfileRead:
+                case OAuthScopes.TherapyRead:
                     permissions.Add("api:profile:read");
                     break;
-                case OAuthScopes.ProfileReadWrite:
+                case OAuthScopes.TherapyReadWrite:
                     permissions.Add("api:profile:read");
                     permissions.Add("api:profile:create");
                     permissions.Add("api:profile:update");
                     break;
 
-                case OAuthScopes.NotificationsRead:
+                case OAuthScopes.AlertsRead:
                     permissions.Add("api:notifications:read");
                     break;
-                case OAuthScopes.NotificationsReadWrite:
+                case OAuthScopes.AlertsReadWrite:
                     permissions.Add("api:notifications:read");
                     permissions.Add("api:notifications:create");
                     permissions.Add("api:notifications:update");

@@ -21,6 +21,7 @@
   import {
     setMemberRoles,
     setMemberPermissions,
+    setMemberLimitTo24Hours,
   } from "$lib/api/generated/memberInvites.generated.remote";
   import { coachmark } from "@nocturne/coach";
   import CreateInviteCard from "$lib/components/members/CreateInviteCard.svelte";
@@ -118,7 +119,7 @@
   <title>Members - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-4xl p-6 space-y-6" {@attach coachmark({ key: "onboarding.sharing", title: "Share with a caretaker", description: "Create an invite link to give a parent, partner, or clinician read-only access to your glucose data.", completedWhen: () => sharingConfigured })}>
+<div class="container mx-auto max-w-4xl p-6 space-y-6" {@attach coachmark({ key: "onboarding.sharing", title: "Share with a caretaker", description: "Share your glucose data with a parent, partner, or clinician.", completedWhen: () => sharingConfigured })}>
   <div class="flex items-center gap-3">
     <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
       <Users class="h-6 w-6 text-primary" />
@@ -252,6 +253,17 @@
             onToggleExpand={() => toggleExpandMember(member.subjectId!)}
             onSaveRoles={(roleIds, permissions) =>
               saveMemberChanges(member.subjectId!, roleIds, permissions)}
+            onSaveLimitTo24Hours={async (limitTo24Hours) => {
+              try {
+                await setMemberLimitTo24Hours({
+                  id: member.subjectId!,
+                  request: { limitTo24Hours },
+                });
+              } catch {
+                errorMessage = "Failed to update member. Please try again.";
+                clearMessages();
+              }
+            }}
             onRemove={async () => {
               if (!tenantId || !member.subjectId) return;
               errorMessage = null;

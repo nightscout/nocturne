@@ -15,7 +15,7 @@ namespace Nocturne.Desktop.Tray.Services;
 public sealed class OidcAuthService : IDisposable
 {
     private const string ClientId = "nocturne-tray";
-    private const string Scopes = "entries.read treatments.read devicestatus.read profile.read";
+    private const string Scopes = "glucose.read treatments.read devices.read therapy.read";
 
     private readonly SettingsService _settingsService;
     private readonly ICredentialStore _credentialStore;

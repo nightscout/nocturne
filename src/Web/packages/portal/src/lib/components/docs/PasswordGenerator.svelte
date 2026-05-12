@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { Copy, Check, RefreshCw } from "@lucide/svelte";
+    import CopyButton from "./CopyButton.svelte";
+    import { RefreshCw } from "@lucide/svelte";
 
     interface Props {
         label?: string;
@@ -42,28 +43,8 @@
         const _key = refreshKey;
         return generatePassword(length);
     });
-    let copied = $state(false);
-    let copyTimer: ReturnType<typeof setTimeout> | undefined;
-
     function refresh() {
         refreshKey += 1;
-        copied = false;
-        if (copyTimer !== undefined) {
-            clearTimeout(copyTimer);
-            copyTimer = undefined;
-        }
-    }
-
-    async function copy() {
-        await navigator.clipboard.writeText(password);
-        copied = true;
-        if (copyTimer !== undefined) {
-            clearTimeout(copyTimer);
-        }
-        copyTimer = setTimeout(() => {
-            copied = false;
-            copyTimer = undefined;
-        }, 2000);
     }
 </script>
 
@@ -88,18 +69,7 @@
                 <RefreshCw class="h-4 w-4" />
             </button>
 
-            <button
-                type="button"
-                onclick={copy}
-                class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-                aria-label={copied ? "Copied" : `Copy ${label} to clipboard`}
-            >
-                {#if copied}
-                    <Check class="h-4 w-4 text-green-500" />
-                {:else}
-                    <Copy class="h-4 w-4" />
-                {/if}
-            </button>
+            <CopyButton text={password} label="Copy {label} to clipboard" />
         </div>
     </div>
 

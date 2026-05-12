@@ -15,7 +15,7 @@ export const getPendingRequests = query(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in accessRequest.getPendingRequests:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -23,7 +23,7 @@ export const getPendingRequests = query(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get pending requests');
+    throw error(500, message ?? 'Failed to get pending requests');
   }
 });
 
@@ -35,7 +35,7 @@ export const approve = command(z.object({ subjectId: z.string(), request: Approv
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in accessRequest.approve:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -43,7 +43,7 @@ export const approve = command(z.object({ subjectId: z.string(), request: Approv
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to approve');
+    throw error(500, message ?? 'Failed to approve');
   }
 });
 
@@ -55,7 +55,7 @@ export const deny = command(z.string(), async (subjectId) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in accessRequest.deny:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -63,6 +63,6 @@ export const deny = command(z.string(), async (subjectId) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to deny');
+    throw error(500, message ?? 'Failed to deny');
   }
 });

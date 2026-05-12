@@ -14,7 +14,7 @@ export const getStepCounts = query(z.object({ count: z.number().optional(), skip
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in stepCount.getStepCounts:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -22,7 +22,7 @@ export const getStepCounts = query(z.object({ count: z.number().optional(), skip
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get step counts');
+    throw error(500, message ?? 'Failed to get step counts');
   }
 });
 
@@ -34,7 +34,7 @@ export const getStepCount = query(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in stepCount.getStepCount:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -42,6 +42,6 @@ export const getStepCount = query(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get step count');
+    throw error(500, message ?? 'Failed to get step count');
   }
 });

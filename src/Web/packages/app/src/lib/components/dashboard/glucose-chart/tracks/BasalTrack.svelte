@@ -179,14 +179,16 @@
 
   <!-- Scheduled basal rate line -->
   {#if scheduledBasalData.length > 0}
-    <Spline
-      data={scheduledBasalData}
-      x={(d) => new Date(d.timestamp ?? 0)}
-      y={(d) => basalScale(d.rate ?? 0)}
-      curve={curveStepAfter}
-      class="stroke-muted-foreground/50 stroke-1 fill-none"
-      stroke-dasharray="4,4"
-    />
+    <ChartClipPath>
+      <Spline
+        data={scheduledBasalData}
+        x={(d) => new Date(d.timestamp ?? 0)}
+        y={(d) => basalScale(d.rate ?? 0)}
+        curve={curveStepAfter}
+        class="stroke-muted-foreground/50 stroke-1 fill-none"
+        stroke-dasharray="4,4"
+      />
+    </ChartClipPath>
   {/if}
 
   <!-- Basal axis on right -->

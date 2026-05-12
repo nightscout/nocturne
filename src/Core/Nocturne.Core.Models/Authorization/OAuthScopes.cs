@@ -23,21 +23,21 @@ public static class OAuthScopes
     // Core health data scopes
 
     /// <summary>Read-only access to glucose entries.</summary>
-    public const string EntriesRead = "entries.read";
+    public const string GlucoseRead = "glucose.read";
     /// <summary>Read and write access to glucose entries.</summary>
-    public const string EntriesReadWrite = "entries.readwrite";
+    public const string GlucoseReadWrite = "glucose.readwrite";
     /// <summary>Read-only access to treatments (boluses, carbs, temp basals, etc.).</summary>
     public const string TreatmentsRead = "treatments.read";
     /// <summary>Read and write access to treatments.</summary>
     public const string TreatmentsReadWrite = "treatments.readwrite";
     /// <summary>Read-only access to device status records.</summary>
-    public const string DeviceStatusRead = "devicestatus.read";
+    public const string DevicesRead = "devices.read";
     /// <summary>Read and write access to device status records.</summary>
-    public const string DeviceStatusReadWrite = "devicestatus.readwrite";
+    public const string DevicesReadWrite = "devices.readwrite";
     /// <summary>Read-only access to user profiles (therapy settings).</summary>
-    public const string ProfileRead = "profile.read";
+    public const string TherapyRead = "therapy.read";
     /// <summary>Read and write access to user profiles.</summary>
-    public const string ProfileReadWrite = "profile.readwrite";
+    public const string TherapyReadWrite = "therapy.readwrite";
     /// <summary>Read-only access to heart rate data.</summary>
     public const string HeartRateRead = "heartrate.read";
     /// <summary>Read and write access to heart rate data.</summary>
@@ -53,10 +53,10 @@ public static class OAuthScopes
 
     // Platform feature scopes
 
-    /// <summary>Read-only access to notification settings and history.</summary>
-    public const string NotificationsRead = "notifications.read";
-    /// <summary>Read and write access to notification settings.</summary>
-    public const string NotificationsReadWrite = "notifications.readwrite";
+    /// <summary>Read-only access to alert settings and history.</summary>
+    public const string AlertsRead = "alerts.read";
+    /// <summary>Read and write access to alert settings.</summary>
+    public const string AlertsReadWrite = "alerts.readwrite";
     /// <summary>Read-only access to generated reports.</summary>
     public const string ReportsRead = "reports.read";
 
@@ -66,6 +66,9 @@ public static class OAuthScopes
     public const string IdentityRead = "identity.read";
     /// <summary>Read and write access to sharing/follower configuration.</summary>
     public const string SharingReadWrite = "sharing.readwrite";
+
+    /// <summary>Read-only access to computed statistics (time-in-range, A1c estimates, etc.).</summary>
+    public const string StatisticsRead = "statistics.read";
 
     // Full access (includes delete)
 
@@ -84,16 +87,16 @@ public static class OAuthScopes
     /// </summary>
     public static readonly IReadOnlyList<string> AllScopes = new[]
     {
-        EntriesRead,
-        EntriesReadWrite,
+        GlucoseRead,
+        GlucoseReadWrite,
         TreatmentsRead,
         TreatmentsReadWrite,
-        DeviceStatusRead,
-        DeviceStatusReadWrite,
-        ProfileRead,
-        ProfileReadWrite,
-        NotificationsRead,
-        NotificationsReadWrite,
+        DevicesRead,
+        DevicesReadWrite,
+        TherapyRead,
+        TherapyReadWrite,
+        AlertsRead,
+        AlertsReadWrite,
         ReportsRead,
         IdentityRead,
         HeartRateRead,
@@ -103,6 +106,7 @@ public static class OAuthScopes
         FoodRead,
         FoodReadWrite,
         SharingReadWrite,
+        StatisticsRead,
     };
 
     /// <summary>
@@ -120,10 +124,10 @@ public static class OAuthScopes
     /// </summary>
     public static readonly IReadOnlyList<string> HealthReadExpansion = new[]
     {
-        EntriesRead,
+        GlucoseRead,
         TreatmentsRead,
-        DeviceStatusRead,
-        ProfileRead,
+        DevicesRead,
+        TherapyRead,
         HeartRateRead,
         StepCountRead,
         FoodRead,
@@ -134,10 +138,10 @@ public static class OAuthScopes
     /// </summary>
     public static readonly IReadOnlyList<string> HealthReadWriteExpansion = new[]
     {
-        EntriesReadWrite,
+        GlucoseReadWrite,
         TreatmentsReadWrite,
-        DeviceStatusReadWrite,
-        ProfileReadWrite,
+        DevicesReadWrite,
+        TherapyReadWrite,
         HeartRateReadWrite,
         StepCountReadWrite,
         FoodReadWrite,
@@ -149,11 +153,11 @@ public static class OAuthScopes
     /// </summary>
     private static readonly Dictionary<string, string> ReadWriteImpliesRead = new()
     {
-        [EntriesReadWrite] = EntriesRead,
+        [GlucoseReadWrite] = GlucoseRead,
         [TreatmentsReadWrite] = TreatmentsRead,
-        [DeviceStatusReadWrite] = DeviceStatusRead,
-        [ProfileReadWrite] = ProfileRead,
-        [NotificationsReadWrite] = NotificationsRead,
+        [DevicesReadWrite] = DevicesRead,
+        [TherapyReadWrite] = TherapyRead,
+        [AlertsReadWrite] = AlertsRead,
         [HeartRateReadWrite] = HeartRateRead,
         [StepCountReadWrite] = StepCountRead,
         [FoodReadWrite] = FoodRead,

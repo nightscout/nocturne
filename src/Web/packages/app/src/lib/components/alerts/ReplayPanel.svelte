@@ -130,6 +130,7 @@
   let running = $state(false);
   let runError = $state<string | null>(null);
   let result = $state<AlertReplayResult | null>(null);
+  let chartDataReady = $state(false);
 
   // Parse a "HH:mm" string into [hours, minutes]. Returns null on bad input.
   function parseHHmm(s: string): [number, number] | null {
@@ -231,6 +232,7 @@
     running = true;
     runError = null;
     result = null;
+    chartDataReady = false;
     pause();
     playPct = 0;
     maxPct = 0;
@@ -407,10 +409,12 @@
     if (playPct > maxPct) maxPct = playPct;
   }
 
-  // Auto-start playback on each new result. untrack so the effect doesn't
-  // re-fire on every animation frame (which would silently restart pausing).
+  // Auto-start playback once the chart has loaded data for the new result.
+  // Gating on chartDataReady prevents the playhead from sweeping before the
+  // glucose trace is visible. untrack so the effect doesn't re-fire on every
+  // animation frame (which would silently restart pausing).
   $effect(() => {
-    if (result && xDomain) untrack(() => play());
+    if (result && xDomain && chartDataReady) untrack(() => play());
   });
 
   onDestroy(() => pause());
@@ -567,6 +571,7 @@
               {@const replayEngine = createChartDataEngine({
                 dateRange: { from: xDomain[0], to: xDomain[1] },
                 enablePredictions: false,
+                onDataReady: () => { chartDataReady = true; },
               })}
               <GlucoseChartShell
                 engine={replayEngine}

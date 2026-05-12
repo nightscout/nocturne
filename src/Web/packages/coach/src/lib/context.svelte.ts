@@ -112,6 +112,23 @@ export class CoachMarkContext {
     }
 
     this.updateStatus(key, "dismissed");
+
+    // If this mark belongs to a sequence, dismiss all remaining unseen/seen steps
+    // so the next step doesn't auto-show on the next load or selection cycle.
+    const seqName = this._keyToSequence.get(key);
+    if (seqName) {
+      const seq = this.sequences[seqName];
+      if (seq) {
+        for (const stepKey of seq.steps) {
+          if (stepKey === key) continue;
+          const status = this.getStatus(stepKey);
+          if (status === "unseen" || status === "seen") {
+            this.updateStatus(stepKey, "dismissed");
+          }
+        }
+      }
+    }
+
     this._activeSelection = null;
     this.scheduleSelection();
   }

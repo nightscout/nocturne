@@ -39,6 +39,8 @@ public interface IBolusRepository : IV4Repository<Bolus>
         bool descending = true,
         bool nativeOnly = false,
         BolusKind? kind = null,
+        DateTime? afterTimestamp = null,
+        Guid? afterId = null,
         CancellationToken ct = default
     );
 
@@ -46,7 +48,7 @@ public interface IBolusRepository : IV4Repository<Bolus>
     Task<IEnumerable<Bolus>> IV4Repository<Bolus>.GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, CancellationToken ct)
-        => GetAsync(from, to, device, source, limit, offset, descending, false, null, ct);
+        => GetAsync(from, to, device, source, limit, offset, descending, false, null, null, null, ct);
 
     /// <summary>Returns a single <see cref="Bolus"/> by its UUID v7, or <c>null</c> if not found.</summary>
     /// <param name="id">UUID v7 record identifier.</param>

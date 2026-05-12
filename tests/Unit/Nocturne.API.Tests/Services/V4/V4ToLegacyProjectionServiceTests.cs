@@ -112,6 +112,7 @@ public class V4ToLegacyProjectionServiceTests
                 It.IsAny<int>(), It.IsAny<int>(),
                 It.IsAny<bool>(), It.IsAny<bool>(),
                 It.IsAny<BolusKind?>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(boluses);
 
@@ -122,6 +123,7 @@ public class V4ToLegacyProjectionServiceTests
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(),
                 It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(carbs);
 

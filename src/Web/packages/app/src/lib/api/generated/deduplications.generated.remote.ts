@@ -15,7 +15,7 @@ export const startDeduplicationJob = command(async () => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in deduplication.startDeduplicationJob:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -23,7 +23,7 @@ export const startDeduplicationJob = command(async () => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to start deduplication job');
+    throw error(500, message ?? 'Failed to start deduplication job');
   }
 });
 
@@ -34,7 +34,7 @@ export const getJobStatus = query(z.string(), async (jobId) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in deduplication.getJobStatus:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -42,7 +42,7 @@ export const getJobStatus = query(z.string(), async (jobId) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get job status');
+    throw error(500, message ?? 'Failed to get job status');
   }
 });
 
@@ -54,7 +54,7 @@ export const cancelJob = command(z.string(), async (jobId) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in deduplication.cancelJob:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -62,7 +62,7 @@ export const cancelJob = command(z.string(), async (jobId) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to cancel job');
+    throw error(500, message ?? 'Failed to cancel job');
   }
 });
 
@@ -73,7 +73,7 @@ export const getEntryLinkedRecords = query(z.string(), async (entryId) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in deduplication.getEntryLinkedRecords:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -81,7 +81,7 @@ export const getEntryLinkedRecords = query(z.string(), async (entryId) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get entry linked records');
+    throw error(500, message ?? 'Failed to get entry linked records');
   }
 });
 
@@ -92,7 +92,7 @@ export const getTreatmentLinkedRecords = query(z.string(), async (treatmentId) =
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in deduplication.getTreatmentLinkedRecords:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -100,7 +100,7 @@ export const getTreatmentLinkedRecords = query(z.string(), async (treatmentId) =
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get treatment linked records');
+    throw error(500, message ?? 'Failed to get treatment linked records');
   }
 });
 
@@ -111,7 +111,7 @@ export const getStateSpanLinkedRecords = query(z.string(), async (stateSpanId) =
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in deduplication.getStateSpanLinkedRecords:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -119,7 +119,7 @@ export const getStateSpanLinkedRecords = query(z.string(), async (stateSpanId) =
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get state span linked records');
+    throw error(500, message ?? 'Failed to get state span linked records');
   }
 });
 
@@ -130,7 +130,7 @@ export const getRecordLinkedRecords = query(z.object({ recordType: z.enum(Record
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in deduplication.getRecordLinkedRecords:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -138,6 +138,6 @@ export const getRecordLinkedRecords = query(z.object({ recordType: z.enum(Record
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get record linked records');
+    throw error(500, message ?? 'Failed to get record linked records');
   }
 });

@@ -21,6 +21,7 @@
   import { getUnitLabel } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getDateParamsContext } from "$lib/hooks/date-params.svelte";
+  import { untrack, tick } from "svelte";
   import { fade } from "svelte/transition";
 
   const reportsParams = getDateParamsContext();
@@ -445,9 +446,11 @@
   });
 
   $effect(() => {
-    void sentinelElements;
+    void sortedYears;
     if (browser && metadataLoaded) {
-      setupObserver();
+      tick().then(() => {
+        untrack(() => setupObserver());
+      });
     }
     return () => {
       observer?.disconnect();
@@ -456,8 +459,8 @@
 
   // Re-fetch when data source filter changes
   $effect(() => {
-    const currentKey = selectedDataSources.sort().join(",");
-    const prevKey = prevDataSources.sort().join(",");
+    const currentKey = [...selectedDataSources].sort().join(",");
+    const prevKey = [...prevDataSources].sort().join(",");
     if (currentKey !== prevKey && metadataLoaded) {
       prevDataSources = [...selectedDataSources];
       clearAndReload();

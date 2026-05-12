@@ -82,7 +82,7 @@
       issue: 72,
     },
     {
-      file: "medtrum.png",
+      file: "medtrum.jpg",
       name: "Medtrum",
       kind: "CGM",
       comingSoon: true,
@@ -144,7 +144,7 @@
       issue: 180,
     },
     {
-      file: "email.png",
+      file: "email.jpg",
       name: "Email",
       kind: "Notify",
       comingSoon: true,

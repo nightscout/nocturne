@@ -47,7 +47,7 @@ public class OAuthAuthorizationCodeEntity : ITenantScoped
     public string CodeHash { get; set; } = string.Empty;
 
     /// <summary>
-    /// Approved scopes (stored as JSON string array, e.g. ["entries.read", "treatments.readwrite"])
+    /// Approved scopes (stored as JSON string array, e.g. ["glucose.read", "treatments.readwrite"])
     /// </summary>
     [Required]
     [Column("scopes")]

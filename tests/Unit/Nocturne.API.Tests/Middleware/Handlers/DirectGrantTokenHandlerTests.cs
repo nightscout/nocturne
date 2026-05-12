@@ -116,7 +116,7 @@ public class DirectGrantTokenHandlerTests : IDisposable
                 SubjectId = _subjectId,
                 GrantType = OAuthGrantTypes.Direct,
                 TokenHash = tokenHash,
-                Scopes = ["entries.read", "treatments.read"],
+                Scopes = ["glucose.read", "treatments.read"],
                 CreatedAt = DateTime.UtcNow,
             });
             await ctx.SaveChangesAsync();
@@ -131,7 +131,7 @@ public class DirectGrantTokenHandlerTests : IDisposable
         Assert.NotNull(result.AuthContext);
         Assert.Equal(AuthType.DirectGrant, result.AuthContext!.AuthType);
         Assert.Equal(_subjectId, result.AuthContext.SubjectId);
-        Assert.Contains("entries.read", result.AuthContext.Scopes);
+        Assert.Contains("glucose.read", result.AuthContext.Scopes);
         Assert.Contains("treatments.read", result.AuthContext.Scopes);
     }
 
@@ -162,7 +162,7 @@ public class DirectGrantTokenHandlerTests : IDisposable
                 SubjectId = _subjectId,
                 GrantType = OAuthGrantTypes.Direct,
                 TokenHash = tokenHash,
-                Scopes = ["entries.read"],
+                Scopes = ["glucose.read"],
                 CreatedAt = DateTime.UtcNow,
                 RevokedAt = DateTime.UtcNow,
             });

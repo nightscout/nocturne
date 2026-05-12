@@ -25,9 +25,12 @@ public interface IGuestLinkService
 
     Task<IReadOnlyList<GuestLinkInfo>> GetGuestLinksAsync(
         Guid dataOwnerSubjectId,
+        bool includeDismissed = false,
         CancellationToken ct = default);
 
     Task<bool> RevokeAsync(Guid grantId, Guid requestingSubjectId, CancellationToken ct = default);
+
+    Task<bool> DismissAsync(Guid grantId, Guid requestingSubjectId, CancellationToken ct = default);
 
     Task<int> GetActiveCountAsync(Guid dataOwnerSubjectId, CancellationToken ct = default);
 }
@@ -55,6 +58,7 @@ public record GuestLinkInfo
     public DateTime? ActivatedAt { get; init; }
     public string? ActivatedIp { get; init; }
     public DateTime? RevokedAt { get; init; }
+    public DateTime? DismissedAt { get; init; }
     public required GuestLinkStatus Status { get; init; }
 }
 

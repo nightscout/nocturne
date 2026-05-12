@@ -38,19 +38,19 @@ public class TenantRoleServiceTests : IDisposable
         roles.Should().Contain(r => r.Slug == "owner" && r.IsSystem);
         roles.Should().Contain(r => r.Slug == "admin" && r.IsSystem);
         roles.Should().Contain(r => r.Slug == "caretaker" && r.IsSystem);
-        roles.Should().Contain(r => r.Slug == "follower" && r.IsSystem);
-        roles.Should().Contain(r => r.Slug == "readable" && r.IsSystem);
+        roles.Should().Contain(r => r.Slug == "viewer" && r.IsSystem);
+        roles.Should().Contain(r => r.Slug == "clinician" && r.IsSystem);
         roles.Should().Contain(r => r.Slug == "denied" && r.IsSystem);
     }
 
     [Fact]
     public async Task CreateRoleAsync_CreatesCustomRole()
     {
-        var result = await _service.CreateRoleAsync(_tenantId, "School Nurse", "Read-only for school staff", ["entries.read", "health.read"]);
+        var result = await _service.CreateRoleAsync(_tenantId, "School Nurse", "Read-only for school staff", ["glucose.read", "statistics.read"]);
         result.Name.Should().Be("School Nurse");
         result.Slug.Should().Be("school-nurse");
         result.Description.Should().Be("Read-only for school staff");
-        result.Permissions.Should().BeEquivalentTo(["entries.read", "health.read"]);
+        result.Permissions.Should().BeEquivalentTo(["glucose.read", "statistics.read"]);
         result.IsSystem.Should().BeFalse();
     }
 
@@ -68,7 +68,7 @@ public class TenantRoleServiceTests : IDisposable
     public async Task DeleteRoleAsync_RemovesRoleFromMembers()
     {
         await _service.SeedRolesForTenantAsync(_tenantId);
-        var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "follower" && r.TenantId == _tenantId);
+        var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "viewer" && r.TenantId == _tenantId);
         var caretakerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "caretaker" && r.TenantId == _tenantId);
 
         var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = Guid.CreateVersion7() };
@@ -91,7 +91,7 @@ public class TenantRoleServiceTests : IDisposable
     public async Task DeleteRoleAsync_BlocksIfMemberWouldHaveZeroPermissions()
     {
         await _service.SeedRolesForTenantAsync(_tenantId);
-        var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "follower" && r.TenantId == _tenantId);
+        var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "viewer" && r.TenantId == _tenantId);
 
         var member = new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = Guid.CreateVersion7() };
         _context.TenantMembers.Add(member);
@@ -107,7 +107,7 @@ public class TenantRoleServiceTests : IDisposable
     public async Task GetEffectivePermissionsAsync_UnionsRolesAndDirectPermissions()
     {
         await _service.SeedRolesForTenantAsync(_tenantId);
-        var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "follower" && r.TenantId == _tenantId);
+        var followerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "viewer" && r.TenantId == _tenantId);
 
         var member = new TenantMemberEntity
         {
@@ -121,7 +121,7 @@ public class TenantRoleServiceTests : IDisposable
         await _context.SaveChangesAsync();
 
         var effective = await _service.GetEffectivePermissionsAsync(member.Id);
-        effective.Should().BeEquivalentTo(["entries.read", "health.read", "treatments.read"]);
+        effective.Should().BeEquivalentTo(["glucose.read", "statistics.read", "treatments.read"]);
     }
 
     public void Dispose() => _context.Dispose();

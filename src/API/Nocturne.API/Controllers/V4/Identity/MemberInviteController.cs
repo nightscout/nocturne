@@ -121,7 +121,7 @@ public class MemberInviteController : ControllerBase
             return NotFound();
 
         var followers = tenant.Members
-            .Where(m => m.Roles.Any(r => r.Slug == TenantPermissions.SeedRoles.Follower))
+            .Where(m => m.Roles.Any(r => r.Slug == TenantPermissions.SeedRoles.Viewer))
             .ToList();
 
         return Ok(followers);

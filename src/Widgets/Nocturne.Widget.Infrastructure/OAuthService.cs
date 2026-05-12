@@ -13,7 +13,7 @@ public class OAuthService : IOAuthService
 {
     private const string ClientId = "nocturne-widget-windows11";
     private const string DefaultScopes =
-        "entries.read treatments.read devicestatus.read profile.read";
+        "glucose.read treatments.read devices.read therapy.read";
 
     private readonly HttpClient _httpClient;
     private readonly ICredentialStore _credentialStore;

@@ -13,6 +13,7 @@
     PatientDeviceManager,
     PatientInsulinManager,
   } from "$lib/components/patient";
+  import type { ClinicalState } from "$lib/components/patient";
   import { coachmark } from "@nocturne/coach";
   import * as patientRemote from "$api/generated/patientRecords.generated.remote";
 
@@ -28,16 +29,10 @@
     (insulins.current ?? []).some((i) => i.isCurrent === true),
   );
 
-  let saving = $state(false);
-  let saveFn = $state<(() => Promise<boolean>) | undefined>(undefined);
+  let clinicalState = $state<ClinicalState | undefined>(undefined);
 
-  function handleState(api: { save: () => Promise<boolean>; saving: boolean; isValid: boolean }) {
-    saving = api.saving;
-    saveFn = api.save;
-  }
-
-  async function handleSave() {
-    if (saveFn) await saveFn();
+  function handleState(state: ClinicalState) {
+    clinicalState = state;
   }
 </script>
 
@@ -73,8 +68,12 @@
       <PatientClinicalForm onstate={handleState} />
     </Card.Content>
     <Card.Footer class="border-t pt-6">
-      <Button onclick={handleSave} disabled={saving}>
-        {#if saving}
+      <Button
+        type="submit"
+        form="clinical-form"
+        disabled={!clinicalState?.record || !clinicalState?.guard.dirty || !!clinicalState?.form.pending}
+      >
+        {#if clinicalState?.form.pending}
           <Loader2 class="mr-2 h-4 w-4 animate-spin" />
         {:else}
           <Save class="mr-2 h-4 w-4" />

@@ -173,7 +173,7 @@
         <div class="space-y-2" {@attach coachmark({
           key: "setup-invite.roles",
           title: "Choose their access",
-          description: "Roles control what they can see \u2014 most caretakers just need Viewer.",
+          description: "Roles control what they can see and do. Viewer for a quick glance, Caretaker if they help manage your diabetes.",
         })}>
           <Label>Roles</Label>
           <div class="grid gap-2 sm:grid-cols-2">

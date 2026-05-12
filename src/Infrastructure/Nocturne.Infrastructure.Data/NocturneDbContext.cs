@@ -1072,6 +1072,14 @@ public class NocturneDbContext : DbContext
             .HasIndex(l => new { l.RecordType, l.SourceTimestamp })
             .HasDatabaseName("ix_linked_records_type_timestamp");
 
+        // Partial index for the NOT EXISTS anti-join in read queries —
+        // only non-primary rows enter the index, keeping it small.
+        modelBuilder
+            .Entity<LinkedRecordEntity>()
+            .HasIndex(l => new { l.RecordType, l.RecordId })
+            .HasDatabaseName("ix_linked_records_non_primary_record")
+            .HasFilter("NOT is_primary");
+
         // ConnectorConfiguration indexes - optimized for connector lookups
         modelBuilder
             .Entity<ConnectorConfigurationEntity>()
@@ -1292,6 +1300,12 @@ public class NocturneDbContext : DbContext
             .HasDatabaseName("ix_sensor_glucose_patient_device_id")
             .HasFilter("patient_device_id IS NOT NULL");
 
+        modelBuilder
+            .Entity<SensorGlucoseEntity>()
+            .HasIndex(e => new { e.TenantId, e.Timestamp })
+            .HasDatabaseName("ix_sensor_glucose_tenant_timestamp")
+            .IsDescending(false, true);
+
         // MeterGlucose indexes
         modelBuilder
             .Entity<MeterGlucoseEntity>()
@@ -1345,6 +1359,12 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => e.CorrelationId)
             .HasDatabaseName("ix_boluses_correlation_id");
 
+        modelBuilder
+            .Entity<BolusEntity>()
+            .HasIndex(e => new { e.TenantId, e.Timestamp })
+            .HasDatabaseName("ix_boluses_tenant_timestamp")
+            .IsDescending(false, true);
+
         modelBuilder.Entity<BolusEntity>()
             .HasIndex(e => new { e.TenantId, e.DataSource, e.SyncIdentifier })
             .HasDatabaseName("ix_boluses_tenant_source_sync_id")
@@ -1369,6 +1389,12 @@ public class NocturneDbContext : DbContext
             .Entity<CarbIntakeEntity>()
             .HasIndex(e => e.CorrelationId)
             .HasDatabaseName("ix_carb_intakes_correlation_id");
+
+        modelBuilder
+            .Entity<CarbIntakeEntity>()
+            .HasIndex(e => new { e.TenantId, e.Timestamp })
+            .HasDatabaseName("ix_carb_intakes_tenant_timestamp")
+            .IsDescending(false, true);
 
         modelBuilder.Entity<CarbIntakeEntity>()
             .HasIndex(e => new { e.TenantId, e.DataSource, e.SyncIdentifier })
@@ -1519,6 +1545,12 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => e.CorrelationId)
             .HasDatabaseName("ix_temp_basals_correlation_id");
 
+        modelBuilder
+            .Entity<TempBasalEntity>()
+            .HasIndex(e => new { e.TenantId, e.StartTimestamp })
+            .HasDatabaseName("ix_temp_basals_tenant_start_timestamp")
+            .IsDescending(false, true);
+
         // Devices unique index is handled by [Index] attribute on entity
 
         // V4 Profile Decomposition indexes
@@ -1547,6 +1579,12 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => e.ProfileName)
             .HasDatabaseName("ix_therapy_settings_profile_name");
 
+        modelBuilder
+            .Entity<TherapySettingsEntity>()
+            .HasIndex(e => new { e.TenantId, e.Timestamp })
+            .HasDatabaseName("ix_therapy_settings_tenant_timestamp")
+            .IsDescending(false, true);
+
         // BasalSchedule indexes
         modelBuilder
             .Entity<BasalScheduleEntity>()
@@ -1570,6 +1608,12 @@ public class NocturneDbContext : DbContext
             .Entity<BasalScheduleEntity>()
             .HasIndex(e => e.ProfileName)
             .HasDatabaseName("ix_basal_schedules_profile_name");
+
+        modelBuilder
+            .Entity<BasalScheduleEntity>()
+            .HasIndex(e => new { e.TenantId, e.ProfileName, e.Timestamp })
+            .HasDatabaseName("ix_basal_schedules_tenant_profile_timestamp")
+            .IsDescending(false, false, true);
 
         // CarbRatioSchedule indexes
         modelBuilder
@@ -1595,6 +1639,12 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => e.ProfileName)
             .HasDatabaseName("ix_carb_ratio_schedules_profile_name");
 
+        modelBuilder
+            .Entity<CarbRatioScheduleEntity>()
+            .HasIndex(e => new { e.TenantId, e.ProfileName, e.Timestamp })
+            .HasDatabaseName("ix_carb_ratio_schedules_tenant_profile_timestamp")
+            .IsDescending(false, false, true);
+
         // SensitivitySchedule indexes
         modelBuilder
             .Entity<SensitivityScheduleEntity>()
@@ -1619,6 +1669,12 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => e.ProfileName)
             .HasDatabaseName("ix_sensitivity_schedules_profile_name");
 
+        modelBuilder
+            .Entity<SensitivityScheduleEntity>()
+            .HasIndex(e => new { e.TenantId, e.ProfileName, e.Timestamp })
+            .HasDatabaseName("ix_sensitivity_schedules_tenant_profile_timestamp")
+            .IsDescending(false, false, true);
+
         // TargetRangeSchedule indexes
         modelBuilder
             .Entity<TargetRangeScheduleEntity>()
@@ -1642,6 +1698,12 @@ public class NocturneDbContext : DbContext
             .Entity<TargetRangeScheduleEntity>()
             .HasIndex(e => e.ProfileName)
             .HasDatabaseName("ix_target_range_schedules_profile_name");
+
+        modelBuilder
+            .Entity<TargetRangeScheduleEntity>()
+            .HasIndex(e => new { e.TenantId, e.ProfileName, e.Timestamp })
+            .HasDatabaseName("ix_target_range_schedules_tenant_profile_timestamp")
+            .IsDescending(false, false, true);
 
         // Tenant indexes
         modelBuilder.Entity<TenantEntity>()

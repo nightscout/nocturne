@@ -16,7 +16,7 @@ export const getSuggestions = query(z.object({ status: z.enum(CompressionLowStat
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in compressionLow.getSuggestions:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -24,7 +24,7 @@ export const getSuggestions = query(z.object({ status: z.enum(CompressionLowStat
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get suggestions');
+    throw error(500, message ?? 'Failed to get suggestions');
   }
 });
 
@@ -36,7 +36,7 @@ export const getSuggestion = query(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in compressionLow.getSuggestion:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -44,7 +44,7 @@ export const getSuggestion = query(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to get suggestion');
+    throw error(500, message ?? 'Failed to get suggestion');
   }
 });
 
@@ -60,7 +60,7 @@ export const deleteSuggestion = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in compressionLow.deleteSuggestion:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -68,7 +68,7 @@ export const deleteSuggestion = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to delete suggestion');
+    throw error(500, message ?? 'Failed to delete suggestion');
   }
 });
 
@@ -84,7 +84,7 @@ export const acceptSuggestion = command(z.object({ id: z.string(), request: Acce
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in compressionLow.acceptSuggestion:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -92,7 +92,7 @@ export const acceptSuggestion = command(z.object({ id: z.string(), request: Acce
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to accept suggestion');
+    throw error(500, message ?? 'Failed to accept suggestion');
   }
 });
 
@@ -108,7 +108,7 @@ export const dismissSuggestion = command(z.string(), async (id) => {
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in compressionLow.dismissSuggestion:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -116,7 +116,7 @@ export const dismissSuggestion = command(z.string(), async (id) => {
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to dismiss suggestion');
+    throw error(500, message ?? 'Failed to dismiss suggestion');
   }
 });
 
@@ -132,7 +132,7 @@ export const triggerDetection = command(TriggerDetectionRequestSchema, async (re
   } catch (err) {
     const status = (err as any)?.status;
     if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, 'Forbidden');
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in compressionLow.triggerDetection:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
@@ -140,6 +140,6 @@ export const triggerDetection = command(TriggerDetectionRequestSchema, async (re
     const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, 'Failed to trigger detection');
+    throw error(500, message ?? 'Failed to trigger detection');
   }
 });

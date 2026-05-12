@@ -122,7 +122,7 @@
         {#each faqCategories as category, ci}
             <section class="py-16 border-t border-border">
                 <div class="mb-8">
-                    <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground">&#167; 0{ci + 1} &mdash; {category.title}</div>
+                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground">0{ci + 1} &mdash; {category.title}</div>
                 </div>
 
                 <Accordion.Root type="multiple" class="space-y-3">
