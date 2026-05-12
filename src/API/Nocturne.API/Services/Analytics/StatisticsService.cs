@@ -1476,7 +1476,7 @@ public class StatisticsService : IStatisticsService
         // Initialize all 24 hours
         for (int hour = 0; hour < 24; hour++)
         {
-            hourlyGroups[hour] = new List<SensorGlucose>();
+            hourlyGroups[hour] = new List<SensorGlucose>(entriesList.Count / 24 + 1);
         }
 
         // Group entries by hour (only if we have entries)
