@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -10,21 +10,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "ix_linked_records_record",
-                table: "linked_records");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS public.ix_linked_records_record;");
 
-            migrationBuilder.CreateIndex(
-                name: "ix_sensor_glucose_tenant_timestamp",
-                table: "sensor_glucose",
-                columns: new[] { "tenant_id", "timestamp" },
-                descending: new[] { false, true });
+            migrationBuilder.Sql(
+                "CREATE INDEX IF NOT EXISTS ix_sensor_glucose_tenant_timestamp " +
+                "ON sensor_glucose (tenant_id, timestamp DESC);");
 
-            migrationBuilder.CreateIndex(
-                name: "ix_linked_records_non_primary_record",
-                table: "linked_records",
-                columns: new[] { "record_type", "record_id" },
-                filter: "NOT is_primary");
+            migrationBuilder.Sql(
+                "CREATE INDEX IF NOT EXISTS ix_linked_records_non_primary_record " +
+                "ON linked_records (record_type, record_id) WHERE NOT is_primary;");
         }
 
         /// <inheritdoc />
