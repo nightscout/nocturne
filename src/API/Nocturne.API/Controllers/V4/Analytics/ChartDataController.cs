@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
@@ -24,14 +26,26 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 public class ChartDataController : ControllerBase
 {
     private readonly IChartDataService _chartDataService;
+    private readonly IBasalSeriesBuilder _basalSeriesBuilder;
+    private readonly ITempBasalRepository _tempBasalRepository;
+    private readonly ITherapySettingsResolver _therapySettingsResolver;
+    private readonly IBasalRateResolver _basalRateResolver;
     private readonly ILogger<ChartDataController> _logger;
 
     public ChartDataController(
         IChartDataService chartDataService,
+        IBasalSeriesBuilder basalSeriesBuilder,
+        ITempBasalRepository tempBasalRepository,
+        ITherapySettingsResolver therapySettingsResolver,
+        IBasalRateResolver basalRateResolver,
         ILogger<ChartDataController> logger
     )
     {
         _chartDataService = chartDataService;
+        _basalSeriesBuilder = basalSeriesBuilder;
+        _tempBasalRepository = tempBasalRepository;
+        _therapySettingsResolver = therapySettingsResolver;
+        _basalRateResolver = basalRateResolver;
         _logger = logger;
     }
 
@@ -80,6 +94,66 @@ public class ChartDataController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error calculating dashboard chart data");
+            return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
+        }
+    }
+
+    /// <summary>
+    /// Gets the basal delivery series for a time window without running the
+    /// full IOB/COB compute pipeline. Fetches only temp basals and profile
+    /// data, making it significantly cheaper than the dashboard endpoint.
+    /// </summary>
+    /// <param name="startTime">Start of the requested window as a Unix timestamp in milliseconds.</param>
+    /// <param name="endTime">End of the requested window as a Unix timestamp in milliseconds.
+    /// Must be greater than <paramref name="startTime"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A list of <see cref="BasalPoint"/> representing basal delivery over time.</returns>
+    [HttpGet("basal-series")]
+    [RemoteQuery]
+    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ProducesResponseType(typeof(List<BasalPoint>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<List<BasalPoint>>> GetBasalSeries(
+        [FromQuery] long startTime,
+        [FromQuery] long endTime,
+        CancellationToken cancellationToken = default
+    )
+    {
+        try
+        {
+            if (endTime <= startTime)
+                return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
+
+            var defaultBasalRate = 1.0;
+            var hasData = await _therapySettingsResolver.HasDataAsync(cancellationToken);
+            if (hasData)
+                defaultBasalRate = await _basalRateResolver.GetBasalRateAsync(endTime, ct: cancellationToken);
+
+            var tempBasals = (await _tempBasalRepository.GetAsync(
+                from: DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime,
+                to: DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime,
+                device: null,
+                source: null,
+                limit: 131072,
+                offset: 0,
+                descending: false,
+                ct: cancellationToken
+            )).ToList();
+
+            var basalSeries = await _basalSeriesBuilder.BuildAsync(
+                tempBasals,
+                startTime,
+                endTime,
+                defaultBasalRate,
+                cancellationToken
+            );
+
+            return Ok(basalSeries);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error calculating basal series");
             return Problem(detail: "Internal server error", statusCode: 500, title: "Internal Server Error");
         }
     }
