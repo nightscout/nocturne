@@ -321,6 +321,64 @@ public class NightscoutDataCompatibilityTests
     }
 
     // ========================================================================
+    // Bug — Entry "date" field (Unix ms) not mapped to Mills
+    //
+    // Nightscout v1 entries API returns "date" (Unix milliseconds) as the
+    // primary timestamp, but the Entry model maps Mills from "mills" only.
+    // "date" falls into AdditionalProperties and Mills returns 0 (epoch 1970).
+    // When "dateString" is also absent, the migrator imports BG data at 1970.
+    // ========================================================================
+
+    [Fact]
+    public void Entry_Mills_ResolvesFromDateFieldWhenMillsMissing()
+    {
+        // Nightscout entry with "date" but no "mills" and no "dateString"
+        var json = """{"sgv": 120, "type": "sgv", "date": 1507507102681}""";
+
+        var entry = JsonSerializer.Deserialize<Entry>(json);
+
+        entry.Should().NotBeNull();
+        entry!.Mills.Should().Be(1507507102681,
+            "Mills should resolve from the Nightscout 'date' field when 'mills' is absent");
+    }
+
+    [Fact]
+    public void Entry_Mills_PrefersMillsOverDateField()
+    {
+        // When both "mills" and "date" are present, "mills" wins
+        var json = """{"sgv": 120, "mills": 1507507102681, "date": 9999999999999}""";
+
+        var entry = JsonSerializer.Deserialize<Entry>(json);
+
+        entry!.Mills.Should().Be(1507507102681,
+            "Mills should use the 'mills' value when both 'mills' and 'date' are present");
+    }
+
+    [Fact]
+    public void Entry_Mills_ResolvesFromDateFieldInFullRecord()
+    {
+        // Real-world Nightscout entry from AAPS — has "date" but no "mills"
+        var json = """
+        {
+            "sgv": 108,
+            "filtered": 142941.16575,
+            "unfiltered": 142941.16575,
+            "direction": "Flat",
+            "device": "xDrip-LibreAlarm",
+            "noise": 0,
+            "type": "sgv",
+            "date": 1507507102681,
+            "_id": "59dabbb7c7d5afdddbc99300"
+        }
+        """;
+
+        var entry = JsonSerializer.Deserialize<Entry>(json);
+
+        entry!.Mills.Should().Be(1507507102681,
+            "full Nightscout entry with 'date' field should resolve Mills correctly");
+    }
+
+    // ========================================================================
     // Issues #2, #3 — Entry glucose/rawbg fields (LOW)
     //
     // Some entries have a "glucose" field (duplicate of sgv) and "rawbg" from

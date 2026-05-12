@@ -39,6 +39,11 @@ public class Entry : ProcessableDocumentBase
             if (_mills != 0)
                 return _mills;
 
+            // Nightscout returns "date" (Unix ms) as the primary timestamp on entries.
+            // "mills" is only added by some clients, so fall back to "date" first.
+            if (_dateMills != 0)
+                return _dateMills;
+
             // If mills is not set but date is available, calculate it
             if (_date.HasValue)
             {
@@ -69,6 +74,19 @@ public class Entry : ProcessableDocumentBase
         set => _mills = value;
     }
     private long _mills;
+
+    /// <summary>
+    /// Captures the Nightscout "date" field (Unix milliseconds).
+    /// Nightscout entries use "date" as their primary timestamp; "mills" is not always present.
+    /// </summary>
+    [JsonPropertyName("date")]
+    [JsonConverter(typeof(FlexibleLongConverter))]
+    public long DateMills
+    {
+        get => _dateMills;
+        set => _dateMills = value;
+    }
+    private long _dateMills;
 
     /// <summary>
     /// Gets or sets the date and time when this glucose reading was taken.
