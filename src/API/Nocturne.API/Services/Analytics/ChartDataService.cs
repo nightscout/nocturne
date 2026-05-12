@@ -2,6 +2,8 @@ using System.Text.Json;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.ChartData;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
@@ -24,8 +26,14 @@ namespace Nocturne.API.Services.Analytics;
 /// <seealso cref="ChartDataContext"/>
 public class ChartDataService : IChartDataService
 {
+    private const int TempBasalQueryLimit = 131072;
+
     private readonly IEnumerable<IChartDataStage> _pipeline;
     private readonly IChartDataAssembler _assembler;
+    private readonly IBasalSeriesBuilder _basalSeriesBuilder;
+    private readonly ITempBasalRepository _tempBasalRepository;
+    private readonly ITherapySettingsResolver _therapySettingsResolver;
+    private readonly IBasalRateResolver _basalRateResolver;
     private readonly ILogger<ChartDataService> _logger;
 
     /// <summary>
@@ -33,15 +41,27 @@ public class ChartDataService : IChartDataService
     /// </summary>
     /// <param name="pipeline">The ordered sequence of <see cref="IChartDataStage"/> stages to execute.</param>
     /// <param name="assembler">The assembler that converts the completed context into the final DTO.</param>
+    /// <param name="basalSeriesBuilder">Builds basal delivery series from temp basals and profile rates.</param>
+    /// <param name="tempBasalRepository">Repository for fetching temp basal records.</param>
+    /// <param name="therapySettingsResolver">Resolves whether therapy settings (profile) data exists.</param>
+    /// <param name="basalRateResolver">Resolves the active basal rate at a point in time.</param>
     /// <param name="logger">The logger instance.</param>
     public ChartDataService(
         IEnumerable<IChartDataStage> pipeline,
         IChartDataAssembler assembler,
+        IBasalSeriesBuilder basalSeriesBuilder,
+        ITempBasalRepository tempBasalRepository,
+        ITherapySettingsResolver therapySettingsResolver,
+        IBasalRateResolver basalRateResolver,
         ILogger<ChartDataService> logger
     )
     {
         _pipeline = pipeline;
         _assembler = assembler;
+        _basalSeriesBuilder = basalSeriesBuilder;
+        _tempBasalRepository = tempBasalRepository;
+        _therapySettingsResolver = therapySettingsResolver;
+        _basalRateResolver = basalRateResolver;
         _logger = logger;
     }
 
@@ -68,6 +88,38 @@ public class ChartDataService : IChartDataService
         }
 
         return _assembler.Assemble(context);
+    }
+
+    /// <inheritdoc />
+    public async Task<List<BasalPoint>> GetBasalSeriesAsync(
+        long startTime,
+        long endTime,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var defaultBasalRate = 1.0;
+        var hasData = await _therapySettingsResolver.HasDataAsync(cancellationToken);
+        if (hasData)
+            defaultBasalRate = await _basalRateResolver.GetBasalRateAsync(endTime, ct: cancellationToken);
+
+        var tempBasals = (await _tempBasalRepository.GetAsync(
+            from: DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime,
+            to: DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime,
+            device: null,
+            source: null,
+            limit: TempBasalQueryLimit,
+            offset: 0,
+            descending: false,
+            ct: cancellationToken
+        )).ToList();
+
+        return await _basalSeriesBuilder.BuildAsync(
+            tempBasals,
+            startTime,
+            endTime,
+            defaultBasalRate,
+            cancellationToken
+        );
     }
 
     #region Internal Helpers

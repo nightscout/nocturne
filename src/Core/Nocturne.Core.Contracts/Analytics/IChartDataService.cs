@@ -28,4 +28,18 @@ public interface IChartDataService
         int intervalMinutes,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Build the basal delivery series for a given time range without running the
+    /// full IOB/COB compute pipeline.
+    /// </summary>
+    /// <param name="startTime">Start of the time range in Unix milliseconds</param>
+    /// <param name="endTime">End of the time range in Unix milliseconds</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Basal delivery points covering the requested window</returns>
+    Task<List<BasalPoint>> GetBasalSeriesAsync(
+        long startTime,
+        long endTime,
+        CancellationToken cancellationToken = default
+    );
 }
