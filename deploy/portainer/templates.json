@@ -7,7 +7,7 @@
       "description": "Nightscout-compatible diabetes management API with Row Level Security and multi-tenancy.",
       "categories": ["diabetes", "nightscout", "healthcare"],
       "platform": "linux",
-      "note": "After deployment, configure data connectors (Dexcom, LibreLinkUp, etc.) through the Nocturne UI.",
+      "note": "After deployment, configure data connectors (Dexcom, LibreLinkUp, etc.) and chat bot integrations (Discord, Slack, Telegram, WhatsApp) through Settings → Administration in the Nocturne UI. Bot credentials are encrypted at rest.",
       "repository": {
         "url": "https://github.com/nightscout/nocturne",
         "stackfile": "deploy/portainer/docker-compose.yaml"
@@ -62,66 +62,6 @@
           "name": "POSTGRES_WEB_PASSWORD",
           "label": "Web role password",
           "description": "Password for nocturne_web — used by the SvelteKit bot state adapter"
-        },
-        {
-          "name": "DISCORD_BOT_TOKEN",
-          "label": "Discord — Bot token",
-          "description": "Optional. Leave blank to disable the Discord bot."
-        },
-        {
-          "name": "DISCORD_PUBLIC_KEY",
-          "label": "Discord — Public key",
-          "description": "Optional. Required if Discord bot token is set."
-        },
-        {
-          "name": "DISCORD_APPLICATION_ID",
-          "label": "Discord — Application ID",
-          "description": "Optional. Required if Discord bot token is set."
-        },
-        {
-          "name": "DISCORD_CLIENT_SECRET",
-          "label": "Discord — Client secret",
-          "description": "Optional. Required if Discord bot token is set."
-        },
-        {
-          "name": "TELEGRAM_BOT_TOKEN",
-          "label": "Telegram — Bot token",
-          "description": "Optional. Leave blank to disable the Telegram bot."
-        },
-        {
-          "name": "TELEGRAM_WEBHOOK_SECRET_TOKEN",
-          "label": "Telegram — Webhook secret token",
-          "description": "Optional. Required if Telegram bot token is set."
-        },
-        {
-          "name": "SLACK_BOT_TOKEN",
-          "label": "Slack — Bot token",
-          "description": "Optional. Leave blank to disable the Slack bot."
-        },
-        {
-          "name": "SLACK_SIGNING_SECRET",
-          "label": "Slack — Signing secret",
-          "description": "Optional. Required if Slack bot token is set."
-        },
-        {
-          "name": "WHATSAPP_ACCESS_TOKEN",
-          "label": "WhatsApp — Access token",
-          "description": "Optional. Leave blank to disable the WhatsApp bot."
-        },
-        {
-          "name": "WHATSAPP_VERIFY_TOKEN",
-          "label": "WhatsApp — Verify token",
-          "description": "Optional. Required if WhatsApp access token is set."
-        },
-        {
-          "name": "WHATSAPP_APP_SECRET",
-          "label": "WhatsApp — App secret",
-          "description": "Optional. Required if WhatsApp access token is set."
-        },
-        {
-          "name": "WHATSAPP_PHONE_NUMBER_ID",
-          "label": "WhatsApp — Phone number ID",
-          "description": "Optional. Required if WhatsApp access token is set."
         }
       ]
     }
