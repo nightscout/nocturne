@@ -57,11 +57,6 @@
           "name": "POSTGRES_APP_PASSWORD",
           "label": "App role password",
           "description": "Password for nocturne_app — runtime role, cannot bypass Row Level Security"
-        },
-        {
-          "name": "POSTGRES_WEB_PASSWORD",
-          "label": "Web role password",
-          "description": "Password for nocturne_web — used by the SvelteKit bot state adapter"
         }
       ]
     }
