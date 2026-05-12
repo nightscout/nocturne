@@ -78,6 +78,9 @@ sdk/java/out/
 sdk/swift/out/
 sdk/python/out/
 
+# BenchmarkDotNet output
+BenchmarkDotNet.Artifacts/
+
 # Auto-generated diagram artifacts
 docs/diagrams/project-dependencies.mmd
 docs/diagrams/er-*.mmd
