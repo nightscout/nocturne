@@ -382,7 +382,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         // Sequential to avoid DbContext thread-safety issues.
         var boluses = await _dbContext.Boluses.AsNoTracking()
             .Where(e => e.SysUpdatedAt >= threshold)
-            .OrderBy(e => e.SysUpdatedAt)
+            .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
         foreach (var entity in boluses)
@@ -390,7 +390,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
         var carbIntakes = await _dbContext.CarbIntakes.AsNoTracking()
             .Where(e => e.SysUpdatedAt >= threshold)
-            .OrderBy(e => e.SysUpdatedAt)
+            .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
         foreach (var entity in carbIntakes)
@@ -398,7 +398,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
         var bgChecks = await _dbContext.BGChecks.AsNoTracking()
             .Where(e => e.SysUpdatedAt >= threshold)
-            .OrderBy(e => e.SysUpdatedAt)
+            .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
         foreach (var entity in bgChecks)
@@ -406,7 +406,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
         var notes = await _dbContext.Notes.AsNoTracking()
             .Where(e => e.SysUpdatedAt >= threshold)
-            .OrderBy(e => e.SysUpdatedAt)
+            .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
         foreach (var entity in notes)
@@ -414,7 +414,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
         var deviceEvents = await _dbContext.DeviceEvents.AsNoTracking()
             .Where(e => e.SysUpdatedAt >= threshold)
-            .OrderBy(e => e.SysUpdatedAt)
+            .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
         foreach (var entity in deviceEvents)
@@ -422,7 +422,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
         var tempBasals = await _dbContext.TempBasals.AsNoTracking()
             .Where(e => e.SysUpdatedAt >= threshold)
-            .OrderBy(e => e.SysUpdatedAt)
+            .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
         foreach (var entity in tempBasals)
@@ -430,7 +430,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
 
         var bolusCalcs = await _dbContext.BolusCalculations.AsNoTracking()
             .Where(e => e.SysUpdatedAt >= threshold)
-            .OrderBy(e => e.SysUpdatedAt)
+            .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
         foreach (var entity in bolusCalcs)
