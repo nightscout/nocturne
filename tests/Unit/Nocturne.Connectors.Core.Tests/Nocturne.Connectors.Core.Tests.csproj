@@ -17,6 +17,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
+        <PackageReference Include="FluentAssertions"/>
         <PackageReference Include="Moq"/>
     </ItemGroup>
     <ItemGroup>
