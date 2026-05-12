@@ -30,7 +30,7 @@ export const getPatientRecord = query(async () => {
 });
 
 /** Update the patient record */
-export const updatePatientRecord = form(formCoerce(PatientRecordSchema) as any, async (request) => {
+export const updatePatientRecord = command(PatientRecordSchema, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const result = await apiClient.patientRecord.updatePatientRecord(request as PatientRecord);
