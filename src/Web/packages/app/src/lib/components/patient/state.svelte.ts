@@ -10,6 +10,12 @@ import {
 import { FormGuard } from "$lib/forms";
 import { z } from "zod";
 
+/** Convert a date value from the API into a YYYY-MM-DD string for date inputs. */
+function toDateInput(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  return new Date(value).toISOString().split("T")[0];
+}
+
 const ClinicalFieldsSchema = z.object({
   diabetesType: z.string().min(1, "Diabetes type is required"),
   diabetesTypeOther: z.string().optional(),
@@ -42,12 +48,8 @@ export class ClinicalState {
       if (r) {
         this.diabetesType = r.diabetesType ?? "";
         this.diabetesTypeOther = r.diabetesTypeOther ?? "";
-        this.diagnosisDate = r.diagnosisDate
-          ? new Date(r.diagnosisDate).toISOString().split("T")[0]
-          : "";
-        this.dateOfBirth = r.dateOfBirth
-          ? new Date(r.dateOfBirth).toISOString().split("T")[0]
-          : "";
+        this.diagnosisDate = toDateInput(r.diagnosisDate);
+        this.dateOfBirth = toDateInput(r.dateOfBirth);
         this.preferredName = r.preferredName ?? "";
         this.pronouns = r.pronouns ?? "";
       }
@@ -63,12 +65,8 @@ export class ClinicalState {
         return {
           diabetesType: r.diabetesType ?? "",
           diabetesTypeOther: r.diabetesTypeOther ?? "",
-          diagnosisDate: r.diagnosisDate
-            ? new Date(r.diagnosisDate).toISOString().split("T")[0]
-            : "",
-          dateOfBirth: r.dateOfBirth
-            ? new Date(r.dateOfBirth).toISOString().split("T")[0]
-            : "",
+          diagnosisDate: toDateInput(r.diagnosisDate),
+          dateOfBirth: toDateInput(r.dateOfBirth),
           preferredName: r.preferredName ?? "",
           pronouns: r.pronouns ?? "",
         };
