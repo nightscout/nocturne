@@ -281,8 +281,8 @@ export const getReportsData = query(
     const carbIntakes = allCarbIntakes!;
     const population = DiabetesPopulation.Type1Adult; // TODO: Get from user settings
 
-    // Get summary, analysis, averaged stats, and basal data in parallel
-    const [summary, analysis, averagedStats, chartData] = await Promise.all([
+    // Get summary, analysis, averaged stats, and basal series in parallel
+    const [summary, analysis, averagedStats, basalSeries] = await Promise.all([
       apiClient.statistics.getMultiPeriodStatistics(),
       apiClient.statistics.analyzeGlucoseDataExtended({
         entries,
@@ -291,11 +291,7 @@ export const getReportsData = query(
         population,
       }),
       apiClient.statistics.calculateAveragedStats(entries),
-      apiClient.chartData.getDashboardChartData(
-        startDate.getTime(),
-        endDate.getTime(),
-        5 // 5-minute intervals
-      ),
+      apiClient.chartData.getBasalSeries(startDate.getTime(), endDate.getTime()),
     ]);
 
     return {
@@ -305,7 +301,7 @@ export const getReportsData = query(
       summary,
       analysis,
       averagedStats,
-      basalSeries: chartData.basalSeries ?? ([] as BasalPoint[]),
+      basalSeries: basalSeries ?? [],
       dateRange: {
         from: startDate.toISOString(),
         to: endDate.toISOString(),
