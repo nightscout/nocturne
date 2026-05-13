@@ -22,13 +22,13 @@ export { getConfigManaged, enable, disable, testExisting, testUnsaved } from './
 export * from './glucoseProcessingSettings.generated.remote';
 export * from './profiles.generated.remote';
 export * from './userPreferences.generated.remote';
-export * from './accessRequests.generated.remote';
-export { upsert } from './platformSettings.generated.remote';
-export { addMember, removeMember, listInvites, provision, getMemberCredentials, attachOidcIdentity, removePasskeyCredential, removeOidcIdentity } from './tenants.generated.remote';
 export * from './services.generated.remote';
 // './status.generated.remote' - all exports collide, import directly
 export * from './supports.generated.remote';
 export * from './systems.generated.remote';
+export { approve, deny } from './accessRequests.generated.remote';
+export { upsert } from './platformSettings.generated.remote';
+export { addMember, removeMember, listInvites, provision, getMemberCredentials, attachOidcIdentity, removePasskeyCredential, removeOidcIdentity } from './tenants.generated.remote';
 export * from './alertCustomSounds.generated.remote';
 export { validateInvite, redeemInvite } from './alertInvites.generated.remote';
 export * from './alertReplays.generated.remote';
@@ -42,6 +42,7 @@ export * from './chatIdentities.generated.remote';
 export * from './guestLinks.generated.remote';
 export * from './linkedPlatforms.generated.remote';
 export * from './memberInvites.generated.remote';
+export { createRequest, getMyRequest, approveRequest, denyRequest } from './membershipRequests.generated.remote';
 export * from './myPermissions.generated.remote';
 export { getMyTenants, validateSlug } from './myTenants.generated.remote';
 export * from './roles.generated.remote';
