@@ -18,7 +18,6 @@
     BarChart3,
     PieChart,
     Settings,
-    Activity,
     Clock,
     User,
     ChevronDown,
@@ -374,11 +373,16 @@
     class="flex flex-row items-center justify-between p-4 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2"
   >
     <div class="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
-      <div
-        class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary"
-      >
-        <Activity class="h-4 w-4 text-primary-foreground" />
-      </div>
+      <img
+        src="/logos/nocturne.png"
+        alt="Nocturne"
+        class="h-8 w-8 rounded-lg dark:block hidden"
+      />
+      <img
+        src="/logos/nocturne-light.png"
+        alt="Nocturne"
+        class="h-8 w-8 rounded-lg dark:hidden block"
+      />
       <span class="text-lg font-bold">Nocturne</span>
     </div>
     <Sidebar.Trigger />
