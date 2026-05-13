@@ -17,6 +17,7 @@
   import AlertBanner from "$lib/components/alerts/AlertBanner.svelte";
   import FiringToast from "$lib/components/alerts/FiringToast.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
+  import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
   import { CommandPalette } from "$lib/components/command-palette";
   import { CoachMarkProvider } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
@@ -55,6 +56,13 @@
   createSettingsStore();
 
   let commandPaletteOpen = $state(false);
+
+  let tenantSlug = $state<string | undefined>(undefined);
+  $effect(() => {
+    if (!browser) return;
+    const parts = window.location.hostname.split(".");
+    if (parts.length > 2) tenantSlug = parts[0];
+  });
 
   const coachMarkAdapter = createCoachMarkAdapter();
 
@@ -203,6 +211,11 @@
       {#if data.isGuestSession && data.guestExpiresAt}
         <GuestBanner expiresAt={data.guestExpiresAt} />
       {/if}
+      <MembershipRequestAutoSubmit
+        isAuthenticated={!!data.user}
+        isGuestSession={data.isGuestSession}
+        {tenantSlug}
+      />
       <AlertBanner />
       <FiringToast />
       <main class="flex-1 overflow-auto">
