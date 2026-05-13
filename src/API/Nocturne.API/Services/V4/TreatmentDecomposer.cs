@@ -521,6 +521,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                 state: PumpModeState.Suspended.ToString(),
                 active: true,
                 count: 1,
+                descending: true,
                 cancellationToken: ct);
 
             var openSpan = openSpans.FirstOrDefault();
