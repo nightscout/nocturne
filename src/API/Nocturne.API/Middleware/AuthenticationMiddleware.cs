@@ -130,6 +130,19 @@ public class AuthenticationMiddleware
             // Also set the legacy AuthenticationContext for backward compatibility
             context.Items["AuthenticationContext"] = MapToLegacyContext(authContext);
 
+            // Load platform admin flag from subject before building claims,
+            // so [Authorize(Roles = "platform_admin")] works correctly.
+            if (authContext is { IsAuthenticated: true, SubjectId: not null })
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<Nocturne.Infrastructure.Data.NocturneDbContext>();
+                var isPlatformAdmin = await db.Subjects
+                    .Where(s => s.Id == authContext.SubjectId.Value)
+                    .Select(s => s.IsPlatformAdmin)
+                    .FirstOrDefaultAsync();
+                authContext.IsPlatformAdmin = isPlatformAdmin;
+            }
+
             // Set HttpContext.User for [Authorize] attribute to work
             if (authContext.IsAuthenticated)
             {
@@ -190,18 +203,6 @@ public class AuthenticationMiddleware
                     SetUnauthenticated(context);
                 }
             }
-        }
-
-        // Load platform admin flag from subject
-        if (resolvedAuth is { IsAuthenticated: true, SubjectId: not null })
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<Nocturne.Infrastructure.Data.NocturneDbContext>();
-            var isPlatformAdmin = await db.Subjects
-                .Where(s => s.Id == resolvedAuth.SubjectId.Value)
-                .Select(s => s.IsPlatformAdmin)
-                .FirstOrDefaultAsync();
-            resolvedAuth.IsPlatformAdmin = isPlatformAdmin;
         }
 
         // For unauthenticated requests with a resolved tenant, try to resolve
