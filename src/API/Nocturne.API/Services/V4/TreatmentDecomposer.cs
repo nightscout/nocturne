@@ -1123,6 +1123,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         // Track treatments that produce both bolus AND bolusCalculation for post-insert linking
         var bolusCalcLinkTreatmentIds = new HashSet<string>();
 
+        var pumpSuspendResumeTreatments = new List<(Treatment Treatment, DeviceEventType EventType)>();
+
         foreach (var treatment in treatments)
         {
             var eventType = treatment.EventType?.Trim();
@@ -1268,6 +1270,11 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                     V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
                 model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
                 deviceEventList.Add(model);
+
+                if (parsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
+                {
+                    pumpSuspendResumeTreatments.Add((treatment, parsedDeviceEventType));
+                }
             }
 
             // Track for post-insert linking
@@ -1384,6 +1391,12 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         {
             var created = await _tempBasalRepository.BulkCreateAsync(tempBasalList, ct);
             result.CreatedRecords.AddRange(created);
+        }
+
+        // Post-insert pump suspend/resume pass: sequential, order-dependent
+        foreach (var (treatment, eventType) in pumpSuspendResumeTreatments.OrderBy(t => t.Treatment.Mills))
+        {
+            await DecomposePumpSuspensionFromTreatmentAsync(treatment, eventType, result, ct);
         }
 
         // Upsert remaining state spans (Override, TemporaryTarget — ProfileSwitch already done in pre-pass)
