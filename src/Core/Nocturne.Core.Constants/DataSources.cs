@@ -62,6 +62,11 @@ public static class DataSources
     public const string NightscoutConnector = "nightscout-connector";
 
     /// <summary>
+    /// Data synced from Gluroo Global Connect's Nightscout-compatible API.
+    /// </summary>
+    public const string GlurooConnector = "gluroo-connector";
+
+    /// <summary>
     /// Data fetched from Tidepool API.
     /// </summary>
     public const string TidepoolConnector = "tidepool-connector";
@@ -230,6 +235,7 @@ public static class DataSources
                 or MiniMedConnector
                 or GlookoConnector
                 or NightscoutConnector
+                or GlurooConnector
                 or TidepoolConnector
                 or TConnectSyncConnector
                 or HomeAssistantConnector
@@ -296,6 +302,7 @@ public static class DataSources
             MiniMedConnector,
             GlookoConnector,
             NightscoutConnector,
+            GlurooConnector,
             TidepoolConnector,
             TConnectSyncConnector,
             HomeAssistantConnector,

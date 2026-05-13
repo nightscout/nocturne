@@ -78,6 +78,12 @@ public static class ServiceNames
     public const string NightscoutConnector = "nightscout-connector";
 
     /// <summary>
+    /// Aspire resource name for the Gluroo Global Connect connector service.
+    /// </summary>
+    /// <seealso cref="DataSources.GlurooConnector"/>
+    public const string GlurooConnector = "gluroo-connector";
+
+    /// <summary>
     /// Aspire resource name for the MyFitnessPal connector service.
     /// </summary>
     /// <seealso cref="DataSources.MyFitnessPalConnector"/>

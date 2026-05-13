@@ -15,6 +15,7 @@ public enum ConnectSource
     Tidepool,
     MyFitnessPal,
     Nightscout,
+    Gluroo,
     HomeAssistant,
     Eversense,
     NocturneRemote,
