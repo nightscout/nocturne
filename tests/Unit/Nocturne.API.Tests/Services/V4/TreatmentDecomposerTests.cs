@@ -1796,6 +1796,8 @@ public class TreatmentDecomposerTests : IDisposable
     [InlineData("Reservoir Change", DeviceEventType.ReservoirChange)]
     [InlineData("Cannula Change", DeviceEventType.CannulaChange)]
     [InlineData("Transmitter Sensor Insert", DeviceEventType.TransmitterSensorInsert)]
+    [InlineData("Pump Suspend", DeviceEventType.PumpSuspend)]
+    [InlineData("Pump Resume", DeviceEventType.PumpResume)]
     public async Task DecomposeAsync_DeviceEventTypes_CreatesDeviceEvent(string eventType, DeviceEventType expectedType)
     {
         // Arrange
@@ -1814,7 +1816,8 @@ public class TreatmentDecomposerTests : IDisposable
         var result = await _decomposer.DecomposeAsync(treatment);
 
         // Assert — DeviceEvent + Note (because Notes is non-empty)
-        result.CreatedRecords.Should().HaveCount(2);
+        result.CreatedRecords.OfType<V4Models.DeviceEvent>().Should().HaveCount(1);
+        result.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
         var deviceEvent = result.CreatedRecords.OfType<V4Models.DeviceEvent>().Single();
         deviceEvent.LegacyId.Should().Be(treatment.Id);
         deviceEvent.Mills.Should().Be(1700000000000);
@@ -1882,6 +1885,137 @@ public class TreatmentDecomposerTests : IDisposable
         // Assert
         var deviceEvent = result.CreatedRecords[0].Should().BeOfType<V4Models.DeviceEvent>().Subject;
         deviceEvent.Notes.Should().BeNull();
+    }
+
+    #endregion
+
+    #region Pump Suspend/Resume → DeviceEvent + PumpMode StateSpan
+
+    [Fact]
+    public async Task DecomposeAsync_PumpSuspend_CreatesDeviceEventAndOpensSuspendedStateSpan()
+    {
+        // Arrange
+        var expectedStateSpan = new StateSpan
+        {
+            Id = "ss-pump-suspend",
+            Category = StateSpanCategory.PumpMode,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedStateSpan);
+
+        var treatment = new Treatment
+        {
+            Id = "pump-suspend-1",
+            EventType = "Pump Suspend",
+            Mills = 1700000000000,
+            Notes = "User suspended pump",
+            EnteredBy = "AAPS",
+            DataSource = "nightscout",
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert — DeviceEvent + Note + StateSpan
+        var deviceEvent = result.CreatedRecords.OfType<V4Models.DeviceEvent>().Single();
+        deviceEvent.EventType.Should().Be(DeviceEventType.PumpSuspend);
+        deviceEvent.LegacyId.Should().Be("pump-suspend-1");
+
+        result.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss =>
+                    ss.Category == StateSpanCategory.PumpMode
+                    && ss.State == "Suspended"
+                    && ss.EndTimestamp == null
+                    && ss.OriginalId == "pump-suspended-tx:pump-suspend-1"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_PumpResume_ClosesOpenSuspendedStateSpan()
+    {
+        // Arrange — an open Suspended state span exists
+        var openSpan = new StateSpan
+        {
+            Id = "ss-open-suspend",
+            Category = StateSpanCategory.PumpMode,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1699999990000).UtcDateTime,
+            EndTimestamp = null,
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
+                null, null, null, true,
+                It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { openSpan });
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan ss, CancellationToken _) => ss);
+
+        var treatment = new Treatment
+        {
+            Id = "pump-resume-1",
+            EventType = "Pump Resume",
+            Mills = 1700000000000,
+            Notes = "User resumed pump",
+            EnteredBy = "AAPS",
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert — DeviceEvent created, StateSpan closed
+        var deviceEvent = result.CreatedRecords.OfType<V4Models.DeviceEvent>().Single();
+        deviceEvent.EventType.Should().Be(DeviceEventType.PumpResume);
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss =>
+                    ss.Id == "ss-open-suspend"
+                    && ss.EndTimestamp == DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        result.UpdatedRecords.OfType<StateSpan>().Should().Contain(ss => ss.Id == "ss-open-suspend");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_PumpResume_NoOpenSpan_CreatesDeviceEventOnly()
+    {
+        // Arrange — no open state span
+        _stateSpanServiceMock
+            .Setup(s => s.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
+                null, null, null, true,
+                It.IsAny<int>(), It.IsAny<int>(), true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<StateSpan>());
+
+        var treatment = new Treatment
+        {
+            Id = "pump-resume-no-span",
+            EventType = "Pump Resume",
+            Mills = 1700000000000,
+        };
+
+        // Act
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        // Assert — DeviceEvent created, no StateSpan upserted
+        result.CreatedRecords.OfType<V4Models.DeviceEvent>().Should().HaveCount(1);
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     #endregion
