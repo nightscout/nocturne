@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { setPublicAccess } from "$api/generated/memberInvites.generated.remote";
   import {
     Check,
     ChartLine,
@@ -8,6 +9,7 @@
     BookOpen,
     Plug,
     ArrowRight,
+    Globe,
   } from "lucide-svelte";
 
   let {
@@ -19,6 +21,19 @@
     onEnterDashboard: () => void;
     onNavigateWithCoach: (url: string) => void;
   } = $props();
+
+  let isPublic = $state(false);
+  let isToggling = $state(false);
+
+  async function handlePublicToggle() {
+    isToggling = true;
+    try {
+      await setPublicAccess({ enabled: !isPublic });
+      isPublic = !isPublic;
+    } finally {
+      isToggling = false;
+    }
+  }
 
   const nextSteps = $derived([
     {
@@ -109,6 +124,24 @@
       </Button>
       <Button variant="ghost" onclick={() => onNavigateWithCoach("/?coach=quick-tour")}>Take the 60-second tour</Button>
     </div>
+
+    <!-- Public access toggle -->
+    <label class="flex items-start gap-3 cursor-pointer" class:opacity-50={isToggling}>
+      <input
+        type="checkbox"
+        checked={isPublic}
+        onclick={handlePublicToggle}
+        disabled={isToggling}
+        class="mt-0.5 h-4 w-4 shrink-0 accent-(--onb-accent) cursor-pointer"
+      />
+      <div class="flex items-start gap-2">
+        <Globe class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div class="flex flex-col gap-0.5">
+          <span class="text-sm text-white">Make my data publicly visible</span>
+          <span class="text-xs text-white/50">Anyone can view your glucose data without signing in. You can change this later in Members settings.</span>
+        </div>
+      </div>
+    </label>
   </div>
 
   <!-- Right column -->

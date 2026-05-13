@@ -120,8 +120,27 @@ public class TenantController : ControllerBase
             .Where(m => m.TenantId == id && m.SubjectId == subjectId)
             .FirstOrDefaultAsync(ct);
 
-        if (member?.Subject?.IsSystemSubject == true)
+        if (member == null)
+            return NoContent();
+
+        if (member.Subject?.IsSystemSubject == true)
             return Problem(detail: "Cannot remove system subject memberships", statusCode: 400, title: "Bad Request");
+
+        // Prevent removing the last member with the owner role
+        var isOwner = await dbContext.TenantMemberRoles
+            .AnyAsync(mr => mr.TenantMemberId == member.Id
+                && mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner, ct);
+
+        if (isOwner)
+        {
+            var ownerCount = await dbContext.TenantMemberRoles
+                .CountAsync(mr => mr.TenantRole.TenantId == id
+                    && mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner
+                    && mr.TenantMember.RevokedAt == null, ct);
+
+            if (ownerCount <= 1)
+                return Problem(detail: "Cannot remove the last owner of a tenant", statusCode: 400, title: "Bad Request");
+        }
 
         await _tenantService.RemoveMemberAsync(id, subjectId, ct);
         return NoContent();

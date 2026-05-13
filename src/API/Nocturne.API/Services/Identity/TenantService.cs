@@ -112,7 +112,7 @@ public partial class TenantService : ITenantService
         // Seed default roles for this tenant
         await _roleService.SeedRolesForTenantAsync(tenant.Id, ct);
 
-        // Create Public subject membership (no roles = unconfigured sentinel)
+        // Create Public subject membership (no roles = private by default)
         await CreatePublicSubjectMembershipAsync(context, tenant.Id, ct);
 
         // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
@@ -149,7 +149,7 @@ public partial class TenantService : ITenantService
         // Seed default roles for this tenant (but don't assign an owner)
         await _roleService.SeedRolesForTenantAsync(tenant.Id, ct);
 
-        // Create Public subject membership (no roles = unconfigured sentinel)
+        // Create Public subject membership (no roles = private by default)
         await CreatePublicSubjectMembershipAsync(context, tenant.Id, ct);
 
         // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
@@ -418,7 +418,7 @@ public partial class TenantService : ITenantService
                 }
                 await context.SaveChangesAsync(ct);
 
-                // Create Public subject membership (no roles = unconfigured sentinel)
+                // Create Public subject membership (no roles = private by default)
                 var publicSubject = await context.Subjects
                     .FirstOrDefaultAsync(s => s.IsSystemSubject && s.Name == "Public", ct);
 
