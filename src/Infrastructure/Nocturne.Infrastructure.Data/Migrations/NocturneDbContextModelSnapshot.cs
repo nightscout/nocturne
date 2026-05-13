@@ -1938,6 +1938,57 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("member_invites");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.MembershipRequestEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBySubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by_subject_id");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("message");
+
+                    b.PrimitiveCollection<string>("RoleIds")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("role_ids");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "SubjectId")
+                        .IsUnique()
+                        .HasFilter("status = 'pending'");
+
+                    b.ToTable("membership_requests");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.MigrationRunEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7107,6 +7158,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Navigation("CreatedBy");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.MembershipRequestEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.MigrationRunEntity", b =>

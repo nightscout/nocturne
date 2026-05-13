@@ -258,6 +258,11 @@ public class NocturneDbContext : DbContext
     public DbSet<MemberInviteEntity> MemberInvites { get; set; } = null!;
 
     /// <summary>
+    /// Gets or sets the MembershipRequests table for tenant membership requests
+    /// </summary>
+    public DbSet<MembershipRequestEntity> MembershipRequests { get; set; } = null!;
+
+    /// <summary>
     /// Gets or sets the CompressionLowSuggestions table for compression low detection
     /// </summary>
     public DbSet<CompressionLowSuggestionEntity> CompressionLowSuggestions { get; set; }
@@ -2610,6 +2615,16 @@ public class NocturneDbContext : DbContext
 
             entity.HasIndex(e => e.TokenHash).IsUnique();
             entity.HasIndex(e => e.TenantId);
+        });
+
+        // Configure Membership Request entity
+        modelBuilder.Entity<MembershipRequestEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+
+            entity.HasIndex(e => new { e.TenantId, e.SubjectId })
+                .HasFilter("status = 'pending'")
+                .IsUnique();
         });
 
         // Configure ClockFace entity
