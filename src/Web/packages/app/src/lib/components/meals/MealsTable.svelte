@@ -207,12 +207,10 @@
                 <!-- Main meal row -->
                 <Table.Row
                   class={cn(
-                    "transition-colors",
-                    hasFoods && "cursor-pointer",
+                    "transition-colors cursor-pointer",
                     isExpanded && "bg-accent/30"
                   )}
-                  onclick={() =>
-                    hasFoods && onToggleRow(meal.carbIntakes?.[0]?.id ?? "")}
+                  onclick={() => onAddFood(meal)}
                 >
                   <Table.Cell class="py-3">
                     {#if hasFoods}
@@ -255,19 +253,12 @@
                   </Table.Cell>
                   <Table.Cell class="py-3">
                     <div class="flex items-center justify-end gap-3">
-                      <button
-                        type="button"
-                        class="w-24 cursor-pointer hover:opacity-80 transition-opacity"
-                        onclick={(e) => {
-                          e.stopPropagation();
-                          onAddFood(meal);
-                        }}
-                      >
+                      <div class="w-24">
                         <CarbBreakdownBar
                           {totalCarbs}
                           foods={meal.foods ?? []}
                         />
-                      </button>
+                      </div>
                       <span class="text-lg font-semibold tabular-nums">
                         {totalCarbs}g
                       </span>
