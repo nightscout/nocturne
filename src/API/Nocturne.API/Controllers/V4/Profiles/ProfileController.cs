@@ -143,6 +143,38 @@ public class ProfileController : ControllerBase
         return Ok(summary);
     }
 
+    /// <summary>
+    /// Set a profile as the active (default) profile. Clears IsDefault on all other profiles.
+    /// </summary>
+    [HttpPost("set-default/{profileName}")]
+    [RemoteCommand(Invalidates = ["GetProfileSummary", "GetTherapySettings"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> SetDefaultProfile(string profileName, CancellationToken ct = default)
+    {
+        var all = await _therapyRepo.GetAsync(null, null, null, null, 1000, 0, true, ct);
+
+        var target = all.FirstOrDefault(ts =>
+            string.Equals(ts.ProfileName, profileName, StringComparison.OrdinalIgnoreCase));
+
+        if (target is null)
+            return NotFound();
+
+        foreach (var ts in all.Where(ts => ts.IsDefault && ts.Id != target.Id))
+        {
+            ts.IsDefault = false;
+            await _therapyRepo.UpdateAsync(ts.Id, ts, ct);
+        }
+
+        if (!target.IsDefault)
+        {
+            target.IsDefault = true;
+            await _therapyRepo.UpdateAsync(target.Id, target, ct);
+        }
+
+        return NoContent();
+    }
+
     #endregion
 
     #region Legacy Profile Records
