@@ -273,6 +273,11 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (produceDeviceEvent)
         {
             await DecomposeDeviceEventAsync(treatment, result, parsedDeviceEventType, ct);
+
+            if (parsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
+            {
+                await DecomposePumpSuspensionFromTreatmentAsync(treatment, parsedDeviceEventType, result, ct);
+            }
         }
 
         // After all decompositions, link records via FKs
@@ -475,6 +480,64 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             var created = await _deviceEventRepository.CreateAsync(model, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created DeviceEvent from legacy treatment {LegacyId}", treatment.Id);
+        }
+    }
+
+    /// <summary>
+    /// Opens or closes a <see cref="StateSpanCategory.PumpMode"/> /
+    /// <see cref="PumpModeState.Suspended"/> state span when a treatment-sourced
+    /// PumpSuspend or PumpResume device event is decomposed.
+    /// </summary>
+    private async Task DecomposePumpSuspensionFromTreatmentAsync(
+        Treatment treatment,
+        DeviceEventType deviceEventType,
+        V4Models.DecompositionResult result,
+        CancellationToken ct)
+    {
+        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime;
+
+        if (deviceEventType == DeviceEventType.PumpSuspend)
+        {
+            var span = new StateSpan
+            {
+                Category = StateSpanCategory.PumpMode,
+                State = PumpModeState.Suspended.ToString(),
+                StartTimestamp = timestamp,
+                EndTimestamp = null,
+                Source = treatment.DataSource ?? treatment.EnteredBy ?? "nightscout",
+                OriginalId = $"pump-suspended-tx:{treatment.Id}",
+            };
+
+            var upserted = await _stateSpanService.UpsertStateSpanAsync(span, ct);
+            result.CreatedRecords.Add(upserted);
+            _logger.LogDebug(
+                "Opened PumpMode/Suspended StateSpan from treatment {LegacyId}",
+                treatment.Id);
+        }
+        else if (deviceEventType == DeviceEventType.PumpResume)
+        {
+            var openSpans = await _stateSpanService.GetStateSpansAsync(
+                category: StateSpanCategory.PumpMode,
+                state: PumpModeState.Suspended.ToString(),
+                active: true,
+                count: 1,
+                cancellationToken: ct);
+
+            var openSpan = openSpans.FirstOrDefault();
+            if (openSpan is null)
+            {
+                _logger.LogWarning(
+                    "PumpResume treatment {LegacyId} but no open PumpMode/Suspended StateSpan to close",
+                    treatment.Id);
+                return;
+            }
+
+            openSpan.EndTimestamp = timestamp;
+            var closed = await _stateSpanService.UpsertStateSpanAsync(openSpan, ct);
+            result.UpdatedRecords.Add(closed);
+            _logger.LogDebug(
+                "Closed PumpMode/Suspended StateSpan {SpanId} from treatment {LegacyId}",
+                openSpan.Id, treatment.Id);
         }
     }
 
