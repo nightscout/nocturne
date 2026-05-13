@@ -94,6 +94,33 @@ public static class BuiltInNotificationTemplates
             Source = "compression-low-engine"
         });
 
+        registry.Register(new NotificationTemplate
+        {
+            Type = "membership.requested",
+            Category = NotificationCategory.ActionRequired,
+            DefaultUrgency = NotificationUrgency.Info,
+            Icon = "user-plus",
+            Source = "membership"
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = "membership.approved",
+            Category = NotificationCategory.Informational,
+            DefaultUrgency = NotificationUrgency.Info,
+            Icon = "check-circle",
+            Source = "membership"
+        });
+
+        registry.Register(new NotificationTemplate
+        {
+            Type = "membership.denied",
+            Category = NotificationCategory.Informational,
+            DefaultUrgency = NotificationUrgency.Info,
+            Icon = "x-circle",
+            Source = "membership"
+        });
+
         return registry;
     }
 }
