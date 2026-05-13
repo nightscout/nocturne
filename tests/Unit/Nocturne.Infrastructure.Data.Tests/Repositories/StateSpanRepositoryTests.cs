@@ -266,26 +266,21 @@ public class StateSpanRepositoryTests : IDisposable
     [Fact]
     public async Task GetCurrentPumpModeAsync_ExcludesNonPrimaryDeduplicatedSpans()
     {
-        await _repository.UpsertStateSpanAsync(new StateSpan
-        {
-            Category = StateSpanCategory.PumpMode,
-            State = PumpModeState.Automatic.ToString(),
-            StartTimestamp = new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc),
-            EndTimestamp = null,
-            Source = "primary",
-            OriginalId = "pm-primary",
-        });
-        await _repository.UpsertStateSpanAsync(new StateSpan
-        {
-            Category = StateSpanCategory.PumpMode,
-            State = PumpModeState.Manual.ToString(),
-            StartTimestamp = new DateTime(2026, 1, 1, 11, 0, 0, DateTimeKind.Utc),
-            EndTimestamp = null,
-            Source = "duplicate",
-            OriginalId = "pm-duplicate",
-        });
+        // Insert entities directly to bypass exclusive-category auto-close logic;
+        // this test verifies the deduplication query filter, not upsert behavior.
+        var primaryEntity = SpanEntity(
+            _context.TenantId, StateSpanCategory.PumpMode, PumpModeState.Automatic.ToString(),
+            new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc), null);
+        primaryEntity.OriginalId = "pm-primary";
+        primaryEntity.Source = "primary";
 
-        var duplicateEntity = _context.StateSpans.Single(s => s.OriginalId == "pm-duplicate");
+        var duplicateEntity = SpanEntity(
+            _context.TenantId, StateSpanCategory.PumpMode, PumpModeState.Manual.ToString(),
+            new DateTime(2026, 1, 1, 11, 0, 0, DateTimeKind.Utc), null);
+        duplicateEntity.OriginalId = "pm-duplicate";
+        duplicateEntity.Source = "duplicate";
+
+        _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
         _context.LinkedRecords.Add(new LinkedRecordEntity
         {
             Id = Guid.NewGuid(),
