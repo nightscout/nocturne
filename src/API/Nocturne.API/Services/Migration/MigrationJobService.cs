@@ -1383,7 +1383,7 @@ internal class MigrationJob
                         AccessTokenPrefix = $"{(subject.Name ?? "unknown").ToLowerInvariant()}-{subject.AccessToken[..Math.Min(8, subject.AccessToken.Length)]}",
                         IsActive = !isDenied,
                         Notes = "Migrated from Nightscout. Consider rotating to a Nocturne token.",
-                        OriginalId = subject.Id,
+                        OriginalId = subject.MongoId ?? subject.Id,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow,
                         ApprovalStatus = "Approved",
