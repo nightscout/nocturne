@@ -25,7 +25,7 @@ export function getDefaultSettings(): ClientSettings {
 		alarmTimeagoUrgent: true,
 		alarmTimeagoUrgentMins: 30,
 		showForecast: true,
-		focusHours: 3,
+		focusHours: 12,
 		heartbeat: 60,
 		baseURL: '',
 		authDefaultRoles: 'readable',
