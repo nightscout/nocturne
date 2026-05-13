@@ -232,73 +232,77 @@ public class NoteRepository : INoteRepository
     )
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-        var entities = records.Select(NoteMapper.ToEntity).ToList();
-        if (entities.Count == 0)
+        var strategy = ctx.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            await tx.CommitAsync(ct);
-            return [];
-        }
+            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
+            var entities = records.Select(NoteMapper.ToEntity).ToList();
+            if (entities.Count == 0)
+            {
+                await tx.CommitAsync(ct);
+                return [];
+            }
 
-        // Batch-level dedup: keep first occurrence per LegacyId
-        entities = entities
-            .GroupBy(e => e.LegacyId ?? e.Id.ToString())
-            .Select(g => g.First())
-            .ToList();
-
-        // DB-level dedup: filter out records whose LegacyId already exists
-        var legacyIds = entities
-            .Where(e => !string.IsNullOrEmpty(e.LegacyId))
-            .Select(e => e.LegacyId!)
-            .ToHashSet();
-
-        if (legacyIds.Count > 0)
-        {
-            var existingIds = await ctx
-                .Notes.AsNoTracking()
-                .Where(e => legacyIds.Contains(e.LegacyId!))
-                .Select(e => e.LegacyId)
-                .ToListAsync(ct);
-
-            var existingSet = existingIds.ToHashSet();
+            // Batch-level dedup: keep first occurrence per LegacyId
             entities = entities
-                .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                .GroupBy(e => e.LegacyId ?? e.Id.ToString())
+                .Select(g => g.First())
                 .ToList();
-        }
 
-        if (entities.Count == 0)
-        {
+            // DB-level dedup: filter out records whose LegacyId already exists
+            var legacyIds = entities
+                .Where(e => !string.IsNullOrEmpty(e.LegacyId))
+                .Select(e => e.LegacyId!)
+                .ToHashSet();
+
+            if (legacyIds.Count > 0)
+            {
+                var existingIds = await ctx
+                    .Notes.AsNoTracking()
+                    .Where(e => legacyIds.Contains(e.LegacyId!))
+                    .Select(e => e.LegacyId)
+                    .ToListAsync(ct);
+
+                var existingSet = existingIds.ToHashSet();
+                entities = entities
+                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                    .ToList();
+            }
+
+            if (entities.Count == 0)
+            {
+                await tx.CommitAsync(ct);
+                return [];
+            }
+
+            const int batchSize = 500;
+            foreach (var batch in entities.Chunk(batchSize))
+            {
+                ctx.Notes.AddRange(batch);
+                await ctx.SaveChangesAsync(ct);
+                ctx.ChangeTracker.Clear();
+            }
+
             await tx.CommitAsync(ct);
-            return [];
-        }
 
-        const int batchSize = 500;
-        foreach (var batch in entities.Chunk(batchSize))
-        {
-            ctx.Notes.AddRange(batch);
-            await ctx.SaveChangesAsync(ct);
-            ctx.ChangeTracker.Clear();
-        }
+            // Insert-time deduplication: link saved records to canonical groups
+            try
+            {
+                var dedupInputs = entities.Select(e => new DeduplicationInput(
+                    RecordId: e.Id,
+                    Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    DataSource: e.DataSource ?? "unknown",
+                    Criteria: new MatchCriteria()
+                )).ToList();
 
-        await tx.CommitAsync(ct);
+                await _deduplicationService.DeduplicateBatchAsync(RecordType.Note, dedupInputs, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Note", entities.Count);
+            }
 
-        // Insert-time deduplication: link saved records to canonical groups
-        try
-        {
-            var dedupInputs = entities.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                DataSource: e.DataSource ?? "unknown",
-                Criteria: new MatchCriteria()
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.Note, dedupInputs, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Note", entities.Count);
-        }
-
-        return entities.Select(NoteMapper.ToDomainModel);
+            return entities.Select(NoteMapper.ToDomainModel);
+        });
     }
 }

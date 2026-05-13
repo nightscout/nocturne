@@ -212,37 +212,41 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
             .ToHashSet();
 
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-
-        if (legacyIds.Count > 0)
+        var strategy = ctx.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            var existingIds = await ctx
-                .UploaderSnapshots.AsNoTracking()
-                .Where(e => legacyIds.Contains(e.LegacyId!))
-                .Select(e => e.LegacyId)
-                .ToListAsync(ct);
+            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
 
-            var existingSet = existingIds.ToHashSet();
-            entities = entities
-                .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
-                .ToList();
-        }
+            if (legacyIds.Count > 0)
+            {
+                var existingIds = await ctx
+                    .UploaderSnapshots.AsNoTracking()
+                    .Where(e => legacyIds.Contains(e.LegacyId!))
+                    .Select(e => e.LegacyId)
+                    .ToListAsync(ct);
 
-        if (entities.Count == 0)
-        {
+                var existingSet = existingIds.ToHashSet();
+                entities = entities
+                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                    .ToList();
+            }
+
+            if (entities.Count == 0)
+            {
+                await tx.CommitAsync(ct);
+                return [];
+            }
+
+            const int batchSize = 500;
+            foreach (var batch in entities.Chunk(batchSize))
+            {
+                ctx.UploaderSnapshots.AddRange(batch);
+                await ctx.SaveChangesAsync(ct);
+                ctx.ChangeTracker.Clear();
+            }
+
             await tx.CommitAsync(ct);
-            return [];
-        }
-
-        const int batchSize = 500;
-        foreach (var batch in entities.Chunk(batchSize))
-        {
-            ctx.UploaderSnapshots.AddRange(batch);
-            await ctx.SaveChangesAsync(ct);
-            ctx.ChangeTracker.Clear();
-        }
-
-        await tx.CommitAsync(ct);
-        return entities.Select(UploaderSnapshotMapper.ToDomainModel);
+            return entities.Select(UploaderSnapshotMapper.ToDomainModel);
+        });
     }
 }

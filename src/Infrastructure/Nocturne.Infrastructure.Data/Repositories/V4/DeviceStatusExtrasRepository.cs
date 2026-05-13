@@ -96,37 +96,41 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
             .ToHashSet();
 
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-
-        if (correlationIds.Count > 0)
+        var strategy = ctx.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            var existingIds = await ctx
-                .DeviceStatusExtras.AsNoTracking()
-                .Where(e => correlationIds.Contains(e.CorrelationId))
-                .Select(e => e.CorrelationId)
-                .ToListAsync(ct);
+            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
 
-            var existingSet = existingIds.ToHashSet();
-            entities = entities
-                .Where(e => !existingSet.Contains(e.CorrelationId))
-                .ToList();
-        }
+            if (correlationIds.Count > 0)
+            {
+                var existingIds = await ctx
+                    .DeviceStatusExtras.AsNoTracking()
+                    .Where(e => correlationIds.Contains(e.CorrelationId))
+                    .Select(e => e.CorrelationId)
+                    .ToListAsync(ct);
 
-        if (entities.Count == 0)
-        {
+                var existingSet = existingIds.ToHashSet();
+                entities = entities
+                    .Where(e => !existingSet.Contains(e.CorrelationId))
+                    .ToList();
+            }
+
+            if (entities.Count == 0)
+            {
+                await tx.CommitAsync(ct);
+                return [];
+            }
+
+            const int batchSize = 500;
+            foreach (var batch in entities.Chunk(batchSize))
+            {
+                ctx.DeviceStatusExtras.AddRange(batch);
+                await ctx.SaveChangesAsync(ct);
+                ctx.ChangeTracker.Clear();
+            }
+
             await tx.CommitAsync(ct);
-            return [];
-        }
-
-        const int batchSize = 500;
-        foreach (var batch in entities.Chunk(batchSize))
-        {
-            ctx.DeviceStatusExtras.AddRange(batch);
-            await ctx.SaveChangesAsync(ct);
-            ctx.ChangeTracker.Clear();
-        }
-
-        await tx.CommitAsync(ct);
-        return entities.Select(DeviceStatusExtrasMapper.ToDomainModel);
+            return entities.Select(DeviceStatusExtrasMapper.ToDomainModel);
+        });
     }
 }
