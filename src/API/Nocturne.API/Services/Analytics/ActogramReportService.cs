@@ -135,6 +135,7 @@ public sealed class ActogramReportService : IActogramReportService
             })
             .ToList();
 
+        var rangeHours = (endTime - startTime) / 3_600_000.0;
         _logger.LogDebug(
             "Actogram report fetched {Glucose} glucose, {Sleep} sleep, {Steps} steps, {HeartRate} heart-rate records for {RangeHours:F1}h",
             glucoseData.Count,

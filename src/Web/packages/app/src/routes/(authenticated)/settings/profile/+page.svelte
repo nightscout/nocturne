@@ -22,11 +22,22 @@
   } from "lucide-svelte";
   import * as Alert from "$lib/components/ui/alert";
   import { bgLabel } from "$lib/utils/formatting";
-  import { getProfileSummary } from "$api/generated/profiles.generated.remote";
+  import { getProfileSummary, setDefaultProfile } from "$api/generated/profiles.generated.remote";
   import { coachmark } from "@nocturne/coach";
   import ScheduleView from "$lib/components/schedule/ScheduleView.svelte";
 
   type Summary = Awaited<ReturnType<typeof getProfileSummary>>;
+
+  let switchingProfile = $state<string | null>(null);
+
+  async function handleSetActive(profileName: string) {
+    switchingProfile = profileName;
+    try {
+      await setDefaultProfile(profileName);
+    } finally {
+      switchingProfile = null;
+    }
+  }
 
   // Query for profile summary data
   const summaryQuery = getProfileSummary(undefined);
@@ -223,6 +234,15 @@
                         >
                           Active
                         </Badge>
+                      {:else}
+                        <button
+                          type="button"
+                          class="text-xs text-muted-foreground hover:text-primary transition-colors"
+                          onclick={(e) => { e.preventDefault(); handleSetActive(profileName); }}
+                          disabled={switchingProfile !== null}
+                        >
+                          {switchingProfile === profileName ? "Switching..." : "Set as active"}
+                        </button>
                       {/if}
                       {#if isExternal}
                         <Badge variant="outline" class="text-xs gap-1">
