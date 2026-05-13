@@ -7,6 +7,7 @@
     getCompatibilityMetrics,
     getCompatibilityAnalyses,
   } from "./data.remote";
+  import { formatDateTimeCompact } from "$lib/utils/formatting";
   import type { AnalysisListItemDto } from "$lib/api";
 
   // Get filter params from URL
@@ -207,11 +208,6 @@
       : activeAnalyses.filter((a) => !isCompatible(a.overallMatch))
   );
 
-  // Format timestamp
-  function formatTime(timestamp: string | Date | undefined) {
-    if (!timestamp) return "N/A";
-    return new Date(timestamp).toLocaleString();
-  }
 
   // Format duration
   function formatDuration(ms: number) {
@@ -226,7 +222,7 @@
     <h1 class="text-3xl font-bold">Compatibility Testing</h1>
     <div class="flex gap-2 items-center">
       <span class="text-sm text-gray-500">
-        Last update: {formatTime(lastUpdate.toISOString())}
+        Last update: {formatDateTimeCompact(lastUpdate.toISOString())}
       </span>
       <button
         onclick={togglePolling}
@@ -424,7 +420,7 @@
               onclick={() => goto(`/compatibility/${analysis.id}`)}
             >
               <td class="px-6 py-4 whitespace-nowrap text-sm">
-                {formatTime(analysis.analysisTimestamp)}
+                {formatDateTimeCompact(analysis.analysisTimestamp)}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm font-mono">
                 {analysis.requestMethod}

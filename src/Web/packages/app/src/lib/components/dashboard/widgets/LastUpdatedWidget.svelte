@@ -8,7 +8,8 @@
     BatteryWarning,
     Zap,
   } from "lucide-svelte";
-  import { formatTime, timeAgo } from "$lib/utils";
+  import { timeAgo } from "$lib/utils";
+  import { time } from "$lib/utils/formatting";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
 
@@ -52,7 +53,7 @@
       {timeAgo(displayLastUpdated)}
     </div>
     <p class="text-xs text-muted-foreground">
-      {formatTime(displayLastUpdated)}
+      {time(displayLastUpdated)}
     </p>
   </WidgetCard>
 {:then currentStatus}
@@ -89,7 +90,7 @@
       </div>
     {:else}
       <p class="text-xs text-muted-foreground">
-        {formatTime(displayLastUpdated)}
+        {time(displayLastUpdated)}
       </p>
     {/if}
   </WidgetCard>
@@ -99,7 +100,7 @@
       {timeAgo(displayLastUpdated)}
     </div>
     <p class="text-xs text-muted-foreground">
-      {formatTime(displayLastUpdated)}
+      {time(displayLastUpdated)}
     </p>
   </WidgetCard>
 {/await}

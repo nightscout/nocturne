@@ -32,6 +32,7 @@
 	import AlertTriangle from 'lucide-svelte/icons/triangle-alert';
 	import History from 'lucide-svelte/icons/history';
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
+	import { time } from '$lib/utils/formatting';
 	import type { CompressionLowSuggestion } from '$lib/api';
 
 	// Create resource with automatic layout registration - load ALL suggestions
@@ -248,10 +249,6 @@
 		return 'outline';
 	}
 
-	function formatTime(mills: number | Date): string {
-		const date = mills instanceof Date ? mills : new Date(mills);
-		return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-	}
 
 	function formatNightOf(nightOf: string | Date): string {
 		const date = nightOf instanceof Date ? nightOf : new Date(nightOf);
@@ -421,7 +418,7 @@
 											{suggestion.nightOf ? formatNightOf(suggestion.nightOf) : 'Unknown date'}
 										</p>
 										<p class="text-sm text-muted-foreground">
-											{formatTime(suggestion.startMills ?? 0)} - {formatTime(
+											{time(suggestion.startMills ?? 0)} - {time(
 												suggestion.endMills ?? 0
 											)}
 										</p>
@@ -511,7 +508,7 @@
 											{isPending ? 'Selected Range' : 'Exclusion Range'}
 										</p>
 										<p class="font-medium">
-											{formatTime(brushDomain[0])} - {formatTime(brushDomain[1])}
+											{time(brushDomain[0])} - {time(brushDomain[1])}
 										</p>
 										{#if isPending}
 											<p class="text-sm text-muted-foreground">

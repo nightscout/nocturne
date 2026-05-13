@@ -4,7 +4,7 @@
   import { Play, Pause, RotateCcw } from "lucide-svelte";
   import { AlertReplayEventKind, type AlertRuleSeverity } from "$api-clients";
   import { severityVar } from "./severity";
-  import { formatDateTime } from "./alertTime";
+  import { formatDateTimeCompact } from "$lib/utils/formatting";
 
   interface EventTick {
     tMs: number;
@@ -165,6 +165,6 @@
   <span
     class="font-mono text-xs text-muted-foreground tabular-nums shrink-0 w-32 text-right"
   >
-    {currentDate ? formatDateTime(currentDate) : ""}
+    {currentDate ? formatDateTimeCompact(currentDate) : ""}
   </span>
 </div>

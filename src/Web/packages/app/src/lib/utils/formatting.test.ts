@@ -18,6 +18,8 @@ vi.mock("runed", () => ({
 }));
 vi.mock("$lib/stores/appearance-store.svelte", () => ({
 	glucoseUnits: { current: "mg/dl" },
+	timeFormat: { current: "12" },
+	preferredLanguage: { current: "en" },
 }));
 
 // Dynamic import so mocks are established first

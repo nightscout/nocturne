@@ -47,14 +47,14 @@ export function formatTime(
 
   if (timeFormat === 24) {
     options.hour12 = false;
-    return date.toLocaleTimeString("en-US", options);
+    return date.toLocaleTimeString(undefined, options);
   }
 
   if (compact) {
     options.minute = "numeric";
   }
 
-  return date.toLocaleTimeString("en-US", options).toLowerCase();
+  return date.toLocaleTimeString(undefined, options).toLowerCase();
 }
 
 /** Calculate BG trend direction based on raw delta value */

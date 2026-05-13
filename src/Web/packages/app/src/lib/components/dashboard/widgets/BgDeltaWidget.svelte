@@ -2,8 +2,8 @@
   import WidgetCard from "./WidgetCard.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { formatGlucoseDelta, getUnitLabel } from "$lib/utils/formatting";
-  import { timeAgo, formatTime } from "$lib/utils";
+  import { formatGlucoseDelta, getUnitLabel, time } from "$lib/utils/formatting";
+  import { timeAgo } from "$lib/utils";
   import { onMount } from "svelte";
   import {
     BatteryCharging,
@@ -97,7 +97,7 @@
         {timeAgo(displayLastUpdated)}
       </span>
       <span class="text-xs text-muted-foreground">
-        {formatTime(displayLastUpdated)}
+        {time(displayLastUpdated)}
       </span>
     </div>
   {:else}
@@ -109,7 +109,7 @@
           {timeAgo(displayLastUpdated)}
         </span>
         <span class="text-xs text-muted-foreground">
-          {formatTime(displayLastUpdated)}
+          {time(displayLastUpdated)}
         </span>
       </div>
     {:then currentStatus}
@@ -145,7 +145,7 @@
           </span>
         {:else}
           <span class="text-xs text-muted-foreground">
-            {formatTime(displayLastUpdated)}
+            {time(displayLastUpdated)}
           </span>
         {/if}
       </div>
@@ -157,7 +157,7 @@
           {timeAgo(displayLastUpdated)}
         </span>
         <span class="text-xs text-muted-foreground">
-          {formatTime(displayLastUpdated)}
+          {time(displayLastUpdated)}
         </span>
       </div>
     {/await}

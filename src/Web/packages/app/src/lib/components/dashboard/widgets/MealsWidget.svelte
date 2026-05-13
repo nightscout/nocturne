@@ -2,7 +2,7 @@
   import WidgetCard from "./WidgetCard.svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { formatTime } from "$lib/utils";
+  import { time } from "$lib/utils/formatting";
   import { UtensilsCrossed } from "lucide-svelte";
 
   const realtimeStore = getRealtimeStore();
@@ -36,7 +36,7 @@
       </div>
       <div class="text-xs text-muted-foreground">
         {#if lastMealTime}
-          Last: {formatTime(lastMealTime)}
+          Last: {time(lastMealTime)}
         {/if}
       </div>
       <div class="flex flex-wrap gap-1 mt-1">
