@@ -51,6 +51,7 @@ import {
   LinkedPlatformsClient,
   MealMatchingClient,
   MemberInviteClient,
+  MembershipRequestClient,
   MetadataClient,
   MeterGlucoseClient,
   MigrationClient,
@@ -152,6 +153,7 @@ export class ApiClient {
   public readonly linkedPlatforms: LinkedPlatformsClient;
   public readonly mealMatching: MealMatchingClient;
   public readonly memberInvite: MemberInviteClient;
+  public readonly membershipRequest: MembershipRequestClient;
   public readonly metadata: MetadataClient;
   public readonly meterGlucose: MeterGlucoseClient;
   public readonly migration: MigrationClient;
@@ -253,6 +255,7 @@ export class ApiClient {
     this.linkedPlatforms = new LinkedPlatformsClient(apiBaseUrl, http);
     this.mealMatching = new MealMatchingClient(apiBaseUrl, http);
     this.memberInvite = new MemberInviteClient(apiBaseUrl, http);
+    this.membershipRequest = new MembershipRequestClient(apiBaseUrl, http);
     this.metadata = new MetadataClient(apiBaseUrl, http);
     this.meterGlucose = new MeterGlucoseClient(apiBaseUrl, http);
     this.migration = new MigrationClient(apiBaseUrl, http);
