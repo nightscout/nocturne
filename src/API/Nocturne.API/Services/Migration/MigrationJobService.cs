@@ -359,6 +359,7 @@ internal class MigrationJob
     private DateTime _startedAt;
     private DateTime? _completedAt;
     private readonly ConcurrentDictionary<string, CollectionProgress> _collectionProgress = new();
+    private static readonly System.Text.Json.JsonSerializerOptions s_caseInsensitiveJson = new() { PropertyNameCaseInsensitive = true };
 
     public MigrationJob(
         Guid id,
@@ -1337,7 +1338,7 @@ internal class MigrationJob
             var content = await response.Content.ReadAsStringAsync(ct);
             var subjects = System.Text.Json.JsonSerializer.Deserialize<NightscoutSubject[]>(
                 content,
-                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+                s_caseInsensitiveJson) ?? [];
 
             UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
             UpdateOverallProgress();
@@ -1406,7 +1407,7 @@ internal class MigrationJob
                             {
                                 Id = Guid.CreateVersion7(),
                                 Name = roleName,
-                                Description = $"Migrated from Nightscout",
+                                Description = "Migrated from Nightscout",
                                 Permissions = permissions,
                                 IsSystemRole = false,
                                 CreatedAt = DateTime.UtcNow,
@@ -1437,6 +1438,7 @@ internal class MigrationJob
                 {
                     _logger.LogWarning(ex, "Failed to migrate subject {Name}", subject.Name);
                     totalFailed++;
+                    dbContext.ChangeTracker.Clear();
                 }
             }
 
@@ -1474,7 +1476,7 @@ internal class MigrationJob
             var content = await response.Content.ReadAsStringAsync(ct);
             var roles = System.Text.Json.JsonSerializer.Deserialize<NightscoutRole[]>(
                 content,
-                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+                s_caseInsensitiveJson) ?? [];
 
             foreach (var role in roles)
             {
@@ -1495,8 +1497,8 @@ internal class MigrationJob
     private static string HashAccessToken(string accessToken)
     {
         var bytes = Encoding.UTF8.GetBytes(accessToken);
-        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexStringLower(hash);
     }
 
     private record NightscoutSubject
