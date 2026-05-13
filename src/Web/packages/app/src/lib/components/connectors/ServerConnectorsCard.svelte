@@ -261,7 +261,7 @@
             <div
               class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
             >
-              <AppLogo icon={connector.icon} />
+              <AppLogo icon={connector.icon} invertMode />
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">

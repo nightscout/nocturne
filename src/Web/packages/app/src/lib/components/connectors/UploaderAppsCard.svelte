@@ -68,7 +68,7 @@
                     ? 'bg-green-100 dark:bg-green-900/30'
                     : 'bg-primary/10'}"
                 >
-                  <AppLogo icon={uploader.icon} />
+                  <AppLogo icon={uploader.icon} invertMode />
                 </div>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
