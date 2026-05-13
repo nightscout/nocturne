@@ -526,6 +526,7 @@
         <UserMenu
           {user}
           {isPlatformAdmin}
+          {isGuestSession}
           collapsed={sidebar.state === "collapsed"}
           class="flex-1 min-w-0"
         />

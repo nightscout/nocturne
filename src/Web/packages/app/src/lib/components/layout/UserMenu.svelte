@@ -2,9 +2,11 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Avatar from "$lib/components/ui/avatar";
   import { Button } from "$lib/components/ui/button";
-  import { User, LogOut, Settings, Shield, ChevronDown } from "lucide-svelte";
+  import { User, LogOut, Settings, Shield, ChevronDown, UserPlus } from "lucide-svelte";
   import { goto } from "$app/navigation";
+  import { browser } from "$app/environment";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
+  import RequestMembershipDialog from "$lib/components/members/RequestMembershipDialog.svelte";
 
   interface Props {
     user: AuthUser | null;
@@ -14,11 +16,21 @@
     class?: string;
     /** Whether the current user is a platform administrator */
     isPlatformAdmin?: boolean;
+    /** Whether the current session is a guest link session */
+    isGuestSession?: boolean;
   }
 
-  const { user, collapsed = false, class: className = "", isPlatformAdmin = false }: Props = $props();
+  const { user, collapsed = false, class: className = "", isPlatformAdmin = false, isGuestSession = false }: Props = $props();
 
   let isOpen = $state(false);
+  let showRequestDialog = $state(false);
+
+  let tenantSlug = $state<string | undefined>(undefined);
+  $effect(() => {
+    if (!browser) return;
+    const parts = window.location.hostname.split(".");
+    if (parts.length > 2) tenantSlug = parts[0];
+  });
 
   /** Get initials from user name */
   function getInitials(name: string): string {
@@ -87,40 +99,49 @@
       </DropdownMenu.Label>
       <DropdownMenu.Separator />
 
-      {#if user.roles.length > 0}
-        <DropdownMenu.Group>
-          <DropdownMenu.Label class="text-xs text-muted-foreground">
-            Roles
-          </DropdownMenu.Label>
-          <div class="px-2 py-1 flex flex-wrap gap-1">
-            {#each user.roles as role}
-              <span
-                class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
-              >
-                {role}
-              </span>
-            {/each}
-          </div>
-        </DropdownMenu.Group>
-        <DropdownMenu.Separator />
-      {/if}
-
-      <DropdownMenu.Group>
-        <DropdownMenu.Item onSelect={() => goto("/settings/account")}>
-          <User class="mr-2 h-4 w-4" />
-          <span>Account</span>
-        </DropdownMenu.Item>
-        <DropdownMenu.Item onSelect={() => goto("/settings")}>
-          <Settings class="mr-2 h-4 w-4" />
-          <span>Settings</span>
-        </DropdownMenu.Item>
-        {#if isPlatformAdmin}
-          <DropdownMenu.Item onSelect={() => goto("/settings/admin")}>
-            <Shield class="mr-2 h-4 w-4" />
-            <span>Admin</span>
-          </DropdownMenu.Item>
+      {#if !isGuestSession}
+        {#if user.roles.length > 0}
+          <DropdownMenu.Group>
+            <DropdownMenu.Label class="text-xs text-muted-foreground">
+              Roles
+            </DropdownMenu.Label>
+            <div class="px-2 py-1 flex flex-wrap gap-1">
+              {#each user.roles as role}
+                <span
+                  class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+                >
+                  {role}
+                </span>
+              {/each}
+            </div>
+          </DropdownMenu.Group>
+          <DropdownMenu.Separator />
         {/if}
-      </DropdownMenu.Group>
+
+        <DropdownMenu.Group>
+          <DropdownMenu.Item onSelect={() => goto("/settings/account")}>
+            <User class="mr-2 h-4 w-4" />
+            <span>Account</span>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={() => goto("/settings")}>
+            <Settings class="mr-2 h-4 w-4" />
+            <span>Settings</span>
+          </DropdownMenu.Item>
+          {#if isPlatformAdmin}
+            <DropdownMenu.Item onSelect={() => goto("/settings/admin")}>
+              <Shield class="mr-2 h-4 w-4" />
+              <span>Admin</span>
+            </DropdownMenu.Item>
+          {/if}
+        </DropdownMenu.Group>
+      {:else}
+        <DropdownMenu.Group>
+          <DropdownMenu.Item onSelect={() => (showRequestDialog = true)}>
+            <UserPlus class="mr-2 h-4 w-4" />
+            <span>Request Membership</span>
+          </DropdownMenu.Item>
+        </DropdownMenu.Group>
+      {/if}
 
       <DropdownMenu.Separator />
 
@@ -133,6 +154,9 @@
       </DropdownMenu.Item>
     </DropdownMenu.Content>
   </DropdownMenu.Root>
+  {#if isGuestSession}
+    <RequestMembershipDialog bind:open={showRequestDialog} {tenantSlug} />
+  {/if}
 {:else}
   <!-- Not logged in - show login button -->
   <Button
