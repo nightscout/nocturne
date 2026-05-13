@@ -9,6 +9,7 @@
 
   interface PermissionCategory {
     name: string;
+    description?: string;
     isSubItem?: boolean;
     levels: AccessLevel[];
   }
@@ -58,46 +59,47 @@
     {
       header: "Patient Record",
       categories: [
-        { name: "Blood Glucose", levels: rw("glucose") },
-        { name: "Treatments", levels: rw("treatments") },
-        { name: "Device Status", levels: rw("devices") },
-        { name: "Heart Rate", levels: rw("heartrate") },
-        { name: "Step Count", levels: rw("stepcount") },
-        { name: "Food & Meals", levels: rw("food") },
-        { name: "Statistics", levels: readOnly("statistics") },
-        { name: "Reports", levels: readOnly("reports") },
+        { name: "Blood Glucose", description: "CGM readings and manual blood glucose entries", levels: rw("glucose") },
+        { name: "Treatments", description: "Insulin doses, carb entries, and therapy events", levels: rw("treatments") },
+        { name: "Device Status", description: "Pump, CGM, and phone status reports", levels: rw("devices") },
+        { name: "Heart Rate", description: "Heart rate data from wearables", levels: rw("heartrate") },
+        { name: "Step Count", description: "Daily step counts from activity trackers", levels: rw("stepcount") },
+        { name: "Food & Meals", description: "Food database entries and nutritional information", levels: rw("food") },
+        { name: "Statistics", description: "Time-in-range, A1c estimates, and averages", levels: readOnly("statistics") },
+        { name: "Reports", description: "Generated reports and data exports", levels: readOnly("reports") },
       ],
     },
     {
       header: "Therapy Settings",
       categories: [
-        { name: "Treatment Profile", levels: rw("therapy") },
-        { name: "Alerts", levels: rw("alerts") },
+        { name: "Treatment Profile", description: "Basal rates, sensitivity factors, carb ratios, and targets", levels: rw("therapy") },
+        { name: "Alerts", description: "Alert rules, notification delivery, and history", levels: rw("alerts") },
       ],
     },
     {
       header: "Account",
       categories: [
-        { name: "Identity", levels: readOnly("identity") },
+        { name: "Identity", description: "Display name, email, and account details", levels: readOnly("identity") },
       ],
     },
     {
       header: "Administration",
       categories: [
-        { name: "Manage Roles", isSubItem: true, levels: toggle("roles.manage") },
-        { name: "Invite Members", isSubItem: true, levels: toggle("members.invite") },
-        { name: "Manage Members", isSubItem: true, levels: toggle("members.manage") },
-        { name: "Tenant Settings", isSubItem: true, levels: toggle("tenant.settings") },
-        { name: "Manage Sharing", isSubItem: true, levels: toggle("sharing.manage") },
-        { name: "Guest Links", isSubItem: true, levels: toggle("sharing.guest") },
+        { name: "Manage Roles", description: "Create, edit, and delete roles", isSubItem: true, levels: toggle("roles.manage") },
+        { name: "Invite Members", description: "Create and send invite links", isSubItem: true, levels: toggle("members.invite") },
+        { name: "Manage Members", description: "Edit member roles and remove members", isSubItem: true, levels: toggle("members.manage") },
+        { name: "Tenant Settings", description: "Site name, units, and preferences", isSubItem: true, levels: toggle("tenant.settings") },
+        { name: "Manage Sharing", description: "Public sharing and follower configuration", isSubItem: true, levels: toggle("sharing.manage") },
+        { name: "Guest Links", description: "Create and revoke temporary guest access links", isSubItem: true, levels: toggle("sharing.guest") },
       ],
     },
     {
       header: "Audit",
       categories: [
-        { name: "View Audit Logs", isSubItem: true, levels: toggle("audit.read") },
+        { name: "View Audit Logs", description: "Read the history of data changes", isSubItem: true, levels: toggle("audit.read") },
         {
           name: "Manage Audit Settings",
+          description: "Configure audit retention and export",
           isSubItem: true,
           levels: [
             { value: "none", label: "No access", atoms: [] },
@@ -165,10 +167,15 @@
         class="flex items-center justify-between gap-4 py-1.5 {cat.isSubItem ? 'pl-3' : ''}"
         class:opacity-60={roleGranted}
       >
-        <div class="flex items-center gap-2 min-w-0 flex-1">
-          <span class="text-sm">{cat.name}</span>
-          {#if roleGranted}
-            <span class="text-xs text-muted-foreground">Granted by role</span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span class="text-sm">{cat.name}</span>
+            {#if roleGranted}
+              <span class="text-xs text-muted-foreground">Granted by role</span>
+            {/if}
+          </div>
+          {#if cat.description && !roleGranted}
+            <p class="text-xs text-muted-foreground leading-tight">{cat.description}</p>
           {/if}
         </div>
         <Select.Root
@@ -179,7 +186,7 @@
           }}
           disabled={readonly || roleGranted}
         >
-          <Select.Trigger class="w-[160px] h-8 text-sm">
+          <Select.Trigger class="w-40 h-8 text-sm">
             {getLevelLabel(cat)}
           </Select.Trigger>
           <Select.Content>
