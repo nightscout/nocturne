@@ -25,8 +25,14 @@
     setMemberLimitTo24Hours,
   } from "$lib/api/generated/memberInvites.generated.remote";
   import { coachmark } from "@nocturne/coach";
+  import {
+    getPendingRequests,
+    approveRequest,
+    denyRequest,
+  } from "$lib/api/generated/membershipRequests.generated.remote";
   import CreateInviteCard from "$lib/components/members/CreateInviteCard.svelte";
   import PendingInvitesList from "$lib/components/members/PendingInvitesList.svelte";
+  import PendingRequestsList from "$lib/components/members/PendingRequestsList.svelte";
   import MemberCard from "$lib/components/members/MemberCard.svelte";
   import GuestLinksSection from "$lib/components/members/GuestLinksSection.svelte";
 
@@ -54,12 +60,14 @@
   const membersQuery = getMembers();
   const invitesQuery = $derived(tenantId ? listInvites(tenantId) : null);
   const rolesQuery = getRoles();
+  const pendingRequestsQuery = $derived(canManageMembers ? getPendingRequests() : null);
 
   // Data
   const allMembers = $derived(membersQuery.current ?? []);
   const invites = $derived(invitesQuery?.current ?? []);
   const activeInvites = $derived(invites.filter((i) => i.isValid));
   const allRoles = $derived(rolesQuery.current ?? []);
+  const pendingRequests = $derived(pendingRequestsQuery?.current ?? []);
 
   const publicMember = $derived(allMembers.find((m) => m.name === "Public"));
   const sharingConfigured = $derived(
@@ -119,6 +127,30 @@
       isSavingMember = false;
     }
   }
+
+  async function handleApproveRequest(requestId: string, roleIds: string[]) {
+    errorMessage = null;
+    try {
+      await approveRequest({ id: requestId, request: { roleIds } });
+      successMessage = "Membership request approved.";
+      clearMessages();
+    } catch {
+      errorMessage = "Failed to approve request. Please try again.";
+      clearMessages();
+    }
+  }
+
+  async function handleDenyRequest(requestId: string) {
+    errorMessage = null;
+    try {
+      await denyRequest(requestId);
+      successMessage = "Membership request denied.";
+      clearMessages();
+    } catch {
+      errorMessage = "Failed to deny request. Please try again.";
+      clearMessages();
+    }
+  }
 </script>
 
 <svelte:head>
@@ -158,6 +190,16 @@
         {successMessage}
       </p>
     </div>
+  {/if}
+
+  <!-- Pending Requests -->
+  {#if canManageMembers && pendingRequests.length > 0}
+    <PendingRequestsList
+      requests={pendingRequests}
+      roles={allRoles}
+      onApprove={handleApproveRequest}
+      onDeny={handleDenyRequest}
+    />
   {/if}
 
   <!-- Active Members -->
