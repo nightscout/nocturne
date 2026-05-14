@@ -77,5 +77,10 @@ public enum ConnectorPropertyKey
     WebhookSecret,
 
     // Eversense-specific
-    PatientUsername
+    PatientUsername,
+
+    // CareLink-specific
+    RefreshToken,
+    CountryCode,
+    LanguageCode,
 }
