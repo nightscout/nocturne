@@ -20,4 +20,5 @@ public enum ConnectSource
     Eversense,
     NocturneRemote,
     Twiist,
+    CareLink,
 }

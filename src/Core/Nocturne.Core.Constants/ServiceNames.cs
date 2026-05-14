@@ -119,6 +119,12 @@ public static class ServiceNames
     public const string TwiistConnector = "twiist-connector";
 
     /// <summary>
+    /// Aspire resource name for the Medtronic CareLink connector service.
+    /// </summary>
+    /// <seealso cref="DataSources.CareLinkConnector"/>
+    public const string CareLinkConnector = "carelink-connector";
+
+    /// <summary>
     /// Aspire parameter names resolved by the AppHost via <c>AddParameter</c> and
     /// by services reading <c>Parameters:&lt;name&gt;</c> from configuration.
     /// </summary>

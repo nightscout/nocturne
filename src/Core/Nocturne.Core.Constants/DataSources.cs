@@ -52,6 +52,11 @@ public static class DataSources
     public const string MiniMedConnector = "minimed-connector";
 
     /// <summary>
+    /// Data fetched from Medtronic CareLink via the CareLink connector.
+    /// </summary>
+    public const string CareLinkConnector = "carelink-connector";
+
+    /// <summary>
     /// Data fetched from Glooko API via the Glooko connector.
     /// </summary>
     public const string GlookoConnector = "glooko-connector";
@@ -233,6 +238,7 @@ public static class DataSources
             is DexcomConnector
                 or LibreConnector
                 or MiniMedConnector
+                or CareLinkConnector
                 or GlookoConnector
                 or NightscoutConnector
                 or GlurooConnector
@@ -300,6 +306,7 @@ public static class DataSources
             DexcomConnector,
             LibreConnector,
             MiniMedConnector,
+            CareLinkConnector,
             GlookoConnector,
             NightscoutConnector,
             GlurooConnector,
