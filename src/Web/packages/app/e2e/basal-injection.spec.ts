@@ -13,7 +13,7 @@ test.describe("basal injection entry flow", () => {
 		// Click the row or button that opens TreatmentEditDialog for a new basalInjection.
 		// In the treatments page, there should be category tabs — click "Long-acting injection".
 		const basalTab = page.getByRole("tab", { name: /long.acting injection/i });
-		if (await basalTab.isVisible({ timeout: 3_000 }).catch(() => false)) {
+		if (await basalTab.isVisible({ timeout: 3_000 })) {
 			await basalTab.click();
 		}
 
@@ -27,7 +27,7 @@ test.describe("basal injection entry flow", () => {
 		// The TreatmentEditDialog should open. If it presents an event type
 		// selector, choose "Long-acting injection" (basalInjection category).
 		const eventTypeSelect = page.getByText(/long.acting injection/i).first();
-		if (await eventTypeSelect.isVisible({ timeout: 3_000 }).catch(() => false)) {
+		if (await eventTypeSelect.isVisible({ timeout: 3_000 })) {
 			await eventTypeSelect.click();
 		}
 
@@ -55,7 +55,7 @@ test.describe("basal injection entry flow", () => {
 
 		// Optionally add a note
 		const notesField = page.locator("#basal-notes");
-		if (await notesField.isVisible({ timeout: 1_000 }).catch(() => false)) {
+		if (await notesField.isVisible({ timeout: 1_000 })) {
 			await notesField.fill("Evening dose");
 		}
 
@@ -63,12 +63,11 @@ test.describe("basal injection entry flow", () => {
 		const saveButton = page.getByRole("button", { name: /save/i });
 		await expect(saveButton).toBeEnabled();
 
-		// Intercept the API call so we can wait for the response
+		// Intercept the SvelteKit form action response (remote functions submit to the page route)
 		const saveResponsePromise = page.waitForResponse(
 			(resp) =>
-				resp.url().includes("basalInjection") &&
-				(resp.request().method() === "POST" ||
-					resp.request().method() === "PUT"),
+				resp.url().includes("/reports/treatments") &&
+				resp.request().method() === "POST",
 			{ timeout: 10_000 },
 		);
 
@@ -79,7 +78,7 @@ test.describe("basal injection entry flow", () => {
 		expect(saveResponse.ok()).toBe(true);
 
 		// The dialog should close after a successful save
-		await expect(page.getByText("Select insulin...")).not.toBeVisible({
+		await expect(page.locator("#basal-units")).not.toBeVisible({
 			timeout: 5_000,
 		});
 

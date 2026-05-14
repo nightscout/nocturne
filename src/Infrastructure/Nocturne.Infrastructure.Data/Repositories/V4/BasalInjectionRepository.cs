@@ -80,16 +80,25 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     /// <returns>The basal injection record, or null if not found.</returns>
     public async Task<BasalInjection?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        var entity = await _context.BasalInjections.FindAsync([id], ct);
+        // Use FirstOrDefaultAsync instead of FindAsync so the soft-delete global query
+        // filter (WHERE DeletedAt IS NULL) is always applied. FindAsync checks the change
+        // tracker first and can return a cached soft-deleted entity.
+        var entity = await _context.BasalInjections
+            .FirstOrDefaultAsync(e => e.Id == id, ct);
         return entity is null ? null : BasalInjectionMapper.ToDomainModel(entity);
     }
 
     /// <summary>
     /// Creates a new basal injection record. When <c>DataSource</c> and <c>SyncIdentifier</c>
-    /// match an existing row for this tenant, the record is updated in place rather
+    /// match an existing row for this tenant, the record is updated in place (upsert) rather
     /// than inserted — making the operation idempotent for connector replays.
     /// Tenant scoping is implicit via the DbContext's RLS-equivalent query filter.
     /// </summary>
+    /// <remarks>
+    /// The controller layer has its own idempotency check that returns the existing record
+    /// unchanged (HTTP semantics). This repository-level upsert exists for non-HTTP callers
+    /// (connectors, background services) that need "latest wins" semantics on replay.
+    /// </remarks>
     /// <param name="model">The basal injection to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created or updated basal injection record.</returns>
@@ -125,7 +134,7 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     public async Task<BasalInjection> UpdateAsync(Guid id, BasalInjection model, CancellationToken ct = default)
     {
         var entity =
-            await _context.BasalInjections.FindAsync([id], ct)
+            await _context.BasalInjections.FirstOrDefaultAsync(e => e.Id == id, ct)
             ?? throw new KeyNotFoundException($"BasalInjection {id} not found");
         BasalInjectionMapper.UpdateEntity(entity, model);
         await _context.SaveChangesAsync(ct);
@@ -143,10 +152,55 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
         var entity =
-            await _context.BasalInjections.FindAsync([id], ct)
+            await _context.BasalInjections.FirstOrDefaultAsync(e => e.Id == id, ct)
             ?? throw new KeyNotFoundException($"BasalInjection {id} not found");
         entity.DeletedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<BasalInjection> RestoreAsync(Guid id, CancellationToken ct = default)
+    {
+        var entity = await _context.BasalInjections.IgnoreQueryFilters()
+            .Where(e => e.TenantId == _context.TenantId && e.Id == id && e.DeletedAt != null)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException($"Soft-deleted BasalInjection {id} not found");
+        entity.DeletedAt = null;
+        await _context.SaveChangesAsync(ct);
+        return BasalInjectionMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<BasalInjection>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    {
+        var idSet = ids.ToHashSet();
+        var entities = await _context.BasalInjections.IgnoreQueryFilters()
+            .Where(e => e.TenantId == _context.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
+            .ToListAsync(ct);
+        foreach (var entity in entities)
+            entity.DeletedAt = null;
+        await _context.SaveChangesAsync(ct);
+        return entities.Select(BasalInjectionMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<BasalInjection>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
+    {
+        var entities = await _context.BasalInjections.IgnoreQueryFilters()
+            .Where(e => e.TenantId == _context.TenantId && e.DeletedAt != null)
+            .OrderByDescending(e => e.DeletedAt)
+            .Skip(offset).Take(limit)
+            .AsNoTracking()
+            .ToListAsync(ct);
+        return entities.Select(BasalInjectionMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
+    {
+        return await _context.BasalInjections.IgnoreQueryFilters()
+            .Where(e => e.TenantId == _context.TenantId && e.DeletedAt != null)
+            .CountAsync(ct);
     }
 
     /// <summary>
