@@ -1280,7 +1280,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_sensor_glucose_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<SensorGlucoseEntity>()
@@ -1352,7 +1352,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_boluses_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<BolusEntity>()
@@ -1369,7 +1369,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.DataSource, e.SyncIdentifier })
             .HasDatabaseName("ix_boluses_tenant_source_sync_id")
             .IsUnique()
-            .HasFilter("sync_identifier IS NOT NULL");
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
         // CarbIntakes indexes
         modelBuilder
@@ -1383,7 +1383,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_carb_intakes_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<CarbIntakeEntity>()
@@ -1400,7 +1400,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.DataSource, e.SyncIdentifier })
             .HasDatabaseName("ix_carb_intakes_tenant_source_sync_id")
             .IsUnique()
-            .HasFilter("sync_identifier IS NOT NULL");
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
         // BGChecks indexes
         modelBuilder
@@ -1414,7 +1414,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_bg_checks_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<BGCheckEntity>()
@@ -1433,7 +1433,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_notes_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<NoteEntity>()
@@ -1452,7 +1452,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_device_events_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<DeviceEventEntity>()
@@ -1471,7 +1471,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_bolus_calculations_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<BolusCalculationEntity>()
@@ -1538,7 +1538,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_temp_basals_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<TempBasalEntity>()
@@ -1551,7 +1551,13 @@ public class NocturneDbContext : DbContext
             .HasDatabaseName("ix_temp_basals_tenant_start_timestamp")
             .IsDescending(false, true);
 
-        // Devices unique index is handled by [Index] attribute on entity
+        // Devices unique index (scoped to live records)
+        modelBuilder
+            .Entity<DeviceEntity>()
+            .HasIndex(e => new { e.Category, e.Type, e.Serial })
+            .HasDatabaseName("ix_devices_category_type_serial")
+            .IsUnique()
+            .HasFilter("deleted_at IS NULL");
 
         // V4 Profile Decomposition indexes
 
@@ -1567,7 +1573,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_therapy_settings_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<TherapySettingsEntity>()
@@ -1597,7 +1603,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_basal_schedules_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<BasalScheduleEntity>()
@@ -1627,7 +1633,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_carb_ratio_schedules_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<CarbRatioScheduleEntity>()
@@ -1657,7 +1663,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_sensitivity_schedules_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<SensitivityScheduleEntity>()
@@ -1687,7 +1693,7 @@ public class NocturneDbContext : DbContext
             .HasIndex(e => new { e.TenantId, e.LegacyId })
             .HasDatabaseName("ix_target_range_schedules_tenant_legacy_id")
             .IsUnique()
-            .HasFilter("legacy_id IS NOT NULL");
+            .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
         modelBuilder
             .Entity<TargetRangeScheduleEntity>()
@@ -1715,11 +1721,12 @@ public class NocturneDbContext : DbContext
             .HasIndex(tm => tm.SubjectId)
             .HasDatabaseName("ix_tenant_members_subject_id");
 
-        // PatientRecord: unique constraint — one record per tenant
+        // PatientRecord: unique constraint — one record per tenant (scoped to live records)
         modelBuilder.Entity<PatientRecordEntity>()
             .HasIndex(e => e.TenantId)
             .HasDatabaseName("ix_patient_records_tenant_id")
-            .IsUnique();
+            .IsUnique()
+            .HasFilter("deleted_at IS NULL");
 
         // PatientDevice: query by tenant + current status
         modelBuilder.Entity<PatientDeviceEntity>()

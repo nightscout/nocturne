@@ -11,7 +11,6 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.Device
 /// </summary>
 [Table("devices")]
-[Index(nameof(Category), nameof(Type), nameof(Serial), IsUnique = true)]
 public class DeviceEntity : ITenantScoped, ISoftDeletable
 {
     /// <summary>
