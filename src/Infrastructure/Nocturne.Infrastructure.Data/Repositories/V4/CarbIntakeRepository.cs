@@ -377,7 +377,8 @@ public class CarbIntakeRepository : ICarbIntakeRepository
 
                 // Over-fetches by a Cartesian amount; the partial unique index
                 // on (tenant_id, data_source, sync_identifier) keeps this cheap.
-                var existingRows = await ctx.CarbIntakes
+                var existingRows = await ctx.CarbIntakes.IgnoreQueryFilters()
+                    .Where(e => e.TenantId == ctx.TenantId)
                     .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
                     .ToListAsync(ct);
 
@@ -427,12 +428,25 @@ public class CarbIntakeRepository : ICarbIntakeRepository
             if (legacyIds.Count > 0)
             {
                 var existingIds = await ctx
-                    .CarbIntakes.AsNoTracking()
+                    .CarbIntakes.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
                     .Where(e => legacyIds.Contains(e.LegacyId!))
                     .Select(e => e.LegacyId)
                     .ToListAsync(ct);
 
                 var existingSet = existingIds.ToHashSet();
+
+                var softDeletedCount = await ctx
+                    .CarbIntakes.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
+                    .Where(e => legacyIds.Contains(e.LegacyId!) && e.DeletedAt != null)
+                    .CountAsync(ct);
+
+                if (softDeletedCount > 0)
+                    _logger.LogInformation(
+                        "Skipped {Count} previously-deleted CarbIntake records during import",
+                        softDeletedCount);
+
                 entities = entities
                     .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
                     .ToList();

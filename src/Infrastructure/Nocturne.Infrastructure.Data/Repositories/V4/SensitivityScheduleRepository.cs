@@ -331,12 +331,25 @@ public class SensitivityScheduleRepository : ISensitivityScheduleRepository
             if (legacyIds.Count > 0)
             {
                 var existingIds = await ctx
-                    .SensitivitySchedules.AsNoTracking()
+                    .SensitivitySchedules.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
                     .Where(e => legacyIds.Contains(e.LegacyId!))
                     .Select(e => e.LegacyId)
                     .ToListAsync(ct);
 
                 var existingSet = existingIds.ToHashSet();
+
+                var softDeletedCount = await ctx
+                    .SensitivitySchedules.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
+                    .Where(e => legacyIds.Contains(e.LegacyId!) && e.DeletedAt != null)
+                    .CountAsync(ct);
+
+                if (softDeletedCount > 0)
+                    _logger.LogInformation(
+                        "Skipped {Count} previously-deleted SensitivitySchedule records during import",
+                        softDeletedCount);
+
                 entities = entities
                     .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
                     .ToList();

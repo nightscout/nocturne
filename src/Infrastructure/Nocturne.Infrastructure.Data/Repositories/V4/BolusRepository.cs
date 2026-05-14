@@ -370,7 +370,8 @@ public class BolusRepository : IBolusRepository
 
                 // Over-fetches by a Cartesian amount; the partial unique index
                 // on (tenant_id, data_source, sync_identifier) keeps this cheap.
-                var existingRows = await ctx.Boluses
+                var existingRows = await ctx.Boluses.IgnoreQueryFilters()
+                    .Where(e => e.TenantId == ctx.TenantId)
                     .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
                     .ToListAsync(ct);
 
@@ -420,12 +421,25 @@ public class BolusRepository : IBolusRepository
             if (legacyIds.Count > 0)
             {
                 var existingIds = await ctx
-                    .Boluses.AsNoTracking()
+                    .Boluses.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
                     .Where(e => legacyIds.Contains(e.LegacyId!))
                     .Select(e => e.LegacyId)
                     .ToListAsync(ct);
 
                 var existingSet = existingIds.ToHashSet();
+
+                var softDeletedCount = await ctx
+                    .Boluses.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
+                    .Where(e => legacyIds.Contains(e.LegacyId!) && e.DeletedAt != null)
+                    .CountAsync(ct);
+
+                if (softDeletedCount > 0)
+                    _logger.LogInformation(
+                        "Skipped {Count} previously-deleted Bolus records during import",
+                        softDeletedCount);
+
                 entities = entities
                     .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
                     .ToList();

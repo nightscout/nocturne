@@ -104,12 +104,25 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
             if (correlationIds.Count > 0)
             {
                 var existingIds = await ctx
-                    .DeviceStatusExtras.AsNoTracking()
+                    .DeviceStatusExtras.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
                     .Where(e => correlationIds.Contains(e.CorrelationId))
                     .Select(e => e.CorrelationId)
                     .ToListAsync(ct);
 
                 var existingSet = existingIds.ToHashSet();
+
+                var softDeletedCount = await ctx
+                    .DeviceStatusExtras.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
+                    .Where(e => correlationIds.Contains(e.CorrelationId) && e.DeletedAt != null)
+                    .CountAsync(ct);
+
+                if (softDeletedCount > 0)
+                    _logger.LogInformation(
+                        "Skipped {Count} previously-deleted DeviceStatusExtras records during import",
+                        softDeletedCount);
+
                 entities = entities
                     .Where(e => !existingSet.Contains(e.CorrelationId))
                     .ToList();

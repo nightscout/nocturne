@@ -269,12 +269,25 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
             if (legacyIds.Count > 0)
             {
                 var existingIds = await ctx
-                    .UploaderSnapshots.AsNoTracking()
+                    .UploaderSnapshots.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
                     .Where(e => legacyIds.Contains(e.LegacyId!))
                     .Select(e => e.LegacyId)
                     .ToListAsync(ct);
 
                 var existingSet = existingIds.ToHashSet();
+
+                var softDeletedCount = await ctx
+                    .UploaderSnapshots.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
+                    .Where(e => legacyIds.Contains(e.LegacyId!) && e.DeletedAt != null)
+                    .CountAsync(ct);
+
+                if (softDeletedCount > 0)
+                    _logger.LogInformation(
+                        "Skipped {Count} previously-deleted UploaderSnapshot records during import",
+                        softDeletedCount);
+
                 entities = entities
                     .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
                     .ToList();
