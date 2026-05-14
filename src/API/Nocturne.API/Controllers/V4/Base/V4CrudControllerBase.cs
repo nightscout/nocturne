@@ -128,6 +128,22 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         }
     }
 
+    /// <summary>Lists soft-deleted records available for restoration, ordered by deletion date (newest first).</summary>
+    /// <param name="limit">Maximum number of records to return. Defaults to `100`.</param>
+    /// <param name="offset">Number of records to skip for pagination. Defaults to `0`.</param>
+    /// <param name="ct">Cancellation token.</param>
+    [HttpGet("deleted")]
+    [RemoteQuery]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public virtual async Task<ActionResult<PaginatedResponse<TModel>>> ListDeleted(
+        [FromQuery] int limit = 100, [FromQuery] int offset = 0,
+        CancellationToken ct = default)
+    {
+        var data = await Repository.GetDeletedAsync(limit, offset, ct);
+        var total = await Repository.CountDeletedAsync(ct);
+        return Ok(new PaginatedResponse<TModel> { Data = data, Pagination = new PaginationInfo(limit, offset, total) });
+    }
+
     /// <summary>Restores a soft-deleted record by ID.</summary>
     /// <param name="id">The unique identifier of the soft-deleted record.</param>
     /// <param name="ct">Cancellation token.</param>

@@ -72,7 +72,7 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
         await using var ctx = await _contextFactory.CreateAsync(ct);
         return await ctx.DeviceStatusExtras
             .Where(e => e.CorrelationId == correlationId)
-            .ExecuteDeleteAsync(ct);
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
     }
 
     /// <inheritdoc />
@@ -103,25 +103,19 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
 
             if (correlationIds.Count > 0)
             {
-                var existingIds = await ctx
-                    .DeviceStatusExtras.IgnoreQueryFilters().AsNoTracking()
+                var existingRecords = await ctx.DeviceStatusExtras.IgnoreQueryFilters().AsNoTracking()
                     .Where(e => e.TenantId == ctx.TenantId)
                     .Where(e => correlationIds.Contains(e.CorrelationId))
-                    .Select(e => e.CorrelationId)
+                    .Select(e => new { e.CorrelationId, IsSoftDeleted = e.DeletedAt != null })
                     .ToListAsync(ct);
 
-                var existingSet = existingIds.ToHashSet();
-
-                var softDeletedCount = await ctx
-                    .DeviceStatusExtras.IgnoreQueryFilters().AsNoTracking()
-                    .Where(e => e.TenantId == ctx.TenantId)
-                    .Where(e => correlationIds.Contains(e.CorrelationId) && e.DeletedAt != null)
-                    .CountAsync(ct);
+                var existingSet = existingRecords.Select(r => r.CorrelationId).ToHashSet();
+                var softDeletedCount = existingRecords.Count(r => r.IsSoftDeleted);
 
                 if (softDeletedCount > 0)
                     _logger.LogInformation(
-                        "Skipped {Count} previously-deleted DeviceStatusExtras records during import",
-                        softDeletedCount);
+                        "Skipped {Count} previously-deleted {Type} records during import",
+                        softDeletedCount, "DeviceStatusExtras");
 
                 entities = entities
                     .Where(e => !existingSet.Contains(e.CorrelationId))

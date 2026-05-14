@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
 using V4Models = Nocturne.Core.Models.V4;
@@ -1584,7 +1585,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
 
     private static async Task<int> DeleteEntitiesByTimeRange<T>(
         Microsoft.EntityFrameworkCore.DbSet<T> dbSet, DateTime? from, DateTime? to, CancellationToken ct)
-        where T : class
+        where T : class, ISoftDeletable
     {
         var query = dbSet.AsQueryable();
 
@@ -1636,6 +1637,6 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             }
         }
 
-        return await query.ExecuteDeleteAsync(ct);
+        return await query.ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
     }
 }

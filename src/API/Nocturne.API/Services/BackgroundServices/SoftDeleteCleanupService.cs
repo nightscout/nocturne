@@ -63,6 +63,7 @@ public class SoftDeleteCleanupService(
 
         // Get per-tenant retention config
         var configs = await configContext.TenantDataRetentionConfig
+            .IgnoreQueryFilters()
             .Select(c => new { c.TenantId, c.SoftDeleteRetentionDays })
             .ToListAsync(ct);
 

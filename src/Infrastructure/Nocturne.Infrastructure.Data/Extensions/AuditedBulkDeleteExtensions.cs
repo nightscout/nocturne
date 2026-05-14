@@ -153,7 +153,7 @@ public static class AuditedBulkDeleteExtensions
                     TenantId = context.TenantId,
                     EntityType = entityTypeName,
                     EntityId = (Guid)entry.Property("Id").CurrentValue!,
-                    Action = "soft_delete",
+                    Action = "delete",
                     ChangesJson = JsonSerializer.Serialize(snapshot, JsonOptions),
                     SubjectId = auditContext?.SubjectId,
                     AuthType = auditContext?.AuthType,

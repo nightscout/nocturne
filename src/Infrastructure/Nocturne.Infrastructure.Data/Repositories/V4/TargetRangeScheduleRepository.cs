@@ -330,25 +330,19 @@ public class TargetRangeScheduleRepository : ITargetRangeScheduleRepository
 
             if (legacyIds.Count > 0)
             {
-                var existingIds = await ctx
-                    .TargetRangeSchedules.IgnoreQueryFilters().AsNoTracking()
+                var existingRecords = await ctx.TargetRangeSchedules.IgnoreQueryFilters().AsNoTracking()
                     .Where(e => e.TenantId == ctx.TenantId)
                     .Where(e => legacyIds.Contains(e.LegacyId!))
-                    .Select(e => e.LegacyId)
+                    .Select(e => new { e.LegacyId, IsSoftDeleted = e.DeletedAt != null })
                     .ToListAsync(ct);
 
-                var existingSet = existingIds.ToHashSet();
-
-                var softDeletedCount = await ctx
-                    .TargetRangeSchedules.IgnoreQueryFilters().AsNoTracking()
-                    .Where(e => e.TenantId == ctx.TenantId)
-                    .Where(e => legacyIds.Contains(e.LegacyId!) && e.DeletedAt != null)
-                    .CountAsync(ct);
+                var existingSet = existingRecords.Select(r => r.LegacyId).ToHashSet();
+                var softDeletedCount = existingRecords.Count(r => r.IsSoftDeleted);
 
                 if (softDeletedCount > 0)
                     _logger.LogInformation(
-                        "Skipped {Count} previously-deleted TargetRangeSchedule records during import",
-                        softDeletedCount);
+                        "Skipped {Count} previously-deleted {Type} records during import",
+                        softDeletedCount, "TargetRangeSchedule");
 
                 entities = entities
                     .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))

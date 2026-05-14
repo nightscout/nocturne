@@ -341,11 +341,50 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 columns: new[] { "tenant_id", "legacy_id" },
                 unique: true,
                 filter: "legacy_id IS NOT NULL AND deleted_at IS NULL");
+
+            // Partial indexes for efficient soft-delete cleanup queries
+            var tables = new[]
+            {
+                "aps_snapshots", "basal_schedules", "bg_checks", "bolus_calculations",
+                "boluses", "calibrations", "carb_intakes", "carb_ratio_schedules",
+                "decomposition_batches", "device_events", "device_status_extras",
+                "devices", "meter_glucose", "notes", "patient_devices",
+                "patient_insulins", "patient_records", "pump_snapshots",
+                "sensitivity_schedules", "sensor_glucose", "target_range_schedules",
+                "temp_basals", "therapy_settings", "uploader_snapshots"
+            };
+
+            foreach (var table in tables)
+            {
+                migrationBuilder.CreateIndex(
+                    name: $"ix_{table}_deleted_at",
+                    table: table,
+                    column: "deleted_at",
+                    filter: "deleted_at IS NOT NULL");
+            }
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            var tables = new[]
+            {
+                "aps_snapshots", "basal_schedules", "bg_checks", "bolus_calculations",
+                "boluses", "calibrations", "carb_intakes", "carb_ratio_schedules",
+                "decomposition_batches", "device_events", "device_status_extras",
+                "devices", "meter_glucose", "notes", "patient_devices",
+                "patient_insulins", "patient_records", "pump_snapshots",
+                "sensitivity_schedules", "sensor_glucose", "target_range_schedules",
+                "temp_basals", "therapy_settings", "uploader_snapshots"
+            };
+
+            foreach (var table in tables)
+            {
+                migrationBuilder.DropIndex(
+                    name: $"ix_{table}_deleted_at",
+                    table: table);
+            }
+
             migrationBuilder.DropIndex(
                 name: "ix_therapy_settings_tenant_legacy_id",
                 table: "therapy_settings");
