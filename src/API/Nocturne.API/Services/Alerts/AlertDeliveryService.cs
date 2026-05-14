@@ -325,6 +325,15 @@ internal sealed class AlertDeliveryService(
                 }
                 break;
 
+            case ChannelType.HomeAssistant:
+                var haProvider = serviceProvider.GetService<Providers.HomeAssistantProvider>();
+                if (haProvider is not null)
+                {
+                    await haProvider.SendAsync(delivery.TenantId, delivery.Destination, payload, ct);
+                    await MarkDeliveredAsync(delivery.Id, null, null, ct);
+                }
+                break;
+
             default:
                 logger.LogWarning("Unsupported channel type '{ChannelType}' for delivery {DeliveryId}",
                     delivery.ChannelType, delivery.Id);

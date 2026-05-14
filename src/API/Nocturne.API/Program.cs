@@ -390,6 +390,7 @@ app.MapHub<DataHub>("/hubs/data");
 app.MapHub<AlarmHub>("/hubs/alarms");
 app.MapHub<AlertHub>("/hubs/alerts");
 app.MapHub<ConfigHub>("/hubs/config");
+app.MapHub<HomeAssistantHub>("/hubs/home-assistant");
 
 // Serve OpenAPI specs at /openapi/{documentName}.json
 app.MapOpenApi();
