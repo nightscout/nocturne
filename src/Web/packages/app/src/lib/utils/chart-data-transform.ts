@@ -81,6 +81,13 @@ export function transformChartData(data: DashboardChartData) {
 			color: resolveChartColor(m.color ?? 'muted-foreground'),
 		})),
 
+		basalInjectionMarkers: (data.basalInjectionMarkers ?? []).map((m) => ({
+			id: m.id ?? '',
+			time: new Date(m.time ?? 0),
+			units: m.units ?? 0,
+			insulinName: m.insulinName,
+		})),
+
 		pumpModeSpans: mapSpans(data.pumpModeSpans),
 		profileSpans: mapSpans(data.profileSpans),
 		overrideSpans: mapSpans(data.overrideSpans),

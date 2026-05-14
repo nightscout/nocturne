@@ -28,6 +28,7 @@ export { default as DeviceEventMarkers } from "./markers/DeviceEventMarkers.svel
 export { default as SystemEventMarkers } from "./markers/SystemEventMarkers.svelte";
 export { default as TrackerMarkers } from "./markers/TrackerMarkers.svelte";
 export { default as BasalInjectionMarker } from "./markers/BasalInjectionMarker.svelte";
+export { default as BasalInjectionMarkers } from "./markers/BasalInjectionMarkers.svelte";
 
 // Dialogs
 export { default as InspectionDialogs } from "./InspectionDialogs.svelte";

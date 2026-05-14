@@ -31,6 +31,7 @@ public class DataFetchStageTests
     private readonly Mock<IStateSpanRepository> _mockStateSpanRepo;
     private readonly Mock<ISystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<ITrackerRepository> _mockTrackerRepo;
+    private readonly Mock<IBasalInjectionRepository> _mockBasalInjectionRepo = new();
     private readonly Mock<IHeartRateService> _mockHeartRateService = new();
     private readonly Mock<IStepCountService> _mockStepCountService = new();
     private readonly DataFetchStage _stage;
@@ -53,6 +54,7 @@ public class DataFetchStageTests
             _mockStateSpanRepo.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
+            _mockBasalInjectionRepo.Object,
             NullLogger<DataFetchStage>.Instance,
             _mockHeartRateService.Object,
             _mockStepCountService.Object
@@ -114,6 +116,15 @@ public class DataFetchStageTests
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<TempBasal>());
+
+        // IBasalInjectionRepository.GetAsync
+        _mockBasalInjectionRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<BasalInjection>());
 
         var emptyStateSpans = new Dictionary<StateSpanCategory, List<StateSpan>>
         {

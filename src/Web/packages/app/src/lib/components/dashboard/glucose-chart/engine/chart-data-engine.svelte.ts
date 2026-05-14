@@ -75,6 +75,14 @@ export interface SystemEventMarkerData {
   [key: string]: unknown;
 }
 
+/** A basal injection marker from the chart data */
+export interface BasalInjectionMarkerData {
+  time: Date;
+  id: string;
+  units: number;
+  insulinName?: string | null;
+}
+
 /** A tracker expiration marker */
 export interface TrackerMarkerData {
   time: Date;
@@ -206,6 +214,7 @@ export interface ChartDataEngine {
   readonly bolusMarkers: BolusMarkerData[];
   readonly carbMarkers: CarbMarkerData[];
   readonly deviceEventMarkers: DeviceEventMarkerData[];
+  readonly basalInjectionMarkers: BasalInjectionMarkerData[];
   readonly iobData: SeriesPoint[];
   readonly cobData: SeriesPoint[];
   readonly basalData: BasalPoint[];
@@ -546,6 +555,9 @@ export function createChartDataEngine(
   );
   const deviceEventMarkers = $derived(
     (serverChartData?.deviceEventMarkers ?? []) as DeviceEventMarkerData[]
+  );
+  const basalInjectionMarkers = $derived(
+    (serverChartData?.basalInjectionMarkers ?? []) as BasalInjectionMarkerData[]
   );
   const iobData = $derived(
     (serverChartData?.iobSeries ?? []) as SeriesPoint[]
@@ -892,6 +904,7 @@ export function createChartDataEngine(
     get bolusMarkers() { return bolusMarkers; },
     get carbMarkers() { return carbMarkers; },
     get deviceEventMarkers() { return deviceEventMarkers; },
+    get basalInjectionMarkers() { return basalInjectionMarkers; },
     get iobData() { return iobData; },
     get cobData() { return cobData; },
     get basalData() { return basalData; },

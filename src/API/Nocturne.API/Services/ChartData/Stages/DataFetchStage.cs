@@ -47,6 +47,7 @@ internal sealed class DataFetchStage(
     IStateSpanRepository stateSpanRepository,
     ISystemEventRepository systemEventRepository,
     ITrackerRepository trackerRepository,
+    IBasalInjectionRepository basalInjectionRepository,
     ILogger<DataFetchStage> logger,
     IHeartRateService heartRateService,
     IStepCountService stepCountService
@@ -132,6 +133,20 @@ internal sealed class DataFetchStage(
         // Fetch device events from v4 DeviceEvent table (display range only)
         var deviceEventList = (
             await deviceEventRepository.GetAsync(
+                from: MillsToDateTime(startTime),
+                to: MillsToDateTime(endTime),
+                device: null,
+                source: null,
+                limit: displayRangeLimit,
+                offset: 0,
+                descending: true,
+                ct: cancellationToken
+            )
+        ).ToList();
+
+        // Fetch basal injections from v4 BasalInjection table (display range only)
+        var basalInjectionList = (
+            await basalInjectionRepository.GetAsync(
                 from: MillsToDateTime(startTime),
                 to: MillsToDateTime(endTime),
                 device: null,
@@ -244,6 +259,7 @@ internal sealed class DataFetchStage(
             BgCheckList = bgCheckList,
             DeviceEventList = deviceEventList,
             TempBasalList = tempBasalList,
+            BasalInjectionList = basalInjectionList,
             StateSpans = stateSpansReadOnly,
             SystemEvents = systemEventsResult?.ToList() ?? [],
             TrackerDefinitions = trackerDefs?.ToList() ?? [],

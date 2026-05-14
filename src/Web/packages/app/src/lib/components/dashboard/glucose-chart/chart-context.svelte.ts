@@ -12,6 +12,7 @@ export interface LegendState {
 	readonly deviceEvents: boolean;
 	readonly alarms: boolean;
 	readonly scheduledTrackers: boolean;
+	readonly basalInjections: boolean;
 	readonly overrideSpans: boolean;
 	readonly profileSpans: boolean;
 	readonly activitySpans: boolean;

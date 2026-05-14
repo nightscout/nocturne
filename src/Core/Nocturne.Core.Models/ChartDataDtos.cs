@@ -81,6 +81,11 @@ public class DashboardChartData
     /// <summary>Basal delivery spans with rate and origin information.</summary>
     public List<BasalDeliverySpanDto> BasalDeliverySpans { get; set; } = new();
 
+    // === Basal injection markers ===
+
+    /// <summary>Discrete long-acting basal injection markers from <see cref="V4.BasalInjection"/> records.</summary>
+    public List<BasalInjectionMarkerDto> BasalInjectionMarkers { get; set; } = new();
+
     // === System events ===
 
     /// <summary>System event markers (alarms, warnings) from <see cref="SystemEvent"/> records.</summary>
@@ -197,6 +202,17 @@ public class BgCheckMarkerDto
     public double Glucose { get; set; }
     public string? GlucoseType { get; set; }
     public string? TreatmentId { get; set; }
+}
+
+/// <summary>
+/// Basal injection marker for chart rendering. Sourced from <see cref="V4.BasalInjection"/> records.
+/// </summary>
+public class BasalInjectionMarkerDto
+{
+    public string Id { get; set; } = "";
+    public long Time { get; set; }
+    public double Units { get; set; }
+    public string? InsulinName { get; set; }
 }
 
 /// <summary>

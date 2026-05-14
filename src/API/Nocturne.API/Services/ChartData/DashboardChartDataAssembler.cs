@@ -25,6 +25,7 @@ internal sealed class DashboardChartDataAssembler : IChartDataAssembler
             BolusMarkers = context.BolusMarkers,
             CarbMarkers = context.CarbMarkers,
             DeviceEventMarkers = context.DeviceEventMarkers,
+            BasalInjectionMarkers = context.BasalInjectionMarkers,
             BgCheckMarkers = context.BgCheckMarkers,
             PumpModeSpans = context.PumpModeSpans,
             ProfileSpans = context.ProfileSpans,

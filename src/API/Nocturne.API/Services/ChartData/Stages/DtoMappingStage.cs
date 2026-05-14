@@ -65,6 +65,16 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
         var basalDeliverySpans = ChartDataService.MapBasalDeliverySpans(context.TempBasalList.ToList());
         var tempBasalSpans = ChartDataService.MapTempBasalSpans(context.TempBasalList.ToList());
         var systemEventMarkers = ChartDataService.MapSystemEvents(context.SystemEvents);
+        var basalInjectionMarkers = context.BasalInjectionList
+            .Select(bi => new BasalInjectionMarkerDto
+            {
+                Id = bi.Id.ToString(),
+                Time = bi.Mills,
+                Units = bi.Units,
+                InsulinName = bi.InsulinContext?.InsulinName,
+            })
+            .ToList();
+
         var trackerMarkers = ChartDataService.MapTrackerMarkers(
             context.TrackerDefinitions,
             context.TrackerInstances,
@@ -91,6 +101,7 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
             CarbMarkers = carbMarkers,
             BgCheckMarkers = bgCheckMarkers,
             DeviceEventMarkers = deviceEventMarkers,
+            BasalInjectionMarkers = basalInjectionMarkers,
             PumpModeSpans = pumpModeSpans,
             ProfileSpans = profileSpans,
             OverrideSpans = overrideSpans,
