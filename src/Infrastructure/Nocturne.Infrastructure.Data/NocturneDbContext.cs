@@ -496,6 +496,11 @@ public class NocturneDbContext : DbContext
     public DbSet<TenantAuditConfigEntity> TenantAuditConfig { get; set; }
 
     /// <summary>
+    /// Gets or sets the TenantDataRetentionConfig table for per-tenant soft-delete retention
+    /// </summary>
+    public DbSet<TenantDataRetentionConfigEntity> TenantDataRetentionConfig { get; set; }
+
+    /// <summary>
     /// Configure the database model and relationships
     /// </summary>
     /// <param name="modelBuilder">The model builder to configure</param>
@@ -1893,6 +1898,10 @@ public class NocturneDbContext : DbContext
             .Entity<TenantAuditConfigEntity>()
             .Property(a => a.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
+        modelBuilder
+            .Entity<TenantDataRetentionConfigEntity>()
+            .Property(a => a.Id)
+            .HasValueGenerator<GuidV7ValueGenerator>();
 
         // Tracker entity UUID generators
         modelBuilder
@@ -2484,6 +2493,17 @@ public class NocturneDbContext : DbContext
             entity.HasIndex(e => e.TenantId)
                 .IsUnique()
                 .HasDatabaseName("ix_tenant_audit_config_tenant_id");
+        });
+
+        // Configure Tenant Data Retention Config entity defaults and indexes
+        modelBuilder.Entity<TenantDataRetentionConfigEntity>(entity =>
+        {
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasIndex(e => e.TenantId)
+                .IsUnique()
+                .HasDatabaseName("ix_tenant_data_retention_config_tenant_id");
         });
 
         // Configure LinkedRecordEntity defaults
