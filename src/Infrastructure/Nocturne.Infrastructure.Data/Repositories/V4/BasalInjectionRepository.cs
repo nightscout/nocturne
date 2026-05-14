@@ -58,10 +58,10 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     )
     {
         var query = _context.BasalInjections.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
+        if (from is { } fromValue)
+            query = query.Where(e => e.Timestamp >= fromValue);
+        if (to is { } toValue)
+            query = query.Where(e => e.Timestamp <= toValue);
         if (device != null)
             query = query.Where(e => e.Device == device);
         if (source != null)
@@ -213,10 +213,10 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     public async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
     {
         var query = _context.BasalInjections.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
+        if (from is { } fromValue)
+            query = query.Where(e => e.Timestamp >= fromValue);
+        if (to is { } toValue)
+            query = query.Where(e => e.Timestamp <= toValue);
         return await query.CountAsync(ct);
     }
 
