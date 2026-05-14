@@ -196,8 +196,57 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         var entity =
             await ctx.SensorGlucose.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"SensorGlucose {id} not found");
-        ctx.SensorGlucose.Remove(entity);
+        entity.DeletedAt = DateTime.UtcNow;
         await ctx.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<SensorGlucose> RestoreAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entity = await ctx.SensorGlucose.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException($"Soft-deleted SensorGlucose {id} not found");
+        entity.DeletedAt = null;
+        await ctx.SaveChangesAsync(ct);
+        return SensorGlucoseMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<SensorGlucose>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var idSet = ids.ToHashSet();
+        var entities = await ctx.SensorGlucose.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
+            .ToListAsync(ct);
+        foreach (var entity in entities)
+            entity.DeletedAt = null;
+        await ctx.SaveChangesAsync(ct);
+        return entities.Select(SensorGlucoseMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<SensorGlucose>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entities = await ctx.SensorGlucose.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
+            .OrderByDescending(e => e.DeletedAt)
+            .Skip(offset).Take(limit)
+            .AsNoTracking()
+            .ToListAsync(ct);
+        return entities.Select(SensorGlucoseMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        return await ctx.SensorGlucose.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
+            .CountAsync(ct);
     }
 
     /// <summary>
@@ -246,7 +295,7 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.AuditedExecuteDeleteAsync(
+        return await ctx.AuditedSoftDeleteAsync(
             ctx.SensorGlucose.Where(e => e.LegacyId == legacyId), _auditContext, ct);
     }
 
@@ -396,7 +445,7 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     public async Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.AuditedExecuteDeleteAsync(
+        return await ctx.AuditedSoftDeleteAsync(
             ctx.SensorGlucose.Where(e => e.DataSource == source), _auditContext, ct);
     }
 
@@ -417,6 +466,6 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         if (to.HasValue)
             query = query.Where(e => e.Timestamp < to.Value);
 
-        return await ctx.AuditedExecuteDeleteAsync(query, _auditContext, ct);
+        return await ctx.AuditedSoftDeleteAsync(query, _auditContext, ct);
     }
 }
