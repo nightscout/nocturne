@@ -566,7 +566,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         try
         {
             await _homeAssistantHubContext
-                .Clients.Group(TenantGroup("ha-glucose"))
+                .Clients.Group(TenantGroup("ha-alerts"))
                 .SendCoreAsync(eventName, new[] { payload });
         }
         catch (Exception ex)

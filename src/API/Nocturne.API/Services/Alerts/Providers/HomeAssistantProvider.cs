@@ -15,19 +15,29 @@ internal sealed class HomeAssistantProvider(
     /// <summary>
     /// Sends an alert payload to the HA instance identified by <paramref name="destination"/>
     /// (the OAuth client ID). Targets the SignalR group "ha:{destination}" within the tenant.
+    /// Returns <c>true</c> if the instance is connected and the message was sent;
+    /// <c>false</c> if no connection is registered for the instance.
     /// </summary>
-    public async Task SendAsync(Guid tenantId, string destination, AlertPayload payload, CancellationToken ct)
+    public async Task<bool> SendAsync(Guid tenantId, string destination, AlertPayload payload, object? channelMeta, CancellationToken ct)
     {
+        if (!HomeAssistantHub.IsInstanceConnected(tenantId.ToString(), destination))
+        {
+            logger.LogDebug("HA instance {Destination} not connected, skipping dispatch", destination);
+            return false;
+        }
+
         var group = TenantAwareHub.FormatTenantGroup(tenantId.ToString(), $"ha:{destination}");
 
         try
         {
             await hubContext.Clients.Group(group)
-                .SendCoreAsync("alert_dispatch", new object[] { payload }, ct);
+                .SendCoreAsync("alert_dispatch", new object[] { payload, channelMeta ?? new { allowAck = false } }, ct);
 
             logger.LogDebug(
                 "HA alert dispatched to instance {Destination} for alert instance {InstanceId}",
                 destination, payload.InstanceId);
+
+            return true;
         }
         catch (Exception ex)
         {

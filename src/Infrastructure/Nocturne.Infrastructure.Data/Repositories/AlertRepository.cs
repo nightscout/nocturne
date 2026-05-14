@@ -57,7 +57,7 @@ public class AlertRepository : IAlertRepository
             .OrderBy(c => c.SortOrder)
             .Select(c => new AlertRuleChannelSnapshot(
                 c.Id, c.AlertRuleId, c.ChannelType,
-                c.Destination, c.DestinationLabel, c.SortOrder))
+                c.Destination, c.DestinationLabel, c.SortOrder, c.Metadata))
             .ToListAsync(ct);
     }
 

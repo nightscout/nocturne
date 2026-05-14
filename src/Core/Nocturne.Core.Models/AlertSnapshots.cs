@@ -21,7 +21,8 @@ public record AlertRuleChannelSnapshot(
     Nocturne.Core.Models.Alerts.ChannelType ChannelType,
     string Destination,
     string? DestinationLabel,
-    int SortOrder);
+    int SortOrder,
+    string? Metadata = null);
 
 /// <summary>
 /// Immutable snapshot of a live alert instance.

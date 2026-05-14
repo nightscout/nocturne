@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -17,24 +18,68 @@ namespace Nocturne.API.Hubs;
 public class HomeAssistantHub : TenantAwareHub
 {
     /// <summary>
+    /// Tracks active HA instance connection counts. Key is the tenant-scoped group name for
+    /// "ha:{instanceId}", value is the number of active connections in that group.
+    /// Used by <see cref="HomeAssistantProvider"/> to gate delivery marking.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, int> _instanceConnectionCounts = new();
+
+    /// <summary>
     /// Subscribe the calling connection to glucose relay and per-instance alert groups.
     /// Also performs catch-up delivery for any failed HA deliveries targeting this instance.
     /// </summary>
     /// <param name="instanceId">The Home Assistant instance identifier (matches channel Destination).</param>
     public async Task Subscribe(string instanceId)
     {
+        var ct = Context.ConnectionAborted;
+
         if (string.IsNullOrWhiteSpace(instanceId))
             throw new HubException("instanceId must not be empty.");
 
         var tenantId = TenantContext?.TenantId
             ?? throw new HubException("No tenant context resolved.");
 
-        // Join tenant-scoped glucose relay and per-instance groups
-        await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup("ha-glucose"));
-        await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup($"ha:{instanceId}"));
+        // Join tenant-scoped glucose relay, per-instance, and alert groups
+        await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup("ha-glucose"), ct);
+        await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup($"ha:{instanceId}"), ct);
+        await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup("ha-alerts"), ct);
+
+        // Track connection count for this instance and store instanceId for cleanup on disconnect
+        var instanceGroupKey = FormatTenantGroup(tenantId.ToString(), $"ha:{instanceId}");
+        _instanceConnectionCounts.AddOrUpdate(instanceGroupKey, 1, (_, count) => count + 1);
+        Context.Items["ha_instance_id"] = instanceId;
 
         // Catch-up: re-dispatch failed deliveries for this instance
-        await CatchUpFailedDeliveriesAsync(tenantId, instanceId);
+        await CatchUpFailedDeliveriesAsync(tenantId, instanceId, ct);
+    }
+
+    /// <summary>
+    /// Decrements the connection count for the instance this connection was subscribed to.
+    /// </summary>
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        var instanceId = Context.Items.TryGetValue("ha_instance_id", out var val) ? val as string : null;
+        if (instanceId is not null)
+        {
+            var tenantId = TenantContext?.TenantId.ToString();
+            if (tenantId is not null)
+            {
+                var groupKey = FormatTenantGroup(tenantId, $"ha:{instanceId}");
+                _instanceConnectionCounts.AddOrUpdate(groupKey, 0, (_, count) => Math.Max(0, count - 1));
+            }
+        }
+
+        await base.OnDisconnectedAsync(exception);
+    }
+
+    /// <summary>
+    /// Returns whether a specific HA instance currently has at least one active SignalR connection.
+    /// Used by <see cref="Services.Alerts.Providers.HomeAssistantProvider"/> to decide whether to mark delivery as delivered.
+    /// </summary>
+    public static bool IsInstanceConnected(string tenantId, string instanceId)
+    {
+        var key = FormatTenantGroup(tenantId, $"ha:{instanceId}");
+        return _instanceConnectionCounts.TryGetValue(key, out var count) && count > 0;
     }
 
     /// <summary>
@@ -45,26 +90,31 @@ public class HomeAssistantHub : TenantAwareHub
     /// <param name="acknowledgedBy">Display name or identifier of the person acknowledging.</param>
     public async Task Acknowledge(Guid excursionId, string acknowledgedBy)
     {
+        var ct = Context.ConnectionAborted;
+
         var tenantId = TenantContext?.TenantId
             ?? throw new HubException("No tenant context resolved.");
 
         // Gate 1: OAuth scope check — require "alerts.readwrite"
-        var scopeClaim = Context.User?.FindFirst("scope")?.Value;
-        if (scopeClaim is null || !scopeClaim.Split(' ').Contains("alerts.readwrite"))
-            throw new HubException("Insufficient scope: alerts.readwrite is required.");
+        var scopes = Context.User?.FindAll("scope")
+            .SelectMany(c => c.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .ToHashSet() ?? new HashSet<string>();
+
+        if (!scopes.Contains("alerts.readwrite"))
+            throw new HubException("Insufficient permissions: alerts.readwrite scope required.");
 
         // Gate 2: Channel config check — find HA channels for this excursion's rule and verify allow_ack
         var services = Context.GetHttpContext()!.RequestServices;
         var contextFactory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
 
-        await using var db = await contextFactory.CreateDbContextAsync(CancellationToken.None);
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
         db.TenantId = tenantId;
 
         var excursion = await db.AlertExcursions
             .AsNoTracking()
             .Where(e => e.Id == excursionId && e.TenantId == tenantId)
             .Select(e => new { e.AlertRuleId })
-            .FirstOrDefaultAsync(CancellationToken.None);
+            .FirstOrDefaultAsync(ct);
 
         if (excursion is null)
             throw new HubException("Excursion not found.");
@@ -75,7 +125,7 @@ public class HomeAssistantHub : TenantAwareHub
                         && c.TenantId == tenantId
                         && c.ChannelType == ChannelType.HomeAssistant)
             .Select(c => c.Metadata)
-            .ToListAsync(CancellationToken.None);
+            .ToListAsync(ct);
 
         var allowAck = haChannels.Any(metadata =>
         {
@@ -99,21 +149,22 @@ public class HomeAssistantHub : TenantAwareHub
 
         // Both gates passed — acknowledge
         var ackService = services.GetRequiredService<IAlertAcknowledgementService>();
-        await ackService.AcknowledgeExcursionAsync(tenantId, excursionId, acknowledgedBy, broadcast: true, CancellationToken.None);
+        await ackService.AcknowledgeExcursionAsync(tenantId, excursionId, acknowledgedBy, broadcast: true, ct);
     }
 
-    private async Task CatchUpFailedDeliveriesAsync(Guid tenantId, string instanceId)
+    private async Task CatchUpFailedDeliveriesAsync(Guid tenantId, string instanceId, CancellationToken ct)
     {
         var services = Context.GetHttpContext()!.RequestServices;
         var contextFactory = services.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
 
-        await using var db = await contextFactory.CreateDbContextAsync(CancellationToken.None);
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
         db.TenantId = tenantId;
 
         // Find failed HA deliveries for this instance that belong to open excursions
         var failedDeliveries = await db.AlertDeliveries
             .Include(d => d.AlertInstance)
                 .ThenInclude(i => i!.AlertExcursion)
+            .Include(d => d.AlertRuleChannel)
             .Where(d => d.TenantId == tenantId
                         && d.ChannelType == ChannelType.HomeAssistant
                         && d.Destination == instanceId
@@ -121,17 +172,30 @@ public class HomeAssistantHub : TenantAwareHub
                         && d.AlertInstance != null
                         && d.AlertInstance.AlertExcursion != null
                         && d.AlertInstance.AlertExcursion.EndedAt == null)
-            .ToListAsync(CancellationToken.None);
+            .ToListAsync(ct);
 
         foreach (var delivery in failedDeliveries)
         {
             try
             {
-                // Re-dispatch the payload to the caller
+                // Re-dispatch the payload to the caller, including allow_ack from channel metadata
                 var payload = JsonSerializer.Deserialize<AlertPayload>(delivery.Payload);
                 if (payload is not null)
                 {
-                    await Clients.Caller.SendCoreAsync("alert_dispatch", [payload], CancellationToken.None);
+                    var allowAck = false;
+                    if (!string.IsNullOrEmpty(delivery.AlertRuleChannel?.Metadata))
+                    {
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(delivery.AlertRuleChannel.Metadata);
+                            allowAck = doc.RootElement.TryGetProperty("allow_ack", out var prop)
+                                       && prop.ValueKind == JsonValueKind.True;
+                        }
+                        catch (JsonException) { }
+                    }
+
+                    var channelMeta = new { allowAck };
+                    await Clients.Caller.SendCoreAsync("alert_dispatch", new object[] { payload, channelMeta }, ct);
 
                     // Mark as delivered
                     delivery.Status = "delivered";
@@ -146,7 +210,7 @@ public class HomeAssistantHub : TenantAwareHub
 
         if (failedDeliveries.Count > 0)
         {
-            await db.SaveChangesAsync(CancellationToken.None);
+            await db.SaveChangesAsync(ct);
         }
     }
 }
