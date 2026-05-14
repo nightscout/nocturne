@@ -76,6 +76,7 @@
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.HomeAssistant\Nocturne.Connectors.HomeAssistant.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.NocturneRemote\Nocturne.Connectors.NocturneRemote.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Twiist\Nocturne.Connectors.Twiist.csproj" />
+    <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.CareLink\Nocturne.Connectors.CareLink.csproj" />
   </ItemGroup>
   <!-- Diagram sources — published to wwwroot/diagrams/ so the OpenAPI document
        transformers can find them in Docker (where the source tree isn't available). -->
