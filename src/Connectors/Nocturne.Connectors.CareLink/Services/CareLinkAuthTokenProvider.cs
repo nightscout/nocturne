@@ -107,7 +107,7 @@ public class CareLinkAuthTokenProvider(
     {
         try
         {
-            var content = new FormUrlEncodedContent(new Dictionary<string, string>
+            using var content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["grant_type"] = "refresh_token",
                 ["client_id"] = clientId,
@@ -138,7 +138,18 @@ public class CareLinkAuthTokenProvider(
             _logger.LogInformation("CareLink token refreshed, expires at {ExpiresAt}", expiresAt);
             return (accessToken, expiresAt);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) { throw; }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Token refresh failed with exception");
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Token refresh failed with exception");
+            return null;
+        }
+        catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Token refresh failed with exception");
             return null;
@@ -164,7 +175,10 @@ public class CareLinkAuthTokenProvider(
             if (doc.RootElement.TryGetProperty("exp", out var exp))
                 return DateTimeOffset.FromUnixTimeSeconds(exp.GetInt64()).UtcDateTime;
         }
-        catch { /* fall through */ }
+        catch (FormatException) { /* fall through */ }
+        catch (JsonException) { /* fall through */ }
+        catch (InvalidOperationException) { /* fall through */ }
+        catch (ArgumentException) { /* fall through */ }
 
         return DateTime.UtcNow.AddHours(1);
     }

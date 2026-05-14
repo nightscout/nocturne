@@ -101,7 +101,7 @@ public partial class CareLinkAuthFlowService(ILogger logger) : IDisposable
         hiddenFields["password"] = password;
         hiddenFields["action"] = "default";
 
-        var formContent = new FormUrlEncodedContent(hiddenFields);
+        using var formContent = new FormUrlEncodedContent(hiddenFields);
         using var postRequest = new HttpRequestMessage(HttpMethod.Post, formAction) { Content = formContent };
         postRequest.Headers.Add("User-Agent", CareLinkConstants.UserAgents.MobileApp);
 
@@ -135,7 +135,7 @@ public partial class CareLinkAuthFlowService(ILogger logger) : IDisposable
 
         // 8. Exchange code for tokens
         _logger.LogInformation("Exchanging authorization code for tokens");
-        var tokenContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        using var tokenContent = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "authorization_code",
             ["client_id"] = ssoConfig.Client.ClientId,
