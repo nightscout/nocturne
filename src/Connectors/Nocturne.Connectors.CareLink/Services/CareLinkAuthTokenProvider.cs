@@ -32,6 +32,7 @@ public class CareLinkAuthTokenProvider(
     public string? CurrentRefreshToken { get { lock (_stateLock) return _refreshToken; } }
     public string? CurrentClientId { get { lock (_stateLock) return _clientId; } }
     public string? CurrentTokenUrl { get { lock (_stateLock) return _tokenUrl; } }
+    public string? CurrentAudience { get { lock (_stateLock) return _audience; } }
 
     /// <summary>
     /// Seeds persisted token state (refresh token, client ID, token URL, audience) into the provider.
@@ -82,7 +83,7 @@ public class CareLinkAuthTokenProvider(
                 _logger.LogInformation("Performing CareLink credential login for {Username} (attempt {Attempt}/{Max})",
                     _config.Username, attempt + 1, maxRetries);
 
-                var authFlow = new CareLinkAuthFlowService(_httpClient, _logger);
+                using var authFlow = new CareLinkAuthFlowService(_logger);
                 var authResult = await authFlow.LoginAsync(_config.Username, _config.Password!, _config.Server, cancellationToken);
                 return (authResult, authResult == null);
             },

@@ -12,11 +12,21 @@ namespace Nocturne.Connectors.CareLink.Services;
 /// <summary>
 /// Handles the Auth0 PKCE discovery and credential login flow for CareLink.
 /// Separated from the token provider to keep token lifecycle management focused.
+/// Uses a dedicated <see cref="HttpClient"/> with auto-redirect disabled so that
+/// the redirect chain can be inspected manually to extract the authorization code.
 /// </summary>
-public partial class CareLinkAuthFlowService(HttpClient httpClient, ILogger logger)
+public partial class CareLinkAuthFlowService(ILogger logger) : IDisposable
 {
-    private readonly HttpClient _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+    // Auth0 PKCE flows require manual redirect inspection to capture the ?code= parameter
+    // before the final redirect lands on a custom scheme URI the HttpClient cannot follow.
+    // AllowAutoRedirect = false ensures we see every 302 response.
+    private readonly HttpClient _httpClient = new(new HttpClientHandler { AllowAutoRedirect = false })
+    {
+        Timeout = TimeSpan.FromMinutes(2)
+    };
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+    public void Dispose() => _httpClient.Dispose();
 
     public record AuthResult(string AccessToken, string RefreshToken, string ClientId, string TokenUrl, string? Audience);
 

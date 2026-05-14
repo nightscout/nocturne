@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.CareLink.Mappers;
@@ -26,6 +25,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     private string? _cachedBleVersion;
     private string? _lastAlarmKey;
     private string? _initialRefreshToken;
+    private string? _accessToken;
 
     public CareLinkConnectorService(
         HttpClient httpClient,
@@ -48,6 +48,23 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     /// <inheritdoc />
     public override async Task<bool> AuthenticateAsync()
     {
+        // Seed the token provider with persisted secrets so refresh is available immediately
+        var secrets = await _configService.GetSecretsAsync("CareLink");
+        secrets.TryGetValue("refresh_token", out var savedRefreshToken);
+        secrets.TryGetValue("client_id", out var savedClientId);
+        secrets.TryGetValue("token_url", out var savedTokenUrl);
+        secrets.TryGetValue("audience", out var savedAudience);
+
+        // Persisted secrets take precedence; the token provider falls back to the
+        // statically-configured RefreshToken from IOptions<CareLinkConnectorConfiguration>
+        // when the seed value is null.
+        _tokenProvider.InitializeFromSecrets(
+            savedRefreshToken,
+            savedClientId,
+            savedTokenUrl,
+            savedAudience);
+        _initialRefreshToken = _tokenProvider.CurrentRefreshToken;
+
         var token = await _tokenProvider.GetValidTokenAsync();
         if (string.IsNullOrEmpty(token))
         {
@@ -55,8 +72,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             return false;
         }
 
-        _httpClient.DefaultRequestHeaders.Remove("Authorization");
-        _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+        // Store the token for per-request use; never mutate DefaultRequestHeaders
+        _accessToken = token;
         TrackSuccessfulRequest();
         return true;
     }
@@ -70,39 +87,26 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        // Seed token provider with persisted secrets so refresh is available immediately
-        var secrets = await _configService.GetSecretsAsync("CareLink", cancellationToken);
-        secrets.TryGetValue("refresh_token", out var savedRefreshToken);
-        secrets.TryGetValue("client_id", out var savedClientId);
-        secrets.TryGetValue("token_url", out var savedTokenUrl);
-        _tokenProvider.InitializeFromSecrets(
-            savedRefreshToken ?? config.RefreshToken,
-            savedClientId,
-            savedTokenUrl,
-            audience: null);
-        _initialRefreshToken = _tokenProvider.CurrentRefreshToken;
-
-        // Authenticate
-        var token = await _tokenProvider.GetValidTokenAsync(cancellationToken);
-        if (string.IsNullOrEmpty(token))
+        // AuthenticateAsync (called by the base SyncDataAsync before this method) populates
+        // _accessToken. Guard against direct calls that bypass the base flow.
+        if (string.IsNullOrEmpty(_accessToken))
         {
-            _logger.LogError("[{ConnectorSource}] Authentication failed", ConnectorSource);
+            _logger.LogError("[{ConnectorSource}] No access token available — authentication must succeed before sync", ConnectorSource);
             result.Success = false;
             result.Errors.Add("Authentication failed");
             result.EndTime = DateTimeOffset.UtcNow;
             return result;
         }
 
-        _httpClient.DefaultRequestHeaders.Remove("Authorization");
-        _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-
         // Determine role
         CareLinkUserInfo? userInfo = null;
         try
         {
             var host = GetServerHost(config);
-            var response = await _httpClient.GetAsync(
-                $"https://{host}{CareLinkConstants.Endpoints.UsersMe}", cancellationToken);
+            var response = await GetWithHeadersAsync(
+                $"https://{host}{CareLinkConstants.Endpoints.UsersMe}",
+                AuthHeaders(),
+                cancellationToken);
 
             if (response.IsSuccessStatusCode)
                 userInfo = await DeserializeResponseAsync<CareLinkUserInfo>(response, cancellationToken);
@@ -258,8 +262,9 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         CareLinkData? monitorData = null;
         try
         {
-            var monitorResponse = await _httpClient.GetAsync(
-                $"https://{host}{CareLinkConstants.Endpoints.MonitorData}", ct);
+            var monitorResponse = await GetWithHeadersAsync(
+                $"https://{host}{CareLinkConstants.Endpoints.MonitorData}",
+                AuthHeaders(), ct);
             if (monitorResponse.IsSuccessStatusCode)
                 monitorData = await DeserializeResponseAsync<CareLinkData>(monitorResponse, ct);
         }
@@ -307,8 +312,9 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         CareLinkData? monitorData = null;
         try
         {
-            var monitorResponse = await _httpClient.GetAsync(
-                $"https://{host}{CareLinkConstants.Endpoints.MonitorData}", ct);
+            var monitorResponse = await GetWithHeadersAsync(
+                $"https://{host}{CareLinkConstants.Endpoints.MonitorData}",
+                AuthHeaders(), ct);
             if (monitorResponse.IsSuccessStatusCode)
                 monitorData = await DeserializeResponseAsync<CareLinkData>(monitorResponse, ct);
         }
@@ -341,9 +347,10 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     {
         try
         {
-            var settingsResponse = await _httpClient.GetAsync(
+            var settingsResponse = await GetWithHeadersAsync(
                 $"https://{host}{CareLinkConstants.Endpoints.CountrySettings}" +
-                $"?countryCode={config.CountryCode}&language={config.LanguageCode}", ct);
+                $"?countryCode={config.CountryCode}&language={config.LanguageCode}",
+                AuthHeaders(), ct);
 
             if (!settingsResponse.IsSuccessStatusCode)
             {
@@ -363,7 +370,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             if (patientId != null)
                 body["patientId"] = patientId;
 
-            var response = await _httpClient.PostAsJsonAsync(endpoint, body, ct);
+            using var jsonContent = JsonContent.Create(body);
+            var response = await PostWithHeadersAsync(endpoint, jsonContent, AuthHeaders(), ct);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -387,7 +395,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             var url = $"https://{host}{CareLinkConstants.Endpoints.ConnectData}" +
                       $"?cpSerialNumber=NONE&msgType=last24hours&requestTime={timestamp}";
 
-            var response = await _httpClient.GetAsync(url, ct);
+            var response = await GetWithHeadersAsync(url, AuthHeaders(), ct);
             if (!response.IsSuccessStatusCode)
                 return null;
 
@@ -422,7 +430,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             try
             {
                 var url = $"https://{host}/connect/carepartner{version}display/data";
-                var response = await _httpClient.PostAsJsonAsync(url, body, ct);
+                using var jsonContent = JsonContent.Create(body);
+                var response = await PostWithHeadersAsync(url, jsonContent, AuthHeaders(), ct);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -451,8 +460,9 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     {
         try
         {
-            var response = await _httpClient.GetAsync(
-                $"https://{host}{CareLinkConstants.Endpoints.LinkedPatients}", ct);
+            var response = await GetWithHeadersAsync(
+                $"https://{host}{CareLinkConstants.Endpoints.LinkedPatients}",
+                AuthHeaders(), ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -505,6 +515,9 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             if (!string.IsNullOrEmpty(_tokenProvider.CurrentTokenUrl))
                 secrets["token_url"] = _tokenProvider.CurrentTokenUrl;
 
+            if (!string.IsNullOrEmpty(_tokenProvider.CurrentAudience))
+                secrets["audience"] = _tokenProvider.CurrentAudience;
+
             await _configService.SaveSecretsAsync("CareLink", secrets, "connector-runtime", ct);
             _logger.LogInformation("[{ConnectorSource}] Persisted updated refresh token", ConnectorSource);
             _initialRefreshToken = currentRefreshToken;
@@ -514,6 +527,13 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             _logger.LogWarning(ex, "[{ConnectorSource}] Failed to persist refresh token", ConnectorSource);
         }
     }
+
+    /// <summary>
+    ///     Returns a per-request Authorization header dictionary using the token obtained during
+    ///     <see cref="AuthenticateAsync"/>. Avoids mutating <c>DefaultRequestHeaders</c> which is not thread-safe.
+    /// </summary>
+    private Dictionary<string, string> AuthHeaders() =>
+        new() { ["Authorization"] = $"Bearer {_accessToken}" };
 
     /// <summary>
     ///     Returns true if the device family indicates a BLE or SIMPLERA device.
