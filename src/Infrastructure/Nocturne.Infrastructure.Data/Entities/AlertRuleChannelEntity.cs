@@ -53,6 +53,13 @@ public class AlertRuleChannelEntity : ITenantScoped
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// Channel-specific configuration stored as JSONB. Schema varies by channel type.
+    /// For home_assistant: { "allow_ack": bool, "delivery_methods": string[], "critical_push": bool }
+    /// </summary>
+    [Column("metadata", TypeName = "jsonb")]
+    public string? Metadata { get; set; }
+
     // Navigation
 
     /// <summary>Navigation back to the owning rule.</summary>

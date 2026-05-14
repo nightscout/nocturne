@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nocturne.Infrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    partial class NocturneDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260514094424_AddAlertRuleChannelMetadata")]
+    partial class AddAlertRuleChannelMetadata
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2615,10 +2618,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
 
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -2638,8 +2637,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("RevokedAt")
                         .HasDatabaseName("ix_oauth_refresh_tokens_revoked_at")
                         .HasFilter("revoked_at IS NULL");
-
-                    b.HasIndex("TenantId");
 
                     b.HasIndex("TokenHash")
                         .IsUnique()
@@ -4818,106 +4815,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
 
                     b.ToTable("bg_checks");
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.V4.BasalInjectionEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AdditionalPropertiesJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("additional_properties");
-
-                    b.Property<string>("App")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("app");
-
-                    b.Property<Guid?>("CorrelationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("correlation_id");
-
-                    b.Property<string>("DataSource")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("data_source");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<string>("Device")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("device");
-
-                    b.Property<string>("InsulinContextJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("insulin_context");
-
-                    b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("legacy_id");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(4096)
-                        .HasColumnType("character varying(4096)")
-                        .HasColumnName("notes");
-
-                    b.Property<string>("SyncIdentifier")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("sync_identifier");
-
-                    b.Property<DateTime>("SysCreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("sys_created_at");
-
-                    b.Property<DateTime>("SysUpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("sys_updated_at");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<DateTime>("Timestamp")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("timestamp");
-
-                    b.Property<double>("Units")
-                        .HasColumnType("double precision")
-                        .HasColumnName("units");
-
-                    b.Property<int?>("UtcOffset")
-                        .HasColumnType("integer")
-                        .HasColumnName("utc_offset");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CorrelationId")
-                        .HasDatabaseName("ix_basal_injections_correlation_id");
-
-                    b.HasIndex("Timestamp")
-                        .IsDescending()
-                        .HasDatabaseName("ix_basal_injections_timestamp");
-
-                    b.HasIndex("TenantId", "LegacyId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_basal_injections_tenant_legacy_id")
-                        .HasFilter("legacy_id IS NOT NULL");
-
-                    b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
-                        .IsUnique()
-                        .HasDatabaseName("ix_basal_injections_tenant_source_sync_id")
-                        .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
-
-                    b.ToTable("basal_injections");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.V4.BasalScheduleEntity", b =>
@@ -7528,12 +7425,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasForeignKey("ReplacedById")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.Navigation("Grant");
 
                     b.Navigation("ReplacedBy");
@@ -7901,15 +7792,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasForeignKey("CorrelationId")
                         .OnDelete(DeleteBehavior.Cascade);
 
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.V4.BasalInjectionEntity", b =>
-                {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
