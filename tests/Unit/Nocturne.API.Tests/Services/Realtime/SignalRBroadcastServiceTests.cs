@@ -20,6 +20,7 @@ public class SignalRBroadcastServiceTests
     private readonly Mock<IHubContext<AlarmHub>> _mockAlarmHubContext;
     private readonly Mock<IHubContext<ConfigHub>> _mockConfigHubContext;
     private readonly Mock<IHubContext<AlertHub>> _mockAlertHubContext;
+    private readonly Mock<IHubContext<HomeAssistantHub>> _mockHomeAssistantHubContext;
     private readonly Mock<ILogger<SignalRBroadcastService>> _mockLogger;
     private readonly Mock<IHubClients> _mockDataClients;
     private readonly Mock<IHubClients> _mockAlarmClients;
@@ -37,6 +38,7 @@ public class SignalRBroadcastServiceTests
         _mockAlarmHubContext = new Mock<IHubContext<AlarmHub>>();
         _mockConfigHubContext = new Mock<IHubContext<ConfigHub>>();
         _mockAlertHubContext = new Mock<IHubContext<AlertHub>>();
+        _mockHomeAssistantHubContext = new Mock<IHubContext<HomeAssistantHub>>();
         _mockLogger = new Mock<ILogger<SignalRBroadcastService>>();
         _mockDataClients = new Mock<IHubClients>();
         _mockAlarmClients = new Mock<IHubClients>();
@@ -63,12 +65,17 @@ public class SignalRBroadcastServiceTests
         _mockAlertClients
             .Setup(x => x.Group(It.IsAny<string>()))
             .Returns(_mockAlertGroupProxy.Object);
+        var mockHaClients = new Mock<IHubClients>();
+        var mockHaProxy = new Mock<IClientProxy>();
+        _mockHomeAssistantHubContext.Setup(x => x.Clients).Returns(mockHaClients.Object);
+        mockHaClients.Setup(x => x.Group(It.IsAny<string>())).Returns(mockHaProxy.Object);
 
         _service = new SignalRBroadcastService(
             _mockDataHubContext.Object,
             _mockAlarmHubContext.Object,
             _mockConfigHubContext.Object,
             _mockAlertHubContext.Object,
+            _mockHomeAssistantHubContext.Object,
             MockTenantAccessor.Create().Object,
             _mockLogger.Object
         );
