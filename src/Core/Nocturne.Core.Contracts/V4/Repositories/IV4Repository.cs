@@ -61,6 +61,39 @@ public interface IV4Repository<T> where T : class, IV4Record
     Task DeleteAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
+    /// Restore a soft-deleted record by clearing its DeletedAt timestamp.
+    /// </summary>
+    /// <param name="id">UUID v7 identifier of the soft-deleted record.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The restored record.</returns>
+    /// <exception cref="KeyNotFoundException">If no soft-deleted record with the given ID exists.</exception>
+    Task<T> RestoreAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Restore multiple soft-deleted records by clearing their DeletedAt timestamps.
+    /// </summary>
+    /// <param name="ids">UUID v7 identifiers of the soft-deleted records.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The restored records (only those that were actually soft-deleted).</returns>
+    Task<IEnumerable<T>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retrieve soft-deleted records for the "trash" view, ordered by deletion date (newest first).
+    /// </summary>
+    /// <param name="limit">Maximum number of records to return.</param>
+    /// <param name="offset">Number of records to skip for pagination.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Soft-deleted records ordered by DeletedAt descending.</returns>
+    Task<IEnumerable<T>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default);
+
+    /// <summary>
+    /// Count soft-deleted records.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Number of soft-deleted records.</returns>
+    Task<int> CountDeletedAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// Count records within an optional time range.
     /// </summary>
     /// <param name="from">Inclusive start of the time window, or <c>null</c> for no lower bound.</param>
