@@ -172,12 +172,20 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             produceDeviceEvent = true;
         }
         else if (string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
-              || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase))
+              || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase))
         {
             produceBolus = true;
             produceCarbIntake = true;
         }
-        else if (string.Equals(eventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, "SMB", StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase))
+        {
+            produceBolus = true;
+        }
+        else if (string.Equals(eventType, "Bolus", StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, "External Insulin", StringComparison.OrdinalIgnoreCase))
         {
             produceBolus = true;
         }
@@ -194,7 +202,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             produceNote = true;
             isAnnouncement = true;
         }
-        else if (string.Equals(eventType, "Note", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(eventType, "Note", StringComparison.OrdinalIgnoreCase)
+              || string.Equals(eventType, "Exercise", StringComparison.OrdinalIgnoreCase))
         {
             produceNote = true;
         }
@@ -214,6 +223,23 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         {
             produceBolus = true;
             produceCarbIntake = true;
+        }
+
+        // Fallback: for unrecognized event types, produce records based on what data is present
+        if (!produceBolus && !produceCarbIntake && !produceBGCheck
+            && !produceNote && !produceBolusCalc && !produceDeviceEvent && !delegateToStateSpan)
+        {
+            if (hasInsulin)
+                produceBolus = true;
+            if (hasCarbs)
+                produceCarbIntake = true;
+
+            if (produceBolus || produceCarbIntake)
+            {
+                _logger.LogInformation(
+                    "Unrecognized event type '{EventType}' for treatment {Id}, producing records based on data (insulin={HasInsulin}, carbs={HasCarbs})",
+                    treatment.EventType, treatment.Id, hasInsulin, hasCarbs);
+            }
         }
 
         // Produce a Note record for any treatment with non-empty Notes,
@@ -309,10 +335,15 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
 
     private async Task DecomposeBolusAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
     {
-        // AAPS uses "Correction Bolus" exclusively for algorithm-delivered SMBs (BolusExtension.kt:28).
-        // The isBasalInsulin flag is never set true on real AAPS treatments.
+        // Algorithm-delivered micro boluses:
+        //   - isBasalInsulin flag (legacy AAPS convention)
+        //   - "Correction Bolus" from AAPS (BolusExtension.kt:28)
+        //   - "SMB" from Trio / iAPS
+        //   - "Automatic Bolus" from AID systems
         var isAlgorithmBolus = (treatment.IsBasalInsulin == true && treatment.Insulin > 0)
-            || (string.Equals(treatment.EventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase) && IsAapsUpload(treatment));
+            || (string.Equals(treatment.EventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase) && IsAapsUpload(treatment))
+            || string.Equals(treatment.EventType, "SMB", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(treatment.EventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase);
 
         if (isAlgorithmBolus)
         {
@@ -1171,12 +1202,20 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                 produceDeviceEvent = true;
             }
             else if (string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
-                  || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase))
+                  || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase))
             {
                 produceBolus = true;
                 produceCarbIntake = true;
             }
-            else if (string.Equals(eventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(eventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(eventType, "SMB", StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(eventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase))
+            {
+                produceBolus = true;
+            }
+            else if (string.Equals(eventType, "Bolus", StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(eventType, "External Insulin", StringComparison.OrdinalIgnoreCase))
             {
                 produceBolus = true;
             }
@@ -1193,7 +1232,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                 produceNote = true;
                 isAnnouncement = true;
             }
-            else if (string.Equals(eventType, "Note", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(eventType, "Note", StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(eventType, "Exercise", StringComparison.OrdinalIgnoreCase))
             {
                 produceNote = true;
             }
@@ -1209,6 +1249,23 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             {
                 produceBolus = true;
                 produceCarbIntake = true;
+            }
+
+            // Fallback: for unrecognized event types, produce records based on what data is present
+            if (!produceBolus && !produceCarbIntake && !produceBGCheck
+                && !produceNote && !produceBolusCalc && !produceDeviceEvent && !delegateToStateSpan)
+            {
+                if (hasInsulin)
+                    produceBolus = true;
+                if (hasCarbs)
+                    produceCarbIntake = true;
+
+                if (produceBolus || produceCarbIntake)
+                {
+                    _logger.LogInformation(
+                        "Unrecognized event type '{EventType}' for treatment {Id}, producing records based on data (insulin={HasInsulin}, carbs={HasCarbs})",
+                        treatment.EventType, treatment.Id, hasInsulin, hasCarbs);
+                }
             }
 
             // Note for any treatment with non-empty Notes (unless already producing a Note)
@@ -1236,7 +1293,9 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             if (produceBolus)
             {
                 var isAlgorithmBolus = (treatment.IsBasalInsulin == true && treatment.Insulin > 0)
-                    || (string.Equals(treatment.EventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase) && IsAapsUpload(treatment));
+                    || (string.Equals(treatment.EventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase) && IsAapsUpload(treatment))
+                    || string.Equals(treatment.EventType, "SMB", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(treatment.EventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase);
 
                 var model = MapToBolus(treatment, batch.Id);
 

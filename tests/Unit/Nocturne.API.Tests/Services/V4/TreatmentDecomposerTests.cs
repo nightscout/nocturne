@@ -1087,10 +1087,9 @@ public class TreatmentDecomposerTests : IDisposable
     #region Override Rule Boundary Cases
 
     [Fact]
-    public async Task DecomposeAsync_UnknownEventWithOnlyInsulin_ProducesNothing()
+    public async Task DecomposeAsync_UnknownEventWithOnlyInsulin_ProducesBolusFallback()
     {
-        // Arrange - override rule only fires when BOTH are > 0.
-        // An unknown event type with only insulin doesn't match any known type.
+        // Arrange - unrecognized event type with insulin produces a Bolus via fallback
         var treatment = new Treatment
         {
             Id = "insulin-only-unknown",
@@ -1103,15 +1102,16 @@ public class TreatmentDecomposerTests : IDisposable
         // Act
         var result = await _decomposer.DecomposeAsync(treatment);
 
-        // Assert - neither the override (needs both) nor any event type matches
-        result.CreatedRecords.Should().BeEmpty();
-        result.UpdatedRecords.Should().BeEmpty();
+        // Assert - fallback produces a Bolus when insulin > 0
+        result.CreatedRecords.Should().ContainSingle()
+            .Which.Should().BeOfType<V4Models.Bolus>()
+            .Which.Insulin.Should().Be(3.0);
     }
 
     [Fact]
-    public async Task DecomposeAsync_UnknownEventWithOnlyCarbs_ProducesNothing()
+    public async Task DecomposeAsync_UnknownEventWithOnlyCarbs_ProducesCarbIntakeFallback()
     {
-        // Arrange - only carbs > 0 with unknown event type
+        // Arrange - unrecognized event type with carbs produces a CarbIntake via fallback
         var treatment = new Treatment
         {
             Id = "carbs-only-unknown",
@@ -1124,8 +1124,10 @@ public class TreatmentDecomposerTests : IDisposable
         // Act
         var result = await _decomposer.DecomposeAsync(treatment);
 
-        // Assert - override rule requires BOTH; unknown type doesn't match
-        result.CreatedRecords.Should().BeEmpty();
+        // Assert - fallback produces a CarbIntake when carbs > 0
+        result.CreatedRecords.Should().ContainSingle()
+            .Which.Should().BeOfType<V4Models.CarbIntake>()
+            .Which.Carbs.Should().Be(20);
     }
 
     [Fact]
@@ -1171,7 +1173,7 @@ public class TreatmentDecomposerTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_NegativeInsulinWithCarbs_DoesNotTriggerOverrideRule()
+    public async Task DecomposeAsync_NegativeInsulinWithCarbs_ProducesCarbIntakeFallback()
     {
         // Arrange - negative insulin: `Insulin is > 0` is false, unknown event type
         var treatment = new Treatment
@@ -1186,8 +1188,110 @@ public class TreatmentDecomposerTests : IDisposable
         // Act
         var result = await _decomposer.DecomposeAsync(treatment);
 
-        // Assert - override rule needs insulin > 0, and "Unknown" doesn't match any event type
-        result.CreatedRecords.Should().BeEmpty();
+        // Assert - override rule needs insulin > 0, but fallback produces CarbIntake for carbs > 0
+        result.CreatedRecords.Should().ContainSingle()
+            .Which.Should().BeOfType<V4Models.CarbIntake>()
+            .Which.Carbs.Should().Be(20);
+    }
+
+    [Theory]
+    [InlineData("SMB")]
+    [InlineData("Automatic Bolus")]
+    public async Task DecomposeAsync_AlgorithmBolusEventTypes_ProducesAlgorithmBolus(string eventType)
+    {
+        var treatment = new Treatment
+        {
+            Id = $"algo-{eventType}",
+            EventType = eventType,
+            Mills = 1700000000000,
+            Insulin = 0.4,
+            EnteredBy = "Trio"
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        var bolus = result.CreatedRecords.Should().ContainSingle()
+            .Which.Should().BeOfType<V4Models.Bolus>().Subject;
+        bolus.Insulin.Should().Be(0.4);
+        bolus.Kind.Should().Be(V4Models.BolusKind.Algorithm);
+        bolus.Automatic.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_GenericBolus_ProducesRegularBolus()
+    {
+        var treatment = new Treatment
+        {
+            Id = "generic-bolus",
+            EventType = "Bolus",
+            Mills = 1700000000000,
+            Insulin = 2.0,
+            EnteredBy = "Trio"
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        var bolus = result.CreatedRecords.Should().ContainSingle()
+            .Which.Should().BeOfType<V4Models.Bolus>().Subject;
+        bolus.Insulin.Should().Be(2.0);
+        bolus.Kind.Should().NotBe(V4Models.BolusKind.Algorithm);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ExternalInsulin_ProducesBolus()
+    {
+        var treatment = new Treatment
+        {
+            Id = "external-insulin",
+            EventType = "External Insulin",
+            Mills = 1700000000000,
+            Insulin = 10.0,
+            EnteredBy = "Trio"
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        var bolus = result.CreatedRecords.Should().ContainSingle()
+            .Which.Should().BeOfType<V4Models.Bolus>().Subject;
+        bolus.Insulin.Should().Be(10.0);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_Exercise_ProducesNote()
+    {
+        var treatment = new Treatment
+        {
+            Id = "exercise-1",
+            EventType = "Exercise",
+            Mills = 1700000000000,
+            Notes = "30 min run",
+            EnteredBy = "manual"
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        var note = result.CreatedRecords.Should().ContainSingle()
+            .Which.Should().BeOfType<V4Models.Note>().Subject;
+        note.Text.Should().Be("30 min run");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ComboBolus_ProducesBolusAndCarbIntake()
+    {
+        var treatment = new Treatment
+        {
+            Id = "combo-1",
+            EventType = "Combo Bolus",
+            Mills = 1700000000000,
+            Insulin = 4.0,
+            Carbs = 30,
+            EnteredBy = "pump"
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
+        result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().HaveCount(1);
     }
 
     [Fact]
