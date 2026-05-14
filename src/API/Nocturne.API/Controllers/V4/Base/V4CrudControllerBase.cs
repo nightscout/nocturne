@@ -128,6 +128,42 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         }
     }
 
+    /// <summary>Restores a soft-deleted record by ID.</summary>
+    /// <param name="id">The unique identifier of the soft-deleted record.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <remarks>Returns `200 OK` with the restored record, or `404 Not Found` if no soft-deleted record with the given <paramref name="id"/> exists.</remarks>
+    [HttpPost("{id:guid}/restore")]
+    [RemoteCommand]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public virtual async Task<ActionResult<TModel>> Restore(Guid id, CancellationToken ct = default)
+    {
+        try
+        {
+            var restored = await Repository.RestoreAsync(id, ct);
+            await OnAfterRestoreAsync(restored, ct);
+            return Ok(restored);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
+    /// <summary>Restores multiple soft-deleted records by their IDs.</summary>
+    /// <param name="ids">The unique identifiers of the soft-deleted records.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <remarks>Returns `200 OK` with the restored records. IDs that don't match a soft-deleted record are silently ignored.</remarks>
+    [HttpPost("restore")]
+    [RemoteCommand]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public virtual async Task<ActionResult<IEnumerable<TModel>>> BulkRestore(
+        [FromBody] Guid[] ids, CancellationToken ct = default)
+    {
+        var restored = await Repository.BulkRestoreAsync(ids, ct);
+        return Ok(restored);
+    }
+
     /// <summary>
     /// Hook called after a record is successfully created. Override to add post-creation side effects
     /// such as alert evaluation or SignalR broadcasting.
@@ -136,4 +172,12 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The record, potentially enriched by the hook.</returns>
     protected virtual Task<TModel> OnAfterCreateAsync(TModel created, CancellationToken ct) => Task.FromResult(created);
+
+    /// <summary>
+    /// Hook called after a record is restored. Override to add post-restore side effects
+    /// such as SignalR broadcasting.
+    /// </summary>
+    /// <param name="restored">The restored record.</param>
+    /// <param name="ct">Cancellation token.</param>
+    protected virtual Task OnAfterRestoreAsync(TModel restored, CancellationToken ct) => Task.CompletedTask;
 }
