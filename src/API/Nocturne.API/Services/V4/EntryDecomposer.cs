@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -259,15 +260,31 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     /// <inheritdoc />
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
-        var deleted = 0;
-        deleted += await _sensorGlucoseRepository.DeleteByLegacyIdAsync(legacyId, ct);
-        deleted += await _meterGlucoseRepository.DeleteByLegacyIdAsync(legacyId, ct);
-        deleted += await _calibrationRepository.DeleteByLegacyIdAsync(legacyId, ct);
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
 
-        if (deleted > 0)
-            _logger.LogDebug("Deleted {Count} v4 records for legacy entry {LegacyId}", deleted, legacyId);
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
+            var now = DateTime.UtcNow;
+            var deleted = 0;
 
-        return deleted;
+            deleted += await _dbContext.SensorGlucose
+                .Where(e => e.LegacyId == legacyId)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
+            deleted += await _dbContext.MeterGlucose
+                .Where(e => e.LegacyId == legacyId)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
+            deleted += await _dbContext.Calibrations
+                .Where(e => e.LegacyId == legacyId)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
+
+            await tx.CommitAsync(ct);
+
+            if (deleted > 0)
+                _logger.LogDebug("Soft-deleted {Count} v4 records for legacy entry {LegacyId}", deleted, legacyId);
+
+            return deleted;
+        });
     }
 
     /// <inheritdoc />
