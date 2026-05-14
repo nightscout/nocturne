@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.DeviceStatusExtras
 /// </summary>
 [Table("device_status_extras")]
-public class DeviceStatusExtrasEntity : ITenantScoped, IAuditable
+public class DeviceStatusExtrasEntity : ITenantScoped, IAuditable, ISoftDeletable
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -53,4 +53,12 @@ public class DeviceStatusExtrasEntity : ITenantScoped, IAuditable
     /// </summary>
     [Column("sys_updated_at")]
     public DateTime SysUpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Soft-delete timestamp. When non-null the record is treated as deleted
+    /// by the global query filter and is invisible above the repository layer.
+    /// </summary>
+    [AuditIgnored]
+    [Column("deleted_at")]
+    public DateTime? DeletedAt { get; set; }
 }

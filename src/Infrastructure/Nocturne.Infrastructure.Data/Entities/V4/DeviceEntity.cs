@@ -12,7 +12,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// </summary>
 [Table("devices")]
 [Index(nameof(Category), nameof(Type), nameof(Serial), IsUnique = true)]
-public class DeviceEntity : ITenantScoped
+public class DeviceEntity : ITenantScoped, ISoftDeletable
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -64,4 +64,11 @@ public class DeviceEntity : ITenantScoped
     /// </summary>
     [Column("additional_properties", TypeName = "jsonb")]
     public string? AdditionalPropertiesJson { get; set; }
+
+    /// <summary>
+    /// Soft-delete timestamp. When non-null the record is treated as deleted
+    /// by the global query filter and is invisible above the repository layer.
+    /// </summary>
+    [Column("deleted_at")]
+    public DateTime? DeletedAt { get; set; }
 }
