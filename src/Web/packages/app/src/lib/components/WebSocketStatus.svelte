@@ -3,7 +3,7 @@
   import { Card, CardContent } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { formatTime } from "$lib/utils";
+  import { time } from "$lib/utils/formatting";
 
   const realtimeStore = getRealtimeStore();
 
@@ -125,7 +125,7 @@
         <p class="font-medium text-destructive">Connection Error:</p>
         <p class="text-muted-foreground">{connectionError.message}</p>
         <p class="text-muted-foreground">
-          {formatTime(new Date(connectionError.timestamp))}
+          {time(new Date(connectionError.timestamp))}
         </p>
       </div>
     {/if}

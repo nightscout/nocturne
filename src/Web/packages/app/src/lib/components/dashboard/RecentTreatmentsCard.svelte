@@ -8,7 +8,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
-  import { formatTime } from "$lib/utils";
+  import { time } from "$lib/utils/formatting";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { EntryEditDialog } from "$lib/components/entries";
 
@@ -118,7 +118,7 @@
                     {/if}
                   </div>
                   <div class="text-sm text-muted-foreground">
-                    {formatTime(entry.data.mills!)}
+                    {time(entry.data.mills!)}
                   </div>
                 </div>
               </div>

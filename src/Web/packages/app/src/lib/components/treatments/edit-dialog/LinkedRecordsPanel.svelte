@@ -11,6 +11,8 @@
     formatDateTimeCompact,
     formatInsulinDisplay,
     formatCarbDisplay,
+    bg,
+    bgLabel,
   } from "$lib/utils/formatting";
 
   interface Props {
@@ -32,7 +34,7 @@
           ? `${formatCarbDisplay(r.data.carbs)}g`
           : "\u2014";
       case "bgCheck":
-        return r.data.mgdl != null ? `${r.data.mgdl} mg/dL` : "\u2014";
+        return r.data.mgdl != null ? `${bg(r.data.mgdl)} ${bgLabel()}` : "\u2014";
       case "note":
         return r.data.text || "\u2014";
       case "deviceEvent":

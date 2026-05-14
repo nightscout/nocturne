@@ -10,19 +10,20 @@ using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.Nightscout.Services;
 
-public class NightscoutConnectorService : BaseConnectorService<NightscoutConnectorConfiguration>
+public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TConfig>
+    where TConfig : NightscoutConnectorConfiguration
 {
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly IRateLimitingStrategy _rateLimitingStrategy;
-    private readonly NightscoutConnectorConfiguration _config;
+    private readonly TConfig _config;
     private string? _apiSecretHash;
 
-    public NightscoutConnectorService(
+    public NightscoutConnectorServiceBase(
         HttpClient httpClient,
-        ILogger<NightscoutConnectorService> logger,
+        ILogger logger,
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
-        NightscoutConnectorConfiguration config,
+        TConfig config,
         IConnectorPublisher? publisher = null
     )
         : base(httpClient, logger, publisher)
@@ -120,7 +121,7 @@ public class NightscoutConnectorService : BaseConnectorService<NightscoutConnect
 
     public override async Task<SyncResult> SyncDataAsync(
         SyncRequest request,
-        NightscoutConnectorConfiguration config,
+        TConfig config,
         CancellationToken cancellationToken,
         ISyncProgressReporter? progressReporter = null)
     {
@@ -138,7 +139,7 @@ public class NightscoutConnectorService : BaseConnectorService<NightscoutConnect
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
-        NightscoutConnectorConfiguration config,
+        TConfig config,
         CancellationToken cancellationToken,
         ISyncProgressReporter? progressReporter = null)
     {
@@ -757,4 +758,19 @@ public class NightscoutConnectorService : BaseConnectorService<NightscoutConnect
 
         return false;
     }
+}
+
+/// <summary>
+/// Nightscout connector service for syncing data from a Nightscout instance.
+/// </summary>
+public class NightscoutConnectorService : NightscoutConnectorServiceBase<NightscoutConnectorConfiguration>
+{
+    public NightscoutConnectorService(
+        HttpClient httpClient,
+        ILogger<NightscoutConnectorService> logger,
+        IRetryDelayStrategy retryDelayStrategy,
+        IRateLimitingStrategy rateLimitingStrategy,
+        NightscoutConnectorConfiguration config,
+        IConnectorPublisher? publisher = null
+    ) : base(httpClient, logger, retryDelayStrategy, rateLimitingStrategy, config, publisher) { }
 }

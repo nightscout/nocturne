@@ -178,8 +178,57 @@ public class SensitivityScheduleRepository : ISensitivityScheduleRepository
         var entity =
             await ctx.SensitivitySchedules.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"SensitivitySchedule {id} not found");
-        ctx.SensitivitySchedules.Remove(entity);
+        entity.DeletedAt = DateTime.UtcNow;
         await ctx.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<SensitivitySchedule> RestoreAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entity = await ctx.SensitivitySchedules.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException($"Soft-deleted SensitivitySchedule {id} not found");
+        entity.DeletedAt = null;
+        await ctx.SaveChangesAsync(ct);
+        return SensitivityScheduleMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<SensitivitySchedule>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var idSet = ids.ToHashSet();
+        var entities = await ctx.SensitivitySchedules.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
+            .ToListAsync(ct);
+        foreach (var entity in entities)
+            entity.DeletedAt = null;
+        await ctx.SaveChangesAsync(ct);
+        return entities.Select(SensitivityScheduleMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<SensitivitySchedule>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entities = await ctx.SensitivitySchedules.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
+            .OrderByDescending(e => e.DeletedAt)
+            .Skip(offset).Take(limit)
+            .AsNoTracking()
+            .ToListAsync(ct);
+        return entities.Select(SensitivityScheduleMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        return await ctx.SensitivitySchedules.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
+            .CountAsync(ct);
     }
 
     /// <summary>
@@ -191,7 +240,8 @@ public class SensitivityScheduleRepository : ISensitivityScheduleRepository
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.SensitivitySchedules.Where(e => e.LegacyId == legacyId).ExecuteDeleteAsync(ct);
+        return await ctx.SensitivitySchedules.Where(e => e.LegacyId == legacyId)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
     }
 
     /// <summary>
@@ -205,7 +255,7 @@ public class SensitivityScheduleRepository : ISensitivityScheduleRepository
         await using var ctx = await _contextFactory.CreateAsync(ct);
         return await ctx
             .SensitivitySchedules.Where(e => e.LegacyId != null && e.LegacyId.StartsWith(prefix))
-            .ExecuteDeleteAsync(ct);
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
     }
 
     /// <summary>
@@ -273,37 +323,48 @@ public class SensitivityScheduleRepository : ISensitivityScheduleRepository
             .ToHashSet();
 
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-
-        if (legacyIds.Count > 0)
+        var strategy = ctx.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            var existingIds = await ctx
-                .SensitivitySchedules.AsNoTracking()
-                .Where(e => legacyIds.Contains(e.LegacyId!))
-                .Select(e => e.LegacyId)
-                .ToListAsync(ct);
+            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
 
-            var existingSet = existingIds.ToHashSet();
-            entities = entities
-                .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
-                .ToList();
-        }
+            if (legacyIds.Count > 0)
+            {
+                var existingRecords = await ctx.SensitivitySchedules.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
+                    .Where(e => legacyIds.Contains(e.LegacyId!))
+                    .Select(e => new { e.LegacyId, IsSoftDeleted = e.DeletedAt != null })
+                    .ToListAsync(ct);
 
-        if (entities.Count == 0)
-        {
+                var existingSet = existingRecords.Select(r => r.LegacyId).ToHashSet();
+                var softDeletedCount = existingRecords.Count(r => r.IsSoftDeleted);
+
+                if (softDeletedCount > 0)
+                    _logger.LogInformation(
+                        "Skipped {Count} previously-deleted {Type} records during import",
+                        softDeletedCount, "SensitivitySchedule");
+
+                entities = entities
+                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                    .ToList();
+            }
+
+            if (entities.Count == 0)
+            {
+                await tx.CommitAsync(ct);
+                return [];
+            }
+
+            const int batchSize = 500;
+            foreach (var batch in entities.Chunk(batchSize))
+            {
+                ctx.SensitivitySchedules.AddRange(batch);
+                await ctx.SaveChangesAsync(ct);
+                ctx.ChangeTracker.Clear();
+            }
+
             await tx.CommitAsync(ct);
-            return [];
-        }
-
-        const int batchSize = 500;
-        foreach (var batch in entities.Chunk(batchSize))
-        {
-            ctx.SensitivitySchedules.AddRange(batch);
-            await ctx.SaveChangesAsync(ct);
-            ctx.ChangeTracker.Clear();
-        }
-
-        await tx.CommitAsync(ct);
-        return entities.Select(SensitivityScheduleMapper.ToDomainModel);
+            return entities.Select(SensitivityScheduleMapper.ToDomainModel);
+        });
     }
 }

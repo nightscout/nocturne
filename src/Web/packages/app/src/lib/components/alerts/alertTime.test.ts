@@ -1,37 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  formatTime,
-  formatDateTime,
   formatRange,
   formatTimeSince,
   formatDuration,
 } from "./alertTime";
 
 describe("alertTime", () => {
-  describe("formatTime", () => {
-    it("returns non-empty string for valid date", () => {
-      expect(formatTime(new Date("2025-03-05T14:32:00Z"))).not.toBe("");
-    });
-    it("accepts ISO string", () => {
-      expect(formatTime("2025-03-05T14:32:00Z")).not.toBe("");
-    });
-    it("returns empty string when undefined", () => {
-      expect(formatTime(undefined)).toBe("");
-    });
-    it("returns empty string for invalid date string", () => {
-      expect(formatTime("not-a-date")).toBe("");
-    });
-  });
-
-  describe("formatDateTime", () => {
-    it("returns non-empty string for valid date", () => {
-      expect(formatDateTime(new Date("2025-03-05T14:32:00Z"))).not.toBe("");
-    });
-    it("returns empty string when undefined", () => {
-      expect(formatDateTime(undefined)).toBe("");
-    });
-  });
-
   describe("formatRange", () => {
     it("returns empty string when either side missing", () => {
       expect(formatRange(undefined, new Date())).toBe("");

@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.Bolus
 /// </summary>
 [Table("boluses")]
-public class BolusEntity : ITenantScoped, IAuditable
+public class BolusEntity : ITenantScoped, IAuditable, ISoftDeletable
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -190,4 +190,12 @@ public class BolusEntity : ITenantScoped, IAuditable
     /// </summary>
     [Column("additional_properties", TypeName = "jsonb")]
     public string? AdditionalPropertiesJson { get; set; }
+
+    /// <summary>
+    /// Soft-delete timestamp. When non-null the record is treated as deleted
+    /// by the global query filter and is invisible above the repository layer.
+    /// </summary>
+    [AuditIgnored]
+    [Column("deleted_at")]
+    public DateTime? DeletedAt { get; set; }
 }

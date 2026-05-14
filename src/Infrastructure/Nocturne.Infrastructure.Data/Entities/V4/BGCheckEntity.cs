@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BGCheck
 /// </summary>
 [Table("bg_checks")]
-public class BGCheckEntity : ITenantScoped
+public class BGCheckEntity : ITenantScoped, ISoftDeletable
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -114,4 +114,11 @@ public class BGCheckEntity : ITenantScoped
     /// </summary>
     [Column("additional_properties", TypeName = "jsonb")]
     public string? AdditionalPropertiesJson { get; set; }
+
+    /// <summary>
+    /// Soft-delete timestamp. When non-null the record is treated as deleted
+    /// by the global query filter and is invisible above the repository layer.
+    /// </summary>
+    [Column("deleted_at")]
+    public DateTime? DeletedAt { get; set; }
 }

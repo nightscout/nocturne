@@ -3,10 +3,12 @@
  *
  * All helpers accept Date | string | undefined and return "" on missing
  * or unparseable input (call sites supply their own dash fallback when
- * they want one). formatTime / formatDateTime fall back to ISO if the
- * runtime's Intl rejects the options, matching the behaviour the
- * helpers had when they lived inside ReplayPanel.
+ * they want one). Generic time/date-time formatting now lives in
+ * "$lib/utils/formatting"; only alert-specific relative/duration
+ * formatters remain here.
  */
+
+import { formatDateTimeCompact } from "$lib/utils/formatting";
 
 function toDate(at: Date | string | undefined): Date | null {
   if (!at) return null;
@@ -15,43 +17,13 @@ function toDate(at: Date | string | undefined): Date | null {
   return d;
 }
 
-/** "14:32" — locale time. */
-export function formatTime(at: Date | string | undefined): string {
-  const d = toDate(at);
-  if (!d) return "";
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(d);
-  } catch {
-    return d.toISOString();
-  }
-}
-
-/** "Mar 5, 14:32" — short date + time. */
-export function formatDateTime(at: Date | string | undefined): string {
-  const d = toDate(at);
-  if (!d) return "";
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(d);
-  } catch {
-    return d.toISOString();
-  }
-}
-
-/** "Mar 5, 14:32 — Mar 5, 15:00" — formatDateTime range. Empty when either side missing. */
+/** "Mar 5, 14:32 — Mar 5, 15:00" — compact date-time range. Empty when either side missing. */
 export function formatRange(
   start: Date | string | undefined,
   end: Date | string | undefined
 ): string {
   if (!start || !end) return "";
-  return `${formatDateTime(start)} — ${formatDateTime(end)}`;
+  return `${formatDateTimeCompact(start)} — ${formatDateTimeCompact(end)}`;
 }
 
 /** Relative: "Just now", "12m ago", "3h 5m ago", "2d ago". */

@@ -10,6 +10,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Extensions;
 using Nocturne.API.Filters;
@@ -146,6 +147,7 @@ builder.Services.AddResponseCaching();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddHostedService<AuditRetentionService>();
+builder.Services.AddHostedService<SoftDeleteCleanupService>();
 
 // Add native API services for strangler pattern
 // Note: NightscoutJsonFilter is added globally to apply null-omission and

@@ -8,6 +8,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Migration;
 
@@ -214,7 +215,7 @@ public class MigrationJobService : IMigrationJobService
             {
                 IsSuccess = true,
                 SiteName = request.NightscoutUrl,
-                AvailableCollections = ["entries", "treatments", "profile", "devicestatus", "food", "activity"],
+                AvailableCollections = ["subjects", "entries", "treatments", "profile", "devicestatus", "food", "activity"],
             };
         }
         catch (HttpRequestException ex)
@@ -358,6 +359,7 @@ internal class MigrationJob
     private DateTime _startedAt;
     private DateTime? _completedAt;
     private readonly ConcurrentDictionary<string, CollectionProgress> _collectionProgress = new();
+    private static readonly System.Text.Json.JsonSerializerOptions s_caseInsensitiveJson = new() { PropertyNameCaseInsensitive = true };
 
     public MigrationJob(
         Guid id,
@@ -459,6 +461,7 @@ internal class MigrationJob
         // Build the list of collections to migrate
         var allCollections = new (string name, Func<HttpClient, NocturneDbContext, CancellationToken, Task> migrate)[]
         {
+            ("subjects", MigrateSubjectsViaApiAsync),
             ("entries", MigrateEntriesViaApiAsync),
             ("treatments", MigrateTreatmentsViaApiAsync),
             ("devicestatus", MigrateDeviceStatusViaApiAsync),
@@ -1302,5 +1305,215 @@ internal class MigrationJob
 
         var bytes = SHA1.HashData(Encoding.UTF8.GetBytes(apiSecret));
         return Convert.ToHexStringLower(bytes);
+    }
+
+    private async Task MigrateSubjectsViaApiAsync(
+        HttpClient httpClient,
+        NocturneDbContext dbContext,
+        CancellationToken ct)
+    {
+        _currentOperation = "Migrating subjects";
+        var collectionName = "subjects";
+
+        var totalMigrated = 0L;
+        var totalFailed = 0L;
+        var totalSkipped = 0L;
+
+        try
+        {
+            // 1. Fetch roles to build name->permissions lookup
+            var rolePermissions = await FetchNightscoutRolePermissionsAsync(httpClient, ct);
+
+            // 2. Fetch subjects
+            var response = await httpClient.GetAsync("/api/v2/authorization/subjects", ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Failed to fetch subjects: {StatusCode}. The API secret may lack admin access. Skipping subject migration.",
+                    response.StatusCode);
+                UpdateCollectionProgress(collectionName, 0, 0, 0, true);
+                return;
+            }
+
+            var content = await response.Content.ReadAsStringAsync(ct);
+            var subjects = System.Text.Json.JsonSerializer.Deserialize<NightscoutSubject[]>(
+                content,
+                s_caseInsensitiveJson) ?? [];
+
+            UpdateCollectionProgress(collectionName, subjects.Length, 0, 0, false);
+            UpdateOverallProgress();
+
+            // 3. Pre-load existing token hashes for duplicate detection
+            var existingHashes = await dbContext.Subjects
+                .Where(s => s.AccessTokenHash != null)
+                .Select(s => s.AccessTokenHash!)
+                .ToHashSetAsync(ct);
+
+            // 4. Pre-load existing Nocturne roles by name
+            var nocturneRoles = await dbContext.Roles
+                .ToDictionaryAsync(r => r.Name, r => r.Id, ct);
+
+            foreach (var subject in subjects)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(subject.AccessToken))
+                    {
+                        totalSkipped++;
+                        continue;
+                    }
+
+                    var tokenHash = HashAccessToken(subject.AccessToken);
+
+                    if (existingHashes.Contains(tokenHash))
+                    {
+                        totalSkipped++;
+                        continue;
+                    }
+
+                    // Determine if subject should be inactive ("denied" is only role)
+                    var isDenied = subject.Roles is ["denied"];
+
+                    var entity = new SubjectEntity
+                    {
+                        Id = Guid.CreateVersion7(),
+                        Name = subject.Name ?? "Unnamed",
+                        AccessTokenHash = tokenHash,
+                        AccessTokenPrefix = $"{(subject.Name ?? "unknown").ToLowerInvariant()}-{subject.AccessToken[..Math.Min(8, subject.AccessToken.Length)]}",
+                        IsActive = !isDenied,
+                        Notes = "Migrated from Nightscout. Consider rotating to a Nocturne token.",
+                        OriginalId = subject.MongoId ?? subject.Id,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow,
+                        ApprovalStatus = "Approved",
+                    };
+
+                    dbContext.Subjects.Add(entity);
+                    await dbContext.SaveChangesAsync(ct);
+
+                    // Assign roles
+                    foreach (var roleName in subject.Roles ?? [])
+                    {
+                        if (roleName == "denied")
+                            continue;
+
+                        if (!nocturneRoles.TryGetValue(roleName, out var roleId))
+                        {
+                            // Custom Nightscout role: create it with fetched permissions
+                            var permissions = rolePermissions.GetValueOrDefault(roleName, []);
+                            var roleEntity = new RoleEntity
+                            {
+                                Id = Guid.CreateVersion7(),
+                                Name = roleName,
+                                Description = "Migrated from Nightscout",
+                                Permissions = permissions,
+                                IsSystemRole = false,
+                                CreatedAt = DateTime.UtcNow,
+                                UpdatedAt = DateTime.UtcNow,
+                            };
+                            dbContext.Roles.Add(roleEntity);
+                            await dbContext.SaveChangesAsync(ct);
+                            roleId = roleEntity.Id;
+                            nocturneRoles[roleName] = roleId;
+                        }
+
+                        dbContext.SubjectRoles.Add(new SubjectRoleEntity
+                        {
+                            SubjectId = entity.Id,
+                            RoleId = roleId,
+                            AssignedAt = DateTime.UtcNow,
+                        });
+                    }
+
+                    await dbContext.SaveChangesAsync(ct);
+
+                    existingHashes.Add(tokenHash);
+                    totalMigrated++;
+                    UpdateCollectionProgress(collectionName, subjects.Length, totalMigrated, totalFailed, false);
+                    UpdateOverallProgress();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to migrate subject {Name}", subject.Name);
+                    totalFailed++;
+                    dbContext.ChangeTracker.Clear();
+                }
+            }
+
+            UpdateCollectionProgress(collectionName, subjects.Length, totalMigrated, totalFailed, true);
+            UpdateOverallProgress();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error migrating subjects via API");
+        }
+
+        _logger.LogInformation(
+            "Subject migration complete: {Migrated} migrated, {Skipped} skipped, {Failed} failed",
+            totalMigrated, totalSkipped, totalFailed);
+    }
+
+    /// <summary>
+    /// Fetches Nightscout role definitions and returns a name-to-permissions lookup.
+    /// Falls back gracefully if the endpoint is inaccessible.
+    /// </summary>
+    private async Task<Dictionary<string, List<string>>> FetchNightscoutRolePermissionsAsync(
+        HttpClient httpClient, CancellationToken ct)
+    {
+        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var response = await httpClient.GetAsync("/api/v2/authorization/roles", ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Failed to fetch Nightscout roles: {StatusCode}. Using default role mappings.", response.StatusCode);
+                return result;
+            }
+
+            var content = await response.Content.ReadAsStringAsync(ct);
+            var roles = System.Text.Json.JsonSerializer.Deserialize<NightscoutRole[]>(
+                content,
+                s_caseInsensitiveJson) ?? [];
+
+            foreach (var role in roles)
+            {
+                if (!string.IsNullOrWhiteSpace(role.Name))
+                {
+                    result[role.Name] = role.Permissions ?? [];
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching Nightscout roles. Custom roles may not have correct permissions.");
+        }
+
+        return result;
+    }
+
+    private static string HashAccessToken(string accessToken)
+    {
+        var bytes = Encoding.UTF8.GetBytes(accessToken);
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexStringLower(hash);
+    }
+
+    private record NightscoutSubject
+    {
+        public string? Id { get; init; }
+        [System.Text.Json.Serialization.JsonPropertyName("_id")]
+        public string? MongoId { get; init; }
+        public string? Name { get; init; }
+        public List<string> Roles { get; init; } = [];
+        public string? AccessToken { get; init; }
+    }
+
+    private record NightscoutRole
+    {
+        public string? Name { get; init; }
+        public List<string> Permissions { get; init; } = [];
     }
 }

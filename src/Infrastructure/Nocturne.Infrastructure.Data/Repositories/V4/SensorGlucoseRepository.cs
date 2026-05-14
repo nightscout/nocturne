@@ -196,8 +196,57 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         var entity =
             await ctx.SensorGlucose.FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"SensorGlucose {id} not found");
-        ctx.SensorGlucose.Remove(entity);
+        entity.DeletedAt = DateTime.UtcNow;
         await ctx.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<SensorGlucose> RestoreAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entity = await ctx.SensorGlucose.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException($"Soft-deleted SensorGlucose {id} not found");
+        entity.DeletedAt = null;
+        await ctx.SaveChangesAsync(ct);
+        return SensorGlucoseMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<SensorGlucose>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var idSet = ids.ToHashSet();
+        var entities = await ctx.SensorGlucose.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
+            .ToListAsync(ct);
+        foreach (var entity in entities)
+            entity.DeletedAt = null;
+        await ctx.SaveChangesAsync(ct);
+        return entities.Select(SensorGlucoseMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<SensorGlucose>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entities = await ctx.SensorGlucose.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
+            .OrderByDescending(e => e.DeletedAt)
+            .Skip(offset).Take(limit)
+            .AsNoTracking()
+            .ToListAsync(ct);
+        return entities.Select(SensorGlucoseMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        return await ctx.SensorGlucose.IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
+            .CountAsync(ct);
     }
 
     /// <summary>
@@ -246,7 +295,7 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.AuditedExecuteDeleteAsync(
+        return await ctx.AuditedSoftDeleteAsync(
             ctx.SensorGlucose.Where(e => e.LegacyId == legacyId), _auditContext, ct);
     }
 
@@ -262,74 +311,85 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     )
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-        var entities = records.Select(SensorGlucoseMapper.ToEntity).ToList();
-        if (entities.Count == 0)
+        var strategy = ctx.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            await tx.CommitAsync(ct);
-            return [];
-        }
+            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
+            var entities = records.Select(SensorGlucoseMapper.ToEntity).ToList();
+            if (entities.Count == 0)
+            {
+                await tx.CommitAsync(ct);
+                return [];
+            }
 
-        // Batch-level dedup: keep first occurrence per LegacyId
-        entities = entities
-            .GroupBy(e => e.LegacyId ?? e.Id.ToString())
-            .Select(g => g.First())
-            .ToList();
-
-        // DB-level dedup: filter out records whose LegacyId already exists
-        var legacyIds = entities
-            .Where(e => !string.IsNullOrEmpty(e.LegacyId))
-            .Select(e => e.LegacyId!)
-            .ToHashSet();
-
-        if (legacyIds.Count > 0)
-        {
-            var existingIds = await ctx
-                .SensorGlucose.AsNoTracking()
-                .Where(e => legacyIds.Contains(e.LegacyId!))
-                .Select(e => e.LegacyId)
-                .ToListAsync(ct);
-
-            var existingSet = existingIds.ToHashSet();
+            // Batch-level dedup: keep first occurrence per LegacyId
             entities = entities
-                .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                .GroupBy(e => e.LegacyId ?? e.Id.ToString())
+                .Select(g => g.First())
                 .ToList();
-        }
 
-        if (entities.Count == 0)
-        {
+            // DB-level dedup: filter out records whose LegacyId already exists
+            var legacyIds = entities
+                .Where(e => !string.IsNullOrEmpty(e.LegacyId))
+                .Select(e => e.LegacyId!)
+                .ToHashSet();
+
+            if (legacyIds.Count > 0)
+            {
+                var existingRecords = await ctx.SensorGlucose.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
+                    .Where(e => legacyIds.Contains(e.LegacyId!))
+                    .Select(e => new { e.LegacyId, IsSoftDeleted = e.DeletedAt != null })
+                    .ToListAsync(ct);
+
+                var existingSet = existingRecords.Select(r => r.LegacyId).ToHashSet();
+                var softDeletedCount = existingRecords.Count(r => r.IsSoftDeleted);
+
+                if (softDeletedCount > 0)
+                    _logger.LogInformation(
+                        "Skipped {Count} previously-deleted {Type} records during import",
+                        softDeletedCount, "SensorGlucose");
+
+                entities = entities
+                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                    .ToList();
+            }
+
+            if (entities.Count == 0)
+            {
+                await tx.CommitAsync(ct);
+                return [];
+            }
+
+            const int batchSize = 500;
+            foreach (var batch in entities.Chunk(batchSize))
+            {
+                ctx.SensorGlucose.AddRange(batch);
+                await ctx.SaveChangesAsync(ct);
+                ctx.ChangeTracker.Clear();
+            }
+
             await tx.CommitAsync(ct);
-            return [];
-        }
 
-        const int batchSize = 500;
-        foreach (var batch in entities.Chunk(batchSize))
-        {
-            ctx.SensorGlucose.AddRange(batch);
-            await ctx.SaveChangesAsync(ct);
-            ctx.ChangeTracker.Clear();
-        }
+            // Insert-time deduplication: link saved records to canonical groups
+            try
+            {
+                var dedupInputs = entities.Select(e => new DeduplicationInput(
+                    RecordId: e.Id,
+                    Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                    DataSource: e.DataSource ?? "unknown",
+                    Criteria: new MatchCriteria { GlucoseValue = e.Mgdl, GlucoseTolerance = 1.0 }
+                )).ToList();
 
-        await tx.CommitAsync(ct);
+                await _deduplicationService.DeduplicateBatchAsync(RecordType.SensorGlucose, dedupInputs, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", entities.Count);
+            }
 
-        // Insert-time deduplication: link saved records to canonical groups
-        try
-        {
-            var dedupInputs = entities.Select(e => new DeduplicationInput(
-                RecordId: e.Id,
-                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                DataSource: e.DataSource ?? "unknown",
-                Criteria: new MatchCriteria { GlucoseValue = e.Mgdl, GlucoseTolerance = 1.0 }
-            )).ToList();
-
-            await _deduplicationService.DeduplicateBatchAsync(RecordType.SensorGlucose, dedupInputs, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", entities.Count);
-        }
-
-        return entities.Select(SensorGlucoseMapper.ToDomainModel);
+            return entities.Select(SensorGlucoseMapper.ToDomainModel);
+        });
     }
 
     /// <summary>
@@ -392,7 +452,7 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     public async Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.AuditedExecuteDeleteAsync(
+        return await ctx.AuditedSoftDeleteAsync(
             ctx.SensorGlucose.Where(e => e.DataSource == source), _auditContext, ct);
     }
 
@@ -413,6 +473,6 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         if (to.HasValue)
             query = query.Where(e => e.Timestamp < to.Value);
 
-        return await ctx.AuditedExecuteDeleteAsync(query, _auditContext, ct);
+        return await ctx.AuditedSoftDeleteAsync(query, _auditContext, ct);
     }
 }

@@ -12,6 +12,7 @@
   import { curveMonotoneX } from "d3";
   import type { BrushContextValue } from "layerchart";
   import RotateCcw from "lucide-svelte/icons/rotate-ccw";
+  import { time, formatDateTimeCompact } from "$lib/utils/formatting";
 
   interface GlucosePoint {
     time: Date;
@@ -76,29 +77,14 @@
         selectedXDomain[1].getTime() !== fullXDomain[1].getTime())
   );
 
-  // Format time for handle labels
-  function formatTime(date: Date): string {
-    return date.toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
   // Format date for longer displays
   function formatDateTime(date: Date): string {
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
-
     if (isToday) {
-      return formatTime(date);
+      return time(date);
     }
-
-    return date.toLocaleDateString([], {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatDateTimeCompact(date);
   }
 
   // Handle brush end - update selection
@@ -202,7 +188,7 @@
             <Axis
               placement="bottom"
               ticks={4}
-              format={(v) => (v instanceof Date ? formatTime(v) : String(v))}
+              format={(v) => (v instanceof Date ? time(v) : String(v))}
               tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
             />
           </Svg>

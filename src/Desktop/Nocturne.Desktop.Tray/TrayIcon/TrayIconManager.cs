@@ -3,7 +3,7 @@ using H.NotifyIcon;
 using H.NotifyIcon.Core;
 using Microsoft.UI.Xaml;
 using Nocturne.Desktop.Tray.Helpers;
-using NightscoutFoundation.Nocturne.Model;
+using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Extensions;
 using Nocturne.Desktop.Tray.Models;
 using Nocturne.Widget.Contracts;
@@ -89,7 +89,7 @@ public sealed class TrayIconManager : IDisposable
     {
         var value = GlucoseRangeHelper.FormatValue(reading.Sgv, settings.Unit);
         var unit = settings.Unit == GlucoseUnit.MmolL ? "mmol/L" : "mg/dL";
-        var arrow = TrendHelper.GetArrowText(reading.Direction?.ToString());
+        var arrow = TrendHelper.GetArrowText(reading.Direction.ToString());
         var delta = GlucoseRangeHelper.FormatDelta(reading.Delta, settings.Unit);
         var age = TimeAgoHelper.Format(reading.GetTimestamp());
 

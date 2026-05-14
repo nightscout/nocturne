@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
-using NightscoutFoundation.Nocturne.Model;
+using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Services;
 using Nocturne.Desktop.Tray.TrayIcon;
 using Nocturne.Desktop.Tray.Views;

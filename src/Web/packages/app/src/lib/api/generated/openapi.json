@@ -5245,6 +5245,46 @@
         "x-remote-type": "query"
       }
     },
+    "/api/v4/profile/set-default/{profileName}": {
+      "post": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Set a profile as the active (default) profile. Clears IsDefault on all other profiles.",
+        "operationId": "Profile_SetDefaultProfile",
+        "parameters": [
+          {
+            "name": "profileName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetProfileSummary",
+          "GetTherapySettings"
+        ]
+      }
+    },
     "/api/v4/profile/records": {
       "get": {
         "tags": [

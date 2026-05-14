@@ -78,6 +78,12 @@ public static class ServiceNames
     public const string NightscoutConnector = "nightscout-connector";
 
     /// <summary>
+    /// Aspire resource name for the Gluroo Global Connect connector service.
+    /// </summary>
+    /// <seealso cref="DataSources.GlurooConnector"/>
+    public const string GlurooConnector = "gluroo-connector";
+
+    /// <summary>
     /// Aspire resource name for the MyFitnessPal connector service.
     /// </summary>
     /// <seealso cref="DataSources.MyFitnessPalConnector"/>
@@ -111,6 +117,12 @@ public static class ServiceNames
     /// </summary>
     /// <seealso cref="DataSources.TwiistConnector"/>
     public const string TwiistConnector = "twiist-connector";
+
+    /// <summary>
+    /// Aspire resource name for the Medtronic CareLink connector service.
+    /// </summary>
+    /// <seealso cref="DataSources.CareLinkConnector"/>
+    public const string CareLinkConnector = "carelink-connector";
 
     /// <summary>
     /// Aspire parameter names resolved by the AppHost via <c>AddParameter</c> and

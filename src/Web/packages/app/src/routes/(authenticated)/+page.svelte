@@ -28,7 +28,7 @@
   const topWidgets = $derived(dashboardTopWidgets.current);
 
   // Get focusHours setting for chart default time range
-  const focusHours = $derived(settingsStore.features?.display?.focusHours ?? 3);
+  const focusHours = $derived(settingsStore.features?.display?.focusHours ?? 12);
 
   // Algorithm prediction settings - controls whether predictions are calculated
   const predictionEnabled = $derived(

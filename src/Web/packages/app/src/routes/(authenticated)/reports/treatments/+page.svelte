@@ -33,6 +33,8 @@
     formatInsulinDisplay,
     formatCarbDisplay,
     formatDateTimeCompact,
+    bg,
+    bgLabel,
   } from "$lib/utils/formatting";
   import { toast } from "svelte-sonner";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -252,7 +254,7 @@
           : "Carb Intake";
       case "bgCheck":
         return record.data.mgdl
-          ? `${record.data.mgdl} mg/dL`
+          ? `${bg(record.data.mgdl)} ${bgLabel()}`
           : "BG Check";
       case "note":
         return record.data.text

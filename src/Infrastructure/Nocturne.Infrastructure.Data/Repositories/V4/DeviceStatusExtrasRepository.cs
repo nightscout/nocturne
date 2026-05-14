@@ -72,7 +72,7 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
         await using var ctx = await _contextFactory.CreateAsync(ct);
         return await ctx.DeviceStatusExtras
             .Where(e => e.CorrelationId == correlationId)
-            .ExecuteDeleteAsync(ct);
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
     }
 
     /// <inheritdoc />
@@ -96,37 +96,48 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
             .ToHashSet();
 
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-
-        if (correlationIds.Count > 0)
+        var strategy = ctx.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            var existingIds = await ctx
-                .DeviceStatusExtras.AsNoTracking()
-                .Where(e => correlationIds.Contains(e.CorrelationId))
-                .Select(e => e.CorrelationId)
-                .ToListAsync(ct);
+            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
 
-            var existingSet = existingIds.ToHashSet();
-            entities = entities
-                .Where(e => !existingSet.Contains(e.CorrelationId))
-                .ToList();
-        }
+            if (correlationIds.Count > 0)
+            {
+                var existingRecords = await ctx.DeviceStatusExtras.IgnoreQueryFilters().AsNoTracking()
+                    .Where(e => e.TenantId == ctx.TenantId)
+                    .Where(e => correlationIds.Contains(e.CorrelationId))
+                    .Select(e => new { e.CorrelationId, IsSoftDeleted = e.DeletedAt != null })
+                    .ToListAsync(ct);
 
-        if (entities.Count == 0)
-        {
+                var existingSet = existingRecords.Select(r => r.CorrelationId).ToHashSet();
+                var softDeletedCount = existingRecords.Count(r => r.IsSoftDeleted);
+
+                if (softDeletedCount > 0)
+                    _logger.LogInformation(
+                        "Skipped {Count} previously-deleted {Type} records during import",
+                        softDeletedCount, "DeviceStatusExtras");
+
+                entities = entities
+                    .Where(e => !existingSet.Contains(e.CorrelationId))
+                    .ToList();
+            }
+
+            if (entities.Count == 0)
+            {
+                await tx.CommitAsync(ct);
+                return [];
+            }
+
+            const int batchSize = 500;
+            foreach (var batch in entities.Chunk(batchSize))
+            {
+                ctx.DeviceStatusExtras.AddRange(batch);
+                await ctx.SaveChangesAsync(ct);
+                ctx.ChangeTracker.Clear();
+            }
+
             await tx.CommitAsync(ct);
-            return [];
-        }
-
-        const int batchSize = 500;
-        foreach (var batch in entities.Chunk(batchSize))
-        {
-            ctx.DeviceStatusExtras.AddRange(batch);
-            await ctx.SaveChangesAsync(ct);
-            ctx.ChangeTracker.Clear();
-        }
-
-        await tx.CommitAsync(ct);
-        return entities.Select(DeviceStatusExtrasMapper.ToDomainModel);
+            return entities.Select(DeviceStatusExtrasMapper.ToDomainModel);
+        });
     }
 }

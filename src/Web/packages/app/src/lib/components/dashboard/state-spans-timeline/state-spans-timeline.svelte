@@ -5,6 +5,7 @@
   import { BasalRateTrack } from "$lib/components/charts";
   import type { ProcessedSpan } from "../../../../routes/(authenticated)/time-spans/data.remote";
   import { BasalDeliveryOrigin } from "$lib/api";
+  import { formatDateTimeCompact } from "$lib/utils/formatting";
 
   interface BasalDeliveryChartData {
     id: string;
@@ -122,15 +123,6 @@
     return `${minutes}m`;
   }
 
-  // Format time for tooltip
-  function formatTime(date: Date): string {
-    return date.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
 </script>
 
 <div class="relative w-full" style="height: {chartHeight}px;">
@@ -282,7 +274,7 @@
       >
         <div class="font-medium">{hoveredSpan.profileName ?? hoveredSpan.state}</div>
         <div class="text-xs text-muted-foreground mt-1">
-          <div>{formatTime(hoveredSpan.startTime)} - {formatTime(hoveredSpan.endTime)}</div>
+          <div>{formatDateTimeCompact(hoveredSpan.startTime)} - {formatDateTimeCompact(hoveredSpan.endTime)}</div>
           <div>Duration: {formatDuration(hoveredSpan.startTime, hoveredSpan.endTime)}</div>
         </div>
       </div>

@@ -29,6 +29,7 @@ public class StateSpanRepository : IStateSpanRepository
         nameof(StateSpanCategory.Override),
         nameof(StateSpanCategory.TemporaryTarget),
         nameof(StateSpanCategory.Profile),
+        nameof(StateSpanCategory.PumpMode),
     };
 
     /// <summary>

@@ -32,7 +32,8 @@
     type ReplayRuleDefinition,
   } from "$api-clients";
   import { severityLabel, severityVar } from "./severity";
-  import { formatTime, formatRange } from "./alertTime";
+  import { formatRange } from "./alertTime";
+  import { time } from "$lib/utils/formatting";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
   import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
   import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
@@ -659,7 +660,7 @@
                   <span
                     class="font-mono text-xs text-muted-foreground tabular-nums w-16 shrink-0"
                   >
-                    {formatTime(m.ev.at)}
+                    {m.ev.at ? time(new Date(m.ev.at)) : ""}
                   </span>
                   <Badge variant="outline" class="shrink-0">
                     {kindLabel(m.ev)}

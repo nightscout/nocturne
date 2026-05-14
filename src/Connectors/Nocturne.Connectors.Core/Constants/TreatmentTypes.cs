@@ -49,6 +49,16 @@ public static class TreatmentTypes
     public const string PumpAlarm = "Pump Alarm";
 
     /// <summary>
+    /// Pump insulin delivery suspended.
+    /// </summary>
+    public const string PumpSuspend = "Pump Suspend";
+
+    /// <summary>
+    /// Pump insulin delivery resumed.
+    /// </summary>
+    public const string PumpResume = "Pump Resume";
+
+    /// <summary>
     /// Reservoir/cartridge change.
     /// </summary>
     public const string ReservoirChange = "Reservoir Change";
@@ -169,5 +179,7 @@ public static class TreatmentTypes
         [ReservoirChangeEvent] = DeviceEventType.ReservoirChange,
         [CannulaChange] = DeviceEventType.CannulaChange,
         [TransmitterSensorInsert] = DeviceEventType.TransmitterSensorInsert,
+        [PumpSuspend] = DeviceEventType.PumpSuspend,
+        [PumpResume] = DeviceEventType.PumpResume,
     };
 }

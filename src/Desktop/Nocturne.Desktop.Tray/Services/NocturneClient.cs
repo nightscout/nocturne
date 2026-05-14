@@ -1,8 +1,10 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
-using NightscoutFoundation.Nocturne.Api;
-using NightscoutFoundation.Nocturne.Model;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Extensions;
 
 namespace Nocturne.Desktop.Tray.Services;
@@ -78,15 +80,12 @@ public sealed class NocturneClient : IAsyncDisposable
             var token = await _authService.GetAccessTokenAsync();
             if (string.IsNullOrEmpty(token)) return (null, []);
 
-            var config = new NightscoutFoundation.Nocturne.Client.Configuration
-            {
-                BasePath = serverUrl
-            };
-            config.ApiKey["Authorization"] = token;
-            config.ApiKeyPrefix["Authorization"] = "Bearer";
+            using var http = new HttpClient { BaseAddress = new Uri(serverUrl) };
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-            var api = new SummaryApi(config);
-            var summary = await api.SummaryGetSummaryAsync(hours, false, cancellationToken);
+            var summary = await http.GetFromJsonAsync<V4SummaryResponse>(
+                $"/api/v4/summary?hours={hours}&includePredictions=false",
+                cancellationToken);
 
             if (summary is null) return (null, []);
 
@@ -231,21 +230,22 @@ public sealed class NocturneClient : IAsyncDisposable
     {
         if (!entry.TryGetProperty("sgv", out var sgvProp)) return null;
 
-        Direction? direction = null;
+        var direction = Direction.NONE;
         if (entry.TryGetProperty("direction", out var dirProp) && dirProp.ValueKind == JsonValueKind.String)
         {
             if (Enum.TryParse<Direction>(dirProp.GetString(), true, out var parsed))
                 direction = parsed;
         }
 
-        return new V4GlucoseReading(
-            sgv: sgvProp.GetDouble(),
-            direction: direction,
-            trendRate: entry.TryGetProperty("trendRate", out var rate) ? rate.GetDouble() : null,
-            delta: entry.TryGetProperty("delta", out var delta) ? delta.GetDouble() : null,
-            mills: entry.TryGetProperty("mills", out var mills) ? mills.GetInt64()
-                  : entry.TryGetProperty("date", out var date) ? date.GetInt64() : 0
-        );
+        return new V4GlucoseReading
+        {
+            Sgv = sgvProp.GetDouble(),
+            Direction = direction,
+            TrendRate = entry.TryGetProperty("trendRate", out var rate) ? rate.GetDouble() : null,
+            Delta = entry.TryGetProperty("delta", out var delta) ? delta.GetDouble() : null,
+            Mills = entry.TryGetProperty("mills", out var mills) ? mills.GetInt64()
+                  : entry.TryGetProperty("date", out var date) ? date.GetInt64() : 0,
+        };
     }
 
     private void StartPolling(CancellationToken cancellationToken)

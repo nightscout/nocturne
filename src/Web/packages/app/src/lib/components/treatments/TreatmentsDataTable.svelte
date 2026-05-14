@@ -35,7 +35,7 @@
     ArrowDown,
     Trash2,
   } from "lucide-svelte";
-  import { formatDateTimeCompact } from "$lib/utils/formatting";
+  import { formatDateTimeCompact, bg, bgLabel } from "$lib/utils/formatting";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
   import DataTableToolbar from "./DataTableToolbar.svelte";
   import DataTablePagination from "./DataTablePagination.svelte";
@@ -106,7 +106,7 @@
       case "carbs":
         return formatNumber(record.data.carbs, "g");
       case "bgCheck":
-        return formatNumber(record.data.mgdl, " mg/dL");
+        return record.data.mgdl != null ? `${bg(record.data.mgdl)} ${bgLabel()}` : "\u2014";
       case "note":
         return record.data.text
           ? record.data.text.length > 40

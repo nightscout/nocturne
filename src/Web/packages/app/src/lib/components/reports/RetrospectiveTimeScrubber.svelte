@@ -3,6 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Play, Pause, SkipBack, SkipForward } from "lucide-svelte";
   import { onDestroy } from "svelte";
+  import { time } from "$lib/utils/formatting";
 
   interface Props {
     /** The date being reviewed */
@@ -62,15 +63,6 @@
     const newTime = sliderToTime(value);
     currentTime = newTime;
     onTimeChange?.(newTime);
-  }
-
-  // Format time for display
-  function formatTime(date: Date): string {
-    return date.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
   }
 
   // Format time label for slider
@@ -169,7 +161,7 @@
     </div>
     <div class="text-center">
       <div class="text-2xl font-bold tabular-nums">
-        {formatTime(currentTime)}
+        {time(currentTime)}
       </div>
       <div class="text-xs text-muted-foreground">
         Scrub time to see data at that moment

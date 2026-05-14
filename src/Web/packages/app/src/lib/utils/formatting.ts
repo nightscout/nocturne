@@ -8,7 +8,7 @@
  * - Insulin/carb/percentage display formatting
  */
 
-import { glucoseUnits, type GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { glucoseUnits, timeFormat, preferredLanguage, type GlucoseUnits } from "$lib/stores/appearance-store.svelte";
 import type { Treatment } from "$lib/api";
 
 // Re-export for backward compatibility
@@ -193,6 +193,36 @@ export function bgThresholds(): {
 }
 
 // =============================================================================
+// Time Formatting (auto-detect format from global preference)
+// =============================================================================
+
+/** The user's preferred locale for Intl formatting */
+function locale(): string {
+  return preferredLanguage.current;
+}
+
+/** Whether the user prefers 12-hour time */
+function hour12(): boolean {
+  return timeFormat.current !== "24";
+}
+
+/**
+ * Format a time using the global time format and language preferences
+ * @param date - Date object or Unix milliseconds
+ * @param compact - If true, use numeric minutes in 12h mode
+ * @returns Formatted time string (e.g. "2:30 pm" or "14:30")
+ */
+export function time(date: Date | number, compact?: boolean): string {
+  const d = typeof date === "number" ? new Date(date) : date;
+  const options: Intl.DateTimeFormatOptions = {
+    hour: "numeric",
+    minute: compact && hour12() ? "numeric" : "2-digit",
+    hour12: hour12(),
+  };
+  return d.toLocaleTimeString(locale(), options);
+}
+
+// =============================================================================
 // Date Formatting
 // =============================================================================
 
@@ -204,7 +234,11 @@ export function bgThresholds(): {
 export function formatDateTime(dateStr: string | undefined): string {
   if (!dateStr) return "—";
   const date = new Date(dateStr);
-  return date.toLocaleDateString() + " " + date.toLocaleTimeString();
+  return date.toLocaleDateString(locale()) + " " + date.toLocaleTimeString(locale(), {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: hour12(),
+  });
 }
 
 /**
@@ -214,7 +248,7 @@ export function formatDateTime(dateStr: string | undefined): string {
  */
 export function formatDate(date: Date | string | undefined): string {
   if (!date) return "N/A";
-  return new Date(date).toLocaleString();
+  return new Date(date).toLocaleString(locale());
 }
 
 /**
@@ -225,12 +259,13 @@ export function formatDate(date: Date | string | undefined): string {
 export function formatDateDetailed(dateString: string | undefined): string {
   if (!dateString) return "Unknown";
   try {
-    return new Date(dateString).toLocaleDateString(undefined, {
+    return new Date(dateString).toLocaleDateString(locale(), {
       year: "numeric",
       month: "long",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      hour12: hour12(),
     });
   } catch {
     return dateString;
@@ -258,14 +293,15 @@ export function formatDateForInput(dateStr: string | undefined): string {
  * @param dateStr - ISO date string or undefined
  * @returns Compact formatted date and time, or "—"
  */
-export function formatDateTimeCompact(dateStr: string | undefined): string {
-  if (!dateStr) return "—";
-  const date = new Date(dateStr);
-  return date.toLocaleDateString(undefined, {
+export function formatDateTimeCompact(date: Date | string | number | undefined): string {
+  if (date == null) return "—";
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleDateString(locale(), {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: hour12(),
   });
 }
 

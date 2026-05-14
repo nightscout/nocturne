@@ -26,7 +26,8 @@ namespace Nocturne.Connectors.Glooko.Configurations;
         SyncDataType.Boluses,
         SyncDataType.CarbIntake,
         SyncDataType.StateSpans,
-        SyncDataType.DeviceEvents
+        SyncDataType.DeviceEvents,
+        SyncDataType.Profiles
     ]
 )]
 public class GlookoConnectorConfiguration : BaseConnectorConfiguration

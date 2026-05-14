@@ -2,6 +2,7 @@
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { getAnalysisDetail } from "../data.remote";
+  import { formatDateTimeCompact } from "$lib/utils/formatting";
 
   // Get ID from route params (guaranteed to exist in [id] route)
   const analysisId = $derived(page.params.id ?? "");
@@ -78,11 +79,6 @@
     return types[type] || "Unknown";
   }
 
-  // Format timestamp
-  function formatTime(timestamp: Date | string | undefined) {
-    if (!timestamp) return "N/A";
-    return new Date(timestamp).toLocaleString();
-  }
 
   // Format duration
   function formatDuration(ms: number) {
@@ -123,7 +119,7 @@
       </div>
       <div>
         <p class="text-sm text-gray-500 dark:text-gray-400">Timestamp</p>
-        <p class="text-sm">{formatTime(analysis.analysisTimestamp)}</p>
+        <p class="text-sm">{formatDateTimeCompact(analysis.analysisTimestamp)}</p>
       </div>
       <div>
         <p class="text-sm text-gray-500 dark:text-gray-400">Overall Match</p>

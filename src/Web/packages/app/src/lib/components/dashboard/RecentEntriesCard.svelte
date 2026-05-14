@@ -2,13 +2,13 @@
   import type { Entry } from "$lib/api";
   import { Card, CardContent, CardHeader } from "$lib/components/ui/card";
 
-  import { formatTime } from "$lib/utils";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
     getUnitLabel,
+    time,
   } from "$lib/utils/formatting";
   import { getDirectionInfo } from "$lib/utils";
 
@@ -52,7 +52,7 @@
                   {/if}
                 </div>
                 <div class="text-sm text-muted-foreground">
-                  {formatTime(entry.mills!)}
+                  {time(entry.mills!)}
                 </div>
               </div>
             </div>

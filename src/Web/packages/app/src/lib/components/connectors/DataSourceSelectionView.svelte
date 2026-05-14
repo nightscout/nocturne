@@ -143,7 +143,7 @@
                   ? 'bg-green-500/10 text-green-600'
                   : 'bg-primary/10 text-primary'}"
               >
-                <AppLogo icon={connector.icon} />
+                <AppLogo icon={connector.icon} invertMode />
               </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
@@ -225,7 +225,7 @@
                         ? 'bg-green-500/10 text-green-600'
                         : 'bg-primary/10 text-primary'}"
                     >
-                      <AppLogo icon={app.icon} />
+                      <AppLogo icon={app.icon} invertMode />
                     </div>
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2 flex-wrap">

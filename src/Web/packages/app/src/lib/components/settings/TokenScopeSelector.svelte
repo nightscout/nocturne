@@ -10,6 +10,7 @@
 
   interface PermissionCategory {
     name: string;
+    description?: string;
     isSubItem?: boolean;
     /** Domain of a parent super-permission (e.g. "health" for heartrate/stepcount). */
     coveredBy?: string;
@@ -51,35 +52,96 @@
 
   const groups: PermissionGroup[] = [
     {
-      header: "Health",
+      header: "Health Data",
       categories: [
-        { name: "Health", levels: rw("health") },
-        { name: "Blood Glucose", isSubItem: true, coveredBy: "health", levels: rw("entries") },
-        { name: "Treatments", isSubItem: true, coveredBy: "health", levels: rw("treatments") },
-        { name: "Devices", isSubItem: true, coveredBy: "health", levels: rw("devicestatus") },
-        { name: "Profile", isSubItem: true, coveredBy: "health", levels: rw("profile") },
-        { name: "Food", isSubItem: true, coveredBy: "health", levels: rw("food") },
-      ],
-    },
-    {
-      header: "Biometrics",
-      categories: [
-        { name: "Heart Rate", isSubItem: true, coveredBy: "health", levels: rw("heartrate") },
-        { name: "Step Count", isSubItem: true, coveredBy: "health", levels: rw("stepcount") },
+        {
+          name: "All Health Data",
+          description: "Shortcut — covers all health categories below",
+          levels: [
+            { value: "none", label: "No access", atoms: [] },
+            { value: "read", label: "Read-only", atoms: ["health.read"] },
+            { value: "full", label: "Full access", atoms: ["health.read", "health.readwrite"] },
+          ],
+        },
+        {
+          name: "Blood Glucose",
+          description: "CGM readings and manual blood glucose entries",
+          isSubItem: true,
+          coveredBy: "health",
+          levels: rw("glucose"),
+        },
+        {
+          name: "Treatments",
+          description: "Insulin doses, carb entries, and therapy events",
+          isSubItem: true,
+          coveredBy: "health",
+          levels: rw("treatments"),
+        },
+        {
+          name: "Devices",
+          description: "Pump, CGM, and phone status reports",
+          isSubItem: true,
+          coveredBy: "health",
+          levels: rw("devices"),
+        },
+        {
+          name: "Therapy Settings",
+          description: "Basal rates, sensitivity factors, carb ratios, and targets",
+          isSubItem: true,
+          coveredBy: "health",
+          levels: rw("therapy"),
+        },
+        {
+          name: "Food",
+          description: "Food database entries and nutritional information",
+          isSubItem: true,
+          coveredBy: "health",
+          levels: rw("food"),
+        },
+        {
+          name: "Heart Rate",
+          description: "Heart rate data from wearables",
+          isSubItem: true,
+          coveredBy: "health",
+          levels: rw("heartrate"),
+        },
+        {
+          name: "Step Count",
+          description: "Daily step counts from activity trackers",
+          isSubItem: true,
+          coveredBy: "health",
+          levels: rw("stepcount"),
+        },
       ],
     },
     {
       header: "Platform",
       categories: [
-        { name: "Notifications", levels: rw("notifications") },
-        { name: "Reports", levels: readOnly("reports") },
+        {
+          name: "Alerts",
+          description: "Alert rules, notification delivery, and history",
+          levels: rw("alerts"),
+        },
+        {
+          name: "Reports",
+          description: "Generated reports and data exports",
+          levels: readOnly("reports"),
+        },
       ],
     },
     {
       header: "Account",
       categories: [
-        { name: "Identity", levels: readOnly("identity") },
-        { name: "Sharing", levels: toggle("sharing.readwrite") },
+        {
+          name: "Identity",
+          description: "Display name, email, and account details",
+          levels: readOnly("identity"),
+        },
+        {
+          name: "Sharing",
+          description: "Follower access and data sharing configuration",
+          levels: toggle("sharing.readwrite"),
+        },
       ],
     },
   ];
@@ -122,7 +184,7 @@
 
   /**
    * Whether a category is fully covered by its parent super-permission.
-   * Only disables children when the parent is at its maximum level (Read & Write).
+   * Only disables children when the parent is at Full access.
    */
   function isCoveredByParent(cat: PermissionCategory): boolean {
     if (!cat.coveredBy) return false;
@@ -150,10 +212,15 @@
         class="flex items-center justify-between gap-4 py-1.5 {cat.isSubItem ? 'pl-3' : ''}"
         class:opacity-60={covered}
       >
-        <div class="flex items-center gap-2 min-w-0 flex-1">
-          <span class="text-sm">{cat.name}</span>
-          {#if covered}
-            <span class="text-xs text-muted-foreground">Covered by {cat.coveredBy!.charAt(0).toUpperCase() + cat.coveredBy!.slice(1)}</span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span class="text-sm {!cat.isSubItem ? 'font-medium' : ''}">{cat.name}</span>
+            {#if covered}
+              <span class="text-xs text-muted-foreground">Covered by Health</span>
+            {/if}
+          </div>
+          {#if cat.description && !covered}
+            <p class="text-xs text-muted-foreground leading-tight">{cat.description}</p>
           {/if}
         </div>
         <Select.Root
@@ -164,7 +231,7 @@
           }}
           disabled={covered}
         >
-          <Select.Trigger class="w-[160px] h-8 text-sm">
+          <Select.Trigger class="w-40 h-8 text-sm">
             {getLevelLabel(cat)}
           </Select.Trigger>
           <Select.Content>
@@ -182,7 +249,10 @@
   {#each [fullAccessCategory] as cat (cat.name)}
     {@const level = getLevel(cat)}
     <div class="flex items-center justify-between gap-4 py-1.5">
-      <span class="text-sm font-medium">{cat.name}</span>
+      <div class="min-w-0 flex-1">
+        <span class="text-sm font-medium">{cat.name}</span>
+        <p class="text-xs text-muted-foreground leading-tight">Unrestricted access to all data including deletion</p>
+      </div>
       <Select.Root
         type="single"
         value={level}
@@ -190,7 +260,7 @@
           if (v) setLevel(cat, v);
         }}
       >
-        <Select.Trigger class="w-[160px] h-8 text-sm">
+        <Select.Trigger class="w-40 h-8 text-sm">
           {getLevelLabel(cat)}
         </Select.Trigger>
         <Select.Content>

@@ -178,7 +178,7 @@
       </CardContent>
     </Card>
   {:else}
-    <!-- Theme Selection -->
+    <!-- Color Theme & Scheme -->
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
@@ -186,7 +186,7 @@
           Color Theme
         </CardTitle>
         <CardDescription>
-          Choose a color theme that matches your preferred app experience
+          Choose a color theme and light/dark mode
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
@@ -380,25 +380,11 @@
           </button>
         </div>
 
-        <p class="text-xs text-muted-foreground">
-          Theme changes take effect immediately
-        </p>
-      </CardContent>
-    </Card>
+        <Separator />
 
-    <!-- Color Scheme (Dark/Light Mode) -->
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <Sun class="h-5 w-5" />
-          Color Scheme
-        </CardTitle>
-        <CardDescription>Choose between light and dark mode</CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-6">
         <div class="grid gap-4 sm:grid-cols-2">
           <div class="space-y-2">
-            <Label>Mode</Label>
+            <Label>Color scheme</Label>
             <Select
               type="single"
               value={currentColorScheme}
@@ -442,24 +428,26 @@
               </SelectContent>
             </Select>
           </div>
-        </div>
 
-        <Separator />
-
-        <div class="flex items-center justify-between">
-          <div class="space-y-0.5">
-            <Label>Night mode schedule</Label>
-            <p class="text-sm text-muted-foreground">
-              Automatically switch to dark theme at night
-            </p>
+          <div class="flex items-center justify-between">
+            <div class="space-y-0.5">
+              <Label>Night mode schedule</Label>
+              <p class="text-sm text-muted-foreground">
+                Auto-switch to dark at night
+              </p>
+            </div>
+            <Switch
+              checked={nightModeSchedule.current}
+              onCheckedChange={(checked) => {
+                nightModeSchedule.current = checked;
+              }}
+            />
           </div>
-          <Switch
-            checked={nightModeSchedule.current}
-            onCheckedChange={(checked) => {
-              nightModeSchedule.current = checked;
-            }}
-          />
         </div>
+
+        <p class="text-xs text-muted-foreground">
+          Theme changes take effect immediately
+        </p>
       </CardContent>
     </Card>
 
@@ -493,78 +481,96 @@
       </CardContent>
     </Card>
 
-    <!-- Dashboard Widgets -->
-    <div {@attach coachmark({
-      key: "feature-intro.appearance-widgets",
-      title: "Widget order",
-      description: "Drag to reorder your dashboard widgets.",
-      completeOn: { event: "dragend" },
-    })}>
-      <DashboardWidgetConfigurator
-        value={dashboardTopWidgets.current}
-        onchange={handleWidgetsChange}
-        maxWidgets={3}
-      />
-    </div>
-
-    <!-- Sidebar Widget -->
+    <!-- Units & Formats -->
     <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
-          <PanelLeft class="h-5 w-5" />
-          Sidebar Widget
+          <Globe class="h-5 w-5" />
+          Units & Formats
         </CardTitle>
         <CardDescription>
-          Choose what to display in the sidebar above the navigation
+          Configure measurement units and display formats
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
         <div class="grid gap-4 sm:grid-cols-2">
-          <button
-            type="button"
-            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {sidebarWidget.current === 'graph'
-              ? 'border-primary bg-accent/30'
-              : 'border-border'}"
-            onclick={() => (sidebarWidget.current = "graph")}
-          >
-            {#if sidebarWidget.current === "graph"}
-              <Badge class="absolute right-2 top-2" variant="default">Active</Badge>
-            {/if}
-            <div class="font-semibold">Glucose Chart</div>
-            <p class="text-sm text-muted-foreground">
-              Compact glucose chart showing recent readings
-            </p>
-          </button>
+          <div class="space-y-2">
+            <Label>Blood glucose units</Label>
+            <Select
+              type="single"
+              value={glucoseUnits.current}
+              onValueChange={(value) => {
+                glucoseUnits.current = value as "mg/dl" | "mmol";
+              }}
+            >
+              <SelectTrigger>
+                <span>
+                  {glucoseUnits.current === "mg/dl" ? "mg/dL" : "mmol/L"}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mg/dl">mg/dL</SelectItem>
+                <SelectItem value="mmol">mmol/L</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          <button
-            type="button"
-            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {sidebarWidget.current === 'halo-dial'
-              ? 'border-primary bg-accent/30'
-              : 'border-border'}"
-            onclick={() => (sidebarWidget.current = "halo-dial")}
-          >
-            {#if sidebarWidget.current === "halo-dial"}
-              <Badge class="absolute right-2 top-2" variant="default">Active</Badge>
-            {/if}
-            <div class="font-semibold">Halo Dial</div>
-            <p class="text-sm text-muted-foreground">
-              Circular dial with glucose history, predictions, and data-at-a-glance
-            </p>
-          </button>
+          <div class="space-y-2">
+            <Label>Time format</Label>
+            <Select
+              type="single"
+              value={timeFormat.current}
+              onValueChange={(value) => {
+                timeFormat.current = value as "12" | "24";
+              }}
+            >
+              <SelectTrigger>
+                <span>
+                  {timeFormat.current === "12" ? "12-hour (AM/PM)" : "24-hour"}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="12">12-hour (AM/PM)</SelectItem>
+                <SelectItem value="24">24-hour</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-
-        <p class="text-xs text-muted-foreground">
-          Changes take effect immediately
-        </p>
       </CardContent>
     </Card>
 
-    {#if sidebarWidget.current === "halo-dial"}
-      <HaloDialConfigurator
-        value={haloDialConfig.current}
-        onchange={(config) => (haloDialConfig.current = config)}
-      />
-    {/if}
+    <!-- Timezone -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <Clock class="h-5 w-5" />
+          Timezone
+        </CardTitle>
+        <CardDescription>
+          Your device's current timezone settings
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="space-y-1">
+            <Label class="text-muted-foreground text-xs">Timezone</Label>
+            <p class="font-medium">{browserTimezone}</p>
+          </div>
+          <div class="space-y-1">
+            <Label class="text-muted-foreground text-xs">UTC Offset</Label>
+            <p class="font-medium">{timezoneOffset}</p>
+          </div>
+          <div class="space-y-1">
+            <Label class="text-muted-foreground text-xs">Current Time</Label>
+            <p class="font-medium font-mono">{currentTime}</p>
+          </div>
+        </div>
+        <p class="text-xs text-muted-foreground mt-4">
+          Timezone is automatically detected from your device. Data is displayed
+          in this timezone.
+        </p>
+      </CardContent>
+    </Card>
 
     <!-- Chart Options -->
     <Card>
@@ -581,7 +587,7 @@
             <FormLabel>Default chart range</FormLabel>
             <Select
               type="single"
-              value={String(store.features?.display?.focusHours ?? 3)}
+              value={String(store.features?.display?.focusHours ?? 12)}
               onValueChange={(value: string) => {
                 if (!store.features) return;
                 if (!store.features.display) {
@@ -592,12 +598,12 @@
               }}
             >
               <SelectTrigger>
-                <span>{store.features?.display?.focusHours ?? 3} hours</span>
+                <span>{store.features?.display?.focusHours ?? 12} hours</span>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">1 hour</SelectItem>
                 <SelectItem value="2">2 hours</SelectItem>
                 <SelectItem value="3">3 hours</SelectItem>
+                <SelectItem value="4">4 hours</SelectItem>
                 <SelectItem value="6">6 hours</SelectItem>
                 <SelectItem value="12">12 hours</SelectItem>
                 <SelectItem value="24">24 hours</SelectItem>
@@ -749,6 +755,79 @@
       </CardContent>
     </Card>
 
+    <!-- Dashboard Widgets -->
+    <div {@attach coachmark({
+      key: "feature-intro.appearance-widgets",
+      title: "Widget order",
+      description: "Drag to reorder your dashboard widgets.",
+      completeOn: { event: "dragend" },
+    })}>
+      <DashboardWidgetConfigurator
+        value={dashboardTopWidgets.current}
+        onchange={handleWidgetsChange}
+        maxWidgets={3}
+      />
+    </div>
+
+    <!-- Sidebar Widget -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <PanelLeft class="h-5 w-5" />
+          Sidebar Widget
+        </CardTitle>
+        <CardDescription>
+          Choose what to display in the sidebar above the navigation
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <button
+            type="button"
+            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {sidebarWidget.current === 'graph'
+              ? 'border-primary bg-accent/30'
+              : 'border-border'}"
+            onclick={() => (sidebarWidget.current = "graph")}
+          >
+            {#if sidebarWidget.current === "graph"}
+              <Badge class="absolute right-2 top-2" variant="default">Active</Badge>
+            {/if}
+            <div class="font-semibold">Glucose Chart</div>
+            <p class="text-sm text-muted-foreground">
+              Compact glucose chart showing recent readings
+            </p>
+          </button>
+
+          <button
+            type="button"
+            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {sidebarWidget.current === 'halo-dial'
+              ? 'border-primary bg-accent/30'
+              : 'border-border'}"
+            onclick={() => (sidebarWidget.current = "halo-dial")}
+          >
+            {#if sidebarWidget.current === "halo-dial"}
+              <Badge class="absolute right-2 top-2" variant="default">Active</Badge>
+            {/if}
+            <div class="font-semibold">Halo Dial</div>
+            <p class="text-sm text-muted-foreground">
+              Circular dial with glucose history, predictions, and data-at-a-glance
+            </p>
+          </button>
+        </div>
+
+        <p class="text-xs text-muted-foreground">
+          Changes take effect immediately
+        </p>
+      </CardContent>
+    </Card>
+
+    {#if sidebarWidget.current === "halo-dial"}
+      <HaloDialConfigurator
+        value={haloDialConfig.current}
+        onchange={(config) => (haloDialConfig.current = config)}
+      />
+    {/if}
+
     <!-- Glucose Processing -->
     <Card>
       <CardHeader>
@@ -867,97 +946,6 @@
           <a href="/settings/trackers" class="text-primary hover:underline">
             Settings → Trackers
           </a>
-        </p>
-      </CardContent>
-    </Card>
-
-    <!-- Units & Formats -->
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <Globe class="h-5 w-5" />
-          Units & Formats
-        </CardTitle>
-        <CardDescription>
-          Configure measurement units and display formats
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        <div class="grid gap-4 sm:grid-cols-2">
-          <div class="space-y-2">
-            <Label>Blood glucose units</Label>
-            <Select
-              type="single"
-              value={glucoseUnits.current}
-              onValueChange={(value) => {
-                glucoseUnits.current = value as "mg/dl" | "mmol";
-              }}
-            >
-              <SelectTrigger>
-                <span>
-                  {glucoseUnits.current === "mg/dl" ? "mg/dL" : "mmol/L"}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="mg/dl">mg/dL</SelectItem>
-                <SelectItem value="mmol">mmol/L</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div class="space-y-2">
-            <Label>Time format</Label>
-            <Select
-              type="single"
-              value={timeFormat.current}
-              onValueChange={(value) => {
-                timeFormat.current = value as "12" | "24";
-              }}
-            >
-              <SelectTrigger>
-                <span>
-                  {timeFormat.current === "12" ? "12-hour (AM/PM)" : "24-hour"}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="12">12-hour (AM/PM)</SelectItem>
-                <SelectItem value="24">24-hour</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-
-    <!-- Timezone -->
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <Clock class="h-5 w-5" />
-          Timezone
-        </CardTitle>
-        <CardDescription>
-          Your device's current timezone settings
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <div class="space-y-1">
-            <Label class="text-muted-foreground text-xs">Timezone</Label>
-            <p class="font-medium">{browserTimezone}</p>
-          </div>
-          <div class="space-y-1">
-            <Label class="text-muted-foreground text-xs">UTC Offset</Label>
-            <p class="font-medium">{timezoneOffset}</p>
-          </div>
-          <div class="space-y-1">
-            <Label class="text-muted-foreground text-xs">Current Time</Label>
-            <p class="font-medium font-mono">{currentTime}</p>
-          </div>
-        </div>
-        <p class="text-xs text-muted-foreground mt-4">
-          Timezone is automatically detected from your device. Data is displayed
-          in this timezone.
         </p>
       </CardContent>
     </Card>

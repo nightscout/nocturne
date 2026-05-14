@@ -3,7 +3,7 @@ using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Text;
 using Microsoft.UI;
 using Nocturne.Desktop.Tray.Helpers;
-using NightscoutFoundation.Nocturne.Model;
+using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Extensions;
 using Nocturne.Desktop.Tray.Models;
 using Windows.Storage.Streams;

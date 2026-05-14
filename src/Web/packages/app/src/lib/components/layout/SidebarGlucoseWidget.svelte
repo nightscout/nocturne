@@ -1,7 +1,10 @@
 <script lang="ts">
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
-  import { formatGlucoseValue } from "$lib/utils/formatting";
+  import {
+    formatGlucoseValue,
+    formatGlucoseDelta,
+  } from "$lib/utils/formatting";
   import {
     glucoseUnits,
     sidebarWidget,
@@ -13,6 +16,11 @@
   import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
   import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
   import ThresholdRules from "$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
+  import { trendAngle } from "$lib/components/dashboard/halo-dial/geometry";
+  import { Tween } from "svelte/motion";
+  import { cubicOut } from "svelte/easing";
+  import { browser } from "$app/environment";
+  import ArrowRight from "lucide-svelte/icons/arrow-right";
 
   const realtimeStore = tryGetRealtimeStore();
 
@@ -54,6 +62,43 @@
   const units = $derived(glucoseUnits.current);
   const displayBG = $derived(formatGlucoseValue(rawCurrentBG, units));
   const widget = $derived(sidebarWidget.current);
+
+  // Trend metadata
+  const bgDelta = $derived(realtimeStore?.bgDelta ?? 0);
+  const direction = $derived(realtimeStore?.direction ?? "Flat");
+  const timeSinceReading = $derived(realtimeStore?.timeSinceReading ?? "");
+  const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
+  const hasData = $derived(!isLoading && rawCurrentBG > 0);
+
+  // Respect reduced motion preference
+  const reducedMotion =
+    browser &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+  // Smoothly animate the trend arrow rotation
+  const arrowAngle = Tween.of(() => trendAngle(bgDelta), {
+    duration: reducedMotion ? 0 : 600,
+    easing: cubicOut,
+  });
+
+  // Delta color based on direction severity
+  function getDeltaColor(dir: string): string {
+    switch (dir) {
+      case "DoubleUp":
+      case "DoubleDown":
+        return "text-red-500";
+      case "SingleUp":
+      case "SingleDown":
+        return "text-orange-500";
+      case "FortyFiveUp":
+      case "FortyFiveDown":
+        return "text-yellow-500";
+      case "Flat":
+        return "text-green-500";
+      default:
+        return "text-muted-foreground";
+    }
+  }
 </script>
 
 <!-- Expanded state: widget based on preference -->
@@ -64,15 +109,31 @@
     </div>
   {:else}
     <div class="flex flex-col justify-center gap-2">
-      <GlucoseValueIndicator
-        displayValue={displayBG}
-        rawBgMgdl={rawCurrentBG}
-        {isLoading}
-        {isStale}
-        {isDisconnected}
-        size="lg"
-        class="text-lg"
-      />
+      <div class="flex items-center justify-center gap-2">
+        <GlucoseValueIndicator
+          displayValue={displayBG}
+          rawBgMgdl={rawCurrentBG}
+          {isLoading}
+          {isStale}
+          {isDisconnected}
+          size="lg"
+          class="text-lg"
+        />
+        {#if hasData && !isStale}
+          <div class="flex flex-col items-center gap-0.5">
+            <div class="flex items-center gap-0.5 {getDeltaColor(direction)}">
+              <ArrowRight
+                class="size-4"
+                style="transform: rotate({arrowAngle.current}deg)"
+              />
+              <span class="text-sm font-medium">{displayDelta}</span>
+            </div>
+            <span class="text-[10px] text-muted-foreground leading-tight">
+              {timeSinceReading}
+            </span>
+          </div>
+        {/if}
+      </div>
       <div
         class="px-2 border border-sidebar-border hover:border-sidebar-ring rounded"
       >
@@ -95,8 +156,8 @@
   {/if}
 </div>
 
-<!-- Collapsed state: just show current BG -->
-<div class="hidden group-data-[collapsible=icon]:flex justify-center">
+<!-- Collapsed state: BG + small arrow + delta -->
+<div class="hidden group-data-[collapsible=icon]:flex flex-col items-center gap-0.5">
   <GlucoseValueIndicator
     displayValue={displayBG}
     rawBgMgdl={rawCurrentBG}
@@ -106,4 +167,13 @@
     size="xs"
     class="text-lg"
   />
+  {#if hasData && !isStale}
+    <div class="flex items-center gap-0.5 {getDeltaColor(direction)}">
+      <ArrowRight
+        class="size-3"
+        style="transform: rotate({arrowAngle.current}deg)"
+      />
+      <span class="text-[10px] font-medium">{displayDelta}</span>
+    </div>
+  {/if}
 </div>

@@ -29,7 +29,6 @@
   import { getMultiPeriodStatistics, getDailyBasalBolusRatios } from "$api/generated/statistics.generated.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { resource } from "runed";
 
   // Get shared date params from context (set by reports layout)
   // Default: 30 days for insulin delivery analysis (TDD and ratios benefit from more data)
@@ -51,32 +50,24 @@
   );
 
   // Daily basal/bolus breakdown for the chart
-  const dailyRatiosResource = resource(
-    () => reportsParams.dateRangeInput,
-    async (input) => {
-      const endDate = input?.to ? new Date(input.to) : new Date();
-      endDate.setHours(23, 59, 59, 999);
-      const startDate = input?.from
-        ? new Date(input.from)
-        : (() => {
-            const d = new Date(endDate);
-            d.setDate(d.getDate() - ((input?.days ?? 30) - 1));
-            return d;
-          })();
-      startDate.setHours(0, 0, 0, 0);
-      return await getDailyBasalBolusRatios({ startDate, endDate });
-    },
-    { debounce: 100 }
-  );
+  const dailyRatiosDates = $derived.by(() => {
+    const input = reportsParams.dateRangeInput;
+    const endDate = input?.to ? new Date(input.to) : new Date();
+    endDate.setHours(23, 59, 59, 999);
+    const startDate = input?.from
+      ? new Date(input.from)
+      : (() => {
+          const d = new Date(endDate);
+          d.setDate(d.getDate() - ((input?.days ?? 30) - 1));
+          return d;
+        })();
+    startDate.setHours(0, 0, 0, 0);
+    return { startDate, endDate };
+  });
+  const dailyRatiosResource = $derived(getDailyBasalBolusRatios(dailyRatiosDates));
 
-  // Secondary resource for multi-period statistics (uses plain resource)
-  const multiPeriodStatsResource = resource(
-    () => ({}),
-    async () => {
-      return await getMultiPeriodStatistics();
-    },
-    { debounce: 100 }
-  );
+  // Secondary resource for multi-period statistics
+  const multiPeriodStatsResource = $derived(getMultiPeriodStatistics());
 
   // Default statistics when loading or no data
   const defaultStats: InsulinDeliveryStatistics = {

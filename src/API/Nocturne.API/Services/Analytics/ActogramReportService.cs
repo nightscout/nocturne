@@ -65,10 +65,6 @@ public sealed class ActogramReportService : IActogramReportService
         var fromDt = DateTimeOffset.FromUnixTimeMilliseconds(startTime).UtcDateTime;
         var toDt = DateTimeOffset.FromUnixTimeMilliseconds(endTime).UtcDateTime;
 
-        // Match DataFetchStage's CGM cap: 12 readings/hour × 1.5 safety margin, floor 500.
-        var rangeHours = Math.Max(1, (endTime - startTime) / (60.0 * 60 * 1000));
-        var glucoseLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 12 * 1.5));
-
         // Sequential awaits: every query below resolves through the same
         // per-request scoped NocturneDbContext, and EF Core's ConcurrencyDetector
         // rejects overlapping operations on a single context. Npgsql also
@@ -79,7 +75,7 @@ public sealed class ActogramReportService : IActogramReportService
             to: toDt,
             device: null,
             source: null,
-            limit: glucoseLimit,
+            limit: int.MaxValue,
             offset: 0,
             descending: false,
             ct: cancellationToken
@@ -139,6 +135,7 @@ public sealed class ActogramReportService : IActogramReportService
             })
             .ToList();
 
+        var rangeHours = (endTime - startTime) / 3_600_000.0;
         _logger.LogDebug(
             "Actogram report fetched {Glucose} glucose, {Sleep} sleep, {Steps} steps, {HeartRate} heart-rate records for {RangeHours:F1}h",
             glucoseData.Count,

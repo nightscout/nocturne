@@ -1,9 +1,8 @@
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, searchForWorkspaceRoot } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import commonjs from "vite-plugin-commonjs";
 import lingo from 'vite-plugin-lingo';
 import tailwindcss from "@tailwindcss/vite";
-import { resolve } from "path";
 import { setupBridge } from "@nocturne/bridge";
 // WUCHALE-DISABLED: wuchale temporarily disabled — see also hooks.server.ts and +layout.ts
 // import { wuchale } from '@wuchale/vite-plugin'
@@ -109,10 +108,8 @@ export default defineConfig(({ mode }) => {
         usePolling: false,
       },
       fs: {
-        allow: [
-          "../node_modules", // This is for src/Web/packages/node_modules
-          resolve(__dirname, "../../node_modules"), // This is for src/Web/node_modules
-        ],
+        allow: [searchForWorkspaceRoot(process.cwd())],
+        strict: false, // pnpm symlinks into its content-addressable store
       },
     },
   };

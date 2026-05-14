@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Nocturne.Desktop.Tray.Helpers;
-using NightscoutFoundation.Nocturne.Model;
+using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Models;
 using Windows.Foundation;
 using Windows.UI;

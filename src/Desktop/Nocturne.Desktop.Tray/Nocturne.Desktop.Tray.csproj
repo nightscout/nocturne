@@ -38,6 +38,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />
     <ProjectReference Include="..\..\Widgets\Nocturne.Widget.Contracts\Nocturne.Widget.Contracts.csproj" />
     <ProjectReference Include="..\..\Widgets\Nocturne.Widget.Infrastructure\Nocturne.Widget.Infrastructure.csproj" />
   </ItemGroup>

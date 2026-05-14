@@ -26,7 +26,8 @@ namespace Nocturne.Connectors.MyLife.Configurations;
         SyncDataType.BolusCalculations,
         SyncDataType.Notes,
         SyncDataType.DeviceEvents,
-        SyncDataType.StateSpans
+        SyncDataType.StateSpans,
+        SyncDataType.Profiles
     ]
 )]
 public class MyLifeConnectorConfiguration : BaseConnectorConfiguration

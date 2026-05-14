@@ -174,7 +174,7 @@
       <div
         class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {iconColors.bg}"
       >
-        <AppLogo {icon} />
+        <AppLogo {icon} invertMode />
       </div>
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 flex-wrap">

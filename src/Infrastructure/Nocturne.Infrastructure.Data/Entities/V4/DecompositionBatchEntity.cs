@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Deleting a batch cascades to all sibling V4 records.
 /// </summary>
 [Table("decomposition_batches")]
-public class DecompositionBatchEntity : ITenantScoped
+public class DecompositionBatchEntity : ITenantScoped, ISoftDeletable
 {
     /// <summary>Primary key (UUID v7).</summary>
     [Key]
@@ -39,4 +39,11 @@ public class DecompositionBatchEntity : ITenantScoped
     /// </summary>
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// Soft-delete timestamp. When non-null the record is treated as deleted
+    /// by the global query filter and is invisible above the repository layer.
+    /// </summary>
+    [Column("deleted_at")]
+    public DateTime? DeletedAt { get; set; }
 }

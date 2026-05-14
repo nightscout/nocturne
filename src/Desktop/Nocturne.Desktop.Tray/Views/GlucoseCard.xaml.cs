@@ -1,7 +1,7 @@
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Nocturne.Desktop.Tray.Helpers;
-using NightscoutFoundation.Nocturne.Model;
+using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Extensions;
 using Nocturne.Desktop.Tray.Models;
 using Nocturne.Widget.Contracts;
@@ -45,7 +45,7 @@ public sealed partial class GlucoseCard : UserControl
 
         TrendArrowText.Text = "\uE74A";
         TrendArrowText.Foreground = brush;
-        TrendArrowRotation.Angle = TrendHelper.GetArrowRotation(reading.Direction?.ToString());
+        TrendArrowRotation.Angle = TrendHelper.GetArrowRotation(reading.Direction.ToString());
 
         var delta = GlucoseRangeHelper.FormatDelta(reading.Delta, settings.Unit);
         DeltaText.Text = delta;

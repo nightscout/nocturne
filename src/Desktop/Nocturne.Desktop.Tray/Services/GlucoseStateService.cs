@@ -1,5 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using NightscoutFoundation.Nocturne.Model;
+using Nocturne.Core.Models.Widget;
 using Nocturne.Desktop.Tray.Extensions;
 
 namespace Nocturne.Desktop.Tray.Services;

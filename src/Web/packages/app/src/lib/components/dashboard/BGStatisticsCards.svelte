@@ -13,8 +13,8 @@
     BatteryWarning,
     Zap,
   } from "lucide-svelte";
-  import { formatTime, timeAgo } from "$lib/utils";
-  import { formatGlucoseDelta, getUnitLabel } from "$lib/utils/formatting";
+  import { timeAgo } from "$lib/utils";
+  import { formatGlucoseDelta, getUnitLabel, time } from "$lib/utils/formatting";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import WebSocketStatus from "$lib/components/WebSocketStatus.svelte";
@@ -87,7 +87,7 @@
           {timeAgo(displayLastUpdated)}
         </div>
         <p class="text-xs text-muted-foreground">
-          {formatTime(displayLastUpdated)}
+          {time(displayLastUpdated)}
         </p>
       </CardContent>
     </Card>
@@ -131,7 +131,7 @@
           </div>
         {:else}
           <p class="text-xs text-muted-foreground">
-            {formatTime(displayLastUpdated)}
+            {time(displayLastUpdated)}
           </p>
         {/if}
       </CardContent>
@@ -146,7 +146,7 @@
           {timeAgo(displayLastUpdated)}
         </div>
         <p class="text-xs text-muted-foreground">
-          {formatTime(displayLastUpdated)}
+          {time(displayLastUpdated)}
         </p>
       </CardContent>
     </Card>
