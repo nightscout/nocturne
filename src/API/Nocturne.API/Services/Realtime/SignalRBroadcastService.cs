@@ -112,13 +112,19 @@ public interface ISignalRBroadcastService
     /// Broadcast sync progress event to subscribers via ConfigHub
     /// </summary>
     Task BroadcastSyncProgressAsync(SyncProgressEvent progress);
+
+    /// <summary>
+    /// Broadcast glucose reading to Home Assistant subscribers via HomeAssistantHub
+    /// </summary>
+    Task BroadcastHomeAssistantGlucoseAsync(object glucoseData);
 }
 
 /// <summary>
 /// Concrete implementation of <see cref="ISignalRBroadcastService"/> that routes broadcasts
-/// to tenant-scoped groups across four hubs: <see cref="DataHub"/> (data and storage events),
+/// to tenant-scoped groups across five hubs: <see cref="DataHub"/> (data and storage events),
 /// <see cref="AlarmHub"/> (notifications and alarms), <see cref="ConfigHub"/> (configuration
-/// changes and sync progress), and <see cref="AlertHub"/> (alert engine events).
+/// changes and sync progress), <see cref="AlertHub"/> (alert engine events), and
+/// <see cref="HomeAssistantHub"/> (glucose relay and alert event relay to HA instances).
 /// </summary>
 /// <remarks>
 /// Group names are always prefixed with the tenant ID via <see cref="TenantAwareHub.FormatTenantGroup"/>
@@ -130,12 +136,14 @@ public interface ISignalRBroadcastService
 /// <seealso cref="AlarmHub"/>
 /// <seealso cref="ConfigHub"/>
 /// <seealso cref="AlertHub"/>
+/// <seealso cref="HomeAssistantHub"/>
 public class SignalRBroadcastService : ISignalRBroadcastService
 {
     private readonly IHubContext<DataHub> _dataHubContext;
     private readonly IHubContext<AlarmHub> _alarmHubContext;
     private readonly IHubContext<ConfigHub> _configHubContext;
     private readonly IHubContext<AlertHub> _alertHubContext;
+    private readonly IHubContext<HomeAssistantHub> _homeAssistantHubContext;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<SignalRBroadcastService> _logger;
 
@@ -146,6 +154,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     /// <param name="alarmHubContext">Hub context for <see cref="AlarmHub"/> — notifications, alarms, and announcements.</param>
     /// <param name="configHubContext">Hub context for <see cref="ConfigHub"/> — configuration changes and sync progress.</param>
     /// <param name="alertHubContext">Hub context for <see cref="AlertHub"/> — alert engine dispatch, resolution, and acknowledgement events.</param>
+    /// <param name="homeAssistantHubContext">Hub context for <see cref="HomeAssistantHub"/> — glucose relay and alert event relay to Home Assistant instances.</param>
     /// <param name="tenantAccessor">Provides the current tenant context for scoping group names.</param>
     /// <param name="logger">The logger instance.</param>
     public SignalRBroadcastService(
@@ -153,6 +162,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         IHubContext<AlarmHub> alarmHubContext,
         IHubContext<ConfigHub> configHubContext,
         IHubContext<AlertHub> alertHubContext,
+        IHubContext<HomeAssistantHub> homeAssistantHubContext,
         ITenantAccessor tenantAccessor,
         ILogger<SignalRBroadcastService> logger
     )
@@ -161,6 +171,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         _alarmHubContext = alarmHubContext;
         _configHubContext = configHubContext;
         _alertHubContext = alertHubContext;
+        _homeAssistantHubContext = homeAssistantHubContext;
         _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
@@ -200,6 +211,9 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 .Clients.Group(group)
                 .SendCoreAsync("dataUpdate", new[] { data });
             _logger.LogInformation("Data update broadcast completed successfully");
+
+            // Relay to Home Assistant subscribers
+            await BroadcastHomeAssistantGlucoseAsync(data);
         }
         catch (Exception ex)
         {
@@ -546,6 +560,34 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error broadcasting alert event {EventName}", eventName);
+        }
+
+        // Also relay to Home Assistant subscribers
+        try
+        {
+            await _homeAssistantHubContext
+                .Clients.Group(TenantGroup("ha-glucose"))
+                .SendCoreAsync(eventName, new[] { payload });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error relaying alert event {EventName} to HA", eventName);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task BroadcastHomeAssistantGlucoseAsync(object glucoseData)
+    {
+        try
+        {
+            _logger.LogDebug("Broadcasting glucose_reading to HA subscribers");
+            await _homeAssistantHubContext
+                .Clients.Group(TenantGroup("ha-glucose"))
+                .SendCoreAsync("glucose_reading", new[] { glucoseData });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting glucose_reading to HA");
         }
     }
 
