@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.CareLink.Services;
+using Xunit;
 
 namespace Nocturne.Connectors.CareLink.Tests.Services;
 
