@@ -59,4 +59,8 @@ public enum ChannelType
     /// <summary>WhatsApp direct message to a user.</summary>
     [EnumMember(Value = "whatsapp_dm"), JsonStringEnumMemberName("whatsapp_dm")]
     WhatsAppDm,
+
+    /// <summary>Home Assistant integration delivery via dedicated SignalR hub.</summary>
+    [EnumMember(Value = "home_assistant"), JsonStringEnumMemberName("home_assistant")]
+    HomeAssistant,
 }
