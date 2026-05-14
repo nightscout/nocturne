@@ -20,7 +20,7 @@ public class HomeAssistantHub : TenantAwareHub
     /// <summary>
     /// Tracks active HA instance connection counts. Key is the tenant-scoped group name for
     /// "ha:{instanceId}", value is the number of active connections in that group.
-    /// Used by <see cref="HomeAssistantProvider"/> to gate delivery marking.
+    /// Used by <see cref="Services.Alerts.Providers.HomeAssistantProvider"/> to gate delivery marking.
     /// </summary>
     private static readonly ConcurrentDictionary<string, int> _instanceConnectionCounts = new();
 
