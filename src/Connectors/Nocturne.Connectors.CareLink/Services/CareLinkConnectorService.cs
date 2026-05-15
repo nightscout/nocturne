@@ -616,7 +616,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     /// </summary>
     private async Task PersistRefreshTokenIfChangedAsync(CancellationToken ct)
     {
-        var currentRefreshToken = _tokenProvider.CurrentRefreshToken;
+        var cached = await _tokenProvider.GetCachedSessionAsync();
+        var currentRefreshToken = cached?.Metadata?.GetValueOrDefault("RefreshToken");
         if (string.IsNullOrEmpty(currentRefreshToken) || currentRefreshToken == _initialRefreshToken)
             return;
 
@@ -624,14 +625,17 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         {
             var secrets = new Dictionary<string, string> { ["refresh_token"] = currentRefreshToken };
 
-            if (!string.IsNullOrEmpty(_tokenProvider.CurrentClientId))
-                secrets["client_id"] = _tokenProvider.CurrentClientId;
+            var clientId = cached?.Metadata?.GetValueOrDefault("ClientId");
+            if (!string.IsNullOrEmpty(clientId))
+                secrets["client_id"] = clientId;
 
-            if (!string.IsNullOrEmpty(_tokenProvider.CurrentTokenUrl))
-                secrets["token_url"] = _tokenProvider.CurrentTokenUrl;
+            var tokenUrl = cached?.Metadata?.GetValueOrDefault("TokenUrl");
+            if (!string.IsNullOrEmpty(tokenUrl))
+                secrets["token_url"] = tokenUrl;
 
-            if (!string.IsNullOrEmpty(_tokenProvider.CurrentAudience))
-                secrets["audience"] = _tokenProvider.CurrentAudience;
+            var audience = cached?.Metadata?.GetValueOrDefault("Audience");
+            if (!string.IsNullOrEmpty(audience))
+                secrets["audience"] = audience;
 
             await _configService.SaveSecretsAsync("CareLink", secrets, "connector-runtime", ct);
             _logger.LogInformation("[{ConnectorSource}] Persisted updated refresh token", ConnectorSource);

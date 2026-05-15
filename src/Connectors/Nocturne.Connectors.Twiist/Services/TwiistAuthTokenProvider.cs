@@ -25,8 +25,6 @@ public class TwiistAuthTokenProvider(
     private readonly IRetryDelayStrategy _retryDelayStrategy =
         retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
-    private string? _refreshToken;
-
     /// <summary>
     /// Cognito access tokens typically expire in 1 hour. Refresh 5 minutes early.
     /// </summary>
@@ -39,6 +37,10 @@ public class TwiistAuthTokenProvider(
     {
         const int maxRetries = 3;
 
+        // Read refresh token from previously cached session metadata
+        var cached = await _tokenCache.GetAsync(ConnectorName, _tenantAccessor.TenantId);
+        var refreshToken = cached?.Metadata?.GetValueOrDefault("RefreshToken");
+
         var accessToken = await ExecuteWithRetryAsync(
             async attempt =>
             {
@@ -49,22 +51,25 @@ public class TwiistAuthTokenProvider(
                     maxRetries);
 
                 // Try refresh token first if we have one
-                if (!string.IsNullOrEmpty(_refreshToken))
+                if (!string.IsNullOrEmpty(refreshToken))
                 {
-                    var refreshResult = await TryRefreshTokenAsync(cancellationToken);
+                    var refreshResult = await TryRefreshTokenAsync(refreshToken, cancellationToken);
                     if (refreshResult != null)
                         return (refreshResult, false);
 
                     _logger.LogInformation("Refresh token expired, falling back to password auth");
-                    _refreshToken = null;
+                    refreshToken = null;
                 }
 
                 // Fall back to password auth
-                var loginResult = await LoginWithPasswordAsync(config, cancellationToken);
-                if (loginResult == null)
+                var (loginAccessToken, loginRefreshToken) = await LoginWithPasswordAsync(config, cancellationToken);
+                if (loginAccessToken == null)
                     return (null, true);
 
-                return (loginResult, false);
+                if (!string.IsNullOrEmpty(loginRefreshToken))
+                    refreshToken = loginRefreshToken;
+
+                return (loginAccessToken, false);
             },
             _retryDelayStrategy,
             maxRetries,
@@ -80,10 +85,14 @@ public class TwiistAuthTokenProvider(
             "Twiist Cognito authentication successful, token expires at {ExpiresAt}",
             expiresAt);
 
-        return (accessToken, expiresAt, null);
+        var metadata = new Dictionary<string, string>();
+        if (!string.IsNullOrEmpty(refreshToken))
+            metadata["RefreshToken"] = refreshToken;
+
+        return (accessToken, expiresAt, metadata.Count > 0 ? metadata : null);
     }
 
-    private async Task<string?> LoginWithPasswordAsync(
+    private async Task<(string? AccessToken, string? RefreshToken)> LoginWithPasswordAsync(
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var body = JsonSerializer.Serialize(new
@@ -99,23 +108,19 @@ public class TwiistAuthTokenProvider(
 
         var result = await PostCognitoAsync(body, cancellationToken);
         if (result?.AuthenticationResult == null)
-            return null;
+            return (null, null);
 
-        // Cache the refresh token for future use
-        if (!string.IsNullOrEmpty(result.AuthenticationResult.RefreshToken))
-            _refreshToken = result.AuthenticationResult.RefreshToken;
-
-        return result.AuthenticationResult.AccessToken;
+        return (result.AuthenticationResult.AccessToken, result.AuthenticationResult.RefreshToken);
     }
 
-    private async Task<string?> TryRefreshTokenAsync(CancellationToken cancellationToken)
+    private async Task<string?> TryRefreshTokenAsync(string refreshToken, CancellationToken cancellationToken)
     {
         var body = JsonSerializer.Serialize(new
         {
             AuthFlow = "REFRESH_TOKEN_AUTH",
             AuthParameters = new
             {
-                REFRESH_TOKEN = _refreshToken!
+                REFRESH_TOKEN = refreshToken
             },
             ClientId = TwiistConstants.Cognito.ClientId
         });

@@ -35,6 +35,10 @@ public class ConnectorConfigurationLoader<TConfig>(
             if (secrets.Count > 0)
                 ConnectorConfigurationBinder.ApplySecretsToConfig(secrets, config);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex,

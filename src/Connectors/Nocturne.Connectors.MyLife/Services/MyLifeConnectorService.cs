@@ -50,18 +50,11 @@ public class MyLifeConnectorService(
     public override bool IsHealthy =>
         FailedRequestCount < MaxFailedRequestsBeforeUnhealthy && !tokenProvider.IsTokenExpired;
 
-    public override async Task<bool> AuthenticateAsync()
+    public override Task<bool> AuthenticateAsync()
     {
-        var token = await tokenProvider.GetValidTokenAsync();
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            sessionCache.Invalidate("MyLife", tenantAccessor.TenantId);
-            TrackFailedRequest("Token missing");
-            return false;
-        }
-
+        // Auth happens per-tenant inside PerformSyncInternalAsync where config is available
         TrackSuccessfulRequest();
-        return true;
+        return Task.FromResult(true);
     }
 
     /// <summary>

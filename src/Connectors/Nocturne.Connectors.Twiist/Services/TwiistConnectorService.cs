@@ -49,17 +49,11 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
     public override List<SyncDataType> SupportedDataTypes =>
         [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake];
 
-    public override async Task<bool> AuthenticateAsync()
+    public override Task<bool> AuthenticateAsync()
     {
-        var token = await _tokenProvider.GetValidTokenAsync();
-        if (token == null)
-        {
-            TrackFailedRequest("Failed to get valid Cognito token");
-            return false;
-        }
-
+        // Auth happens per-tenant inside PerformSyncInternalAsync where config is available
         TrackSuccessfulRequest();
-        return true;
+        return Task.FromResult(true);
     }
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
@@ -73,7 +67,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
 
         try
         {
-            var package = await FetchPackageAsync(config.PwdId, cancellationToken);
+            var package = await FetchPackageAsync(config, cancellationToken);
             if (package?.Status == null)
             {
                 _logger.LogWarning("[{Source}] Twiist returned empty package for PWD {PwdId}",
@@ -208,9 +202,10 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         }
     }
 
-    private async Task<TwiistPackage?> FetchPackageAsync(string pwdId, CancellationToken cancellationToken)
+    private async Task<TwiistPackage?> FetchPackageAsync(
+        TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var accessToken = await _tokenProvider.GetValidTokenAsync();
+        var accessToken = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
         if (string.IsNullOrEmpty(accessToken))
         {
             _logger.LogWarning("[{Source}] Failed to get valid token for package fetch", ConnectorSource);
@@ -221,12 +216,12 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var result = await ExecuteWithRetryAsync(
-            async () => await FetchPackageCoreAsync(accessToken, pwdId, cancellationToken),
+            async () => await FetchPackageCoreAsync(accessToken, config.PwdId, cancellationToken),
             _retryDelayStrategy,
             async () =>
             {
                 _tokenProvider.InvalidateToken();
-                var newToken = await _tokenProvider.GetValidTokenAsync();
+                var newToken = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
                 if (string.IsNullOrEmpty(newToken)) return false;
                 accessToken = newToken;
                 return true;

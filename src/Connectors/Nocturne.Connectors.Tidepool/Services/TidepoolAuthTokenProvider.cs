@@ -26,14 +26,6 @@ public class TidepoolAuthTokenProvider(
     private readonly IRetryDelayStrategy _retryDelayStrategy =
         retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
-    private string? _userId;
-
-    /// <summary>
-    ///     The authenticated user ID, used for data fetching endpoints.
-    ///     Set from auth response unless overridden in configuration.
-    /// </summary>
-    public string? UserId => _userId;
-
     /// <summary>
     ///     Tidepool sessions last ~24 hours. Refresh at 23 hours.
     /// </summary>
@@ -45,6 +37,7 @@ public class TidepoolAuthTokenProvider(
         TidepoolConnectorConfiguration config, CancellationToken cancellationToken)
     {
         const int maxRetries = 3;
+        string? authUserId = null;
 
         var sessionToken = await ExecuteWithRetryAsync(
             async attempt =>
@@ -55,10 +48,11 @@ public class TidepoolAuthTokenProvider(
                     attempt + 1,
                     maxRetries);
 
-                var token = await LoginAsync(config, cancellationToken);
+                var (token, userId) = await LoginAsync(config, cancellationToken);
                 if (string.IsNullOrEmpty(token))
                     return (null, true);
 
+                authUserId = userId;
                 return (token, false);
             },
             _retryDelayStrategy,
@@ -70,7 +64,7 @@ public class TidepoolAuthTokenProvider(
         if (string.IsNullOrEmpty(sessionToken))
             return (null, DateTime.MinValue, null);
 
-        var resolvedUserId = !string.IsNullOrEmpty(config.UserId) ? config.UserId : _userId;
+        var resolvedUserId = !string.IsNullOrEmpty(config.UserId) ? config.UserId : authUserId;
         var expiresAt = DateTime.UtcNow.AddHours(24);
         _logger.LogInformation(
             "Tidepool authentication successful for user {UserId}, session expires at {ExpiresAt}",
@@ -84,7 +78,7 @@ public class TidepoolAuthTokenProvider(
         return (sessionToken, expiresAt, metadata.Count > 0 ? metadata : null);
     }
 
-    private async Task<string?> LoginAsync(TidepoolConnectorConfiguration config, CancellationToken cancellationToken)
+    private async Task<(string? Token, string? UserId)> LoginAsync(TidepoolConnectorConfiguration config, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post,
             _serverResolver.BuildUrl(config, "/auth/login"));
@@ -99,7 +93,7 @@ public class TidepoolAuthTokenProvider(
         if (!response.IsSuccessStatusCode)
         {
             await HandleErrorResponseAsync(response, "Tidepool authentication", cancellationToken);
-            return null;
+            return (null, null);
         }
 
         // Session token is in the response header
@@ -107,30 +101,31 @@ public class TidepoolAuthTokenProvider(
         {
             _logger.LogError("Tidepool authentication response missing {Header} header",
                 TidepoolConstants.Headers.SessionToken);
-            return null;
+            return (null, null);
         }
 
         var token = tokenValues.FirstOrDefault();
         if (string.IsNullOrEmpty(token))
         {
             _logger.LogError("Tidepool authentication returned empty session token");
-            return null;
+            return (null, null);
         }
 
         // Extract user ID from response body
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         var authResponse = JsonSerializer.Deserialize<TidepoolAuthResponse>(body, JsonDefaults.CaseInsensitive);
 
+        string? userId = null;
         if (authResponse != null && !string.IsNullOrEmpty(authResponse.Userid))
         {
-            _userId = authResponse.Userid;
-            _logger.LogDebug("Tidepool user ID resolved to {UserId}", _userId);
+            userId = authResponse.Userid;
+            _logger.LogDebug("Tidepool user ID resolved to {UserId}", userId);
         }
         else
         {
             _logger.LogWarning("Tidepool authentication response did not contain a user ID");
         }
 
-        return token;
+        return (token, userId);
     }
 }

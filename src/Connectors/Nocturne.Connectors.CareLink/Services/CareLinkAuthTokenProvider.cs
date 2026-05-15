@@ -27,51 +27,59 @@ public class CareLinkAuthTokenProvider(
 
     protected override string ConnectorName => "CareLink";
 
-    private string? _refreshToken;
-    private string? _clientId;
-    private string? _tokenUrl;
-    private string? _audience;
-    private readonly object _stateLock = new();
+    /// <summary>
+    ///     Per-tenant state seeded by <see cref="InitializeFromSecrets"/>.
+    ///     Only used as a fallback when the token cache has no prior session for this tenant.
+    ///     Access is guarded by the per-tenant lock in the base class's GetValidTokenAsync,
+    ///     so concurrent tenants cannot stomp each other.
+    /// </summary>
+    [ThreadStatic]
+    private static string? t_refreshToken;
+    [ThreadStatic]
+    private static string? t_clientId;
+    [ThreadStatic]
+    private static string? t_tokenUrl;
+    [ThreadStatic]
+    private static string? t_audience;
 
-    public string? CurrentRefreshToken { get { lock (_stateLock) return _refreshToken; } }
-    public string? CurrentClientId { get { lock (_stateLock) return _clientId; } }
-    public string? CurrentTokenUrl { get { lock (_stateLock) return _tokenUrl; } }
-    public string? CurrentAudience { get { lock (_stateLock) return _audience; } }
+    public string? CurrentRefreshToken => t_refreshToken;
+    public string? CurrentClientId => t_clientId;
+    public string? CurrentTokenUrl => t_tokenUrl;
+    public string? CurrentAudience => t_audience;
 
     /// <summary>
     /// Seeds persisted token state (refresh token, client ID, token URL, audience) into the provider.
-    /// Called by the connector service on startup to restore state from secrets storage.
+    /// Called by the connector service per-tenant before GetValidTokenAsync.
+    /// Uses thread-static storage so concurrent tenant syncs don't interfere.
     /// </summary>
     public void InitializeFromSecrets(string? refreshToken, string? clientId, string? tokenUrl, string? audience)
     {
-        lock (_stateLock)
-        {
-            _refreshToken = refreshToken;
-            _clientId = clientId;
-            _tokenUrl = tokenUrl;
-            _audience = audience;
-        }
+        t_refreshToken = refreshToken;
+        t_clientId = clientId;
+        t_tokenUrl = tokenUrl;
+        t_audience = audience;
     }
 
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         CareLinkConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        // Try refresh first
-        string? refreshToken, clientId, tokenUrl;
-        lock (_stateLock)
-        {
-            refreshToken = _refreshToken ?? config.RefreshToken;
-            clientId = _clientId;
-            tokenUrl = _tokenUrl;
-        }
+        // Read from previously cached session metadata first, fall back to seeded secrets
+        var cached = await _tokenCache.GetAsync(ConnectorName, _tenantAccessor.TenantId);
+        var refreshToken = cached?.Metadata?.GetValueOrDefault("RefreshToken") ?? t_refreshToken ?? config.RefreshToken;
+        var clientId = cached?.Metadata?.GetValueOrDefault("ClientId") ?? t_clientId;
+        var tokenUrl = cached?.Metadata?.GetValueOrDefault("TokenUrl") ?? t_tokenUrl;
+
+        var audience = cached?.Metadata?.GetValueOrDefault("Audience") ?? t_audience;
 
         if (!string.IsNullOrEmpty(refreshToken) && !string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(tokenUrl))
         {
             var refreshResult = await TryRefreshTokenAsync(refreshToken, clientId, tokenUrl, cancellationToken);
             if (refreshResult != null)
             {
-                var (token, expiresAt) = refreshResult.Value;
-                return (token, expiresAt, BuildMetadata());
+                var (token, expiresAt, newRefreshToken) = refreshResult.Value;
+                if (!string.IsNullOrEmpty(newRefreshToken))
+                    refreshToken = newRefreshToken;
+                return (token, expiresAt, BuildMetadata(refreshToken, clientId, tokenUrl, audience));
             }
             _logger.LogWarning("Refresh token failed, falling back to credential login");
         }
@@ -100,35 +108,31 @@ public class CareLinkAuthTokenProvider(
 
         if (result == null) return (null, DateTime.MinValue, null);
 
-        lock (_stateLock)
-        {
-            _refreshToken = result.RefreshToken;
-            _clientId = result.ClientId;
-            _tokenUrl = result.TokenUrl;
-            _audience = result.Audience;
-        }
+        refreshToken = result.RefreshToken;
+        clientId = result.ClientId;
+        tokenUrl = result.TokenUrl;
+        audience = result.Audience;
 
-        return (result.AccessToken, GetTokenExpiry(result.AccessToken), BuildMetadata());
+        return (result.AccessToken, GetTokenExpiry(result.AccessToken),
+            BuildMetadata(refreshToken, clientId, tokenUrl, audience));
     }
 
-    private IReadOnlyDictionary<string, string>? BuildMetadata()
+    private static IReadOnlyDictionary<string, string>? BuildMetadata(
+        string? refreshToken, string? clientId, string? tokenUrl, string? audience)
     {
-        lock (_stateLock)
-        {
-            var metadata = new Dictionary<string, string>();
-            if (!string.IsNullOrEmpty(_refreshToken))
-                metadata["RefreshToken"] = _refreshToken;
-            if (!string.IsNullOrEmpty(_clientId))
-                metadata["ClientId"] = _clientId;
-            if (!string.IsNullOrEmpty(_tokenUrl))
-                metadata["TokenUrl"] = _tokenUrl;
-            if (!string.IsNullOrEmpty(_audience))
-                metadata["Audience"] = _audience;
-            return metadata.Count > 0 ? metadata : null;
-        }
+        var metadata = new Dictionary<string, string>();
+        if (!string.IsNullOrEmpty(refreshToken))
+            metadata["RefreshToken"] = refreshToken;
+        if (!string.IsNullOrEmpty(clientId))
+            metadata["ClientId"] = clientId;
+        if (!string.IsNullOrEmpty(tokenUrl))
+            metadata["TokenUrl"] = tokenUrl;
+        if (!string.IsNullOrEmpty(audience))
+            metadata["Audience"] = audience;
+        return metadata.Count > 0 ? metadata : null;
     }
 
-    private async Task<(string Token, DateTime ExpiresAt)?> TryRefreshTokenAsync(
+    private async Task<(string Token, DateTime ExpiresAt, string? NewRefreshToken)?> TryRefreshTokenAsync(
         string refreshToken, string clientId, string tokenUrl, CancellationToken ct)
     {
         try
@@ -157,12 +161,9 @@ public class CareLinkAuthTokenProvider(
 
             if (string.IsNullOrEmpty(accessToken)) return null;
 
-            if (!string.IsNullOrEmpty(newRefreshToken))
-                lock (_stateLock) { _refreshToken = newRefreshToken; }
-
             var expiresAt = GetTokenExpiry(accessToken);
             _logger.LogInformation("CareLink token refreshed, expires at {ExpiresAt}", expiresAt);
-            return (accessToken, expiresAt);
+            return (accessToken, expiresAt, newRefreshToken);
         }
         catch (OperationCanceledException) { throw; }
         catch (HttpRequestException ex)
