@@ -1,5 +1,3 @@
-using System.Reflection;
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
@@ -48,11 +46,11 @@ public abstract class ConnectorSyncExecutor<TService, TConfig> : IConnectorSyncE
 
             var dbConfig = await configService.GetConfigurationAsync(ConnectorName, ct);
             if (dbConfig?.Configuration != null)
-                ApplyJsonToConfig(dbConfig.Configuration, config);
+                ConnectorConfigurationBinder.ApplyJsonToConfig(dbConfig.Configuration, config);
 
             var secrets = await configService.GetSecretsAsync(ConnectorName, ct);
             if (secrets.Count > 0)
-                ApplySecretsToConfig(secrets, config);
+                ConnectorConfigurationBinder.ApplySecretsToConfig(secrets, config);
         }
         catch (Exception ex)
         {
@@ -60,61 +58,6 @@ public abstract class ConnectorSyncExecutor<TService, TConfig> : IConnectorSyncE
                 ex,
                 "Failed to load database configuration for {ConnectorName} during manual sync",
                 ConnectorName);
-        }
-    }
-
-    private static void ApplyJsonToConfig(JsonDocument configuration, TConfig config)
-    {
-        var properties = config.GetType()
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        var root = configuration.RootElement;
-
-        foreach (var property in properties)
-        {
-            if (!property.CanWrite)
-                continue;
-
-            var camelName = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
-            if (!root.TryGetProperty(camelName, out var element))
-                continue;
-
-            try
-            {
-                if (property.PropertyType == typeof(string)
-                    && element.ValueKind == JsonValueKind.String)
-                    property.SetValue(config, element.GetString());
-                else if (property.PropertyType == typeof(int)
-                    && element.ValueKind == JsonValueKind.Number)
-                    property.SetValue(config, element.GetInt32());
-                else if (property.PropertyType == typeof(double)
-                    && element.ValueKind == JsonValueKind.Number)
-                    property.SetValue(config, element.GetDouble());
-                else if (property.PropertyType == typeof(bool)
-                    && (element.ValueKind == JsonValueKind.True
-                        || element.ValueKind == JsonValueKind.False))
-                    property.SetValue(config, element.GetBoolean());
-            }
-            catch (Exception)
-            {
-                // Skip properties that can't be set
-            }
-        }
-    }
-
-    private static void ApplySecretsToConfig(
-        Dictionary<string, string> secrets, TConfig config)
-    {
-        var properties = config.GetType()
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance);
-
-        foreach (var property in properties)
-        {
-            if (!property.CanWrite || property.PropertyType != typeof(string))
-                continue;
-
-            var camelName = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
-            if (secrets.TryGetValue(camelName, out var value))
-                property.SetValue(config, value);
         }
     }
 }
