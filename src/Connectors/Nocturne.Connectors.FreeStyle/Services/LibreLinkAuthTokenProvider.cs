@@ -1,10 +1,10 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.FreeStyle.Configurations;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.Connectors.FreeStyle.Services;
 
@@ -13,11 +13,13 @@ namespace Nocturne.Connectors.FreeStyle.Services;
 ///     Returns a Bearer token for API requests.
 /// </summary>
 public class LibreLinkAuthTokenProvider(
-    IOptions<LibreLinkUpConnectorConfiguration> config,
     HttpClient httpClient,
+    IConnectorTokenCache tokenCache,
+    IConnectorServerResolver<LibreLinkUpConnectorConfiguration> serverResolver,
+    ITenantAccessor tenantAccessor,
     ILogger<LibreLinkAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy
-) : AuthTokenProviderBase<LibreLinkUpConnectorConfiguration>(config.Value, httpClient, logger)
+) : AuthTokenProviderBase<LibreLinkUpConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -33,8 +35,10 @@ public class LibreLinkAuthTokenProvider(
     /// </summary>
     protected override int TokenLifetimeBufferMinutes => 60;
 
-    protected override async Task<(string? Token, DateTime ExpiresAt)> AcquireTokenAsync(
-        CancellationToken cancellationToken)
+    protected override string ConnectorName => "FreeStyle";
+
+    protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
+        LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)
     {
         const int maxRetries = LibreLinkUpConstants.Configuration.MaxRetries;
 
@@ -43,21 +47,21 @@ public class LibreLinkAuthTokenProvider(
             {
                 _logger.LogInformation(
                     "Authenticating with LibreLinkUp for user: {Username} (attempt {Attempt}/{MaxRetries})",
-                    _config.Username,
+                    config.Username,
                     attempt + 1,
                     maxRetries);
 
                 var loginPayload = new
                 {
-                    email = _config.Username,
-                    password = _config.Password
+                    email = config.Username,
+                    password = config.Password
                 };
 
                 var json = JsonSerializer.Serialize(loginPayload);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.PostAsync(
-                    LibreLinkUpConstants.ApiPaths.Login,
+                    _serverResolver.BuildUrl(config, LibreLinkUpConstants.ApiPaths.Login),
                     content,
                     cancellationToken);
 
@@ -95,7 +99,7 @@ public class LibreLinkAuthTokenProvider(
             cancellationToken
         );
 
-        if (string.IsNullOrEmpty(token)) return (null, DateTime.MinValue);
+        if (string.IsNullOrEmpty(token)) return (null, DateTime.MinValue, null);
 
         var expiresAt = DateTime.UtcNow.AddHours(24);
 
@@ -103,7 +107,7 @@ public class LibreLinkAuthTokenProvider(
             "LibreLinkUp authentication successful, token expires at {ExpiresAt}",
             expiresAt);
 
-        return (token, expiresAt);
+        return (token, expiresAt, null);
     }
 
     private static bool IsLockedOutResponse(string? content)

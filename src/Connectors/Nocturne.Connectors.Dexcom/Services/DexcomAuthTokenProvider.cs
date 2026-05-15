@@ -1,10 +1,10 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Dexcom.Configurations;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.Connectors.Dexcom.Services;
 
@@ -13,11 +13,13 @@ namespace Nocturne.Connectors.Dexcom.Services;
 ///     Handles the two-step authentication flow (authenticate → get session ID).
 /// </summary>
 public class DexcomAuthTokenProvider(
-    IOptions<DexcomConnectorConfiguration> config,
     HttpClient httpClient,
+    IConnectorTokenCache tokenCache,
+    IConnectorServerResolver<DexcomConnectorConfiguration> serverResolver,
+    ITenantAccessor tenantAccessor,
     ILogger<DexcomAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy)
-    : AuthTokenProviderBase<DexcomConnectorConfiguration>(config.Value, httpClient, logger)
+    : AuthTokenProviderBase<DexcomConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
 {
     private const string DexcomApplicationId = "d89443d2-327c-4a6f-89e5-496bbb0317db";
 
@@ -29,8 +31,10 @@ public class DexcomAuthTokenProvider(
     /// </summary>
     protected override int TokenLifetimeBufferMinutes => 60;
 
-    protected override async Task<(string? Token, DateTime ExpiresAt)> AcquireTokenAsync(
-        CancellationToken cancellationToken)
+    protected override string ConnectorName => "Dexcom";
+
+    protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
+        DexcomConnectorConfiguration config, CancellationToken cancellationToken)
     {
         const int maxRetries = 3;
 
@@ -39,15 +43,15 @@ public class DexcomAuthTokenProvider(
             {
                 _logger.LogInformation(
                     "Authenticating with Dexcom Share for account: {Username} (attempt {Attempt}/{MaxRetries})",
-                    _config.Username,
+                    config.Username,
                     attempt + 1,
                     maxRetries);
 
-                var accountId = await AuthenticatePublisherAccountAsync(cancellationToken);
+                var accountId = await AuthenticatePublisherAccountAsync(config, cancellationToken);
                 if (string.IsNullOrEmpty(accountId))
                     return (null, true);
 
-                var token = await LoginPublisherAccountAsync(accountId, cancellationToken);
+                var token = await LoginPublisherAccountAsync(config, accountId, cancellationToken);
                 if (string.IsNullOrEmpty(token))
                     return (null, true);
 
@@ -60,30 +64,31 @@ public class DexcomAuthTokenProvider(
         );
 
         if (string.IsNullOrEmpty(sessionId))
-            return (null, DateTime.MinValue);
+            return (null, DateTime.MinValue, null);
 
         var expiresAt = DateTime.UtcNow.AddHours(24);
         _logger.LogInformation(
             "Dexcom Share authentication successful, session expires at {ExpiresAt}",
             expiresAt);
 
-        return (sessionId, expiresAt);
+        return (sessionId, expiresAt, null);
     }
 
-    private async Task<string?> AuthenticatePublisherAccountAsync(CancellationToken cancellationToken)
+    private async Task<string?> AuthenticatePublisherAccountAsync(
+        DexcomConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var authPayload = new
         {
-            password = _config.Password,
+            password = config.Password,
             applicationId = DexcomApplicationId,
-            accountName = _config.Username
+            accountName = config.Username
         };
 
         var json = JsonSerializer.Serialize(authPayload);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var response = await _httpClient.PostAsync(
-            "/ShareWebServices/Services/General/AuthenticatePublisherAccount",
+            _serverResolver.BuildUrl(config, "/ShareWebServices/Services/General/AuthenticatePublisherAccount"),
             content,
             cancellationToken);
 
@@ -101,11 +106,12 @@ public class DexcomAuthTokenProvider(
         return null;
     }
 
-    private async Task<string?> LoginPublisherAccountAsync(string accountId, CancellationToken cancellationToken)
+    private async Task<string?> LoginPublisherAccountAsync(
+        DexcomConnectorConfiguration config, string accountId, CancellationToken cancellationToken)
     {
         var sessionPayload = new
         {
-            password = _config.Password,
+            password = config.Password,
             applicationId = DexcomApplicationId,
             accountId
         };
@@ -114,7 +120,7 @@ public class DexcomAuthTokenProvider(
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var response = await _httpClient.PostAsync(
-            "/ShareWebServices/Services/General/LoginPublisherAccountById",
+            _serverResolver.BuildUrl(config, "/ShareWebServices/Services/General/LoginPublisherAccountById"),
             content,
             cancellationToken);
 

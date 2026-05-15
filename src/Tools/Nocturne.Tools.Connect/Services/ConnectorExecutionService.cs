@@ -440,14 +440,19 @@ public class ConnectorExecutionService(
         GlookoConnectorConfiguration config
     )
     {
+        var tokenCache = new ConnectorTokenCache();
+        var tenantAccessor = new ToolTenantAccessor();
+        var serverResolver = new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null);
         var tokenProvider = new GlookoAuthTokenProvider(
-            Options.Create(config),
             new HttpClient(),
+            tokenCache,
+            serverResolver,
+            tenantAccessor,
             _loggerFactory.CreateLogger<GlookoAuthTokenProvider>()
         );
         var service = new GlookoConnectorService(
             new HttpClient(),
-            Options.Create(config),
+            serverResolver,
             _loggerFactory.CreateLogger<GlookoConnectorService>(),
             new ProductionRetryDelayStrategy(),
             new ProductionRateLimitingStrategy(
@@ -463,14 +468,28 @@ public class ConnectorExecutionService(
         DexcomConnectorConfiguration config
     )
     {
+        var tokenCache = new ConnectorTokenCache();
+        var tenantAccessor = new ToolTenantAccessor();
+        var serverResolver = new ConnectorServerResolver<DexcomConnectorConfiguration>(
+            new Dictionary<string, string>
+            {
+                ["US"] = "https://share2.dexcom.com",
+                ["EU"] = "https://shareous1.dexcom.com",
+                ["OUS"] = "https://shareous1.dexcom.com"
+            },
+            c => ((DexcomConnectorConfiguration)c).Server,
+            null);
         var tokenProvider = new DexcomAuthTokenProvider(
-            Options.Create(config),
             new HttpClient(),
+            tokenCache,
+            serverResolver,
+            tenantAccessor,
             _loggerFactory.CreateLogger<DexcomAuthTokenProvider>(),
             new ProductionRetryDelayStrategy()
         );
         var service = new DexcomConnectorService(
             new HttpClient(),
+            serverResolver,
             _loggerFactory.CreateLogger<DexcomConnectorService>(),
             new ProductionRetryDelayStrategy(),
             new ProductionRateLimitingStrategy(
@@ -486,15 +505,20 @@ public class ConnectorExecutionService(
         LibreLinkUpConnectorConfiguration config
     )
     {
+        var tokenCache = new ConnectorTokenCache();
+        var tenantAccessor = new ToolTenantAccessor();
+        var serverResolver = new ConnectorServerResolver<LibreLinkUpConnectorConfiguration>(null, null, null);
         var tokenProvider = new LibreLinkAuthTokenProvider(
-            Options.Create(config),
             new HttpClient(),
+            tokenCache,
+            serverResolver,
+            tenantAccessor,
             _loggerFactory.CreateLogger<LibreLinkAuthTokenProvider>(),
             new ProductionRetryDelayStrategy()
         );
         var service = new LibreConnectorService(
             new HttpClient(),
-            Options.Create(config),
+            serverResolver,
             _loggerFactory.CreateLogger<LibreConnectorService>(),
             new ProductionRetryDelayStrategy(),
             new ProductionRateLimitingStrategy(
@@ -510,14 +534,19 @@ public class ConnectorExecutionService(
         MyLifeConnectorConfiguration config
     )
     {
+        var tokenCache = new ConnectorTokenCache();
+        var tenantAccessor = new ToolTenantAccessor();
+        var serverResolver = new ConnectorServerResolver<MyLifeConnectorConfiguration>(null, null, null);
         var sessionStore = new MyLifeSessionStore();
         var soapClient = new MyLifeSoapClient(
             new HttpClient(),
             _loggerFactory.CreateLogger<MyLifeSoapClient>()
         );
         var tokenProvider = new MyLifeAuthTokenProvider(
-            Options.Create(config),
             new HttpClient(),
+            tokenCache,
+            serverResolver,
+            tenantAccessor,
             soapClient,
             sessionStore,
             _loggerFactory.CreateLogger<MyLifeAuthTokenProvider>()
@@ -526,7 +555,7 @@ public class ConnectorExecutionService(
         var eventProcessor = new MyLifeEventProcessor();
         var service = new MyLifeConnectorService(
             new HttpClient(),
-            Options.Create(config),
+            serverResolver,
             _loggerFactory.CreateLogger<MyLifeConnectorService>(),
             tokenProvider,
             eventProcessor,
@@ -535,6 +564,17 @@ public class ConnectorExecutionService(
             null
         );
         return new ConnectorServiceWrapper<MyLifeConnectorConfiguration>(service);
+    }
+
+    /// <summary>
+    /// Stub tenant accessor for CLI tool usage (single-tenant context).
+    /// </summary>
+    private class ToolTenantAccessor : Nocturne.Core.Contracts.Multitenancy.ITenantAccessor
+    {
+        public bool IsResolved => true;
+        public Guid TenantId => Guid.Empty;
+        public Nocturne.Core.Contracts.Multitenancy.TenantContext? Context => null;
+        public void SetTenant(Nocturne.Core.Contracts.Multitenancy.TenantContext context) { }
     }
 }
 

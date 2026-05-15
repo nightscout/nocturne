@@ -345,27 +345,33 @@ public class EversenseConnectorServiceTests
 
         public FakeEversenseAuthTokenProvider(string? tokenToReturn)
             : base(
-                Options.Create(new EversenseConnectorConfiguration
-                {
-                    Username = "test@example.com",
-                    Password = "test-password",
-                }),
                 new HttpClient(),
+                new Nocturne.Connectors.Core.Services.ConnectorTokenCache(),
+                new Nocturne.Connectors.Core.Services.ConnectorServerResolver<EversenseConnectorConfiguration>(null, null, null),
+                new FakeTenantAccessor(),
                 NullLogger<EversenseAuthTokenProvider>.Instance,
                 Mock.Of<IRetryDelayStrategy>())
         {
             _tokenToReturn = tokenToReturn;
         }
 
-        protected override Task<(string? Token, DateTime ExpiresAt)> AcquireTokenAsync(
-            CancellationToken cancellationToken)
+        protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
+            EversenseConnectorConfiguration config, CancellationToken cancellationToken)
         {
             if (_tokenToReturn != null)
-                return Task.FromResult<(string? Token, DateTime ExpiresAt)>(
-                    (_tokenToReturn, DateTime.UtcNow.AddHours(1)));
+                return Task.FromResult<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)>(
+                    (_tokenToReturn, DateTime.UtcNow.AddHours(1), null));
 
-            return Task.FromResult<(string? Token, DateTime ExpiresAt)>(
-                (null, DateTime.MinValue));
+            return Task.FromResult<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)>(
+                (null, DateTime.MinValue, null));
+        }
+
+        private class FakeTenantAccessor : Nocturne.Core.Contracts.Multitenancy.ITenantAccessor
+        {
+            public bool IsResolved => true;
+            public Guid TenantId => Guid.Empty;
+            public Nocturne.Core.Contracts.Multitenancy.TenantContext? Context => null;
+            public void SetTenant(Nocturne.Core.Contracts.Multitenancy.TenantContext context) { }
         }
     }
 
@@ -430,6 +436,7 @@ public class EversenseConnectorServiceTests
 
             Service = new EversenseConnectorService(
                 httpClient,
+                new Nocturne.Connectors.Core.Services.ConnectorServerResolver<EversenseConnectorConfiguration>(null, null, null),
                 logger,
                 retryStrategy,
                 tokenProvider,

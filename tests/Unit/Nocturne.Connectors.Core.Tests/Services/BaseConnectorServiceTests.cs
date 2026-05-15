@@ -15,7 +15,9 @@ public class BaseConnectorServiceTests
             HttpClient httpClient,
             ILogger<TestConnectorService> logger,
             IConnectorPublisher? publisher = null)
-            : base(httpClient, logger, publisher)
+            : base(httpClient,
+                new ConnectorServerResolver<TestConfig>(null, null, null),
+                logger, publisher)
         {
         }
 
@@ -27,18 +29,9 @@ public class BaseConnectorServiceTests
             => Task.FromResult(Enumerable.Empty<Nocturne.Core.Models.Entry>());
     }
 
-    public class TestConfig : IConnectorConfiguration
+    public class TestConfig : BaseConnectorConfiguration
     {
-        public int SyncIntervalMinutes { get; set; } = 5;
-        public bool Enabled { get; set; } = true;
-        public int BatchSize { get; set; } = 100;
-        public ConnectSource ConnectSource { get; set; } = ConnectSource.Dexcom;
-        public int MaxRetryAttempts { get; set; } = 3;
-        public Nocturne.Core.Models.V4.GlucoseProcessing GlucoseProcessing { get; set; } = Nocturne.Core.Models.V4.GlucoseProcessing.Smoothed;
-
-        public void Validate() { }
-        public bool IsDataTypeEnabled(SyncDataType type) => true;
-        public List<SyncDataType> GetEnabledDataTypes(List<SyncDataType> supportedTypes) => supportedTypes;
+        protected override void ValidateSourceSpecificConfiguration() { }
     }
 
     [Fact]

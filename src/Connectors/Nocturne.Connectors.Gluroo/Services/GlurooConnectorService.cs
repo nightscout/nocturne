@@ -11,12 +11,13 @@ public class GlurooConnectorService : NightscoutConnectorServiceBase<GlurooConne
 {
     public GlurooConnectorService(
         HttpClient httpClient,
+        IConnectorServerResolver<GlurooConnectorConfiguration> serverResolver,
         ILogger<GlurooConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
         GlurooConnectorConfiguration config,
         IConnectorPublisher? publisher = null
-    ) : base(httpClient, logger, retryDelayStrategy, rateLimitingStrategy, config, publisher) { }
+    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, rateLimitingStrategy, config, publisher) { }
 
     protected override string ConnectorSource => DataSources.GlurooConnector;
     public override string ServiceName => "Gluroo Global Connect";

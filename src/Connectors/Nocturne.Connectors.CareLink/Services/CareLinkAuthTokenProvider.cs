@@ -1,9 +1,9 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.CareLink.Configurations;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.Connectors.CareLink.Services;
 
@@ -12,16 +12,20 @@ namespace Nocturne.Connectors.CareLink.Services;
 /// Attempts refresh token grant first, falling back to full Auth0 PKCE credential login.
 /// </summary>
 public class CareLinkAuthTokenProvider(
-    IOptions<CareLinkConnectorConfiguration> config,
     HttpClient httpClient,
+    IConnectorTokenCache tokenCache,
+    IConnectorServerResolver<CareLinkConnectorConfiguration> serverResolver,
+    ITenantAccessor tenantAccessor,
     ILogger<CareLinkAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy)
-    : AuthTokenProviderBase<CareLinkConnectorConfiguration>(config.Value, httpClient, logger)
+    : AuthTokenProviderBase<CareLinkConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
 {
     private readonly IRetryDelayStrategy _retryDelayStrategy =
         retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
     protected override int TokenLifetimeBufferMinutes => 1;
+
+    protected override string ConnectorName => "CareLink";
 
     private string? _refreshToken;
     private string? _clientId;
@@ -49,13 +53,14 @@ public class CareLinkAuthTokenProvider(
         }
     }
 
-    protected override async Task<(string? Token, DateTime ExpiresAt)> AcquireTokenAsync(CancellationToken cancellationToken)
+    protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
+        CareLinkConnectorConfiguration config, CancellationToken cancellationToken)
     {
         // Try refresh first
         string? refreshToken, clientId, tokenUrl;
         lock (_stateLock)
         {
-            refreshToken = _refreshToken ?? _config.RefreshToken;
+            refreshToken = _refreshToken ?? config.RefreshToken;
             clientId = _clientId;
             tokenUrl = _tokenUrl;
         }
@@ -63,17 +68,21 @@ public class CareLinkAuthTokenProvider(
         if (!string.IsNullOrEmpty(refreshToken) && !string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(tokenUrl))
         {
             var refreshResult = await TryRefreshTokenAsync(refreshToken, clientId, tokenUrl, cancellationToken);
-            if (refreshResult != null) return refreshResult.Value;
+            if (refreshResult != null)
+            {
+                var (token, expiresAt) = refreshResult.Value;
+                return (token, expiresAt, BuildMetadata());
+            }
             _logger.LogWarning("Refresh token failed, falling back to credential login");
         }
 
         // Credential login fallback
-        if (string.IsNullOrEmpty(_config.Password))
+        if (string.IsNullOrEmpty(config.Password))
         {
             _logger.LogError(
                 "Cannot authenticate: refresh token is invalid/expired and no password is configured. " +
                 "Please provide a valid password or a new refresh token.");
-            return (null, DateTime.MinValue);
+            return (null, DateTime.MinValue, null);
         }
 
         const int maxRetries = 2;
@@ -81,15 +90,15 @@ public class CareLinkAuthTokenProvider(
             async attempt =>
             {
                 _logger.LogInformation("Performing CareLink credential login for {Username} (attempt {Attempt}/{Max})",
-                    _config.Username, attempt + 1, maxRetries);
+                    config.Username, attempt + 1, maxRetries);
 
                 using var authFlow = new CareLinkAuthFlowService(_logger);
-                var authResult = await authFlow.LoginAsync(_config.Username, _config.Password!, _config.Server, cancellationToken);
+                var authResult = await authFlow.LoginAsync(config.Username, config.Password!, config.Server, cancellationToken);
                 return (authResult, authResult == null);
             },
             _retryDelayStrategy, maxRetries, "CareLink credential login", cancellationToken);
 
-        if (result == null) return (null, DateTime.MinValue);
+        if (result == null) return (null, DateTime.MinValue, null);
 
         lock (_stateLock)
         {
@@ -99,7 +108,24 @@ public class CareLinkAuthTokenProvider(
             _audience = result.Audience;
         }
 
-        return (result.AccessToken, GetTokenExpiry(result.AccessToken));
+        return (result.AccessToken, GetTokenExpiry(result.AccessToken), BuildMetadata());
+    }
+
+    private IReadOnlyDictionary<string, string>? BuildMetadata()
+    {
+        lock (_stateLock)
+        {
+            var metadata = new Dictionary<string, string>();
+            if (!string.IsNullOrEmpty(_refreshToken))
+                metadata["RefreshToken"] = _refreshToken;
+            if (!string.IsNullOrEmpty(_clientId))
+                metadata["ClientId"] = _clientId;
+            if (!string.IsNullOrEmpty(_tokenUrl))
+                metadata["TokenUrl"] = _tokenUrl;
+            if (!string.IsNullOrEmpty(_audience))
+                metadata["Audience"] = _audience;
+            return metadata.Count > 0 ? metadata : null;
+        }
     }
 
     private async Task<(string Token, DateTime ExpiresAt)?> TryRefreshTokenAsync(

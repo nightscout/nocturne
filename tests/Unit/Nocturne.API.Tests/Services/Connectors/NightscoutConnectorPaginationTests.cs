@@ -57,6 +57,7 @@ public class NightscoutConnectorPaginationTests
 
         return new NightscoutConnectorService(
             httpClient,
+            new Nocturne.Connectors.Core.Services.ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null),
             Mock.Of<ILogger<NightscoutConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
             Mock.Of<IRateLimitingStrategy>(),

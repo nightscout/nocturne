@@ -3,7 +3,6 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Dexcom.Configurations;
@@ -64,14 +63,19 @@ public class ConnectorTestService
             };
 
             var httpClient = new HttpClient();
+            var tokenCache = new ConnectorTokenCache();
+            var tenantAccessor = new ToolTenantAccessor();
+            var serverResolver = new ConnectorServerResolver<GlookoConnectorConfiguration>(null, null, null);
             var tokenProvider = new GlookoAuthTokenProvider(
-                Options.Create(glookoConfig),
                 httpClient,
+                tokenCache,
+                serverResolver,
+                tenantAccessor,
                 _loggerFactory.CreateLogger<GlookoAuthTokenProvider>()
             );
             using var connector = new GlookoConnectorService(
                 httpClient,
-                Options.Create(glookoConfig),
+                serverResolver,
                 _loggerFactory.CreateLogger<GlookoConnectorService>(),
                 new ProductionRetryDelayStrategy(),
                 new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
@@ -147,14 +151,28 @@ public class ConnectorTestService
             };
 
             var dexcomHttpClient = new HttpClient();
+            var tokenCache = new ConnectorTokenCache();
+            var tenantAccessor = new ToolTenantAccessor();
+            var serverResolver = new ConnectorServerResolver<DexcomConnectorConfiguration>(
+                new Dictionary<string, string>
+                {
+                    ["US"] = "https://share2.dexcom.com",
+                    ["EU"] = "https://shareous1.dexcom.com",
+                    ["OUS"] = "https://shareous1.dexcom.com"
+                },
+                c => ((DexcomConnectorConfiguration)c).Server,
+                null);
             var dexcomTokenProvider = new DexcomAuthTokenProvider(
-                Options.Create(dexcomConfig),
                 dexcomHttpClient,
+                tokenCache,
+                serverResolver,
+                tenantAccessor,
                 _loggerFactory.CreateLogger<DexcomAuthTokenProvider>(),
                 new ProductionRetryDelayStrategy()
             );
             using var connector = new DexcomConnectorService(
                 dexcomHttpClient,
+                serverResolver,
                 _loggerFactory.CreateLogger<DexcomConnectorService>(),
                 new ProductionRetryDelayStrategy(),
                 new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
@@ -230,15 +248,20 @@ public class ConnectorTestService
             };
 
             var libreHttpClient = new HttpClient();
+            var tokenCache = new ConnectorTokenCache();
+            var tenantAccessor = new ToolTenantAccessor();
+            var serverResolver = new ConnectorServerResolver<LibreLinkUpConnectorConfiguration>(null, null, null);
             var libreTokenProvider = new LibreLinkAuthTokenProvider(
-                Options.Create(libreConfig),
                 libreHttpClient,
+                tokenCache,
+                serverResolver,
+                tenantAccessor,
                 _loggerFactory.CreateLogger<LibreLinkAuthTokenProvider>(),
                 new ProductionRetryDelayStrategy()
             );
             using var connector = new LibreConnectorService(
                 libreHttpClient,
-                Options.Create(libreConfig),
+                serverResolver,
                 _loggerFactory.CreateLogger<LibreConnectorService>(),
                 new ProductionRetryDelayStrategy(),
                 new ProductionRateLimitingStrategy(_loggerFactory.CreateLogger<ProductionRateLimitingStrategy>()),
@@ -279,5 +302,16 @@ public class ConnectorTestService
                 DateTime.UtcNow - startTime
             );
         }
+    }
+
+    /// <summary>
+    /// Stub tenant accessor for CLI tool usage (single-tenant context).
+    /// </summary>
+    private class ToolTenantAccessor : Nocturne.Core.Contracts.Multitenancy.ITenantAccessor
+    {
+        public bool IsResolved => true;
+        public Guid TenantId => Guid.Empty;
+        public Nocturne.Core.Contracts.Multitenancy.TenantContext? Context => null;
+        public void SetTenant(Nocturne.Core.Contracts.Multitenancy.TenantContext context) { }
     }
 }

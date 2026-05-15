@@ -27,12 +27,13 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
 
     public TwiistConnectorService(
         HttpClient httpClient,
+        IConnectorServerResolver<TwiistConnectorConfiguration> serverResolver,
         ILogger<TwiistConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
         TwiistAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null)
-        : base(httpClient, logger, publisher)
+        : base(httpClient, serverResolver, logger, publisher)
     {
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));

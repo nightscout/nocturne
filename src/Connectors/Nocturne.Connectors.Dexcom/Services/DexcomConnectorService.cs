@@ -25,13 +25,14 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
 
     public DexcomConnectorService(
         HttpClient httpClient,
+        IConnectorServerResolver<DexcomConnectorConfiguration> serverResolver,
         ILogger<DexcomConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
         DexcomAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null
     )
-        : base(httpClient, logger, publisher)
+        : base(httpClient, serverResolver, logger, publisher)
     {
         _retryDelayStrategy =
             retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
@@ -49,13 +50,7 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
 
     public override async Task<bool> AuthenticateAsync()
     {
-        var token = await _tokenProvider.GetValidTokenAsync();
-        if (token == null)
-        {
-            TrackFailedRequest("Failed to get valid token");
-            return false;
-        }
-
+        // AuthenticateAsync is a legacy method; actual auth happens per-tenant in sync flow
         TrackSuccessfulRequest();
         return true;
     }
@@ -63,9 +58,10 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
     /// <summary>
     ///     Fetches SensorGlucose records from the Dexcom Share API.
     /// </summary>
-    private async Task<IEnumerable<SensorGlucose>> FetchSensorGlucoseAsync(DateTime? since = null)
+    private async Task<IEnumerable<SensorGlucose>> FetchSensorGlucoseAsync(
+        DexcomConnectorConfiguration config, DateTime? since = null)
     {
-        var batchData = await FetchBatchDataAsync(since);
+        var batchData = await FetchBatchDataAsync(config, since);
         if (batchData == null) return [];
 
         var records = _sensorGlucoseMapper.MapBatchData(batchData).ToList();
@@ -98,7 +94,7 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
 
         try
         {
-            var sensorGlucose = await FetchSensorGlucoseAsync(request.From);
+            var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From);
             var sgList = sensorGlucose.ToList();
 
             if (sgList.Count > 0)
@@ -131,9 +127,10 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
         return result;
     }
 
-    private async Task<DexcomEntry[]?> FetchBatchDataAsync(DateTime? since = null)
+    private async Task<DexcomEntry[]?> FetchBatchDataAsync(
+        DexcomConnectorConfiguration config, DateTime? since = null)
     {
-        var sessionId = await _tokenProvider.GetValidTokenAsync();
+        var sessionId = await _tokenProvider.GetValidTokenAsync(config);
         if (string.IsNullOrEmpty(sessionId))
         {
             _logger.LogWarning(
@@ -147,12 +144,12 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
         await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var result = await ExecuteWithRetryAsync(
-            async () => await FetchRawDataCoreAsync(sessionId, since),
+            async () => await FetchRawDataCoreAsync(config, sessionId, since),
             _retryDelayStrategy,
             async () =>
             {
                 _tokenProvider.InvalidateToken();
-                var newToken = await _tokenProvider.GetValidTokenAsync();
+                var newToken = await _tokenProvider.GetValidTokenAsync(config);
                 if (string.IsNullOrEmpty(newToken)) return false;
                 sessionId = newToken;
                 return true;
@@ -177,7 +174,8 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
         return result;
     }
 
-    private async Task<DexcomEntry[]?> FetchRawDataCoreAsync(string sessionId, DateTime? since = null)
+    private async Task<DexcomEntry[]?> FetchRawDataCoreAsync(
+        DexcomConnectorConfiguration config, string sessionId, DateTime? since = null)
     {
         var twoDaysAgo = DateTime.UtcNow.AddDays(-2);
         var startTime = since.HasValue
@@ -188,11 +186,11 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
         var maxCount = Math.Ceiling(timeDiff.TotalMinutes / 5);
         var minutes = (int)(maxCount * 5);
 
-        var url =
+        var path =
             $"/ShareWebServices/Services/Publisher/ReadPublisherLatestGlucoseValues?sessionID={sessionId}&minutes={minutes}&maxCount={(int)maxCount}";
 
         var response = await _httpClient.PostAsync(
-            url,
+            _serverResolver.BuildUrl(config, path),
             new StringContent("{}", Encoding.UTF8, "application/json")
         );
 

@@ -24,12 +24,13 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
 
     public EversenseConnectorService(
         HttpClient httpClient,
+        IConnectorServerResolver<EversenseConnectorConfiguration> serverResolver,
         ILogger<EversenseConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         EversenseAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null
     )
-        : base(httpClient, logger, publisher)
+        : base(httpClient, serverResolver, logger, publisher)
     {
         _retryDelayStrategy =
             retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));

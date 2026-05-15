@@ -20,11 +20,12 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
     public NocturneRemoteConnectorService(
         HttpClient httpClient,
+        IConnectorServerResolver<NocturneRemoteConnectorConfiguration> serverResolver,
         ILogger<NocturneRemoteConnectorService> logger,
         NocturneRemoteConnectorConfiguration config,
         IConnectorPublisher? publisher = null
     )
-        : base(httpClient, logger, publisher)
+        : base(httpClient, serverResolver, logger, publisher)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
     }

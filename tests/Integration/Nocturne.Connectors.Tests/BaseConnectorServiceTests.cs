@@ -108,7 +108,9 @@ public class TestConnectorService : BaseConnectorService<TestConnectorConfigurat
         IConnectorPublisher publisher,
         ILogger<BaseConnectorService<TestConnectorConfiguration>> logger
     )
-        : base(new HttpClient(), logger, publisher) { }
+        : base(new HttpClient(),
+            new Nocturne.Connectors.Core.Services.ConnectorServerResolver<TestConnectorConfiguration>(null, null, null),
+            logger, publisher) { }
 
     protected override string ConnectorSource => "test-connector";
     public override string ServiceName => "Test Connector";

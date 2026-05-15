@@ -1,10 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Eversense.Configurations;
 using Nocturne.Connectors.Eversense.Models;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.Connectors.Eversense.Services;
 
@@ -13,19 +13,23 @@ namespace Nocturne.Connectors.Eversense.Services;
 ///     Uses OAuth2 resource owner password grant against the Eversense IAM endpoint.
 /// </summary>
 public class EversenseAuthTokenProvider(
-    IOptions<EversenseConnectorConfiguration> config,
     HttpClient httpClient,
+    IConnectorTokenCache tokenCache,
+    IConnectorServerResolver<EversenseConnectorConfiguration> serverResolver,
+    ITenantAccessor tenantAccessor,
     ILogger<EversenseAuthTokenProvider> logger,
     IRetryDelayStrategy retryDelayStrategy)
-    : AuthTokenProviderBase<EversenseConnectorConfiguration>(config.Value, httpClient, logger)
+    : AuthTokenProviderBase<EversenseConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
 {
     private readonly IRetryDelayStrategy _retryDelayStrategy =
         retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
     protected override int TokenLifetimeBufferMinutes => 5;
 
-    protected override async Task<(string? Token, DateTime ExpiresAt)> AcquireTokenAsync(
-        CancellationToken cancellationToken)
+    protected override string ConnectorName => "Eversense";
+
+    protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
+        EversenseConnectorConfiguration config, CancellationToken cancellationToken)
     {
         const int maxRetries = 3;
 
@@ -34,11 +38,11 @@ public class EversenseAuthTokenProvider(
             {
                 _logger.LogInformation(
                     "Authenticating with Eversense Now for account: {Username} (attempt {Attempt}/{MaxRetries})",
-                    _config.Username,
+                    config.Username,
                     attempt + 1,
                     maxRetries);
 
-                var result = await RequestTokenAsync(cancellationToken);
+                var result = await RequestTokenAsync(config, cancellationToken);
                 return (result, result == null);
             },
             _retryDelayStrategy,
@@ -48,28 +52,29 @@ public class EversenseAuthTokenProvider(
         );
 
         if (token == null)
-            return (null, DateTime.MinValue);
+            return (null, DateTime.MinValue, null);
 
         var expiresAt = DateTime.UtcNow.AddSeconds(token.ExpiresIn);
         _logger.LogInformation(
             "Eversense Now authentication successful, token expires at {ExpiresAt}",
             expiresAt);
 
-        return (token.AccessToken, expiresAt);
+        return (token.AccessToken, expiresAt, null);
     }
 
-    private async Task<EversenseTokenResponse?> RequestTokenAsync(CancellationToken cancellationToken)
+    private async Task<EversenseTokenResponse?> RequestTokenAsync(
+        EversenseConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var authBaseUrl = _config.Server.ToUpperInvariant() switch
+        var authBaseUrl = config.Server.ToUpperInvariant() switch
         {
             "US" => EversenseConstants.Servers.UsAuth,
-            _ => throw new ArgumentOutOfRangeException(nameof(_config.Server), _config.Server, "Unsupported Eversense server region")
+            _ => throw new ArgumentOutOfRangeException(nameof(config.Server), config.Server, "Unsupported Eversense server region")
         };
 
         var formContent = new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["username"] = _config.Username,
-            ["password"] = _config.Password,
+            ["username"] = config.Username,
+            ["password"] = config.Password,
             ["grant_type"] = "password",
             ["client_id"] = EversenseConstants.ClientId,
             ["client_secret"] = EversenseConstants.ClientSecret

@@ -20,13 +20,14 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
     public NightscoutConnectorServiceBase(
         HttpClient httpClient,
+        IConnectorServerResolver<TConfig> serverResolver,
         ILogger logger,
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
         TConfig config,
         IConnectorPublisher? publisher = null
     )
-        : base(httpClient, logger, publisher)
+        : base(httpClient, serverResolver, logger, publisher)
     {
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
@@ -767,10 +768,11 @@ public class NightscoutConnectorService : NightscoutConnectorServiceBase<Nightsc
 {
     public NightscoutConnectorService(
         HttpClient httpClient,
+        IConnectorServerResolver<NightscoutConnectorConfiguration> serverResolver,
         ILogger<NightscoutConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
         NightscoutConnectorConfiguration config,
         IConnectorPublisher? publisher = null
-    ) : base(httpClient, logger, retryDelayStrategy, rateLimitingStrategy, config, publisher) { }
+    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, rateLimitingStrategy, config, publisher) { }
 }

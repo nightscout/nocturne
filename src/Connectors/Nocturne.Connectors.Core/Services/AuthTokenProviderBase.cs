@@ -125,6 +125,16 @@ public abstract class AuthTokenProviderBase<TConfig>(
         }
     }
 
+    /// <summary>
+    ///     Returns the cached session for the current tenant, or null if not cached.
+    ///     Used by connector services that need to read metadata (e.g. session cookies, user data).
+    /// </summary>
+    public async Task<ConnectorSession?> GetCachedSessionAsync()
+    {
+        if (!_tenantAccessor.IsResolved) return null;
+        return await _tokenCache.GetAsync(ConnectorName, _tenantAccessor.TenantId);
+    }
+
     /// <inheritdoc />
     public void InvalidateToken()
     {

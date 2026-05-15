@@ -30,12 +30,13 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
     public CareLinkConnectorService(
         HttpClient httpClient,
+        IConnectorServerResolver<CareLinkConnectorConfiguration> serverResolver,
         CareLinkAuthTokenProvider tokenProvider,
         IConnectorConfigurationService configService,
         ILogger<CareLinkConnectorService> logger,
         IConnectorPublisher? publisher = null
     )
-        : base(httpClient, logger, publisher)
+        : base(httpClient, serverResolver, logger, publisher)
     {
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
         _configService = configService ?? throw new ArgumentNullException(nameof(configService));
@@ -47,7 +48,14 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     public override List<SyncDataType> SupportedDataTypes => [SyncDataType.Glucose, SyncDataType.DeviceStatus];
 
     /// <inheritdoc />
-    public override async Task<bool> AuthenticateAsync()
+    public override Task<bool> AuthenticateAsync()
+    {
+        // Legacy method; actual auth happens per-tenant in PerformSyncInternalAsync
+        TrackSuccessfulRequest();
+        return Task.FromResult(true);
+    }
+
+    private async Task<bool> AuthenticateWithConfigAsync(CareLinkConnectorConfiguration config)
     {
         // Seed the token provider with persisted secrets so refresh is available immediately
         var secrets = await _configService.GetSecretsAsync("CareLink");
@@ -56,9 +64,6 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         secrets.TryGetValue("token_url", out var savedTokenUrl);
         secrets.TryGetValue("audience", out var savedAudience);
 
-        // Persisted secrets take precedence; the token provider falls back to the
-        // statically-configured RefreshToken from IOptions<CareLinkConnectorConfiguration>
-        // when the seed value is null.
         _tokenProvider.InitializeFromSecrets(
             savedRefreshToken,
             savedClientId,
@@ -66,7 +71,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             savedAudience);
         _initialRefreshToken = _tokenProvider.CurrentRefreshToken;
 
-        var token = await _tokenProvider.GetValidTokenAsync();
+        var token = await _tokenProvider.GetValidTokenAsync(config);
         if (string.IsNullOrEmpty(token))
         {
             TrackFailedRequest("Failed to obtain CareLink access token");
@@ -88,8 +93,15 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
-        // AuthenticateAsync (called by the base SyncDataAsync before this method) populates
-        // _accessToken. Guard against direct calls that bypass the base flow.
+        // Authenticate with per-tenant config
+        if (!await AuthenticateWithConfigAsync(config))
+        {
+            result.Success = false;
+            result.Errors.Add("Authentication failed");
+            result.EndTime = DateTimeOffset.UtcNow;
+            return result;
+        }
+
         if (string.IsNullOrEmpty(_accessToken))
         {
             _logger.LogError("[{ConnectorSource}] No access token available — authentication must succeed before sync", ConnectorSource);

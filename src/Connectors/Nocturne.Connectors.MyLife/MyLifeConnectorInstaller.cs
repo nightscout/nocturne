@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
@@ -24,22 +23,20 @@ public class MyLifeConnectorInstaller : IConnectorInstaller
         if (!config.Enabled)
             return;
 
+        // Register server resolver, config loader, and token cache
+        services.AddSingleton<IConnectorServerResolver<MyLifeConnectorConfiguration>>(
+            new ConnectorServerResolver<MyLifeConnectorConfiguration>(null, null, null));
+        services.AddSingleton<IConnectorConfigurationLoader<MyLifeConnectorConfiguration>,
+            ConnectorConfigurationLoader<MyLifeConnectorConfiguration>>();
+        services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
+        services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
+
         services.AddHttpClient<MyLifeSoapClient>();
         services.AddHttpClient<MyLifeAuthTokenProvider>();
         services.AddHttpClient<MyLifeConnectorService>();
         services.AddSingleton<MyLifeSessionStore>();
 
-        // Register as Singleton to preserve token cache across requests
-        services.AddSingleton(sp =>
-        {
-            var factory = sp.GetRequiredService<IHttpClientFactory>();
-            var httpClient = factory.CreateClient(nameof(MyLifeAuthTokenProvider));
-            var options = sp.GetRequiredService<IOptions<MyLifeConnectorConfiguration>>();
-            var soapClient = sp.GetRequiredService<MyLifeSoapClient>();
-            var sessionStore = sp.GetRequiredService<MyLifeSessionStore>();
-            var logger = sp.GetRequiredService<ILogger<MyLifeAuthTokenProvider>>();
-            return new MyLifeAuthTokenProvider(options, httpClient, soapClient, sessionStore, logger);
-        });
+        services.AddConnectorTokenProvider<MyLifeAuthTokenProvider>();
 
         services.AddSingleton<MyLifeSyncService>();
         services.AddSingleton<MyLifeEventProcessor>();

@@ -2,11 +2,12 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Connectors.Glooko.Utilities;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.Connectors.Glooko.Services;
 
@@ -19,47 +20,40 @@ namespace Nocturne.Connectors.Glooko.Services;
 public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConfiguration>
 {
     public GlookoAuthTokenProvider(
-        IOptions<GlookoConnectorConfiguration> config,
         HttpClient httpClient,
+        IConnectorTokenCache tokenCache,
+        IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
+        ITenantAccessor tenantAccessor,
         ILogger<GlookoAuthTokenProvider> logger)
-        : base(config.Value, httpClient, logger)
+        : base(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
     {
     }
 
-    /// <summary>
-    ///     Gets the user data obtained during authentication.
-    ///     Contains the Glooko code needed for API requests.
-    /// </summary>
-    public GlookoUserData? UserData { get; private set; }
+    protected override string ConnectorName => "Glooko";
 
-    /// <summary>
-    ///     Gets the session cookie for API requests.
-    /// </summary>
-    public string? SessionCookie { get; private set; }
-
-    protected override async Task<(string? Token, DateTime ExpiresAt)> AcquireTokenAsync(
-        CancellationToken cancellationToken)
+    protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
+        GlookoConnectorConfiguration config, CancellationToken cancellationToken)
     {
         try
         {
             _logger.LogInformation("Authenticating with Glooko server: {Server} (v3={UseV3})",
-                _config.Server, _config.UseV3Api);
+                config.Server, config.UseV3Api);
 
-            var baseUrl = GlookoConstants.ResolveBaseUrl(_config.Server);
-            var webOrigin = GlookoConstants.ResolveWebOrigin(_config.Server);
+            var baseUrl = GlookoConstants.ResolveBaseUrl(config.Server);
+            var webOrigin = GlookoConstants.ResolveWebOrigin(config.Server);
 
             string signInPath;
             string loginJson;
 
-            if (_config.UseV3Api)
+            if (config.UseV3Api)
             {
                 signInPath = GlookoConstants.V3SignInPath;
                 var loginData = new
                 {
                     user = new
                     {
-                        email = _config.Email,
-                        password = _config.Password
+                        email = config.Email,
+                        password = config.Password
                     }
                 };
                 loginJson = JsonSerializer.Serialize(loginData);
@@ -71,8 +65,8 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
                 {
                     userLogin = new
                     {
-                        email = _config.Email,
-                        password = _config.Password
+                        email = config.Email,
+                        password = config.Password
                     },
                     deviceInformation = GlookoConstants.DeviceInformation
                 };
@@ -93,30 +87,32 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
                 var errorContent = await GlookoHttpHelper.ReadResponseAsync(response, cancellationToken);
                 _logger.LogError("Glooko authentication failed: {StatusCode} - {Error}",
                     response.StatusCode, errorContent);
-                return (null, DateTime.MinValue);
+                return (null, DateTime.MinValue, null);
             }
 
             // Extract session cookie from response headers
+            string? sessionCookie = null;
             if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
                 foreach (var cookie in cookies)
                     if (cookie.StartsWith($"{GlookoConstants.SessionCookieName}="))
                     {
-                        SessionCookie = cookie.Split(';')[0];
+                        sessionCookie = cookie.Split(';')[0];
                         _logger.LogInformation("Session cookie extracted successfully");
                         break;
                     }
 
             // Parse user data from sign-in response (V2 only — V3 sign-in returns { success, two_fa_required })
             var responseJson = await GlookoHttpHelper.ReadResponseAsync(response, cancellationToken);
-            if (!_config.UseV3Api)
+            GlookoUserData? userData = null;
+            if (!config.UseV3Api)
             {
                 try
                 {
-                    UserData = JsonSerializer.Deserialize<GlookoUserData>(responseJson);
-                    if (UserData?.GlookoCode != null)
+                    userData = JsonSerializer.Deserialize<GlookoUserData>(responseJson);
+                    if (userData?.GlookoCode != null)
                         _logger.LogInformation(
                             "User data parsed successfully. Glooko code: {GlookoCode}",
-                            UserData.GlookoCode);
+                            userData.GlookoCode);
                 }
                 catch (Exception ex)
                 {
@@ -124,20 +120,20 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
                 }
             }
 
-            if (!string.IsNullOrEmpty(SessionCookie))
+            if (!string.IsNullOrEmpty(sessionCookie))
             {
                 // V3 sign-in doesn't return user data — fetch it from /api/v3/session/users
-                if (_config.UseV3Api)
+                if (config.UseV3Api)
                 {
                     try
                     {
-                        var userData = await FetchV3UserDataAsync(baseUrl, webOrigin, cancellationToken);
-                        if (userData != null)
+                        var v3User = await FetchV3UserDataAsync(baseUrl, webOrigin, sessionCookie, cancellationToken);
+                        if (v3User != null)
                         {
-                            UserData = new GlookoUserData { User = new GlookoUserLogin { GlookoCode = userData.GlookoCode } };
+                            userData = new GlookoUserData { User = new GlookoUserLogin { GlookoCode = v3User.GlookoCode } };
                             _logger.LogInformation(
                                 "V3 user profile loaded. Glooko code: {GlookoCode}, MeterUnits: {Units}",
-                                userData.GlookoCode, userData.MeterUnits);
+                                v3User.GlookoCode, v3User.MeterUnits);
                         }
                         else
                         {
@@ -151,16 +147,26 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
                 }
 
                 _logger.LogInformation("Glooko authentication successful");
-                return (SessionCookie, DateTime.UtcNow.Add(GlookoConstants.SessionLifetime));
+
+                var metadata = new Dictionary<string, string>();
+                if (!string.IsNullOrEmpty(sessionCookie))
+                    metadata["SessionCookie"] = sessionCookie;
+                if (userData != null)
+                {
+                    var userDataJson = JsonSerializer.Serialize(userData);
+                    metadata["UserData"] = userDataJson;
+                }
+
+                return (sessionCookie, DateTime.UtcNow.Add(GlookoConstants.SessionLifetime), metadata);
             }
 
             _logger.LogError("Failed to extract session cookie from Glooko response");
-            return (null, DateTime.MinValue);
+            return (null, DateTime.MinValue, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Glooko authentication error: {Message}", ex.Message);
-            return (null, DateTime.MinValue);
+            return (null, DateTime.MinValue, null);
         }
     }
 
@@ -170,10 +176,10 @@ public class GlookoAuthTokenProvider : AuthTokenProviderBase<GlookoConnectorConf
     ///     the glookoCode and meter units come from this follow-up call.
     /// </summary>
     private async Task<GlookoV3User?> FetchV3UserDataAsync(
-        string baseUrl, string webOrigin, CancellationToken cancellationToken)
+        string baseUrl, string webOrigin, string sessionCookie, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}{GlookoConstants.V3UsersPath}");
-        GlookoHttpHelper.ApplyStandardHeaders(request, webOrigin, SessionCookie);
+        GlookoHttpHelper.ApplyStandardHeaders(request, webOrigin, sessionCookie);
 
         var response = await _httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)

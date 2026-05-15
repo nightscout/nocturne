@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -23,23 +22,16 @@ namespace Nocturne.Connectors.Glooko.Services;
 /// </summary>
 public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfiguration>
 {
-    private readonly GlookoConnectorConfiguration _config;
     private readonly IConnectorPublisher? _connectorPublisher;
     private readonly IMealMatchingService? _mealMatchingService;
     private readonly IRateLimitingStrategy _rateLimitingStrategy;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
-    private readonly GlookoProfileMapper _profileMapper;
-    private readonly GlookoSensorGlucoseMapper _sensorGlucoseMapper;
-    private readonly GlookoStateSpanMapper _stateSpanMapper;
-    private readonly GlookoSystemEventMapper _systemEventMapper;
-    private readonly GlookoTempBasalMapper _tempBasalMapper;
-    private readonly GlookoTimeMapper _timeMapper;
     private readonly GlookoAuthTokenProvider _tokenProvider;
-    private readonly GlookoV4TreatmentMapper _v4TreatmentMapper;
+    private readonly ILogger<GlookoConnectorService> _glookoLogger;
 
     public GlookoConnectorService(
         HttpClient httpClient,
-        IOptions<GlookoConnectorConfiguration> config,
+        IConnectorServerResolver<GlookoConnectorConfiguration> serverResolver,
         ILogger<GlookoConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
@@ -47,21 +39,14 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         IConnectorPublisher? publisher = null,
         IMealMatchingService? mealMatchingService = null
     )
-        : base(httpClient, logger, publisher)
+        : base(httpClient, serverResolver, logger, publisher)
     {
-        _config = config?.Value ?? throw new ArgumentNullException(nameof(config));
         _connectorPublisher = publisher;
         _mealMatchingService = mealMatchingService;
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
-        _timeMapper = new GlookoTimeMapper(_config, logger);
-        _sensorGlucoseMapper = new GlookoSensorGlucoseMapper(_config, ConnectorSource, _timeMapper, logger);
-        _v4TreatmentMapper = new GlookoV4TreatmentMapper(ConnectorSource, _timeMapper, logger);
-        _stateSpanMapper = new GlookoStateSpanMapper(ConnectorSource, _timeMapper, logger);
-        _tempBasalMapper = new GlookoTempBasalMapper(ConnectorSource, _timeMapper, logger);
-        _systemEventMapper = new GlookoSystemEventMapper(ConnectorSource, _timeMapper, logger);
-        _profileMapper = new GlookoProfileMapper(ConnectorSource, logger);
+        _glookoLogger = logger;
     }
 
     public override string ServiceName => "Glooko";
@@ -77,15 +62,57 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         SyncDataType.Profiles
     ];
 
+    // ── Per-sync state (populated in PerformSyncInternalAsync) ─────────
+
+    private string? _sessionCookie;
+    private GlookoUserData? _userData;
+    private GlookoConnectorConfiguration? _syncConfig;
+    private GlookoTimeMapper? _timeMapper;
+    private GlookoSensorGlucoseMapper? _sensorGlucoseMapper;
+    private GlookoV4TreatmentMapper? _v4TreatmentMapper;
+    private GlookoStateSpanMapper? _stateSpanMapper;
+    private GlookoTempBasalMapper? _tempBasalMapper;
+    private GlookoSystemEventMapper? _systemEventMapper;
+    private GlookoProfileMapper? _profileMapper;
+
+    private void InitializeMappers(GlookoConnectorConfiguration config)
+    {
+        _syncConfig = config;
+        _timeMapper = new GlookoTimeMapper(config, _glookoLogger);
+        _sensorGlucoseMapper = new GlookoSensorGlucoseMapper(config, ConnectorSource, _timeMapper, _glookoLogger);
+        _v4TreatmentMapper = new GlookoV4TreatmentMapper(ConnectorSource, _timeMapper, _glookoLogger);
+        _stateSpanMapper = new GlookoStateSpanMapper(ConnectorSource, _timeMapper, _glookoLogger);
+        _tempBasalMapper = new GlookoTempBasalMapper(ConnectorSource, _timeMapper, _glookoLogger);
+        _systemEventMapper = new GlookoSystemEventMapper(ConnectorSource, _timeMapper, _glookoLogger);
+        _profileMapper = new GlookoProfileMapper(ConnectorSource, _glookoLogger);
+    }
+
     // ── Authentication ──────────────────────────────────────────────────
 
     public override async Task<bool> AuthenticateAsync()
     {
-        var token = await _tokenProvider.GetValidTokenAsync();
+        // Legacy method; actual auth happens per-tenant in sync flow
+        TrackSuccessfulRequest();
+        return true;
+    }
+
+    private async Task<bool> AuthenticateWithConfigAsync(GlookoConnectorConfiguration config)
+    {
+        var token = await _tokenProvider.GetValidTokenAsync(config);
         if (token == null)
         {
             TrackFailedRequest("Failed to get valid token");
             return false;
+        }
+
+        // The token IS the session cookie for Glooko
+        _sessionCookie = token;
+
+        // Retrieve user data from cache metadata via the token provider's public accessor
+        var cached = await _tokenProvider.GetCachedSessionAsync();
+        if (cached?.Metadata != null && cached.Metadata.TryGetValue("UserData", out var userDataJson))
+        {
+            _userData = JsonSerializer.Deserialize<GlookoUserData>(userDataJson);
         }
 
         TrackSuccessfulRequest();
@@ -99,18 +126,18 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     /// </summary>
     private string? EnsureAuthenticatedAndGetCode()
     {
-        if (string.IsNullOrEmpty(_tokenProvider.SessionCookie))
+        if (string.IsNullOrEmpty(_sessionCookie))
             throw new InvalidOperationException(
                 "Not authenticated with Glooko. Call AuthenticateAsync first.");
 
-        var code = _tokenProvider.UserData?.GlookoCode;
+        var code = _userData?.GlookoCode;
         if (code == null)
             _logger.LogWarning("Missing Glooko user code, cannot fetch data");
 
         return code;
     }
 
-    private bool IsSessionExpired() => string.IsNullOrEmpty(_tokenProvider.SessionCookie);
+    private bool IsSessionExpired() => string.IsNullOrEmpty(_sessionCookie);
 
     // ── HTTP helpers ────────────────────────────────────────────────────
 
@@ -120,8 +147,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     /// </summary>
     private async Task<JsonElement?> FetchFromGlookoEndpoint(string url)
     {
-        var baseUrl = GlookoConstants.ResolveBaseUrl(_config.Server);
-        var webOrigin = GlookoConstants.ResolveWebOrigin(_config.Server);
+        var baseUrl = GlookoConstants.ResolveBaseUrl(_syncConfig!.Server);
+        var webOrigin = GlookoConstants.ResolveWebOrigin(_syncConfig!.Server);
         var absoluteUrl = url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
             ? url
             : $"{baseUrl}{url}";
@@ -129,7 +156,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         _logger.LogDebug("GLOOKO FETCHER LOADING {Url}", absoluteUrl);
 
         var request = new HttpRequestMessage(HttpMethod.Get, absoluteUrl);
-        GlookoHttpHelper.ApplyStandardHeaders(request, webOrigin, _tokenProvider.SessionCookie);
+        GlookoHttpHelper.ApplyStandardHeaders(request, webOrigin, _sessionCookie);
 
         var response = await _httpClient.SendAsync(request);
 
@@ -199,7 +226,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
     private string ConstructV2Url(string endpoint, DateTime startDate, DateTime endDate)
     {
-        var patientCode = _tokenProvider.UserData?.GlookoCode;
+        var patientCode = _userData?.GlookoCode;
         var maxCount = Math.Max(1, (int)Math.Ceiling((endDate - startDate).TotalMinutes / 5));
 
         return $"{endpoint}?patient={patientCode}"
@@ -212,9 +239,9 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
     private string ConstructV3GraphUrl(DateTime startDate, DateTime endDate)
     {
-        var patientCode = _tokenProvider.UserData?.GlookoCode;
+        var patientCode = _userData?.GlookoCode;
 
-        var series = _config.V3IncludeCgmBackfill
+        var series = _syncConfig!.V3IncludeCgmBackfill
             ? GlookoConstants.V3GraphSeries.Concat(GlookoConstants.V3CgmBackfillSeries)
             : GlookoConstants.V3GraphSeries;
 
@@ -245,10 +272,11 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
         try
         {
+            InitializeMappers(config);
             await ReportMessageAsync(progressReporter, SyncMessageType.Authenticating, null, cancellationToken);
 
             if (IsSessionExpired())
-                if (!await AuthenticateAsync())
+                if (!await AuthenticateWithConfigAsync(config))
                 {
                     result.Success = false;
                     result.Message = "Authentication failed";
@@ -285,7 +313,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                     },
                     cancellationToken);
 
-                var chunkSuccess = _config.UseV3Api
+                var chunkSuccess = _syncConfig!.UseV3Api
                     ? await FetchAndMapViaV3Async(chunkFrom, chunkTo, activeTypes, result, config, cancellationToken)
                     : await FetchAndMapViaV2Async(chunkFrom, chunkTo, activeTypes, result, config, cancellationToken);
 
@@ -436,7 +464,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         }
 
         // 1. Glucose
-        if (_config.V3IncludeCgmBackfill)
+        if (_syncConfig!.V3IncludeCgmBackfill)
         {
             var sensorGlucose = _sensorGlucoseMapper.TransformV3ToSensorGlucose(v3Data, _meterUnits).ToList();
             await PublishRecordTypeAsync(result, SyncDataType.Glucose, activeTypes,

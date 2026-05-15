@@ -25,12 +25,13 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
     public MyFitnessPalConnectorService(
         HttpClient httpClient,
+        IConnectorServerResolver<MyFitnessPalConnectorConfiguration> serverResolver,
         ILogger<MyFitnessPalConnectorService> logger,
         MyFitnessPalConnectorConfiguration config,
         IRetryDelayStrategy retryDelayStrategy,
         IConnectorPublisher? publisher = null
     )
-        : base(httpClient, logger, publisher)
+        : base(httpClient, serverResolver, logger, publisher)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _retryDelayStrategy =

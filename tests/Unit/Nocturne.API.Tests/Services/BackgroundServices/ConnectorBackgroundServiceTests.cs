@@ -22,17 +22,9 @@ public class ConnectorBackgroundServiceTests
     /// <summary>
     /// Minimal IConnectorConfiguration implementation for testing.
     /// </summary>
-    private class TestConnectorConfig : IConnectorConfiguration
+    private class TestConnectorConfig : BaseConnectorConfiguration
     {
-        public ConnectSource ConnectSource { get; set; } = ConnectSource.Nightscout;
-        public bool Enabled { get; set; } = true;
-        public int MaxRetryAttempts { get; set; } = 1;
-        public int BatchSize { get; set; } = 100;
-        public int SyncIntervalMinutes { get; set; } = 5;
-        public Core.Models.V4.GlucoseProcessing GlucoseProcessing { get; set; } = Core.Models.V4.GlucoseProcessing.Smoothed;
-        public void Validate() { }
-        public bool IsDataTypeEnabled(SyncDataType type) => true;
-        public List<SyncDataType> GetEnabledDataTypes(List<SyncDataType> supportedTypes) => supportedTypes;
+        protected override void ValidateSourceSpecificConfiguration() { }
     }
 
     /// <summary>
@@ -47,7 +39,7 @@ public class ConnectorBackgroundServiceTests
             TestConnectorConfig config,
             SyncResult syncResult,
             ILogger logger)
-            : base(serviceProvider, config, logger)
+            : base(serviceProvider, logger)
         {
             _syncResult = syncResult;
         }
@@ -56,6 +48,7 @@ public class ConnectorBackgroundServiceTests
 
         protected override Task<SyncResult> PerformSyncAsync(
             IServiceProvider scopeProvider,
+            TestConnectorConfig config,
             CancellationToken cancellationToken,
             ISyncProgressReporter? progressReporter = null)
         {

@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -20,7 +19,7 @@ namespace Nocturne.Connectors.FreeStyle.Services;
 /// </summary>
 public class LibreConnectorService(
     HttpClient httpClient,
-    IOptions<LibreLinkUpConnectorConfiguration> config,
+    IConnectorServerResolver<LibreLinkUpConnectorConfiguration> serverResolver,
     ILogger<LibreConnectorService> logger,
     IRetryDelayStrategy retryDelayStrategy,
     IRateLimitingStrategy rateLimitingStrategy,
@@ -29,13 +28,11 @@ public class LibreConnectorService(
 )
     : BaseConnectorService<LibreLinkUpConnectorConfiguration>(
         httpClient,
+        serverResolver,
         logger,
         publisher
     )
 {
-    private readonly LibreLinkUpConnectorConfiguration _config =
-        config?.Value ?? throw new ArgumentNullException(nameof(config));
-
     private readonly LibreSensorGlucoseMapper _sensorGlucoseMapper = new(logger);
 
     private readonly IRateLimitingStrategy _rateLimitingStrategy =
@@ -63,7 +60,14 @@ public class LibreConnectorService(
 
     public override async Task<bool> AuthenticateAsync()
     {
-        var token = await _tokenProvider.GetValidTokenAsync();
+        // Legacy method; actual auth happens per-tenant in sync flow
+        TrackSuccessfulRequest();
+        return true;
+    }
+
+    private async Task<bool> AuthenticateWithConfigAsync(LibreLinkUpConnectorConfiguration config)
+    {
+        var token = await _tokenProvider.GetValidTokenAsync(config);
         if (token == null)
         {
             _accountIdHash = string.Empty;
@@ -93,7 +97,7 @@ public class LibreConnectorService(
         _httpClient.DefaultRequestHeaders.Remove("Authorization");
         _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
 
-        await LoadConnectionsAsync();
+        await LoadConnectionsAsync(config);
 
         TrackSuccessfulRequest();
         return true;
@@ -102,12 +106,13 @@ public class LibreConnectorService(
     /// <summary>
     ///     Fetches SensorGlucose records from the LibreLinkUp API.
     /// </summary>
-    private async Task<IEnumerable<SensorGlucose>> FetchSensorGlucoseAsync(DateTime? since = null)
+    private async Task<IEnumerable<SensorGlucose>> FetchSensorGlucoseAsync(
+        LibreLinkUpConnectorConfiguration config, DateTime? since = null)
     {
         if (_tokenProvider.IsTokenExpired || _selectedConnection == null)
         {
             _logger.LogInformation("Token expired or missing connection, attempting to re-authenticate");
-            if (!await AuthenticateAsync())
+            if (!await AuthenticateWithConfigAsync(config))
             {
                 _logger.LogError("Failed to authenticate with LibreLinkUp");
                 return [];
@@ -121,7 +126,8 @@ public class LibreConnectorService(
             return [];
         }
 
-        var url = string.Format(LibreLinkUpConstants.ApiPaths.GraphData, _selectedConnection.PatientId);
+        var url = _serverResolver.BuildUrl(config,
+            string.Format(LibreLinkUpConstants.ApiPaths.GraphData, _selectedConnection.PatientId));
 
         await _rateLimitingStrategy.ApplyDelayAsync(0);
 
@@ -132,7 +138,7 @@ public class LibreConnectorService(
             {
                 _tokenProvider.InvalidateToken();
                 _selectedConnection = null;
-                return await AuthenticateAsync();
+                return await AuthenticateWithConfigAsync(config);
             },
             operationName: "FetchSensorGlucoseData"
         );
@@ -161,7 +167,7 @@ public class LibreConnectorService(
 
         try
         {
-            var sensorGlucose = await FetchSensorGlucoseAsync(request.From);
+            var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From);
             var sgList = sensorGlucose.ToList();
 
             if (sgList.Count > 0)
@@ -194,11 +200,13 @@ public class LibreConnectorService(
         return result;
     }
 
-    private async Task LoadConnectionsAsync()
+    private async Task LoadConnectionsAsync(LibreLinkUpConnectorConfiguration config)
     {
         try
         {
-            var response = await GetWithHeadersAsync(LibreLinkUpConstants.ApiPaths.Connections, RequestHeaders);
+            var response = await GetWithHeadersAsync(
+                _serverResolver.BuildUrl(config, LibreLinkUpConstants.ApiPaths.Connections),
+                RequestHeaders);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -214,9 +222,9 @@ public class LibreConnectorService(
                 return;
             }
 
-            if (!string.IsNullOrEmpty(_config.PatientId))
+            if (!string.IsNullOrEmpty(config.PatientId))
                 _selectedConnection = connectionsResponse.Data.FirstOrDefault(c =>
-                    c.PatientId == _config.PatientId
+                    c.PatientId == config.PatientId
                 );
 
             if (_selectedConnection == null)

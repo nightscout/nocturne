@@ -24,13 +24,14 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
 
     public TidepoolConnectorService(
         HttpClient httpClient,
+        IConnectorServerResolver<TidepoolConnectorConfiguration> serverResolver,
         ILogger<TidepoolConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
         TidepoolAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null
     )
-        : base(httpClient, logger, publisher)
+        : base(httpClient, serverResolver, logger, publisher)
     {
         _retryDelayStrategy =
             retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));

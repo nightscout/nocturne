@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -20,16 +19,15 @@ namespace Nocturne.Connectors.MyLife.Services;
 /// </summary>
 public class MyLifeConnectorService(
     HttpClient httpClient,
-    IOptions<MyLifeConnectorConfiguration> config,
+    IConnectorServerResolver<MyLifeConnectorConfiguration> serverResolver,
     ILogger<MyLifeConnectorService> logger,
     MyLifeAuthTokenProvider tokenProvider,
     MyLifeEventProcessor eventProcessor,
     MyLifeSessionStore sessionStore,
     MyLifeSyncService syncService,
     IConnectorPublisher? publisher = null
-) : BaseConnectorService<MyLifeConnectorConfiguration>(httpClient, logger, publisher)
+) : BaseConnectorService<MyLifeConnectorConfiguration>(httpClient, serverResolver, logger, publisher)
 {
-    private readonly MyLifeConnectorConfiguration _config = config.Value;
 
     public override string ServiceName => "MyLife";
     protected override string ConnectorSource => DataSources.MyLifeConnector;
