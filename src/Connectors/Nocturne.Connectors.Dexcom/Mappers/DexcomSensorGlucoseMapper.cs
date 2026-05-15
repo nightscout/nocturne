@@ -8,20 +8,6 @@ namespace Nocturne.Connectors.Dexcom.Mappers;
 
 public class DexcomSensorGlucoseMapper(ILogger logger)
 {
-    private static readonly Dictionary<int, GlucoseDirection> TrendDirections = new()
-    {
-        { 0, GlucoseDirection.None },
-        { 1, GlucoseDirection.DoubleUp },
-        { 2, GlucoseDirection.SingleUp },
-        { 3, GlucoseDirection.FortyFiveUp },
-        { 4, GlucoseDirection.Flat },
-        { 5, GlucoseDirection.FortyFiveDown },
-        { 6, GlucoseDirection.SingleDown },
-        { 7, GlucoseDirection.DoubleDown },
-        { 8, GlucoseDirection.NotComputable },
-        { 9, GlucoseDirection.RateOutOfRange }
-    };
-
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     public IEnumerable<SensorGlucose> MapBatchData(DexcomEntry[]? batchData)
@@ -48,7 +34,7 @@ public class DexcomSensorGlucoseMapper(ILogger logger)
                 return null;
             }
 
-            var direction = TrendDirections.GetValueOrDefault(dexcomEntry.Trend, GlucoseDirection.NotComputable);
+            var direction = dexcomEntry.Trend;
             var mgdl = (double)dexcomEntry.Value;
 
             return new SensorGlucose
