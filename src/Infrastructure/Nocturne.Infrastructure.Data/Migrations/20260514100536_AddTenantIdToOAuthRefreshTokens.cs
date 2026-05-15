@@ -18,13 +18,27 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 type: "uuid",
                 nullable: true);
 
-            // Backfill from the parent grant
+            // Backfill from the parent grant. The migrator role is NOBYPASSRLS,
+            // so reading oauth_grants requires setting app.current_tenant_id per
+            // tenant — without it, FORCE RLS on oauth_grants silently filters
+            // every row and the subsequent NOT NULL alter fails.
             migrationBuilder.Sql(
                 """
-                UPDATE oauth_refresh_tokens rt
-                SET tenant_id = g.tenant_id
-                FROM oauth_grants g
-                WHERE rt.grant_id = g.id;
+                DO $$
+                DECLARE
+                    r RECORD;
+                BEGIN
+                    FOR r IN SELECT id FROM tenants
+                    LOOP
+                        PERFORM set_config('app.current_tenant_id', r.id::text, true);
+
+                        UPDATE oauth_refresh_tokens rt
+                        SET tenant_id = g.tenant_id
+                        FROM oauth_grants g
+                        WHERE rt.grant_id = g.id
+                          AND g.tenant_id = r.id;
+                    END LOOP;
+                END $$;
                 """);
 
             // Make NOT NULL now that all rows are backfilled
