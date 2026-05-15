@@ -34,6 +34,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
     private readonly IAuditContext _auditContext;
     private readonly IConfiguration _configuration;
     private readonly IHostEnvironment _environment;
+    private readonly IEnumerable<IConnectorCacheInvalidator> _cacheInvalidators;
     private readonly ILogger<ConnectorConfigurationService> _logger;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -65,6 +66,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         IAuditContext auditContext,
         IConfiguration configuration,
         IHostEnvironment environment,
+        IEnumerable<IConnectorCacheInvalidator> cacheInvalidators,
         ILogger<ConnectorConfigurationService> logger)
     {
         _context = context;
@@ -73,6 +75,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         _auditContext = auditContext;
         _configuration = configuration;
         _environment = environment;
+        _cacheInvalidators = cacheInvalidators;
         _logger = logger;
     }
 
@@ -151,6 +154,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         }
 
         await _context.SaveChangesAsync(ct);
+
+        // Invalidate cached auth tokens so the next sync uses fresh credentials
+        var tenantId = _context.TenantId;
+        foreach (var invalidator in _cacheInvalidators)
+            invalidator.Invalidate(connectorName, tenantId);
 
         // Broadcast configuration change
         await _broadcastService.BroadcastConfigChangeAsync(new ConfigurationChangeEvent
