@@ -14,16 +14,15 @@ public class GlurooConnectorBackgroundService : ConnectorBackgroundService<Gluro
 {
     public GlurooConnectorBackgroundService(
         IServiceProvider serviceProvider,
-        GlurooConnectorConfiguration config,
         ILogger<GlurooConnectorBackgroundService> logger
     )
-        : base(serviceProvider, config, logger) { }
+        : base(serviceProvider, logger) { }
 
     protected override string ConnectorName => "Gluroo";
 
-    protected override async Task<SyncResult> PerformSyncAsync(IServiceProvider scopeProvider, CancellationToken cancellationToken, ISyncProgressReporter? progressReporter = null)
+    protected override async Task<SyncResult> PerformSyncAsync(IServiceProvider scopeProvider, GlurooConnectorConfiguration config, CancellationToken cancellationToken, ISyncProgressReporter? progressReporter = null)
     {
         var connectorService = scopeProvider.GetRequiredService<GlurooConnectorService>();
-        return await connectorService.SyncDataAsync(Config, cancellationToken, since: null, progressReporter);
+        return await connectorService.SyncDataAsync(config, cancellationToken, since: null, progressReporter);
     }
 }

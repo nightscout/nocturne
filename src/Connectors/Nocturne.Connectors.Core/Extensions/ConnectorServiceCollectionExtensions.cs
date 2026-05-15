@@ -3,7 +3,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -84,10 +83,9 @@ public static class ConnectorServiceCollectionExtensions
             var config = new TConfig();
             configuration.BindConnectorConfiguration(config, connectorName);
 
-            services.AddSingleton(config);
-            services.AddSingleton<IOptions<TConfig>>(
-                new OptionsWrapper<TConfig>(config)
-            );
+            // Register as frozen startup defaults (NOT as a DI service consumers inject)
+            services.AddSingleton<IConnectorRegistration<TConfig>>(
+                new ConnectorRegistration<TConfig>(config, connectorName));
 
             return config;
         }
@@ -118,38 +116,40 @@ public static class ConnectorServiceCollectionExtensions
             if (!config.Enabled)
                 return null;
 
-            // Resolve server URL
-            var serverUrl = ResolveServerUrl(config, options);
+            // Register server resolver
+            services.AddSingleton<IConnectorServerResolver<TConfig>>(
+                new ConnectorServerResolver<TConfig>(
+                    options.ServerMapping,
+                    options.GetServerRegion,
+                    options.DefaultServer));
 
-            // Register HttpClients with configuration
-            if (serverUrl != null)
-            {
-                services.AddHttpClient<TService>()
-                    .ConfigureConnectorClient(
-                        serverUrl,
-                        options.AdditionalHeaders,
-                        options.UserAgent,
-                        options.Timeout,
-                        options.ConnectTimeout,
-                        options.AddResilience
-                    );
+            // Register config loader
+            services.AddSingleton<IConnectorConfigurationLoader<TConfig>, ConnectorConfigurationLoader<TConfig>>();
 
-                services.AddHttpClient<TTokenProvider>()
-                    .ConfigureConnectorClient(
-                        serverUrl,
-                        options.AdditionalHeaders,
-                        options.UserAgent,
-                        options.Timeout,
-                        options.ConnectTimeout,
-                        options.AddResilience
-                    );
-            }
-            else
-            {
-                // Register without specific configuration
-                services.AddHttpClient<TService>();
-                services.AddHttpClient<TTokenProvider>();
-            }
+            // Register token cache (shared singleton across all connectors)
+            services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
+            services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
+
+            // Register HttpClients WITHOUT BaseAddress (server resolved per-tenant at call time)
+            services.AddHttpClient<TService>()
+                .ConfigureConnectorClient(
+                    null,
+                    options.AdditionalHeaders,
+                    options.UserAgent,
+                    options.Timeout,
+                    options.ConnectTimeout,
+                    options.AddResilience
+                );
+
+            services.AddHttpClient<TTokenProvider>()
+                .ConfigureConnectorClient(
+                    null,
+                    options.AdditionalHeaders,
+                    options.UserAgent,
+                    options.Timeout,
+                    options.ConnectTimeout,
+                    options.AddResilience
+                );
 
             return config;
         }
@@ -172,26 +172,30 @@ public static class ConnectorServiceCollectionExtensions
             if (!config.Enabled)
                 return null;
 
-            // Resolve server URL
-            var serverUrl = ResolveServerUrl(config, options);
+            // Register server resolver
+            services.AddSingleton<IConnectorServerResolver<TConfig>>(
+                new ConnectorServerResolver<TConfig>(
+                    options.ServerMapping,
+                    options.GetServerRegion,
+                    options.DefaultServer));
 
-            // Register HttpClient with configuration
-            if (serverUrl != null)
-            {
-                services.AddHttpClient<TService>()
-                    .ConfigureConnectorClient(
-                        serverUrl,
-                        options.AdditionalHeaders,
-                        options.UserAgent,
-                        options.Timeout,
-                        options.ConnectTimeout,
-                        options.AddResilience
-                    );
-            }
-            else
-            {
-                services.AddHttpClient<TService>();
-            }
+            // Register config loader
+            services.AddSingleton<IConnectorConfigurationLoader<TConfig>, ConnectorConfigurationLoader<TConfig>>();
+
+            // Register token cache (shared singleton across all connectors)
+            services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
+            services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
+
+            // Register HttpClient WITHOUT BaseAddress (server resolved per-tenant at call time)
+            services.AddHttpClient<TService>()
+                .ConfigureConnectorClient(
+                    null,
+                    options.AdditionalHeaders,
+                    options.UserAgent,
+                    options.Timeout,
+                    options.ConnectTimeout,
+                    options.AddResilience
+                );
 
             return config;
         }
@@ -336,22 +340,5 @@ public static class ConnectorServiceCollectionExtensions
 
             return services;
         }
-    }
-
-    /// <summary>
-    ///     Resolves the server URL from connector options and configuration.
-    ///     When a server mapping is provided but the region value doesn't match any key,
-    ///     the region value itself is used as the server URL (allowing direct URL configuration).
-    /// </summary>
-    private static string? ResolveServerUrl(BaseConnectorConfiguration config, ConnectorOptions options)
-    {
-        if (options is { ServerMapping: not null, GetServerRegion: not null })
-        {
-            var region = options.GetServerRegion(config);
-            var defaultServer = options.DefaultServer ?? region ?? options.ServerMapping.Values.FirstOrDefault() ?? "";
-            return ConnectorServerResolver.Resolve(region, options.ServerMapping, defaultServer);
-        }
-
-        return options.DefaultServer;
     }
 }

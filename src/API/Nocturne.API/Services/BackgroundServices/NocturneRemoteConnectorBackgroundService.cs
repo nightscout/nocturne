@@ -13,20 +13,18 @@ namespace Nocturne.API.Services.BackgroundServices;
 public class NocturneRemoteConnectorBackgroundService : ConnectorBackgroundService<NocturneRemoteConnectorConfiguration>
 {
     /// <param name="serviceProvider">Service provider used to create a DI scope per sync cycle.</param>
-    /// <param name="config">NocturneRemote connector configuration (URL, token, polling interval, etc.).</param>
     /// <param name="logger">Logger instance for this background service.</param>
     public NocturneRemoteConnectorBackgroundService(
         IServiceProvider serviceProvider,
-        NocturneRemoteConnectorConfiguration config,
         ILogger<NocturneRemoteConnectorBackgroundService> logger
     )
-        : base(serviceProvider, config, logger) { }
+        : base(serviceProvider, logger) { }
 
     protected override string ConnectorName => "NocturneRemote";
 
-    protected override async Task<SyncResult> PerformSyncAsync(IServiceProvider scopeProvider, CancellationToken cancellationToken, ISyncProgressReporter? progressReporter = null)
+    protected override async Task<SyncResult> PerformSyncAsync(IServiceProvider scopeProvider, NocturneRemoteConnectorConfiguration config, CancellationToken cancellationToken, ISyncProgressReporter? progressReporter = null)
     {
         var connectorService = scopeProvider.GetRequiredService<NocturneRemoteConnectorService>();
-        return await connectorService.SyncDataAsync(Config, cancellationToken, since: null, progressReporter);
+        return await connectorService.SyncDataAsync(config, cancellationToken, since: null, progressReporter);
     }
 }

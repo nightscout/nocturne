@@ -29,7 +29,7 @@ public static class HttpClientExtensions
         /// <param name="connectTimeout">Connection timeout (defaults to 5 seconds)</param>
         /// <param name="addResilience">Whether to add resilience policies (retry, circuit breaker)</param>
         public IHttpClientBuilder ConfigureConnectorClient(
-            string baseUrl,
+            string? baseUrl,
             Dictionary<string, string>? additionalHeaders = null,
             string? userAgent = null,
             TimeSpan? timeout = null,
@@ -40,15 +40,17 @@ public static class HttpClientExtensions
             var effectiveConnectTimeout = connectTimeout ?? TimeSpan.FromSeconds(5);
             var effectiveUserAgent = userAgent ?? DefaultUserAgent;
 
-            // Ensure URL has scheme
-            var url = baseUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-                ? baseUrl
-                : $"https://{baseUrl}";
-
             builder
                 .ConfigureHttpClient(client =>
                 {
-                    client.BaseAddress = new Uri(url);
+                    if (baseUrl != null)
+                    {
+                        var url = baseUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                            ? baseUrl
+                            : $"https://{baseUrl}";
+                        client.BaseAddress = new Uri(url);
+                    }
+
                     client.DefaultRequestHeaders.Accept.Clear();
                     client.DefaultRequestHeaders.Accept.Add(
                         new MediaTypeWithQualityHeaderValue("application/json")

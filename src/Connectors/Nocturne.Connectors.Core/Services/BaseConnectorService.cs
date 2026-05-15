@@ -14,9 +14,10 @@ namespace Nocturne.Connectors.Core.Services;
 /// </summary>
 /// <typeparam name="TConfig">The connector-specific configuration type</typeparam>
 public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
-    where TConfig : IConnectorConfiguration
+    where TConfig : BaseConnectorConfiguration
 {
     protected readonly HttpClient _httpClient;
+    protected readonly IConnectorServerResolver<TConfig> _serverResolver;
     protected readonly ILogger _logger;
     private readonly IConnectorPublisher? _publisher;
 
@@ -24,17 +25,18 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     Base constructor for connector services using IHttpClientFactory pattern
     /// </summary>
     /// <param name="httpClient">HttpClient instance from IHttpClientFactory (will not be disposed)</param>
+    /// <param name="serverResolver">Resolves the base server URL from per-tenant config</param>
     /// <param name="logger">Logger instance for this connector</param>
     /// <param name="publisher">Optional publisher for Nocturne mode</param>
-    /// <param name="metricsTracker">Optional metrics tracker</param>
-    /// <param name="stateService">Optional state service for tracking connector state</param>
     protected BaseConnectorService(
         HttpClient httpClient,
+        IConnectorServerResolver<TConfig> serverResolver,
         ILogger logger,
         IConnectorPublisher? publisher = null
     )
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _serverResolver = serverResolver ?? throw new ArgumentNullException(nameof(serverResolver));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _publisher = publisher;
     }
