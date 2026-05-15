@@ -45,13 +45,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
 
     public override async Task<bool> AuthenticateAsync()
     {
-        var token = await _tokenProvider.GetValidTokenAsync();
-        if (token == null)
-        {
-            TrackFailedRequest("Failed to get valid token");
-            return false;
-        }
-
+        // AuthenticateAsync is a legacy method; actual auth happens per-tenant in sync flow
         TrackSuccessfulRequest();
         return true;
     }
@@ -197,7 +191,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
         EversenseConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var token = await _tokenProvider.GetValidTokenAsync();
+        var token = await _tokenProvider.GetValidTokenAsync(config);
         if (string.IsNullOrEmpty(token))
         {
             _logger.LogWarning("[{ConnectorSource}] No valid token available for data fetch", ConnectorSource);
@@ -230,7 +224,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
             reAuthenticateOnUnauthorized: async () =>
             {
                 _tokenProvider.InvalidateToken();
-                var newToken = await _tokenProvider.GetValidTokenAsync();
+                var newToken = await _tokenProvider.GetValidTokenAsync(config);
                 if (string.IsNullOrEmpty(newToken)) return false;
                 token = newToken;
                 return true;

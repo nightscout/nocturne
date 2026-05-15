@@ -106,9 +106,9 @@ public class EversenseConnectorServiceTests
     #region AuthenticateAsync Tests
 
     [Fact]
-    public async Task AuthenticateAsync_WhenTokenProviderReturnsToken_ReturnsTrue()
+    public async Task AuthenticateAsync_ReturnsTrue()
     {
-        // Arrange
+        // Arrange — AuthenticateAsync is a legacy no-op; actual auth happens per-tenant in sync flow
         var fixture = new ServiceFixture(tokenToReturn: "valid-token");
 
         // Act
@@ -117,20 +117,6 @@ public class EversenseConnectorServiceTests
         // Assert
         result.Should().BeTrue();
         fixture.Service.FailedRequestCount.Should().Be(0);
-    }
-
-    [Fact]
-    public async Task AuthenticateAsync_WhenTokenProviderReturnsNull_ReturnsFalse()
-    {
-        // Arrange
-        var fixture = new ServiceFixture(tokenToReturn: null);
-
-        // Act
-        var result = await fixture.Service.AuthenticateAsync();
-
-        // Assert
-        result.Should().BeFalse();
-        fixture.Service.FailedRequestCount.Should().Be(1);
     }
 
     #endregion
