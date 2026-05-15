@@ -79,6 +79,7 @@ public class ConnectorConfigurationLegacyGrantTests : IDisposable
             _auditContext.Object,
             configuration,
             environment,
+            Enumerable.Empty<IConnectorCacheInvalidator>(),
             logger);
     }
 
