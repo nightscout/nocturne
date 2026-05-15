@@ -7,6 +7,7 @@ using Nocturne.Connectors.MyLife.Mappers;
 using Nocturne.Connectors.MyLife.Mappers.Constants;
 using Nocturne.Connectors.MyLife.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
@@ -23,7 +24,8 @@ public class MyLifeConnectorService(
     ILogger<MyLifeConnectorService> logger,
     MyLifeAuthTokenProvider tokenProvider,
     MyLifeEventProcessor eventProcessor,
-    MyLifeSessionStore sessionStore,
+    IMyLifeSessionCache sessionCache,
+    ITenantAccessor tenantAccessor,
     MyLifeSyncService syncService,
     IConnectorPublisher? publisher = null
 ) : BaseConnectorService<MyLifeConnectorConfiguration>(httpClient, serverResolver, logger, publisher)
@@ -53,7 +55,7 @@ public class MyLifeConnectorService(
         var token = await tokenProvider.GetValidTokenAsync();
         if (string.IsNullOrWhiteSpace(token))
         {
-            sessionStore.Clear();
+            sessionCache.Invalidate("MyLife", tenantAccessor.TenantId);
             TrackFailedRequest("Token missing");
             return false;
         }
@@ -77,17 +79,19 @@ public class MyLifeConnectorService(
     public async Task<IEnumerable<Profile>> FetchPumpSettingsProfileAsync(
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(sessionStore.ServiceUrl)
-            || string.IsNullOrWhiteSpace(sessionStore.AuthToken)
-            || string.IsNullOrWhiteSpace(sessionStore.PatientId))
+        var session = sessionCache.Get(tenantAccessor.TenantId);
+        if (session == null
+            || string.IsNullOrWhiteSpace(session.ServiceUrl)
+            || string.IsNullOrWhiteSpace(session.AuthToken)
+            || string.IsNullOrWhiteSpace(session.PatientId))
         {
             return [];
         }
 
         var readouts = await syncService.FetchPumpSettingsAsync(
-            sessionStore.ServiceUrl,
-            sessionStore.AuthToken,
-            sessionStore.PatientId,
+            session.ServiceUrl,
+            session.AuthToken,
+            session.PatientId,
             cancellationToken
         );
 
@@ -117,9 +121,11 @@ public class MyLifeConnectorService(
         try
         {
             // Validate session
-            if (string.IsNullOrWhiteSpace(sessionStore.ServiceUrl)
-                || string.IsNullOrWhiteSpace(sessionStore.AuthToken)
-                || string.IsNullOrWhiteSpace(sessionStore.PatientId))
+            var session = sessionCache.Get(tenantAccessor.TenantId);
+            if (session == null
+                || string.IsNullOrWhiteSpace(session.ServiceUrl)
+                || string.IsNullOrWhiteSpace(session.AuthToken)
+                || string.IsNullOrWhiteSpace(session.PatientId))
             {
                 result.Success = false;
                 result.Errors.Add("MyLife session not established");
@@ -158,9 +164,9 @@ public class MyLifeConnectorService(
 
             // Stream month by month
             await foreach (var batch in syncService.FetchEventsPerMonthAsync(
-                sessionStore.ServiceUrl,
-                sessionStore.AuthToken,
-                sessionStore.PatientId,
+                session.ServiceUrl,
+                session.AuthToken,
+                session.PatientId,
                 overallSince,
                 until,
                 cancellationToken))

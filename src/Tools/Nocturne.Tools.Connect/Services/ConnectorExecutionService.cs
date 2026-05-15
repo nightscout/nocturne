@@ -537,7 +537,7 @@ public class ConnectorExecutionService(
         var tokenCache = new ConnectorTokenCache();
         var tenantAccessor = new ToolTenantAccessor();
         var serverResolver = new ConnectorServerResolver<MyLifeConnectorConfiguration>(null, null, null);
-        var sessionStore = new MyLifeSessionStore();
+        var sessionCache = new MyLifeSessionCache();
         var soapClient = new MyLifeSoapClient(
             new HttpClient(),
             _loggerFactory.CreateLogger<MyLifeSoapClient>()
@@ -548,7 +548,7 @@ public class ConnectorExecutionService(
             serverResolver,
             tenantAccessor,
             soapClient,
-            sessionStore,
+            sessionCache,
             _loggerFactory.CreateLogger<MyLifeAuthTokenProvider>()
         );
         var syncService = new MyLifeSyncService(soapClient, _loggerFactory.CreateLogger<MyLifeSyncService>());
@@ -559,7 +559,8 @@ public class ConnectorExecutionService(
             _loggerFactory.CreateLogger<MyLifeConnectorService>(),
             tokenProvider,
             eventProcessor,
-            sessionStore,
+            sessionCache,
+            tenantAccessor,
             syncService,
             null
         );

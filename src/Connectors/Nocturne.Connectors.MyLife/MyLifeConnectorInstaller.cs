@@ -34,7 +34,8 @@ public class MyLifeConnectorInstaller : IConnectorInstaller
         services.AddHttpClient<MyLifeSoapClient>();
         services.AddHttpClient<MyLifeAuthTokenProvider>();
         services.AddHttpClient<MyLifeConnectorService>();
-        services.AddSingleton<MyLifeSessionStore>();
+        services.AddSingleton<IMyLifeSessionCache, MyLifeSessionCache>();
+        services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IMyLifeSessionCache>());
 
         services.AddConnectorTokenProvider<MyLifeAuthTokenProvider>();
 

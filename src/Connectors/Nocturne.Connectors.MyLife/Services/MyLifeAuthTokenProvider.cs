@@ -13,11 +13,11 @@ public class MyLifeAuthTokenProvider(
     IConnectorServerResolver<MyLifeConnectorConfiguration> serverResolver,
     ITenantAccessor tenantAccessor,
     MyLifeSoapClient soapClient,
-    MyLifeSessionStore sessionStore,
+    IMyLifeSessionCache sessionCache,
     ILogger<MyLifeAuthTokenProvider> logger)
     : AuthTokenProviderBase<MyLifeConnectorConfiguration>(httpClient, tokenCache, serverResolver, tenantAccessor, logger)
 {
-    private readonly MyLifeSessionStore _sessionStore = sessionStore;
+    private readonly IMyLifeSessionCache _sessionCache = sessionCache;
     private readonly MyLifeSoapClient _soapClient = soapClient;
 
     protected override int TokenLifetimeBufferMinutes => 60;
@@ -63,13 +63,13 @@ public class MyLifeAuthTokenProvider(
 
         var restServiceUrl = location.Country20?.RestServiceUrl ?? string.Empty;
 
-        _sessionStore.SetSession(
+        _sessionCache.Set(_tenantAccessor.TenantId, new MyLifeSession(
             serviceUrl,
             restServiceUrl,
             login.AuthToken,
             login.UserId ?? string.Empty,
             patient.OnlinePatientId ?? string.Empty
-        );
+        ));
 
         var expiresAt = DateTime.UtcNow.AddHours(24);
         return (login.AuthToken, expiresAt, null);
