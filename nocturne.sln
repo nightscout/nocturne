@@ -166,6 +166,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.CareLin
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.CareLink", "src\Connectors\Nocturne.Connectors.CareLink\Nocturne.Connectors.CareLink.csproj", "{7F711727-8E92-41B0-98BB-5E9B6CA91FD5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.Dexcom.Tests", "tests\Unit\Nocturne.Connectors.Dexcom.Tests\Nocturne.Connectors.Dexcom.Tests.csproj", "{0563E4E3-D81A-454D-8C27-B53867751EC5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -824,6 +826,18 @@ Global
 		{7F711727-8E92-41B0-98BB-5E9B6CA91FD5}.Release|x64.Build.0 = Release|Any CPU
 		{7F711727-8E92-41B0-98BB-5E9B6CA91FD5}.Release|x86.ActiveCfg = Release|Any CPU
 		{7F711727-8E92-41B0-98BB-5E9B6CA91FD5}.Release|x86.Build.0 = Release|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Debug|x64.Build.0 = Debug|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Debug|x86.Build.0 = Debug|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Release|x64.ActiveCfg = Release|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Release|x64.Build.0 = Release|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Release|x86.ActiveCfg = Release|Any CPU
+		{0563E4E3-D81A-454D-8C27-B53867751EC5}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -896,5 +910,6 @@ Global
 		{211B8187-292A-4848-B5FF-488399FADD92} = {237CDB4C-E7C4-795B-969A-4CCB7C8B335B}
 		{C8C9F361-44C0-4A32-BC47-C4D104C15DCF} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 		{7F711727-8E92-41B0-98BB-5E9B6CA91FD5} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
+		{0563E4E3-D81A-454D-8C27-B53867751EC5} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 	EndGlobalSection
 EndGlobal

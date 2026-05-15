@@ -110,4 +110,18 @@ public class ConnectorTokenCacheTests
 
         ReferenceEquals(lockA, lockB).Should().BeFalse();
     }
+
+    [Fact]
+    public async Task DifferentConnectors_SameTenant_AreIsolated()
+    {
+        var tenantId = Guid.NewGuid();
+
+        await _cache.SetAsync("dexcom", tenantId,
+            new ConnectorSession("dexcom-token", DateTime.UtcNow.AddHours(1)));
+        await _cache.SetAsync("glooko", tenantId,
+            new ConnectorSession("glooko-token", DateTime.UtcNow.AddHours(1)));
+
+        (await _cache.GetAsync("dexcom", tenantId))!.Token.Should().Be("dexcom-token");
+        (await _cache.GetAsync("glooko", tenantId))!.Token.Should().Be("glooko-token");
+    }
 }
