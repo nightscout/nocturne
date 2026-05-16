@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
@@ -30,46 +31,44 @@ public class CareLinkAuthTokenProvider(
     /// <summary>
     ///     Per-tenant state seeded by <see cref="InitializeFromSecrets"/>.
     ///     Only used as a fallback when the token cache has no prior session for this tenant.
-    ///     Access is guarded by the per-tenant lock in the base class's GetValidTokenAsync,
-    ///     so concurrent tenants cannot stomp each other.
+    ///     Keyed by tenant ID so concurrent tenant syncs cannot stomp each other.
     /// </summary>
-    [ThreadStatic]
-    private static string? t_refreshToken;
-    [ThreadStatic]
-    private static string? t_clientId;
-    [ThreadStatic]
-    private static string? t_tokenUrl;
-    [ThreadStatic]
-    private static string? t_audience;
+    private readonly ConcurrentDictionary<Guid, TenantSecrets> _tenantSecrets = new();
 
-    public string? CurrentRefreshToken => t_refreshToken;
-    public string? CurrentClientId => t_clientId;
-    public string? CurrentTokenUrl => t_tokenUrl;
-    public string? CurrentAudience => t_audience;
+    public string? CurrentRefreshToken => GetTenantSecrets()?.RefreshToken;
+    public string? CurrentClientId => GetTenantSecrets()?.ClientId;
+    public string? CurrentTokenUrl => GetTenantSecrets()?.TokenUrl;
+    public string? CurrentAudience => GetTenantSecrets()?.Audience;
 
     /// <summary>
     /// Seeds persisted token state (refresh token, client ID, token URL, audience) into the provider.
     /// Called by the connector service per-tenant before GetValidTokenAsync.
-    /// Uses thread-static storage so concurrent tenant syncs don't interfere.
+    /// Keyed by tenant ID so concurrent tenant syncs cannot stomp each other.
     /// </summary>
     public void InitializeFromSecrets(string? refreshToken, string? clientId, string? tokenUrl, string? audience)
     {
-        t_refreshToken = refreshToken;
-        t_clientId = clientId;
-        t_tokenUrl = tokenUrl;
-        t_audience = audience;
+        var tenantId = _tenantAccessor.TenantId;
+        _tenantSecrets[tenantId] = new TenantSecrets(refreshToken, clientId, tokenUrl, audience);
     }
+
+    private TenantSecrets? GetTenantSecrets()
+    {
+        return _tenantSecrets.TryGetValue(_tenantAccessor.TenantId, out var secrets) ? secrets : null;
+    }
+
+    private sealed record TenantSecrets(string? RefreshToken, string? ClientId, string? TokenUrl, string? Audience);
 
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         CareLinkConnectorConfiguration config, CancellationToken cancellationToken)
     {
         // Read from previously cached session metadata first, fall back to seeded secrets
         var cached = await _tokenCache.GetAsync(ConnectorName, _tenantAccessor.TenantId);
-        var refreshToken = cached?.Metadata?.GetValueOrDefault("RefreshToken") ?? t_refreshToken ?? config.RefreshToken;
-        var clientId = cached?.Metadata?.GetValueOrDefault("ClientId") ?? t_clientId;
-        var tokenUrl = cached?.Metadata?.GetValueOrDefault("TokenUrl") ?? t_tokenUrl;
+        var seeded = GetTenantSecrets();
+        var refreshToken = cached?.Metadata?.GetValueOrDefault("RefreshToken") ?? seeded?.RefreshToken ?? config.RefreshToken;
+        var clientId = cached?.Metadata?.GetValueOrDefault("ClientId") ?? seeded?.ClientId;
+        var tokenUrl = cached?.Metadata?.GetValueOrDefault("TokenUrl") ?? seeded?.TokenUrl;
 
-        var audience = cached?.Metadata?.GetValueOrDefault("Audience") ?? t_audience;
+        var audience = cached?.Metadata?.GetValueOrDefault("Audience") ?? seeded?.Audience;
 
         if (!string.IsNullOrEmpty(refreshToken) && !string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(tokenUrl))
         {

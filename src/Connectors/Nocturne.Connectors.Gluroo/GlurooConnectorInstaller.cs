@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
@@ -20,6 +21,14 @@ public class GlurooConnectorInstaller : IConnectorInstaller
 
         if (!glurooConfig.Enabled)
             return;
+
+        // Server resolver — Gluroo URLs come from per-tenant config, not a server mapping
+        services.AddSingleton<IConnectorServerResolver<GlurooConnectorConfiguration>>(
+            new ConnectorServerResolver<GlurooConnectorConfiguration>(null, null, null));
+        services.AddSingleton<IConnectorConfigurationLoader<GlurooConnectorConfiguration>,
+            ConnectorConfigurationLoader<GlurooConnectorConfiguration>>();
+        services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
+        services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
 
         if (!string.IsNullOrEmpty(glurooConfig.Url))
             services.AddHttpClient<GlurooConnectorService>()

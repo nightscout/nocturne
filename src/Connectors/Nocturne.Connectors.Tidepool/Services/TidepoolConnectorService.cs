@@ -198,7 +198,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         return await ExecuteWithRetryAsync(
-            async () => await FetchDataCoreAsync<T>(token, userId, dataType, startDate, endDate),
+            async () => await FetchDataCoreAsync<T>(config, token, userId, dataType, startDate, endDate),
             _retryDelayStrategy,
             async () =>
             {
@@ -216,6 +216,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
     }
 
     private async Task<T?> FetchDataCoreAsync<T>(
+        TidepoolConnectorConfiguration config,
         string token, string userId, string dataType, DateTime? startDate, DateTime? endDate) where T : class
     {
         var url = $"/data/{userId}?type={dataType}";
@@ -224,6 +225,8 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             url += $"&startDate={startDate.Value.ToUniversalTime():o}";
         if (endDate.HasValue)
             url += $"&endDate={endDate.Value.ToUniversalTime():o}";
+
+        url = _serverResolver.BuildUrl(config, url);
 
         var headers = new Dictionary<string, string>
         {

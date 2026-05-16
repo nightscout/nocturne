@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
@@ -21,6 +22,14 @@ public class NightscoutConnectorInstaller : IConnectorInstaller
 
         if (!nightscoutConfig.Enabled)
             return;
+
+        // Server resolver — Nightscout URLs come from per-tenant config, not a server mapping
+        services.AddSingleton<IConnectorServerResolver<NightscoutConnectorConfiguration>>(
+            new ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null));
+        services.AddSingleton<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>,
+            ConnectorConfigurationLoader<NightscoutConnectorConfiguration>>();
+        services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
+        services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
 
         // URL comes from user config (possibly loaded from DB at runtime),
         // so configure it at registration time only if already available.

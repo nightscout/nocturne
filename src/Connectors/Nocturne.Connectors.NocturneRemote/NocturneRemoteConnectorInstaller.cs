@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
@@ -20,6 +21,14 @@ public class NocturneRemoteConnectorInstaller : IConnectorInstaller
 
         if (!config.Enabled)
             return;
+
+        // Server resolver — URLs come from per-tenant config, not a server mapping
+        services.AddSingleton<IConnectorServerResolver<NocturneRemoteConnectorConfiguration>>(
+            new ConnectorServerResolver<NocturneRemoteConnectorConfiguration>(null, null, null));
+        services.AddSingleton<IConnectorConfigurationLoader<NocturneRemoteConnectorConfiguration>,
+            ConnectorConfigurationLoader<NocturneRemoteConnectorConfiguration>>();
+        services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
+        services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());
 
         // URL comes from user config (possibly loaded from DB at runtime),
         // so configure it at registration time only if already available.

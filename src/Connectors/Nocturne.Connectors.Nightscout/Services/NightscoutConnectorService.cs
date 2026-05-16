@@ -17,6 +17,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private readonly IRateLimitingStrategy _rateLimitingStrategy;
     private readonly TConfig _config;
     private string? _apiSecretHash;
+    private string? _resolvedBaseUrl;
 
     public NightscoutConnectorServiceBase(
         HttpClient httpClient,
@@ -54,9 +55,16 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
     public override async Task<bool> AuthenticateAsync()
     {
-        EnsureBaseAddress();
+        // Legacy no-config overload; uses the injected startup config.
+        // Per-tenant sync uses AuthenticateWithConfigAsync instead.
+        return await AuthenticateWithConfigAsync(_config);
+    }
 
-        if (string.IsNullOrEmpty(_config.ApiSecret))
+    private async Task<bool> AuthenticateWithConfigAsync(TConfig config)
+    {
+        _resolvedBaseUrl = ResolveBaseUrl(config.Url);
+
+        if (string.IsNullOrEmpty(config.ApiSecret))
         {
             _logger.LogError(
                 "[{ConnectorSource}] API secret is not configured",
@@ -65,17 +73,18 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             return false;
         }
 
-        _apiSecretHash = ComputeApiSecretHash(_config.ApiSecret);
+        _apiSecretHash = ComputeApiSecretHash(config.ApiSecret);
 
         _logger.LogDebug(
             "[{ConnectorSource}] Authenticating with Nightscout at {Url}",
             ConnectorSource,
-            _httpClient.BaseAddress);
+            _resolvedBaseUrl);
 
         try
         {
             var headers = GetAuthHeaders();
-            var response = await GetWithHeadersAsync("/api/v1/entries.json?count=1", headers);
+            var response = await GetWithHeadersAsync(
+                $"{_resolvedBaseUrl}/api/v1/entries.json?count=1", headers);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -87,7 +96,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     _logger.LogError(
                         "[{ConnectorSource}] Nightscout instance at {Url} is behind a WAF (e.g. Cloudflare) that is blocking API requests",
                         ConnectorSource,
-                        _httpClient.BaseAddress);
+                        _resolvedBaseUrl);
                     TrackFailedRequest(
                         "Your Nightscout instance is behind a firewall (e.g. Cloudflare) that is blocking Nocturne from syncing. " +
                         "Please add a WAF bypass rule for API paths (e.g. /api/*) or allowlist the Nocturne server IP.");
@@ -115,7 +124,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             _logger.LogError(ex,
                 "[{ConnectorSource}] Failed to connect to Nightscout instance at {Url}",
                 ConnectorSource,
-                _httpClient.BaseAddress);
+                _resolvedBaseUrl);
             return false;
         }
     }
@@ -126,7 +135,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         CancellationToken cancellationToken,
         ISyncProgressReporter? progressReporter = null)
     {
-        if (!await AuthenticateAsync())
+        if (!await AuthenticateWithConfigAsync(config))
         {
             return new SyncResult
             {
@@ -627,7 +636,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private async Task<T?> FetchDataCoreAsync<T>(string url) where T : class
     {
         var headers = GetAuthHeaders();
-        var response = await GetWithHeadersAsync(url, headers);
+        var absoluteUrl = _resolvedBaseUrl != null ? $"{_resolvedBaseUrl}{url}" : url;
+        var response = await GetWithHeadersAsync(absoluteUrl, headers);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -699,19 +709,16 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return url;
     }
 
-    private void EnsureBaseAddress()
+    private static string ResolveBaseUrl(string configUrl)
     {
-        if (_httpClient.BaseAddress != null)
-            return;
-
-        if (string.IsNullOrEmpty(_config.Url))
+        if (string.IsNullOrEmpty(configUrl))
             throw new InvalidOperationException("Nightscout URL is not configured");
 
-        var url = _config.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-            ? _config.Url
-            : $"https://{_config.Url}";
+        var url = configUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? configUrl
+            : $"https://{configUrl}";
 
-        _httpClient.BaseAddress = new Uri(url);
+        return url.TrimEnd('/');
     }
 
     private Dictionary<string, string> GetAuthHeaders()

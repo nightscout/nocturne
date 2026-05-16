@@ -97,6 +97,14 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         return true;
     }
 
+    private static string ResolveAbsoluteUrl(string configUrl, string endpoint)
+    {
+        var baseUrl = configUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? configUrl
+            : $"https://{configUrl}";
+        return $"{baseUrl.TrimEnd('/')}{endpoint}";
+    }
+
     private List<T> FilterItems(IReadOnlyList<T> items)
     {
         var filtered = new List<T>(items.Count);
@@ -117,7 +125,8 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
     {
         try
         {
-            using var request = new HttpRequestMessage(method, endpoint);
+            var absoluteUrl = ResolveAbsoluteUrl(_config.Url, endpoint);
+            using var request = new HttpRequestMessage(method, absoluteUrl);
             request.Headers.Add(
                 "api-secret",
                 NightscoutConnectorService.ComputeApiSecretHash(_config.ApiSecret));

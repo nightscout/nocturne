@@ -45,12 +45,29 @@ public class LibreConnectorService(
         tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
 
     private string _accountIdHash = string.Empty;
+    private string? _bearerToken;
     private LibreUserConnection? _selectedConnection;
 
-    private Dictionary<string, string>? RequestHeaders =>
-        string.IsNullOrWhiteSpace(_accountIdHash)
-            ? null
-            : new Dictionary<string, string> { { "Account-Id", _accountIdHash } };
+    private Dictionary<string, string>? RequestHeaders
+    {
+        get
+        {
+            Dictionary<string, string>? headers = null;
+
+            if (!string.IsNullOrWhiteSpace(_accountIdHash))
+            {
+                headers = new Dictionary<string, string> { { "Account-Id", _accountIdHash } };
+            }
+
+            if (!string.IsNullOrEmpty(_bearerToken))
+            {
+                headers ??= new Dictionary<string, string>();
+                headers["Authorization"] = $"Bearer {_bearerToken}";
+            }
+
+            return headers;
+        }
+    }
 
     public override string ServiceName => "LibreLinkUp";
     protected override string ConnectorSource => DataSources.LibreConnector;
@@ -94,8 +111,7 @@ public class LibreConnectorService(
             _logger.LogWarning("LibreLinkUp token is not a valid JWT");
         }
 
-        _httpClient.DefaultRequestHeaders.Remove("Authorization");
-        _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+        _bearerToken = token;
 
         await LoadConnectionsAsync(config);
 

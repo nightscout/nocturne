@@ -41,9 +41,13 @@ public static class ConnectorConfigurationBinder
                         || element.ValueKind == JsonValueKind.False))
                     property.SetValue(config, element.GetBoolean());
             }
-            catch (Exception)
+            catch (TargetInvocationException)
             {
-                // Skip properties that can't be set
+                // Skip properties that can't be set (e.g. setter throws)
+            }
+            catch (ArgumentException)
+            {
+                // Skip properties with type mismatches
             }
         }
     }

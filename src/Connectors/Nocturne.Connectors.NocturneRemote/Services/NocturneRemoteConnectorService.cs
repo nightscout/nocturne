@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -17,6 +16,8 @@ namespace Nocturne.Connectors.NocturneRemote.Services;
 public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemoteConnectorConfiguration>
 {
     private readonly NocturneRemoteConnectorConfiguration _config;
+    private string? _resolvedBaseUrl;
+    private Dictionary<string, string>? _authHeaders;
 
     public NocturneRemoteConnectorService(
         HttpClient httpClient,
@@ -51,12 +52,18 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
     public override async Task<bool> AuthenticateAsync()
     {
-        EnsureConfiguration();
+        // Legacy no-config overload; uses the injected startup config.
+        return await AuthenticateWithConfigAsync(_config);
+    }
+
+    private async Task<bool> AuthenticateWithConfigAsync(NocturneRemoteConnectorConfiguration config)
+    {
+        ResolveConfiguration(config);
 
         try
         {
-            var url = $"{NocturneRemoteConstants.SensorGlucose}?limit=1";
-            var response = await _httpClient.GetAsync(url);
+            var url = BuildAbsoluteUrl($"{NocturneRemoteConstants.SensorGlucose}?limit=1");
+            var response = await GetWithHeadersAsync(url, _authHeaders);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -74,7 +81,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             _logger.LogInformation(
                 "[{ConnectorSource}] Successfully authenticated with remote Nocturne instance at {Url}",
                 ConnectorSource,
-                _httpClient.BaseAddress);
+                _resolvedBaseUrl);
             return true;
         }
         catch (Exception ex)
@@ -83,7 +90,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             _logger.LogError(ex,
                 "[{ConnectorSource}] Failed to connect to remote Nocturne instance at {Url}",
                 ConnectorSource,
-                _httpClient.BaseAddress);
+                _resolvedBaseUrl);
             return false;
         }
     }
@@ -94,7 +101,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         CancellationToken cancellationToken,
         ISyncProgressReporter? progressReporter = null)
     {
-        if (!await AuthenticateAsync())
+        if (!await AuthenticateWithConfigAsync(config))
         {
             return new SyncResult
             {
@@ -326,8 +333,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         NocturneRemoteConnectorConfiguration config, CancellationToken ct)
     {
         // Foods endpoint returns a flat array, not PaginatedResponse
-        var url = $"{NocturneRemoteConstants.Foods}?count={_config.MaxCount}";
-        var response = await _httpClient.GetAsync(url, ct);
+        var url = BuildAbsoluteUrl($"{NocturneRemoteConstants.Foods}?count={_config.MaxCount}");
+        var response = await GetWithHeadersAsync(url, _authHeaders, ct);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -362,8 +369,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         {
             ct.ThrowIfCancellationRequested();
 
-            var url = BuildPaginatedUrl(endpoint, from, to, _config.MaxCount, offset);
-            var response = await _httpClient.GetAsync(url, ct);
+            var url = BuildAbsoluteUrl(BuildPaginatedUrl(endpoint, from, to, _config.MaxCount, offset));
+            var response = await GetWithHeadersAsync(url, _authHeaders, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -414,8 +421,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         {
             ct.ThrowIfCancellationRequested();
 
-            var url = BuildPaginatedUrl(endpoint, from, to, _config.MaxCount, offset);
-            var response = await _httpClient.GetAsync(url, ct);
+            var url = BuildAbsoluteUrl(BuildPaginatedUrl(endpoint, from, to, _config.MaxCount, offset));
+            var response = await GetWithHeadersAsync(url, _authHeaders, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -465,8 +472,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         {
             ct.ThrowIfCancellationRequested();
 
-            var url = BuildV1DeviceStatusUrl(from, currentTo);
-            var response = await _httpClient.GetAsync(url, ct);
+            var url = BuildAbsoluteUrl(BuildV1DeviceStatusUrl(from, currentTo));
+            var response = await GetWithHeadersAsync(url, _authHeaders, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -544,22 +551,24 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
 
     #endregion
 
-    private void EnsureConfiguration()
+    private void ResolveConfiguration(NocturneRemoteConnectorConfiguration config)
     {
-        if (_httpClient.BaseAddress != null)
-            return;
-
-        if (string.IsNullOrEmpty(_config.Url))
+        if (string.IsNullOrEmpty(config.Url))
             throw new InvalidOperationException("Remote Nocturne URL is not configured");
 
-        var url = _config.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-            ? _config.Url
-            : $"https://{_config.Url}";
+        var url = config.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? config.Url
+            : $"https://{config.Url}";
 
-        _httpClient.BaseAddress = new Uri(url);
+        _resolvedBaseUrl = url.TrimEnd('/');
 
-        if (!string.IsNullOrEmpty(_config.Token))
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", _config.Token);
+        _authHeaders = !string.IsNullOrEmpty(config.Token)
+            ? new Dictionary<string, string> { ["Authorization"] = $"Bearer {config.Token}" }
+            : null;
+    }
+
+    private string BuildAbsoluteUrl(string relativePath)
+    {
+        return _resolvedBaseUrl != null ? $"{_resolvedBaseUrl}{relativePath}" : relativePath;
     }
 }
