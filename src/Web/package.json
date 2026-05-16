@@ -44,6 +44,11 @@
           "@tiptap/core": "*",
           "@tiptap/pm": "*"
         }
+      },
+      "@microsoft/signalr": {
+        "dependencies": {
+          "tough-cookie": "*"
+        }
       }
     },
     "onlyBuiltDependencies": [
