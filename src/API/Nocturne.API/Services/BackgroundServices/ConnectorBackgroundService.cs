@@ -191,7 +191,12 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         {
             config = await loader.LoadForTenantAsync(scope.ServiceProvider, stoppingToken);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
+        {
+            Logger.LogWarning(ex, "Failed to load config for {ConnectorName}/{TenantSlug}", ConnectorName, tenantSlug);
+            return;
+        }
+        catch (DbUpdateException ex)
         {
             Logger.LogWarning(ex, "Failed to load config for {ConnectorName}/{TenantSlug}", ConnectorName, tenantSlug);
             return;

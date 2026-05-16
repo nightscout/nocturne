@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 
@@ -24,7 +23,6 @@ public abstract class ConnectorSyncExecutor<TService, TConfig> : IConnectorSyncE
         CancellationToken ct,
         ISyncProgressReporter? progressReporter = null)
     {
-        var logger = scopeProvider.GetRequiredService<ILoggerFactory>().CreateLogger(GetType());
         var loader = scopeProvider.GetRequiredService<IConnectorConfigurationLoader<TConfig>>();
 
         var config = await loader.LoadForTenantAsync(scopeProvider, ct);

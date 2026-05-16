@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Linq;
 
 namespace Nocturne.Connectors.Core.Services;
 
@@ -16,11 +17,8 @@ public static class ConnectorConfigurationBinder
             .GetProperties(BindingFlags.Public | BindingFlags.Instance);
         var root = configuration.RootElement;
 
-        foreach (var property in properties)
+        foreach (var property in properties.Where(p => p.CanWrite))
         {
-            if (!property.CanWrite)
-                continue;
-
             var camelName = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
             if (!root.TryGetProperty(camelName, out var element))
                 continue;
@@ -59,11 +57,8 @@ public static class ConnectorConfigurationBinder
         var properties = config.GetType()
             .GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
-        foreach (var property in properties)
+        foreach (var property in properties.Where(p => p.CanWrite && p.PropertyType == typeof(string)))
         {
-            if (!property.CanWrite || property.PropertyType != typeof(string))
-                continue;
-
             var camelName = char.ToLowerInvariant(property.Name[0]) + property.Name[1..];
             if (secrets.TryGetValue(camelName, out var value))
                 property.SetValue(config, value);

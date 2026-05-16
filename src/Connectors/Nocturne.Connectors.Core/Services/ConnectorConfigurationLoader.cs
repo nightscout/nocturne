@@ -39,7 +39,13 @@ public class ConnectorConfigurationLoader<TConfig>(
         {
             throw;
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex,
+                "Failed to load database configuration for {ConnectorName}",
+                registration.ConnectorName);
+        }
+        catch (JsonException ex)
         {
             logger.LogWarning(ex,
                 "Failed to load database configuration for {ConnectorName}",

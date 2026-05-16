@@ -452,7 +452,7 @@ public class ConnectorBackgroundServiceTests
     {
         public void Dispose()
         {
-            try { File.Delete(path); } catch { /* best-effort */ }
+            try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 

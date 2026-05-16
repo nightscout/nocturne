@@ -27,8 +27,9 @@ public class AuthTokenProviderBaseTenantGuardTests
         tenantAccessor.Setup(t => t.IsResolved).Returns(false);
         tenantAccessor.Setup(t => t.TenantId).Returns(Guid.Empty);
 
+        using var httpClient = new HttpClient();
         var provider = new TestTokenProvider(
-            new HttpClient(),
+            httpClient,
             new ConnectorTokenCache(),
             NoOpResolver,
             tenantAccessor.Object,
@@ -49,8 +50,9 @@ public class AuthTokenProviderBaseTenantGuardTests
         tenantAccessor.Setup(t => t.IsResolved).Returns(true);
         tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
 
+        using var httpClient = new HttpClient();
         var provider = new TestTokenProvider(
-            new HttpClient(),
+            httpClient,
             new ConnectorTokenCache(),
             NoOpResolver,
             tenantAccessor.Object,
