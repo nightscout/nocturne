@@ -20,6 +20,10 @@ public class NightscoutConnectorInstaller : IConnectorInstaller
             configuration,
             "Nightscout");
 
+        // Always register the configuration so write-back sinks can be resolved
+        // (they're referenced by ServiceRegistrationExtensions even when disabled)
+        services.AddSingleton(nightscoutConfig);
+
         if (!nightscoutConfig.Enabled)
             return;
 
