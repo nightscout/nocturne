@@ -35,11 +35,17 @@ public class Program
         // Configure HTTP clients for API communication
         var apiUrl = builder.Configuration["DemoService:ApiUrl"] ?? "http://localhost:5000";
         var demoHost = builder.Configuration["DemoService:DemoHost"] ?? "demo.localhost";
+        var instanceKey = builder.Configuration["DemoService:InstanceKey"] ?? "";
+        var instanceKeyHash = !string.IsNullOrEmpty(instanceKey)
+            ? Nocturne.Connectors.Core.Utilities.HashUtils.Sha1Hex(instanceKey)
+            : "";
 
         builder.Services.AddHttpClient("DemoAdmin", client =>
         {
             client.BaseAddress = new Uri(apiUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromMinutes(5); // Backfill can be slow
+            if (!string.IsNullOrEmpty(instanceKeyHash))
+                client.DefaultRequestHeaders.Add("X-Instance-Key", instanceKeyHash);
         });
 
         builder.Services.AddHttpClient("DemoTenant", client =>
@@ -47,6 +53,8 @@ public class Program
             client.BaseAddress = new Uri(apiUrl.TrimEnd('/') + "/");
             client.DefaultRequestHeaders.Host = demoHost;
             client.Timeout = TimeSpan.FromMinutes(5);
+            if (!string.IsNullOrEmpty(instanceKeyHash))
+                client.DefaultRequestHeaders.Add("X-Instance-Key", instanceKeyHash);
         });
 
         // Register the API client
