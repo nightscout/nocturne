@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -94,7 +95,20 @@ public static class DatabaseInitializationExtensions
         var context = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<NocturneDbContext>>();
 
-        await VerifyRlsAsync(context, logger, cancellationToken);
+        var tenantScopedTables = context.Model.GetEntityTypes()
+            .Where(et => typeof(ITenantScoped).IsAssignableFrom(et.ClrType))
+            .Select(et => et.GetTableName())
+            .Where(name => !string.IsNullOrEmpty(name))
+            .Select(name => name!)
+            .Distinct()
+            .ToArray();
+
+        await VerifyRlsAsync(
+            context.Database.GetDbConnection(),
+            tenantScopedTables,
+            logger,
+            cancellationToken);
+
         VerifyNoResetOnClose(context, logger);
     }
 
@@ -120,31 +134,28 @@ public static class DatabaseInitializationExtensions
     }
 
     /// <summary>
-    /// Verifies that every table backing an <see cref="ITenantScoped"/> entity has
-    /// Row Level Security enabled, forced, and at least one policy. Also checks
-    /// table ownership and default privileges, and warns if the current database
-    /// user is a superuser or has BYPASSRLS.
+    /// Verifies that every supplied tenant-scoped table has Row Level Security
+    /// enabled, forced, and at least one policy. Also checks table ownership and
+    /// default privileges, and warns if the connected database user is a superuser
+    /// or has BYPASSRLS.
     ///
-    /// This runs on every startup after migrations so that accidentally adding a
-    /// new tenant-scoped table without an accompanying RLS migration fails loud
-    /// instead of silently leaking PHI across tenants.
+    /// Runs at API startup after migrations so accidentally adding a new
+    /// tenant-scoped table without an accompanying RLS migration fails loud
+    /// instead of silently leaking PHI across tenants. Also called directly by
+    /// the RLS migration smoke test against a freshly-migrated test database.
     /// </summary>
-    private static async Task VerifyRlsAsync(
-        NocturneDbContext context,
+    /// <param name="connection">Open or closed DbConnection to run the checks against. Opened if needed and left open.</param>
+    /// <param name="tenantScopedTables">Names of tables expected to have RLS configured (typically derived from the EF model walk for <see cref="ITenantScoped"/> entities).</param>
+    /// <param name="logger">Logger for pass/warn/fail messages. Pass <see cref="Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance"/> to suppress.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static async Task VerifyRlsAsync(
+        DbConnection connection,
+        IEnumerable<string> tenantScopedTables,
         ILogger logger,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
-        // Discover every tenant-scoped table name by walking the EF model rather
-        // than a hardcoded list -- that way we can never drift out of sync with
-        // new entities.
-        var tenantScopedTables = context.Model.GetEntityTypes()
-            .Where(et => typeof(ITenantScoped).IsAssignableFrom(et.ClrType))
-            .Select(et => et.GetTableName())
-            .Where(name => !string.IsNullOrEmpty(name))
-            .Distinct()
-            .ToArray();
-
-        if (tenantScopedTables.Length == 0)
+        var tables = tenantScopedTables.ToArray();
+        if (tables.Length == 0)
         {
             return;
         }
@@ -167,7 +178,7 @@ public static class DatabaseInitializationExtensions
 
         var rows = new List<(string Table, bool RlsEnabled, bool RlsForced, long PolicyCount)>();
 
-        await using (var cmd = context.Database.GetDbConnection().CreateCommand())
+        await using (var cmd = connection.CreateCommand())
         {
             if (cmd.Connection!.State != System.Data.ConnectionState.Open)
             {
@@ -177,7 +188,7 @@ public static class DatabaseInitializationExtensions
             cmd.CommandText = sql;
             var param = cmd.CreateParameter();
             param.ParameterName = "@tables";
-            param.Value = tenantScopedTables;
+            param.Value = tables;
             cmd.Parameters.Add(param);
 
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -192,7 +203,7 @@ public static class DatabaseInitializationExtensions
         }
 
         var foundTables = rows.Select(r => r.Table).ToHashSet(StringComparer.Ordinal);
-        var missing = tenantScopedTables.Where(t => !foundTables.Contains(t!)).ToArray();
+        var missing = tables.Where(t => !foundTables.Contains(t)).ToArray();
         var notEnabled = rows.Where(r => !r.RlsEnabled).Select(r => r.Table).ToArray();
         var notForced = rows.Where(r => r.RlsEnabled && !r.RlsForced).Select(r => r.Table).ToArray();
         var noPolicy = rows.Where(r => r.RlsEnabled && r.PolicyCount == 0).Select(r => r.Table).ToArray();
@@ -226,7 +237,7 @@ public static class DatabaseInitializationExtensions
         }
 
         // Owner check: all tenant-scoped tables should be owned by nocturne_migrator.
-        await using (var ownerCmd = context.Database.GetDbConnection().CreateCommand())
+        await using (var ownerCmd = connection.CreateCommand())
         {
             if (ownerCmd.Connection!.State != System.Data.ConnectionState.Open)
             {
@@ -237,7 +248,7 @@ public static class DatabaseInitializationExtensions
                 "SELECT tablename, tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = ANY(@tables) AND tableowner != 'nocturne_migrator'";
             var ownerParam = ownerCmd.CreateParameter();
             ownerParam.ParameterName = "@tables";
-            ownerParam.Value = tenantScopedTables;
+            ownerParam.Value = tables;
             ownerCmd.Parameters.Add(ownerParam);
 
             var badOwners = new List<string>();
@@ -259,7 +270,7 @@ public static class DatabaseInitializationExtensions
         }
 
         // Default privileges check: nocturne_migrator must have ALTER DEFAULT PRIVILEGES configured.
-        await using (var defAclCmd = context.Database.GetDbConnection().CreateCommand())
+        await using (var defAclCmd = connection.CreateCommand())
         {
             if (defAclCmd.Connection!.State != System.Data.ConnectionState.Open)
             {
@@ -286,7 +297,7 @@ public static class DatabaseInitializationExtensions
         // Secondary check: if the connected role bypasses RLS, all of the above
         // is cosmetic. This is the single most common silent failure mode -- in
         // dev the app typically connects as the Postgres bootstrap superuser.
-        await using (var roleCmd = context.Database.GetDbConnection().CreateCommand())
+        await using (var roleCmd = connection.CreateCommand())
         {
             if (roleCmd.Connection!.State != System.Data.ConnectionState.Open)
             {
@@ -314,7 +325,7 @@ public static class DatabaseInitializationExtensions
                 {
                     logger.LogInformation(
                         "Row Level Security self-check passed for {Count} tenant-scoped tables (runtime role: {User})",
-                        tenantScopedTables.Length, user);
+                        tables.Length, user);
                 }
             }
         }
