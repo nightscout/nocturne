@@ -16,11 +16,12 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 columns: new[] { "tenant_id", "timestamp" },
                 descending: new[] { false, true });
 
-            migrationBuilder.CreateIndex(
-                name: "ix_temp_basals_tenant_start_timestamp",
-                table: "temp_basals",
-                columns: new[] { "tenant_id", "start_timestamp" },
-                descending: new[] { false, true });
+            // Idempotent: name overlaps with AddTenantTimestampIndexes (20260511000001),
+            // which creates the same index without descending ordering. Skip recreation
+            // if it already exists so both ordering choices work in sequence.
+            migrationBuilder.Sql(
+                "CREATE INDEX IF NOT EXISTS ix_temp_basals_tenant_start_timestamp " +
+                "ON temp_basals (tenant_id, start_timestamp DESC);");
 
             migrationBuilder.CreateIndex(
                 name: "ix_target_range_schedules_tenant_profile_timestamp",
@@ -40,17 +41,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 columns: new[] { "tenant_id", "profile_name", "timestamp" },
                 descending: new[] { false, false, true });
 
-            migrationBuilder.CreateIndex(
-                name: "ix_carb_intakes_tenant_timestamp",
-                table: "carb_intakes",
-                columns: new[] { "tenant_id", "timestamp" },
-                descending: new[] { false, true });
+            migrationBuilder.Sql(
+                "CREATE INDEX IF NOT EXISTS ix_carb_intakes_tenant_timestamp " +
+                "ON carb_intakes (tenant_id, timestamp DESC);");
 
-            migrationBuilder.CreateIndex(
-                name: "ix_boluses_tenant_timestamp",
-                table: "boluses",
-                columns: new[] { "tenant_id", "timestamp" },
-                descending: new[] { false, true });
+            migrationBuilder.Sql(
+                "CREATE INDEX IF NOT EXISTS ix_boluses_tenant_timestamp " +
+                "ON boluses (tenant_id, timestamp DESC);");
 
             migrationBuilder.CreateIndex(
                 name: "ix_basal_schedules_tenant_profile_timestamp",
@@ -75,9 +72,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 name: "ix_therapy_settings_tenant_timestamp",
                 table: "therapy_settings");
 
-            migrationBuilder.DropIndex(
-                name: "ix_temp_basals_tenant_start_timestamp",
-                table: "temp_basals");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS ix_temp_basals_tenant_start_timestamp;");
 
             migrationBuilder.DropIndex(
                 name: "ix_target_range_schedules_tenant_profile_timestamp",
@@ -91,13 +86,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 name: "ix_carb_ratio_schedules_tenant_profile_timestamp",
                 table: "carb_ratio_schedules");
 
-            migrationBuilder.DropIndex(
-                name: "ix_carb_intakes_tenant_timestamp",
-                table: "carb_intakes");
-
-            migrationBuilder.DropIndex(
-                name: "ix_boluses_tenant_timestamp",
-                table: "boluses");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS ix_carb_intakes_tenant_timestamp;");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS ix_boluses_tenant_timestamp;");
 
             migrationBuilder.DropIndex(
                 name: "ix_basal_schedules_tenant_profile_timestamp",
