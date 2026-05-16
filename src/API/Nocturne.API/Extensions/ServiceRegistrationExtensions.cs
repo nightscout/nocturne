@@ -394,12 +394,11 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITreatmentCache, Nocturne.API.Services.Treatments.TreatmentCacheAdapter>();
         services.AddScoped<SignalRTreatmentEventSink>();
         services.AddScoped<IDataEventSink<Treatment>>(sp =>
-            new CompositeDataEventSink<Treatment>(
-                [
-                    sp.GetRequiredService<SignalRTreatmentEventSink>(),
-                    sp.GetRequiredService<NightscoutTreatmentWriteBackSink>()
-                ],
-                sp.GetService<ILogger<CompositeDataEventSink<Treatment>>>()));
+        {
+            var sinks = new List<IDataEventSink<Treatment>> { sp.GetRequiredService<SignalRTreatmentEventSink>() };
+            sp.TryAddOptionalSink<NightscoutTreatmentWriteBackSink, Treatment>(sinks);
+            return new CompositeDataEventSink<Treatment>(sinks, sp.GetService<ILogger<CompositeDataEventSink<Treatment>>>());
+        });
         services.AddScoped<IWriteSideEffects, WriteSideEffectsService>();
         services.AddScoped<IEntryService, EntryService>();
         services.AddScoped<IEntryStore, Nocturne.API.Services.Entries.EntryReadService>();
@@ -407,22 +406,18 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<SignalREntryEventSink>();
         services.AddScoped<IDataEventSink<Entry>>(sp =>
         {
-            var sinks = new List<IDataEventSink<Entry>>
-            {
-                sp.GetRequiredService<SignalREntryEventSink>(),
-                sp.GetRequiredService<NightscoutEntryWriteBackSink>()
-            };
-
-            return new CompositeDataEventSink<Entry>(
-                sinks,
-                sp.GetService<ILogger<CompositeDataEventSink<Entry>>>());
+            var sinks = new List<IDataEventSink<Entry>> { sp.GetRequiredService<SignalREntryEventSink>() };
+            sp.TryAddOptionalSink<NightscoutEntryWriteBackSink, Entry>(sinks);
+            return new CompositeDataEventSink<Entry>(sinks, sp.GetService<ILogger<CompositeDataEventSink<Entry>>>());
         });
         services.AddScoped<IStateSpanService, StateSpanService>();
         services.AddScoped<DeviceStatusProjectionService>();
         services.AddScoped<IDataEventSink<DeviceStatus>>(sp =>
-            new CompositeDataEventSink<DeviceStatus>(
-                [sp.GetRequiredService<NightscoutDeviceStatusWriteBackSink>()],
-                sp.GetService<ILogger<CompositeDataEventSink<DeviceStatus>>>()));
+        {
+            var sinks = new List<IDataEventSink<DeviceStatus>>();
+            sp.TryAddOptionalSink<NightscoutDeviceStatusWriteBackSink, DeviceStatus>(sinks);
+            return new CompositeDataEventSink<DeviceStatus>(sinks, sp.GetService<ILogger<CompositeDataEventSink<DeviceStatus>>>());
+        });
         services.AddScoped<IBatteryService, BatteryService>();
         services.AddScoped<IProfileWriteService, ProfileWriteService>();
         services.AddScoped<IActiveProfileResolver, ActiveProfileResolver>();
@@ -436,16 +431,20 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITempBasalResolver, TempBasalResolver>();
         services.AddScoped<IProfileProjectionService, ProfileProjectionService>();
         services.AddScoped<IDataEventSink<Profile>>(sp =>
-            new CompositeDataEventSink<Profile>(
-                [sp.GetRequiredService<NightscoutProfileWriteBackSink>()],
-                sp.GetService<ILogger<CompositeDataEventSink<Profile>>>()));
+        {
+            var sinks = new List<IDataEventSink<Profile>>();
+            sp.TryAddOptionalSink<NightscoutProfileWriteBackSink, Profile>(sinks);
+            return new CompositeDataEventSink<Profile>(sinks, sp.GetService<ILogger<CompositeDataEventSink<Profile>>>());
+        });
 
         // Food services
         services.AddScoped<IFoodService, FoodService>();
         services.AddScoped<IDataEventSink<Food>>(sp =>
-            new CompositeDataEventSink<Food>(
-                [sp.GetRequiredService<NightscoutFoodWriteBackSink>()],
-                sp.GetService<ILogger<CompositeDataEventSink<Food>>>()));
+        {
+            var sinks = new List<IDataEventSink<Food>>();
+            sp.TryAddOptionalSink<NightscoutFoodWriteBackSink, Food>(sinks);
+            return new CompositeDataEventSink<Food>(sinks, sp.GetService<ILogger<CompositeDataEventSink<Food>>>());
+        });
         services.AddScoped<IConnectorFoodEntryService, ConnectorFoodEntryService>();
         services.AddScoped<ITreatmentFoodService, TreatmentFoodService>();
         services.AddScoped<IUserFoodFavoriteService, UserFoodFavoriteService>();
@@ -455,9 +454,11 @@ public static class ServiceRegistrationExtensions
         // Activity and health metric services
         services.AddScoped<IActivityService, ActivityService>();
         services.AddScoped<IDataEventSink<Activity>>(sp =>
-            new CompositeDataEventSink<Activity>(
-                [sp.GetRequiredService<NightscoutActivityWriteBackSink>()],
-                sp.GetService<ILogger<CompositeDataEventSink<Activity>>>()));
+        {
+            var sinks = new List<IDataEventSink<Activity>>();
+            sp.TryAddOptionalSink<NightscoutActivityWriteBackSink, Activity>(sinks);
+            return new CompositeDataEventSink<Activity>(sinks, sp.GetService<ILogger<CompositeDataEventSink<Activity>>>());
+        });
         services.AddScoped<IHeartRateService, HeartRateService>();
         services.AddScoped<IBodyWeightService, BodyWeightService>();
         services.AddScoped<IStepCountService, StepCountService>();
@@ -795,5 +796,25 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService<Nocturne.API.Services.Migration.MigrationStartupService>();
 
         return services;
+    }
+
+    // Resolves an optional write-back sink and appends it to <paramref name="sinks"/>.
+    // Returns silently if the sink isn't registered or if construction throws (e.g. the
+    // connector's configuration singleton went missing) — the request pipeline must not
+    // 500 just because a side-effect sink is misconfigured. Surfaces the failure as a
+    // warning so the underlying issue stays visible.
+    private static void TryAddOptionalSink<TSink, TEvent>(this IServiceProvider sp, List<IDataEventSink<TEvent>> sinks)
+        where TSink : class, IDataEventSink<TEvent>
+    {
+        try
+        {
+            if (sp.GetService<TSink>() is { } sink) sinks.Add(sink);
+        }
+        catch (Exception ex)
+        {
+            sp.GetService<ILogger<CompositeDataEventSink<TEvent>>>()?
+                .LogWarning(ex, "Optional {SinkType} could not be resolved; skipping for IDataEventSink<{EventType}>",
+                    typeof(TSink).Name, typeof(TEvent).Name);
+        }
     }
 }
