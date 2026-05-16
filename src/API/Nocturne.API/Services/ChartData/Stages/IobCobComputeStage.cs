@@ -110,6 +110,7 @@ internal sealed class IobCobComputeStage(
         CancellationToken ct = default
     )
     {
+
         // Generate cache key based on data hash and time range
         var cacheKey = GenerateIobCobCacheKey(boluses, carbIntakes, startTime, endTime, intervalMinutes, tempBasals);
 
