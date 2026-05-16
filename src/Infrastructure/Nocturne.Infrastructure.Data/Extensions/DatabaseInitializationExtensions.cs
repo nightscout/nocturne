@@ -143,6 +143,13 @@ public static class DatabaseInitializationExtensions
     /// tenant-scoped table without an accompanying RLS migration fails loud
     /// instead of silently leaking PHI across tenants. Also called directly by
     /// the RLS migration smoke test against a freshly-migrated test database.
+    ///
+    /// PostgreSQL only -- queries pg_catalog views (pg_class, pg_policy,
+    /// pg_namespace, pg_tables, pg_default_acl, pg_roles), so the supplied
+    /// connection must be an NpgsqlConnection.
+    ///
+    /// Connection lifecycle is owned by the caller: the connection is opened
+    /// if it isn't already, and is left open on return.
     /// </summary>
     /// <param name="connection">Open or closed DbConnection to run the checks against. Opened if needed and left open.</param>
     /// <param name="tenantScopedTables">Names of tables expected to have RLS configured (typically derived from the EF model walk for <see cref="ITenantScoped"/> entities).</param>
@@ -158,6 +165,11 @@ public static class DatabaseInitializationExtensions
         if (tables.Length == 0)
         {
             return;
+        }
+
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
         }
 
         // pg_class.relrowsecurity = ENABLE ROW LEVEL SECURITY
@@ -180,11 +192,6 @@ public static class DatabaseInitializationExtensions
 
         await using (var cmd = connection.CreateCommand())
         {
-            if (cmd.Connection!.State != System.Data.ConnectionState.Open)
-            {
-                await cmd.Connection.OpenAsync(cancellationToken);
-            }
-
             cmd.CommandText = sql;
             var param = cmd.CreateParameter();
             param.ParameterName = "@tables";
@@ -239,11 +246,6 @@ public static class DatabaseInitializationExtensions
         // Owner check: all tenant-scoped tables should be owned by nocturne_migrator.
         await using (var ownerCmd = connection.CreateCommand())
         {
-            if (ownerCmd.Connection!.State != System.Data.ConnectionState.Open)
-            {
-                await ownerCmd.Connection.OpenAsync(cancellationToken);
-            }
-
             ownerCmd.CommandText =
                 "SELECT tablename, tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = ANY(@tables) AND tableowner != 'nocturne_migrator'";
             var ownerParam = ownerCmd.CreateParameter();
@@ -272,11 +274,6 @@ public static class DatabaseInitializationExtensions
         // Default privileges check: nocturne_migrator must have ALTER DEFAULT PRIVILEGES configured.
         await using (var defAclCmd = connection.CreateCommand())
         {
-            if (defAclCmd.Connection!.State != System.Data.ConnectionState.Open)
-            {
-                await defAclCmd.Connection.OpenAsync(cancellationToken);
-            }
-
             defAclCmd.CommandText = """
                 SELECT 1 FROM pg_default_acl d
                 JOIN pg_roles r ON d.defaclrole = r.oid
@@ -299,11 +296,6 @@ public static class DatabaseInitializationExtensions
         // dev the app typically connects as the Postgres bootstrap superuser.
         await using (var roleCmd = connection.CreateCommand())
         {
-            if (roleCmd.Connection!.State != System.Data.ConnectionState.Open)
-            {
-                await roleCmd.Connection.OpenAsync(cancellationToken);
-            }
-
             roleCmd.CommandText =
                 "SELECT current_user, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user";
             await using var reader = await roleCmd.ExecuteReaderAsync(cancellationToken);
