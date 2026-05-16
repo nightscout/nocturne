@@ -9,4 +9,4 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 /// <param name="DisplayName">The human-readable display name of the tenant.</param>
 /// <param name="IsActive">Whether the tenant is currently active and accepting data.</param>
 /// <seealso cref="ITenantAccessor"/>
-public record TenantContext(Guid TenantId, string Slug, string DisplayName, bool IsActive);
+public record TenantContext(Guid TenantId, string Slug, string DisplayName, bool IsActive, bool IsDemo = false);

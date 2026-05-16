@@ -185,7 +185,7 @@ public class TenantResolutionMiddleware
         if (tenant == null)
             return null;
 
-        var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive);
+        var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo);
         _cache.Set(cacheKey, tenantContext, CacheDuration);
         return tenantContext;
     }
@@ -225,7 +225,7 @@ public class TenantResolutionMiddleware
             return null;
 
         var tenant = tenants[0];
-        var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive);
+        var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo);
         _cache.Set(cacheKey, tenantContext, CacheDuration);
         return tenantContext;
     }

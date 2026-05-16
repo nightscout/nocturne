@@ -69,6 +69,13 @@ public class TenantSetupMiddleware
             return;
         }
 
+        // Demo tenants bypass setup requirements — they have no owner credentials by design
+        if (tenantAccessor.Context?.IsDemo == true)
+        {
+            await _next(context);
+            return;
+        }
+
         // Endpoints marked [AllowDuringSetup] bypass both the setup check and the
         // recovery check — these are the bootstrap endpoints (passkey/TOTP setup,
         // OIDC bootstrap login, admin provisioning, metadata).
