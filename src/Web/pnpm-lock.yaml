@@ -9,7 +9,7 @@ overrides:
   svelte: ^5.37.0
   vite: ^6.3.5
 
-packageExtensionsChecksum: sha256-6F/1WkKxBVDJ8BZyE4tVp8Hz5H6dhFW1EHEBwWWMtEk=
+packageExtensionsChecksum: sha256-vJ0zYsojxAc/+KH1CJAifmsRxfze2q511/6WQBYHep0=
 
 importers:
 
@@ -6798,6 +6798,7 @@ snapshots:
       eventsource: 2.0.2
       fetch-cookie: 2.2.0
       node-fetch: 2.7.0(encoding@0.1.13)
+      tough-cookie: 6.0.1
       ws: 7.5.10
     transitivePeerDependencies:
       - bufferutil
