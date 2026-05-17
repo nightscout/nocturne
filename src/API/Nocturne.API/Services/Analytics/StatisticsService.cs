@@ -2104,7 +2104,7 @@ public class StatisticsService : IStatisticsService
     )
     {
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
-        var tempBasalList = tempBasals.ToList();
+        var tempBasalList = ClipOverlappingTempBasals(tempBasals);
         var dayCount = Math.Max(1, (int)Math.Ceiling((endDate - startDate).TotalDays));
 
         var allRates = new List<double>();
@@ -2118,15 +2118,16 @@ public class StatisticsService : IStatisticsService
         var hourlyRates = new List<(double Rate, long WeightMs)>[24];
         for (int h = 0; h < 24; h++) hourlyRates[h] = new();
 
-        foreach (var tb in tempBasalList)
+        foreach (var (tb, effectiveEndMills) in tempBasalList)
         {
+            // Skip zero-duration records (e.g. exact cross-source duplicates clipped to zero)
+            if (effectiveEndMills <= tb.StartMills)
+                continue;
+
             var rate = tb.Rate;
             allRates.Add(rate);
-            totalDelivered += GetTempBasalInsulin(tb);
+            totalDelivered += GetTempBasalInsulin(tb, effectiveEndMills);
 
-            // Effective interval: open-ended TempBasals fall back to a 5-min slice (matches
-            // GetTempBasalInsulin's convention), so the weight isn't zero.
-            var effectiveEndMills = tb.EndMills ?? tb.StartMills + 5 * 60_000L;
             DistributeAcrossHourOfDay(tb.StartMills, effectiveEndMills, rate, tz, hourlyRates);
 
             if (tb.Origin != TempBasalOrigin.Scheduled && tb.Origin != TempBasalOrigin.Inferred)
