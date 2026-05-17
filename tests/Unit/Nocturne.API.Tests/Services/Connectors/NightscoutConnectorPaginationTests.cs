@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Models;
@@ -57,11 +58,11 @@ public class NightscoutConnectorPaginationTests
 
         return new NightscoutConnectorService(
             httpClient,
-            new Nocturne.Connectors.Core.Services.ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null),
+            new ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null),
             Mock.Of<ILogger<NightscoutConnectorService>>(),
             Mock.Of<IRetryDelayStrategy>(),
             Mock.Of<IRateLimitingStrategy>(),
-            config,
+            new ConnectorRegistration<NightscoutConnectorConfiguration>(config, "Nightscout"),
             publisher);
     }
 

@@ -20,8 +20,13 @@ public class NightscoutConnectorInstaller : IConnectorInstaller
             configuration,
             "Nightscout");
 
-        // Always register the configuration so write-back sinks can be resolved
-        // (they're referenced by ServiceRegistrationExtensions even when disabled)
+        // Direct singleton of the startup config. The connector service and write-back
+        // sinks no longer take this dependency (they go through IConnectorRegistration /
+        // IConnectorConfigurationLoader), but the compatibility proxy stack —
+        // RequestForwardingService, NightscoutTransitionController, CompatibilityController,
+        // CompatibilityProxyHealthCheck — still injects NightscoutConnectorConfiguration
+        // directly. Those should be migrated to the loader pattern as a followup, at which
+        // point this registration can be removed.
         services.AddSingleton(nightscoutConfig);
 
         if (!nightscoutConfig.Enabled)

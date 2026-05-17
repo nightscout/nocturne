@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Models;
 
@@ -9,10 +10,11 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 /// </summary>
 public class NightscoutDeviceStatusWriteBackSink(
     HttpClient httpClient,
-    NightscoutConnectorConfiguration config,
+    IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
+    IServiceProvider serviceProvider,
     NightscoutCircuitBreaker circuitBreaker,
     ILogger<NightscoutDeviceStatusWriteBackSink> logger)
-    : NightscoutWriteBackSink<DeviceStatus>(httpClient, config, circuitBreaker, logger)
+    : NightscoutWriteBackSink<DeviceStatus>(httpClient, configLoader, serviceProvider, circuitBreaker, logger)
 {
     protected override string Endpoint => "/api/v1/devicestatus";
 }

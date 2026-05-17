@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -11,10 +12,11 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 /// </summary>
 public class NightscoutEntryWriteBackSink(
     HttpClient httpClient,
-    NightscoutConnectorConfiguration config,
+    IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
+    IServiceProvider serviceProvider,
     NightscoutCircuitBreaker circuitBreaker,
     ILogger<NightscoutEntryWriteBackSink> logger)
-    : NightscoutWriteBackSink<Entry>(httpClient, config, circuitBreaker, logger)
+    : NightscoutWriteBackSink<Entry>(httpClient, configLoader, serviceProvider, circuitBreaker, logger)
 {
     protected override string Endpoint => "/api/v1/entries";
 

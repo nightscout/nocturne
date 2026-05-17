@@ -15,9 +15,9 @@ public class GlurooConnectorService : NightscoutConnectorServiceBase<GlurooConne
         ILogger<GlurooConnectorService> logger,
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
-        GlurooConnectorConfiguration config,
+        IConnectorRegistration<GlurooConnectorConfiguration> registration,
         IConnectorPublisher? publisher = null
-    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, rateLimitingStrategy, config, publisher) { }
+    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, rateLimitingStrategy, registration, publisher) { }
 
     protected override string ConnectorSource => DataSources.GlurooConnector;
     public override string ServiceName => "Gluroo Global Connect";

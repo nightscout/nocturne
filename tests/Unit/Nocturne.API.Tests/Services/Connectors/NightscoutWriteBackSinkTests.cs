@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
@@ -34,9 +35,19 @@ public class NightscoutWriteBackSinkTests
 
         _sut = new NightscoutEntryWriteBackSink(
             httpClient,
-            _config,
+            CreateLoader(_config),
+            Mock.Of<IServiceProvider>(),
             _circuitBreaker,
             Mock.Of<ILogger<NightscoutEntryWriteBackSink>>());
+    }
+
+    private static IConnectorConfigurationLoader<NightscoutConnectorConfiguration> CreateLoader(
+        NightscoutConnectorConfiguration config)
+    {
+        var loader = new Mock<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>>();
+        loader.Setup(l => l.LoadForTenantAsync(It.IsAny<IServiceProvider>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(config);
+        return loader.Object;
     }
 
     [Fact]
@@ -156,7 +167,8 @@ public class NightscoutWriteBackSinkTests
         };
         var sink = new NightscoutEntryWriteBackSink(
             httpClient,
-            _config,
+            CreateLoader(_config),
+            Mock.Of<IServiceProvider>(),
             _circuitBreaker,
             Mock.Of<ILogger<NightscoutEntryWriteBackSink>>());
 
