@@ -25,7 +25,7 @@ public class NocturneRemoteConnectorInstaller : IConnectorInstaller
         // Server resolver — URLs come from per-tenant config, not a server mapping
         services.AddSingleton<IConnectorServerResolver<NocturneRemoteConnectorConfiguration>>(
             new ConnectorServerResolver<NocturneRemoteConnectorConfiguration>(null, null, null));
-        services.AddSingleton<IConnectorConfigurationLoader<NocturneRemoteConnectorConfiguration>,
+        services.AddScoped<IConnectorConfigurationLoader<NocturneRemoteConnectorConfiguration>,
             ConnectorConfigurationLoader<NocturneRemoteConnectorConfiguration>>();
         services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
         services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());

@@ -124,7 +124,7 @@ public static class ConnectorServiceCollectionExtensions
                     options.DefaultServer));
 
             // Register config loader
-            services.AddSingleton<IConnectorConfigurationLoader<TConfig>, ConnectorConfigurationLoader<TConfig>>();
+            services.AddScoped<IConnectorConfigurationLoader<TConfig>, ConnectorConfigurationLoader<TConfig>>();
 
             // Register token cache (shared singleton across all connectors)
             services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
@@ -180,7 +180,7 @@ public static class ConnectorServiceCollectionExtensions
                     options.DefaultServer));
 
             // Register config loader
-            services.AddSingleton<IConnectorConfigurationLoader<TConfig>, ConnectorConfigurationLoader<TConfig>>();
+            services.AddScoped<IConnectorConfigurationLoader<TConfig>, ConnectorConfigurationLoader<TConfig>>();
 
             // Register token cache (shared singleton across all connectors)
             services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();

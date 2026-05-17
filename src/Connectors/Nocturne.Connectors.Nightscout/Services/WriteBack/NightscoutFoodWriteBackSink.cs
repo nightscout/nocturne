@@ -11,10 +11,9 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 public class NightscoutFoodWriteBackSink(
     HttpClient httpClient,
     IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
-    IServiceProvider serviceProvider,
     NightscoutCircuitBreaker circuitBreaker,
     ILogger<NightscoutFoodWriteBackSink> logger)
-    : NightscoutWriteBackSink<Food>(httpClient, configLoader, serviceProvider, circuitBreaker, logger)
+    : NightscoutWriteBackSink<Food>(httpClient, configLoader, circuitBreaker, logger)
 {
     protected override string Endpoint => "/api/v1/food";
 }

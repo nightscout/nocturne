@@ -13,10 +13,9 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 public class NightscoutTreatmentWriteBackSink(
     HttpClient httpClient,
     IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
-    IServiceProvider serviceProvider,
     NightscoutCircuitBreaker circuitBreaker,
     ILogger<NightscoutTreatmentWriteBackSink> logger)
-    : NightscoutWriteBackSink<Treatment>(httpClient, configLoader, serviceProvider, circuitBreaker, logger)
+    : NightscoutWriteBackSink<Treatment>(httpClient, configLoader, circuitBreaker, logger)
 {
     protected override string Endpoint => "/api/v1/treatments";
 

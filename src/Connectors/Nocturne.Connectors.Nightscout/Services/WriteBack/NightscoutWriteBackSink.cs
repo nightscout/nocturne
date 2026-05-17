@@ -15,25 +15,21 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
 {
     private readonly HttpClient _httpClient;
     private readonly IConnectorConfigurationLoader<NightscoutConnectorConfiguration> _configLoader;
-    private readonly IServiceProvider _serviceProvider;
     private readonly NightscoutCircuitBreaker _circuitBreaker;
     private readonly ILogger _logger;
 
-    // Cached per sink lifetime (which equals the request/sync scope, since sinks are
-    // resolved transiently from a scope). The loader reads per-tenant config from the
-    // DB; we don't want to repeat that for every entity write within a single request.
+    // Cached per sink instance. Sinks are transient (resolved from a scope per request),
+    // so this avoids repeated DB reads within a single request that writes multiple entities.
     private NightscoutConnectorConfiguration? _cachedConfig;
 
     protected NightscoutWriteBackSink(
         HttpClient httpClient,
         IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
-        IServiceProvider serviceProvider,
         NightscoutCircuitBreaker circuitBreaker,
         ILogger logger)
     {
         _httpClient = httpClient;
         _configLoader = configLoader;
-        _serviceProvider = serviceProvider;
         _circuitBreaker = circuitBreaker;
         _logger = logger;
     }
@@ -94,7 +90,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
 
     private async Task<NightscoutConnectorConfiguration?> ResolveIfReadyAsync(CancellationToken ct)
     {
-        var config = _cachedConfig ??= await _configLoader.LoadForTenantAsync(_serviceProvider, ct);
+        var config = _cachedConfig ??= await _configLoader.LoadForTenantAsync(ct);
 
         if (!config.WriteBackEnabled)
             return null;

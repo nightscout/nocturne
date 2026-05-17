@@ -189,7 +189,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         TConfig config;
         try
         {
-            config = await loader.LoadForTenantAsync(scope.ServiceProvider, stoppingToken);
+            config = await loader.LoadForTenantAsync(stoppingToken);
         }
         catch (InvalidOperationException ex)
         {

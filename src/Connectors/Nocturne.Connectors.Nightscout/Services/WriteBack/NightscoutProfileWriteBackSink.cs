@@ -11,10 +11,9 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 public class NightscoutProfileWriteBackSink(
     HttpClient httpClient,
     IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
-    IServiceProvider serviceProvider,
     NightscoutCircuitBreaker circuitBreaker,
     ILogger<NightscoutProfileWriteBackSink> logger)
-    : NightscoutWriteBackSink<Profile>(httpClient, configLoader, serviceProvider, circuitBreaker, logger)
+    : NightscoutWriteBackSink<Profile>(httpClient, configLoader, circuitBreaker, logger)
 {
     protected override string Endpoint => "/api/v1/profile";
 }

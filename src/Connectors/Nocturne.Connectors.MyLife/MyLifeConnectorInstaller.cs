@@ -26,7 +26,7 @@ public class MyLifeConnectorInstaller : IConnectorInstaller
         // Register server resolver, config loader, and token cache
         services.AddSingleton<IConnectorServerResolver<MyLifeConnectorConfiguration>>(
             new ConnectorServerResolver<MyLifeConnectorConfiguration>(null, null, null));
-        services.AddSingleton<IConnectorConfigurationLoader<MyLifeConnectorConfiguration>,
+        services.AddScoped<IConnectorConfigurationLoader<MyLifeConnectorConfiguration>,
             ConnectorConfigurationLoader<MyLifeConnectorConfiguration>>();
         services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
         services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());

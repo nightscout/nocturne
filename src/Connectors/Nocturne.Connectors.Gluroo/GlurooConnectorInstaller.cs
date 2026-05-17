@@ -25,7 +25,7 @@ public class GlurooConnectorInstaller : IConnectorInstaller
         // Server resolver — Gluroo URLs come from per-tenant config, not a server mapping
         services.AddSingleton<IConnectorServerResolver<GlurooConnectorConfiguration>>(
             new ConnectorServerResolver<GlurooConnectorConfiguration>(null, null, null));
-        services.AddSingleton<IConnectorConfigurationLoader<GlurooConnectorConfiguration>,
+        services.AddScoped<IConnectorConfigurationLoader<GlurooConnectorConfiguration>,
             ConnectorConfigurationLoader<GlurooConnectorConfiguration>>();
         services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
         services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());

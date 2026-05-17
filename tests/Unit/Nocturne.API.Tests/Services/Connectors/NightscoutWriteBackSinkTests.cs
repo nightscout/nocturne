@@ -36,7 +36,6 @@ public class NightscoutWriteBackSinkTests
         _sut = new NightscoutEntryWriteBackSink(
             httpClient,
             CreateLoader(_config),
-            Mock.Of<IServiceProvider>(),
             _circuitBreaker,
             Mock.Of<ILogger<NightscoutEntryWriteBackSink>>());
     }
@@ -45,7 +44,7 @@ public class NightscoutWriteBackSinkTests
         NightscoutConnectorConfiguration config)
     {
         var loader = new Mock<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>>();
-        loader.Setup(l => l.LoadForTenantAsync(It.IsAny<IServiceProvider>(), It.IsAny<CancellationToken>()))
+        loader.Setup(l => l.LoadForTenantAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(config);
         return loader.Object;
     }
@@ -168,7 +167,6 @@ public class NightscoutWriteBackSinkTests
         var sink = new NightscoutEntryWriteBackSink(
             httpClient,
             CreateLoader(_config),
-            Mock.Of<IServiceProvider>(),
             _circuitBreaker,
             Mock.Of<ILogger<NightscoutEntryWriteBackSink>>());
 

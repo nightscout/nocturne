@@ -11,10 +11,9 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 public class NightscoutActivityWriteBackSink(
     HttpClient httpClient,
     IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
-    IServiceProvider serviceProvider,
     NightscoutCircuitBreaker circuitBreaker,
     ILogger<NightscoutActivityWriteBackSink> logger)
-    : NightscoutWriteBackSink<Activity>(httpClient, configLoader, serviceProvider, circuitBreaker, logger)
+    : NightscoutWriteBackSink<Activity>(httpClient, configLoader, circuitBreaker, logger)
 {
     protected override string Endpoint => "/api/v1/activity";
 }

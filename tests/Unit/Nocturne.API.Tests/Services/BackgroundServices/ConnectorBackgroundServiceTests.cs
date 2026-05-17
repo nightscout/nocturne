@@ -426,7 +426,7 @@ public class ConnectorBackgroundServiceTests
     /// </summary>
     private sealed class TestConfigLoader(TestConnectorConfig config) : IConnectorConfigurationLoader<TestConnectorConfig>
     {
-        public Task<TestConnectorConfig> LoadForTenantAsync(IServiceProvider scopeProvider, CancellationToken ct)
+        public Task<TestConnectorConfig> LoadForTenantAsync(CancellationToken ct)
             => Task.FromResult(config);
     }
 

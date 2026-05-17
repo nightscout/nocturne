@@ -35,7 +35,7 @@ public class NightscoutConnectorInstaller : IConnectorInstaller
         // Server resolver — Nightscout URLs come from per-tenant config, not a server mapping
         services.AddSingleton<IConnectorServerResolver<NightscoutConnectorConfiguration>>(
             new ConnectorServerResolver<NightscoutConnectorConfiguration>(null, null, null));
-        services.AddSingleton<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>,
+        services.AddScoped<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>,
             ConnectorConfigurationLoader<NightscoutConnectorConfiguration>>();
         services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
         services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());

@@ -11,10 +11,9 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 public class NightscoutDeviceStatusWriteBackSink(
     HttpClient httpClient,
     IConnectorConfigurationLoader<NightscoutConnectorConfiguration> configLoader,
-    IServiceProvider serviceProvider,
     NightscoutCircuitBreaker circuitBreaker,
     ILogger<NightscoutDeviceStatusWriteBackSink> logger)
-    : NightscoutWriteBackSink<DeviceStatus>(httpClient, configLoader, serviceProvider, circuitBreaker, logger)
+    : NightscoutWriteBackSink<DeviceStatus>(httpClient, configLoader, circuitBreaker, logger)
 {
     protected override string Endpoint => "/api/v1/devicestatus";
 }

@@ -6,5 +6,5 @@ namespace Nocturne.Connectors.Core.Interfaces;
 /// </summary>
 public interface IConnectorConfigurationLoader<TConfig>
 {
-    Task<TConfig> LoadForTenantAsync(IServiceProvider scopeProvider, CancellationToken ct);
+    Task<TConfig> LoadForTenantAsync(CancellationToken ct);
 }

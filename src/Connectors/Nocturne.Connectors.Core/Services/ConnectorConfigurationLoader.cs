@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -9,6 +8,7 @@ namespace Nocturne.Connectors.Core.Services;
 
 public class ConnectorConfigurationLoader<TConfig>(
     IConnectorRegistration<TConfig> registration,
+    IConnectorConfigurationService configService,
     ILogger<ConnectorConfigurationLoader<TConfig>> logger)
     : IConnectorConfigurationLoader<TConfig>
     where TConfig : BaseConnectorConfiguration, new()
@@ -18,15 +18,13 @@ public class ConnectorConfigurationLoader<TConfig>(
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public async Task<TConfig> LoadForTenantAsync(IServiceProvider scopeProvider, CancellationToken ct)
+    public async Task<TConfig> LoadForTenantAsync(CancellationToken ct)
     {
         // Start from a fresh copy of the startup defaults
         var config = CloneDefaults(registration.Defaults);
 
         try
         {
-            var configService = scopeProvider.GetRequiredService<IConnectorConfigurationService>();
-
             var dbConfig = await configService.GetConfigurationAsync(registration.ConnectorName, ct);
             if (dbConfig?.Configuration != null)
                 ConnectorConfigurationBinder.ApplyJsonToConfig(dbConfig.Configuration, config);

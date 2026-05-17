@@ -25,7 +25,7 @@ public class MyFitnessPalConnectorInstaller : IConnectorInstaller
         // Server resolver — MyFitnessPal has a fixed URL, not a server mapping
         services.AddSingleton<IConnectorServerResolver<MyFitnessPalConnectorConfiguration>>(
             new ConnectorServerResolver<MyFitnessPalConnectorConfiguration>(null, null, null));
-        services.AddSingleton<IConnectorConfigurationLoader<MyFitnessPalConnectorConfiguration>,
+        services.AddScoped<IConnectorConfigurationLoader<MyFitnessPalConnectorConfiguration>,
             ConnectorConfigurationLoader<MyFitnessPalConnectorConfiguration>>();
         services.TryAddSingleton<IConnectorTokenCache, ConnectorTokenCache>();
         services.TryAddSingleton<IConnectorCacheInvalidator>(sp => sp.GetRequiredService<IConnectorTokenCache>());

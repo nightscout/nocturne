@@ -25,7 +25,7 @@ public abstract class ConnectorSyncExecutor<TService, TConfig> : IConnectorSyncE
     {
         var loader = scopeProvider.GetRequiredService<IConnectorConfigurationLoader<TConfig>>();
 
-        var config = await loader.LoadForTenantAsync(scopeProvider, ct);
+        var config = await loader.LoadForTenantAsync(ct);
 
         var service = scopeProvider.GetRequiredService<TService>();
         return await service.SyncDataAsync(request, config, ct, progressReporter);
