@@ -95,8 +95,8 @@ public class StatisticsServiceTDDTests
     {
         var tempBasals = new[]
         {
-            MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: Day1Mills), // 0.5U
-            MakeTempBasal(rate: 0.8, durationMinutes: 60, mills: Day1Mills), // 0.8U
+            MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: Day1Mills),                       // 0.5U
+            MakeTempBasal(rate: 0.8, durationMinutes: 60, mills: Day1Mills + 30 * 60_000L), // 0.8U
         };
 
         var result = _sut.CalculateInsulinDeliveryStatistics(
@@ -274,6 +274,58 @@ public class StatisticsServiceTDDTests
         delivery.TotalBasal.Should().BeGreaterThan(0);
         delivery.BolusCount.Should().Be(11, "3 meals + 8 SMBs = 11 boluses");
     }
+
+    #region LoopSystem Overlap
+
+    [Fact]
+    public void LoopSystem_OverlappingTempBasals_ShouldClipToActualDelivery()
+    {
+        // Trio pattern: 12 records at 1.0 U/hr, 30-min declared duration, every 5 min.
+        // Naive:  12 × 0.5 hr × 1.0 = 6.0 U.
+        // Clipped: 11 × (5/60) hr × 1.0 + 1 × 0.5 hr × 1.0 = 0.917 + 0.5 = 1.417 U
+        //          (last record keeps its declared 30-min end — see Task 4 follow-up bug)
+        var tempBasals = Enumerable.Range(0, 12)
+            .Select(i => MakeTempBasal(
+                rate: 1.0,
+                durationMinutes: 30,
+                mills: Day1Mills + i * 5 * 60_000L))
+            .ToArray();
+
+        var delivery = _sut.CalculateInsulinDeliveryStatistics(
+            Array.Empty<Bolus>(), Array.Empty<Bolus>(), tempBasals,
+            Array.Empty<CarbIntake>(), StartDate, EndDate);
+
+        var ratios = _sut.CalculateDailyBasalBolusRatios(
+            Array.Empty<Bolus>(), Array.Empty<Bolus>(), tempBasals);
+
+        delivery.TotalBasal.Should().BeApproximately(1.417, 0.01,
+            "11 clipped to 5-min windows + last record at full 30 min = 1.417 U, not 6.0 U (naive)");
+        ratios.DailyData.Sum(d => d.Basal).Should().BeApproximately(1.417, 0.01,
+            "daily ratios should also use clipped durations");
+    }
+
+    [Fact]
+    public void LoopSystem_VaryingRates_ShouldUseEachRecordsOwnRate()
+    {
+        // Alternating 0.5 and 2.0 U/hr, every 5 min, 30-min declared duration.
+        // Last record (index 11) is 2.0 U/hr and keeps its declared 30-min end.
+        // Clipped: 6 × 0.5 × (5/60) + 5 × 2.0 × (5/60) + 1 × 2.0 × 0.5 = 0.25 + 0.833 + 1.0 = 2.083 U
+        var tempBasals = Enumerable.Range(0, 12)
+            .Select(i => MakeTempBasal(
+                rate: i % 2 == 0 ? 0.5 : 2.0,
+                durationMinutes: 30,
+                mills: Day1Mills + i * 5 * 60_000L))
+            .ToArray();
+
+        var delivery = _sut.CalculateInsulinDeliveryStatistics(
+            Array.Empty<Bolus>(), Array.Empty<Bolus>(), tempBasals,
+            Array.Empty<CarbIntake>(), StartDate, EndDate);
+
+        delivery.TotalBasal.Should().BeApproximately(2.083, 0.01,
+            "each clipped window uses its own record's rate; naive would be 7.5 U");
+    }
+
+    #endregion
 
     [Fact]
     public void RealisticPattern_Omnipod_BolusOnlyTreatments_ShouldReportBolusCorrectly()

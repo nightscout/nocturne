@@ -1931,9 +1931,9 @@ public class StatisticsService : IStatisticsService
         var tempBasalInsulin = 0.0;
         var scheduledBasalInsulin = 0.0;
         var additionalBasalInsulin = 0.0;
-        foreach (var tb in tempBasals)
+        foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
         {
-            var insulin = GetTempBasalInsulin(tb);
+            var insulin = GetTempBasalInsulin(tb, effectiveEndMills);
             if (insulin <= 0)
                 continue;
             tempBasalInsulin += insulin;
@@ -1941,8 +1941,7 @@ public class StatisticsService : IStatisticsService
             // Split into scheduled vs additional using ScheduledRate when available
             if (tb.ScheduledRate.HasValue)
             {
-                var endMills = tb.EndMills ?? tb.StartMills + (5 * 60 * 1000);
-                var durationHours = (endMills - tb.StartMills) / (1000.0 * 60 * 60);
+                var durationHours = (effectiveEndMills - tb.StartMills) / (1000.0 * 60 * 60);
                 var scheduled = tb.ScheduledRate.Value * durationHours;
                 scheduledBasalInsulin += scheduled;
                 additionalBasalInsulin += insulin - scheduled;
@@ -2011,10 +2010,10 @@ public class StatisticsService : IStatisticsService
             dailyData[dateKey] = (currentBasal, currentBolus + bolus.Insulin);
         }
 
-        // Process TempBasals
-        foreach (var tb in tempBasals)
+        // Process TempBasals — clip overlapping records (loop systems write every ~5 min with longer declared duration)
+        foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
         {
-            var basalInsulin = GetTempBasalInsulin(tb);
+            var basalInsulin = GetTempBasalInsulin(tb, effectiveEndMills);
             if (basalInsulin <= 0)
                 continue;
 
