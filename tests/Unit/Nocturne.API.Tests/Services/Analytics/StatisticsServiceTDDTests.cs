@@ -639,6 +639,118 @@ public class StatisticsServiceTDDTests
 
     #endregion
 
+    #region ClipOverlappingTempBasals
+
+    [Fact]
+    public void Clip_NonOverlapping_ShouldBeUnchanged()
+    {
+        // 3 hourly records, perfectly adjacent — clip is a no-op
+        var records = new[]
+        {
+            MakeTempBasal(rate: 1.0, durationMinutes: 60, mills: Day1Mills),
+            MakeTempBasal(rate: 0.8, durationMinutes: 60, mills: Day1Mills + 3_600_000L),
+            MakeTempBasal(rate: 1.2, durationMinutes: 60, mills: Day1Mills + 7_200_000L),
+        };
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(records);
+
+        clipped.Should().HaveCount(3);
+        for (int i = 0; i < clipped.Count; i++)
+            clipped[i].EffectiveEndMills.Should().Be(records[i].EndMills!.Value,
+                $"non-overlapping record {i} should be unchanged");
+    }
+
+    [Fact]
+    public void Clip_LastRecord_ShouldUseOriginalEnd()
+    {
+        var record = MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: Day1Mills);
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(new[] { record });
+
+        clipped.Should().HaveCount(1);
+        clipped[0].EffectiveEndMills.Should().Be(record.EndMills!.Value);
+    }
+
+    [Fact]
+    public void Clip_Overlapping_ShouldTruncateToNextStart()
+    {
+        // 3 records starting every 5 min, each with 30-min duration
+        var t0 = Day1Mills;
+        var t1 = Day1Mills + 5 * 60_000L;
+        var t2 = Day1Mills + 10 * 60_000L;
+        var records = new[]
+        {
+            MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: t0),
+            MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: t1),
+            MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: t2),
+        };
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(records);
+
+        clipped.Should().HaveCount(3);
+        clipped[0].EffectiveEndMills.Should().Be(t1, "first record clipped to second's start");
+        clipped[1].EffectiveEndMills.Should().Be(t2, "second record clipped to third's start");
+        clipped[2].EffectiveEndMills.Should().Be(records[2].EndMills!.Value, "last record unchanged");
+    }
+
+    [Fact]
+    public void Clip_MultipleDeviceGroups_ShouldClipWithinGroupOnly()
+    {
+        // Device A: one 60-min record at t0
+        // Device B: one 60-min record at t0 + 5 min
+        // Device A's record must NOT be clipped by Device B's record
+        var t0 = Day1Mills;
+        var tB = Day1Mills + 5 * 60_000L;
+
+        var recordA = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(t0).UtcDateTime,
+            EndTimestamp   = DateTimeOffset.FromUnixTimeMilliseconds(t0 + 60 * 60_000L).UtcDateTime,
+            Rate           = 1.0,
+            Origin         = TempBasalOrigin.Algorithm,
+            Device         = "PumpA",
+        };
+        var recordB = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(tB).UtcDateTime,
+            EndTimestamp   = DateTimeOffset.FromUnixTimeMilliseconds(tB + 60 * 60_000L).UtcDateTime,
+            Rate           = 1.0,
+            Origin         = TempBasalOrigin.Algorithm,
+            Device         = "PumpB",
+        };
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(new[] { recordA, recordB });
+
+        clipped.Should().HaveCount(2);
+        var a = clipped.Single(c => c.Tb.Device == "PumpA");
+        var b = clipped.Single(c => c.Tb.Device == "PumpB");
+
+        a.EffectiveEndMills.Should().Be(recordA.EndMills!.Value,
+            "device A is not clipped by device B");
+        b.EffectiveEndMills.Should().Be(recordB.EndMills!.Value,
+            "device B is not clipped by device A");
+    }
+
+    [Fact]
+    public void Clip_ExactSameStart_ZeroDuration()
+    {
+        // Two records with identical start (exact cross-source duplicate)
+        var records = new[]
+        {
+            MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: Day1Mills),
+            MakeTempBasal(rate: 1.0, durationMinutes: 30, mills: Day1Mills), // same device (null), same start
+        };
+
+        var clipped = StatisticsService.ClipOverlappingTempBasals(records);
+
+        clipped.Should().HaveCount(2);
+        // Whichever sorts first gets EffectiveEnd = Day1Mills (zero duration)
+        clipped.Should().Contain(c => c.EffectiveEndMills == c.Tb.StartMills,
+            "one duplicate collapses to zero duration");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static Bolus MakeBolus(double insulin, long? mills = null, bool automatic = false)
