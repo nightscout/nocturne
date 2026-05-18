@@ -101,6 +101,13 @@
           onCheckedChange={(v) => updateSetting("alwaysShowTime", !!v)}
         />
       </div>
+      <div class="flex items-center justify-between">
+        <Label>Screensaver mode (bouncing)</Label>
+        <Checkbox
+          checked={settings.screensaverMode ?? false}
+          onCheckedChange={(v) => updateSetting("screensaverMode", !!v)}
+        />
+      </div>
       <Separator />
       <Button
         variant="outline"
