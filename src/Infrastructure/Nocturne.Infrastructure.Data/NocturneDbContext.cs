@@ -2507,6 +2507,9 @@ public class NocturneDbContext : DbContext
 
             entity.HasIndex(e => new { e.TenantId, e.CreatedAt })
                 .HasDatabaseName("ix_mutation_audit_log_created");
+
+            entity.HasIndex(e => new { e.EntityType, e.EntityId, e.Action, e.CreatedAt })
+                .HasDatabaseName("ix_mutation_audit_log_entity_lookup");
         });
 
         // Configure Read Access Log entity defaults and indexes
