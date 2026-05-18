@@ -353,6 +353,14 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                             _logger.LogInformation("[{ConnectorSource}] Published {Count} profiles from device settings",
                                 ConnectorSource, profiles.Count);
                         }
+
+                        var profileStateSpans = _profileMapper.TransformDeviceSettingsToStateSpans(deviceSettings);
+                        if (profileStateSpans.Count > 0)
+                        {
+                            await PublishStateSpanDataAsync(profileStateSpans, config, cancellationToken);
+                            _logger.LogInformation("[{ConnectorSource}] Published {Count} profile state spans from device settings",
+                                ConnectorSource, profileStateSpans.Count);
+                        }
                     }
                 }
                 catch (Exception profileEx)
