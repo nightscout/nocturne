@@ -67,9 +67,10 @@ public class MyLifeConnectorService(
     }
 
     /// <summary>
-    /// Fetches pump settings from MyLife and maps them to Profile records.
+    /// Fetches pump settings readouts from MyLife. Returns an empty list when no valid session
+    /// is established.
     /// </summary>
-    public async Task<IEnumerable<Profile>> FetchPumpSettingsProfileAsync(
+    private async Task<IReadOnlyList<MyLifePumpSettingsReadout>> FetchPumpSettingsReadoutsAsync(
         CancellationToken cancellationToken)
     {
         var session = sessionCache.Get(tenantAccessor.TenantId);
@@ -81,13 +82,21 @@ public class MyLifeConnectorService(
             return [];
         }
 
-        var readouts = await syncService.FetchPumpSettingsAsync(
+        return await syncService.FetchPumpSettingsAsync(
             session.ServiceUrl,
             session.AuthToken,
             session.PatientId,
             cancellationToken
         );
+    }
 
+    /// <summary>
+    /// Fetches pump settings from MyLife and maps them to Profile records.
+    /// </summary>
+    public async Task<IEnumerable<Profile>> FetchPumpSettingsProfileAsync(
+        CancellationToken cancellationToken)
+    {
+        var readouts = await FetchPumpSettingsReadoutsAsync(cancellationToken);
         return MyLifePumpSettingsMapper.MapToProfiles(readouts);
     }
 
@@ -255,12 +264,24 @@ public class MyLifeConnectorService(
                 UpdatePreviousTail(previousTail, batch.Events, overlapMs);
             }
 
-            // Publish Profile records from pump settings (separate SOAP call)
+            // Publish Profile records and active-profile state spans from pump settings
+            // (one SOAP call, two derived data shapes).
             if (activeTypes.Contains(SyncDataType.Profiles))
             {
-                var profiles = (await FetchPumpSettingsProfileAsync(cancellationToken)).ToList();
+                var readouts = await FetchPumpSettingsReadoutsAsync(cancellationToken);
+
+                var profiles = MyLifePumpSettingsMapper.MapToProfiles(readouts);
                 await PublishRecordTypeAsync(result, SyncDataType.Profiles, activeTypes,
                     profiles, PublishProfileDataAsync, config, cancellationToken);
+
+                var profileStateSpans = MyLifePumpSettingsMapper.MapToStateSpans(readouts, ConnectorSource);
+                if (profileStateSpans.Count > 0)
+                {
+                    await PublishStateSpanDataAsync(profileStateSpans, config, cancellationToken);
+                    _logger.LogInformation(
+                        "Published {Count} profile state spans from pump settings",
+                        profileStateSpans.Count);
+                }
             }
         }
         catch (Exception ex)
