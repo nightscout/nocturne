@@ -82,7 +82,7 @@ public class GlookoProfileMapper
 
             for (var i = 0; i < ordered.Count; i++)
             {
-                var (key, parsed, settings) = ordered[i];
+                var (_, parsed, settings) = ordered[i];
                 var profileName = settings.BasalSettings?.ActiveBasalProgram;
                 if (string.IsNullOrWhiteSpace(profileName))
                     continue;
