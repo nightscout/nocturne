@@ -313,6 +313,12 @@ public class ClockSettings
     /// </summary>
     [JsonPropertyName("backgroundOpacity")]
     public int BackgroundOpacity { get; set; } = 100;
+
+    /// <summary>
+    /// Enable bouncing screensaver mode on fullscreen views.
+    /// </summary>
+    [JsonPropertyName("screensaverMode")]
+    public bool ScreensaverMode { get; set; }
 }
 
 /// <summary>
