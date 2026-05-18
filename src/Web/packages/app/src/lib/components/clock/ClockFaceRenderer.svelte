@@ -322,12 +322,6 @@
     return corners[Math.floor(Math.random() * corners.length)];
   }
 
-  function armForCorner() {
-    const target = pickCorner();
-    vel = computeAngleToCorner(pos, target, SCREENSAVER_SPEED);
-    armedForCorner = true;
-  }
-
   $effect(() => {
     if (!browser || !screensaver || !bouncerRef) return;
     const ro = new ResizeObserver((entries) => {
@@ -350,14 +344,11 @@
 
     const angle = randomNonAxialAngle(Math.random);
     vel = angleToVel(angle, SCREENSAVER_SPEED);
-    pos = {
-      x: Math.random() * Math.max(0, viewportSize.w - blockSize.w),
-      y: Math.random() * Math.max(0, viewportSize.h - blockSize.h),
-    };
     scheduleNextCornerHit();
 
     let raf = 0;
     let lastT = 0;
+    let positioned = false;
 
     const tick = (t: number) => {
       if (document.visibilityState !== "visible") {
@@ -365,13 +356,25 @@
         raf = requestAnimationFrame(tick);
         return;
       }
+      if (blockSize.w <= 0 || blockSize.h <= 0) {
+        lastT = 0;
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      if (!positioned) {
+        pos = {
+          x: Math.random() * Math.max(0, viewportSize.w - blockSize.w),
+          y: Math.random() * Math.max(0, viewportSize.h - blockSize.h),
+        };
+        positioned = true;
+      }
       if (lastT === 0) lastT = t;
       const dt = Math.min(0.05, (t - lastT) / 1000);
       lastT = t;
 
       const now = Date.now();
       if (!armedForCorner && now >= nextCornerHitAt - CORNER_ARM_LEAD_MS) {
-        armForCorner();
+        armedForCorner = true;
       }
 
       const result = advance(
@@ -391,6 +394,15 @@
 
       const hitX = result.hitLeft || result.hitRight;
       const hitY = result.hitTop || result.hitBottom;
+
+      if (armedForCorner && (hitX || hitY) && !(hitX && hitY)) {
+        // Just bounced off one wall. Steer the new trajectory to a corner
+        // from the post-bounce position so the direction change is hidden
+        // inside the bounce.
+        const target = pickCorner();
+        vel = computeAngleToCorner(pos, target, SCREENSAVER_SPEED);
+      }
+
       if (hitX && hitY) {
         const cx = result.hitLeft ? 0 : viewportSize.w;
         const cy = result.hitTop ? 0 : viewportSize.h;
