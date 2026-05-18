@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.SensitivitySchedule
 /// </summary>
 [Table("sensitivity_schedules")]
-public class SensitivityScheduleEntity : ITenantScoped, ISoftDeletable
+public class SensitivityScheduleEntity : ITenantScoped, ISoftDeletable, IV4Entity
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
