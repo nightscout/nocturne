@@ -93,7 +93,7 @@ public class RlsCompletenessFixture : IAsyncLifetime
         // canonical init script. Tests can run from various working dirs
         // (dotnet test, IDE, CI runner), so a hardcoded relative path is fragile.
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "docs", "postgres", "container-init", "00-init.sh")))
+        while (dir is not null && !File.Exists(Path.Join(dir.FullName, "docs/postgres/container-init/00-init.sh")))
         {
             dir = dir.Parent;
         }
@@ -104,7 +104,7 @@ public class RlsCompletenessFixture : IAsyncLifetime
                 "Could not locate docs/postgres/container-init/00-init.sh by walking up from " + AppContext.BaseDirectory);
         }
 
-        return Path.Combine(dir.FullName, "docs", "postgres", "container-init", "00-init.sh");
+        return Path.Join(dir.FullName, "docs/postgres/container-init/00-init.sh");
     }
 }
 
