@@ -26,6 +26,7 @@ public class RlsCompletenessFixture : IAsyncLifetime
     private const string BootstrapPassword = "bootstrap-test-password";
     private const string MigratorPassword = "rls-completeness-migrator-password";
     private const string AppPassword = "rls-completeness-app-password";
+    private const string WebPassword = "rls-completeness-web-password";
 
     private PostgreSqlContainer? _container;
 
@@ -43,6 +44,7 @@ public class RlsCompletenessFixture : IAsyncLifetime
             .WithPassword(BootstrapPassword)
             .WithEnvironment("NOCTURNE_MIGRATOR_PASSWORD", MigratorPassword)
             .WithEnvironment("NOCTURNE_APP_PASSWORD", AppPassword)
+            .WithEnvironment("NOCTURNE_WEB_PASSWORD", WebPassword)
             .WithBindMount(initScriptPath, "/docker-entrypoint-initdb.d/00-init.sh")
             .Build();
 
