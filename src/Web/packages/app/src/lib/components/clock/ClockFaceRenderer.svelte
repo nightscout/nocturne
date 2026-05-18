@@ -32,7 +32,7 @@
     randomNonAxialAngle,
     type Vec2,
   } from "$lib/components/clock/screensaver-math";
-  import ScreensaverPulse from "$lib/components/clock/ScreensaverPulse.svelte";
+  import ScreensaverPulse, { PULSE_DURATION_MS } from "$lib/components/clock/ScreensaverPulse.svelte";
 
   interface Props {
     config: ClockFaceConfig;
@@ -307,7 +307,7 @@
     pulses = [...pulses, { id, x, y }];
     setTimeout(() => {
       pulses = pulses.filter((p) => p.id !== id);
-    }, 1300);
+    }, PULSE_DURATION_MS + 100);
   }
 
   function pickCorner(): Vec2 {
@@ -329,6 +329,17 @@
   }
 
   $effect(() => {
+    if (!browser || !screensaver || !bouncerRef) return;
+    const ro = new ResizeObserver((entries) => {
+      const e = entries[0];
+      if (!e) return;
+      blockSize = { w: e.contentRect.width, h: e.contentRect.height };
+    });
+    ro.observe(bouncerRef);
+    return () => ro.disconnect();
+  });
+
+  $effect(() => {
     if (!browser || !screensaver) return;
 
     const updateViewport = () => {
@@ -336,17 +347,6 @@
     };
     updateViewport();
     window.addEventListener("resize", updateViewport);
-
-    let ro: ResizeObserver | null = null;
-    if (bouncerRef) {
-      ro = new ResizeObserver((entries) => {
-        const e = entries[0];
-        if (!e) return;
-        const r = e.contentRect;
-        blockSize = { w: r.width, h: r.height };
-      });
-      ro.observe(bouncerRef);
-    }
 
     const angle = randomNonAxialAngle(Math.random);
     vel = angleToVel(angle, SCREENSAVER_SPEED);
@@ -405,7 +405,6 @@
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", updateViewport);
-      ro?.disconnect();
     };
   });
 </script>

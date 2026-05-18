@@ -1,3 +1,8 @@
+<script module lang="ts">
+  /** Duration of the corner-hit pulse animation, in milliseconds. Must match the CSS keyframe below. */
+  export const PULSE_DURATION_MS = 1200;
+</script>
+
 <script lang="ts">
   interface Props {
     /** Viewport coordinate where the corner hit occurred. */
