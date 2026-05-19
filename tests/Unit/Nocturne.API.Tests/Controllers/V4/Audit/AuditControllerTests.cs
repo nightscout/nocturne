@@ -411,4 +411,123 @@ public class AuditControllerTests : IDisposable
 
         _configCache.Verify(c => c.Invalidate(TenantId), Times.Once);
     }
+
+    // ── Retention-ordering validation ───────────────────────────────
+    // Mutation audit retention must cover the soft-delete window; otherwise audit
+    // rows age out while the soft-deleted entities they describe still live, losing
+    // user-delete attribution. The symmetric direction (rejecting a soft-delete
+    // retention bump that exceeds audit retention) will land when the
+    // TenantDataRetentionConfig update endpoint exists.
+
+    private async Task SeedSoftDeleteRetentionAsync(int? days)
+    {
+        await using var db = new NocturneDbContext(_dbOptions) { TenantId = TenantId };
+        db.TenantDataRetentionConfig.Add(new TenantDataRetentionConfigEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            SoftDeleteRetentionDays = days,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task UpdateConfig_AuditShorterThanSoftDelete_Returns400()
+    {
+        await SeedSoftDeleteRetentionAsync(30);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 10,
+        }, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        bad.Value.Should().NotBeNull();
+        var payload = bad.Value!.ToString();
+        payload.Should().Contain("10");
+        payload.Should().Contain("30");
+    }
+
+    [Fact]
+    public async Task UpdateConfig_AuditEqualToSoftDelete_Returns200()
+    {
+        await SeedSoftDeleteRetentionAsync(30);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 30,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateConfig_AuditLongerThanSoftDelete_Returns200()
+    {
+        await SeedSoftDeleteRetentionAsync(30);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 90,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateConfig_AuditNullWithFiniteSoftDelete_Returns200()
+    {
+        await SeedSoftDeleteRetentionAsync(30);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = null,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateConfig_FiniteAuditWithNullSoftDelete_Returns400()
+    {
+        await SeedSoftDeleteRetentionAsync(null);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 10,
+        }, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        bad.Value.Should().NotBeNull();
+        var payload = bad.Value!.ToString();
+        payload.Should().Contain("10");
+        payload.Should().Contain("null");
+    }
+
+    [Fact]
+    public async Task UpdateConfig_NullAuditWithNullSoftDelete_Returns200()
+    {
+        await SeedSoftDeleteRetentionAsync(null);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = null,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
 }
