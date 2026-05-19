@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ConnectorPublishing;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -61,6 +62,7 @@ public class TreatmentPublisherTests
             _mockTempBasalRepository.Object,
             _mockBasalRateResolver.Object,
             _mockTherapySettingsResolver.Object,
+            Mock.Of<IAuditContext>(),
             NullLogger<TreatmentPublisher>.Instance
         );
     }

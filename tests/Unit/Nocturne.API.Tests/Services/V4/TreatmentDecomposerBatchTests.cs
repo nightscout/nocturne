@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -107,6 +108,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
             _profileDecomposerMock.Object,
             _activeProfileResolverMock.Object,
             _insulinRepoMock.Object,
+            Mock.Of<IAuditContext>(),
             NullLogger<TreatmentDecomposer>.Instance);
     }
 
