@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
 
@@ -63,31 +64,95 @@ public static class SoftDeleteDedupExtensions
         if (softDeletedById.Count == 0)
             return blocking;
 
-        // Step 2: latest "delete" audit row per soft-deleted entity.
-        // Materialize first then group in memory — the EF in-memory provider
-        // can't translate GroupBy + OrderByDescending + First().AuthType, and
-        // on real Postgres this set is bounded by the dedup batch size, so the
-        // round-trip cost is dominated by the index seek added in Task 2.
         var entityType = typeof(TEntity).Name.Replace("Entity", "");
-        var softDeletedIds = softDeletedById.Keys.ToHashSet();
+        var userDeletedIds = await GetUserDeletedEntityIdsAsync(
+            ctx, entityType, softDeletedById.Keys.ToHashSet(), ct);
 
-        var rawAudits = await ctx.MutationAuditLog
+        foreach (var userId in userDeletedIds)
+        {
+            if (softDeletedById.TryGetValue(userId, out var legacyId))
+                blocking.Add(legacyId);
+        }
+
+        return blocking;
+    }
+
+    /// <summary>
+    /// Sibling of <see cref="GetBlockingLegacyIdsAsync{TEntity}"/> for entities keyed
+    /// by <c>CorrelationId</c> (Guid) instead of <c>LegacyId</c> (string). Currently
+    /// used by <c>DeviceStatusExtrasEntity</c> only. Same discrimination semantics
+    /// otherwise — active rows always block, soft-deleted rows block iff the latest
+    /// delete audit row has <c>AuthType IS NOT NULL</c>.
+    /// </summary>
+    public static async Task<HashSet<Guid>> GetBlockingCorrelationIdsAsync(
+        this NocturneDbContext ctx,
+        HashSet<Guid> correlationIds,
+        CancellationToken ct = default)
+    {
+        if (correlationIds.Count == 0)
+            return new HashSet<Guid>();
+
+        var existing = await ctx.DeviceStatusExtras.IgnoreQueryFilters().AsNoTracking()
+            .Where(e => e.TenantId == ctx.TenantId
+                     && correlationIds.Contains(e.CorrelationId))
+            .Select(e => new { e.Id, e.CorrelationId, e.DeletedAt })
+            .ToListAsync(ct);
+
+        if (existing.Count == 0)
+            return new HashSet<Guid>();
+
+        var blocking = new HashSet<Guid>();
+        var softDeletedById = new Dictionary<Guid, Guid>();
+
+        foreach (var row in existing)
+        {
+            if (row.DeletedAt == null)
+                blocking.Add(row.CorrelationId);
+            else
+                softDeletedById[row.Id] = row.CorrelationId;
+        }
+
+        if (softDeletedById.Count == 0)
+            return blocking;
+
+        var userDeletedIds = await GetUserDeletedEntityIdsAsync(
+            ctx, "DeviceStatusExtras", softDeletedById.Keys.ToHashSet(), ct);
+
+        foreach (var userId in userDeletedIds)
+        {
+            if (softDeletedById.TryGetValue(userId, out var corrId))
+                blocking.Add(corrId);
+        }
+
+        return blocking;
+    }
+
+    // Latest "delete" audit row per soft-deleted entity, filtered to user-attributed.
+    // Materialize-first then group in memory — the EF in-memory provider can't
+    // translate GroupBy + OrderByDescending + First().AuthType, and on real
+    // Postgres this set is bounded by the dedup batch size, so the round-trip
+    // cost is dominated by the index seek added in Task 2.
+    private static async Task<HashSet<Guid>> GetUserDeletedEntityIdsAsync(
+        NocturneDbContext ctx,
+        string entityType,
+        HashSet<Guid> softDeletedIds,
+        CancellationToken ct)
+    {
+        if (softDeletedIds.Count == 0)
+            return new HashSet<Guid>();
+
+        var raw = await ctx.MutationAuditLog
             .Where(a => a.EntityType == entityType
                      && softDeletedIds.Contains(a.EntityId)
                      && a.Action == "delete")
             .Select(a => new { a.EntityId, a.AuthType, a.CreatedAt })
             .ToListAsync(ct);
 
-        var latestDeletes = rawAudits
+        return raw
             .GroupBy(a => a.EntityId)
-            .Select(g => g.OrderByDescending(a => a.CreatedAt).First());
-
-        foreach (var d in latestDeletes)
-        {
-            if (d.AuthType != null && softDeletedById.TryGetValue(d.EntityId, out var legacyId))
-                blocking.Add(legacyId);
-        }
-
-        return blocking;
+            .Select(g => g.OrderByDescending(a => a.CreatedAt).First())
+            .Where(d => d.AuthType != null)
+            .Select(d => d.EntityId)
+            .ToHashSet();
     }
 }

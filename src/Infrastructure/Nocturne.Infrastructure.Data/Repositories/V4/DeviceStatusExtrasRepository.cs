@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -13,17 +13,14 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
 {
     private readonly ITenantDbContextFactory _contextFactory;
-    private readonly ILogger<DeviceStatusExtrasRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeviceStatusExtrasRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="logger">The logger instance.</param>
-    public DeviceStatusExtrasRepository(ITenantDbContextFactory contextFactory, ILogger<DeviceStatusExtrasRepository> logger)
+    public DeviceStatusExtrasRepository(ITenantDbContextFactory contextFactory)
     {
         _contextFactory = contextFactory;
-        _logger = logger;
     }
 
     /// <summary>
@@ -103,22 +100,10 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
 
             if (correlationIds.Count > 0)
             {
-                var existingRecords = await ctx.DeviceStatusExtras.IgnoreQueryFilters().AsNoTracking()
-                    .Where(e => e.TenantId == ctx.TenantId)
-                    .Where(e => correlationIds.Contains(e.CorrelationId))
-                    .Select(e => new { e.CorrelationId, IsSoftDeleted = e.DeletedAt != null })
-                    .ToListAsync(ct);
-
-                var existingSet = existingRecords.Select(r => r.CorrelationId).ToHashSet();
-                var softDeletedCount = existingRecords.Count(r => r.IsSoftDeleted);
-
-                if (softDeletedCount > 0)
-                    _logger.LogInformation(
-                        "Skipped {Count} previously-deleted {Type} records during import",
-                        softDeletedCount, "DeviceStatusExtras");
+                var blockedCorrelationIds = await ctx.GetBlockingCorrelationIdsAsync(correlationIds, ct);
 
                 entities = entities
-                    .Where(e => !existingSet.Contains(e.CorrelationId))
+                    .Where(e => !blockedCorrelationIds.Contains(e.CorrelationId))
                     .ToList();
             }
 

@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
@@ -324,22 +325,10 @@ public class DeviceEventRepository : IDeviceEventRepository
 
             if (legacyIds.Count > 0)
             {
-                var existingRecords = await ctx.DeviceEvents.IgnoreQueryFilters().AsNoTracking()
-                    .Where(e => e.TenantId == ctx.TenantId)
-                    .Where(e => legacyIds.Contains(e.LegacyId!))
-                    .Select(e => new { e.LegacyId, IsSoftDeleted = e.DeletedAt != null })
-                    .ToListAsync(ct);
-
-                var existingSet = existingRecords.Select(r => r.LegacyId).ToHashSet();
-                var softDeletedCount = existingRecords.Count(r => r.IsSoftDeleted);
-
-                if (softDeletedCount > 0)
-                    _logger.LogInformation(
-                        "Skipped {Count} previously-deleted {Type} records during import",
-                        softDeletedCount, "DeviceEvent");
+                var blockedLegacyIds = await ctx.GetBlockingLegacyIdsAsync<DeviceEventEntity>(legacyIds, ct);
 
                 entities = entities
-                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
                     .ToList();
             }
 

@@ -136,4 +136,70 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
 
         blocked.Should().BeEquivalentTo(new[] { "legacy-active", "legacy-user" });
     }
+
+    private DeviceStatusExtrasEntity SeedDeviceStatusExtras(Guid correlationId, bool softDeleted)
+    {
+        var entity = new DeviceStatusExtrasEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantA,
+            CorrelationId = correlationId,
+            Timestamp = DateTime.UtcNow,
+            ExtrasJson = "{}",
+            DeletedAt = softDeleted ? DateTime.UtcNow.AddHours(-1) : null,
+        };
+        _ctx.DeviceStatusExtras.Add(entity);
+        _ctx.SaveChanges();
+        return entity;
+    }
+
+    private void SeedDeviceStatusExtrasDeleteAudit(Guid entityId, string? authType, DateTime? createdAt = null)
+    {
+        _ctx.MutationAuditLog.Add(new MutationAuditLogEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantA,
+            EntityType = "DeviceStatusExtras",
+            EntityId = entityId,
+            Action = "delete",
+            AuthType = authType,
+            CreatedAt = createdAt ?? DateTime.UtcNow,
+        });
+        _ctx.SaveChanges();
+    }
+
+    [Fact]
+    public async Task CorrelationId_ActiveRow_AlwaysBlocks()
+    {
+        var corrId = Guid.NewGuid();
+        SeedDeviceStatusExtras(corrId, softDeleted: false);
+
+        var blocked = await _ctx.GetBlockingCorrelationIdsAsync(new HashSet<Guid> { corrId });
+
+        blocked.Should().Contain(corrId);
+    }
+
+    [Fact]
+    public async Task CorrelationId_SystemSoftDeleted_DoesNotBlock()
+    {
+        var corrId = Guid.NewGuid();
+        var entity = SeedDeviceStatusExtras(corrId, softDeleted: true);
+        SeedDeviceStatusExtrasDeleteAudit(entity.Id, authType: null);
+
+        var blocked = await _ctx.GetBlockingCorrelationIdsAsync(new HashSet<Guid> { corrId });
+
+        blocked.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CorrelationId_UserSoftDeleted_Blocks()
+    {
+        var corrId = Guid.NewGuid();
+        var entity = SeedDeviceStatusExtras(corrId, softDeleted: true);
+        SeedDeviceStatusExtrasDeleteAudit(entity.Id, authType: "Bearer");
+
+        var blocked = await _ctx.GetBlockingCorrelationIdsAsync(new HashSet<Guid> { corrId });
+
+        blocked.Should().Contain(corrId);
+    }
 }
