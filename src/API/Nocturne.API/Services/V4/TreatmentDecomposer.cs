@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Constants;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
@@ -13,6 +14,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.API.Services.Audit;
 
 using V4Models = Nocturne.Core.Models.V4;
 
@@ -51,6 +53,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     private readonly IProfileDecomposer _profileDecomposer;
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly IPatientInsulinRepository _insulinRepo;
+    private readonly IAuditContext _auditContext;
     private readonly ILogger<TreatmentDecomposer> _logger;
 
     /// <summary>
@@ -93,6 +96,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         IProfileDecomposer profileDecomposer,
         IActiveProfileResolver activeProfileResolver,
         IPatientInsulinRepository insulinRepo,
+        IAuditContext auditContext,
         ILogger<TreatmentDecomposer> logger)
     {
         _dbContext = dbContext;
@@ -109,6 +113,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         _profileDecomposer = profileDecomposer;
         _activeProfileResolver = activeProfileResolver;
         _insulinRepo = insulinRepo;
+        _auditContext = auditContext;
         _logger = logger;
     }
 
@@ -1412,46 +1417,49 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         }
 
         // Bulk-insert all typed lists
-        if (bolusList.Count > 0)
+        using (SystemAuditScope.Push(_auditContext))
         {
-            var created = await _bolusRepository.BulkCreateAsync(bolusList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (bolusList.Count > 0)
+            {
+                var created = await _bolusRepository.BulkCreateAsync(bolusList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (carbList.Count > 0)
-        {
-            var created = await _carbIntakeRepository.BulkCreateAsync(carbList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (carbList.Count > 0)
+            {
+                var created = await _carbIntakeRepository.BulkCreateAsync(carbList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (bgCheckList.Count > 0)
-        {
-            var created = await _bgCheckRepository.BulkCreateAsync(bgCheckList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (bgCheckList.Count > 0)
+            {
+                var created = await _bgCheckRepository.BulkCreateAsync(bgCheckList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (noteList.Count > 0)
-        {
-            var created = await _noteRepository.BulkCreateAsync(noteList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (noteList.Count > 0)
+            {
+                var created = await _noteRepository.BulkCreateAsync(noteList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (bolusCalcList.Count > 0)
-        {
-            var created = await _bolusCalculationRepository.BulkCreateAsync(bolusCalcList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (bolusCalcList.Count > 0)
+            {
+                var created = await _bolusCalculationRepository.BulkCreateAsync(bolusCalcList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (deviceEventList.Count > 0)
-        {
-            var created = await _deviceEventRepository.BulkCreateAsync(deviceEventList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (deviceEventList.Count > 0)
+            {
+                var created = await _deviceEventRepository.BulkCreateAsync(deviceEventList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (tempBasalList.Count > 0)
-        {
-            var created = await _tempBasalRepository.BulkCreateAsync(tempBasalList, ct);
-            result.CreatedRecords.AddRange(created);
+            if (tempBasalList.Count > 0)
+            {
+                var created = await _tempBasalRepository.BulkCreateAsync(tempBasalList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
         }
 
         // Post-insert pump suspend/resume pass: sequential, order-dependent

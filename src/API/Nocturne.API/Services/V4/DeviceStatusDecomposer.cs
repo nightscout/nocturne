@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Services.Audit;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4;
@@ -31,6 +33,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
     private readonly IDeviceStatusExtrasRepository _extrasRepo;
     private readonly IStateSpanService _stateSpanService;
     private readonly IDeviceService _deviceService;
+    private readonly IAuditContext _auditContext;
     private readonly ILogger<DeviceStatusDecomposer> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -54,6 +57,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
         IDeviceStatusExtrasRepository extrasRepo,
         IStateSpanService stateSpanService,
         IDeviceService deviceService,
+        IAuditContext auditContext,
         ILogger<DeviceStatusDecomposer> logger)
     {
         _dbContext = dbContext;
@@ -63,6 +67,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
         _extrasRepo = extrasRepo;
         _stateSpanService = stateSpanService;
         _deviceService = deviceService;
+        _auditContext = auditContext;
         _logger = logger;
     }
 
@@ -525,28 +530,31 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
         }
 
         // Bulk-insert all snapshot types
-        if (apsList.Count > 0)
+        using (SystemAuditScope.Push(_auditContext))
         {
-            var created = await _apsRepo.BulkCreateAsync(apsList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (apsList.Count > 0)
+            {
+                var created = await _apsRepo.BulkCreateAsync(apsList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (pumpList.Count > 0)
-        {
-            var created = await _pumpRepo.BulkCreateAsync(pumpList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (pumpList.Count > 0)
+            {
+                var created = await _pumpRepo.BulkCreateAsync(pumpList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (uploaderList.Count > 0)
-        {
-            var created = await _uploaderRepo.BulkCreateAsync(uploaderList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (uploaderList.Count > 0)
+            {
+                var created = await _uploaderRepo.BulkCreateAsync(uploaderList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (extrasList.Count > 0)
-        {
-            var created = await _extrasRepo.BulkCreateAsync(extrasList, ct);
-            result.CreatedRecords.AddRange(created);
+            if (extrasList.Count > 0)
+            {
+                var created = await _extrasRepo.BulkCreateAsync(extrasList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
         }
 
         // Upsert override state spans individually — IStateSpanService only exposes

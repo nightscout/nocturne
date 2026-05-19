@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Services.Audit;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -26,6 +28,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
     private readonly ICalibrationRepository _calibrationRepository;
     private readonly IGlucoseProcessingResolver _glucoseResolver;
+    private readonly IAuditContext _auditContext;
     private readonly ILogger<EntryDecomposer> _logger;
 
     /// <param name="dbContext">EF Core context used to persist <see cref="DecompositionBatchEntity"/> records.</param>
@@ -40,6 +43,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         IMeterGlucoseRepository meterGlucoseRepository,
         ICalibrationRepository calibrationRepository,
         IGlucoseProcessingResolver glucoseResolver,
+        IAuditContext auditContext,
         ILogger<EntryDecomposer> logger)
     {
         _dbContext = dbContext;
@@ -47,6 +51,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         _meterGlucoseRepository = meterGlucoseRepository;
         _calibrationRepository = calibrationRepository;
         _glucoseResolver = glucoseResolver;
+        _auditContext = auditContext;
         _logger = logger;
     }
 
@@ -236,22 +241,25 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
             }
         }
 
-        if (sgvList.Count > 0)
+        using (SystemAuditScope.Push(_auditContext))
         {
-            var created = await _sensorGlucoseRepository.BulkCreateAsync(sgvList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (sgvList.Count > 0)
+            {
+                var created = await _sensorGlucoseRepository.BulkCreateAsync(sgvList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (mbgList.Count > 0)
-        {
-            var created = await _meterGlucoseRepository.BulkCreateAsync(mbgList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (mbgList.Count > 0)
+            {
+                var created = await _meterGlucoseRepository.BulkCreateAsync(mbgList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (calList.Count > 0)
-        {
-            var created = await _calibrationRepository.BulkCreateAsync(calList, ct);
-            result.CreatedRecords.AddRange(created);
+            if (calList.Count > 0)
+            {
+                var created = await _calibrationRepository.BulkCreateAsync(calList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
         }
 
         return result;
