@@ -20,6 +20,7 @@ public static class ChartColorMapper
             "Exercise" => ChartColor.PumpModeExercise,
             "Suspended" => ChartColor.PumpModeSuspended,
             "Off" => ChartColor.PumpModeOff,
+            "Liberty" => ChartColor.PumpModeLiberty,
             _ => ChartColor.PumpModeManual,
         };
 

@@ -7,6 +7,7 @@
   import SuspendedModeIcon from "./SuspendedModeIcon.svelte";
   import LimitedModeIcon from "./LimitedModeIcon.svelte";
   import EaseOffModeIcon from "./EaseOffModeIcon.svelte";
+  import LibertyModeIcon from "./LibertyModeIcon.svelte";
 
   interface Props {
     state: string;
@@ -41,6 +42,8 @@
   <LimitedModeIcon class={className} {size} {strokeWidth} {color} />
 {:else if state === "EaseOff"}
   <EaseOffModeIcon class={className} {size} {strokeWidth} {color} />
+{:else if state === "Liberty"}
+  <LibertyModeIcon class={className} {size} {strokeWidth} {color} />
 {:else}
   <!-- Default to manual mode icon for unknown states -->
   <ManualModeIcon class={className} {size} {strokeWidth} {color} />

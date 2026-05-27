@@ -55,6 +55,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     public override List<SyncDataType> SupportedDataTypes =>
     [
         SyncDataType.Glucose,
+        SyncDataType.ManualBG,
         SyncDataType.Boluses,
         SyncDataType.CarbIntake,
         SyncDataType.StateSpans,
@@ -243,9 +244,11 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     {
         var patientCode = _userData?.GlookoCode;
 
-        var series = _syncConfig!.V3IncludeCgmBackfill
-            ? GlookoConstants.V3GraphSeries.Concat(GlookoConstants.V3CgmBackfillSeries)
-            : GlookoConstants.V3GraphSeries;
+        var series = GlookoConstants.V3GraphSeries
+            .Concat(GlookoConstants.V3PumpModeSeries);
+
+        if (_syncConfig!.V3IncludeCgmBackfill)
+            series = series.Concat(GlookoConstants.V3CgmBackfillSeries);
 
         var seriesParams = string.Join("&", series.Select(s => $"series[]={s}"));
 
@@ -549,6 +552,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         if (activeTypes.Contains(SyncDataType.StateSpans))
         {
             var stateSpans = _stateSpanMapper.TransformV3ToStateSpans(v3Data);
+            stateSpans.AddRange(_stateSpanMapper.TransformV3PumpModeToStateSpans(v3Data));
             if (stateSpans.Count > 0)
                 await PublishStateSpanDataAsync(stateSpans, config, cancellationToken);
 

@@ -87,6 +87,37 @@ public class GlookoV3Series
 
     // Target ranges
     [JsonPropertyName("bgTargets")] public GlookoV3TargetDataPoint[]? BgTargets { get; set; }
+
+    // Pump mode series — CamAPS FX
+    [JsonPropertyName("pumpCamapsAutomaticMode")] public GlookoV3PumpModeDataPoint[]? PumpCamapsAutomaticMode { get; set; }
+    [JsonPropertyName("pumpCamapsManualMode")] public GlookoV3PumpModeDataPoint[]? PumpCamapsManualMode { get; set; }
+    [JsonPropertyName("pumpCamapsBoostMode")] public GlookoV3PumpModeDataPoint[]? PumpCamapsBoostMode { get; set; }
+    [JsonPropertyName("pumpCamapsEaseOffMode")] public GlookoV3PumpModeDataPoint[]? PumpCamapsEaseOffMode { get; set; }
+    [JsonPropertyName("pumpCamapsLibertyMode")] public GlookoV3PumpModeDataPoint[]? PumpCamapsLibertyMode { get; set; }
+    [JsonPropertyName("pumpCamapsPumpDeliverySuspendedMode")] public GlookoV3PumpModeDataPoint[]? PumpCamapsPumpDeliverySuspendedMode { get; set; }
+    [JsonPropertyName("pumpCamapsNoPumpConnectivityMode")] public GlookoV3PumpModeDataPoint[]? PumpCamapsNoPumpConnectivityMode { get; set; }
+    [JsonPropertyName("pumpCamapsBluetoothTurnedOffMode")] public GlookoV3PumpModeDataPoint[]? PumpCamapsBluetoothTurnedOffMode { get; set; }
+    [JsonPropertyName("pumpCamapsNoCgmMode")] public GlookoV3PumpModeDataPoint[]? PumpCamapsNoCgmMode { get; set; }
+
+    // Pump mode series — Control-IQ
+    [JsonPropertyName("pumpControliqAutomaticMode")] public GlookoV3PumpModeDataPoint[]? PumpControliqAutomaticMode { get; set; }
+    [JsonPropertyName("pumpControliqManualMode")] public GlookoV3PumpModeDataPoint[]? PumpControliqManualMode { get; set; }
+    [JsonPropertyName("pumpControliqSleepMode")] public GlookoV3PumpModeDataPoint[]? PumpControliqSleepMode { get; set; }
+    [JsonPropertyName("pumpControliqExerciseMode")] public GlookoV3PumpModeDataPoint[]? PumpControliqExerciseMode { get; set; }
+
+    // Pump mode series — Omnipod 5
+    [JsonPropertyName("pumpOp5AutomaticMode")] public GlookoV3PumpModeDataPoint[]? PumpOp5AutomaticMode { get; set; }
+    [JsonPropertyName("pumpOp5ManualMode")] public GlookoV3PumpModeDataPoint[]? PumpOp5ManualMode { get; set; }
+    [JsonPropertyName("pumpOp5LimitedMode")] public GlookoV3PumpModeDataPoint[]? PumpOp5LimitedMode { get; set; }
+    [JsonPropertyName("pumpOp5HypoprotectMode")] public GlookoV3PumpModeDataPoint[]? PumpOp5HypoprotectMode { get; set; }
+
+    // Pump mode series — Basal-iQ
+    [JsonPropertyName("pumpBasaliqAutomaticMode")] public GlookoV3PumpModeDataPoint[]? PumpBasaliqAutomaticMode { get; set; }
+    [JsonPropertyName("pumpBasaliqManualMode")] public GlookoV3PumpModeDataPoint[]? PumpBasaliqManualMode { get; set; }
+
+    // Pump mode series — Generic
+    [JsonPropertyName("pumpGenericAutomaticMode")] public GlookoV3PumpModeDataPoint[]? PumpGenericAutomaticMode { get; set; }
+    [JsonPropertyName("pumpGenericManualMode")] public GlookoV3PumpModeDataPoint[]? PumpGenericManualMode { get; set; }
 }
 
 /// <summary>
@@ -378,4 +409,34 @@ public class GlookoV3TargetDataPoint : GlookoV3DataPointBase
     [JsonPropertyName("low")] public double? Low { get; set; }
 
     [JsonPropertyName("high")] public double? High { get; set; }
+}
+
+/// <summary>
+///     Pump mode data point (CamAPS, Control-IQ, Op5, Basal-iQ, generic)
+/// </summary>
+public class GlookoV3PumpModeDataPoint : GlookoV3DataPointBase
+{
+    /// <summary>
+    ///     Mode type string (e.g., "automatic", "ease_off", "boost", "no_pump_connectivity")
+    /// </summary>
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    /// <summary>
+    ///     Duration in seconds
+    /// </summary>
+    [JsonPropertyName("duration")]
+    public int? Duration { get; set; }
+
+    /// <summary>
+    ///     ISO 8601 end timestamp
+    /// </summary>
+    [JsonPropertyName("endTimestamp")]
+    public string? EndTimestamp { get; set; }
+
+    /// <summary>
+    ///     Whether this is an interpolated graph point (not a real event)
+    /// </summary>
+    [JsonPropertyName("interpolated")]
+    public bool Interpolated { get; set; }
 }
