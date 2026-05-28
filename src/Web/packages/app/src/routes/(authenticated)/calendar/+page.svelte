@@ -416,7 +416,7 @@
     </div>
 
     {#if trackersLoading}
-      <div class="flex-1 p-4">
+      <div class="flex-1 p-3 sm:p-4">
         <Card.Root class="h-full">
           <Card.Content class="p-4 h-full flex items-center justify-center">
             <div class="text-muted-foreground">Loading data...</div>
@@ -424,9 +424,9 @@
         </Card.Root>
       </div>
     {:else if trackersError}
-      <div class="flex-1 p-4">
+      <div class="flex-1 p-3 sm:p-4">
         <Card.Root class="h-full">
-          <Card.Content class="p-4 h-full flex flex-col">
+          <Card.Content class="p-2 sm:p-4 h-full flex flex-col">
             <div class="grid grid-cols-7 gap-1 mb-2">
               {#each DAY_NAMES as dayName}
                 <div
@@ -444,9 +444,9 @@
         </Card.Root>
       </div>
     {:else}
-      <div class="flex-1 p-4">
+      <div class="flex-1 p-3 sm:p-4">
         <Card.Root class="h-full">
-          <Card.Content class="p-4 h-full flex flex-col">
+          <Card.Content class="p-2 sm:p-4 h-full flex flex-col">
             <div class="grid grid-cols-7 gap-1 mb-2">
               {#each DAY_NAMES as dayName}
                 <div
