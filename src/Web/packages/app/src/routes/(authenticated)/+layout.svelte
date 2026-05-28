@@ -208,8 +208,8 @@
   <CoachParamHandler />
   <Sidebar.Provider>
     <AppSidebar user={data.user} tenantCount={data.tenantCount} effectivePermissions={data.effectivePermissions} isPlatformAdmin={data.isPlatformAdmin} isGuestSession={data.isGuestSession} />
-    <MobileHeader />
     <Sidebar.Inset>
+      <MobileHeader />
       {#if data.isDemo}
         <DemoBanner nextResetAt={data.nextResetAt} />
       {/if}

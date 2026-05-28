@@ -314,9 +314,9 @@
     </div>
   {/if}
 
-  <div class="grid gap-6 @3xl:grid-cols-[minmax(0,1fr)_320px] @3xl:items-start">
+  <div class="grid grid-cols-1 gap-6 @3xl:grid-cols-[minmax(0,1fr)_320px] @3xl:items-start">
     <!-- Main editor column -->
-    <div class="space-y-6">
+    <div class="min-w-0 space-y-6">
       {#if loading}
         <Card>
           <CardHeader>
@@ -509,7 +509,7 @@
     </div>
 
     <!-- Right rail: test alert + historic firings -->
-    <aside class="lg:sticky lg:top-6 self-start space-y-4">
+    <aside class="min-w-0 lg:sticky lg:top-6 self-start space-y-4">
       <Card>
         <CardHeader>
           <CardTitle class="text-base">Test alert</CardTitle>

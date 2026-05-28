@@ -232,7 +232,7 @@
       >
         {label}
       </span>
-      <div class="flex-1">
+      <div class="min-w-0 flex-1">
         <RuleBuilder bind:node={parent.composite!.conditions[index]} {availableRules} nested />
       </div>
       <DropdownMenu.Root>
@@ -268,7 +268,7 @@
   <!-- Leaf row (possibly wrapped in NOT/SUSTAINED) -->
   <div
     role="listitem"
-    class="group/row flex items-center gap-2 rounded-md border bg-background px-2 py-1.5 transition-opacity"
+    class="group/row flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1.5 transition-opacity"
     class:opacity-50={isDragSource}
     draggable="true"
     ondragstart={startDrag}

@@ -188,12 +188,14 @@
       return Number.isFinite(t) && t >= cutoff;
     }).length}
 
-    <!-- Armed status strip -->
-    <ArmedStatusStrip
-      state={armedState}
-      onDisableDnd={armedState === "dnd" && dnd ? () => handleDisableDnd(dnd) : undefined}
-      {disablingDnd}
-    />
+    <!-- Armed status strip — only meaningful once at least one rule exists. -->
+    {#if totalCount > 0}
+      <ArmedStatusStrip
+        state={armedState}
+        onDisableDnd={armedState === "dnd" && dnd ? () => handleDisableDnd(dnd) : undefined}
+        {disablingDnd}
+      />
+    {/if}
 
     <!-- Stat row -->
     <div class="grid gap-3 @md:grid-cols-3">
