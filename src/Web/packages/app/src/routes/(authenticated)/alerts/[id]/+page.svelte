@@ -256,7 +256,7 @@
   <title>{isNew ? "New alert" : state.name || "Alert"} · Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto p-4 lg:p-6 max-w-7xl">
+<div class="@container container mx-auto p-4 @3xl:p-6 max-w-7xl">
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between gap-4">
     <div class="flex items-center gap-2 min-w-0">
@@ -314,7 +314,7 @@
     </div>
   {/if}
 
-  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+  <div class="grid gap-6 @3xl:grid-cols-[minmax(0,1fr)_320px] @3xl:items-start">
     <!-- Main editor column -->
     <div class="space-y-6">
       {#if loading}

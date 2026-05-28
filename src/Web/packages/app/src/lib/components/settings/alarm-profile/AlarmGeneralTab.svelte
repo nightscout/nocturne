@@ -42,8 +42,8 @@
   const priorities: AlarmPriority[] = ["Low", "Normal", "High", "Critical"];
 </script>
 
-<div class="space-y-6">
-  <div class="grid gap-4 sm:grid-cols-2">
+<div class="space-y-6 @container">
+  <div class="grid gap-4 @sm:grid-cols-2">
     <div class="space-y-2">
       <Label for="name">Alarm Name</Label>
       <Input
@@ -62,7 +62,7 @@
     </div>
   </div>
 
-  <div class="grid gap-4 sm:grid-cols-2">
+  <div class="grid gap-4 @sm:grid-cols-2">
     <div class="space-y-2">
       <Label>Alarm Type</Label>
       <Select
@@ -123,7 +123,7 @@
 
   <div class="space-y-4">
     <h4 class="font-medium">Threshold Settings</h4>
-    <div class="grid gap-4 sm:grid-cols-2">
+    <div class="grid gap-4 @sm:grid-cols-2">
       <div class="space-y-2">
         <Label>
           {profile.alarmType === "StaleData"

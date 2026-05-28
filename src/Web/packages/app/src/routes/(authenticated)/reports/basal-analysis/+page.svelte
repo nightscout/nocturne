@@ -84,7 +84,7 @@
 </svelte:head>
 
 {#if reportsResource.current}
-  <div class="container mx-auto max-w-7xl space-y-8 px-4 py-6">
+  <div class="@container container mx-auto max-w-7xl space-y-8 px-4 py-6">
     <!-- Header -->
     <div class="space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-4">
@@ -169,7 +169,7 @@
     </Card>
 
     <!-- Key Stats Cards -->
-    <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
+    <div class="grid grid-cols-2 gap-4 @lg:grid-cols-4">
       <Card class="border">
         <CardContent class="pt-6 text-center">
           <div class="text-2xl font-bold tabular-nums">
@@ -268,7 +268,7 @@
           </CardTitle>
         </CardHeader>
         <CardContent class="space-y-4">
-          <div class="grid gap-4 md:grid-cols-2">
+          <div class="grid gap-4 @3xl:grid-cols-2">
             <!-- Rate Range -->
             <div class="rounded-lg border bg-card p-4">
               <div class="flex items-start gap-3">

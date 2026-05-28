@@ -174,7 +174,7 @@
 </script>
 
 <Dialog.Root bind:open onOpenChange={(isOpen) => !isOpen && handleClose()}>
-  <Dialog.Content class="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+  <Dialog.Content class="@container max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Edit class="h-5 w-5" />
@@ -351,7 +351,7 @@
               </div>
             </div>
 
-            <div class="grid md:grid-cols-2 gap-6">
+            <div class="grid @lg:grid-cols-2 gap-6">
               <!-- Target Low -->
               <div class="space-y-3">
                 <div class="flex items-center justify-between">

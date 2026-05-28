@@ -153,7 +153,7 @@
   <title>Appearance - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-4xl p-6 space-y-6">
+<div class="@container container mx-auto max-w-4xl p-6 space-y-6">
   <!-- Header -->
   <div class="flex items-center gap-3">
     <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -190,7 +190,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="grid gap-4 @xl:grid-cols-2 @5xl:grid-cols-4">
           <!-- Nocturne Theme -->
           <button
             type="button"
@@ -382,7 +382,7 @@
 
         <Separator />
 
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 @sm:grid-cols-2">
           <div class="space-y-2">
             <Label>Color scheme</Label>
             <Select
@@ -493,7 +493,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 @sm:grid-cols-2">
           <div class="space-y-2">
             <Label>Blood glucose units</Label>
             <Select
@@ -551,7 +551,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 @sm:grid-cols-2">
           <div class="space-y-1">
             <Label class="text-muted-foreground text-xs">Timezone</Label>
             <p class="font-medium">{browserTimezone}</p>
@@ -582,7 +582,7 @@
         <CardDescription>Configure chart display preferences</CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 @sm:grid-cols-2">
           <div class="space-y-2">
             <FormLabel>Default chart range</FormLabel>
             <Select
@@ -615,7 +615,7 @@
         <Separator class="my-4" />
 
         <!-- Glucose line visual style -->
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 @sm:grid-cols-2">
           <!-- Line Color Mode -->
           <div class="space-y-2">
             <FormLabel>Line color mode</FormLabel>
@@ -781,7 +781,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 @xl:grid-cols-2">
           <button
             type="button"
             class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {sidebarWidget.current === 'graph'
@@ -840,7 +840,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 @sm:grid-cols-2">
           <div class="space-y-2">
             <Label>Display preference</Label>
             <Select

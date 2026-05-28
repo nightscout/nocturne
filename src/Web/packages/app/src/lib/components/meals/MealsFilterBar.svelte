@@ -58,13 +58,13 @@
 </script>
 
 <Card.Root>
-  <Card.Content class="space-y-4 p-4">
+  <Card.Content class="@container space-y-4 p-4">
     <!-- Row 1: Date picker inline -->
     <DateRangePicker defaultDays={1} onDateChange={handleDateChange} />
 
     <!-- Row 2: All filter controls -->
     <div
-      class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
+      class="flex flex-col gap-4 @lg:flex-row @lg:items-center @lg:justify-between"
     >
       <!-- Left side: All/Unattributed, Search, Food filter -->
       <div class="flex flex-wrap items-center gap-2">
@@ -89,7 +89,7 @@
         </div>
 
         <!-- Separator -->
-        <div class="hidden md:block h-6 w-px bg-border"></div>
+        <div class="hidden @lg:block h-6 w-px bg-border"></div>
 
         <!-- Search -->
         <div class="flex-1 min-w-[200px] max-w-sm">

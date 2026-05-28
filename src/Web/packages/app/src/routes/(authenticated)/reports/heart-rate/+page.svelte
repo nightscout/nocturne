@@ -111,7 +111,7 @@
 
 {#await actogramResource then actogramData}
   {#if actogramData}
-  <div class="container mx-auto space-y-6 px-4 py-6 max-w-7xl">
+  <div class="@container container mx-auto space-y-6 px-4 py-6 max-w-7xl">
     <!-- Header -->
     <div>
       <h1 class="text-3xl font-bold">Heart Rate</h1>
@@ -121,7 +121,7 @@
     </div>
 
     <!-- Summary Cards -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 @sm:grid-cols-4 gap-4">
       <Card>
         <CardHeader class="pb-2">
           <CardTitle class="text-sm font-medium text-muted-foreground">

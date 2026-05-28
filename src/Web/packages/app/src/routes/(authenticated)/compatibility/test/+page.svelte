@@ -388,16 +388,16 @@
   }
 </script>
 
-<div class="container mx-auto p-6 space-y-6">
+<div class="@container container mx-auto p-6 space-y-6">
   <!-- Header -->
-  <div class="flex justify-between items-center">
+  <div class="flex flex-col gap-3 @lg:flex-row @lg:justify-between @lg:items-center">
     <div>
       <h1 class="text-3xl font-bold">Manual Compatibility Test</h1>
       <p class="text-muted-foreground mt-1">
         Compare API responses between Nightscout and Nocturne
       </p>
     </div>
-    <Button variant="outline" href="/compatibility">
+    <Button variant="outline" href="/compatibility" class="shrink-0">
       <ArrowLeft class="h-4 w-4 mr-2" />
       Back to Dashboard
     </Button>
@@ -412,7 +412,7 @@
       </Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
         <div class="space-y-2">
           <Label for="nightscoutUrl">Nightscout URL</Label>
           <Input
@@ -448,7 +448,7 @@
           </div>
         </div>
 
-        <div class="md:col-span-2 space-y-2">
+        <div class="@lg:col-span-2 space-y-2">
           <Label for="queryPath">Query Path</Label>
           <div class="flex gap-2">
             <Select.Root type="single" bind:value={method}>
@@ -470,7 +470,7 @@
         </div>
 
         {#if method === "POST"}
-          <div class="md:col-span-2 space-y-2">
+          <div class="@lg:col-span-2 space-y-2">
             <Label for="requestBody">Request Body (JSON)</Label>
             <Textarea
               id="requestBody"
@@ -544,7 +544,7 @@
   <!-- Results -->
   {#if result}
     <!-- Status Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 @4xl:grid-cols-4 gap-4">
       <Card.Root>
         <Card.Content class="pt-6">
           <p class="text-sm text-muted-foreground mb-1">Nightscout Status</p>
@@ -620,7 +620,7 @@
     <!-- Diff View -->
     {#if showSideBySide}
       <!-- Side by Side Diff View -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
         <Card.Root>
           <Card.Header class="py-3">
             <Card.Title class="text-base text-red-600">

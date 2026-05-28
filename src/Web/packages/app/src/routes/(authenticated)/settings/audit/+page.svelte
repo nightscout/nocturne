@@ -146,7 +146,7 @@
   <title>Audit Log - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-4xl p-6 space-y-6">
+<div class="@container container mx-auto max-w-4xl p-6 space-y-6">
   <div class="flex items-center gap-3">
     <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
       <ScrollText class="h-6 w-6 text-primary" />
@@ -169,7 +169,7 @@
         </Card.Title>
       </Card.Header>
       <Card.Content>
-        <div class="grid gap-4 sm:grid-cols-3">
+        <div class="grid gap-4 @sm:grid-cols-3">
           <div class="flex items-center gap-3">
             <Switch
               checked={readAuditEnabled}
@@ -232,8 +232,8 @@
       <!-- Date Range Filter Card -->
       <Card.Root>
         <Card.Content class="p-4">
-          <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div class="flex flex-1 flex-col gap-4 md:flex-row md:items-end">
+          <div class="flex flex-col gap-4 @lg:flex-row @lg:items-end @lg:justify-between">
+            <div class="flex flex-1 flex-col gap-4 @lg:flex-row @lg:items-end">
               <div class="space-y-1">
                 <Label for="m-from">From</Label>
                 <Input id="m-from" type="date" bind:value={mFrom} />
@@ -311,8 +311,8 @@
         <!-- Date Range Filter Card -->
         <Card.Root>
           <Card.Content class="p-4">
-            <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div class="flex flex-1 flex-col gap-4 md:flex-row md:items-end">
+            <div class="flex flex-col gap-4 @lg:flex-row @lg:items-end @lg:justify-between">
+              <div class="flex flex-1 flex-col gap-4 @lg:flex-row @lg:items-end">
                 <div class="space-y-1">
                   <Label for="r-from">From</Label>
                   <Input id="r-from" type="date" bind:value={rFrom} />

@@ -134,7 +134,7 @@
   <title>Alerts · Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-5xl p-4 lg:p-6 space-y-6">
+<div class="@container container mx-auto max-w-5xl p-4 @3xl:p-6 space-y-6">
   <!-- Header -->
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div class="flex items-center gap-3">
@@ -196,7 +196,7 @@
     />
 
     <!-- Stat row -->
-    <div class="grid gap-3 sm:grid-cols-3">
+    <div class="grid gap-3 @md:grid-cols-3">
       <Card>
         <CardContent>
           <p class="text-xs uppercase tracking-wider text-muted-foreground">Rules enabled</p>

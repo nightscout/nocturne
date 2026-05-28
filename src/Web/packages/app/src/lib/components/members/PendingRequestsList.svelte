@@ -96,7 +96,7 @@
     {@const isDenying = denyingIds.has(request.id ?? "")}
     {@const isBusy = isApproving || isDenying}
     <Card.Root>
-      <Card.Content class="space-y-4 pt-6">
+      <Card.Content class="@container space-y-4 pt-6">
         <!-- Requester info -->
         <div class="flex items-start gap-3">
           <Avatar.Root class="h-10 w-10 shrink-0">
@@ -130,7 +130,7 @@
         <!-- Role selection -->
         <div class="space-y-2">
           <Label>Assign roles</Label>
-          <div class="grid gap-2 sm:grid-cols-2">
+          <div class="grid gap-2 @sm:grid-cols-2">
             {#each roles as role (role.id)}
               <div class="flex items-center gap-2">
                 <Checkbox

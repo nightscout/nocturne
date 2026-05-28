@@ -114,7 +114,7 @@
   });
 </script>
 
-<Card.Root>
+<Card.Root class="@container">
   <Card.Header>
     <div class="flex items-start gap-4">
       <div class="relative group">
@@ -180,7 +180,7 @@
         Account Details
       </h3>
 
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="grid gap-4 @sm:grid-cols-2">
         <div class="space-y-1">
           <p class="text-sm text-muted-foreground">Subject ID</p>
           <p class="text-sm font-mono bg-muted px-2 py-1 rounded">
@@ -253,15 +253,15 @@
       {/if}
     </div>
   </Card.Content>
-  <Card.Footer class="flex flex-col sm:flex-row gap-2 border-t pt-6">
-    <Button variant="outline" href="/settings" class="w-full sm:w-auto">
+  <Card.Footer class="flex flex-col @sm:flex-row gap-2 border-t pt-6">
+    <Button variant="outline" href="/settings" class="w-full @sm:w-auto">
       <Settings class="mr-2 h-4 w-4" />
       Back to Settings
     </Button>
     <Button
       variant="destructive"
       onclick={onLogout}
-      class="w-full sm:w-auto"
+      class="w-full @sm:w-auto"
     >
       <LogOut class="mr-2 h-4 w-4" />
       Log Out

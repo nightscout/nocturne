@@ -30,9 +30,9 @@
 </script>
 
 <div
-  class="border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 sticky top-0 z-10"
+  class="@container border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 sticky top-0 z-10"
 >
-  <div class="flex items-center justify-between p-4">
+  <div class="flex flex-wrap items-center justify-between gap-2 p-4">
     <div class="flex items-center gap-4">
       <Calendar class="h-6 w-6 text-muted-foreground" />
       <h1 class="text-2xl font-bold">Calendar</h1>
@@ -59,8 +59,8 @@
   </div>
 
   <!-- Legend and View Toggle -->
-  <div class="flex items-center justify-between px-4 pb-3">
-    <div class="flex items-center gap-6">
+  <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 pb-3">
+    <div class="flex flex-wrap items-center gap-3 @xl:gap-6">
       <!-- View Mode Toggle -->
       <ToggleGroup.Root
         type="single"
@@ -95,7 +95,7 @@
       <!-- Mode-specific explanation -->
       {#if viewMode === "profile"}
         <div
-          class="flex items-center gap-3 text-xs text-muted-foreground border-l pl-4"
+          class="hidden @2xl:flex items-center gap-3 text-xs text-muted-foreground border-l pl-4"
         >
           <span>Daily glucose profile</span>
           <span>·</span>
@@ -103,7 +103,7 @@
         </div>
       {/if}
     </div>
-    <div class="text-sm text-muted-foreground">
+    <div class="hidden @xl:block text-sm text-muted-foreground">
       Click any day to view detailed report
     </div>
   </div>

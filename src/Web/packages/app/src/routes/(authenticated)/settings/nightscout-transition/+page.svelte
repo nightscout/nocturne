@@ -104,7 +104,7 @@
 	<title>Nightscout Transition - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-4xl p-6 space-y-6">
+<div class="@container container mx-auto max-w-4xl p-6 space-y-6">
 	<!-- Header -->
 	<div class="flex items-center gap-3">
 		<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -157,7 +157,7 @@
 			</CardHeader>
 			<CardContent class="space-y-4">
 				{#if Object.keys(status.migration.recordCounts).length > 0}
-					<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+					<div class="grid grid-cols-2 gap-3 @sm:grid-cols-3">
 						{#each Object.entries(status.migration.recordCounts) as [dataType, count]}
 							<div class="rounded-lg border p-3">
 								<p class="text-sm text-muted-foreground capitalize">{dataType}</p>

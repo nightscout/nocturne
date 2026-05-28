@@ -31,9 +31,9 @@
   <title>Food Editor - Nocturne</title>
 </svelte:head>
 
-<div class="food-editor flex-1 overflow-auto p-5">
+<div class="food-editor @container flex-1 overflow-auto p-5">
   <!-- Header -->
-  <div class="mb-5 flex items-center justify-between">
+  <div class="mb-5 flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
     <div>
       <h1 class="text-[22px] font-bold tracking-tight">Food Editor</h1>
       <div class="mt-0.5 text-xs text-muted-foreground">
@@ -44,7 +44,7 @@
         {/if}
       </div>
     </div>
-    <div class="flex gap-2">
+    <div class="flex flex-wrap gap-2">
       <Button variant="outline" size="sm"><Download class="h-3.5 w-3.5" /> Export</Button>
       <Button variant="outline" size="sm"><Upload class="h-3.5 w-3.5" /> Import CSV</Button>
       <Button size="sm" onclick={() => (state.composerOpen = true)}><Plus class="h-3.5 w-3.5" /> Add food</Button>
@@ -54,8 +54,8 @@
   <!-- Main card -->
   <div class="overflow-hidden rounded-[14px] border border-border bg-card">
     <!-- Toolbar -->
-    <div class="flex items-center gap-2.5 border-b border-border bg-card px-4 py-3.5">
-      <div class="flex h-[38px] flex-1 items-center gap-2 rounded-lg border border-border bg-white/[0.04] px-2.5 text-[13px] focus-within:border-ring focus-within:bg-white/[0.07]">
+    <div class="flex flex-wrap items-center gap-2.5 border-b border-border bg-card px-4 py-3.5">
+      <div class="flex h-[38px] min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-border bg-white/[0.04] px-2.5 text-[13px] focus-within:border-ring focus-within:bg-white/[0.07]">
         <Search class="h-[15px] w-[15px] text-muted-foreground" />
         <input
           class="h-full flex-1 border-0 bg-transparent p-0 text-foreground outline-0"

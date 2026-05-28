@@ -75,7 +75,7 @@
 </svelte:head>
 
 {#if suggestionsResource.current}
-	<div class="container mx-auto max-w-4xl space-y-6">
+	<div class="@container container mx-auto max-w-4xl space-y-6">
 		<!-- Header -->
 		<div class="flex items-center gap-3">
 			<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -88,7 +88,7 @@
 		</div>
 
 		<!-- Summary Stats -->
-		<div class="grid gap-4 sm:grid-cols-3">
+		<div class="grid gap-4 @lg:grid-cols-3">
 			<Card>
 				<CardContent class="flex items-center gap-4 pt-6">
 					<div
@@ -187,7 +187,7 @@
 			<Card
 				class="border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-900/10"
 			>
-				<CardContent class="flex items-center justify-between pt-6">
+				<CardContent class="flex flex-col gap-3 pt-6 @lg:flex-row @lg:items-center @lg:justify-between">
 					<div class="flex items-center gap-3">
 						<Clock class="h-5 w-5 text-amber-600 dark:text-amber-400" />
 						<div>
@@ -199,7 +199,7 @@
 							</p>
 						</div>
 					</div>
-					<Button href="/reports/data-quality/compression-lows" variant="default">
+					<Button href="/reports/data-quality/compression-lows" variant="default" class="shrink-0">
 						Review Now
 					</Button>
 				</CardContent>

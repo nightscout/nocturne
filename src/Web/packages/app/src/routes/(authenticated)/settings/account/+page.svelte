@@ -312,7 +312,7 @@
   <title>Account - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-4xl p-6 space-y-6">
+<div class="@container container mx-auto max-w-4xl p-6 space-y-6">
   {#if user}
     <div class="flex items-center gap-3">
       <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -513,7 +513,7 @@
           <Button
             href="/auth/login"
             size="lg"
-            class="w-full sm:w-auto min-w-[200px] font-medium"
+            class="w-full @sm:w-auto min-w-[200px] font-medium"
           >
             <User class="mr-2 h-5 w-5" />
             Sign In with Nocturne

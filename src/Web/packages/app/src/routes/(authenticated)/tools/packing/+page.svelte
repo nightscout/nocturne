@@ -65,9 +65,9 @@
   );
 </script>
 
-<div class="container mx-auto p-6 max-w-3xl space-y-5">
+<div class="@container container mx-auto p-6 max-w-3xl space-y-5">
   <!-- Header with inline trip duration -->
-  <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+  <div class="flex flex-col gap-4 @sm:flex-row @sm:items-end @sm:justify-between">
     <div>
       <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
         <Luggage class="h-6 w-6" />

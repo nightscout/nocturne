@@ -311,11 +311,11 @@
 
   <!-- Filters Panel -->
   <Card.Root>
-    <Card.Content class="p-4">
+    <Card.Content class="@container p-4">
       <div
-        class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
+        class="flex flex-col gap-4 @lg:flex-row @lg:items-end @lg:justify-between"
       >
-        <div class="flex flex-1 flex-col gap-4 md:flex-row md:items-end">
+        <div class="flex flex-1 flex-col gap-4 @lg:flex-row @lg:items-end">
           <div class="flex-1 max-w-sm">
             <Label for="search" class="text-sm font-medium">Search</Label>
             <Input

@@ -120,9 +120,9 @@
         Irreversible actions that affect this connector
       </CardDescription>
     </CardHeader>
-    <CardContent class="space-y-4">
+    <CardContent class="@container space-y-4">
       {#if hasExistingConfig}
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
           <div>
             <p class="font-medium">Delete Configuration</p>
             <p class="text-sm text-muted-foreground">
@@ -131,6 +131,7 @@
             </p>
           </div>
           <Button
+            class="shrink-0"
             variant="destructive"
             onclick={() => {
               deleteConfigResult = null;
@@ -148,7 +149,7 @@
       {/if}
 
       {#if hasData}
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
           <div>
             <p class="font-medium">Delete Synced Data</p>
             <p class="text-sm text-muted-foreground">
@@ -169,6 +170,7 @@
             {/if}
           </div>
           <Button
+            class="shrink-0"
             variant="destructive"
             disabled={!hasData}
             onclick={() => {

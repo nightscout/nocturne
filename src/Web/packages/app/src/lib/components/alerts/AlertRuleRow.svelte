@@ -61,7 +61,7 @@
 </script>
 
 <div
-  class="flex items-center gap-3 rounded-md border bg-background px-4 py-3 {!rule.isEnabled
+  class="@container flex items-center gap-3 rounded-md border bg-background px-4 py-3 {!rule.isEnabled
     ? 'opacity-60'
     : ''}"
 >
@@ -92,7 +92,7 @@
 
   <!-- Channel icons -->
   {#if rule.channels && rule.channels.length > 0}
-    <div class="hidden items-center gap-1 sm:flex" aria-label="Channels">
+    <div class="hidden items-center gap-1 @sm:flex" aria-label="Channels">
       {#each rule.channels.slice(0, 4) as ch (ch.id)}
         {@const meta = findChannelMeta(ch.channelType)}
         <span

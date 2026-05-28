@@ -80,9 +80,9 @@
     </CardTitle>
     <CardDescription>Configure the halo dial display</CardDescription>
   </CardHeader>
-  <CardContent class="space-y-4">
+  <CardContent class="space-y-4 @container">
     <!-- Section 1: Ring Settings -->
-    <div class="grid gap-4 sm:grid-cols-2">
+    <div class="grid gap-4 @sm:grid-cols-2">
       <div class="space-y-2">
         <Label>Color mode</Label>
         <Select.Root
@@ -160,7 +160,7 @@
     <Separator />
 
     <!-- Section 2: Center & Arcs -->
-    <div class="grid gap-4 sm:grid-cols-2">
+    <div class="grid gap-4 @sm:grid-cols-2">
       <div class="space-y-2">
         <Label>Center sub-element</Label>
         <Select.Root

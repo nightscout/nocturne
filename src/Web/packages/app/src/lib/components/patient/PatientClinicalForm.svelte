@@ -22,6 +22,7 @@
 
 <form
   id="clinical-form"
+  class="@container"
   bind:this={formEl}
   {...state.guard.enhance()}
 >
@@ -39,7 +40,7 @@
     <input type="hidden" name="modifiedAt" value={state.record.modifiedAt instanceof Date ? state.record.modifiedAt.toISOString() : state.record.modifiedAt} />
   {/if}
 
-  <div class="grid gap-4 sm:grid-cols-2">
+  <div class="grid gap-4 @sm:grid-cols-2">
     <div class="space-y-2">
       <Label for="diabetes-type">Diabetes Type</Label>
       <Select.Root type="single" name="diabetesType" bind:value={state.diabetesType}>
@@ -111,7 +112,7 @@
       />
     </div>
 
-    <div class="space-y-2 sm:col-span-2">
+    <div class="space-y-2 @sm:col-span-2">
       <Label for="timezone">Timezone</Label>
       <Input
         id="timezone"

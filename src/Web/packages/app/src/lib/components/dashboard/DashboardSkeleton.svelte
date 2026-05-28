@@ -3,9 +3,9 @@
   import { Card, CardContent, CardHeader } from "$lib/components/ui/card";
 </script>
 
-<div class="container mx-auto p-6 space-y-6">
+<div class="@container container mx-auto p-6 space-y-6">
   <!-- Header Skeleton -->
-  <div class="flex items-center justify-between">
+  <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
     <div class="space-y-2">
       <Skeleton class="h-9 w-64" />
       <Skeleton class="h-4 w-96" />
@@ -17,7 +17,7 @@
   </div>
 
   <!-- Overall Status Cards Skeleton (4-card grid) -->
-  <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+  <div class="grid gap-4 @lg:grid-cols-2 @3xl:grid-cols-4">
     {#each Array(4) as _, i (i)}
       <Card>
         <CardHeader
@@ -35,7 +35,7 @@
   </div>
 
   <!-- Detailed Metrics Skeleton (2-column grid) -->
-  <div class="grid gap-6 md:grid-cols-2">
+  <div class="grid gap-6 @lg:grid-cols-2">
     <!-- Left Card -->
     <Card>
       <CardHeader>

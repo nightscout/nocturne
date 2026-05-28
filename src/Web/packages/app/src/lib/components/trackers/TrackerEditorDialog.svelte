@@ -74,7 +74,7 @@
 </script>
 
 {#snippet definitionFormFields(prefix: string)}
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+  <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
     <div class="space-y-2">
       <Label for="name">Name</Label>
       <Input
@@ -328,7 +328,7 @@
 {/snippet}
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-2xl max-h-[90vh] overflow-y-auto">
+  <Dialog.Content class="@container max-w-2xl max-h-[90vh] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>
         {isNewDefinition ? "New Tracker Definition" : "Edit Definition"}

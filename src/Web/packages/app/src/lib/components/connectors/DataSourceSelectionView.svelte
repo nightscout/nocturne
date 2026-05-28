@@ -120,7 +120,7 @@
     </Card.Content>
   </Card.Root>
 {:else}
-  <div class="space-y-8">
+  <div class="@container space-y-8">
     <!-- Cloud Services (Connectors) -->
     {#if connectors.length > 0}
       <div class="space-y-3">
@@ -128,7 +128,7 @@
           <Cloud class="h-4 w-4" />
           Cloud Services
         </h2>
-        <div class="grid gap-3 sm:grid-cols-2">
+        <div class="grid gap-3 @xl:grid-cols-2">
           {#each connectors as connector (connector.id)}
             {@const configured = connector.isConfigured ?? false}
             <button
@@ -172,12 +172,12 @@
     <!-- Phone Apps (Uploaders) -->
     {#if uploaderApps.length > 0}
       <div class="space-y-3">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
           <h2 class="text-sm font-medium text-muted-foreground flex items-center gap-2">
             <Smartphone class="h-4 w-4" />
             Phone Apps
           </h2>
-          <div class="flex items-center gap-1">
+          <div class="flex flex-wrap items-center gap-1 shrink-0">
             <Button
               variant={platformFilter === "all" ? "default" : "outline"}
               size="sm"
@@ -210,7 +210,7 @@
           {#each groupedApps as group (group.category)}
             <div class="space-y-3">
               <h3 class="text-sm font-medium text-muted-foreground">{group.label}</h3>
-              <div class="grid gap-3 sm:grid-cols-2">
+              <div class="grid gap-3 @xl:grid-cols-2">
                 {#each group.apps as app (app.id)}
                   {@const detected = isDetected(app.id)}
                   <button

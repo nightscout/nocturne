@@ -3,7 +3,7 @@
   import { Card, CardContent, CardHeader } from "$lib/components/ui/card";
 </script>
 
-<div class="container mx-auto space-y-8 px-4 py-6">
+<div class="@container container mx-auto space-y-8 px-4 py-6">
   <!-- Header Skeleton -->
   <div class="space-y-3 text-center">
     <div class="flex items-center justify-center gap-2">
@@ -23,7 +23,7 @@
   </div>
 
   <!-- Score Cards Skeleton -->
-  <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+  <div class="grid grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-4">
     {#each Array(4) as _}
       <Card>
         <CardHeader class="pb-2">
@@ -42,8 +42,8 @@
   </div>
 
   <!-- Charts Row Skeleton -->
-  <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-    <Card class="lg:col-span-1">
+  <div class="grid grid-cols-1 gap-6 @4xl:grid-cols-3">
+    <Card class="@4xl:col-span-1">
       <CardHeader>
         <div class="flex items-center gap-2">
           <Skeleton class="h-5 w-5 rounded" />
@@ -56,7 +56,7 @@
       </CardContent>
     </Card>
 
-    <Card class="lg:col-span-2">
+    <Card class="@4xl:col-span-2">
       <CardHeader>
         <div class="flex items-center justify-between">
           <div>
@@ -76,7 +76,7 @@
   </div>
 
   <!-- Stats Grid Skeleton -->
-  <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+  <div class="grid grid-cols-2 gap-3 @sm:grid-cols-3 @3xl:grid-cols-6">
     {#each Array(6) as _}
       <Card class="p-4 text-center">
         <Skeleton class="h-8 w-16 mx-auto mb-2" />

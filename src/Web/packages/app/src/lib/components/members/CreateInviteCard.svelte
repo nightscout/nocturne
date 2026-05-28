@@ -119,7 +119,7 @@
       after signing in.
     </Card.Description>
   </Card.Header>
-  <Card.Content>
+  <Card.Content class="@container">
     {#if createdInviteUrl}
       <div class="space-y-4">
         <div
@@ -176,7 +176,7 @@
           description: "Roles control what they can see and do. Viewer for a quick glance, Caretaker if they help manage your diabetes.",
         })}>
           <Label>Roles</Label>
-          <div class="grid gap-2 sm:grid-cols-2">
+          <div class="grid gap-2 @sm:grid-cols-2">
             {#each roles as role (role.id)}
               <div class="flex items-center gap-2">
                 <Checkbox

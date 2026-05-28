@@ -96,9 +96,9 @@
   }
 </script>
 
-<Card>
+<Card class="@container">
   <CardHeader>
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
       <div>
         <CardTitle class="flex items-center gap-2">
           <Cloud class="h-5 w-5" />
@@ -144,7 +144,7 @@
     </div>
   </CardHeader>
   <CardContent>
-    <div class="grid gap-3 sm:grid-cols-2">
+    <div class="grid gap-3 @xl:grid-cols-2">
       {#each availableConnectors as connector}
         {@const connectorStatusInfo = connectorStatuses.find(
           (cs) => cs.id === connector.id

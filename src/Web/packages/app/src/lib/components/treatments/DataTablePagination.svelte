@@ -24,11 +24,12 @@
 </script>
 
 <!-- Pagination -->
-<div class="flex items-center justify-between px-2">
+<div class="@container">
+<div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between px-2">
   <div class="text-sm text-muted-foreground">
     {selectedCount} of {totalCount} row(s) selected
   </div>
-  <div class="flex items-center gap-6 lg:gap-8">
+  <div class="flex items-center gap-6 @3xl:gap-8">
     <div class="flex items-center gap-2">
       <p class="text-sm font-medium">Rows per page</p>
       <select
@@ -83,4 +84,5 @@
       </Button>
     </div>
   </div>
+</div>
 </div>

@@ -76,7 +76,7 @@
 </svelte:head>
 
 {#if siteChangeResource.current}
-<div class="container mx-auto max-w-7xl space-y-8 px-4 py-6">
+<div class="@container container mx-auto max-w-7xl space-y-8 px-4 py-6">
   <!-- Header -->
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-4">
@@ -185,7 +185,7 @@
         ages.
       </p>
 
-      <div class="grid gap-4 md:grid-cols-2">
+      <div class="grid gap-4 @lg:grid-cols-2">
         <div>
           <p class="font-medium">Before Site Change (Left)</p>
           <p class="text-blue-700/80 dark:text-blue-300/80">
@@ -228,7 +228,7 @@
         </CardTitle>
       </CardHeader>
       <CardContent class="space-y-4">
-        <div class="grid gap-4 md:grid-cols-2">
+        <div class="grid gap-4 @lg:grid-cols-2">
           {#if percentImprovement > 5}
             <div
               class="flex items-start gap-3 rounded-lg bg-green-50 p-4 dark:bg-green-950/30"

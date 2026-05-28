@@ -126,9 +126,9 @@
   {@const sensitivity = selectedProfileName ? getSensitivityForProfile(data, selectedProfileName) : null}
   {@const targetRange = selectedProfileName ? getTargetRangeForProfile(data, selectedProfileName) : null}
   {@const profileConfigured = (data?.basalSchedules ?? []).length > 0}
-  <div class="container mx-auto max-w-4xl p-6 space-y-6" {@attach coachmark({ key: "onboarding.therapy-profile", title: "Automatically synced", description: "Your basal rates, carb ratios, and sensitivity factors are imported from your uploader (AAPS, Loop, xDrip+). No manual entry needed.", completedWhen: () => profileConfigured })}>
+  <div class="@container container mx-auto max-w-4xl p-6 space-y-6" {@attach coachmark({ key: "onboarding.therapy-profile", title: "Automatically synced", description: "Your basal rates, carb ratios, and sensitivity factors are imported from your uploader (AAPS, Loop, xDrip+). No manual entry needed.", completedWhen: () => profileConfigured })}>
     <!-- Header -->
-    <div class="flex items-start justify-between">
+    <div class="flex flex-wrap items-start justify-between gap-2">
       <div class="flex items-center gap-3">
         <div
           class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"
@@ -189,7 +189,7 @@
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="grid gap-2 @xl:grid-cols-2 @4xl:grid-cols-3">
               {#each profileNames as profileName}
                 {@const profileTherapy = getTherapyForProfile(data, profileName)}
                 {@const isSelected = selectedProfileName === profileName}
@@ -223,7 +223,7 @@
                     {/if}
                   </div>
                   <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
                       <span class="font-medium truncate">
                         {profileName}
                       </span>
@@ -315,7 +315,7 @@
             </div>
           </CardHeader>
           <CardContent>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 @xl:grid-cols-4 gap-4">
               <div class="space-y-1">
                 <span class="text-xs text-muted-foreground">Units</span>
                 <p class="font-medium">
@@ -345,7 +345,7 @@
         </Card>
 
         <!-- Schedule Cards Grid -->
-        <div class="grid gap-4 md:grid-cols-2">
+        <div class="grid gap-4 @3xl:grid-cols-2">
           {#if basal?.entries && basal.entries.length > 0}
             <ScheduleView
               title="Basal Rates"
@@ -401,7 +401,7 @@
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+            <div class="grid grid-cols-2 @xl:grid-cols-4 gap-4 text-sm">
               <div>
                 <span class="text-muted-foreground">DIA</span>
                 <p class="font-medium">{therapy.dia ?? "-"} hours</p>

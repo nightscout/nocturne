@@ -275,7 +275,7 @@
 {/snippet}
 
 {#if dayDataResource.current}
-<div class="space-y-6 p-4">
+<div class="@container space-y-6 p-4">
   <!-- Header with Navigation -->
   <Card.Root>
     <Card.Content class="p-4">
@@ -304,16 +304,16 @@
   </Card.Root>
 
   <!-- Summary Stats -->
-  <div class="grid md:grid-cols-3 gap-6">
+  <div class="grid @4xl:grid-cols-3 gap-6">
     <!-- Glucose Overview -->
-    <Card.Root class="md:col-span-2">
+    <Card.Root class="@4xl:col-span-2">
       <Card.Content class="p-4 space-y-4">
         <TIRStackedChart
           percentages={analysis?.timeInRange?.percentages}
           orientation="horizontal"
           compact
         />
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 text-sm">
+        <div class="grid grid-cols-2 @lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
           <div>
             <div class="text-muted-foreground">Mean</div>
             <div class="font-medium tabular-nums">

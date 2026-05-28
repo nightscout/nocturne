@@ -40,7 +40,7 @@
       Connect your CGM app or AID system to push data to Nocturne
     </CardDescription>
   </CardHeader>
-  <CardContent>
+  <CardContent class="@container">
     <Tabs.Root value="cgm">
       <Tabs.List class="grid w-full grid-cols-3">
         <Tabs.Trigger value="cgm">CGM Apps</Tabs.Trigger>
@@ -54,7 +54,7 @@
         { value: "other", apps: otherApps },
       ] as tab}
         <Tabs.Content value={tab.value} class="mt-4">
-          <div class="grid gap-3 sm:grid-cols-2">
+          <div class="grid gap-3 @xl:grid-cols-2">
             {#each tab.apps as uploader}
               {@const active = isUploaderActive(uploader)}
               <button

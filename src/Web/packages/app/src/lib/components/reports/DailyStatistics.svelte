@@ -10,7 +10,8 @@
   let { dayData, thresholds }: Props = $props();
 </script>
 
-<div class="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+<div class="@container mt-4">
+<div class="grid grid-cols-2 @lg:grid-cols-3 gap-4 text-sm">
   <div class="bg-gray-50 p-3 rounded">
     <div class="text-gray-600 text-xs">Average</div>
     <div
@@ -65,4 +66,5 @@
         (dayData.analytics?.timeInRange?.percentages?.veryHigh ?? 0)}%
     </div>
   </div>
+</div>
 </div>

@@ -63,7 +63,8 @@
   }
 </script>
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="@container">
+<div class="grid grid-cols-1 @lg:grid-cols-3 gap-4">
   <Card>
     <CardHeader class="pb-2">
       <CardTitle class="text-sm font-medium">BG Delta</CardTitle>
@@ -155,4 +156,5 @@
   {#if showWebSocketStatus}
     <WebSocketStatus />
   {/if}
+</div>
 </div>

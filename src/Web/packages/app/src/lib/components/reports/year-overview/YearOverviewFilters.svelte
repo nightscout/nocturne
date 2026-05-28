@@ -23,8 +23,9 @@
   }>();
 </script>
 
+<div class="@container">
 <div
-  class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+  class="mb-6 flex flex-col gap-4 @sm:flex-row @sm:items-center @sm:justify-between"
 >
   <div class="flex items-center gap-3">
     <div
@@ -122,4 +123,5 @@
       </Popover.Root>
     {/if}
   </div>
+</div>
 </div>

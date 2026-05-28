@@ -39,9 +39,9 @@
 </script>
 
 {#if snapshot}
-  <Card.Root>
+  <Card.Root class="@container">
     <Card.Header class="pb-2">
-      <div class="flex items-center justify-between">
+      <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
         <Card.Title class="flex items-center gap-2 text-sm">
           <Brain class="h-4 w-4" />
           APS Decision at {snapshotTime}
@@ -49,8 +49,8 @@
         <Badge
           variant={isEnacted ? "default" : "outline"}
           class={isEnacted
-            ? "bg-green-600/20 text-green-400 border-green-600/40"
-            : ""}
+            ? "shrink-0 bg-green-600/20 text-green-400 border-green-600/40"
+            : "shrink-0"}
         >
           {#if isEnacted}
             <Check class="h-3 w-3 mr-1" />
@@ -62,7 +62,7 @@
       </div>
     </Card.Header>
     <Card.Content>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 text-sm">
+      <div class="grid grid-cols-2 @sm:grid-cols-4 gap-x-6 gap-y-3 text-sm">
         <!-- IOB -->
         <div>
           <div class="flex items-center gap-1 text-muted-foreground">

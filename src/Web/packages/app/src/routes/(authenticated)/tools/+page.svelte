@@ -8,13 +8,13 @@
   import { Luggage } from "lucide-svelte";
 </script>
 
-<div class="container mx-auto p-6 max-w-5xl space-y-6">
+<div class="@container container mx-auto p-6 max-w-5xl space-y-6">
   <div>
     <h1 class="text-2xl font-bold tracking-tight">Tools</h1>
     <p class="text-muted-foreground">Utilities to help manage your diabetes.</p>
   </div>
 
-  <div class="grid gap-4 md:grid-cols-2">
+  <div class="grid gap-4 @xl:grid-cols-2">
     <a href="/tools/packing" class="block">
       <Card class="h-full hover:bg-muted/50 transition-colors cursor-pointer">
         <CardHeader>

@@ -125,7 +125,7 @@
   <title>Access Requests - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="w-full py-6 space-y-6">
+<div class="@container w-full py-6 space-y-6">
   <div class="flex items-center gap-3">
     <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
       <UserPlus class="h-6 w-6 text-primary" />
@@ -209,7 +209,7 @@
             <!-- Role multi-select -->
             <div class="space-y-2">
               <Label>Roles</Label>
-              <div class="grid gap-2 sm:grid-cols-2">
+              <div class="grid gap-2 @sm:grid-cols-2">
                 {#each allRoles as role (role.id)}
                   <div class="flex items-center gap-2">
                     <Checkbox

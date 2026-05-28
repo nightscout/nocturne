@@ -75,7 +75,7 @@
 </svelte:head>
 
 {#if reportsResource.current}
-<div class="container mx-auto px-4 py-6 space-y-8 max-w-7xl">
+<div class="@container container mx-auto px-4 py-6 space-y-8 max-w-7xl">
   <!-- Header with AGP Explanation -->
   <div class="space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-4">
@@ -172,7 +172,7 @@
     {@const variability = analysis.glycemicVariability ?? {}}
 
     <!-- Quick Stats Grid -->
-    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+    <div class="grid grid-cols-2 @lg:grid-cols-4 @3xl:grid-cols-6 gap-4">
       <Card
         class="p-4 text-center border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/30"
       >
@@ -231,13 +231,13 @@
           pattern
         </CardDescription>
       </CardHeader>
-      <CardContent class="h-80 md:h-96">
+      <CardContent class="h-80 @lg:h-96">
         <AmbulatoryGlucoseProfile averagedStats={data.averagedStats} />
       </CardContent>
     </Card>
 
     <!-- Time in Range Visual -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
       <Card class="border-2">
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
@@ -373,7 +373,7 @@
   <!-- Clinical Context Footer -->
   <Card class="border bg-muted/30">
     <CardContent class="pt-6">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+      <div class="grid grid-cols-1 @3xl:grid-cols-3 gap-6 text-sm">
         <div>
           <h4 class="font-semibold mb-2">About This Report</h4>
           <p class="text-muted-foreground">

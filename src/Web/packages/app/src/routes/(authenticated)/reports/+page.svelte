@@ -183,7 +183,7 @@
     </div>
   </div>
 {:else}
-  <div class="min-h-screen">
+  <div class="@container min-h-screen">
     <!-- Hero Section with Key Metrics -->
     <section
       class="relative overflow-hidden bg-linear-to-b from-slate-50 via-white to-transparent pb-8 pt-6 dark:from-slate-900 dark:via-slate-950 dark:to-transparent"
@@ -220,7 +220,7 @@
             })}
           </div>
           <h1
-            class="bg-linear-to-r from-slate-900 via-slate-700 to-slate-800 bg-clip-text text-4xl font-bold tracking-tight text-transparent dark:from-white dark:via-slate-200 dark:to-slate-300 md:text-5xl"
+            class="bg-linear-to-r from-slate-900 via-slate-700 to-slate-800 bg-clip-text text-4xl font-bold tracking-tight text-transparent dark:from-white dark:via-slate-200 dark:to-slate-300 @lg:text-5xl"
           >
             Your Glucose Report
           </h1>
@@ -248,18 +248,18 @@
                 )}
               ></div>
 
-              <div class="grid items-center gap-8 lg:grid-cols-[1fr,auto,1fr]">
+              <div class="grid items-center gap-8 @3xl:grid-cols-[1fr,auto,1fr]">
                 <!-- Left: Time in Range highlight -->
-                <div class="text-center lg:text-left">
+                <div class="text-center @3xl:text-left">
                   <div class="mb-1 text-sm font-medium text-muted-foreground">
                     Time in Range
                   </div>
                   <div
-                    class="flex items-baseline justify-center gap-2 lg:justify-start"
+                    class="flex items-baseline justify-center gap-2 @3xl:justify-start"
                   >
                     <span
                       class={cn(
-                        "bg-linear-to-r bg-clip-text text-6xl font-bold tabular-nums text-transparent md:text-7xl",
+                        "bg-linear-to-r bg-clip-text text-6xl font-bold tabular-nums text-transparent @lg:text-7xl",
                         getStatusColor(tirStatus)
                       )}
                     >
@@ -289,7 +289,7 @@
                 </div>
 
                 <!-- Right: Secondary metrics -->
-                <div class="grid grid-cols-2 gap-4 lg:gap-6">
+                <div class="grid grid-cols-2 gap-4 @3xl:gap-6">
                   <div
                     class="rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
                   >
@@ -460,7 +460,7 @@
         </p>
       </div>
 
-      <div class="grid gap-6 md:grid-cols-2" {@attach coachmark({
+      <div class="grid gap-6 @3xl:grid-cols-2" {@attach coachmark({
         key: "setup-reports.categories",
         title: "Start with Executive Summary",
         description: "It combines your key metrics into a single page \u2014 great for clinic visits or sharing with your endo.",

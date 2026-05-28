@@ -283,8 +283,8 @@
 </svelte:head>
 
 {#if suggestionsResource.current}
-	<div class="container mx-auto space-y-6">
-		<div class="flex items-center justify-between">
+	<div class="@container container mx-auto space-y-6">
+		<div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
 			<div class="flex items-center gap-4">
 				<Button href="/reports/data-quality" variant="ghost" size="icon">
 					<ArrowLeft class="h-4 w-4" />
@@ -300,7 +300,7 @@
 					</p>
 				</div>
 			</div>
-			<div class="flex items-center gap-2">
+			<div class="flex shrink-0 items-center gap-2">
 				<span class="text-sm text-muted-foreground">Status:</span>
 				<Select
 					type="single"
@@ -386,7 +386,7 @@
 				</CardContent>
 			</Card>
 		{:else}
-			<div class="grid gap-6 lg:grid-cols-3">
+			<div class="grid gap-6 @3xl:grid-cols-3">
 				<!-- Suggestion List -->
 				<div class="max-h-[600px] space-y-2 overflow-y-auto pr-2">
 					{#each filteredSuggestions as suggestion, index (suggestion.id)}
@@ -433,7 +433,7 @@
 				</div>
 
 				<!-- Chart and Actions -->
-				<div class="lg:col-span-2">
+				<div class="@3xl:col-span-2">
 					{#if suggestionDetail}
 						<Card>
 							<CardHeader>

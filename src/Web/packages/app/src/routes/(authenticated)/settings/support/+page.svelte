@@ -181,7 +181,7 @@
   <title>Support & Community - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-4xl p-6 space-y-6">
+<div class="@container container mx-auto max-w-4xl p-6 space-y-6">
   <!-- Header -->
   <div class="flex items-center gap-3">
     <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -246,7 +246,7 @@
       <CardDescription>Need help? Here's how to reach us</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="grid gap-4 @xl:grid-cols-2">
         {#await supportConfigQuery then supportConfig}
           {#each supportOptions as option}
             {#if option.template === "account" && supportConfig?.accountBilling?.mode === "redirect"}

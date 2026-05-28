@@ -19,7 +19,8 @@
 </script>
 
 {#if monthSummary.totalReadings > 0}
-  <div class="mt-4 pt-4 border-t grid grid-cols-2 md:grid-cols-4 gap-4">
+  <div class="@container mt-4 pt-4 border-t">
+  <div class="grid grid-cols-2 @lg:grid-cols-4 gap-4">
     <div class="text-center">
       <div class="text-2xl font-bold text-glucose-in-range">
         {monthSummary.inRangePercent.toFixed(1)}%
@@ -51,5 +52,6 @@
         Avg TDD
       </div>
     </div>
+  </div>
   </div>
 {/if}

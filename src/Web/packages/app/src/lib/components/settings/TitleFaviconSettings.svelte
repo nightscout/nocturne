@@ -64,7 +64,7 @@
       Customize how glucose data appears in the browser tab
     </CardDescription>
   </CardHeader>
-  <CardContent class="space-y-6">
+  <CardContent class="space-y-6 @container">
     <!-- Master Enable -->
     <div class="flex items-center justify-between">
       <div class="space-y-0.5">
@@ -88,7 +88,7 @@
       <div class="space-y-4">
         <h4 class="text-sm font-medium">Title</h4>
 
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 @sm:grid-cols-2">
           <div class="flex items-center justify-between">
             <Label>Show BG value</Label>
             <Switch
@@ -158,7 +158,7 @@
         </div>
 
         {#if settings.faviconEnabled}
-          <div class="grid gap-4 sm:grid-cols-2 pl-4">
+          <div class="grid gap-4 @sm:grid-cols-2 pl-4">
             <div class="flex items-center justify-between">
               <Label>Show BG value in favicon</Label>
               <Switch

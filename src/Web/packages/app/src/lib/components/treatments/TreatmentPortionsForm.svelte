@@ -33,7 +33,7 @@
   }: Props = $props();
 </script>
 
-<div class="border-t pt-4 space-y-4">
+<div class="@container border-t pt-4 space-y-4">
   <div class="text-sm font-medium">How much did you eat?</div>
 
   <!-- Show remaining carbs context -->
@@ -49,7 +49,7 @@
   {/if}
 
   <!-- Bidirectional portion/carbs input -->
-  <div class="grid gap-4 md:grid-cols-3">
+  <div class="grid gap-4 @lg:grid-cols-3">
     {#if showPortions}
       <div class="space-y-2">
         <Label for="portions">Portions</Label>

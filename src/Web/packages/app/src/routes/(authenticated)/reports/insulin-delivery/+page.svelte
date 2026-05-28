@@ -146,7 +146,7 @@
 </svelte:head>
 
 {#if reportsResource.current || multiPeriodStatsResource.current}
-<div class="container mx-auto max-w-7xl space-y-8 px-4 py-6">
+<div class="@container container mx-auto max-w-7xl space-y-8 px-4 py-6">
   <!-- Header -->
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-4">
@@ -231,8 +231,8 @@
   </Card>
 
   <!-- Key Summary Stats -->
-  <div class="grid grid-cols-2 gap-4 md:grid-cols-5">
-    <Card class="border md:col-span-1">
+  <div class="grid grid-cols-2 gap-4 @lg:grid-cols-5">
+    <Card class="border @lg:col-span-1">
       <CardContent class="pt-6 text-center">
         <div class="text-3xl font-bold tabular-nums text-primary">
           {(insulinStats.tdd ?? 0).toFixed(1)}
@@ -356,7 +356,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid gap-4 md:grid-cols-3">
+        <div class="grid gap-4 @3xl:grid-cols-3">
           <div class="rounded-lg border bg-card p-4 text-center">
             <div class="text-3xl font-bold text-blue-600">
               {insulinStats.bolusCount ?? 0}

@@ -359,7 +359,7 @@
   ]);
 </script>
 
-<div class="space-y-6">
+<div class="@container space-y-6">
   <!-- Period controls -->
   <Card.Root>
     <Card.Content class="space-y-4 p-4">
@@ -398,7 +398,7 @@
         </Button>
       </div>
 
-      <div class="grid gap-4 md:grid-cols-2">
+      <div class="grid gap-4 @xl:grid-cols-2">
         {#each sideConfigs as cfg (cfg.side)}
           {@const p = periods[cfg.side]}
           <div class="rounded-md border border-border bg-card p-3">
@@ -538,7 +538,7 @@
       </Card.Description>
     </Card.Header>
     <Card.Content>
-      <div class="grid gap-6 md:grid-cols-2">
+      <div class="grid gap-6 @xl:grid-cols-2">
         {#each tirColumns as col (col.key)}
           <div class="flex flex-col">
             <div class="mb-3 flex items-center gap-2">

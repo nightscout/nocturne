@@ -141,7 +141,7 @@
     ]);
 </script>
 
-<div class="w-full">
+<div class="@container w-full">
   {#if analysis && analysis.hasSufficientData && chartData.length > 0}
     <div class="h-[400px] w-full">
       <AreaChart
@@ -242,7 +242,7 @@
 
     <!-- Summary Statistics -->
     {#if analysis.summary}
-      <div class="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div class="mt-6 grid grid-cols-2 gap-4 @lg:grid-cols-4">
         <div class="rounded-lg bg-muted/50 p-3 text-center">
           <div class="text-sm text-muted-foreground">Avg Before</div>
           <div class="text-xl font-semibold">

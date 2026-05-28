@@ -107,7 +107,7 @@
   }
 </script>
 
-<Card.Root>
+<Card.Root class="@container">
   <Card.Header>
     <div class="flex items-start justify-between gap-4">
       <div class="space-y-1 flex-1 min-w-0">
@@ -189,7 +189,7 @@
       <!-- Role selection -->
       <div class="space-y-2">
         <Label>Roles</Label>
-        <div class="grid gap-2 sm:grid-cols-2">
+        <div class="grid gap-2 @sm:grid-cols-2">
           {#each roles as role (role.id)}
             {@const isOwnerSelf = role.slug === "owner" && member.subjectId === currentSubjectId}
             {@const isOwnerRole = editingRoleIds.includes(role.id ?? '')}

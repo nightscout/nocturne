@@ -61,7 +61,8 @@
   );
 </script>
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="@container">
+<div class="grid grid-cols-1 @4xl:grid-cols-3 gap-4">
   <!-- Total Records -->
   <Card.Root class="bg-card">
     <Card.Content class="p-4">
@@ -147,4 +148,5 @@
       </div>
     </Card.Content>
   </Card.Root>
+</div>
 </div>
