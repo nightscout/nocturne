@@ -75,7 +75,7 @@
 </svelte:head>
 
 {#if suggestionsResource.current}
-	<div class="@container container mx-auto max-w-4xl space-y-6">
+	<div class="@container container mx-auto max-w-4xl space-y-6 p-3 @md:p-6">
 		<!-- Header -->
 		<div class="flex items-center gap-3">
 			<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">

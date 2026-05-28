@@ -283,7 +283,7 @@
 </svelte:head>
 
 {#if suggestionsResource.current}
-	<div class="@container container mx-auto space-y-6">
+	<div class="@container container mx-auto space-y-6 p-3 @md:p-6">
 		<div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
 			<div class="flex items-center gap-4">
 				<Button href="/reports/data-quality" variant="ghost" size="icon">

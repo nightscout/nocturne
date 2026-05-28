@@ -111,7 +111,7 @@
 
 {#await actogramResource then actogramData}
   {#if actogramData}
-  <div class="@container container mx-auto space-y-6 px-4 py-6 max-w-7xl">
+  <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
     <!-- Header -->
     <div>
       <h1 class="text-3xl font-bold">Heart Rate</h1>

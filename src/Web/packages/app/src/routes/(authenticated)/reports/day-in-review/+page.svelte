@@ -275,30 +275,51 @@
 {/snippet}
 
 {#if dayDataResource.current}
-<div class="@container space-y-6 p-4">
+<div class="@container space-y-6 p-3 @md:p-6">
   <!-- Header with Navigation -->
   <Card.Root>
     <Card.Content class="p-4">
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <Button variant="ghost" size="sm" onclick={goBackToMonthView}>
+      <div
+        class="flex flex-col gap-3 @2xl:flex-row @2xl:flex-wrap @2xl:items-center @2xl:justify-between"
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          class="self-start @2xl:self-auto"
+          onclick={goBackToMonthView}
+        >
           <ArrowLeft class="h-4 w-4 mr-2" />
           Back to Month View
         </Button>
 
-        <div class="flex items-center gap-2">
-          <Button variant="outline" size="icon" onclick={goToPreviousDay}>
+        <div class="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            class="shrink-0"
+            onclick={goToPreviousDay}
+          >
             <ChevronLeft class="h-4 w-4" />
           </Button>
-          <div class="flex items-center gap-2 min-w-[280px] justify-center">
-            <Calendar class="h-4 w-4 text-muted-foreground" />
-            <span class="text-lg font-medium">{dateDisplay}</span>
+          <div
+            class="flex min-w-0 items-center justify-center gap-2 px-1 @2xl:min-w-[220px]"
+          >
+            <Calendar class="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span class="truncate text-base font-medium @2xl:text-lg">
+              {dateDisplay}
+            </span>
           </div>
-          <Button variant="outline" size="icon" onclick={goToNextDay}>
+          <Button
+            variant="outline"
+            size="icon"
+            class="shrink-0"
+            onclick={goToNextDay}
+          >
             <ChevronRight class="h-4 w-4" />
           </Button>
         </div>
 
-        <div class="w-[100px]"><!-- Spacer for alignment --></div>
+        <div class="hidden @2xl:block @2xl:w-[100px]"><!-- Spacer for alignment --></div>
       </div>
     </Card.Content>
   </Card.Root>

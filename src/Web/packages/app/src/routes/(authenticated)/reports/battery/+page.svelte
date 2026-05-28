@@ -128,7 +128,7 @@
 </svelte:head>
 
 {#if batteryResource.current}
-<div class="@container container mx-auto space-y-6 px-4 py-6">
+<div class="@container container mx-auto space-y-6 p-3 @md:p-6">
   <!-- Header -->
   <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
     <div>

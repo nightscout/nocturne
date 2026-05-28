@@ -84,7 +84,7 @@
 </svelte:head>
 
 {#if reportsResource.current}
-  <div class="@container container mx-auto max-w-7xl space-y-8 px-4 py-6">
+  <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
     <!-- Header -->
     <div class="space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-4">

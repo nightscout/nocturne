@@ -200,7 +200,7 @@
         ></div>
       </div>
 
-      <div class="container relative mx-auto max-w-6xl px-4">
+      <div class="container relative mx-auto max-w-6xl px-3">
         <!-- Header -->
         <div
           class="mb-8 text-center"
@@ -427,7 +427,7 @@
     </section>
 
     <!-- Quick Actions -->
-    <section class="container mx-auto max-w-6xl px-4 py-6">
+    <section class="container mx-auto max-w-6xl px-3 py-6">
       <div
         class="flex flex-wrap items-center justify-center gap-3"
         in:fly={{ y: 20, duration: 500, delay: 450, easing: cubicOut }}
@@ -459,7 +459,7 @@
     </section>
 
     <!-- Report Categories -->
-    <section class="container mx-auto max-w-6xl px-4 pb-16 pt-8">
+    <section class="container mx-auto max-w-6xl px-3 pb-16 pt-8">
       <div
         class="mb-10 text-center"
         in:fly={{ y: 20, duration: 500, delay: 500, easing: cubicOut }}
@@ -567,7 +567,7 @@
     </section>
 
     <!-- Footer Note -->
-    <section class="container mx-auto max-w-6xl px-4 pb-12">
+    <section class="container mx-auto max-w-6xl px-3 pb-12">
       <div
         class="rounded-2xl bg-slate-50 p-6 text-center dark:bg-slate-900/50"
         in:fade={{ duration: 400, delay: 800 }}

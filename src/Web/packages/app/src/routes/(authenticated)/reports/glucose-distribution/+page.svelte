@@ -97,7 +97,7 @@
 
 {#if reportsResource.current}
   {@const report = reportsResource.current}
-  <div class="@container space-y-6 p-4">
+  <div class="@container space-y-6 p-3 @md:p-6">
     <Card.Root>
       <Card.Header>
         <Card.Title class="flex items-center gap-2">

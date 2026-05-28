@@ -277,7 +277,7 @@
 </svelte:head>
 
 {#if reportsResource.current}
-<div class="container mx-auto space-y-6 px-4 py-6">
+<div class="@container container mx-auto space-y-6 p-3 @md:p-6">
   <!-- Header -->
   <div class="space-y-2">
     <div

@@ -16,7 +16,7 @@
 </script>
 
 {#if reportsResource.current}
-  <GlucoseChartCard
-    dateRange={reportsResource.current.dateRange}
-  />
+  <div class="p-3 @md:p-6">
+    <GlucoseChartCard dateRange={reportsResource.current.dateRange} />
+  </div>
 {/if}
