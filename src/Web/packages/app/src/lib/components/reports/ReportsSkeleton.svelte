@@ -3,7 +3,7 @@
   import { Card, CardContent, CardHeader } from "$lib/components/ui/card";
 </script>
 
-<div class="@container container mx-auto space-y-8 px-4 py-6">
+<div class="@container container mx-auto space-y-6 px-4 py-6 @lg:space-y-8">
   <!-- Header Skeleton -->
   <div class="space-y-3 text-center">
     <div class="flex items-center justify-center gap-2">
