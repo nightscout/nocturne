@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent } from "$lib/api";
+  import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent, BasalInjection } from "$lib/api";
   import { BolusType, GlucoseType, GlucoseUnit, DeviceEventType } from "$lib/api";
   import type { EntryRecord, EntryCategoryId } from "$lib/constants/entry-categories";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
@@ -17,6 +17,7 @@
   import BGCheckSection from "./BGCheckSection.svelte";
   import NoteSection from "./NoteSection.svelte";
   import DeviceEventSection from "./DeviceEventSection.svelte";
+  import BasalInjectionSection from "./BasalInjectionSection.svelte";
   import {
     Plus,
     Trash2,
@@ -55,6 +56,11 @@
     update as updateDeviceEventForm,
     remove as deleteDeviceEvent,
   } from "$api/generated/deviceEvents.generated.remote";
+  import {
+    create as createBasalInjectionForm,
+    update as updateBasalInjectionForm,
+    remove as deleteBasalInjection,
+  } from "$api/generated/basalInjections.generated.remote";
 
   interface Sections {
     bolus: Partial<Bolus> | null;
@@ -62,6 +68,7 @@
     bgCheck: Partial<BGCheck> | null;
     note: Partial<Note> | null;
     deviceEvent: Partial<DeviceEvent> | null;
+    basalInjection: Partial<BasalInjection> | null;
   }
 
   interface Props {
@@ -93,6 +100,7 @@
     bgCheck: null,
     note: null,
     deviceEvent: null,
+    basalInjection: null,
   });
 
   let mills = $state<number>(Date.now());
@@ -105,6 +113,7 @@
   let bgCheckFormRef = $state<HTMLFormElement | null>(null);
   let noteFormRef = $state<HTMLFormElement | null>(null);
   let deviceEventFormRef = $state<HTMLFormElement | null>(null);
+  let basalInjectionFormRef = $state<HTMLFormElement | null>(null);
 
   // Track form completion per section
   let bolusFormDone = $state(false);
@@ -112,6 +121,7 @@
   let bgCheckFormDone = $state(false);
   let noteFormDone = $state(false);
   let deviceEventFormDone = $state(false);
+  let basalInjectionFormDone = $state(false);
   let saveError = $state<string | null>(null);
   let isSaving = $state(false);
 
@@ -162,6 +172,11 @@
     existingDeviceEventRecord?.data.id ? updateDeviceEventForm : createDeviceEventForm,
   );
 
+  const existingBasalInjectionRecord = $derived(findExistingRecord("basalInjection"));
+  const activeBasalInjectionForm = $derived(
+    existingBasalInjectionRecord?.data.id ? updateBasalInjectionForm : createBasalInjectionForm,
+  );
+
   // Aggregate pending state across all forms
   const formsPending = $derived(
     !!createBolusForm.pending ||
@@ -173,7 +188,9 @@
     !!createNoteForm.pending ||
     !!updateNoteForm.pending ||
     !!createDeviceEventForm.pending ||
-    !!updateDeviceEventForm.pending,
+    !!updateDeviceEventForm.pending ||
+    !!createBasalInjectionForm.pending ||
+    !!updateBasalInjectionForm.pending,
   );
 
   const sectionIcons: Record<EntryCategoryId, typeof Syringe> = {
@@ -182,6 +199,7 @@
     bgCheck: Droplet,
     note: FileText,
     deviceEvent: Smartphone,
+    basalInjection: Syringe,
   };
 
   // Populate sections from entry and correlated records when dialog opens
@@ -196,6 +214,7 @@
         bgCheck: null,
         note: null,
         deviceEvent: null,
+        basalInjection: null,
       };
 
       // Populate primary entry
@@ -217,6 +236,7 @@
         bgCheck: null,
         note: null,
         deviceEvent: null,
+        basalInjection: null,
       };
       mills = Date.now();
       carbsPendingFoods = [];
@@ -239,6 +259,9 @@
         break;
       case "deviceEvent":
         target.deviceEvent = { ...record.data };
+        break;
+      case "basalInjection":
+        target.basalInjection = { ...record.data };
         break;
     }
   }
@@ -284,6 +307,7 @@
     bgCheckFormDone = sections.bgCheck == null;
     noteFormDone = sections.note == null;
     deviceEventFormDone = sections.deviceEvent == null;
+    basalInjectionFormDone = sections.basalInjection == null;
 
     // Submit all active forms
     if (sections.bolus != null && bolusFormRef) {
@@ -301,10 +325,13 @@
     if (sections.deviceEvent != null && deviceEventFormRef) {
       deviceEventFormRef.requestSubmit();
     }
+    if (sections.basalInjection != null && basalInjectionFormRef) {
+      basalInjectionFormRef.requestSubmit();
+    }
   }
 
   function checkAllDone() {
-    if (bolusFormDone && carbsFormDone && bgCheckFormDone && noteFormDone && deviceEventFormDone) {
+    if (bolusFormDone && carbsFormDone && bgCheckFormDone && noteFormDone && deviceEventFormDone && basalInjectionFormDone) {
       if (!saveError) {
         toast.success(isEditing ? "Entry updated" : "Entry created");
         open = false;
@@ -318,7 +345,7 @@
 
   // Watch for form completion
   $effect(() => {
-    if (isSaving && bolusFormDone && carbsFormDone && bgCheckFormDone && noteFormDone && deviceEventFormDone) {
+    if (isSaving && bolusFormDone && carbsFormDone && bgCheckFormDone && noteFormDone && deviceEventFormDone && basalInjectionFormDone) {
       checkAllDone();
     }
   });
@@ -346,6 +373,9 @@
         case "deviceEvent":
           promises.push(deleteDeviceEvent(entry.data.id));
           break;
+        case "basalInjection":
+          promises.push(deleteBasalInjection(entry.data.id));
+          break;
       }
 
       // Delete correlated records
@@ -366,6 +396,9 @@
             break;
           case "deviceEvent":
             promises.push(deleteDeviceEvent(record.data.id));
+            break;
+          case "basalInjection":
+            promises.push(deleteBasalInjection(record.data.id));
             break;
         }
       }
@@ -556,6 +589,43 @@
   </form>
 {/if}
 
+<!-- Hidden basal injection form -->
+{#if sections.basalInjection != null}
+  {@const correlationId = activeSectionCount > 1 ? crypto.randomUUID() : undefined}
+  <form
+    bind:this={basalInjectionFormRef}
+    class="hidden"
+    {...activeBasalInjectionForm.enhance(async ({ submit }) => {
+      await submit();
+      if (activeBasalInjectionForm.result) {
+        basalInjectionFormDone = true;
+      } else {
+        saveError = "Failed to save basal injection";
+        basalInjectionFormDone = true;
+      }
+    })}
+  >
+    {#if existingBasalInjectionRecord?.data.id}
+      <input type="hidden" name="id" value={existingBasalInjectionRecord.data.id} />
+    {/if}
+    <input type="hidden" name="n:mills" value={mills} />
+    {#if correlationId}
+      <input type="hidden" name="correlationId" value={correlationId} />
+    {/if}
+    {#if sections.basalInjection?.insulinContext?.patientInsulinId}
+      <input
+        type="hidden"
+        name="patientInsulinId"
+        value={sections.basalInjection.insulinContext.patientInsulinId}
+      />
+    {/if}
+    <input type="hidden" name="n:units" value={sections.basalInjection?.units ?? 0} />
+    {#if sections.basalInjection?.notes}
+      <input type="hidden" name="notes" value={sections.basalInjection.notes} />
+    {/if}
+  </form>
+{/if}
+
 {#if isMobile.current}
   <Sheet.Root bind:open onOpenChange={(o) => !o && onClose()}>
     <Sheet.Content
@@ -642,6 +712,13 @@
             bind:deviceEvent={sections.deviceEvent}
             onRemove={activeSectionCount > 1
               ? () => removeSection("deviceEvent")
+              : undefined}
+          />
+        {:else if key === "basalInjection" && sections.basalInjection != null}
+          <BasalInjectionSection
+            bind:injection={sections.basalInjection}
+            onRemove={activeSectionCount > 1
+              ? () => removeSection("basalInjection")
               : undefined}
           />
         {/if}
