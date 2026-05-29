@@ -82,6 +82,14 @@ export interface BasalInjectionMarkerData {
   insulinName?: string | null;
 }
 
+/** A BG check (fingerprick) marker from the chart data */
+export interface BgCheckMarkerData {
+  time: Date;
+  glucose: number;
+  glucoseType?: string | null;
+  treatmentId?: string | null;
+}
+
 /** A tracker expiration marker */
 export interface TrackerMarkerData {
   time: Date;
@@ -214,6 +222,7 @@ export interface ChartDataEngine {
   readonly carbMarkers: CarbMarkerData[];
   readonly deviceEventMarkers: DeviceEventMarkerData[];
   readonly basalInjectionMarkers: BasalInjectionMarkerData[];
+  readonly bgCheckMarkers: BgCheckMarkerData[];
   readonly iobData: SeriesPoint[];
   readonly cobData: SeriesPoint[];
   readonly basalData: BasalPoint[];
@@ -300,7 +309,7 @@ export function createChartDataEngine(
 
   const effectiveShowPredictions = $derived(
     (options.enablePredictions ?? true) &&
-      (predictionServiceAvailable || hasExternalPredictions)
+    (predictionServiceAvailable || hasExternalPredictions)
   );
 
   const fullDataRange = $derived({
@@ -325,9 +334,9 @@ export function createChartDataEngine(
     from: displayDateRange.from,
     to: effectiveShowPredictions
       ? new Date(
-          displayDateRange.to.getTime() +
-            predictionMinutes.current * 60 * 1000
-        )
+        displayDateRange.to.getTime() +
+        predictionMinutes.current * 60 * 1000
+      )
       : displayDateRange.to,
   });
 
@@ -338,8 +347,8 @@ export function createChartDataEngine(
     to:
       effectiveShowPredictions && predictionData
         ? new Date(
-            fullDataRange.to.getTime() + predictionHours * 60 * 60 * 1000
-          )
+          fullDataRange.to.getTime() + predictionHours * 60 * 60 * 1000
+        )
         : fullDataRange.to,
   });
 
@@ -558,6 +567,9 @@ export function createChartDataEngine(
   const basalInjectionMarkers = $derived(
     (serverChartData?.basalInjectionMarkers ?? []) as BasalInjectionMarkerData[]
   );
+  const bgCheckMarkers = $derived(
+    (serverChartData?.bgCheckMarkers ?? []) as BgCheckMarkerData[]
+  );
   const iobData = $derived(
     (serverChartData?.iobSeries ?? []) as SeriesPoint[]
   );
@@ -698,8 +710,8 @@ export function createChartDataEngine(
     const rangeStart = displayDateRange.from.getTime();
     const predEnd = effectiveShowPredictions && predictionData
       ? new Date(
-          displayDateRange.to.getTime() + predictionHours * 60 * 60 * 1000
-        ).getTime()
+        displayDateRange.to.getTime() + predictionHours * 60 * 60 * 1000
+      ).getTime()
       : displayDateRange.to.getTime();
     return trackerMarkers
       .filter((m) => {
@@ -904,6 +916,7 @@ export function createChartDataEngine(
     get carbMarkers() { return carbMarkers; },
     get deviceEventMarkers() { return deviceEventMarkers; },
     get basalInjectionMarkers() { return basalInjectionMarkers; },
+    get bgCheckMarkers() { return bgCheckMarkers; },
     get iobData() { return iobData; },
     get cobData() { return cobData; },
     get basalData() { return basalData; },

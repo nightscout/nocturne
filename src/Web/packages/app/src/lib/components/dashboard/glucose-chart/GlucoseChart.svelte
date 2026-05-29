@@ -32,6 +32,7 @@
   import DeviceEventMarkers from "./markers/DeviceEventMarkers.svelte";
   import SystemEventMarkers from "./markers/SystemEventMarkers.svelte";
   import TrackerMarkers from "./markers/TrackerMarkers.svelte";
+  import BgCheckMarkers from "./markers/BgCheckMarkers.svelte";
   import ChartHighlight from "./tracks/ChartHighlight.svelte";
   import ChartTooltip from "./ChartTooltip.svelte";
 
@@ -228,6 +229,7 @@
       areaMode={chartAreaMode.current}
       areaOpacity={chartAreaOpacity.current}
     />
+    <BgCheckMarkers />
     {#if enablePredictions !== false}
       <PredictionTrack />
     {/if}
