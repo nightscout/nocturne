@@ -7,6 +7,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
+  import { IsMobile } from "$lib/hooks/is-mobile.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import {
     predictionEnabled,
@@ -79,6 +80,9 @@
 
   const realtimeStore = getRealtimeStore();
   const displayDemoMode = $derived(demoMode ?? realtimeStore.demoMode);
+
+  // On mobile, drop the card chrome so the chart can use the full width.
+  const isMobile = new IsMobile();
 
   // ===== ENGINE =====
   // svelte-ignore state_referenced_locally
@@ -304,8 +308,8 @@
   );
 </script>
 
-<Card class="@container bg-card border-border">
-  <CardHeader class="pb-2 px-3 @md:px-6">
+{#snippet chartBody()}
+  <CardHeader class={isMobile.current ? "pb-2 px-1" : "pb-2 px-3 @md:px-6"}>
     <div class="flex items-center justify-between flex-wrap gap-2">
       <CardTitle class="flex items-center gap-2 text-card-foreground">
         Blood Glucose
@@ -329,7 +333,7 @@
     </div>
   </CardHeader>
 
-  <CardContent class="p-1 @md:p-2">
+  <CardContent class={isMobile.current ? "-mx-2 p-0" : "p-1 @md:p-2"}>
     <ZoomIndicator {isZoomed} brushXDomain={brushDomain} onResetZoom={resetZoom} />
 
     <div class={heightClass ?? "h-80 @md:h-[450px]"}>
@@ -421,7 +425,17 @@
       onToggleExpandedPumpModes={() => (expandedPumpModes = !expandedPumpModes)}
     />
   </CardContent>
-</Card>
+{/snippet}
+
+{#if isMobile.current}
+  <div class="@container">
+    {@render chartBody()}
+  </div>
+{:else}
+  <Card class="@container bg-card border-border">
+    {@render chartBody()}
+  </Card>
+{/if}
 
 <!-- Entry Edit Dialog -->
 <EntryEditDialog

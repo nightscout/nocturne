@@ -4,6 +4,8 @@
   import type { EntryRecord, EntryCategoryId } from "$lib/constants/entry-categories";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
   import * as Dialog from "$lib/components/ui/dialog";
+  import * as Sheet from "$lib/components/ui/sheet";
+  import { IsMobile } from "$lib/hooks/is-mobile.svelte";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Separator } from "$lib/components/ui/separator";
   import { Button } from "$lib/components/ui/button";
@@ -74,6 +76,9 @@
     correlatedRecords = [],
     onClose,
   }: Props = $props();
+
+  // On mobile, present the editor as a bottom sheet instead of a centered dialog.
+  const isMobile = new IsMobile();
 
   let sections = $state<Sections>({
     bolus: null,
@@ -544,8 +549,24 @@
   </form>
 {/if}
 
-<Dialog.Root bind:open onOpenChange={(o) => !o && onClose()}>
-  <Dialog.Content class="max-w-lg max-h-[85vh] overflow-y-auto">
+{#if isMobile.current}
+  <Sheet.Root bind:open onOpenChange={(o) => !o && onClose()}>
+    <Sheet.Content
+      side="bottom"
+      class="max-h-[90vh] overflow-y-auto rounded-t-xl p-6"
+    >
+      {@render dialogBody()}
+    </Sheet.Content>
+  </Sheet.Root>
+{:else}
+  <Dialog.Root bind:open onOpenChange={(o) => !o && onClose()}>
+    <Dialog.Content class="max-w-lg max-h-[85vh] overflow-y-auto">
+      {@render dialogBody()}
+    </Dialog.Content>
+  </Dialog.Root>
+{/if}
+
+{#snippet dialogBody()}
     <Dialog.Header>
       <Dialog.Title>
         {isEditing ? "Edit Entry" : "New Entry"}
@@ -684,5 +705,4 @@
         </Button>
       </Dialog.Footer>
     </div>
-  </Dialog.Content>
-</Dialog.Root>
+{/snippet}

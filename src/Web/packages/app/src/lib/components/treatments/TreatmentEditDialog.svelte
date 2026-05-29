@@ -22,6 +22,8 @@
     getEntryStyle,
   } from "$lib/constants/entry-categories";
   import * as Dialog from "$lib/components/ui/dialog";
+  import * as Sheet from "$lib/components/ui/sheet";
+  import { IsMobile } from "$lib/hooks/is-mobile.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -68,6 +70,9 @@
     onSave,
     onDelete,
   }: Props = $props();
+
+  // On mobile, present the editor as a bottom sheet instead of a centered dialog.
+  const isMobile = new IsMobile();
 
   // Override record for viewing linked records (null = use the `record` prop)
   let overrideRecord = $state<EntryRecord | null>(null);
@@ -402,8 +407,24 @@
   }
 </script>
 
-<Dialog.Root bind:open onOpenChange={(o) => !o && onClose()}>
-  <Dialog.Content class="max-w-lg max-h-[90vh] overflow-y-auto">
+{#if isMobile.current}
+  <Sheet.Root bind:open onOpenChange={(o) => !o && onClose()}>
+    <Sheet.Content
+      side="bottom"
+      class="max-h-[90vh] overflow-y-auto rounded-t-xl p-6"
+    >
+      {@render dialogBody()}
+    </Sheet.Content>
+  </Sheet.Root>
+{:else}
+  <Dialog.Root bind:open onOpenChange={(o) => !o && onClose()}>
+    <Dialog.Content class="max-w-lg max-h-[90vh] overflow-y-auto">
+      {@render dialogBody()}
+    </Dialog.Content>
+  </Dialog.Root>
+{/if}
+
+{#snippet dialogBody()}
     {#if activeRecord && activeCategory && activeStyle && ActiveKindIcon}
       <Dialog.Header>
         <Dialog.Title class="flex items-center gap-2">
@@ -586,5 +607,4 @@
         </Dialog.Description>
       </Dialog.Header>
     {/if}
-  </Dialog.Content>
-</Dialog.Root>
+{/snippet}
