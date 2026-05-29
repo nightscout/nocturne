@@ -24,7 +24,11 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Sheet from "$lib/components/ui/sheet";
   import { IsMobile } from "$lib/hooks/is-mobile.svelte";
-  import { useDialogHistory } from "$lib/hooks/dialog-history.svelte";
+  import { untrack } from "svelte";
+  import {
+    useDialogHistory,
+    type DialogHistoryParam,
+  } from "$lib/hooks/dialog-history.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -60,6 +64,12 @@
     onClose: () => void;
     onSave: (record: EntryRecord) => void;
     onDelete?: (record: EntryRecord) => void;
+    /**
+     * When set, the open dialog is reflected in this URL search param so it can
+     * be reloaded / deep-linked (the owning page resolves the param on load).
+     * Omit for plain back-button dismissal via an opaque history flag.
+     */
+    historyParam?: DialogHistoryParam;
   }
 
   let {
@@ -70,15 +80,19 @@
     onClose,
     onSave,
     onDelete,
+    historyParam,
   }: Props = $props();
 
   // On mobile, present the editor as a bottom sheet instead of a centered dialog.
   const isMobile = new IsMobile();
 
   // Let the browser back button (and mobile back gesture) dismiss the dialog.
+  // `historyParam` is stable config supplied at mount, so reading it once is
+  // intentional (untrack avoids the reactive-capture warning).
   useDialogHistory(
     () => open,
     () => onClose(),
+    { param: untrack(() => historyParam) },
   );
 
   // Override record for viewing linked records (null = use the `record` prop)

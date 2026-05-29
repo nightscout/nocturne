@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { replaceState } from "$app/navigation";
 
   interface TreatmentSummary {
     totals?: {
@@ -102,6 +103,41 @@
   let editRecord = $state<EntryRecord | null>(null);
   let editLoading = $state(false);
 
+  // Reflect the open edit dialog in the URL (?edit=<kind>:<id>) so it can be
+  // reloaded and deep-linked. The token is resolved against the loaded rows.
+  const EDIT_PARAM = "edit";
+  const editHistoryParam = {
+    name: EDIT_PARAM,
+    value: () =>
+      editRecord?.data.id ? `${editRecord.kind}:${editRecord.data.id}` : "",
+  };
+
+  // On load (or deep link), open the dialog for the record named in ?edit=.
+  // Runs once data is available; clears the param if the record isn't in range.
+  let restoredFromUrl = false;
+  $effect(() => {
+    if (restoredFromUrl || !reportsResource.current) return;
+    const token = page.url.searchParams.get(EDIT_PARAM);
+    if (!token) {
+      restoredFromUrl = true;
+      return;
+    }
+    const sep = token.indexOf(":");
+    const kind = sep === -1 ? token : token.slice(0, sep);
+    const id = sep === -1 ? "" : token.slice(sep + 1);
+    const found = allRows.find((r) => r.kind === kind && r.data.id === id);
+    restoredFromUrl = true;
+    if (found) {
+      editRecord = found;
+      editDialogOpen = true;
+    } else {
+      // Stale / out-of-range link: drop the param so the URL isn't misleading.
+      const url = new URL(page.url);
+      url.searchParams.delete(EDIT_PARAM);
+      replaceState(url, page.state);
+    }
+  });
+
   const editCorrelatedRecords = $derived.by(() => {
     if (!editRecord?.data.correlationId) return [];
     return allRows.filter(
@@ -164,13 +200,15 @@
   // Handlers
   function handleCategoryChange(category: EntryCategoryId | "all") {
     activeCategory = category;
-    const url = new URL(window.location.href);
+    const url = new URL(page.url);
     if (category === "all") {
       url.searchParams.delete("category");
     } else {
       url.searchParams.set("category", category);
     }
-    window.history.replaceState({}, "", url);
+    // Use SvelteKit shallow routing so `page.url` stays authoritative (the edit
+    // dialog reads it to keep its `?edit=` param in sync).
+    replaceState(url, page.state);
   }
 
   function handleSearch(e: Event) {
@@ -598,6 +636,7 @@
   record={editRecord}
   correlatedRecords={editCorrelatedRecords}
   isLoading={editLoading}
+  historyParam={editHistoryParam}
   onClose={handleEditClose}
   onSave={handleEditSave}
   onDelete={handleEditDelete}
