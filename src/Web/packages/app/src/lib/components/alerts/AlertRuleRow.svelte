@@ -117,21 +117,6 @@
 
   <!-- Per-row actions -->
   <div class="flex items-center gap-1 shrink-0">
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      class="h-8 w-8"
-      onclick={onTestFire}
-      disabled={isTesting || !rule.isEnabled}
-      title="Test fire — sends a real notification"
-    >
-      {#if isTesting}
-        <Loader2 class="h-4 w-4 animate-spin" />
-      {:else}
-        <Zap class="h-4 w-4" />
-      {/if}
-    </Button>
     <Switch
       checked={rule.isEnabled ?? false}
       onCheckedChange={onToggleEnabled}
@@ -156,6 +141,17 @@
       <DropdownMenu.Content align="end">
         <DropdownMenu.Item onclick={onEdit}>
           <Pencil class="h-4 w-4 mr-2" /> Edit
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          onclick={onTestFire}
+          disabled={isTesting || !rule.isEnabled}
+        >
+          {#if isTesting}
+            <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+          {:else}
+            <Zap class="h-4 w-4 mr-2" />
+          {/if}
+          Test fire
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
         <AlertDialog.Root>

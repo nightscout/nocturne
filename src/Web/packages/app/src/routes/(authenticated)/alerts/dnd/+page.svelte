@@ -92,7 +92,7 @@
   <title>Do Not Disturb · Alerts · Nocturne</title>
 </svelte:head>
 
-<div class="@container container mx-auto max-w-3xl p-4 @3xl:p-6 space-y-6">
+<div class="@container container mx-auto max-w-3xl p-3 @md:p-6 space-y-6">
   <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
     <div class="flex items-center gap-2">
       <Button

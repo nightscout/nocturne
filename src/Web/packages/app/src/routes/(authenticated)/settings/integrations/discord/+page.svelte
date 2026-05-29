@@ -121,7 +121,7 @@
 	);
 </script>
 
-<div class="container mx-auto max-w-2xl p-6 space-y-6">
+<div class="@container container mx-auto max-w-2xl p-3 @md:p-6 space-y-6">
 	<div>
 		<h1 class="text-2xl font-bold">Discord Integration</h1>
 		<p class="text-muted-foreground">

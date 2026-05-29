@@ -15,6 +15,7 @@
     Info,
     AlertCircle,
     Calendar as CalendarIcon,
+    CalendarDays,
     CheckCircle2,
     BellOff,
     Bell,
@@ -190,6 +191,23 @@
       day: "numeric",
     });
   }
+
+  // Link to the Day in Review report for the day under replay. Prefers the
+  // explicitly picked date; falls back to the day of the result window so the
+  // link still works for a rolling last-24h / brushed window.
+  let dayInReviewHref = $derived.by<string | undefined>(() => {
+    let ymd: string | undefined;
+    if (selectedDate) {
+      ymd = selectedDate.toString();
+    } else if (result?.windowStart) {
+      const d = new Date(result.windowStart);
+      if (!Number.isNaN(d.getTime())) {
+        const pad = (n: number) => String(n).padStart(2, "0");
+        ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      }
+    }
+    return ymd ? `/reports/day-in-review?date=${ymd}` : undefined;
+  });
 
   function clearDate(): void {
     selectedDate = undefined;
@@ -471,7 +489,7 @@
 
 {#snippet replayTooltipExtras({ time }: { time: Date })}
   {@const nearby = eventsNear(time)}
-  {#each nearby as m (`${m.ev.ruleId ?? "x"}:${m.tMs}`)}
+  {#each nearby as m, i (`${m.ev.ruleId ?? "x"}:${m.tMs}:${m.ev.kind ?? ""}:${i}`)}
     <Tooltip.Item
       label={kindLabel(m.ev)}
       value={m.ev.ruleName ?? "(unnamed rule)"}
@@ -541,6 +559,18 @@
         <Loader2 class="h-3.5 w-3.5 animate-spin" />
         Running…
       </span>
+    {/if}
+
+    {#if dayInReviewHref}
+      <Button
+        variant="outline"
+        href={dayInReviewHref}
+        class="ml-auto h-8 gap-2 font-normal"
+        title="Open Day in Review for this day"
+      >
+        <CalendarDays class="h-3.5 w-3.5 text-muted-foreground" />
+        <span class="hidden @sm:inline">Day in review</span>
+      </Button>
     {/if}
   </div>
 
@@ -628,7 +658,7 @@
             <div
               class="flex-1 min-h-0 overflow-y-auto rounded-md border divide-y"
             >
-              {#each firedMarkers as m (`${m.ev.ruleId ?? "x"}:${m.tMs}`)}
+              {#each firedMarkers as m, i (`${m.ev.ruleId ?? "x"}:${m.tMs}:${m.ev.kind ?? ""}:${i}`)}
                 {@const dimmed = currentTimeMs != null && m.tMs > currentTimeMs}
                 {@const isResolved =
                   m.ev.kind === AlertReplayEventKind.AutoResolved}

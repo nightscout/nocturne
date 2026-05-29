@@ -111,7 +111,7 @@
 </svelte:head>
 
 {#await summaryQuery}
-  <div class="container mx-auto max-w-4xl p-6 space-y-6">
+  <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
     <div class="flex items-center justify-center h-64">
       <div class="animate-pulse text-muted-foreground">Loading profiles...</div>
     </div>
@@ -126,7 +126,7 @@
   {@const sensitivity = selectedProfileName ? getSensitivityForProfile(data, selectedProfileName) : null}
   {@const targetRange = selectedProfileName ? getTargetRangeForProfile(data, selectedProfileName) : null}
   {@const profileConfigured = (data?.basalSchedules ?? []).length > 0}
-  <div class="@container container mx-auto max-w-4xl p-6 space-y-6" {@attach coachmark({ key: "onboarding.therapy-profile", title: "Automatically synced", description: "Your basal rates, carb ratios, and sensitivity factors are imported from your uploader (AAPS, Loop, xDrip+). No manual entry needed.", completedWhen: () => profileConfigured })}>
+  <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6" {@attach coachmark({ key: "onboarding.therapy-profile", title: "Automatically synced", description: "Your basal rates, carb ratios, and sensitivity factors are imported from your uploader (AAPS, Loop, xDrip+). No manual entry needed.", completedWhen: () => profileConfigured })}>
     <!-- Header -->
     <div class="flex flex-wrap items-start justify-between gap-2">
       <div class="flex items-center gap-3">
@@ -436,7 +436,7 @@
     {/if}
   </div>
 {:catch error}
-  <div class="container mx-auto max-w-4xl p-6 space-y-6">
+  <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
     <Card class="border-destructive">
       <CardContent class="py-8">
         <div class="text-center space-y-2">

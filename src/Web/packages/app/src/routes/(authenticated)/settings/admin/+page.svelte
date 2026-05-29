@@ -408,7 +408,7 @@
   <title>Administration - Settings - Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto p-6 max-w-5xl">
+<div class="@container container mx-auto p-3 @md:p-6 max-w-5xl">
   <!-- Header -->
   <div class="flex items-center gap-3">
     <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
