@@ -75,11 +75,11 @@
     <div class="absolute bottom-0 inset-x-0 h-[280px] pointer-events-none bg-gradient-to-b from-transparent to-background" aria-hidden="true"></div>
 
     <div class="absolute inset-0 pt-16 pointer-events-none">
-        <div class="absolute top-[calc(4rem+20px)] left-6 flex flex-col gap-0.5 font-mono text-[9px] tracking-[0.12em] uppercase text-[oklch(0.6_0.01_261)]">
+        <div class="absolute top-[calc(4rem+20px)] left-6 hidden md:flex flex-col gap-0.5 font-mono text-[9px] tracking-[0.12em] uppercase text-[oklch(0.6_0.01_261)]">
             <span>NCTRN / HOMEPAGE</span>
             <span>v0.4 &middot; public preview</span>
         </div>
-        <div class="absolute top-[calc(4rem+20px)] right-6 flex flex-col gap-0.5 font-mono text-[9px] tracking-[0.12em] uppercase text-[oklch(0.6_0.01_261)] text-right">
+        <div class="absolute top-[calc(4rem+20px)] right-6 hidden md:flex flex-col gap-0.5 font-mono text-[9px] tracking-[0.12em] uppercase text-[oklch(0.6_0.01_261)] text-right">
             <span>5,250 d &middot; running</span>
             <span>22 connectors</span>
         </div>
@@ -88,7 +88,7 @@
             bind:this={textBlockEl}
             class="absolute bottom-[200px] left-1/2 -translate-x-1/2 w-[min(760px,90vw)] text-center flex flex-col items-center gap-5"
         >
-            <span class="inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.16em] uppercase text-[oklch(0.7_0.01_261)]">
+            <span class="inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.16em] uppercase text-[oklch(0.94_0.012_261)] [text-shadow:0_1px_3px_oklch(0_0_0_/_90%),0_2px_12px_oklch(0_0_0_/_75%)]">
                 <span class="eyebrow-dot size-1.5 rounded-full shrink-0 bg-glucose-in-range"></span>The new Nightscout API
             </span>
             <h1 class="flex flex-col items-center text-[clamp(2.5rem,7vw,4.8rem)] font-bold leading-[1.06] tracking-[-0.025em] text-[oklch(0.97_0.005_261)] m-0 [text-shadow:0_2px_8px_oklch(0_0_0_/_70%),0_4px_40px_oklch(0_0_0_/_80%)]">

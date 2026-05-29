@@ -55,7 +55,8 @@ void main(){
   vec2 q=vec2(fbm(p*1.4+vec2(0.,t)),fbm(p*1.4+vec2(5.2,-t*0.8)));
   vec2 r=vec2(fbm(p*2.1+1.8*q+vec2(1.7,9.2)+t*1.3),fbm(p*2.1+1.8*q+vec2(8.3,2.8)-t*1.1));
   float n=fbm(p*1.6+2.2*r);
-  float band=smoothstep(0.0,0.55,1.0-abs(p.y*1.15+0.05));
+  float yb=p.y*1.15+0.05;
+  float band=smoothstep(0.0,0.55,1.0-yb*yb);
   float v=pow(n,1.15)*(0.55+0.6*band);
   vec3 col=ramp(v);
   float vign=smoothstep(0.95,0.2,length(p*vec2(0.55,1.05)));
