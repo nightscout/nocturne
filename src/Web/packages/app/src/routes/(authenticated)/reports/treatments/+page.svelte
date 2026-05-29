@@ -59,6 +59,7 @@
     updateEntry,
     createEntry,
   } from "./data.remote";
+  import { toCreateEntryInput, toUpdateEntryInput } from "./entry-request";
 
   // Get shared date params from context (set by reports layout)
   const reportsParams = requireDateParamsContext(7);
@@ -287,17 +288,10 @@
     editLoading = true;
     try {
       if (record.data.id) {
-        await updateEntry({
-          kind: record.kind,
-          id: record.data.id,
-          data: record.data as Record<string, unknown>,
-        });
+        await updateEntry(toUpdateEntryInput(record));
         toast.success("Record updated successfully");
       } else {
-        await createEntry({
-          kind: record.kind,
-          data: record.data as Record<string, unknown>,
-        });
+        await createEntry(toCreateEntryInput(record));
         toast.success("Record created successfully");
       }
       editDialogOpen = false;

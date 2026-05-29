@@ -5,7 +5,28 @@
 import { z } from 'zod';
 import { getRequestEvent, form, command, query } from '$app/server';
 import { invalid } from '@sveltejs/kit';
-import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent, BasalInjection } from '$lib/api';
+import type {
+	CreateBolusRequest,
+	UpdateBolusRequest,
+	CreateCarbIntakeRequest,
+	UpdateCarbIntakeRequest,
+	UpsertBGCheckRequest,
+	UpsertNoteRequest,
+	UpsertDeviceEventRequest,
+	CreateBasalInjectionRequest,
+	UpdateBasalInjectionRequest,
+} from '$lib/api';
+import {
+	CreateBolusRequestSchema,
+	UpdateBolusRequestSchema,
+	CreateCarbIntakeRequestSchema,
+	UpdateCarbIntakeRequestSchema,
+	UpsertBGCheckRequestSchema,
+	UpsertNoteRequestSchema,
+	UpsertDeviceEventRequestSchema,
+	CreateBasalInjectionRequestSchema,
+	UpdateBasalInjectionRequestSchema,
+} from '$lib/api/generated/schemas';
 import { getProfileSummary } from '$api/generated/profiles.generated.remote';
 import { getLocalDayBoundariesUtc } from '$lib/utils/timezone';
 
@@ -212,31 +233,37 @@ export const bulkDeleteEntries = command(
 );
 
 /**
- * Update a single entry (v4: dispatches to the correct endpoint by kind)
+ * Update a single entry (v4: dispatches to the correct endpoint by kind).
+ *
+ * Input is validated per kind against the backend-generated request schemas
+ * (the same schemas the auto-generated per-kind remote forms use), so the
+ * payload is guaranteed to match the API contract before dispatch. The caller
+ * maps the dialog's domain record onto the request DTO via `toUpdateEntryInput`.
  */
 export const updateEntry = command(
-	z.object({
-		kind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent', 'basalInjection']),
-		id: z.string().min(1),
-		data: z.record(z.string(), z.unknown()),
-	}),
-	async ({ kind, id, data }) => {
-		const { locals } = getRequestEvent();
-		const { apiClient } = locals;
-
-		switch (kind) {
+	z.discriminatedUnion('kind', [
+		z.object({ kind: z.literal('bolus'), id: z.string().min(1), data: UpdateBolusRequestSchema }),
+		z.object({ kind: z.literal('carbs'), id: z.string().min(1), data: UpdateCarbIntakeRequestSchema }),
+		z.object({ kind: z.literal('bgCheck'), id: z.string().min(1), data: UpsertBGCheckRequestSchema }),
+		z.object({ kind: z.literal('note'), id: z.string().min(1), data: UpsertNoteRequestSchema }),
+		z.object({ kind: z.literal('deviceEvent'), id: z.string().min(1), data: UpsertDeviceEventRequestSchema }),
+		z.object({ kind: z.literal('basalInjection'), id: z.string().min(1), data: UpdateBasalInjectionRequestSchema }),
+	]),
+	async (input) => {
+		const { apiClient } = getRequestEvent().locals;
+		switch (input.kind) {
 			case 'bolus':
-				return await apiClient.bolus.update(id, data as Bolus);
+				return await apiClient.bolus.update(input.id, input.data as UpdateBolusRequest);
 			case 'carbs':
-				return await apiClient.nutrition.updateCarbIntake(id, data as CarbIntake);
+				return await apiClient.nutrition.updateCarbIntake(input.id, input.data as UpdateCarbIntakeRequest);
 			case 'bgCheck':
-				return await apiClient.bGCheck.update(id, data as BGCheck);
+				return await apiClient.bGCheck.update(input.id, input.data as UpsertBGCheckRequest);
 			case 'note':
-				return await apiClient.note.update(id, data as Note);
+				return await apiClient.note.update(input.id, input.data as UpsertNoteRequest);
 			case 'deviceEvent':
-				return await apiClient.deviceEvent.update(id, data as DeviceEvent);
+				return await apiClient.deviceEvent.update(input.id, input.data as UpsertDeviceEventRequest);
 			case 'basalInjection':
-				return await apiClient.basalInjection.update(id, data as BasalInjection);
+				return await apiClient.basalInjection.update(input.id, input.data as UpdateBasalInjectionRequest);
 		}
 	}
 );
@@ -249,83 +276,34 @@ export const updateEntry = command(
  * upstream device, so a first-class manual create flow is required. The same
  * dispatcher handles every kind for consistency.
  *
- * `data` is the v4 domain shape produced by the edit dialog; we map it onto the
- * create-request shape, converting the mills-first timestamp to an ISO instant.
+ * Input is validated per kind against the backend-generated request schemas, so
+ * the payload matches the API contract before dispatch. The caller maps the
+ * dialog's domain record onto the request DTO via `toCreateEntryInput`.
  */
 export const createEntry = command(
-	z.object({
-		kind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent', 'basalInjection']),
-		data: z.record(z.string(), z.unknown()),
-	}),
-	async ({ kind, data }) => {
-		const { locals } = getRequestEvent();
-		const { apiClient } = locals;
-
-		const d = data as Record<string, any>;
-		const mills = typeof d.mills === 'number' ? d.mills : Date.now();
-		const timestamp = new Date(mills);
-		const utcOffset = typeof d.utcOffset === 'number' ? d.utcOffset : undefined;
-		const app = 'Nocturne Web';
-
-		switch (kind) {
+	z.discriminatedUnion('kind', [
+		z.object({ kind: z.literal('bolus'), data: CreateBolusRequestSchema }),
+		z.object({ kind: z.literal('carbs'), data: CreateCarbIntakeRequestSchema }),
+		z.object({ kind: z.literal('bgCheck'), data: UpsertBGCheckRequestSchema }),
+		z.object({ kind: z.literal('note'), data: UpsertNoteRequestSchema }),
+		z.object({ kind: z.literal('deviceEvent'), data: UpsertDeviceEventRequestSchema }),
+		z.object({ kind: z.literal('basalInjection'), data: CreateBasalInjectionRequestSchema }),
+	]),
+	async (input) => {
+		const { apiClient } = getRequestEvent().locals;
+		switch (input.kind) {
 			case 'bolus':
-				return await apiClient.bolus.create({
-					timestamp,
-					utcOffset,
-					app,
-					insulin: d.insulin,
-					programmed: d.programmed,
-					delivered: d.delivered,
-					bolusType: d.bolusType,
-					duration: d.duration,
-					automatic: d.automatic,
-					insulinType: d.insulinType,
-					patientInsulinId: d.insulinContext?.patientInsulinId ?? d.patientInsulinId,
-				});
+				return await apiClient.bolus.create(input.data as CreateBolusRequest);
 			case 'carbs':
-				return await apiClient.nutrition.createCarbIntake({
-					timestamp,
-					utcOffset,
-					app,
-					carbs: d.carbs,
-					carbTime: d.carbTime,
-					absorptionTime: d.absorptionTime,
-				});
+				return await apiClient.nutrition.createCarbIntake(input.data as CreateCarbIntakeRequest);
 			case 'bgCheck':
-				return await apiClient.bGCheck.create({
-					timestamp,
-					utcOffset,
-					app,
-					glucose: d.glucose ?? d.mgdl,
-					units: d.units,
-					glucoseType: d.glucoseType,
-				});
+				return await apiClient.bGCheck.create(input.data as UpsertBGCheckRequest);
 			case 'note':
-				return await apiClient.note.create({
-					timestamp,
-					utcOffset,
-					app,
-					text: d.text,
-					eventType: d.eventType,
-					isAnnouncement: d.isAnnouncement,
-				});
+				return await apiClient.note.create(input.data as UpsertNoteRequest);
 			case 'deviceEvent':
-				return await apiClient.deviceEvent.create({
-					timestamp,
-					utcOffset,
-					app,
-					eventType: d.eventType,
-					notes: d.notes,
-				});
+				return await apiClient.deviceEvent.create(input.data as UpsertDeviceEventRequest);
 			case 'basalInjection':
-				return await apiClient.basalInjection.create({
-					timestamp,
-					utcOffset,
-					app,
-					patientInsulinId: d.insulinContext?.patientInsulinId ?? d.patientInsulinId,
-					units: d.units,
-					notes: d.notes,
-				});
+				return await apiClient.basalInjection.create(input.data as CreateBasalInjectionRequest);
 		}
 	}
 );
