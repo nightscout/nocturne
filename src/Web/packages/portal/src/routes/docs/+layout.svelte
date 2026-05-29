@@ -57,3 +57,14 @@
         </main>
     </div>
 </div>
+
+<style>
+    /* Markdown tables can hold long, unbreakable strings (callback URLs, paths).
+       Let them scroll horizontally on narrow screens instead of forcing the
+       whole page to overflow. */
+    article.prose :global(table) {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+    }
+</style>

@@ -95,7 +95,7 @@
     };
 </script>
 
-<div class="max-w-[1200px] mx-auto px-6">
+<div class="max-w-[1200px] mx-auto px-6 overflow-x-clip">
 
     <!-- Hero -->
     <div class="pt-20 pb-16 border-b border-border relative overflow-hidden">
@@ -132,7 +132,7 @@
                         {flip ? 'md:grid-cols-[1.05fr_1fr]' : 'md:grid-cols-[1fr_1.05fr]'}">
 
             <!-- Text -->
-            <div class="flex flex-col gap-5 {flip ? 'md:order-2' : 'md:order-1'}">
+            <div class="flex flex-col gap-5 min-w-0 {flip ? 'md:order-2' : 'md:order-1'}">
                 <!-- Eyebrow -->
                 <div class="flex items-center gap-3 text-[17px] font-semibold tracking-[0.02em] uppercase"
                      style:color={p.color}>
@@ -167,7 +167,7 @@
             </div>
 
             <!-- Demo -->
-            <div class="relative {flip ? 'md:order-1' : 'md:order-2'}">
+            <div class="relative min-w-0 {flip ? 'md:order-1' : 'md:order-2'}">
                 <div class="absolute -inset-10 rounded-3xl pointer-events-none"
                      style="background: radial-gradient(60% 60% at 50% 50%, color-mix(in oklch, {p.color}, transparent 80%), transparent 70%); filter: blur(24px);"
                      aria-hidden="true"></div>
