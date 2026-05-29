@@ -6,6 +6,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Sheet from "$lib/components/ui/sheet";
   import { IsMobile } from "$lib/hooks/is-mobile.svelte";
+  import { useDialogHistory } from "$lib/hooks/dialog-history.svelte";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Separator } from "$lib/components/ui/separator";
   import { Button } from "$lib/components/ui/button";
@@ -79,6 +80,12 @@
 
   // On mobile, present the editor as a bottom sheet instead of a centered dialog.
   const isMobile = new IsMobile();
+
+  // Let the browser back button (and mobile back gesture) dismiss the dialog.
+  useDialogHistory(
+    () => open,
+    () => onClose(),
+  );
 
   let sections = $state<Sections>({
     bolus: null,

@@ -24,6 +24,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Sheet from "$lib/components/ui/sheet";
   import { IsMobile } from "$lib/hooks/is-mobile.svelte";
+  import { useDialogHistory } from "$lib/hooks/dialog-history.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -73,6 +74,12 @@
 
   // On mobile, present the editor as a bottom sheet instead of a centered dialog.
   const isMobile = new IsMobile();
+
+  // Let the browser back button (and mobile back gesture) dismiss the dialog.
+  useDialogHistory(
+    () => open,
+    () => onClose(),
+  );
 
   // Override record for viewing linked records (null = use the `record` prop)
   let overrideRecord = $state<EntryRecord | null>(null);

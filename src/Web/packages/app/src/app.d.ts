@@ -92,7 +92,11 @@ declare global {
 		interface PageData extends Partial<BasePageData> {
 			[key: string]: any;
 		}
-		// interface PageState {}
+		// Shallow-routing state. Dialogs key their browser-history entries here
+		// (see useDialogHistory) so the back button can dismiss them.
+		interface PageState {
+			[key: string]: unknown;
+		}
 		// interface Platform {}
 	}
 }
