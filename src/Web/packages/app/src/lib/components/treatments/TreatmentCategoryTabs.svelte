@@ -21,6 +21,7 @@
     bgCheck: Droplet,
     note: FileText,
     deviceEvent: Smartphone,
+    basalInjection: Syringe,
   } as const;
 </script>
 
