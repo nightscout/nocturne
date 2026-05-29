@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { getRequestEvent, form, command, query } from '$app/server';
 import { invalid } from '@sveltejs/kit';
-import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent } from '$lib/api';
+import type { Bolus, CarbIntake, BGCheck, Note, DeviceEvent, BasalInjection } from '$lib/api';
 import { getProfileSummary } from '$api/generated/profiles.generated.remote';
 import { getLocalDayBoundariesUtc } from '$lib/utils/timezone';
 
@@ -58,20 +58,28 @@ export const getTreatmentsData = query(
 		const profile = await getProfileSummary(undefined);
 		const timezone = profile?.therapySettings?.[0]?.timezone;
 		const { startDate, endDate } = calculateDateRange(input, timezone);
-		const [bolusResponse, carbResponse, bgCheckResponse, noteResponse, deviceEventResponse] =
-			await Promise.all([
-				apiClient.bolus.getAll(startDate, endDate, 10000),
-				apiClient.nutrition.getCarbIntakes(startDate, endDate, 10000),
-				apiClient.bGCheck.getAll(startDate, endDate, 10000),
-				apiClient.note.getAll(startDate, endDate, 10000),
-				apiClient.deviceEvent.getAll(startDate, endDate, 10000),
-			]);
+		const [
+			bolusResponse,
+			carbResponse,
+			bgCheckResponse,
+			noteResponse,
+			deviceEventResponse,
+			basalInjectionResponse,
+		] = await Promise.all([
+			apiClient.bolus.getAll(startDate, endDate, 10000),
+			apiClient.nutrition.getCarbIntakes(startDate, endDate, 10000),
+			apiClient.bGCheck.getAll(startDate, endDate, 10000),
+			apiClient.note.getAll(startDate, endDate, 10000),
+			apiClient.deviceEvent.getAll(startDate, endDate, 10000),
+			apiClient.basalInjection.getAll(startDate, endDate, 10000),
+		]);
 
 		const boluses = bolusResponse.data ?? [];
 		const carbIntakes = carbResponse.data ?? [];
 		const bgChecks = bgCheckResponse.data ?? [];
 		const notes = noteResponse.data ?? [];
 		const deviceEvents = deviceEventResponse.data ?? [];
+		const basalInjections = basalInjectionResponse.data ?? [];
 
 		const treatmentSummary =
 			boluses.length > 0 || carbIntakes.length > 0
@@ -84,6 +92,7 @@ export const getTreatmentsData = query(
 			bgChecks,
 			notes,
 			deviceEvents,
+			basalInjections,
 			treatmentSummary,
 			dateRange: {
 				from: startDate.toISOString(),
@@ -99,7 +108,7 @@ export const getTreatmentsData = query(
 export const deleteEntryForm = form(
 	z.object({
 		entryId: z.string().min(1, 'Entry ID is required'),
-		entryKind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent']),
+		entryKind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent', 'basalInjection']),
 	}),
 	async ({ entryId, entryKind }, issue) => {
 		const { locals } = getRequestEvent();
@@ -122,6 +131,9 @@ export const deleteEntryForm = form(
 				case 'deviceEvent':
 					await apiClient.deviceEvent.delete(entryId);
 					break;
+				case 'basalInjection':
+					await apiClient.basalInjection.delete(entryId);
+					break;
 			}
 
 			return {
@@ -143,7 +155,7 @@ export const bulkDeleteEntries = command(
 	z.array(
 		z.object({
 			id: z.string(),
-			kind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent']),
+			kind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent', 'basalInjection']),
 		})
 	),
 	async (items) => {
@@ -170,6 +182,9 @@ export const bulkDeleteEntries = command(
 						break;
 					case 'deviceEvent':
 						await apiClient.deviceEvent.delete(item.id);
+						break;
+					case 'basalInjection':
+						await apiClient.basalInjection.delete(item.id);
 						break;
 				}
 				deletedIds.push(item.id);
@@ -201,7 +216,7 @@ export const bulkDeleteEntries = command(
  */
 export const updateEntry = command(
 	z.object({
-		kind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent']),
+		kind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent', 'basalInjection']),
 		id: z.string().min(1),
 		data: z.record(z.string(), z.unknown()),
 	}),
@@ -220,6 +235,97 @@ export const updateEntry = command(
 				return await apiClient.note.update(id, data as Note);
 			case 'deviceEvent':
 				return await apiClient.deviceEvent.update(id, data as DeviceEvent);
+			case 'basalInjection':
+				return await apiClient.basalInjection.update(id, data as BasalInjection);
+		}
+	}
+);
+
+/**
+ * Create a single entry (v4: dispatches to the correct endpoint by kind).
+ *
+ * Manual entry path for the treatments page. Most treatment kinds normally
+ * arrive from a connected app, but long-acting (basal) injections have no
+ * upstream device, so a first-class manual create flow is required. The same
+ * dispatcher handles every kind for consistency.
+ *
+ * `data` is the v4 domain shape produced by the edit dialog; we map it onto the
+ * create-request shape, converting the mills-first timestamp to an ISO instant.
+ */
+export const createEntry = command(
+	z.object({
+		kind: z.enum(['bolus', 'carbs', 'bgCheck', 'note', 'deviceEvent', 'basalInjection']),
+		data: z.record(z.string(), z.unknown()),
+	}),
+	async ({ kind, data }) => {
+		const { locals } = getRequestEvent();
+		const { apiClient } = locals;
+
+		const d = data as Record<string, any>;
+		const mills = typeof d.mills === 'number' ? d.mills : Date.now();
+		const timestamp = new Date(mills);
+		const utcOffset = typeof d.utcOffset === 'number' ? d.utcOffset : undefined;
+		const app = 'Nocturne Web';
+
+		switch (kind) {
+			case 'bolus':
+				return await apiClient.bolus.create({
+					timestamp,
+					utcOffset,
+					app,
+					insulin: d.insulin,
+					programmed: d.programmed,
+					delivered: d.delivered,
+					bolusType: d.bolusType,
+					duration: d.duration,
+					automatic: d.automatic,
+					insulinType: d.insulinType,
+					patientInsulinId: d.insulinContext?.patientInsulinId ?? d.patientInsulinId,
+				});
+			case 'carbs':
+				return await apiClient.nutrition.createCarbIntake({
+					timestamp,
+					utcOffset,
+					app,
+					carbs: d.carbs,
+					carbTime: d.carbTime,
+					absorptionTime: d.absorptionTime,
+				});
+			case 'bgCheck':
+				return await apiClient.bGCheck.create({
+					timestamp,
+					utcOffset,
+					app,
+					glucose: d.glucose ?? d.mgdl,
+					units: d.units,
+					glucoseType: d.glucoseType,
+				});
+			case 'note':
+				return await apiClient.note.create({
+					timestamp,
+					utcOffset,
+					app,
+					text: d.text,
+					eventType: d.eventType,
+					isAnnouncement: d.isAnnouncement,
+				});
+			case 'deviceEvent':
+				return await apiClient.deviceEvent.create({
+					timestamp,
+					utcOffset,
+					app,
+					eventType: d.eventType,
+					notes: d.notes,
+				});
+			case 'basalInjection':
+				return await apiClient.basalInjection.create({
+					timestamp,
+					utcOffset,
+					app,
+					patientInsulinId: d.insulinContext?.patientInsulinId ?? d.patientInsulinId,
+					units: d.units,
+					notes: d.notes,
+				});
 		}
 	}
 );

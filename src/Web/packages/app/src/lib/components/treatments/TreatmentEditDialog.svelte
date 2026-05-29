@@ -327,6 +327,10 @@
     activeRecord ? kindIcon[activeRecord.kind] : null
   );
 
+  // A record without an id is being created rather than edited. Drives the
+  // title/description/button copy and suppresses edit-only chrome.
+  let isCreate = $derived(!activeRecord?.data.id);
+
   function handleSubmit() {
     if (!activeRecord) return;
 
@@ -456,10 +460,12 @@
             <ActiveKindIcon class="mr-1 h-3.5 w-3.5" />
             {activeCategory.name}
           </Badge>
-          Edit Record
+          {isCreate ? "Add Record" : "Edit Record"}
         </Dialog.Title>
         <Dialog.Description>
-          Edit the details of this {activeCategory.name.toLowerCase()} record.
+          {isCreate
+            ? `Log a new ${activeCategory.name.toLowerCase()} record.`
+            : `Edit the details of this ${activeCategory.name.toLowerCase()} record.`}
         </Dialog.Description>
       </Dialog.Header>
 
@@ -471,6 +477,7 @@
         class="space-y-4"
       >
         <!-- Read-only metadata -->
+        {#if !isCreate}
         <div
           class="flex flex-wrap gap-4 text-sm text-muted-foreground bg-muted/30 rounded-lg p-3"
         >
@@ -491,6 +498,7 @@
             </div>
           {/if}
         </div>
+        {/if}
 
         <!-- Date and Time -->
         <div class="space-y-2">
@@ -557,7 +565,11 @@
             Cancel
           </Button>
           <Button type="submit" disabled={isLoading}>
-            {isLoading ? "Saving..." : "Save Changes"}
+            {isLoading
+              ? "Saving..."
+              : isCreate
+                ? "Create Record"
+                : "Save Changes"}
           </Button>
         </Dialog.Footer>
       </form>

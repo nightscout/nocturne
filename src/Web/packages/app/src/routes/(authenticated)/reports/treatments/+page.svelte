@@ -29,7 +29,17 @@
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
   import * as Alert from "$lib/components/ui/alert";
-  import { Calendar, X } from "lucide-svelte";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import {
+    Calendar,
+    X,
+    Plus,
+    Syringe,
+    Utensils,
+    Droplet,
+    FileText,
+    Smartphone,
+  } from "lucide-svelte";
   import {
     formatInsulinDisplay,
     formatCarbDisplay,
@@ -47,6 +57,7 @@
     deleteEntryForm,
     bulkDeleteEntries,
     updateEntry,
+    createEntry,
   } from "./data.remote";
 
   // Get shared date params from context (set by reports layout)
@@ -64,6 +75,7 @@
       bgChecks: reportsResource.current?.bgChecks,
       notes: reportsResource.current?.notes,
       deviceEvents: reportsResource.current?.deviceEvents,
+      basalInjections: reportsResource.current?.basalInjections,
     })
   );
   const dateRange = $derived(
@@ -182,6 +194,11 @@
             if (r.data.eventType) searchable.push(r.data.eventType);
             if (r.data.notes) searchable.push(r.data.notes);
             break;
+          case "basalInjection":
+            if (r.data.insulinContext?.insulinName)
+              searchable.push(r.data.insulinContext.insulinName);
+            if (r.data.notes) searchable.push(r.data.notes);
+            break;
         }
 
         if (r.data.dataSource) searchable.push(r.data.dataSource);
@@ -236,6 +253,31 @@
     editDialogOpen = true;
   }
 
+  // Build an empty record of the chosen kind to open the dialog in "create"
+  // mode. The dialog keys off the absent id to switch its title/buttons and the
+  // save handler routes id-less records to createEntry.
+  function makeBlankRecord(kind: EntryCategoryId): EntryRecord {
+    const data = {
+      mills: Date.now(),
+      utcOffset: -new Date().getTimezoneOffset(),
+    } as EntryRecord["data"];
+    return { kind, data } as EntryRecord;
+  }
+
+  function handleAddTreatment(kind: EntryCategoryId) {
+    editRecord = makeBlankRecord(kind);
+    editDialogOpen = true;
+  }
+
+  const addKindIcons: Record<EntryCategoryId, typeof Plus> = {
+    bolus: Syringe,
+    carbs: Utensils,
+    bgCheck: Droplet,
+    note: FileText,
+    deviceEvent: Smartphone,
+    basalInjection: Syringe,
+  };
+
   function handleEditClose() {
     editDialogOpen = false;
     editRecord = null;
@@ -244,18 +286,28 @@
   async function handleEditSave(record: EntryRecord) {
     editLoading = true;
     try {
-      await updateEntry({
-        kind: record.kind,
-        id: record.data.id!,
-        data: record.data as Record<string, unknown>,
-      });
-      toast.success("Record updated successfully");
+      if (record.data.id) {
+        await updateEntry({
+          kind: record.kind,
+          id: record.data.id,
+          data: record.data as Record<string, unknown>,
+        });
+        toast.success("Record updated successfully");
+      } else {
+        await createEntry({
+          kind: record.kind,
+          data: record.data as Record<string, unknown>,
+        });
+        toast.success("Record created successfully");
+      }
       editDialogOpen = false;
       editRecord = null;
       reportsResource.refresh();
     } catch (error) {
-      console.error("Update error:", error);
-      toast.error("Failed to update record");
+      console.error("Save error:", error);
+      toast.error(
+        record.data.id ? "Failed to update record" : "Failed to create record",
+      );
     } finally {
       editLoading = false;
     }
@@ -302,6 +354,10 @@
           : "Note";
       case "deviceEvent":
         return record.data.eventType ?? "Device Event";
+      case "basalInjection":
+        return record.data.units
+          ? `${record.data.units}U basal`
+          : "Long-acting injection";
     }
   }
 </script>
@@ -373,6 +429,27 @@
               Clear filters
             </Button>
           {/if}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props })}
+                <Button {...props} size="sm">
+                  <Plus class="mr-1 h-4 w-4" />
+                  Add Treatment
+                </Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              {#each Object.entries(ENTRY_CATEGORIES) as [id, cat]}
+                {@const Icon = addKindIcons[id as EntryCategoryId]}
+                <DropdownMenu.Item
+                  onclick={() => handleAddTreatment(id as EntryCategoryId)}
+                >
+                  <Icon class="mr-2 h-4 w-4 {cat.colorClass}" />
+                  {cat.name}
+                </DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         </div>
       </div>
 
@@ -639,6 +716,6 @@
   historyParam={editHistoryParam}
   onClose={handleEditClose}
   onSave={handleEditSave}
-  onDelete={handleEditDelete}
+  onDelete={editRecord?.data.id ? handleEditDelete : undefined}
 />
 {/if}
