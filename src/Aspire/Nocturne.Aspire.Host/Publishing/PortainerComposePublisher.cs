@@ -155,7 +155,10 @@ public static class PortainerComposePublisherExtensions
             throw new FileNotFoundException(
                 $"[portainer-publisher] Init script not found at: {initScriptPath}", initScriptPath);
 
-        var initScriptContent = File.ReadAllText(initScriptPath);
+        // Docker Compose interpolates `configs.*.content` when loading the file,
+        // so the script's runtime shell references (e.g. ${POSTGRES_DB:?...}) must
+        // be escaped to `$$` to survive parse-time and reach the container intact.
+        var initScriptContent = File.ReadAllText(initScriptPath).Replace("$", "$$");
 
         // Remove the ./init bind-mount.
         volumesList.Children.Remove(bindMountEntry);

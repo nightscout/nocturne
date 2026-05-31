@@ -188,20 +188,20 @@ configs:
 
       set -euo pipefail
 
-      : "${POSTGRES_DB:?POSTGRES_DB must be set}"
-      : "${POSTGRES_USER:?POSTGRES_USER must be set}"
-      : "${NOCTURNE_MIGRATOR_PASSWORD:?NOCTURNE_MIGRATOR_PASSWORD must be set}"
-      : "${NOCTURNE_APP_PASSWORD:?NOCTURNE_APP_PASSWORD must be set}"
-      : "${NOCTURNE_WEB_PASSWORD:?NOCTURNE_WEB_PASSWORD must be set}"
+      : "$${POSTGRES_DB:?POSTGRES_DB must be set}"
+      : "$${POSTGRES_USER:?POSTGRES_USER must be set}"
+      : "$${NOCTURNE_MIGRATOR_PASSWORD:?NOCTURNE_MIGRATOR_PASSWORD must be set}"
+      : "$${NOCTURNE_APP_PASSWORD:?NOCTURNE_APP_PASSWORD must be set}"
+      : "$${NOCTURNE_WEB_PASSWORD:?NOCTURNE_WEB_PASSWORD must be set}"
 
       psql \
-          --username "$POSTGRES_USER" \
-          --dbname "$POSTGRES_DB" \
+          --username "$$POSTGRES_USER" \
+          --dbname "$$POSTGRES_DB" \
           --set ON_ERROR_STOP=on \
-          --set DBNAME="$POSTGRES_DB" \
-          --set migrator_password="$NOCTURNE_MIGRATOR_PASSWORD" \
-          --set app_password="$NOCTURNE_APP_PASSWORD" \
-          --set web_password="$NOCTURNE_WEB_PASSWORD" \
+          --set DBNAME="$$POSTGRES_DB" \
+          --set migrator_password="$$NOCTURNE_MIGRATOR_PASSWORD" \
+          --set app_password="$$NOCTURNE_APP_PASSWORD" \
+          --set web_password="$$NOCTURNE_WEB_PASSWORD" \
           <<'SQL'
       CREATE ROLE nocturne_migrator LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD :'migrator_password';
       CREATE ROLE nocturne_app      LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD :'app_password';
