@@ -1,5 +1,7 @@
 <script lang="ts">
     import { Database } from "@lucide/svelte";
+    import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
+    import bootstrapSql from "$lib/release/bootstrap-roles.sql?raw";
 </script>
 
 <div class="max-w-3xl">
@@ -47,6 +49,10 @@
             <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded font-mono">bootstrap-roles.sql</code>
             from the Nocturne repository under
             <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded font-mono">docs/postgres/</code>.
+            <details class="mt-2">
+                <summary class="text-sm font-medium cursor-pointer hover:text-foreground">View bootstrap-roles.sql</summary>
+                <CodeBlock code={bootstrapSql} class="mt-2" maxHeight="400px" />
+            </details>
         </li>
         <li>
             Edit the file and replace the three
@@ -55,7 +61,7 @@
         </li>
         <li>
             Run as a PostgreSQL superuser against your Nocturne database:
-            <pre class="mt-2 p-3 rounded-lg bg-muted/50 border border-border/60 text-sm overflow-x-auto"><code>psql -U &lt;superuser&gt; -d &lt;nocturne-database&gt; -f bootstrap-roles.sql</code></pre>
+            <CodeBlock code="psql -U <superuser> -d <nocturne-database> -f bootstrap-roles.sql" class="mt-2" />
         </li>
         <li>
             Set three connection strings in Nocturne's environment:

@@ -11,9 +11,8 @@
 
     const baseNavLinks = [
         { href: "/features", label: "Features" },
-        { href: "/roadmap", label: "Roadmap" },
-        { href: "/changelog", label: "Changelog" },
         { href: "/docs", label: "Docs" },
+        { href: "/get-involved", label: "Contribute" },
         { href: "/faq", label: "FAQ" },
     ];
 
