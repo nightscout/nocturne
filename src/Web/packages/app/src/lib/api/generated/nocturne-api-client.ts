@@ -30092,6 +30092,7 @@ export enum ChannelType {
     WhatsApp = "whatsapp",
     WhatsAppDm = "whatsapp_dm",
     HomeAssistant = "home_assistant",
+    ResendEmail = "resend_email",
 }
 
 export enum ChannelStatus {

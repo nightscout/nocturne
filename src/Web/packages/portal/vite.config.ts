@@ -51,26 +51,40 @@ function releaseAssets(): Plugin {
   return {
     name: 'release-assets',
     buildStart() {
-      const deployPortainerDir = resolve(__dirname, '../../../../deploy/portainer');
+      const deployRoot = resolve(__dirname, '../../../../deploy');
       const dest = resolve(__dirname, 'src/lib/release');
-
-      if (!existsSync(deployPortainerDir)) {
-        this.warn(`release-assets: deploy/portainer not found at ${deployPortainerDir}; skipping`);
-        return;
-      }
 
       if (existsSync(dest)) {
         rmSync(dest, { recursive: true, force: true });
       }
       mkdirSync(dest, { recursive: true });
 
-      for (const file of ['docker-compose.yaml', '.env.example']) {
-        const src = resolve(deployPortainerDir, file);
-        if (existsSync(src)) {
-          cpSync(src, resolve(dest, file));
-        } else {
-          this.warn(`release-assets: ${file} not found in deploy/portainer; skipping`);
+      const variants = ['portainer', 'docker-compose'] as const;
+      for (const variant of variants) {
+        const srcDir = resolve(deployRoot, variant);
+        if (!existsSync(srcDir)) {
+          this.warn(`release-assets: deploy/${variant} not found at ${srcDir}; skipping`);
+          continue;
         }
+        const variantDest = resolve(dest, variant);
+        mkdirSync(variantDest, { recursive: true });
+        for (const file of ['docker-compose.yaml', '.env.example']) {
+          const src = resolve(srcDir, file);
+          if (existsSync(src)) {
+            cpSync(src, resolve(variantDest, file));
+          } else {
+            this.warn(`release-assets: ${file} not found in deploy/${variant}; skipping`);
+          }
+        }
+      }
+
+      // Copy standalone docs assets (e.g. BYO Postgres bootstrap script)
+      const docsRoot = resolve(__dirname, '../../../../docs');
+      const bootstrapSql = resolve(docsRoot, 'postgres/bootstrap-roles.sql');
+      if (existsSync(bootstrapSql)) {
+        cpSync(bootstrapSql, resolve(dest, 'bootstrap-roles.sql'));
+      } else {
+        this.warn(`release-assets: bootstrap-roles.sql not found at ${bootstrapSql}; skipping`);
       }
     }
   };

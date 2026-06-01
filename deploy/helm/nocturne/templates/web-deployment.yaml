@@ -46,7 +46,7 @@ spec:
             - name: NOCTURNE_API_URL
               value: {{ include "nocturne.api.internalUrl" . | quote }}
             {{- if .Values.baseUrl }}
-            - name: PUBLIC_BASE_DOMAIN
+            - name: BASE_DOMAIN
               value: {{ .Values.baseUrl | quote }}
             {{- end }}
             - name: INSTANCE_KEY

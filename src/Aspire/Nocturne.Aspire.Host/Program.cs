@@ -99,7 +99,9 @@ class Program
             postgresWebPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresWebPassword,
                 secret: true
-            );
+            ).WithPublishMetadata(
+                "Web role password",
+                "Password for nocturne_web — bot-framework state, cannot bypass Row Level Security");
 
             // Container init lives in docs/postgres/container-init. Only
             // 00-init.sh is mounted into /docker-entrypoint-initdb.d so the

@@ -531,10 +531,20 @@ public class ActivityServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task DeleteMultipleActivitiesAsync_WithoutFilter_ReturnsZero()
+    public async Task DeleteMultipleActivitiesAsync_WithoutFilter_DeletesAllStateSpanActivities()
     {
         // Arrange
-        // DeleteMultipleActivitiesAsync is not implemented yet, so it returns 0
+        var activities = new List<Activity>
+        {
+            new Activity { Id = "1", Type = "exercise", Mills = 1 },
+            new Activity { Id = "2", Type = "meal", Mills = 2 },
+        };
+        _mockStateSpanService
+            .Setup(s => s.GetActivitiesAsync(null, int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(activities);
+        _mockStateSpanService
+            .Setup(s => s.DeleteActivityAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
         // Act
         var result = await _activityService.DeleteMultipleActivitiesAsync(
@@ -542,17 +552,42 @@ public class ActivityServiceTests
         );
 
         // Assert
-        Assert.Equal(0L, result);
+        Assert.Equal(2L, result);
+        _mockStateSpanService.Verify(
+            s => s.DeleteActivityAsync("1", It.IsAny<CancellationToken>()),
+            Times.Once
+        );
+        _mockStateSpanService.Verify(
+            s => s.DeleteActivityAsync("2", It.IsAny<CancellationToken>()),
+            Times.Once
+        );
+        _mockActivityDecomposer.Verify(
+            d => d.DeleteByLegacyIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(2)
+        );
+        _mockSignalRBroadcastService.Verify(
+            s => s.BroadcastStorageDeleteAsync("activity", It.IsAny<object>()),
+            Times.Once
+        );
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task DeleteMultipleActivitiesAsync_WithFilter_ReturnsZero()
+    public async Task DeleteMultipleActivitiesAsync_WithFilter_PassesFilterAndCountsDeleted()
     {
         // Arrange
         var find = "{\"type\":\"exercise\"}";
-        // DeleteMultipleActivitiesAsync is not implemented yet, so it returns 0
+        var activities = new List<Activity>
+        {
+            new Activity { Id = "1", Type = "exercise", Mills = 1 },
+        };
+        _mockStateSpanService
+            .Setup(s => s.GetActivitiesAsync(find, int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(activities);
+        _mockStateSpanService
+            .Setup(s => s.DeleteActivityAsync("1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
         // Act
         var result = await _activityService.DeleteMultipleActivitiesAsync(
@@ -561,7 +596,34 @@ public class ActivityServiceTests
         );
 
         // Assert
+        Assert.Equal(1L, result);
+        _mockStateSpanService.Verify(
+            s => s.GetActivitiesAsync(find, int.MaxValue, 0, It.IsAny<CancellationToken>()),
+            Times.Once
+        );
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    [Trait("Category", "Parity")]
+    public async Task DeleteMultipleActivitiesAsync_WithNoMatches_ReturnsZeroAndDoesNotBroadcast()
+    {
+        // Arrange
+        _mockStateSpanService
+            .Setup(s => s.GetActivitiesAsync(null, int.MaxValue, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<Activity>());
+
+        // Act
+        var result = await _activityService.DeleteMultipleActivitiesAsync(
+            cancellationToken: CancellationToken.None
+        );
+
+        // Assert
         Assert.Equal(0L, result);
+        _mockSignalRBroadcastService.Verify(
+            s => s.BroadcastStorageDeleteAsync(It.IsAny<string>(), It.IsAny<object>()),
+            Times.Never
+        );
     }
 
     [Fact]
@@ -570,15 +632,14 @@ public class ActivityServiceTests
     public async Task DeleteMultipleActivitiesAsync_WithException_ThrowsException()
     {
         // Arrange
-        // Since the method currently just returns Task.FromResult(0L), it won't throw
-        // But we'll test what happens if it's modified to throw
+        _mockStateSpanService
+            .Setup(s => s.GetActivitiesAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Exception("Database error"));
 
         // Act & Assert
-        // For now, this should pass since the method doesn't actually throw
-        var result = await _activityService.DeleteMultipleActivitiesAsync(
-            cancellationToken: CancellationToken.None
+        await Assert.ThrowsAsync<Exception>(() =>
+            _activityService.DeleteMultipleActivitiesAsync(cancellationToken: CancellationToken.None)
         );
-        Assert.Equal(0L, result);
     }
 
     [Fact]

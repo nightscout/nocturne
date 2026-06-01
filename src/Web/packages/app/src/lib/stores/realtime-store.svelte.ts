@@ -403,8 +403,9 @@ export class RealtimeStore {
   private setupEventHandlers(): void {
     this.websocketClient.on("connect", () => {
       toast.success("Connected to real-time data");
-      // Backfill any missed data on reconnection
-      this.performBackfillIfNeeded();
+      // Always force backfill on reconnection — any disconnection may have
+      // caused missed data, even if the gap was under 5 minutes.
+      this.performBackfillIfNeeded(true);
     });
 
     this.websocketClient.on("disconnect", () => {
@@ -802,6 +803,13 @@ export class RealtimeStore {
       }
     }
     this.websocketClient.destroy();
+
+    // Clear the module-level singleton so the next createRealtimeStore() builds
+    // a fresh store rather than resurrecting this torn-down instance with stale
+    // realtime state (e.g. when re-entering the authenticated layout).
+    if (singletonStore === this) {
+      singletonStore = null;
+    }
   }
 
   /**

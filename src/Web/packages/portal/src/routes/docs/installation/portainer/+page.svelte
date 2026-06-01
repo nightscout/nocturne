@@ -1,14 +1,21 @@
 <script lang="ts">
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
     import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
-    import CopyButton from "$lib/components/docs/CopyButton.svelte";
+    import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
     import { Info } from "@lucide/svelte";
 
     const templateUrl = "https://raw.githubusercontent.com/nightscout/nocturne/main/deploy/portainer/templates.json";
 </script>
 
 <div class="max-w-3xl">
-    <h1 class="text-4xl font-bold tracking-tight mb-4">Portainer</h1>
+    <div class="flex items-center gap-4 mb-4">
+        <img
+            src="/logos/portainer.jpg"
+            alt="Portainer"
+            class="w-12 h-12 rounded-lg object-cover shrink-0"
+        />
+        <h1 class="text-4xl font-bold tracking-tight">Portainer</h1>
+    </div>
     <p class="text-lg text-muted-foreground mb-8">
         Deploy Nocturne using the Portainer web interface. No command-line access required.
     </p>
@@ -31,12 +38,7 @@
         In Portainer, go to <strong class="text-foreground">Settings → App Templates</strong> and
         set the URL to:
     </p>
-    <div class="flex items-center gap-2 rounded-lg bg-muted/50 border border-border/60 mb-4">
-        <pre class="flex-1 p-3 text-sm overflow-x-auto"><code>{templateUrl}</code></pre>
-        <div class="mr-3">
-            <CopyButton text={templateUrl} label="Copy URL to clipboard" />
-        </div>
-    </div>
+    <CodeBlock code={templateUrl} class="mb-4" />
     <p class="text-muted-foreground mb-8">
         Click <strong class="text-foreground">Save settings</strong>.
     </p>

@@ -36,6 +36,14 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     private readonly ConcurrentDictionary<Guid, DateTime> _lastSyncByTenant = new();
 
     /// <summary>
+    /// Tracks the last time a nudge (immediate sync request) was accepted per tenant,
+    /// used to debounce rapid consecutive calls.
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, DateTime> _lastNudgeByTenant = new();
+
+    private static readonly TimeSpan NudgeDebounceWindow = TimeSpan.FromSeconds(10);
+
+    /// <summary>
     /// Initialises a new <see cref="ConnectorBackgroundService{TConfig}"/>.
     /// </summary>
     /// <param name="serviceProvider">Root DI service provider; a new scope is created per tenant sync.</param>
@@ -50,9 +58,45 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     }
 
     /// <summary>
+    /// Requests an immediate sync for the specified tenant on the next poll cycle.
+    /// Removes the tenant's last-sync timestamp so the interval check passes immediately.
+    /// Calls within <see cref="NudgeDebounceWindow"/> of a previous nudge for the same
+    /// tenant are silently ignored to prevent event storms.
+    /// </summary>
+    /// <param name="tenantId">The tenant to sync immediately.</param>
+    protected void RequestImmediateSync(Guid tenantId)
+    {
+        var now = DateTime.UtcNow;
+
+        if (_lastNudgeByTenant.TryGetValue(tenantId, out var lastNudge) && now - lastNudge < NudgeDebounceWindow)
+            return;
+
+        _lastNudgeByTenant[tenantId] = now;
+        _lastSyncByTenant.TryRemove(tenantId, out _);
+
+        Logger.LogDebug(
+            "Immediate sync requested for {ConnectorName} tenant {TenantId}",
+            ConnectorName, tenantId);
+    }
+
+    /// <summary>
     /// Gets the connector name for logging
     /// </summary>
     protected abstract string ConnectorName { get; }
+
+    /// <summary>
+    /// Called once after the initial startup delay, before the poll loop begins.
+    /// Override to start real-time listeners (e.g. webhooks, SSE, WebSocket connections).
+    /// The default implementation is a no-op.
+    /// </summary>
+    protected virtual Task StartRealtimeListenersAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// Called when the service is shutting down, after the poll loop exits.
+    /// Override to tear down any real-time listeners started in <see cref="StartRealtimeListenersAsync"/>.
+    /// The default implementation is a no-op.
+    /// </summary>
+    protected virtual Task StopRealtimeListenersAsync() => Task.CompletedTask;
 
     /// <summary>
     /// Performs a single sync operation using the connector service.
@@ -119,6 +163,18 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
         try
         {
+            try
+            {
+                await StartRealtimeListenersAsync(stoppingToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Logger.LogWarning(
+                    ex,
+                    "Failed to start real-time listeners for {ConnectorName}, falling back to polling",
+                    ConnectorName);
+            }
+
             // Poll every minute; each tenant is only synced when its own
             // SyncIntervalMinutes has elapsed since its last sync.
             using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
@@ -141,6 +197,18 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         }
         finally
         {
+            try
+            {
+                await StopRealtimeListenersAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(
+                    ex,
+                    "Failed to stop real-time listeners for {ConnectorName}",
+                    ConnectorName);
+            }
+
             Logger.LogInformation(
                 "{ConnectorName} connector background service stopped",
                 ConnectorName);

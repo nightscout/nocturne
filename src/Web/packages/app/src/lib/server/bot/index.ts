@@ -77,6 +77,16 @@ const platformBuilders: Record<string, PlatformConfigBuilder> = {
 		}),
 		fromEnv: () => false, // WhatsApp has no env var fallback
 	},
+	resend: {
+		fromDb: (fields) => ({
+			enabled: true,
+			fromAddress: fields["fromAddress"],
+			fromName: fields["fromName"],
+			apiKey: fields["apiKey"],
+			webhookSecret: fields["webhookSecret"],
+		}),
+		fromEnv: () => !!(env.RESEND_API_KEY && env.RESEND_FROM_ADDRESS),
+	},
 };
 
 function buildPlatformConfig(
@@ -103,6 +113,7 @@ async function initBot(): Promise<Bot> {
 			slack: buildPlatformConfig("slack", dbCredentials),
 			telegram: buildPlatformConfig("telegram", dbCredentials),
 			whatsapp: buildPlatformConfig("whatsapp", dbCredentials),
+			resend: buildPlatformConfig("resend", dbCredentials),
 		},
 		// The bot adapter expects a postgresql:// URL, not the .NET-style
 		// ConnectionStrings__nocturne-postgres value (which is

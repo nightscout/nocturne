@@ -64,6 +64,7 @@
     <PackageVersion Include="MongoDB.Driver" Version="3.5.0" />
     <PackageVersion Include="MongoDB.Bson" Version="3.5.0" />
     <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageVersion Include="SocketIOClient" Version="4.0.4" />
     <PackageVersion Include="StackExchange.Redis" Version="2.9.32" />
     <PackageVersion Include="System.Text.Json" Version="10.0.0" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.15.0" />

@@ -119,4 +119,12 @@ public interface IDeduplicationService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if the job was cancelled, false if not found or already completed</returns>
     Task<bool> CancelJobAsync(Guid jobId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reconcile newly-created linked_records for the current tenant in bounded chunks,
+    /// merging duplicate canonical groups. Processes links with SysCreatedAt at or after
+    /// the tenant's watermark (minus a small overlap), advancing the watermark per batch.
+    /// Stops when caught up or after maxBatches. Returns groups merged and whether caught up.
+    /// </summary>
+    Task<ReconcileResult> ReconcileNewLinksAsync(int batchSize, int maxBatches, CancellationToken cancellationToken = default);
 }

@@ -18,7 +18,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.1")
+                .HasAnnotation("ProductVersion", "10.0.8")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1290,6 +1290,21 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_data_source_metadata_tenant_device");
 
                     b.ToTable("data_source_metadata");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DedupReconcileStateEntity", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime>("LastReconciledLinkCreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_reconciled_link_created_at");
+
+                    b.HasKey("TenantId");
+
+                    b.ToTable("dedup_reconcile_state");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DiscrepancyAnalysisEntity", b =>
@@ -7365,6 +7380,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DataSourceMetadataEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DedupReconcileStateEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()

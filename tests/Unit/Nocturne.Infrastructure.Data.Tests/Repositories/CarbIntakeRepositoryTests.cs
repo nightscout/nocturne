@@ -197,6 +197,66 @@ public class CarbIntakeRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task CountAsync_ExcludesNonPrimaryDuplicates()
+    {
+        var timestamp = DateTime.UtcNow;
+
+        // The same meal imported by two connectors (e.g. MyLife pump data that
+        // also flows through Glooko) — two distinct rows.
+        var primary = await _repo.CreateAsync(new CarbIntake
+        {
+            Timestamp = timestamp,
+            DataSource = "mylife-connector",
+            LegacyId = "mylife-1",
+            Carbs = 50.0,
+        });
+        var duplicate = await _repo.CreateAsync(new CarbIntake
+        {
+            Timestamp = timestamp,
+            DataSource = "glooko-connector",
+            LegacyId = "glooko-1",
+            Carbs = 50.0,
+        });
+
+        // Dedup links them into one canonical group; the Glooko row is non-primary.
+        var canonicalId = Guid.CreateVersion7();
+        var mills = new DateTimeOffset(timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        _context.LinkedRecords.AddRange(
+            new LinkedRecordEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TestTenantId,
+                CanonicalId = canonicalId,
+                RecordType = "carbintake",
+                RecordId = primary.Id,
+                SourceTimestamp = mills,
+                DataSource = "mylife-connector",
+                IsPrimary = true,
+            },
+            new LinkedRecordEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TestTenantId,
+                CanonicalId = canonicalId,
+                RecordType = "carbintake",
+                RecordId = duplicate.Id,
+                SourceTimestamp = mills,
+                DataSource = "glooko-connector",
+                IsPrimary = false,
+            });
+        await _context.SaveChangesAsync();
+
+        // GetAsync already drops the non-primary duplicate; CountAsync must agree
+        // so pagination totals match the returned rows.
+        var fetched = (await _repo.GetAsync(
+            from: null, to: null, device: null, source: null)).ToList();
+        var count = await _repo.CountAsync(from: null, to: null);
+
+        fetched.Should().HaveCount(1);
+        count.Should().Be(1);
+    }
+
+    [Fact]
     public async Task BulkCreateAsync_WithIntraBatchSyncIdentifierCollision_DeduplicatesToLatest()
     {
         var timestamp = DateTime.UtcNow;

@@ -1,6 +1,6 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, Shield, ChevronRight, ChevronDown } from "@lucide/svelte";
+    import { Rocket, Download, Settings, Shield, Bell, ChevronRight, ChevronDown } from "@lucide/svelte";
 
     const navSections = [
         {
@@ -26,6 +26,13 @@
             items: [
                 { href: "/docs/authentication/google", label: "Sign in with Google" },
                 { href: "/docs/authentication/github", label: "Sign in with GitHub" },
+            ],
+        },
+        {
+            title: "Alerts",
+            icon: Bell,
+            items: [
+                { href: "/docs/alerts/email", label: "Email (Resend)" },
             ],
         },
         {

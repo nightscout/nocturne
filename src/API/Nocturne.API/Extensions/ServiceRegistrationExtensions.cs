@@ -730,6 +730,9 @@ public static class ServiceRegistrationExtensions
         // Background sweep
         services.AddHostedService<AlertSweepService>();
 
+        // Periodic watermark-driven deduplication reconciliation across active tenants
+        services.AddHostedService<Nocturne.API.Services.BackgroundServices.DeduplicationReconciliationBackgroundService>();
+
         return services;
     }
 

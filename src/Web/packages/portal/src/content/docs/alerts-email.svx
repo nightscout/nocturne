@@ -1,0 +1,102 @@
+---
+title: Email Alerts (Resend)
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Email Alerts
+
+Nocturne can deliver glucose alerts directly to email using [Resend](https://resend.com),
+an email API provider. Resend's free tier includes 3,000 emails per month and 100 emails
+per day -- more than enough for most alert configurations.
+
+## 1. Create a Resend account
+
+1. Go to [resend.com](https://resend.com) and sign up
+2. Verify your email address
+
+## 2. Add and verify a sending domain
+
+1. In the Resend dashboard, go to **Domains**
+2. Click **Add Domain** and enter the domain you want to send from (e.g. `alerts.your-instance.com`)
+3. Add the DNS records Resend provides (typically a few TXT and MX records)
+4. Wait for verification -- this usually takes a few minutes but can take up to 48 hours
+
+<Callout type="info" title="Free tier sending domain">
+  On the free tier you can also send from Resend's shared domain
+  (<code>onboarding@resend.dev</code>) for testing, but a verified custom domain
+  is strongly recommended for production use to avoid deliverability issues.
+</Callout>
+
+## 3. Create an API key
+
+1. In the Resend dashboard, go to **API Keys**
+2. Click **Create API Key**
+3. Give it a name (e.g. `Nocturne Alerts`) and select **Sending access** permission
+4. Copy the key immediately
+
+<Callout type="warning" title="Save the API key now">
+  Resend only displays the full API key once. If you lose it, you'll need to
+  create a new one.
+</Callout>
+
+## 4. Configure Nocturne
+
+### Option A: Admin UI
+
+1. Sign in to your Nocturne instance as an admin
+2. Go to **Settings > Admin > Platform Settings**
+3. Find or add the **Resend** provider and fill in:
+
+| Field | Value |
+|-------|-------|
+| **From Address** | The email address to send from (e.g. `alerts@your-instance.com`) |
+| **From Name** | Display name in the From header (e.g. `Nocturne Alerts`) |
+| **API Key** | The API key from step 3 |
+| **Webhook Secret** | _(optional)_ Webhook signing secret for inbound email replies |
+
+4. Enable the provider and click **Save**
+
+### Option B: Environment variables
+
+Set these in your `.env` or container environment:
+
+| Variable | Value |
+|----------|-------|
+| `RESEND_API_KEY` | Your Resend API key |
+| `RESEND_FROM_ADDRESS` | Sender address (e.g. `alerts@your-instance.com`) |
+| `RESEND_FROM_NAME` | _(optional)_ Display name (e.g. `Nocturne Alerts`) |
+| `RESEND_WEBHOOK_SECRET` | _(optional)_ Webhook signing secret |
+
+Then restart Nocturne for the changes to take effect.
+
+## 5. Set up an alert rule
+
+1. Go to **Settings > Alerts**
+2. Create or edit an alert rule
+3. Under **Delivery channels**, add an **Email** channel
+4. Enter the recipient email address
+5. Save the rule
+
+## 6. Test it
+
+1. Trigger a test alert from **Settings > Alerts** (or wait for a real glucose excursion)
+2. Check the recipient's inbox for the alert email
+3. Verify that the **Acknowledge** link in the email works
+
+<Callout type="tip" title="Check spam folders">
+  If the test email doesn't arrive, check the spam/junk folder. Using a verified
+  custom domain with proper DNS records (SPF, DKIM) greatly improves deliverability.
+</Callout>
+
+## Inbound replies (optional)
+
+If you'd like users to reply to alert emails (e.g. to acknowledge an alert via email),
+set up a Resend inbound webhook:
+
+1. In the Resend dashboard, go to **Webhooks**
+2. Add a webhook pointing to `https://your-instance.com/api/v4/webhooks/resend`
+3. Copy the **signing secret** and add it as `RESEND_WEBHOOK_SECRET` in your config
+4. Enable the webhook

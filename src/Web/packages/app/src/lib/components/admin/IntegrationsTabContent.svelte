@@ -21,6 +21,7 @@
     slack: "Slack",
     telegram: "Telegram",
     whatsapp: "WhatsApp",
+    resend: "Resend (Email)",
   };
 
   let { platforms, onSave, onDelete } = $props<{

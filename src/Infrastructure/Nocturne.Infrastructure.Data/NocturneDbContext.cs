@@ -207,6 +207,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     public DbSet<LinkedRecordEntity> LinkedRecords { get; set; }
 
+    /// <summary>
+    /// Gets or sets the DedupReconcileState table tracking per-tenant reconciliation watermarks
+    /// </summary>
+    public DbSet<DedupReconcileStateEntity> DedupReconcileState { get; set; }
+
     // Connector Configuration entities
 
     /// <summary>
@@ -2563,6 +2568,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         {
             entity.Property(e => e.IsPrimary).HasDefaultValue(false);
             entity.Property(e => e.SysCreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+        });
+
+        // Configure DedupReconcileStateEntity — one row per tenant, PK on tenant id.
+        modelBuilder.Entity<DedupReconcileStateEntity>(entity =>
+        {
+            entity.HasKey(e => e.TenantId);
         });
 
         // Configure InAppNotification entity

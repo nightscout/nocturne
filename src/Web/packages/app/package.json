@@ -46,6 +46,7 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@internationalized/date": "^3.12.1",
     "@lucide/svelte": "^1.14.0",
     "@playwright/test": "^1.60.0",

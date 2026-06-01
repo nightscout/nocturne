@@ -32,18 +32,18 @@
                     </li>
                     <li>
                         <a
-                            href="/changelog"
+                            href="/roadmap"
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
-                            Changelog
+                            Roadmap
                         </a>
                     </li>
                     <li>
                         <a
-                            href="/setup"
+                            href="/changelog"
                             class="text-sm text-muted-foreground hover:text-foreground transition-colors"
                         >
-                            Get Started
+                            Changelog
                         </a>
                     </li>
                     <li>
@@ -92,6 +92,24 @@
             <div>
                 <h3 class="font-semibold mb-4">Community</h3>
                 <ul class="space-y-2.5">
+                    <li>
+                        <a
+                            href="/get-involved"
+                            class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            Get Involved
+                        </a>
+                    </li>
+                    <li>
+                        <a
+                            href="https://discord.gg/sKEhtHeb2z"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            Discord
+                        </a>
+                    </li>
                     <li>
                         <a
                             href="https://github.com/nightscout/nocturne"

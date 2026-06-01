@@ -35,7 +35,7 @@
   // WebSocket config - defaults, can be overridden in production
   const config = {
     url: typeof window !== "undefined" ? window.location.origin : "",
-    reconnectAttempts: 10,
+    reconnectAttempts: Infinity,
     reconnectDelay: 5000,
     maxReconnectDelay: 30000,
     pingTimeout: 60000,

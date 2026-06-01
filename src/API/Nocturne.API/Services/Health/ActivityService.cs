@@ -351,9 +351,59 @@ public class ActivityService : IActivityService
         {
             _logger.LogDebug("Bulk deleting activity records with filter: {Find}", find);
 
-            // TODO: Implement bulk delete for activities stored as StateSpans
-            _logger.LogWarning("Bulk delete for activities is not implemented yet");
-            return await Task.FromResult(0L);
+            // Regular activities are stored as StateSpans and are the only source
+            // addressable by the type-based `find` filter. Heart rate and step count
+            // sensor data live in dedicated tables and are not bulk-deletable here.
+            var activities = await _stateSpanService.GetActivitiesAsync(
+                type: find,
+                count: int.MaxValue,
+                skip: 0,
+                cancellationToken: cancellationToken
+            );
+
+            long deletedCount = 0;
+            foreach (var activity in activities)
+            {
+                if (string.IsNullOrEmpty(activity.Id))
+                    continue;
+
+                // Clean up any decomposed records linked to this legacy activity id.
+                try
+                {
+                    await _activityDecomposer.DeleteByLegacyIdAsync(
+                        activity.Id,
+                        cancellationToken
+                    );
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Failed to delete decomposed records for legacy activity {Id}",
+                        activity.Id
+                    );
+                }
+
+                if (await _stateSpanService.DeleteActivityAsync(activity.Id, cancellationToken))
+                    deletedCount++;
+            }
+
+            if (deletedCount > 0)
+            {
+                await _signalRBroadcastService.BroadcastStorageDeleteAsync(
+                    "activity",
+                    new { collection = "activity", count = deletedCount }
+                );
+
+                await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);
+
+                _logger.LogDebug(
+                    "Successfully bulk deleted {Count} activity records",
+                    deletedCount
+                );
+            }
+
+            return deletedCount;
         }
         catch (Exception ex)
         {

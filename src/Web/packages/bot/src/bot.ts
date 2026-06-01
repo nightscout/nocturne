@@ -3,6 +3,7 @@ import { createDiscordAdapter } from "@chat-adapter/discord";
 import { createSlackAdapter } from "@chat-adapter/slack";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
+import { createResendAdapter } from "@resend/chat-sdk-adapter";
 import { createPostgresState } from "@chat-adapter/state-pg";
 import { createLogger } from "./lib/logger.js";
 
@@ -18,6 +19,10 @@ export interface PlatformCredentials {
   appSecret?: string;
   phoneNumberId?: string;
   verifyToken?: string;
+  fromAddress?: string;
+  fromName?: string;
+  apiKey?: string;
+  webhookSecret?: string;
 }
 
 export interface BotOptions {
@@ -26,6 +31,7 @@ export interface BotOptions {
     slack?: PlatformCredentials | boolean;
     telegram?: PlatformCredentials | boolean;
     whatsapp?: PlatformCredentials | boolean;
+    resend?: PlatformCredentials | boolean;
   };
   postgresUrl: string;
 }
@@ -89,6 +95,24 @@ export function createBot(options: BotOptions): Chat {
       logger.warn(
         "WhatsApp requires explicit credentials configured via the admin UI — skipping env var fallback",
       );
+    }
+  }
+
+  const resend = platforms.resend;
+  if (resend) {
+    if (typeof resend === "object") {
+      logger.info("Enabling Resend adapter");
+      adapters.resend = createResendAdapter({
+        fromAddress: resend.fromAddress!,
+        fromName: resend.fromName,
+        apiKey: resend.apiKey!,
+        webhookSecret: resend.webhookSecret,
+      });
+    } else {
+      adapters.resend = createResendAdapter({
+        fromAddress: process.env.RESEND_FROM_ADDRESS!,
+        fromName: process.env.RESEND_FROM_NAME,
+      }); // apiKey + webhookSecret auto-load from env
     }
   }
 

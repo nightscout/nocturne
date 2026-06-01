@@ -30,14 +30,17 @@ public class ConnectorBackgroundServiceTests
     private class TestConnectorBackgroundService : ConnectorBackgroundService<TestConnectorConfig>
     {
         private readonly SyncResult _syncResult;
+        private readonly Action? _onSync;
 
         public TestConnectorBackgroundService(
             IServiceProvider serviceProvider,
             SyncResult syncResult,
-            ILogger logger)
+            ILogger logger,
+            Action? onSync = null)
             : base(serviceProvider, logger)
         {
             _syncResult = syncResult;
+            _onSync = onSync;
         }
 
         protected override string ConnectorName => "TestConnector";
@@ -48,6 +51,7 @@ public class ConnectorBackgroundServiceTests
             CancellationToken cancellationToken,
             ISyncProgressReporter? progressReporter = null)
         {
+            _onSync?.Invoke();
             return Task.FromResult(_syncResult);
         }
 
@@ -61,12 +65,27 @@ public class ConnectorBackgroundServiceTests
                 .GetMethod("SyncAllTenantsAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
             await (Task)method.Invoke(this, [ct])!;
         }
+
+        /// <summary>
+        /// Exposes the protected RequestImmediateSync for testing.
+        /// </summary>
+        public new void RequestImmediateSync(Guid tenantId) => base.RequestImmediateSync(tenantId);
     }
 
     /// <summary>
     /// Sets up an in-memory SQLite NocturneDbContext with one active tenant.
     /// </summary>
     private static (IDisposable cleanup, string connectionString) CreateSqliteDb()
+    {
+        var (cleanup, connectionString, _) = CreateSqliteDbWithTenantId();
+        return (cleanup, connectionString);
+    }
+
+    /// <summary>
+    /// Sets up an in-memory SQLite NocturneDbContext with one active tenant,
+    /// returning the tenant ID for tests that need to target a specific tenant.
+    /// </summary>
+    private static (IDisposable cleanup, string connectionString, Guid tenantId) CreateSqliteDbWithTenantId()
     {
         // Use a temp file so factory-created contexts can share the same data
         var dbPath = Path.Combine(Path.GetTempPath(), $"ConnectorBgTest_{Guid.NewGuid():N}.db");
@@ -98,7 +117,7 @@ public class ConnectorBackgroundServiceTests
             tenantId.ToString(), "test-tenant", "Test Tenant",
             DateTime.UtcNow.ToString("O"), DateTime.UtcNow.ToString("O"));
 
-        return (cleanup, connectionString);
+        return (cleanup, connectionString, tenantId);
     }
 
     private static IServiceProvider BuildServiceProvider(
@@ -419,6 +438,113 @@ public class ConnectorBackgroundServiceTests
                 It.IsAny<CancellationToken>()),
             Times.Once,
             "Expected error message to be cleared on successful sync");
+    }
+
+    [Fact]
+    public async Task RequestImmediateSync_CausesNextPollToSyncImmediately()
+    {
+        // Arrange
+        var (cleanup, connStr, tenantId) = CreateSqliteDbWithTenantId();
+        using var _ = cleanup;
+
+        var syncCount = 0;
+        var syncResult = new SyncResult { Success = true, Message = "OK" };
+
+        var configServiceMock = new Mock<IConnectorConfigurationService>();
+        configServiceMock
+            .Setup(x => x.GetConfigurationAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = "TestConnector",
+                IsActive = true,
+                Configuration = JsonDocument.Parse("{\"enabled\": true, \"syncIntervalMinutes\": 60}")
+            });
+        configServiceMock
+            .Setup(x => x.GetSecretsAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+        configServiceMock
+            .Setup(x => x.UpdateHealthStateAsync(
+                It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<bool?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var config = new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 60 };
+        var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            syncResult,
+            NullLogger<TestConnectorBackgroundService>.Instance,
+            onSync: () => syncCount++);
+
+        // Act — first poll triggers the initial sync
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        Assert.Equal(1, syncCount);
+
+        // Second poll should NOT sync (60-minute interval hasn't elapsed)
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        Assert.Equal(1, syncCount);
+
+        // Request immediate sync, then poll again — it should sync immediately
+        sut.RequestImmediateSync(tenantId);
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        Assert.Equal(2, syncCount);
+    }
+
+    [Fact]
+    public async Task RequestImmediateSync_DebouncesPreviouslyNudgedTenant()
+    {
+        // Arrange
+        var (cleanup, connStr, tenantId) = CreateSqliteDbWithTenantId();
+        using var _ = cleanup;
+
+        var syncCount = 0;
+        var syncResult = new SyncResult { Success = true, Message = "OK" };
+
+        var configServiceMock = new Mock<IConnectorConfigurationService>();
+        configServiceMock
+            .Setup(x => x.GetConfigurationAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = "TestConnector",
+                IsActive = true,
+                Configuration = JsonDocument.Parse("{\"enabled\": true, \"syncIntervalMinutes\": 60}")
+            });
+        configServiceMock
+            .Setup(x => x.GetSecretsAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+        configServiceMock
+            .Setup(x => x.UpdateHealthStateAsync(
+                It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<bool?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var config = new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 60 };
+        var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            syncResult,
+            NullLogger<TestConnectorBackgroundService>.Instance,
+            onSync: () => syncCount++);
+
+        // Act — initial sync
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        Assert.Equal(1, syncCount);
+
+        // First nudge should succeed and cause a sync
+        sut.RequestImmediateSync(tenantId);
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        Assert.Equal(2, syncCount);
+
+        // Second nudge within the debounce window should be ignored
+        sut.RequestImmediateSync(tenantId);
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+        // Sync count should remain at 2 because the nudge was debounced
+        // and the 60-minute interval hasn't elapsed
+        Assert.Equal(2, syncCount);
     }
 
     /// <summary>

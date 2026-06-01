@@ -60,6 +60,13 @@ public class PlatformSettingsService
             new("phoneNumberId", "Phone Number ID", true),
             new("verifyToken", "Verify Token", true),
         ],
+        ["resend"] =
+        [
+            new("apiKey", "API Key", true),
+            new("fromAddress", "From Address", true),
+            new("fromName", "From Name", false),
+            new("webhookSecret", "Webhook Secret", false),
+        ],
     };
 
     public PlatformSettingsService(NocturneDbContext db, ISecretEncryptionService encryption)
