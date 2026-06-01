@@ -9,7 +9,14 @@
 </script>
 
 <div class="max-w-3xl">
-    <h1 class="text-4xl font-bold tracking-tight mb-4">Docker Compose</h1>
+    <div class="flex items-center gap-4 mb-4">
+        <img
+            src="/logos/docker-compose.png"
+            alt="Docker Compose"
+            class="w-12 h-12 object-contain shrink-0"
+        />
+        <h1 class="text-4xl font-bold tracking-tight">Docker Compose</h1>
+    </div>
     <p class="text-lg text-muted-foreground mb-8">
         Deploy Nocturne on any server with Docker Compose from the command line.
     </p>

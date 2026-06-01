@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Vote, ExternalLink } from "@lucide/svelte";
+    import { ExternalLink } from "@lucide/svelte";
 </script>
 
 <a
@@ -10,7 +10,11 @@
 >
     <div class="flex items-start gap-4">
         <div class="w-12 h-12 rounded-lg bg-violet-500/15 flex items-center justify-center shrink-0">
-            <Vote class="w-6 h-6 text-violet-500" />
+            <img
+                src="/logos/pikapods.png"
+                alt="PikaPods"
+                class="w-7 h-7 object-contain"
+            />
         </div>
         <div class="flex-1">
             <h3 class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors">

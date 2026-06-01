@@ -1,8 +1,6 @@
 <script lang="ts">
   import {
     ArrowRight,
-    Terminal,
-    LayoutDashboard,
     Cloud,
     Database,
     Globe,
@@ -56,7 +54,11 @@
         <div
           class="w-12 h-12 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0"
         >
-          <Terminal class="w-6 h-6 text-blue-500" />
+          <img
+            src="/logos/docker-compose.png"
+            alt="Docker Compose"
+            class="w-7 h-7 object-contain"
+          />
         </div>
         <div class="flex-1">
           <h3
@@ -81,9 +83,13 @@
     >
       <div class="flex items-start gap-4">
         <div
-          class="w-12 h-12 rounded-lg bg-cyan-500/15 flex items-center justify-center shrink-0"
+          class="w-12 h-12 rounded-lg bg-cyan-500/15 flex items-center justify-center shrink-0 overflow-hidden"
         >
-          <LayoutDashboard class="w-6 h-6 text-cyan-500" />
+          <img
+            src="/logos/portainer.jpg"
+            alt="Portainer"
+            class="w-full h-full object-cover"
+          />
         </div>
         <div class="flex-1">
           <h3

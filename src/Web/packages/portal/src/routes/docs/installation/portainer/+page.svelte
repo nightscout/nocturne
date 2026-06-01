@@ -8,7 +8,14 @@
 </script>
 
 <div class="max-w-3xl">
-    <h1 class="text-4xl font-bold tracking-tight mb-4">Portainer</h1>
+    <div class="flex items-center gap-4 mb-4">
+        <img
+            src="/logos/portainer.jpg"
+            alt="Portainer"
+            class="w-12 h-12 rounded-lg object-cover shrink-0"
+        />
+        <h1 class="text-4xl font-bold tracking-tight">Portainer</h1>
+    </div>
     <p class="text-lg text-muted-foreground mb-8">
         Deploy Nocturne using the Portainer web interface. No command-line access required.
     </p>
