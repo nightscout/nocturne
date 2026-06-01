@@ -24,6 +24,7 @@ namespace Nocturne.Connectors.Glooko.Configurations;
     SupportedDataTypes = [
         SyncDataType.Glucose,
         SyncDataType.Boluses,
+        SyncDataType.BasalInjections,
         SyncDataType.CarbIntake,
         SyncDataType.StateSpans,
         SyncDataType.DeviceEvents,

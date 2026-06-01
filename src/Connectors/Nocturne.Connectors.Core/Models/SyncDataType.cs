@@ -15,6 +15,7 @@ public enum SyncDataType
     Notes,
     DeviceEvents,
     StateSpans,
+    BasalInjections,
     Profiles,
     DeviceStatus,
     Activity,

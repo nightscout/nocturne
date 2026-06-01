@@ -795,6 +795,28 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         );
     }
 
+    /// <summary>
+    ///     Submits V4 BasalInjection data directly to the API
+    /// </summary>
+    protected virtual async Task<bool> PublishBasalInjectionDataAsync(
+        IEnumerable<BasalInjection> records,
+        TConfig config,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (_publisher == null || !_publisher.IsAvailable)
+        {
+            _logger?.LogWarning("Publisher not available for BasalInjection submission");
+            return false;
+        }
+
+        return await _publisher.Treatments.PublishBasalInjectionsAsync(
+            records,
+            ConnectorSource,
+            cancellationToken
+        );
+    }
+
     #endregion
 
     /// <summary>

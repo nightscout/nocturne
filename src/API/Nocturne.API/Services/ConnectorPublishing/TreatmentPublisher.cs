@@ -24,6 +24,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     private readonly IBGCheckRepository _bgCheckRepository;
     private readonly IBolusCalculationRepository _bolusCalculationRepository;
     private readonly ITempBasalRepository _tempBasalRepository;
+    private readonly IBasalInjectionRepository _basalInjectionRepository;
+    private readonly IPatientInsulinRepository _patientInsulinRepository;
     private readonly IBasalRateResolver _basalRateResolver;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly ILogger<TreatmentPublisher> _logger;
@@ -36,6 +38,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         IBGCheckRepository bgCheckRepository,
         IBolusCalculationRepository bolusCalculationRepository,
         ITempBasalRepository tempBasalRepository,
+        IBasalInjectionRepository basalInjectionRepository,
+        IPatientInsulinRepository patientInsulinRepository,
         IBasalRateResolver basalRateResolver,
         ITherapySettingsResolver therapySettingsResolver,
         ILogger<TreatmentPublisher> logger)
@@ -47,6 +51,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         _bgCheckRepository = bgCheckRepository ?? throw new ArgumentNullException(nameof(bgCheckRepository));
         _bolusCalculationRepository = bolusCalculationRepository ?? throw new ArgumentNullException(nameof(bolusCalculationRepository));
         _tempBasalRepository = tempBasalRepository ?? throw new ArgumentNullException(nameof(tempBasalRepository));
+        _basalInjectionRepository = basalInjectionRepository ?? throw new ArgumentNullException(nameof(basalInjectionRepository));
+        _patientInsulinRepository = patientInsulinRepository ?? throw new ArgumentNullException(nameof(patientInsulinRepository));
         _basalRateResolver = basalRateResolver ?? throw new ArgumentNullException(nameof(basalRateResolver));
         _therapySettingsResolver = therapySettingsResolver ?? throw new ArgumentNullException(nameof(therapySettingsResolver));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -80,6 +86,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             var recordList = records.ToList();
             if (recordList.Count == 0) return true;
 
+            await ResolvePatientInsulinsForBolusesAsync(recordList, cancellationToken);
             await _bolusRepository.BulkCreateAsync(recordList, cancellationToken);
             _logger.LogDebug("Published {Count} Bolus records for {Source}", recordList.Count, source);
             return true;
@@ -243,6 +250,32 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         return reclassified;
     }
 
+    public async Task<bool> PublishBasalInjectionsAsync(
+        IEnumerable<BasalInjection> records,
+        string source,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var recordList = records.ToList();
+            if (recordList.Count == 0) return true;
+
+            await ResolvePatientInsulinsForBasalInjectionsAsync(recordList, cancellationToken);
+
+            foreach (var record in recordList)
+                await _basalInjectionRepository.CreateAsync(record, cancellationToken);
+
+            _logger.LogDebug("Published {Count} BasalInjection records for {Source}", recordList.Count, source);
+            return true;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish BasalInjection records for {Source}", source);
+            return false;
+        }
+    }
+
     public async Task<bool> PublishDecompositionBatchesAsync(
         IEnumerable<DecompositionBatch> batches,
         string source,
@@ -299,5 +332,117 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             return DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills).UtcDateTime;
 
         return null;
+    }
+
+    // ── Patient Insulin resolution helpers ──────────────────────────────
+
+    /// <summary>
+    /// For boluses that carry an <see cref="TreatmentInsulinContext"/> with a placeholder
+    /// <c>PatientInsulinId</c> (Guid.Empty), resolves or auto-creates the corresponding
+    /// <see cref="PatientInsulin"/> record and updates the context in place.
+    /// </summary>
+    private async Task ResolvePatientInsulinsForBolusesAsync(
+        List<Bolus> records, CancellationToken ct)
+    {
+        var needsResolution = records
+            .Where(r => r.InsulinContext is { PatientInsulinId: var id } && id == Guid.Empty)
+            .ToList();
+
+        if (needsResolution.Count == 0) return;
+
+        var cache = await BuildPatientInsulinCacheAsync(ct);
+
+        foreach (var bolus in needsResolution)
+        {
+            var resolved = await ResolveOrCreatePatientInsulinAsync(
+                bolus.InsulinContext!, InsulinRole.Bolus, cache, ct);
+            bolus.InsulinContext = resolved;
+        }
+    }
+
+    /// <summary>
+    /// For basal injections that carry an <see cref="TreatmentInsulinContext"/> with a placeholder
+    /// <c>PatientInsulinId</c> (Guid.Empty), resolves or auto-creates the corresponding
+    /// <see cref="PatientInsulin"/> record and updates the context in place.
+    /// </summary>
+    private async Task ResolvePatientInsulinsForBasalInjectionsAsync(
+        List<BasalInjection> records, CancellationToken ct)
+    {
+        var needsResolution = records
+            .Where(r => r.InsulinContext.PatientInsulinId == Guid.Empty)
+            .ToList();
+
+        if (needsResolution.Count == 0) return;
+
+        var cache = await BuildPatientInsulinCacheAsync(ct);
+
+        foreach (var injection in needsResolution)
+        {
+            var resolved = await ResolveOrCreatePatientInsulinAsync(
+                injection.InsulinContext, InsulinRole.Basal, cache, ct);
+            injection.InsulinContext = resolved;
+        }
+    }
+
+    /// <summary>
+    /// Builds a lookup of existing patient insulins keyed by name (case-insensitive).
+    /// </summary>
+    private async Task<Dictionary<string, PatientInsulin>> BuildPatientInsulinCacheAsync(CancellationToken ct)
+    {
+        var existing = await _patientInsulinRepository.GetAllAsync(ct);
+        return existing
+            .GroupBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Finds an existing <see cref="PatientInsulin"/> by name, or creates one from the
+    /// <see cref="TreatmentInsulinContext"/> catalog data. Returns a new context with the
+    /// real <c>PatientInsulinId</c> populated.
+    /// </summary>
+    private async Task<TreatmentInsulinContext> ResolveOrCreatePatientInsulinAsync(
+        TreatmentInsulinContext context,
+        InsulinRole role,
+        Dictionary<string, PatientInsulin> cache,
+        CancellationToken ct)
+    {
+        var name = context.InsulinName;
+        if (string.IsNullOrWhiteSpace(name) || name == "Unknown")
+            return context;
+
+        if (cache.TryGetValue(name, out var existing))
+        {
+            return context with { PatientInsulinId = existing.Id };
+        }
+
+        // Auto-create a PatientInsulin from the catalog data in the context
+        var formulation = InsulinCatalog.GetAll()
+            .FirstOrDefault(f => f.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+        var newInsulin = new PatientInsulin
+        {
+            Id = Guid.CreateVersion7(),
+            Name = name,
+            InsulinCategory = formulation?.Category ?? (role == InsulinRole.Basal
+                ? InsulinCategory.LongActing
+                : InsulinCategory.RapidActing),
+            FormulationId = formulation?.Id,
+            Dia = context.Dia,
+            Peak = context.Peak,
+            Curve = context.Curve,
+            Concentration = context.Concentration,
+            Role = role == InsulinRole.Basal ? InsulinRole.Basal : InsulinRole.Bolus,
+            IsCurrent = true,
+            IsPrimary = !cache.Values.Any(i => i.Role == role && i.IsPrimary),
+        };
+
+        var created = await _patientInsulinRepository.CreateAsync(newInsulin, ct);
+        cache[name] = created;
+
+        _logger.LogInformation(
+            "Auto-created PatientInsulin '{Name}' (role={Role}, id={Id}) from connector import",
+            created.Name, role, created.Id);
+
+        return context with { PatientInsulinId = created.Id };
     }
 }

@@ -23,6 +23,8 @@ public class TreatmentPublisherTests
     private readonly Mock<IBGCheckRepository> _mockBGCheckRepository;
     private readonly Mock<IBolusCalculationRepository> _mockBolusCalculationRepository;
     private readonly Mock<ITempBasalRepository> _mockTempBasalRepository;
+    private readonly Mock<IBasalInjectionRepository> _mockBasalInjectionRepository;
+    private readonly Mock<IPatientInsulinRepository> _mockPatientInsulinRepository;
     private readonly Mock<IBasalRateResolver> _mockBasalRateResolver;
     private readonly Mock<ITherapySettingsResolver> _mockTherapySettingsResolver;
     private readonly TreatmentPublisher _publisher;
@@ -35,6 +37,8 @@ public class TreatmentPublisherTests
         _mockBGCheckRepository = new Mock<IBGCheckRepository>();
         _mockBolusCalculationRepository = new Mock<IBolusCalculationRepository>();
         _mockTempBasalRepository = new Mock<ITempBasalRepository>();
+        _mockBasalInjectionRepository = new Mock<IBasalInjectionRepository>();
+        _mockPatientInsulinRepository = new Mock<IPatientInsulinRepository>();
         _mockBasalRateResolver = new Mock<IBasalRateResolver>();
         _mockTherapySettingsResolver = new Mock<ITherapySettingsResolver>();
 
@@ -59,6 +63,8 @@ public class TreatmentPublisherTests
             _mockBGCheckRepository.Object,
             _mockBolusCalculationRepository.Object,
             _mockTempBasalRepository.Object,
+            _mockBasalInjectionRepository.Object,
+            _mockPatientInsulinRepository.Object,
             _mockBasalRateResolver.Object,
             _mockTherapySettingsResolver.Object,
             NullLogger<TreatmentPublisher>.Instance
