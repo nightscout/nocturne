@@ -29,6 +29,12 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
         ["V3"] = "Nightscout V3",
     };
 
+    /// <summary>
+    /// Conceptual guide tags that have no operations of their own but still render as
+    /// a standalone sidebar page from their description. Added to the Nocturne document only.
+    /// </summary>
+    private static readonly string[] StandaloneDocTags = ["Idempotency"];
+
     private static readonly Dictionary<string, string> Descriptions = new()
     {
         // ── Nocturne document (V4 + Auth) ────────────────────────────────
@@ -207,6 +213,40 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
             This is reference data — it is not tenant-specific and cannot be modified via the API.
             """,
 
+        ["Idempotency"] = """
+            How Nocturne guarantees that writing the same record twice never creates a duplicate — and why there are two separate keys for it.
+
+            Diabetes data is written by two very different kinds of client, and **both retry**. A phone app may resend a `POST` after a flaky network; a background connector re-fetches overlapping time windows on every sync. To make writes safe to repeat, every V4 record carries an idempotency key and the database enforces uniqueness on it. Which key is used depends on **who is writing**.
+
+            ## Two channels
+
+            | Channel | Key | Who sets it | Why |
+            | --- | --- | --- | --- |
+            | **API clients** (apps, uploaders) | `syncIdentifier` | The client | The client owns a stable per-record ID and sends it with every write. |
+            | **Connectors** (Glooko, Dexcom, …) | `legacyId` | Nocturne | The upstream source exposes no stable per-record ID, so a deterministic hash of the record's content is derived. |
+
+            A given record normally carries **one** of these keys, not both.
+
+            ### `syncIdentifier` — client-owned
+
+            Clients that integrate over the REST API supply their own stable identifier on each write, scoped by `dataSource`. On create, if a record with the same `(dataSource, syncIdentifier)` already exists, the endpoint returns the existing record unchanged — an idempotent upsert — instead of inserting a duplicate. Enforced by a unique index on `(tenant_id, data_source, sync_identifier)`.
+
+            Use this when **you** control the writer and can guarantee a stable ID that survives retries.
+
+            ### `legacyId` — content-derived
+
+            Connectors pull from upstream platforms that rarely expose a stable per-record ID — Glooko's graph series, for example, are just timestamped points. Rather than a source ID, the connector derives a deterministic fingerprint from the record's own immutable content (event type + timestamp + salient fields). Re-syncing the same window regenerates an identical `legacyId`, so the second write is recognised as a duplicate. Enforced by a unique index on `(tenant_id, legacy_id)`.
+
+            `legacyId` also doubles as migration traceability: it ties a V4 record back to the original Nightscout/Mongo document it was decomposed from.
+
+            ## Guidance for writers
+
+            - **Building a client or uploader?** Always send `dataSource` + `syncIdentifier`, and reuse the same `syncIdentifier` when retrying the same logical record.
+            - **Building a connector?** Derive a stable `legacyId` from immutable content. The repository bulk-create paths dedupe on it automatically.
+
+            > **Footgun:** The two keys are not interchangeable per record type. A writer that populates `legacyId` but is backed by a repository that only dedupes on `syncIdentifier` (or vice-versa) will insert duplicates — or hit a unique-constraint violation on the next retry. When adding a new record type, make sure its repository honours **both** keys.
+            """,
+
         // ── Nightscout document (V1 / V2 / V3) ──────────────────────────
 
         ["V1"] = """
@@ -265,6 +305,14 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
                         usedTags.Add(openApiTag.Name);
                 }
             }
+        }
+
+        // Standalone conceptual guide pages have no operations but still render as
+        // their own sidebar entry. Only surface them in the Nocturne document.
+        if (context.DocumentName == "nocturne")
+        {
+            foreach (var docTag in StandaloneDocTags)
+                usedTags.Add(docTag);
         }
 
         // Build the document-level tag set with descriptions.
