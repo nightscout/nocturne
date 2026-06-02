@@ -4,6 +4,26 @@ import commonjs from "vite-plugin-commonjs";
 import lingo from 'vite-plugin-lingo';
 import tailwindcss from "@tailwindcss/vite";
 import { setupBridge } from "@nocturne/bridge";
+import { createRequire } from "node:module";
+import { dirname } from "node:path";
+
+// @resend/chat-sdk-adapter (via @nocturne/bot) renders email cards with React
+// (react-email). It declares react/react-dom as transitive peers, so pnpm
+// never co-locates React with the adapter in its store — a bundler or Node
+// resolving `react` from the adapter's path can't find it. Pin React to the
+// single hoisted copy (resolved at config-eval time, so it works the same on
+// Windows and CI Linux) and bundle the adapter into the SSR output (see
+// ssr.noExternal) so no unresolvable bare `react` import survives.
+//
+// Alias to the package *directories*, not their entry files: @rollup/plugin-alias
+// matches at path boundaries, so `react-dom` -> <dir> also rewrites subpaths like
+// `react-dom/server` -> <dir>/server (react-email needs that). Aliasing to a file
+// would turn `react-dom/server` into `<dir>/index.js/server` (ENOTDIR).
+const require = createRequire(import.meta.url);
+const reactAliases = {
+  react: dirname(require.resolve("react/package.json")),
+  "react-dom": dirname(require.resolve("react-dom/package.json")),
+};
 // WUCHALE-DISABLED: wuchale temporarily disabled — see also hooks.server.ts and +layout.ts
 // import { wuchale } from '@wuchale/vite-plugin'
 
@@ -13,6 +33,15 @@ export default defineConfig(({ mode }) => {
 
   return {
     assetsInclude: ["**/*.jpg", "**/*.png", "**/*.gif"],
+    resolve: {
+      alias: reactAliases,
+    },
+    ssr: {
+      // Bundle the Resend adapter (and its React deps) into the SSR output so
+      // there is no bare `react` import left for Node to resolve from pnpm's
+      // store path at prerender/runtime.
+      noExternal: ["@resend/chat-sdk-adapter"],
+    },
     plugins: [
       tailwindcss(),
       sveltekit(),
