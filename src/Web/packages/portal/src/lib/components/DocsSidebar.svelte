@@ -1,6 +1,6 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, Shield, Bell, ChevronRight, ChevronDown } from "@lucide/svelte";
+    import { Rocket, Download, Settings, Shield, Bell, Code2, ChevronRight, ChevronDown } from "@lucide/svelte";
 
     const navSections = [
         {
@@ -40,6 +40,13 @@
             icon: Settings,
             items: [
                 { href: "/docs/configuration", label: "Configuration Guide" },
+            ],
+        },
+        {
+            title: "API Reference",
+            icon: Code2,
+            items: [
+                { href: "/scalar", label: "Interactive API Docs" },
             ],
         },
     ];

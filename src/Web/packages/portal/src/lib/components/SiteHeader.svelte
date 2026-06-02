@@ -12,6 +12,7 @@
     const baseNavLinks = [
         { href: "/features", label: "Features" },
         { href: "/docs", label: "Docs" },
+        { href: "/scalar", label: "API" },
         { href: "/get-involved", label: "Contribute" },
         { href: "/faq", label: "FAQ" },
     ];
