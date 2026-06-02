@@ -70,9 +70,16 @@ try
         return 1;
     }
 
-    var envMetadata = JsonSerializer.Deserialize<EnvVarMeta[]>(
-        File.ReadAllText(envMetadataPath),
-        new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+    // Parse via JsonNode rather than reflection-based Deserialize: file-based
+    // apps run with reflection serialization disabled, which would throw.
+    var envMetadata = JsonNode.Parse(File.ReadAllText(envMetadataPath))!
+        .AsArray()
+        .Select(n => new EnvVarMeta(
+            (string)n!["name"]!,
+            (string)n["label"]!,
+            (string?)n["description"],
+            (string?)n["default"]))
+        .ToArray();
 
     var initScriptSource = Path.Combine(repoRoot, "docs", "postgres", "container-init", "00-init.sh");
     var groups = ParseAspireEnv(Path.Combine(tempDir, ".env"), envMetadata);

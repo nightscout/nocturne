@@ -71,9 +71,11 @@ class Program
             // (or env var Parameters__postgres-username) automatically.
             var postgresUsername = builder.AddParameter(
                 ServiceNames.Parameters.PostgresUsername,
-                "nocturne",
+                ServiceNames.Defaults.PostgresUsername,
                 secret: false
-            ).WithPublishMetadata("PostgreSQL bootstrap username");
+            ).WithPublishMetadata(
+                "PostgreSQL bootstrap username",
+                defaultValue: ServiceNames.Defaults.PostgresUsername);
             var postgresPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresPassword,
                 secret: true
@@ -252,15 +254,21 @@ class Program
         // Nocturne API
         // ------------------------------------------------------------------
         var api = builder
+            // Run mode: no port → Aspire assigns a dynamic one. Publish mode:
+            // pin the in-container listen port so the generated compose bakes a
+            // concrete http://nocturne-api:8080 (mirrors the web service's fixed
+            // internal port) instead of an empty NOCTURNE_API_PORT placeholder.
+            // This port is never host-published — YARP is the only entry point.
             .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
-            .WithHttpEndpoint(name: "http")
+            .WithHttpEndpoint(
+                name: "http",
+                targetPort: builder.ExecutionContext.IsPublishMode ? 8080 : null)
             .PublishAsDockerComposeService((_, _) => { })
             .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
             .WithRemoteImageTag("latest")
             .WithPublishImageMetadata(
                 imageLabel: "API image",
-                imageDefault: "ghcr.io/nightscout/nocturne/nocturne-api:latest",
-                portLabel: "API port")
+                imageDefault: "ghcr.io/nightscout/nocturne/nocturne-api:latest")
             .WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
 
         if (

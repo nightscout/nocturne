@@ -51,7 +51,7 @@ public static class PortainerComposePublisherExtensions
 
                     if (resource is ParameterResource)
                     {
-                        entries.Add(new(prefix, meta.Label, meta.Description, null));
+                        entries.Add(new(prefix, meta.Label, meta.Description, meta.Default));
                     }
                     else
                     {

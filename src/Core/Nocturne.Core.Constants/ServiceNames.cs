@@ -273,5 +273,12 @@ public static class ServiceNames
         /// Default PostgreSQL database name.
         /// </summary>
         public const string PostgresDatabase = "nocturne";
+
+        /// <summary>
+        /// Default PostgreSQL bootstrap superuser name. Used only at first
+        /// container init to create the runtime roles; the app never connects
+        /// as this user.
+        /// </summary>
+        public const string PostgresUsername = "nocturne";
     }
 }
