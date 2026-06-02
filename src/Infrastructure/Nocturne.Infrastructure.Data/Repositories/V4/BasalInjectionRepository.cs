@@ -221,15 +221,55 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     }
 
     /// <summary>
-    /// Soft-deletes basal injection records matching the given data source and sync identifier
-    /// by setting <c>DeletedAt</c> on each row. The global query filter hides soft-deleted rows
-    /// from subsequent reads; the <c>MutationAuditInterceptor</c> writes per-row audit entries
-    /// when it observes the null → non-null transition on <c>DeletedAt</c>.
+    /// Bulk-create basal injection records with LegacyId-based deduplication.
+    /// Records whose LegacyId already exists for the tenant are skipped.
     /// </summary>
-    /// <param name="dataSource">The external data source name.</param>
-    /// <param name="syncIdentifier">The external sync identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of soft-deleted records.</returns>
+    public async Task<IEnumerable<BasalInjection>> BulkCreateAsync(IEnumerable<BasalInjection> records, CancellationToken ct = default)
+    {
+        var entities = records.Select(BasalInjectionMapper.ToEntity).ToList();
+        if (entities.Count == 0)
+            return [];
+
+        // Intra-batch dedup: keep first occurrence per LegacyId
+        entities = entities
+            .GroupBy(e => !string.IsNullOrEmpty(e.LegacyId) ? e.LegacyId : e.Id.ToString())
+            .Select(g => g.First())
+            .ToList();
+
+        // DB-level dedup: filter out records whose LegacyId already exists
+        var legacyIds = entities
+            .Where(e => !string.IsNullOrEmpty(e.LegacyId))
+            .Select(e => e.LegacyId!)
+            .ToHashSet();
+
+        if (legacyIds.Count > 0)
+        {
+            var existingLegacyIds = await _context.BasalInjections.IgnoreQueryFilters().AsNoTracking()
+                .Where(e => e.TenantId == _context.TenantId)
+                .Where(e => legacyIds.Contains(e.LegacyId!))
+                .Select(e => e.LegacyId)
+                .ToListAsync(ct);
+
+            var existingSet = existingLegacyIds.ToHashSet();
+            entities = entities
+                .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                .ToList();
+        }
+
+        if (entities.Count == 0)
+            return [];
+
+        const int batchSize = 500;
+        foreach (var batch in entities.Chunk(batchSize))
+        {
+            _context.BasalInjections.AddRange(batch);
+            await _context.SaveChangesAsync(ct);
+            _context.ChangeTracker.Clear();
+        }
+
+        return entities.Select(BasalInjectionMapper.ToDomainModel);
+    }
+
     public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default)
     {
         var entities = await _context.BasalInjections

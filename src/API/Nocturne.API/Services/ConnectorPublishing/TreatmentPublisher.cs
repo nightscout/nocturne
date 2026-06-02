@@ -261,9 +261,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             if (recordList.Count == 0) return true;
 
             await ResolvePatientInsulinsForBasalInjectionsAsync(recordList, cancellationToken);
-
-            foreach (var record in recordList)
-                await _basalInjectionRepository.CreateAsync(record, cancellationToken);
+            await _basalInjectionRepository.BulkCreateAsync(recordList, cancellationToken);
 
             _logger.LogDebug("Published {Count} BasalInjection records for {Source}", recordList.Count, source);
             return true;

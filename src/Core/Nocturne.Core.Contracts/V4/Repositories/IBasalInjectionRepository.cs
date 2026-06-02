@@ -26,4 +26,13 @@ public interface IBasalInjectionRepository : IV4Repository<BasalInjection>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The matching record, or <c>null</c> if not found.</returns>
     Task<BasalInjection?> FindBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk-create basal injection records with LegacyId-based deduplication.
+    /// Records whose <see cref="BasalInjection.LegacyId"/> already exists for the tenant are skipped.
+    /// </summary>
+    /// <param name="records">The records to create.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The created records (excludes duplicates).</returns>
+    Task<IEnumerable<BasalInjection>> BulkCreateAsync(IEnumerable<BasalInjection> records, CancellationToken ct = default);
 }
