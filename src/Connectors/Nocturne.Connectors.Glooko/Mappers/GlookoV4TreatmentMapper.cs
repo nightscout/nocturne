@@ -873,33 +873,25 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             .Replace("™", "", StringComparison.Ordinal)
             .Trim();
 
-        // Try exact catalog ID match first
-        var match = InsulinCatalog.GetAll().FirstOrDefault(f =>
-            normalized.Contains(f.Id, StringComparison.OrdinalIgnoreCase));
+        // Hyphen-free version for ID matching: catalog IDs use hyphens (e.g., "humalog-u200")
+        // but Glooko names concatenate them ("HumalogU200")
+        var normalizedCompact = normalized.Replace("-", "", StringComparison.Ordinal);
+
+        // Try catalog ID match, most-specific (longest ID) first so that
+        // "HumalogU200" matches "humalog-u200" before the shorter "humalog".
+        var match = InsulinCatalog.GetAll()
+            .OrderByDescending(f => f.Id.Length)
+            .FirstOrDefault(f =>
+                normalizedCompact.Contains(f.Id.Replace("-", ""), StringComparison.OrdinalIgnoreCase));
 
         // Try matching by catalog name keywords
         if (match == null)
         {
             // Extract the first word as the brand name for matching
             var brandWord = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
-            match = InsulinCatalog.GetAll().FirstOrDefault(f =>
-                f.Name.Contains(brandWord, StringComparison.OrdinalIgnoreCase));
-        }
-
-        // Try matching concentration suffix (e.g., "U100", "U200")
-        if (match == null)
-        {
-            var candidates = InsulinCatalog.GetByCategory(primaryCategory)
-                .Concat(InsulinCatalog.GetByCategory(secondaryCategory));
-
-            foreach (var candidate in candidates)
-            {
-                if (normalized.Contains(candidate.Name.Split('(')[0].Trim(), StringComparison.OrdinalIgnoreCase))
-                {
-                    match = candidate;
-                    break;
-                }
-            }
+            match = InsulinCatalog.GetAll()
+                .OrderByDescending(f => f.Id.Length)
+                .FirstOrDefault(f => f.Name.Contains(brandWord, StringComparison.OrdinalIgnoreCase));
         }
 
         if (match != null)
