@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
@@ -17,6 +18,7 @@ public class MigrationController : ControllerBase
 {
     private readonly IMigrationJobService _migrationService;
     private readonly IConnectorConfigurationService _connectorConfigService;
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<MigrationController> _logger;
 
     /// <summary>
@@ -24,14 +26,17 @@ public class MigrationController : ControllerBase
     /// </summary>
     /// <param name="migrationService">Service for managing Nightscout data migration jobs.</param>
     /// <param name="connectorConfigService">Service for reading saved connector credentials.</param>
+    /// <param name="tenantAccessor">Resolves the current request's tenant, used to own and scope migration jobs.</param>
     /// <param name="logger">Logger instance.</param>
     public MigrationController(
         IMigrationJobService migrationService,
         IConnectorConfigurationService connectorConfigService,
+        ITenantAccessor tenantAccessor,
         ILogger<MigrationController> logger)
     {
         _migrationService = migrationService;
         _connectorConfigService = connectorConfigService;
+        _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
 
@@ -77,7 +82,7 @@ public class MigrationController : ControllerBase
             }
         }
 
-        var jobInfo = await _migrationService.StartMigrationAsync(request, ct);
+        var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
         return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
     }
 
@@ -115,7 +120,7 @@ public class MigrationController : ControllerBase
             NightscoutApiSecret = apiSecret,
         };
 
-        var jobInfo = await _migrationService.StartMigrationAsync(request, ct);
+        var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
         return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
     }
 
@@ -128,7 +133,7 @@ public class MigrationController : ControllerBase
     {
         try
         {
-            var status = await _migrationService.GetStatusAsync(jobId);
+            var status = await _migrationService.GetStatusAsync(_tenantAccessor.TenantId, jobId);
             return Ok(status);
         }
         catch (KeyNotFoundException)
@@ -146,7 +151,7 @@ public class MigrationController : ControllerBase
     {
         try
         {
-            await _migrationService.CancelAsync(jobId);
+            await _migrationService.CancelAsync(_tenantAccessor.TenantId, jobId);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -161,7 +166,7 @@ public class MigrationController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<MigrationJobInfo>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<MigrationJobInfo>>> GetHistory()
     {
-        var history = await _migrationService.GetHistoryAsync();
+        var history = await _migrationService.GetHistoryAsync(_tenantAccessor.TenantId);
         return Ok(history);
     }
 

@@ -6,6 +6,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -20,15 +21,16 @@ public interface IMigrationJobService
 {
     Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
+        TenantContext? tenantContext,
         CancellationToken ct = default
     );
 
-    /// <exception cref="KeyNotFoundException">Thrown when the migration job is not found.</exception>
-    Task<MigrationJobStatus> GetStatusAsync(Guid jobId);
+    /// <exception cref="KeyNotFoundException">Thrown when the migration job is not found for the given tenant.</exception>
+    Task<MigrationJobStatus> GetStatusAsync(Guid tenantId, Guid jobId);
 
-    /// <exception cref="KeyNotFoundException">Thrown when the migration job is not found.</exception>
-    Task CancelAsync(Guid jobId);
-    Task<IReadOnlyList<MigrationJobInfo>> GetHistoryAsync();
+    /// <exception cref="KeyNotFoundException">Thrown when the migration job is not found for the given tenant.</exception>
+    Task CancelAsync(Guid tenantId, Guid jobId);
+    Task<IReadOnlyList<MigrationJobInfo>> GetHistoryAsync(Guid tenantId);
     Task<TestMigrationConnectionResult> TestConnectionAsync(
         TestMigrationConnectionRequest request,
         CancellationToken ct = default
@@ -50,7 +52,7 @@ public class MigrationJobService : IMigrationJobService
     private readonly IServiceProvider _serviceProvider;
     private readonly IConfiguration _configuration;
     private readonly ConcurrentDictionary<Guid, MigrationJob> _jobs = new();
-    private readonly List<MigrationJobInfo> _history = [];
+    private readonly List<(Guid TenantId, MigrationJobInfo Info)> _history = [];
     private readonly object _historyLock = new();
 
     public MigrationJobService(
@@ -66,10 +68,12 @@ public class MigrationJobService : IMigrationJobService
 
     public async Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
+        TenantContext? tenantContext,
         CancellationToken ct = default
     )
     {
         var jobId = Guid.CreateVersion7();
+        var tenantId = tenantContext?.TenantId ?? Guid.Empty;
         var sourceDesc =
             request.Mode == MigrationMode.Api
                 ? request.NightscoutUrl
@@ -83,28 +87,32 @@ public class MigrationJobService : IMigrationJobService
             SourceDescription = sourceDesc,
         };
 
-        var job = new MigrationJob(jobId, request, jobInfo, _logger, _serviceProvider);
+        var job = new MigrationJob(jobId, tenantId, request, jobInfo, tenantContext, _logger, _serviceProvider);
         _jobs[jobId] = job;
 
         lock (_historyLock)
         {
-            _history.Add(jobInfo);
+            _history.Add((tenantId, jobInfo));
         }
 
-        // Start migration in background
+        // Start migration on a detached background task. This deliberately does NOT use the
+        // request's CancellationToken (HttpContext.RequestAborted): the migration is designed to
+        // outlive the HTTP request that kicked it off, and tying it to the request token would
+        // cancel/abort it as soon as that request completes. User-initiated cancellation flows
+        // through the job's own CancellationTokenSource via Cancel().
         _ = Task.Run(
             async () =>
             {
                 try
                 {
-                    await job.ExecuteAsync(ct);
+                    await job.ExecuteAsync(CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Migration job {JobId} failed", jobId);
                 }
             },
-            ct
+            CancellationToken.None
         );
 
         _logger.LogInformation(
@@ -117,9 +125,9 @@ public class MigrationJobService : IMigrationJobService
         return jobInfo;
     }
 
-    public Task<MigrationJobStatus> GetStatusAsync(Guid jobId)
+    public Task<MigrationJobStatus> GetStatusAsync(Guid tenantId, Guid jobId)
     {
-        if (_jobs.TryGetValue(jobId, out var job))
+        if (_jobs.TryGetValue(jobId, out var job) && job.TenantId == tenantId)
         {
             return Task.FromResult(job.GetStatus());
         }
@@ -127,9 +135,9 @@ public class MigrationJobService : IMigrationJobService
         throw new KeyNotFoundException($"Migration job {jobId} not found");
     }
 
-    public Task CancelAsync(Guid jobId)
+    public Task CancelAsync(Guid tenantId, Guid jobId)
     {
-        if (_jobs.TryGetValue(jobId, out var job))
+        if (_jobs.TryGetValue(jobId, out var job) && job.TenantId == tenantId)
         {
             job.Cancel();
             _logger.LogInformation("Cancelled migration job {JobId}", jobId);
@@ -139,11 +147,12 @@ public class MigrationJobService : IMigrationJobService
         throw new KeyNotFoundException($"Migration job {jobId} not found");
     }
 
-    public Task<IReadOnlyList<MigrationJobInfo>> GetHistoryAsync()
+    public Task<IReadOnlyList<MigrationJobInfo>> GetHistoryAsync(Guid tenantId)
     {
         lock (_historyLock)
         {
-            return Task.FromResult<IReadOnlyList<MigrationJobInfo>>(_history.ToList());
+            return Task.FromResult<IReadOnlyList<MigrationJobInfo>>(
+                _history.Where(h => h.TenantId == tenantId).Select(h => h.Info).ToList());
         }
     }
 
@@ -347,11 +356,16 @@ public class MigrationJobService : IMigrationJobService
 internal class MigrationJob
 {
     private readonly Guid _id;
+    private readonly Guid _tenantId;
     private readonly StartMigrationRequest _request;
     private readonly MigrationJobInfo _info;
+    private readonly TenantContext? _tenantContext;
     private readonly ILogger _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly CancellationTokenSource _cts = new();
+
+    /// <summary>The tenant that owns this migration job. Used to scope status/cancel lookups.</summary>
+    public Guid TenantId => _tenantId;
     private MigrationJobState _state = MigrationJobState.Pending;
     private string? _currentOperation;
     private string? _errorMessage;
@@ -363,17 +377,38 @@ internal class MigrationJob
 
     public MigrationJob(
         Guid id,
+        Guid tenantId,
         StartMigrationRequest request,
         MigrationJobInfo info,
+        TenantContext? tenantContext,
         ILogger logger,
         IServiceProvider serviceProvider
     )
     {
         _id = id;
+        _tenantId = tenantId;
         _request = request;
         _info = info;
+        _tenantContext = tenantContext;
         _logger = logger;
         _serviceProvider = serviceProvider;
+    }
+
+    /// <summary>
+    /// Creates a DI scope for migration work and propagates the owning tenant's context into it,
+    /// so that tenant-scoped services (NocturneDbContext, decomposers, repositories) resolve and
+    /// write under the correct tenant. The migration runs on a detached background task with no
+    /// ambient request scope, so the tenant must be re-applied explicitly here — mirroring the
+    /// pattern used by other background services (e.g. ConnectorBackgroundService).
+    /// </summary>
+    private IServiceScope CreateTenantScope()
+    {
+        var scope = _serviceProvider.CreateScope();
+        if (_tenantContext is not null)
+        {
+            scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(_tenantContext);
+        }
+        return scope;
     }
 
     public MigrationJobStatus GetStatus() =>
@@ -445,7 +480,7 @@ internal class MigrationJob
     {
         _currentOperation = "Connecting to Nightscout";
 
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = CreateTenantScope();
         var httpClientFactory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
         var httpClient = httpClientFactory.CreateClient();
         httpClient.BaseAddress = new Uri(_request.NightscoutUrl!.TrimEnd('/'));
@@ -581,7 +616,7 @@ internal class MigrationJob
         DateTime? currentTo = null;
         const int pageSize = 10000;
 
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<IEntryDecomposer>();
 
         while (true)
@@ -655,7 +690,7 @@ internal class MigrationJob
         DateTime? currentTo = null;
         const int pageSize = 10000;
 
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<ITreatmentDecomposer>();
 
         while (true)
@@ -728,7 +763,7 @@ internal class MigrationJob
         DateTime? currentTo = null;
         const int pageSize = 10000;
 
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<IDeviceStatusDecomposer>();
 
         while (true)
@@ -812,7 +847,7 @@ internal class MigrationJob
             UpdateCollectionProgress(collectionName, profiles.Length, 0, 0, false);
             UpdateOverallProgress();
 
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = CreateTenantScope();
             var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
 
             foreach (var profile in profiles)
@@ -964,7 +999,7 @@ internal class MigrationJob
         DateTime? currentTo = null;
         const int pageSize = 10000;
 
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<IActivityDecomposer>();
 
         while (true)
@@ -1028,7 +1063,7 @@ internal class MigrationJob
         var client = new MongoClient(_request.MongoConnectionString);
         var database = client.GetDatabase(_request.MongoDatabaseName);
 
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = CreateTenantScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
 
         // List available collections
@@ -1199,7 +1234,7 @@ internal class MigrationJob
         if (doc.Contains("_id"))
             status.Id = doc["_id"].AsObjectId.ToString();
 
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<Core.Contracts.V4.IDeviceStatusDecomposer>();
         await decomposer.DecomposeAsync(status, ct);
     }
@@ -1244,7 +1279,7 @@ internal class MigrationJob
             LoopSettings = loopSettings,
         };
 
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
         await decomposer.DecomposeAsync(profile, ct);
     }
