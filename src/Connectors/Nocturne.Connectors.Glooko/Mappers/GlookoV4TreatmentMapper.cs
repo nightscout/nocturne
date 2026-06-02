@@ -874,8 +874,10 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
             .Trim();
 
         // Hyphen-free version for ID matching: catalog IDs use hyphens (e.g., "humalog-u200")
-        // but Glooko names concatenate them ("HumalogU200")
-        var normalizedCompact = normalized.Replace("-", "", StringComparison.Ordinal);
+        // but Glooko names concatenate them ("HumalogU200") or use spaces ("Humulin R U500")
+        var normalizedCompact = normalized
+            .Replace("-", "", StringComparison.Ordinal)
+            .Replace(" ", "", StringComparison.Ordinal);
 
         // Try catalog ID match, most-specific (longest ID) first so that
         // "HumalogU200" matches "humalog-u200" before the shorter "humalog".
