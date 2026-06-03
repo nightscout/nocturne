@@ -1609,10 +1609,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_temp_basals_tenant_start_timestamp")
             .IsDescending(false, true);
 
-        // Devices unique index (scoped to live records)
+        // Devices unique index (scoped to live records, per tenant).
+        // TenantId must be part of the key: devices are tenant-owned (FindByCategoryTypeAndSerialAsync
+        // is RLS-scoped to the current tenant) and the type/serial often carry shared, non-unique
+        // values — e.g. a pump's manufacturer/model ("Insulet"/"Omnipod 5") or the generic Loop
+        // uploader identity ("iPhone"/"unknown"). Without TenantId the constraint is global, so the
+        // first tenant to register such a device permanently blocks every other tenant's insert,
+        // surfacing as a 500 on devicestatus ingestion (and a network error in Loop).
         modelBuilder
             .Entity<DeviceEntity>()
-            .HasIndex(e => new { e.Category, e.Type, e.Serial })
+            .HasIndex(e => new { e.TenantId, e.Category, e.Type, e.Serial })
             .HasDatabaseName("ix_devices_category_type_serial")
             .IsUnique()
             .HasFilter("deleted_at IS NULL");
