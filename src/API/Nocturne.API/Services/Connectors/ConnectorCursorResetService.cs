@@ -140,25 +140,44 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
 
         var results = new List<ConnectorCursorResetResult>(configs.Count);
 
+        // Loop-invariant: setting To forces "explicit range" mode in the connectors, bypassing the
+        // per-type catch-up cursors so history is genuinely re-pulled. A null From means no lower bound.
+        var request = new SyncRequest
+        {
+            From = from,
+            To = DateTime.UtcNow,
+            DataTypes = dataTypes ?? [],
+        };
+
         foreach (var config in configs)
         {
             ct.ThrowIfCancellationRequested();
-
-            // Setting To forces "explicit range" mode in the connectors, bypassing the per-type
-            // catch-up cursors so history is genuinely re-pulled. A null From means no lower bound.
-            var request = new SyncRequest
-            {
-                From = from,
-                To = DateTime.UtcNow,
-                DataTypes = dataTypes ?? [],
-            };
 
             _logger.LogInformation(
                 "Resetting cursor for connector {ConnectorName} in tenant {TenantSlug} (from {From})",
                 config.ConnectorName, tenant.Slug, from?.ToString("o") ?? "beginning");
 
-            var result = await _syncService.TriggerSyncAsync(config.ConnectorName, request, ct);
-            results.Add(new ConnectorCursorResetResult(config.ConnectorName, result));
+            // Isolate each connector: one failing must not abort the rest of the tenant's fan-out,
+            // and the response should carry one entry per configured connector. Cancellation still
+            // propagates so a cancelled request stops cleanly.
+            try
+            {
+                var result = await _syncService.TriggerSyncAsync(config.ConnectorName, request, ct);
+                results.Add(new ConnectorCursorResetResult(config.ConnectorName, result));
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Cursor reset failed for connector {ConnectorName} in tenant {TenantSlug}",
+                    config.ConnectorName, tenant.Slug);
+                results.Add(new ConnectorCursorResetResult(
+                    config.ConnectorName,
+                    new SyncResult { Success = false, Message = ex.Message }));
+            }
         }
 
         _logger.LogInformation(
