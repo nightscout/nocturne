@@ -73,6 +73,24 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
         var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
 
+        // Authenticate up front. The data fetches below treat a missing token as "no data" and
+        // return null without raising an error, so without this gate an auth failure (e.g. bad
+        // credentials returning 401) would be recorded as a successful, healthy sync — masking a
+        // broken connector so it never surfaces as unhealthy. Fail the sync explicitly instead.
+        // The token is cached, so the fetches below reuse it rather than re-authenticating.
+        if (activeTypes.Count > 0)
+        {
+            var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
+            if (string.IsNullOrEmpty(token))
+            {
+                result.Success = false;
+                result.Errors.Add("Authentication failed");
+                result.EndTime = DateTimeOffset.UtcNow;
+                _logger.LogWarning("[{ConnectorSource}] Sync failed: authentication unsuccessful", ConnectorSource);
+                return result;
+            }
+        }
+
         // Handle Glucose (CBG + SMBG → SensorGlucose)
         if (activeTypes.Contains(SyncDataType.Glucose))
         {
