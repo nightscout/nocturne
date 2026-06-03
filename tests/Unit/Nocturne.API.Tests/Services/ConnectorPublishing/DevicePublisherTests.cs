@@ -16,16 +16,19 @@ public class DevicePublisherTests
 {
     private readonly Mock<IDeviceStatusDecomposer> _mockDecomposer;
     private readonly Mock<IDeviceEventRepository> _mockDeviceEventRepository;
+    private readonly Mock<IApsSnapshotRepository> _mockApsSnapshotRepository;
     private readonly DevicePublisher _publisher;
 
     public DevicePublisherTests()
     {
         _mockDecomposer = new Mock<IDeviceStatusDecomposer>();
         _mockDeviceEventRepository = new Mock<IDeviceEventRepository>();
+        _mockApsSnapshotRepository = new Mock<IApsSnapshotRepository>();
 
         _publisher = new DevicePublisher(
             _mockDecomposer.Object,
             _mockDeviceEventRepository.Object,
+            _mockApsSnapshotRepository.Object,
             NullLogger<DevicePublisher>.Instance
         );
     }

@@ -13,7 +13,7 @@ public sealed class ScalarExtensionsDocumentTransformer : IOpenApiDocumentTransf
 {
     private static readonly Dictionary<string, string[]> NocturneTagGroups = new()
     {
-        ["Concepts"] = ["Idempotency"],
+        ["Concepts"] = ["Syncing"],
         ["Authentication & Identity"] = ["Authentication", "OIDC Discovery", "Identity"],
         ["Health Data"] = ["Glucose", "Treatments", "Health", "Devices", "State Spans"],
         ["Insights & Alerting"] = ["Analytics", "Current Therapy State", "Monitoring"],
@@ -72,7 +72,7 @@ public sealed class ScalarExtensionsDocumentTransformer : IOpenApiDocumentTransf
     {
         var used = new HashSet<string>(StringComparer.Ordinal);
 
-        // Document-level tags include standalone conceptual pages (e.g. Idempotency)
+        // Document-level tags include standalone conceptual pages (e.g. Syncing)
         // added by TagDescriptionDocumentTransformer, which runs before this one.
         if (document.Tags is not null)
             foreach (var tag in document.Tags)

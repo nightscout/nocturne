@@ -183,4 +183,35 @@ internal sealed class MetadataPublisher : IMetadataPublisher
             return false;
         }
     }
+
+    /// <summary>
+    /// Returns the timestamp of the most recent activity record for the current tenant,
+    /// or <c>null</c> if none exist. Activities are stored across decomposed sources (StateSpans,
+    /// HeartRate, StepCount); <see cref="IActivityService.GetActivitiesAsync"/> merges them and
+    /// orders newest-first, so requesting a single record yields the global latest. Like
+    /// <see cref="ITreatmentPublisher.GetLatestTreatmentTimestampAsync"/>, this is not source-filtered.
+    /// </summary>
+    public async Task<DateTime?> GetLatestActivityTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default)
+    {
+        // TODO: Filter by source to support multi-connector catch-up. Currently returns global latest.
+        var latest = (await _activityService.GetActivitiesAsync(
+                count: 1,
+                skip: 0,
+                cancellationToken: cancellationToken))
+            .FirstOrDefault();
+
+        if (latest == null)
+            return null;
+
+        if (!string.IsNullOrEmpty(latest.CreatedAt)
+            && DateTime.TryParse(latest.CreatedAt, out var createdAt))
+            return createdAt;
+
+        if (latest.Mills > 0)
+            return DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills).UtcDateTime;
+
+        return null;
+    }
 }

@@ -15,15 +15,18 @@ internal sealed class DevicePublisher : IDevicePublisher
 {
     private readonly IDeviceStatusDecomposer _decomposer;
     private readonly IDeviceEventRepository _deviceEventRepository;
+    private readonly IApsSnapshotRepository _apsSnapshotRepository;
     private readonly ILogger<DevicePublisher> _logger;
 
     public DevicePublisher(
         IDeviceStatusDecomposer decomposer,
         IDeviceEventRepository deviceEventRepository,
+        IApsSnapshotRepository apsSnapshotRepository,
         ILogger<DevicePublisher> logger)
     {
         _decomposer = decomposer ?? throw new ArgumentNullException(nameof(decomposer));
         _deviceEventRepository = deviceEventRepository ?? throw new ArgumentNullException(nameof(deviceEventRepository));
+        _apsSnapshotRepository = apsSnapshotRepository ?? throw new ArgumentNullException(nameof(apsSnapshotRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -69,4 +72,15 @@ internal sealed class DevicePublisher : IDevicePublisher
             return false;
         }
     }
+
+    /// <summary>
+    /// Returns the timestamp of the most recent device-status record for the current tenant,
+    /// using the <c>aps_snapshots</c> watermark — the dominant loop/openaps/pump device-status
+    /// source after decomposition. Like <see cref="ITreatmentPublisher.GetLatestTreatmentTimestampAsync"/>,
+    /// this is not source-filtered and returns the global latest for the tenant.
+    /// </summary>
+    public async Task<DateTime?> GetLatestDeviceStatusTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default)
+        => await _apsSnapshotRepository.GetLatestTimestampAsync(null, cancellationToken);
 }

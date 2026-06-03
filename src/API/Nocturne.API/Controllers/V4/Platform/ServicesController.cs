@@ -436,6 +436,55 @@ public class ServicesController : ControllerBase
     }
 
     /// <summary>
+    /// Reset a connector's sync cursor for the current tenant and re-pull historical data.
+    /// </summary>
+    /// <remarks>
+    /// Nocturne does not persist a sync cursor — each data type resumes from the latest record
+    /// already stored. This endpoint forces a fresh ingest of history by running an explicit-range
+    /// sync (an upper bound of "now" bypasses the per-type catch-up cursors), so the effect is a
+    /// cursor reset. Re-ingested records are deduplicated on their idempotency keys (see the
+    /// "Syncing" guide), so it is safe to run after fixing a connector bug to push corrected data
+    /// to a tenant.
+    /// </remarks>
+    /// <param name="id">Connector ID (e.g., "nightscout", "dexcom").</param>
+    /// <param name="request">Optional lower bound and data-type filter. Omit <c>from</c> to re-pull all available history; omit <c>dataTypes</c> to reset every supported type.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Sync result with success status and details.</returns>
+    [HttpPost("connectors/{id}/reset-cursor")]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
+    [ProducesResponseType(400)]
+    public async Task<
+        ActionResult<Nocturne.Connectors.Core.Models.SyncResult>
+    > ResetConnectorCursor(
+        string id,
+        [FromBody] ResetCursorRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            return Problem(detail: "Connector ID is required", statusCode: 400, title: "Bad Request");
+
+        // Setting To forces "explicit range" mode in the connectors, bypassing the per-type
+        // catch-up cursors so history is genuinely re-pulled rather than resumed from the latest
+        // stored record. A null From means no lower bound — re-pull everything available.
+        var syncRequest = new Nocturne.Connectors.Core.Models.SyncRequest
+        {
+            From = request.From,
+            To = DateTime.UtcNow,
+            DataTypes = request.DataTypes ?? [],
+        };
+
+        _logger.LogInformation(
+            "Cursor reset requested for connector {ConnectorId} (from {From})",
+            id,
+            request.From?.ToString("o") ?? "beginning");
+
+        var result = await _connectorSyncService.TriggerSyncAsync(id, syncRequest, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Get sync status for a specific connector, including latest timestamps and connector state.
     /// Used by connectors on startup to determine where to resume syncing from.
     /// </summary>
@@ -547,6 +596,24 @@ public class ServicesController : ControllerBase
         return $"{request.Scheme}://{request.Host}";
     }
 
+}
+
+/// <summary>
+/// Request body for resetting a connector's sync cursor and re-pulling history.
+/// </summary>
+public class ResetCursorRequest
+{
+    /// <summary>
+    /// Optional lower bound for the re-pull. When null, no lower bound is applied and all
+    /// available history is re-ingested.
+    /// </summary>
+    public DateTime? From { get; init; }
+
+    /// <summary>
+    /// Optional set of data types to reset. When null or empty, every data type the connector
+    /// supports is re-pulled.
+    /// </summary>
+    public List<Nocturne.Connectors.Core.Models.SyncDataType>? DataTypes { get; init; }
 }
 
 /// <summary>

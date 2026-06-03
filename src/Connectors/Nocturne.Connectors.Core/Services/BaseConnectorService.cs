@@ -161,6 +161,64 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
+    ///     Get the timestamp of the most recent device status from the Nocturne API
+    ///     This enables independent "catch up" for device status, decoupled from glucose
+    /// </summary>
+    private async Task<DateTime?> FetchLatestDeviceStatusTimestampAsync(TConfig config)
+    {
+        if (_publisher is not { IsAvailable: true })
+        {
+            _logger.LogDebug(
+                "API data submitter not available, cannot fetch latest device status timestamp"
+            );
+            return null;
+        }
+
+        try
+        {
+            return await _publisher.Device.GetLatestDeviceStatusTimestampAsync(ConnectorSource);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to fetch latest device status timestamp for {ConnectorSource}",
+                ConnectorSource
+            );
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     Get the timestamp of the most recent activity record from the Nocturne API
+    ///     This enables independent "catch up" for activity, decoupled from glucose
+    /// </summary>
+    private async Task<DateTime?> FetchLatestActivityTimestampAsync(TConfig config)
+    {
+        if (_publisher is not { IsAvailable: true })
+        {
+            _logger.LogDebug(
+                "API data submitter not available, cannot fetch latest activity timestamp"
+            );
+            return null;
+        }
+
+        try
+        {
+            return await _publisher.Metadata.GetLatestActivityTimestampAsync(ConnectorSource);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to fetch latest activity timestamp for {ConnectorSource}",
+                ConnectorSource
+            );
+            return null;
+        }
+    }
+
+    /// <summary>
     ///     Calculate the optimal "since" timestamp for fetching glucose entries
     ///     Uses catch-up logic to fetch from the most recent entry, or falls back to default lookback
     /// </summary>
@@ -197,9 +255,34 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Helper method to calculate the since timestamp from a latest timestamp
+    ///     Calculate an independent catch-up "since" timestamp for device status.
+    ///     Returns the most recent device-status timestamp (minus a small overlap), or
+    ///     <c>null</c> when none exists — letting the caller decide its own fallback
+    ///     rather than forcing a full initial-window re-fetch of high-volume telemetry.
     /// </summary>
-    private DateTime CalculateSinceFromTimestamp(DateTime? latestTimestamp, string dataType)
+    protected async Task<DateTime?> CalculateDeviceStatusCatchUpSinceAsync(TConfig config)
+    {
+        var latest = await FetchLatestDeviceStatusTimestampAsync(config);
+        return TryCalculateCatchUpSince(latest, "device status");
+    }
+
+    /// <summary>
+    ///     Calculate an independent catch-up "since" timestamp for activity.
+    ///     Returns the most recent activity timestamp (minus a small overlap), or
+    ///     <c>null</c> when none exists so the caller can choose its own fallback.
+    /// </summary>
+    protected async Task<DateTime?> CalculateActivityCatchUpSinceAsync(TConfig config)
+    {
+        var latest = await FetchLatestActivityTimestampAsync(config);
+        return TryCalculateCatchUpSince(latest, "activity");
+    }
+
+    /// <summary>
+    ///     Applies the catch-up overlap to a latest-record timestamp: returns the timestamp
+    ///     minus a small overlap (to absorb clock drift), or <c>null</c> when there is no
+    ///     usable prior timestamp.
+    /// </summary>
+    private DateTime? TryCalculateCatchUpSince(DateTime? latestTimestamp, string dataType)
     {
         if (latestTimestamp.HasValue && latestTimestamp.Value > DateTime.MinValue.AddMinutes(10))
         {
@@ -214,6 +297,19 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             );
             return sinceWithOverlap;
         }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     Helper method to calculate the since timestamp from a latest timestamp.
+    ///     Falls back to a 6-month initial window when no prior data exists.
+    /// </summary>
+    private DateTime CalculateSinceFromTimestamp(DateTime? latestTimestamp, string dataType)
+    {
+        var catchUpSince = TryCalculateCatchUpSince(latestTimestamp, dataType);
+        if (catchUpSince.HasValue)
+            return catchUpSince.Value;
 
         // Fallback to 6 months for initial sync if no existing data found
         var fallbackSince = DateTime.UtcNow.AddMonths(-6);
