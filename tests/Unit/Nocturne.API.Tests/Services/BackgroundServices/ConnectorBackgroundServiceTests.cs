@@ -31,16 +31,19 @@ public class ConnectorBackgroundServiceTests
     {
         private readonly SyncResult _syncResult;
         private readonly Action? _onSync;
+        private readonly Action<IServiceProvider>? _onSyncScope;
 
         public TestConnectorBackgroundService(
             IServiceProvider serviceProvider,
             SyncResult syncResult,
             ILogger logger,
-            Action? onSync = null)
+            Action? onSync = null,
+            Action<IServiceProvider>? onSyncScope = null)
             : base(serviceProvider, logger)
         {
             _syncResult = syncResult;
             _onSync = onSync;
+            _onSyncScope = onSyncScope;
         }
 
         protected override string ConnectorName => "TestConnector";
@@ -52,6 +55,7 @@ public class ConnectorBackgroundServiceTests
             ISyncProgressReporter? progressReporter = null)
         {
             _onSync?.Invoke();
+            _onSyncScope?.Invoke(scopeProvider);
             return Task.FromResult(_syncResult);
         }
 
@@ -438,6 +442,57 @@ public class ConnectorBackgroundServiceTests
                 It.IsAny<CancellationToken>()),
             Times.Once,
             "Expected error message to be cleared on successful sync");
+    }
+
+    [Fact]
+    public async Task SyncForTenant_PinsScopedDbContextToSyncedTenant_ForRlsIsolation()
+    {
+        // Regression test for the connector-wide outage: NocturneDbContext is leased from a pool
+        // (AddPooledDbContextFactory) and its TenantId is NOT reset between leases. The background
+        // sync must set dbContext.TenantId to the tenant being synced — otherwise the
+        // TenantConnectionInterceptor applies a stale/empty RLS tenant, tenant-scoped reads
+        // (connector config + secrets) silently return nothing, and every connector authenticates
+        // with empty credentials. Before the fix the scoped context stayed at Guid.Empty here.
+        var (cleanup, connStr, tenantId) = CreateSqliteDbWithTenantId();
+        using var _ = cleanup;
+
+        var syncResult = new SyncResult { Success = true, Message = "OK" };
+
+        var configServiceMock = new Mock<IConnectorConfigurationService>();
+        configServiceMock
+            .Setup(x => x.GetConfigurationAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = "TestConnector",
+                IsActive = true,
+                Configuration = JsonDocument.Parse("{\"enabled\": true, \"syncIntervalMinutes\": 5}")
+            });
+        configServiceMock
+            .Setup(x => x.GetSecretsAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+        configServiceMock
+            .Setup(x => x.UpdateHealthStateAsync(
+                It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<bool?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var config = new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 };
+        var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
+
+        Guid? capturedTenantId = null;
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            syncResult,
+            NullLogger<TestConnectorBackgroundService>.Instance,
+            onSyncScope: sp => capturedTenantId = sp.GetRequiredService<NocturneDbContext>().TenantId);
+
+        // Act
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        // Assert — the scoped DbContext the connector services share must be pinned to the synced
+        // tenant so RLS scopes correctly.
+        Assert.Equal(tenantId, capturedTenantId);
     }
 
     [Fact]

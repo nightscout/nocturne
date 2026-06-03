@@ -252,6 +252,17 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         dbContext.AuditContext = SystemAuditContext.ForService($"connector:{ConnectorName}");
 
+        // Pin the RLS tenant on the scoped DbContext. NocturneDbContext is leased from a pool
+        // (AddPooledDbContextFactory) and its TenantId is NOT reset between leases, so a context
+        // can arrive carrying a previous lessee's tenant. On HTTP requests the auth handlers set
+        // dbContext.TenantId explicitly; background syncs have no such handler, so we must set it
+        // here. Setting ITenantAccessor alone does not retro-fit the already-leased context — the
+        // TenantConnectionInterceptor reads NocturneDbContext.TenantId to configure RLS on connection
+        // open. Without this, tenant-scoped reads (connector config + secrets) run under a stale or
+        // empty tenant and silently return nothing, so every connector authenticates with empty
+        // credentials and no data syncs.
+        dbContext.TenantId = tenantId;
+
         // Load per-tenant config via the loader
         var loader = scope.ServiceProvider.GetRequiredService<IConnectorConfigurationLoader<TConfig>>();
         TConfig config;
