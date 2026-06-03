@@ -58,6 +58,12 @@ public class TenantResolutionMiddleware
         // so login must not be tenant-gated. On a subdomain the tenant still resolves
         // normally; this only allows the apex (tenantless) case through.
         "/api/auth/oidc/login",
+        // The OIDC callback is the registered redirect_uri (apex). For apex-initiated
+        // logins the state carries no TenantSlug, so OidcCallbackRedirectMiddleware
+        // can't bounce it to a subdomain and it must process here. The session it
+        // issues is subject-scoped (no tenant needed). Subdomain-originated callbacks
+        // are already redirected to their subdomain before reaching this point.
+        "/api/auth/oidc/callback",
     ];
 
     /// <summary>
