@@ -52,6 +52,12 @@ public class TenantResolutionMiddleware
         "/api/metadata",
         "/api/v4/chat-identity/directory/resolve",
         "/api/v4/chat-identity/directory/pending-links",
+        // OIDC login can be initiated from the apex (no subdomain) — e.g. the
+        // platform-access grant bounces an unauthenticated operator here. OIDC is
+        // centralized at the apex (the registered redirect_uri is the apex callback),
+        // so login must not be tenant-gated. On a subdomain the tenant still resolves
+        // normally; this only allows the apex (tenantless) case through.
+        "/api/auth/oidc/login",
     ];
 
     /// <summary>
