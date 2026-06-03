@@ -119,8 +119,16 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
         }
 
         // Switch the ambient tenant context to the target tenant so that RLS-scoped queries and the
-        // sync executors operate under the right tenant. This is the same mechanism the dev-only
-        // sync-all endpoint and the migration background jobs use.
+        // sync executors operate under the right tenant.
+        //
+        // The TenantConnectionInterceptor sets the RLS GUC from NocturneDbContext.TenantId on each
+        // connection open (and RESETs it on close), so the *DbContext's* TenantId is what actually
+        // scopes our own queries below — updating ITenantAccessor alone does not retro-fit the
+        // already-created _db. Set it explicitly, otherwise the ConnectorConfigurations query runs
+        // under the admin's (or empty) tenant and silently finds no connectors. SetTenantGucAsync is
+        // belt-and-suspenders for the current connection; SetTenant propagates to the executor scope
+        // that IConnectorSyncService.TriggerSyncAsync creates.
+        _db.TenantId = tenantId;
         await SetTenantGucAsync(tenantId, ct);
         _tenantAccessor.SetTenant(new TenantContext(
             tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo));
@@ -169,6 +177,9 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
         if (tenant is null)
             return null;
 
+        // See ResetTenantCursorsAsync: the interceptor scopes connections by DbContext.TenantId,
+        // so set it on _db before the RLS-scoped query below.
+        _db.TenantId = tenantId;
         await SetTenantGucAsync(tenantId, ct);
 
         var connectors = await _db.ConnectorConfigurations.AsNoTracking()
