@@ -47,6 +47,7 @@
     PlayCircle,
     History as HistoryIcon,
     SlidersHorizontal,
+    RefreshCw,
   } from "lucide-svelte";
   import { getSidebarReportItems } from "$lib/navigation/report-navigation";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
@@ -313,7 +314,10 @@
           icon: HeartHandshake,
         },
         ...(isPlatformAdmin
-          ? [{ title: "Tenant Management", href: "/settings/admin/tenants", icon: Building2 }]
+          ? [
+              { title: "Tenant Management", href: "/settings/admin/tenants", icon: Building2 },
+              { title: "Reset Connector Cursors", href: "/settings/admin/connector-cursors", icon: RefreshCw },
+            ]
           : []),
       ],
     });

@@ -751,6 +751,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConnectorConfigurationService, ConnectorConfigurationService>();
         services.AddScoped<PlatformSettingsService>();
         services.AddScoped<IConnectorSyncService, ConnectorSyncService>();
+        services.AddScoped<IConnectorCursorResetService, ConnectorCursorResetService>();
 
         // Connector runtime
         services.AddBaseConnectorServices();
