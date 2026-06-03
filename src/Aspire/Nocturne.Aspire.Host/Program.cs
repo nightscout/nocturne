@@ -514,6 +514,13 @@ class Program
                 yarp.AddRoute("/api/v4/dev-only/{**catch-all}", api.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
+                // Platform-admin tenant-access grant → API (sets the .basedomain grant cookie on a
+                // browser navigation; must come before /api/ → web catch-all)
+                yarp.AddRoute("/api/auth/platform-access/{**catch-all}", api.GetEndpoint("http"))
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                yarp.AddRoute("/api/auth/platform-access", api.GetEndpoint("http"))
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+
                 // Bot webhooks, remote functions → web
                 yarp.AddRoute("/api/{**catch-all}", webEndpoints.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);

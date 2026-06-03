@@ -94,6 +94,32 @@ public class MemberScopeMiddlewareTests
     }
 
     [Fact]
+    public async Task PlatformAccess_AlwaysGetsSuperuserAccess()
+    {
+        // A platform-admin tenant-access grant (verified + tenant-pinned by
+        // PlatformAccessCookieHandler) gets full superuser on the granted tenant,
+        // with no membership lookup.
+        var (middleware, context) = Build(new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.PlatformAccess,
+            SubjectId = _subjectId,
+            TenantId = _tenantId,
+            Scopes = [],
+        });
+
+        await middleware.InvokeAsync(context);
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().Contain("*");
+
+        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        permissionTrie.Should().NotBeNull();
+        permissionTrie!.Check("*").Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ApiKey_WithMultipleScopes_GrantsOnlyThoseScopes()
     {
         var (middleware, context) = Build(new AuthContext

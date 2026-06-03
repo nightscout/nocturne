@@ -188,8 +188,10 @@ public class AuthenticationMiddleware
         var resolvedAuth = context.Items["AuthContext"] as AuthContext;
         if (resolvedAuth is { IsAuthenticated: true, SubjectId: not null, TenantId: not null })
         {
-            // Skip membership check for ApiSecret and InstanceKey auth (grants admin on the resolved tenant)
-            if (resolvedAuth.AuthType is not (AuthType.ApiKey or AuthType.InstanceKey))
+            // Skip membership check for ApiSecret and InstanceKey auth (grants admin on the resolved
+            // tenant), and for PlatformAccess grants (PlatformAccessCookieHandler already proved the
+            // grant is platform-access-marked and pinned to this tenant).
+            if (resolvedAuth.AuthType is not (AuthType.ApiKey or AuthType.InstanceKey or AuthType.PlatformAccess))
             {
                 var tenantMemberService = context.RequestServices.GetRequiredService<ITenantMemberService>();
                 var isMember = await tenantMemberService.IsMemberAsync(

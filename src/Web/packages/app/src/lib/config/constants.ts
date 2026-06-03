@@ -18,6 +18,9 @@ export const WEBSOCKET_PING_INTERVAL_MS = 20_000;
 // if anyone reports a conflict.
 export const COOKIE_ACCESS_TOKEN_NAME = ".Nocturne.AccessToken";
 export const COOKIE_REFRESH_TOKEN_NAME = ".Nocturne.RefreshToken";
+// Platform-admin tenant-access grant (short-lived, tenant-pinned). Must be forwarded
+// to the API alongside the session so out-of-tenant superuser requests carry it.
+export const COOKIE_PLATFORM_ACCESS_NAME = ".Nocturne.PlatformAccess";
 
 // OpenTelemetry service identity (build-time, not deployment config)
 export const OTEL_SERVICE_NAME = "nocturne-web";

@@ -66,8 +66,10 @@ public class MemberScopeMiddleware
             return;
         }
 
-        // InstanceKey: infrastructure auth, always superuser — no membership lookup needed
-        if (authContext.AuthType is AuthType.InstanceKey)
+        // InstanceKey: infrastructure auth, always superuser — no membership lookup needed.
+        // PlatformAccess: a platform-admin tenant-access grant, pinned to this tenant and verified
+        // by PlatformAccessCookieHandler — full superuser on the granted tenant, no membership.
+        if (authContext.AuthType is AuthType.InstanceKey or AuthType.PlatformAccess)
         {
             var superuserScopes = new HashSet<string> { "*" };
             context.Items["GrantedScopes"] = (IReadOnlySet<string>)superuserScopes;

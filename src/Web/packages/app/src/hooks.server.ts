@@ -144,12 +144,14 @@ const authHandle: Handle = async ({ event, resolve }) => {
     // performed by the API (via SessionCookieHandler auto-refresh) back to
     // the browser, so rotated refresh tokens don't silently disappear.
     const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
+    const platformAccessToken = event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
     const forwardedHost = getEffectiveHost(event.request, event.cookies);
     const authExtraHeaders: Record<string, string> = { "X-Forwarded-Proto": getOriginalProto(event.request) };
     if (forwardedHost) authExtraHeaders["X-Forwarded-Host"] = forwardedHost;
     const apiClient = createServerApiClient(apiBaseUrl, fetch, {
       accessToken,
       refreshToken,
+      platformAccessToken,
       hashedInstanceKey: getHashedInstanceKey(),
       extraHeaders: authExtraHeaders,
       responseCookies: event.cookies,
@@ -334,6 +336,7 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
     const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
     const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
     const guestSession = event.cookies.get("nocturne-guest-session");
+    const platformAccess = event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
     const cookies: string[] = [];
     if (accessToken) {
       cookies.push(`${AUTH_COOKIE_NAMES.accessToken}=${accessToken}`);
@@ -343,6 +346,9 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
     }
     if (guestSession) {
       cookies.push(`nocturne-guest-session=${guestSession}`);
+    }
+    if (platformAccess) {
+      cookies.push(`${AUTH_COOKIE_NAMES.platformAccess}=${platformAccess}`);
     }
     if (cookies.length > 0) {
       headers.set("Cookie", cookies.join("; "));
@@ -381,6 +387,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
   const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
   const guestSessionToken = event.cookies.get("nocturne-guest-session");
+  const platformAccessToken = event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
 
   const extraHeaders: Record<string, string> = {
     "X-Forwarded-Proto": getOriginalProto(event.request),
@@ -400,6 +407,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
     accessToken,
     refreshToken,
     guestSessionToken,
+    platformAccessToken,
     hashedInstanceKey: getHashedInstanceKey(),
     extraHeaders,
     responseCookies: event.cookies,

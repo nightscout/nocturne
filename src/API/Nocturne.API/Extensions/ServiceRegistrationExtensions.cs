@@ -230,6 +230,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantService, TenantService>();
 
         // Auth handlers (executed in priority order, lowest first)
+        services.AddSingleton<IAuthHandler, PlatformAccessCookieHandler>(); // Priority 40
         services.AddSingleton<IAuthHandler, SessionCookieHandler>(); // Priority 50
         services.AddSingleton<IAuthHandler, GuestSessionHandler>(); // Priority 52
         services.AddSingleton<GuestSessionHandler>(); // For direct cookie-setting use
