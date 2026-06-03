@@ -29,6 +29,14 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 /// taken from the <c>tenant</c> (slug) query parameter, not from subdomain resolution. The path is
 /// registered as tenantless-allowed in <see cref="TenantResolutionMiddleware"/>.
 /// </para>
+/// <para>
+/// Like <c>GET /api/auth/oidc/login</c>, this is a GET navigation endpoint and is therefore exposed
+/// to login-CSRF (a third party could force a platform admin's browser to mint a grant). The blast
+/// radius is bounded: the grant cookie is HttpOnly and lives only in the victim's own browser, the
+/// victim must already be a platform admin, the only effect is being navigated into a tenant, and
+/// the mint is recorded in the auth audit log under the operator's real subject. Accepted as a
+/// residual risk consistent with the existing OIDC-login endpoint shape.
+/// </para>
 /// </remarks>
 [ApiController]
 [Tags("PlatformAdmin")]
@@ -130,7 +138,10 @@ public class PlatformAccessController(
             "Platform-admin {SubjectId} was granted access to tenant {TenantId} ({Slug})",
             auth.SubjectId, target.Id, target.Slug);
 
-        var proto = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
+        // Only honour a sensible forwarded scheme; never reflect an arbitrary client value
+        // into the redirect. Prod is always behind TLS, so default to https.
+        var forwardedProto = Request.Headers["X-Forwarded-Proto"].FirstOrDefault();
+        var proto = forwardedProto is "http" or "https" ? forwardedProto : "https";
         var redirectUrl = $"{proto}://{target.Slug}.{baseDomainOptions.Value.BaseDomain}/";
         return Redirect(redirectUrl);
     }

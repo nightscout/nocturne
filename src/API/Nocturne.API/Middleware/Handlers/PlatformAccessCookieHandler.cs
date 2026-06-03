@@ -1,8 +1,11 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Auth;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Middleware.Handlers;
 
@@ -55,22 +58,22 @@ public class PlatformAccessCookieHandler : IAuthHandler
     }
 
     /// <inheritdoc />
-    public Task<AuthResult> AuthenticateAsync(HttpContext context)
+    public async Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
         var grant = context.Request.Cookies[_options.Cookie.PlatformAccessName];
         if (string.IsNullOrEmpty(grant))
-            return Task.FromResult(AuthResult.Skip());
+            return AuthResult.Skip();
 
         // A grant is only meaningful on a resolved tenant subdomain.
         if (context.Items["TenantContext"] is not TenantContext tenant)
-            return Task.FromResult(AuthResult.Skip());
+            return AuthResult.Skip();
 
         using var scope = _scopeFactory.CreateScope();
         var jwtService = scope.ServiceProvider.GetRequiredService<IJwtService>();
         var result = jwtService.ValidateAccessToken(grant);
 
         if (!result.IsValid || result.Claims is null)
-            return Task.FromResult(AuthResult.Skip());
+            return AuthResult.Skip();
 
         var claims = result.Claims;
 
@@ -78,13 +81,30 @@ public class PlatformAccessCookieHandler : IAuthHandler
         // (a normal session, an OAuth tenant-pinned token, a grant for another tenant)
         // falls through to the normal auth chain.
         if (!claims.PlatformAccess || claims.TenantId != tenant.TenantId)
-            return Task.FromResult(AuthResult.Skip());
+            return AuthResult.Skip();
+
+        // Defense in depth: a self-contained grant can't be revoked, so confirm the subject
+        // is STILL a platform admin on every request. Revoking the flag then ends access on
+        // the next request instead of lingering until the grant expires.
+        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        var stillPlatformAdmin = await db.Subjects
+            .Where(s => s.Id == claims.SubjectId)
+            .Select(s => s.IsPlatformAdmin)
+            .FirstOrDefaultAsync();
+
+        if (!stillPlatformAdmin)
+        {
+            _logger.LogWarning(
+                "Platform-access grant rejected: subject {SubjectId} is no longer a platform admin",
+                claims.SubjectId);
+            return AuthResult.Skip();
+        }
 
         _logger.LogInformation(
             "Platform-admin access grant accepted for subject {SubjectId} on tenant {TenantId}",
             claims.SubjectId, tenant.TenantId);
 
-        return Task.FromResult(AuthResult.Success(new AuthContext
+        return AuthResult.Success(new AuthContext
         {
             IsAuthenticated = true,
             AuthType = AuthType.PlatformAccess,
@@ -94,7 +114,8 @@ public class PlatformAccessCookieHandler : IAuthHandler
             Permissions = ["*"],
             Roles = claims.Roles,
             RawToken = grant,
+            TokenId = Guid.TryParse(claims.JwtId, out var jwtId) ? jwtId : null,
             ExpiresAt = claims.ExpiresAt,
-        }));
+        });
     }
 }
