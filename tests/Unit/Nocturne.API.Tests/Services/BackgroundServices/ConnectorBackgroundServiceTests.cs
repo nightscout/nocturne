@@ -32,31 +32,53 @@ public class ConnectorBackgroundServiceTests
         private readonly SyncResult _syncResult;
         private readonly Action? _onSync;
         private readonly Action<IServiceProvider>? _onSyncScope;
+        private readonly Action? _onSyncCompleted;
+        private readonly TimeSpan? _perTenantTimeout;
+        private readonly int _hangFirstNCalls;
+        private int _callCount;
 
         public TestConnectorBackgroundService(
             IServiceProvider serviceProvider,
             SyncResult syncResult,
             ILogger logger,
             Action? onSync = null,
-            Action<IServiceProvider>? onSyncScope = null)
+            Action<IServiceProvider>? onSyncScope = null,
+            TimeSpan? perTenantTimeout = null,
+            int hangFirstNCalls = 0,
+            Action? onSyncCompleted = null)
             : base(serviceProvider, logger)
         {
             _syncResult = syncResult;
             _onSync = onSync;
             _onSyncScope = onSyncScope;
+            _perTenantTimeout = perTenantTimeout;
+            _hangFirstNCalls = hangFirstNCalls;
+            _onSyncCompleted = onSyncCompleted;
         }
 
         protected override string ConnectorName => "TestConnector";
 
-        protected override Task<SyncResult> PerformSyncAsync(
+        protected override TimeSpan PerTenantSyncTimeout => _perTenantTimeout ?? base.PerTenantSyncTimeout;
+
+        /// <summary>Number of times PerformSyncAsync has been entered (across all tenants).</summary>
+        public int CallCount => _callCount;
+
+        protected override async Task<SyncResult> PerformSyncAsync(
             IServiceProvider scopeProvider,
             TestConnectorConfig config,
             CancellationToken cancellationToken,
             ISyncProgressReporter? progressReporter = null)
         {
+            var n = Interlocked.Increment(ref _callCount);
             _onSync?.Invoke();
             _onSyncScope?.Invoke(scopeProvider);
-            return Task.FromResult(_syncResult);
+
+            // Simulate a stuck tenant (e.g. an auth-retry storm) that respects cancellation.
+            if (n <= _hangFirstNCalls)
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+
+            _onSyncCompleted?.Invoke();
+            return _syncResult;
         }
 
         /// <summary>
@@ -122,6 +144,44 @@ public class ConnectorBackgroundServiceTests
             DateTime.UtcNow.ToString("O"), DateTime.UtcNow.ToString("O"));
 
         return (cleanup, connectionString, tenantId);
+    }
+
+    /// <summary>
+    /// Sets up an in-memory SQLite NocturneDbContext with two active tenants.
+    /// </summary>
+    private static (IDisposable cleanup, string connectionString) CreateSqliteDbWithTwoTenants()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"ConnectorBgTest_{Guid.NewGuid():N}.db");
+        var connectionString = $"Data Source={dbPath}";
+        var cleanup = new TempFileCleanup(dbPath);
+
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseSqlite(connectionString)
+            .Options;
+
+        using var context = new NocturneDbContext(options);
+        context.Database.ExecuteSqlRaw(@"
+            CREATE TABLE tenants (
+                Id TEXT PRIMARY KEY,
+                slug TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                last_reading_at TEXT,
+                allow_access_requests INTEGER NOT NULL DEFAULT 1,
+                onboarding_completed_at TEXT,
+                sys_created_at TEXT NOT NULL,
+                sys_updated_at TEXT NOT NULL
+            )");
+
+        foreach (var slug in new[] { "tenant-a", "tenant-b" })
+        {
+            context.Database.ExecuteSqlRaw(
+                "INSERT INTO tenants (Id, slug, display_name, is_active, allow_access_requests, sys_created_at, sys_updated_at) VALUES ({0}, {1}, {2}, 1, 1, {3}, {4})",
+                Guid.NewGuid().ToString(), slug, slug,
+                DateTime.UtcNow.ToString("O"), DateTime.UtcNow.ToString("O"));
+        }
+
+        return (cleanup, connectionString);
     }
 
     private static IServiceProvider BuildServiceProvider(
@@ -493,6 +553,92 @@ public class ConnectorBackgroundServiceTests
         // Assert — the scoped DbContext the connector services share must be pinned to the synced
         // tenant so RLS scopes correctly.
         Assert.Equal(tenantId, capturedTenantId);
+    }
+
+    [Fact]
+    public async Task SyncAllTenants_RunsTenantsConcurrently_OneStuckTenantDoesNotBlockOthers()
+    {
+        // Tenants must sync independently: a tenant whose sync hangs (e.g. an auth-retry storm against
+        // bad credentials) must not delay or block any other tenant of the connector.
+        var (cleanup, connStr) = CreateSqliteDbWithTwoTenants();
+        using var _ = cleanup;
+
+        var configServiceMock = BuildEnabledConfigMock();
+        var config = new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 };
+        var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
+
+        var secondTenantDone = new TaskCompletionSource();
+        using var cts = new CancellationTokenSource();
+
+        // The first tenant to start hangs. A long per-tenant timeout ensures this test measures
+        // concurrency, not the timeout cutting the hang short.
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = true },
+            NullLogger<TestConnectorBackgroundService>.Instance,
+            perTenantTimeout: TimeSpan.FromSeconds(30),
+            hangFirstNCalls: 1,
+            onSyncCompleted: () => secondTenantDone.TrySetResult());
+
+        var run = sut.ExecuteOnceAsync(cts.Token);
+        try
+        {
+            var winner = await Task.WhenAny(secondTenantDone.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+            winner.Should().Be(secondTenantDone.Task,
+                "the second tenant must sync concurrently while the first tenant is stuck");
+        }
+        finally
+        {
+            cts.Cancel();
+            try { await run; } catch (OperationCanceledException) { }
+        }
+    }
+
+    [Fact]
+    public async Task SyncForTenant_IsCancelled_WhenItExceedsPerTenantTimeout()
+    {
+        // A stuck tenant must be cancelled at PerTenantSyncTimeout so it cannot hold a slot forever.
+        var (cleanup, connStr, _) = CreateSqliteDbWithTenantId();
+        using var _c = cleanup;
+
+        var configServiceMock = BuildEnabledConfigMock();
+        var config = new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 };
+        var serviceProvider = BuildServiceProvider(connStr, configServiceMock, config);
+
+        var sut = new TestConnectorBackgroundService(
+            serviceProvider,
+            new SyncResult { Success = true },
+            NullLogger<TestConnectorBackgroundService>.Instance,
+            perTenantTimeout: TimeSpan.FromMilliseconds(300),
+            hangFirstNCalls: 1);
+
+        var run = sut.ExecuteOnceAsync(CancellationToken.None);
+        var winner = await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(10)));
+
+        winner.Should().Be(run,
+            "a tenant exceeding PerTenantSyncTimeout must be cancelled so the cycle completes");
+        await run;
+    }
+
+    /// <summary>Config-service mock that reports the test connector as configured and enabled.</summary>
+    private static Mock<IConnectorConfigurationService> BuildEnabledConfigMock()
+    {
+        var mock = new Mock<IConnectorConfigurationService>();
+        mock.Setup(x => x.GetConfigurationAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = "TestConnector",
+                IsActive = true,
+                Configuration = JsonDocument.Parse("{\"enabled\": true, \"syncIntervalMinutes\": 5}")
+            });
+        mock.Setup(x => x.GetSecretsAsync("TestConnector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+        mock.Setup(x => x.UpdateHealthStateAsync(
+                It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<bool?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        return mock;
     }
 
     [Fact]
