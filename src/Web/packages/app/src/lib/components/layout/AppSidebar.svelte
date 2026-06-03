@@ -97,6 +97,33 @@
   let defaultTenantSlug = $state<string | null>(null);
   let baseDomain = $state<string | null>(null);
   let currentSlug = $state<string | null>(null);
+  // Whether the authenticated subject is a member of the tenant on the current
+  // subdomain, and whether that has been determined yet.
+  let isCurrentTenantMember = $state(false);
+  let tenantTargetsLoaded = $state(false);
+
+  /**
+   * Platform-admin "access" mode: the only way to be authenticated on a tenant
+   * subdomain you are NOT a member of is via a short-lived platform-access grant.
+   * So a platform admin on a non-member tenant is viewing it via that mechanism
+   * (not normal membership). Surfaced distinctly so it's never mistaken for it.
+   */
+  const isPlatformAccessView = $derived(
+    isPlatformAdmin &&
+      !isGuestSession &&
+      tenantTargetsLoaded &&
+      !!currentSlug &&
+      !isCurrentTenantMember,
+  );
+  // Minutes left on the access grant (its JWT expiry flows through to the session).
+  const grantExpiresInMin = $derived(
+    user?.expiresAt
+      ? Math.max(
+          0,
+          Math.round((new Date(user.expiresAt).getTime() - Date.now()) / 60000),
+        )
+      : null,
+  );
 
   // Derive subdomain info from hostname
   $effect(() => {
@@ -118,6 +145,8 @@
       const tenants = await getMyTenants();
       totalTenantCount = (tenants ?? []).length;
       defaultTenantSlug = (tenants ?? [])[0]?.slug ?? null;
+      isCurrentTenantMember = (tenants ?? []).some((t) => t.slug === currentSlug);
+      tenantTargetsLoaded = true;
 
       tenantTargets = (tenants ?? [])
         .filter(
@@ -400,6 +429,33 @@
   </Sidebar.Group>
 
   <Sidebar.Separator />
+
+  <!-- Platform-admin access indicator: viewing a tenant you're NOT a member of,
+       via a short-lived platform-access grant (distinct from the member switcher). -->
+  {#if isPlatformAccessView}
+    <div
+      class="border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 group-data-[collapsible=icon]:hidden"
+    >
+      <p
+        class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400"
+      >
+        <Shield class="h-3 w-3 shrink-0" />
+        Platform admin access
+      </p>
+      <p class="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Eye class="h-3 w-3 shrink-0" />
+        <span
+          >Viewing <span class="font-medium text-foreground">{currentSlug}</span> — you
+          are not a member</span
+        >
+      </p>
+      {#if grantExpiresInMin !== null && grantExpiresInMin > 0}
+        <p class="mt-0.5 text-[11px] text-muted-foreground">
+          Access expires in ~{grantExpiresInMin} min
+        </p>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Tenant switcher (only visible when multiple tenants are available, hidden for guests) -->
   {#if totalTenantCount > 1 && tenantTargets.length > 0 && !isGuestSession}
