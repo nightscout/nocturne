@@ -515,12 +515,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         // 2b. Manual insulin (pen injections: gkInsulinBasal → BasalInjection, gkInsulinBolus → Bolus)
         var (manualBasalInjections, manualBoluses) = _v4TreatmentMapper.MapV3ManualInsulin(v3Data);
 
-        if (manualBoluses.Count > 0)
-        {
-            v3Boluses.AddRange(manualBoluses);
-            await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
-                manualBoluses, PublishBolusDataAsync, config, cancellationToken);
-        }
+        await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
+            manualBoluses, PublishBolusDataAsync, config, cancellationToken);
 
         await PublishRecordTypeAsync(result, SyncDataType.BasalInjections, activeTypes,
             manualBasalInjections, PublishBasalInjectionDataAsync, config, cancellationToken);

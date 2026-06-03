@@ -383,39 +383,45 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     }
 
     /// <summary>
-    /// Builds a lookup of existing patient insulins keyed by name (case-insensitive).
+    /// Builds a lookup of existing patient insulins keyed by (name, role).
+    /// A <see cref="InsulinRole.Both"/> entry satisfies either Basal or Bolus lookups.
     /// </summary>
-    private async Task<Dictionary<string, PatientInsulin>> BuildPatientInsulinCacheAsync(CancellationToken ct)
+    private async Task<List<PatientInsulin>> BuildPatientInsulinCacheAsync(CancellationToken ct)
     {
         var existing = await _patientInsulinRepository.GetAllAsync(ct);
-        return existing
-            .GroupBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        return existing.ToList();
     }
 
     /// <summary>
-    /// Finds an existing <see cref="PatientInsulin"/> by name, or creates one from the
-    /// <see cref="TreatmentInsulinContext"/> catalog data. Returns a new context with the
+    /// Finds an existing <see cref="PatientInsulin"/> by name and compatible role, or creates one
+    /// from the <see cref="TreatmentInsulinContext"/> catalog data. Returns a new context with the
     /// real <c>PatientInsulinId</c> populated.
     /// </summary>
     private async Task<TreatmentInsulinContext> ResolveOrCreatePatientInsulinAsync(
         TreatmentInsulinContext context,
         InsulinRole role,
-        Dictionary<string, PatientInsulin> cache,
+        List<PatientInsulin> cache,
         CancellationToken ct)
     {
         var name = context.InsulinName;
         if (string.IsNullOrWhiteSpace(name) || name == "Unknown")
             return context;
 
-        if (cache.TryGetValue(name, out var existing))
-        {
+        // Match by name AND compatible role (exact match or Role.Both)
+        var existing = cache.FirstOrDefault(i =>
+            i.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
+            (i.Role == role || i.Role == InsulinRole.Both));
+
+        if (existing != null)
             return context with { PatientInsulinId = existing.Id };
-        }
 
         // Auto-create a PatientInsulin from the catalog data in the context
         var formulation = InsulinCatalog.GetAll()
             .FirstOrDefault(f => f.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+        // Check if a primary already exists for this role (including Role.Both entries)
+        var hasPrimary = cache.Any(i =>
+            i.IsPrimary && (i.Role == role || i.Role == InsulinRole.Both));
 
         var newInsulin = new PatientInsulin
         {
@@ -431,11 +437,11 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             Concentration = context.Concentration,
             Role = role == InsulinRole.Basal ? InsulinRole.Basal : InsulinRole.Bolus,
             IsCurrent = true,
-            IsPrimary = !cache.Values.Any(i => i.Role == role && i.IsPrimary),
+            IsPrimary = !hasPrimary,
         };
 
         var created = await _patientInsulinRepository.CreateAsync(newInsulin, ct);
-        cache[name] = created;
+        cache.Add(created);
 
         _logger.LogInformation(
             "Auto-created PatientInsulin '{Name}' (role={Role}, id={Id}) from connector import",
