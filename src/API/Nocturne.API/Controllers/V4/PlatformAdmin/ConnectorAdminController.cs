@@ -25,14 +25,17 @@ namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 public class ConnectorAdminController : ControllerBase
 {
     private readonly IConnectorCursorResetService _cursorResetService;
+    private readonly IConnectorCursorResetJobService _resetJobService;
     private readonly ILogger<ConnectorAdminController> _logger;
 
     /// <summary>Initializes a new instance of <see cref="ConnectorAdminController"/>.</summary>
     public ConnectorAdminController(
         IConnectorCursorResetService cursorResetService,
+        IConnectorCursorResetJobService resetJobService,
         ILogger<ConnectorAdminController> logger)
     {
         _cursorResetService = cursorResetService;
+        _resetJobService = resetJobService;
         _logger = logger;
     }
 
@@ -59,23 +62,24 @@ public class ConnectorAdminController : ControllerBase
     }
 
     /// <summary>
-    /// Reset the sync cursor for every connector configured on a target tenant, forcing a re-pull
-    /// of history. Use after fixing a connector bug to push corrected data to an affected tenant.
+    /// Enqueue a background reset of the sync cursor for every connector configured on a target
+    /// tenant, forcing a re-pull of history. Use after fixing a connector bug to push corrected data
+    /// to an affected tenant.
     /// </summary>
     /// <remarks>
-    /// First cut runs synchronously and returns a per-connector <see cref="SyncResult"/>. A full
-    /// re-pull can take minutes per connector, so this can block for a while on data-heavy tenants.
-    /// TODO: move to a background job with progress polling (cf. the migration job model) before
-    /// fanning out across many tenants at once.
+    /// A full re-pull can take minutes per connector — far longer than gateway/proxy/browser request
+    /// timeouts — so the work runs on a background job that outlives the request. This returns
+    /// <c>202 Accepted</c> with a job id immediately; poll <see cref="GetResetJobStatus"/> for
+    /// per-connector progress, and <see cref="CancelResetJob"/> to stop it.
     /// </remarks>
     /// <param name="tenantId">The target tenant whose connectors should be re-pulled.</param>
     /// <param name="request">Optional lower bound and data-type filter, mirroring the per-tenant reset endpoint.</param>
-    /// <param name="ct">Cancellation token.</param>
+    /// <param name="ct">Cancellation token for enqueueing (not the background job itself).</param>
     [HttpPost("{tenantId:guid}/reset-cursors")]
-    [RemoteCommand(Invalidates = ["GetTenantConnectors"])]
-    [ProducesResponseType(typeof(TenantCursorResetResult), StatusCodes.Status200OK)]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(ConnectorResetJobInfo), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<TenantCursorResetResult>> ResetTenantCursors(
+    public async Task<ActionResult<ConnectorResetJobInfo>> ResetTenantCursors(
         Guid tenantId,
         [FromBody] AdminResetCursorsRequest request,
         CancellationToken ct)
@@ -84,12 +88,54 @@ public class ConnectorAdminController : ControllerBase
             "Platform admin cursor reset requested for tenant {TenantId} (from {From})",
             tenantId, request.From?.ToString("o") ?? "beginning");
 
-        var result = await _cursorResetService.ResetTenantCursorsAsync(
+        var job = await _resetJobService.StartResetAsync(
             tenantId, request.From, request.DataTypes, ct);
 
-        return result is null
+        return job is null
             ? Problem(detail: $"Tenant not found: {tenantId}", statusCode: 404, title: "Not Found")
-            : Ok(result);
+            : AcceptedAtAction(nameof(GetResetJobStatus), new { jobId = job.JobId }, job);
+    }
+
+    /// <summary>
+    /// Get the progress of a connector cursor reset job, including per-connector outcomes as they land.
+    /// </summary>
+    /// <param name="jobId">The job id returned by <see cref="ResetTenantCursors"/>.</param>
+    [HttpGet("jobs/{jobId:guid}")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(ConnectorResetJobStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<ConnectorResetJobStatus> GetResetJobStatus(Guid jobId)
+    {
+        try
+        {
+            return Ok(_resetJobService.GetStatus(jobId));
+        }
+        catch (KeyNotFoundException)
+        {
+            return Problem(detail: $"Reset job not found: {jobId}", statusCode: 404, title: "Not Found");
+        }
+    }
+
+    /// <summary>
+    /// Request cancellation of a running connector cursor reset job. Connectors already re-pulled
+    /// keep their committed data; the fan-out simply stops before the next connector.
+    /// </summary>
+    /// <param name="jobId">The job id to cancel.</param>
+    [HttpPost("jobs/{jobId:guid}/cancel")]
+    [RemoteCommand(Invalidates = ["GetResetJobStatus"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult CancelResetJob(Guid jobId)
+    {
+        try
+        {
+            _resetJobService.Cancel(jobId);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return Problem(detail: $"Reset job not found: {jobId}", statusCode: 404, title: "Not Found");
+        }
     }
 }
 

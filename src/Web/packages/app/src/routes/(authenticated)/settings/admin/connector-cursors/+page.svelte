@@ -26,10 +26,16 @@
   import {
     getTenantConnectors,
     resetTenantCursors,
+    getResetJobStatus,
+    cancelResetJob,
+  } from "$api/generated/connectorAdmins.generated.remote";
+  import {
+    ConnectorResetConnectorState,
+    ConnectorResetJobState,
+    type TenantDto,
     type TenantConnectorsDto,
-    type TenantCursorResetResult,
-  } from "../connector-cursors.remote";
-  import type { TenantDto } from "$api";
+    type ConnectorResetJobStatus,
+  } from "$api";
 
   // Tenant list (platform admin)
   let tenants = $state<TenantDto[]>([]);
@@ -48,8 +54,23 @@
   // Reset execution
   let confirmOpen = $state(false);
   let resetting = $state(false);
-  let resetResult = $state<TenantCursorResetResult | null>(null);
+  let cancelling = $state(false);
+  let jobStatus = $state<ConnectorResetJobStatus | null>(null);
+  let activeJobId = $state<string | null>(null);
   let resetError = $state<string | null>(null);
+
+  // Poll handle so we can stop polling on teardown / completion.
+  let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const TERMINAL_STATES = [
+    ConnectorResetJobState.Completed,
+    ConnectorResetJobState.Failed,
+    ConnectorResetJobState.Cancelled,
+  ];
+  function isTerminal(state: ConnectorResetJobState | undefined): boolean {
+    return state !== undefined && TERMINAL_STATES.includes(state);
+  }
+  const jobInFlight = $derived(jobStatus !== null && !isTerminal(jobStatus.state));
 
   const selectedTenant = $derived(
     tenants.find((t) => t.id === selectedTenantId),
@@ -75,14 +96,19 @@
   async function onTenantChange(value: string | undefined) {
     selectedTenantId = value;
     connectors = null;
-    resetResult = null;
+    stopPolling();
+    jobStatus = null;
+    activeJobId = null;
     resetError = null;
     if (!value) return;
 
     connectorsLoading = true;
     connectorsError = null;
     try {
-      connectors = await getTenantConnectors(value);
+      // Refresh so re-selecting a tenant always shows current health, not a memoised snapshot.
+      const connectorsQuery = getTenantConnectors(value);
+      await connectorsQuery.refresh();
+      connectors = await connectorsQuery;
     } catch (err) {
       console.error("Failed to load connectors:", err);
       connectorsError = "Failed to load this tenant's connectors.";
@@ -91,31 +117,87 @@
     }
   }
 
+  function stopPolling() {
+    if (pollTimer) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  async function pollJob() {
+    if (!activeJobId) return;
+    try {
+      // Force a fresh fetch each tick — the query memoises by argument otherwise.
+      const statusQuery = getResetJobStatus(activeJobId);
+      await statusQuery.refresh();
+      const status = await statusQuery;
+      jobStatus = status;
+
+      if (isTerminal(status.state)) {
+        stopPolling();
+        // Refresh the connector list so the admin sees updated sync timestamps.
+        if (selectedTenantId) {
+          const connectorsQuery = getTenantConnectors(selectedTenantId);
+          await connectorsQuery.refresh();
+          connectors = await connectorsQuery;
+        }
+        return;
+      }
+    } catch (err) {
+      console.error("Failed to poll reset job:", err);
+      // Keep polling through transient errors; surface persistent ones to the operator.
+      resetError = "Lost contact with the reset job. Check the server logs.";
+    }
+    pollTimer = setTimeout(pollJob, 1500);
+  }
+
   async function runReset() {
     if (!selectedTenantId) return;
     resetting = true;
     resetError = null;
-    resetResult = null;
+    jobStatus = null;
+    stopPolling();
     try {
       // Convert the optional date-only lower bound to an ISO instant.
       const fromIso = fromDate ? new Date(`${fromDate}T00:00:00Z`).toISOString() : null;
-      resetResult = await resetTenantCursors({
+      const job = await resetTenantCursors({
         tenantId: selectedTenantId,
-        from: fromIso,
-        dataTypes: null, // first cut resets every supported type
+        request: {
+          from: fromIso,
+          dataTypes: null, // first cut resets every supported type
+        },
       });
-      // Refresh the connector list so the admin sees updated sync timestamps.
-      connectors = await getTenantConnectors(selectedTenantId);
+      activeJobId = job.jobId ?? null;
+      confirmOpen = false;
+      // Kick off polling; the first poll returns the seeded per-connector list.
+      await pollJob();
     } catch (err) {
       console.error("Cursor reset failed:", err);
-      resetError = "Cursor reset failed. Check the server logs for details.";
+      resetError = "Failed to start the cursor reset. Check the server logs for details.";
     } finally {
       resetting = false;
-      confirmOpen = false;
     }
   }
 
-  function formatTimestamp(value: string | null | undefined): string {
+  async function cancelJob() {
+    if (!activeJobId) return;
+    cancelling = true;
+    try {
+      await cancelResetJob(activeJobId);
+      // Reflect the request promptly; the next poll confirms the terminal state.
+      await pollJob();
+    } catch (err) {
+      console.error("Failed to cancel reset job:", err);
+      resetError = "Failed to cancel the reset job.";
+    } finally {
+      cancelling = false;
+    }
+  }
+
+  // Stop polling when the page is torn down.
+  $effect(() => stopPolling);
+
+  function formatTimestamp(value: string | Date | null | undefined): string {
     if (!value) return "Never";
     return new Date(value).toLocaleString(undefined, {
       year: "numeric",
@@ -126,7 +208,7 @@
     });
   }
 
-  const hasConnectors = $derived((connectors?.connectors.length ?? 0) > 0);
+  const hasConnectors = $derived((connectors?.connectors?.length ?? 0) > 0);
 </script>
 
 <svelte:head>
@@ -152,8 +234,9 @@
     <Alert.Description>
       This forces a full re-pull of history for every configured connector on
       the selected tenant. Re-ingested records dedupe on their idempotency keys,
-      so it is safe to re-run, but a large re-pull can take several minutes and
-      runs synchronously.
+      so it is safe to re-run. A large re-pull can take several minutes, so it
+      runs as a background job &mdash; progress appears below and you can leave
+      this page while it finishes.
     </Alert.Description>
   </Alert.Root>
 
@@ -220,17 +303,31 @@
           </CardTitle>
           <CardDescription>Current sync status for {selectedTenant?.slug}</CardDescription>
         </div>
-        <Button
-          onclick={() => (confirmOpen = true)}
-          disabled={!hasConnectors || connectorsLoading || resetting}
-        >
-          {#if resetting}
-            <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-          {:else}
-            <RefreshCw class="mr-2 h-4 w-4" />
+        <div class="flex items-center gap-2">
+          {#if jobInFlight}
+            <Button
+              variant="outline"
+              onclick={cancelJob}
+              disabled={cancelling}
+            >
+              {#if cancelling}
+                <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+              {/if}
+              Cancel
+            </Button>
           {/if}
-          Reset cursors
-        </Button>
+          <Button
+            onclick={() => (confirmOpen = true)}
+            disabled={!hasConnectors || connectorsLoading || resetting || jobInFlight}
+          >
+            {#if resetting || jobInFlight}
+              <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+            {:else}
+              <RefreshCw class="mr-2 h-4 w-4" />
+            {/if}
+            Reset cursors
+          </Button>
+        </div>
       </CardHeader>
       <CardContent class="space-y-3">
         {#if connectorsLoading}
@@ -248,9 +345,29 @@
             This tenant has no configured connectors.
           </p>
         {:else}
-          {#each connectors!.connectors as c (c.connectorName)}
-            {@const resultForConnector = resetResult?.connectors.find(
-              (r) => r.connectorName === c.connectorName,
+          {#if jobStatus}
+            {@const jobDone = isTerminal(jobStatus.state)}
+            <div class="flex items-center gap-2 rounded-lg border bg-muted/40 p-3 text-sm">
+              {#if !jobDone}
+                <Loader2 class="h-4 w-4 animate-spin text-primary" />
+              {:else if jobStatus.state === ConnectorResetJobState.Completed}
+                <CheckCircle2 class="h-4 w-4 text-green-600" />
+              {:else}
+                <AlertTriangle class="h-4 w-4 text-destructive" />
+              {/if}
+              <span class="font-medium">{jobStatus.state}</span>
+              <span class="text-muted-foreground">
+                {jobStatus.completedConnectors} / {jobStatus.totalConnectors} connectors
+              </span>
+              {#if jobStatus.errorMessage}
+                <span class="text-destructive">{jobStatus.errorMessage}</span>
+              {/if}
+            </div>
+          {/if}
+
+          {#each connectors?.connectors ?? [] as c (c.connectorName)}
+            {@const progress = jobStatus?.connectors?.find(
+              (p) => p.connectorName === c.connectorName,
             )}
             <div class="rounded-lg border p-3">
               <div class="flex items-center justify-between">
@@ -262,15 +379,21 @@
                     <Badge variant="destructive">Unhealthy</Badge>
                   {/if}
                 </div>
-                {#if resultForConnector}
-                  {#if resultForConnector.result.success}
+                {#if progress}
+                  {#if progress.state === ConnectorResetConnectorState.Succeeded}
                     <span class="flex items-center gap-1 text-sm text-green-600">
                       <CheckCircle2 class="h-4 w-4" /> Reset
                     </span>
-                  {:else}
+                  {:else if progress.state === ConnectorResetConnectorState.Failed}
                     <span class="flex items-center gap-1 text-sm text-destructive">
                       <XCircle class="h-4 w-4" /> Failed
                     </span>
+                  {:else if progress.state === ConnectorResetConnectorState.Running}
+                    <span class="flex items-center gap-1 text-sm text-primary">
+                      <Loader2 class="h-4 w-4 animate-spin" /> Re-pulling
+                    </span>
+                  {:else}
+                    <span class="text-sm text-muted-foreground">Queued</span>
                   {/if}
                 {/if}
               </div>
@@ -287,8 +410,8 @@
               {#if c.lastErrorMessage}
                 <p class="mt-1 text-xs text-destructive">{c.lastErrorMessage}</p>
               {/if}
-              {#if resultForConnector}
-                <p class="mt-1 text-xs">{resultForConnector.result.message}</p>
+              {#if progress?.message}
+                <p class="mt-1 text-xs">{progress.message}</p>
               {/if}
             </div>
           {/each}
@@ -311,13 +434,14 @@
     <AlertDialog.Header>
       <AlertDialog.Title>Reset cursors for {selectedTenant?.slug}?</AlertDialog.Title>
       <AlertDialog.Description>
-        This re-pulls history for all {connectors?.connectors.length ?? 0}
+        This re-pulls history for all {connectors?.connectors?.length ?? 0}
         connector(s) configured on this tenant
         {#if fromDate}
           from {fromDate}
         {:else}
           from the beginning
-        {/if}. The request runs synchronously and may take a while.
+        {/if}. This starts a background job &mdash; you can watch per-connector
+        progress here or leave the page while it runs.
       </AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>

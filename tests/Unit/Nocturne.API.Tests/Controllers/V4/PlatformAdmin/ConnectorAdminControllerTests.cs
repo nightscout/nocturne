@@ -14,14 +14,11 @@ using Xunit;
 namespace Nocturne.API.Tests.Controllers.V4.PlatformAdmin;
 
 /// <summary>
-/// Tests for the platform-admin cross-tenant cursor-reset endpoint and its backing service.
-/// The key behaviours are:
-/// <list type="bullet">
-///   <item>the action sets the tenant context to the <em>target</em> tenant (not the caller's);</item>
-///   <item>it fans out across <em>every</em> connector that tenant has configured;</item>
-///   <item>each per-connector sync forces a full re-pull (<see cref="SyncRequest.To"/> is set).</item>
-/// </list>
-/// The EF Core in-memory provider is used so the RLS GUC (a PostgreSQL-only function) is skipped.
+/// Tests for the platform-admin cross-tenant connector controller. The reset endpoint enqueues a
+/// background job and returns <c>202 Accepted</c> (the fan-out itself is covered by
+/// <see cref="ConnectorCursorResetServiceTests"/> and <see cref="ConnectorCursorResetJobServiceTests"/>);
+/// the <c>GetTenantConnectors</c> endpoint is exercised against the real engine on the EF Core
+/// in-memory provider, where the RLS GUC (a PostgreSQL-only function) is skipped.
 /// </summary>
 public class ConnectorAdminControllerTests
 {
@@ -66,83 +63,143 @@ public class ConnectorAdminControllerTests
         return db;
     }
 
-    private static ConnectorAdminController CreateController(IConnectorCursorResetService service) =>
-        new(service, Mock.Of<ILogger<ConnectorAdminController>>());
+    private static ConnectorAdminController CreateController(
+        IConnectorCursorResetService service,
+        IConnectorCursorResetJobService? jobService = null) =>
+        new(service, jobService ?? Mock.Of<IConnectorCursorResetJobService>(),
+            Mock.Of<ILogger<ConnectorAdminController>>());
+
+    private static ConnectorCursorResetService Engine(NocturneDbContext db) =>
+        new(db, Mock.Of<IConnectorSyncService>(), Mock.Of<ITenantAccessor>(),
+            Mock.Of<ILogger<ConnectorCursorResetService>>());
 
     [Fact]
-    public async Task ResetTenantCursors_FansOutAcrossEveryConnector_WithUpperBoundSet()
+    public async Task ResetTenantCursors_KnownTenant_Returns202WithJobInfo()
     {
         var db = CreateDb();
-        var captured = new List<(string ConnectorId, SyncRequest Request)>();
-        var syncService = new Mock<IConnectorSyncService>();
-        syncService
-            .Setup(s => s.TriggerSyncAsync(It.IsAny<string>(), It.IsAny<SyncRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<string, SyncRequest, CancellationToken>((id, r, _) => captured.Add((id, r)))
-            .ReturnsAsync(new SyncResult { Success = true });
-
-        var tenantAccessor = new Mock<ITenantAccessor>();
-        TenantContext? setContext = null;
-        tenantAccessor.Setup(a => a.SetTenant(It.IsAny<TenantContext>()))
-            .Callback<TenantContext>(c => setContext = c);
-
-        var service = new ConnectorCursorResetService(
-            db, syncService.Object, tenantAccessor.Object,
-            Mock.Of<ILogger<ConnectorCursorResetService>>());
-        var controller = CreateController(service);
+        var jobInfo = new ConnectorResetJobInfo
+        {
+            JobId = Guid.CreateVersion7(),
+            TenantId = _targetTenantId,
+            TenantSlug = "erik",
+            CreatedAt = DateTime.UtcNow,
+            State = ConnectorResetJobState.Pending,
+            TotalConnectors = 2,
+        };
 
         var from = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var jobService = new Mock<IConnectorCursorResetJobService>();
+        jobService
+            .Setup(s => s.StartResetAsync(_targetTenantId, from,
+                It.Is<List<SyncDataType>>(d => d.Contains(SyncDataType.Boluses)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(jobInfo);
+
+        var controller = CreateController(Engine(db), jobService.Object);
+
         var result = await controller.ResetTenantCursors(
             _targetTenantId,
             new AdminResetCursorsRequest { From = from, DataTypes = [SyncDataType.Boluses] },
             CancellationToken.None);
 
-        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
-        var payload = ok.Value.Should().BeOfType<TenantCursorResetResult>().Subject;
-
-        // Fans out across BOTH configured connectors.
-        captured.Should().HaveCount(2);
-        captured.Select(c => c.ConnectorId).Should().BeEquivalentTo(["nightscout", "dexcom"]);
-        payload.Connectors.Should().HaveCount(2);
-
-        // Every request forces a full re-pull (To set), passing through the requested filters.
-        captured.Should().OnlyContain(c => c.Request.To != null);
-        captured.Should().OnlyContain(c => c.Request.From == from);
-        captured.Should().OnlyContain(c => c.Request.DataTypes.Contains(SyncDataType.Boluses));
-
-        // The tenant context is switched to the TARGET tenant on the admin's behalf.
-        setContext.Should().NotBeNull();
-        setContext!.TenantId.Should().Be(_targetTenantId);
-        setContext.Slug.Should().Be("erik");
+        var accepted = result.Result.Should().BeOfType<AcceptedAtActionResult>().Subject;
+        accepted.ActionName.Should().Be(nameof(ConnectorAdminController.GetResetJobStatus));
+        accepted.Value.Should().BeSameAs(jobInfo);
     }
 
     [Fact]
-    public async Task ResetTenantCursors_UnknownTenant_Returns404_AndDoesNotSync()
+    public async Task ResetTenantCursors_UnknownTenant_Returns404()
     {
         var db = CreateDb();
-        var syncService = new Mock<IConnectorSyncService>();
-        var service = new ConnectorCursorResetService(
-            db, syncService.Object, Mock.Of<ITenantAccessor>(),
-            Mock.Of<ILogger<ConnectorCursorResetService>>());
-        var controller = CreateController(service);
+        var jobService = new Mock<IConnectorCursorResetJobService>();
+        jobService
+            .Setup(s => s.StartResetAsync(It.IsAny<Guid>(), It.IsAny<DateTime?>(),
+                It.IsAny<List<SyncDataType>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ConnectorResetJobInfo?)null);
+
+        var controller = CreateController(Engine(db), jobService.Object);
 
         var result = await controller.ResetTenantCursors(
             Guid.CreateVersion7(), new AdminResetCursorsRequest(), CancellationToken.None);
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(404);
-        syncService.Verify(
-            s => s.TriggerSyncAsync(It.IsAny<string>(), It.IsAny<SyncRequest>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+    }
+
+    [Fact]
+    public void GetResetJobStatus_UnknownJob_Returns404()
+    {
+        var db = CreateDb();
+        var jobService = new Mock<IConnectorCursorResetJobService>();
+        jobService.Setup(s => s.GetStatus(It.IsAny<Guid>()))
+            .Throws(new KeyNotFoundException());
+
+        var controller = CreateController(Engine(db), jobService.Object);
+
+        var result = controller.GetResetJobStatus(Guid.CreateVersion7());
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public void GetResetJobStatus_KnownJob_ReturnsStatus()
+    {
+        var db = CreateDb();
+        var jobId = Guid.CreateVersion7();
+        var status = new ConnectorResetJobStatus
+        {
+            JobId = jobId,
+            TenantId = _targetTenantId,
+            TenantSlug = "erik",
+            State = ConnectorResetJobState.Running,
+        };
+        var jobService = new Mock<IConnectorCursorResetJobService>();
+        jobService.Setup(s => s.GetStatus(jobId)).Returns(status);
+
+        var controller = CreateController(Engine(db), jobService.Object);
+
+        var result = controller.GetResetJobStatus(jobId);
+
+        result.Result.Should().BeOfType<OkObjectResult>()
+            .Which.Value.Should().BeSameAs(status);
+    }
+
+    [Fact]
+    public void CancelResetJob_UnknownJob_Returns404()
+    {
+        var db = CreateDb();
+        var jobService = new Mock<IConnectorCursorResetJobService>();
+        jobService.Setup(s => s.Cancel(It.IsAny<Guid>())).Throws(new KeyNotFoundException());
+
+        var controller = CreateController(Engine(db), jobService.Object);
+
+        var result = controller.CancelResetJob(Guid.CreateVersion7());
+
+        result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public void CancelResetJob_KnownJob_Returns204()
+    {
+        var db = CreateDb();
+        var jobId = Guid.CreateVersion7();
+        var jobService = new Mock<IConnectorCursorResetJobService>();
+
+        var controller = CreateController(Engine(db), jobService.Object);
+
+        var result = controller.CancelResetJob(jobId);
+
+        result.Should().BeOfType<NoContentResult>();
+        jobService.Verify(s => s.Cancel(jobId), Times.Once);
     }
 
     [Fact]
     public async Task GetTenantConnectors_ReturnsConfiguredConnectorsWithHealth()
     {
         var db = CreateDb();
-        var service = new ConnectorCursorResetService(
-            db, Mock.Of<IConnectorSyncService>(), Mock.Of<ITenantAccessor>(),
-            Mock.Of<ILogger<ConnectorCursorResetService>>());
-        var controller = CreateController(service);
+        var controller = CreateController(Engine(db));
 
         var result = await controller.GetTenantConnectors(_targetTenantId, CancellationToken.None);
 
@@ -157,10 +214,7 @@ public class ConnectorAdminControllerTests
     public async Task GetTenantConnectors_UnknownTenant_Returns404()
     {
         var db = CreateDb();
-        var service = new ConnectorCursorResetService(
-            db, Mock.Of<IConnectorSyncService>(), Mock.Of<ITenantAccessor>(),
-            Mock.Of<ILogger<ConnectorCursorResetService>>());
-        var controller = CreateController(service);
+        var controller = CreateController(Engine(db));
 
         var result = await controller.GetTenantConnectors(Guid.CreateVersion7(), CancellationToken.None);
 

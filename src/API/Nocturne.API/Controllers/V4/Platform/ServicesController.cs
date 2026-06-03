@@ -445,6 +445,14 @@ public class ServicesController : ControllerBase
     /// cursor reset. Re-ingested records are deduplicated on their idempotency keys (see the
     /// "Syncing" guide), so it is safe to run after fixing a connector bug to push corrected data
     /// to a tenant.
+    ///
+    /// <para><b>Latency:</b> this runs synchronously. A full-history re-pull with no lower bound
+    /// re-ingests every data type over the connector's entire history (glucose can be tens of
+    /// thousands of records), which is a multi-minute request and may approach or exceed
+    /// reverse-proxy / browser timeouts. Scope it with <c>from</c> and/or <c>dataTypes</c> when
+    /// possible. The cross-tenant equivalent
+    /// (<c>POST /api/v4/admin/connectors/{tenantId}/reset-cursors</c>) runs as a background job to
+    /// avoid this.</para>
     /// </remarks>
     /// <param name="id">Connector ID (e.g., "nightscout", "dexcom").</param>
     /// <param name="request">Optional lower bound and data-type filter. Omit <c>from</c> to re-pull all available history; omit <c>dataTypes</c> to reset every supported type.</param>

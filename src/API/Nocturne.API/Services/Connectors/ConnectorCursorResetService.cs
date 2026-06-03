@@ -25,6 +25,10 @@ public interface IConnectorCursorResetService
     /// <param name="tenantId">The target tenant whose connectors should be re-pulled.</param>
     /// <param name="from">Optional lower bound. When null, all available history is re-ingested.</param>
     /// <param name="dataTypes">Optional data-type filter. When null/empty, every supported type is reset.</param>
+    /// <param name="progress">
+    /// Optional sink notified as each connector starts and completes, so a long-running fan-out can
+    /// report incremental per-connector progress (e.g. to a background-job status endpoint).
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>
     /// A per-connector result, or null when the target tenant does not exist.
@@ -33,6 +37,7 @@ public interface IConnectorCursorResetService
         Guid tenantId,
         DateTime? from,
         List<SyncDataType>? dataTypes,
+        IConnectorResetProgress? progress,
         CancellationToken ct);
 
     /// <summary>
@@ -43,6 +48,22 @@ public interface IConnectorCursorResetService
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The configured connectors, or null when the target tenant does not exist.</returns>
     Task<TenantConnectorsDto?> GetTenantConnectorsAsync(Guid tenantId, CancellationToken ct);
+}
+
+/// <summary>
+/// Receives incremental per-connector progress while a tenant-wide cursor reset runs. Used by the
+/// background-job wrapper (<see cref="IConnectorCursorResetJobService"/>) to surface progress to a
+/// polling client; synchronous callers pass <see langword="null"/>.
+/// </summary>
+public interface IConnectorResetProgress
+{
+    /// <summary>Called immediately before a connector's re-pull begins.</summary>
+    /// <param name="connectorName">The connector about to be reset (e.g. <c>nightscout</c>).</param>
+    void ConnectorStarted(string connectorName);
+
+    /// <summary>Called once a connector's re-pull has finished (whether it succeeded or failed).</summary>
+    /// <param name="result">The per-connector outcome.</param>
+    void ConnectorCompleted(ConnectorCursorResetResult result);
 }
 
 /// <summary>Sync/health summary for a single configured connector.</summary>
@@ -107,6 +128,7 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
         Guid tenantId,
         DateTime? from,
         List<SyncDataType>? dataTypes,
+        IConnectorResetProgress? progress,
         CancellationToken ct)
     {
         var tenant = await _db.Tenants.AsNoTracking()
@@ -157,13 +179,16 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
                 "Resetting cursor for connector {ConnectorName} in tenant {TenantSlug} (from {From})",
                 config.ConnectorName, tenant.Slug, from?.ToString("o") ?? "beginning");
 
+            progress?.ConnectorStarted(config.ConnectorName);
+
             // Isolate each connector: one failing must not abort the rest of the tenant's fan-out,
             // and the response should carry one entry per configured connector. Cancellation still
             // propagates so a cancelled request stops cleanly.
+            ConnectorCursorResetResult outcome;
             try
             {
                 var result = await _syncService.TriggerSyncAsync(config.ConnectorName, request, ct);
-                results.Add(new ConnectorCursorResetResult(config.ConnectorName, result));
+                outcome = new ConnectorCursorResetResult(config.ConnectorName, result);
             }
             catch (OperationCanceledException)
             {
@@ -174,10 +199,13 @@ public class ConnectorCursorResetService : IConnectorCursorResetService
                 _logger.LogError(ex,
                     "Cursor reset failed for connector {ConnectorName} in tenant {TenantSlug}",
                     config.ConnectorName, tenant.Slug);
-                results.Add(new ConnectorCursorResetResult(
+                outcome = new ConnectorCursorResetResult(
                     config.ConnectorName,
-                    new SyncResult { Success = false, Message = ex.Message }));
+                    new SyncResult { Success = false, Message = ex.Message });
             }
+
+            results.Add(outcome);
+            progress?.ConnectorCompleted(outcome);
         }
 
         _logger.LogInformation(

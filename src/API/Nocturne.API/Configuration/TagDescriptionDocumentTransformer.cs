@@ -237,9 +237,10 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
             Two endpoints force data in on demand, both reusing the stored connector credentials:
 
             - **Manual sync** — `POST /api/v4/services/connectors/{id}/sync` with a `SyncRequest`. Supplying `to` switches the connector into *explicit-range* mode: it fetches exactly `from`…`to` for the requested `dataTypes`, bypassing the catch-up cursors. Use this to backfill a specific window of a specific type (e.g. treatments only) without re-pulling everything.
-            - **Cursor reset** — `POST /api/v4/services/connectors/{id}/reset-cursor`. Re-pulls history (all types, or a subset) from the beginning, or from an optional `from`. Use this after fixing a connector bug to push corrected data to a tenant.
+            - **Cursor reset (single tenant)** — `POST /api/v4/services/connectors/{id}/reset-cursor`. Re-pulls history (all types, or a subset) from the beginning, or from an optional `from`. Use this after fixing a connector bug to push corrected data to a tenant. This runs **synchronously**: a full-history re-pull (glucose can be tens of thousands of records) is a multi-minute request, so it may approach or exceed reverse-proxy / browser timeouts on data-heavy tenants — scope it with `from` / `dataTypes` when you can.
+            - **Cursor reset (cross-tenant, platform admin)** — `POST /api/v4/admin/connectors/{tenantId}/reset-cursors`. Resets *every* connector configured on a target tenant. Because the fan-out can run for minutes, this is **asynchronous**: it returns `202 Accepted` with a job id immediately, then you poll `GET /api/v4/admin/connectors/jobs/{jobId}` for per-connector progress (and `POST …/jobs/{jobId}/cancel` to stop it). The job outlives the request that started it, so it is not affected by proxy timeouts.
 
-            Both are safe to re-run because of idempotency, below.
+            All are safe to re-run because of idempotency, below.
 
             ## Idempotency
 
