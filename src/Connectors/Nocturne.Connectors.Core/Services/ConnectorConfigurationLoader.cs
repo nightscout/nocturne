@@ -27,7 +27,18 @@ public class ConnectorConfigurationLoader<TConfig>(
         {
             var dbConfig = await configService.GetConfigurationAsync(registration.ConnectorName, ct);
             if (dbConfig?.Configuration != null)
+            {
                 ConnectorConfigurationBinder.ApplyJsonToConfig(dbConfig.Configuration, config);
+            }
+            else
+            {
+                // No per-tenant configuration row exists, so this connector is not configured for
+                // this tenant and must not sync. registration.Defaults sets Enabled = true (a C#
+                // property initializer, not a deliberate opt-in); without this, every connector
+                // would poll every tenant with empty credentials — producing auth failures and
+                // "configuration not found" health-state noise across all tenants.
+                config.Enabled = false;
+            }
 
             var secrets = await configService.GetSecretsAsync(registration.ConnectorName, ct);
             if (secrets.Count > 0)
