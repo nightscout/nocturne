@@ -44,9 +44,26 @@
         };
         document.head.appendChild(script);
 
+        // Diagrams embedded in the OpenAPI descriptions are rendered by the API's
+        // own mermaid lazy-loader, served alongside the specs. Reusing it (rather
+        // than forking a copy into the portal) keeps rendering in sync with the API.
+        // It observes the document, so load order relative to Scalar doesn't matter.
+        const mermaidCss = document.createElement("link");
+        mermaidCss.rel = "stylesheet";
+        mermaidCss.href = `${SCALAR_API_URL}/scalar/mermaid-loader.css`;
+        document.head.appendChild(mermaidCss);
+
+        const mermaid = document.createElement("script");
+        mermaid.type = "module";
+        mermaid.crossOrigin = "anonymous";
+        mermaid.src = `${SCALAR_API_URL}/scalar/mermaid-loader.js`;
+        document.head.appendChild(mermaid);
+
         return () => {
             instance?.destroy?.();
             script.remove();
+            mermaidCss.remove();
+            mermaid.remove();
         };
     });
 </script>
