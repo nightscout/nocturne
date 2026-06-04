@@ -22,6 +22,7 @@ import type {
   ApsSnapshot,
   PumpModeState,
   ProfileSummary,
+  SensorGlucose,
 } from "$lib/api";
 
 /**
@@ -48,6 +49,22 @@ import * as alarmState from "$lib/stores/alarm-state.svelte";
 import { getContext, setContext } from "svelte";
 import { getApiClient } from "$lib/api/client";
 import { processPillsData, type ProcessedPillsData } from "$api/pills-processor";
+
+/**
+ * Normalize a V4 SensorGlucose DTO (REST shape: `id` + `mgdl`, no `_id`/`sgv`) into the Entry
+ * shape the store uses. `_id` is set to the reading's GUID — the value the API's realtime
+ * broadcast also uses for `Entry._id` — so REST-backfilled and live-pushed copies of a reading
+ * dedupe on `_id`.
+ */
+export function sensorGlucoseToEntry(sg: SensorGlucose): Entry {
+  return {
+    ...sg,
+    _id: sg.id,
+    type: "sgv",
+    sgv: sg.mgdl,
+    data_source: sg.dataSource,
+  } as unknown as Entry;
+}
 
 const REALTIME_STORE_KEY = Symbol("realtime-store");
 
@@ -81,6 +98,12 @@ export class RealtimeStore {
   /** Background polling interval when tab is hidden */
   private backgroundPollInterval: ReturnType<typeof setInterval> | null = null;
   private static readonly BACKGROUND_POLL_MS = 30_000; // 30s — browsers throttle setInterval to ~60s in hidden tabs, so aim for ~1 poll per minute worst-case
+
+  /** Foreground safety-net poll: runs while the tab is visible to recover from a
+   *  silently-stalled ("zombie") socket the browser still believes is connected. */
+  private foregroundPollInterval: ReturnType<typeof setInterval> | null = null;
+  private static readonly FOREGROUND_POLL_MS = 60_000; // re-check staleness every 60s while visible
+  private static readonly FOREGROUND_STALE_MS = 5 * 60_000; // refetch if no data for 5 min while visible
 
   /** Reactive state using Svelte 5 runes - using $state.raw for arrays to avoid deep proxy issues */
   entries = $state.raw<Entry[]>([]);
@@ -251,6 +274,16 @@ export class RealtimeStore {
         this.now = Date.now();
       }, 1000);
 
+      // Foreground safety net: while visible the dashboard relies solely on the realtime
+      // socket. A silently-stalled socket (still "connected" but not delivering) otherwise
+      // only recovers on refocus/reload. Re-check periodically; backfill once data is stale.
+      this.foregroundPollInterval = setInterval(() => {
+        if (document.visibilityState !== 'visible') return;
+        if (Date.now() - this.lastDataReceived > RealtimeStore.FOREGROUND_STALE_MS) {
+          this.performBackfillIfNeeded(true);
+        }
+      }, RealtimeStore.FOREGROUND_POLL_MS);
+
       // Add visibility change listener for sleep/wake detection (tab switching)
       this.handleVisibilityChange = () => {
         if (document.visibilityState === 'visible') {
@@ -302,7 +335,7 @@ export class RealtimeStore {
         historicalApsSnapshots,
         currentTherapyState,
       ] = await Promise.all([
-        apiClient.sensorGlucose.getAll(undefined, undefined, 1000).then((r) => (r.data ?? []) as unknown as Entry[]).catch(() => [] as Entry[]),
+        apiClient.sensorGlucose.getAll(undefined, undefined, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch(() => [] as Entry[]),
         Promise.resolve([] as DeviceStatus[]),
         apiClient.profile.getProfileSummary().catch(() => null),
         apiClient.trackers.getDefinitions().catch(() => []),
@@ -793,6 +826,9 @@ export class RealtimeStore {
     if (this.timeInterval) {
       clearInterval(this.timeInterval);
     }
+    if (this.foregroundPollInterval) {
+      clearInterval(this.foregroundPollInterval);
+    }
     this.stopBackgroundPolling();
     if (typeof window !== 'undefined') {
       if (this.handleVisibilityChange) {
@@ -890,7 +926,7 @@ export class RealtimeStore {
       const backfillFromDate = new Date(backfillFrom);
       const nowDate = new Date();
       const [entries, deviceStatuses, boluses, carbIntakes, bgChecks, notes, devEvents, newApsSnapshots] = await Promise.all([
-        apiClient.sensorGlucose.getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []) as unknown as Entry[]).catch(() => [] as Entry[]),
+        apiClient.sensorGlucose.getAll(backfillFromDate, nowDate, 1000).then((r) => (r.data ?? []).map(sensorGlucoseToEntry)).catch(() => [] as Entry[]),
         Promise.resolve([] as DeviceStatus[]),
         apiClient.bolus.getAll(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),
         apiClient.nutrition.getCarbIntakes(backfillFromDate, nowDate, 500).then((r) => r.data ?? []).catch(() => []),

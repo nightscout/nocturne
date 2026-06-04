@@ -7,6 +7,7 @@ using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -22,6 +23,7 @@ public class GlucosePublisherTests
     private readonly Mock<IEntryService> _mockEntryService;
     private readonly Mock<ISensorGlucoseRepository> _mockSensorGlucoseRepository;
     private readonly Mock<IPatientDeviceRepository> _mockPatientDeviceRepository;
+    private readonly Mock<IDataEventSink<SensorGlucose>> _mockSensorGlucoseEvents;
     private readonly GlucosePublisher _publisher;
 
     public GlucosePublisherTests()
@@ -29,6 +31,7 @@ public class GlucosePublisherTests
         _mockEntryService = new Mock<IEntryService>();
         _mockSensorGlucoseRepository = new Mock<ISensorGlucoseRepository>();
         _mockPatientDeviceRepository = new Mock<IPatientDeviceRepository>();
+        _mockSensorGlucoseEvents = new Mock<IDataEventSink<SensorGlucose>>();
 
         _publisher = new GlucosePublisher(
             _mockEntryService.Object,
@@ -37,6 +40,7 @@ public class GlucosePublisherTests
             Mock.Of<IDbContextFactory<NocturneDbContext>>(),
             Mock.Of<ITenantAccessor>(),
             Mock.Of<IAlertOrchestrator>(),
+            _mockSensorGlucoseEvents.Object,
             NullLogger<GlucosePublisher>.Instance
         );
     }
@@ -68,6 +72,31 @@ public class GlucosePublisherTests
         var result = await _publisher.PublishEntriesAsync(new List<Entry>(), "test-source");
 
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PublishSensorGlucoseAsync_BroadcastsRealtimeEvent_ForPublishedReadings()
+    {
+        _mockPatientDeviceRepository
+            .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<PatientDevice>());
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
+
+        var records = new List<SensorGlucose>
+        {
+            new() { Mgdl = 120, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
+        };
+
+        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector);
+
+        result.Should().BeTrue();
+        _mockSensorGlucoseEvents.Verify(
+            e => e.OnCreatedAsync(
+                It.Is<IReadOnlyList<SensorGlucose>>(l => l.Count == 1),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

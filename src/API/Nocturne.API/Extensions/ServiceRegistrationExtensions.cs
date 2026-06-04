@@ -60,6 +60,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -424,6 +425,20 @@ public static class ServiceRegistrationExtensions
             return new CompositeDataEventSink<Entry>(
                 sinks,
                 sp.GetService<ILogger<CompositeDataEventSink<Entry>>>());
+        });
+        // V4-native sensor glucose writes (POST /api/v4/glucose/sensor + connector publisher)
+        // broadcast on the real-time "entries" collection, mirroring the legacy entries path.
+        services.AddScoped<SignalRSensorGlucoseEventSink>();
+        services.AddScoped<IDataEventSink<SensorGlucose>>(sp =>
+        {
+            var sinks = new List<IDataEventSink<SensorGlucose>>
+            {
+                sp.GetRequiredService<SignalRSensorGlucoseEventSink>(),
+            };
+
+            return new CompositeDataEventSink<SensorGlucose>(
+                sinks,
+                sp.GetService<ILogger<CompositeDataEventSink<SensorGlucose>>>());
         });
         services.AddScoped<IStateSpanService, StateSpanService>();
         services.AddScoped<DeviceStatusProjectionService>();

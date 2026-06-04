@@ -3,6 +3,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -25,6 +26,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IAlertOrchestrator _alertOrchestrator;
+    private readonly IDataEventSink<SensorGlucose> _sensorGlucoseEvents;
     private readonly ILogger<GlucosePublisher> _logger;
 
     public GlucosePublisher(
@@ -34,6 +36,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         IDbContextFactory<NocturneDbContext> contextFactory,
         ITenantAccessor tenantAccessor,
         IAlertOrchestrator alertOrchestrator,
+        IDataEventSink<SensorGlucose> sensorGlucoseEvents,
         ILogger<GlucosePublisher> logger)
     {
         _entryService = entryService ?? throw new ArgumentNullException(nameof(entryService));
@@ -42,6 +45,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
         _alertOrchestrator = alertOrchestrator ?? throw new ArgumentNullException(nameof(alertOrchestrator));
+        _sensorGlucoseEvents = sensorGlucoseEvents ?? throw new ArgumentNullException(nameof(sensorGlucoseEvents));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -80,6 +84,9 @@ internal sealed class GlucosePublisher : IGlucosePublisher
             await _sensorGlucoseRepository.BulkCreateAsync(recordList, cancellationToken);
             await UpdateLastReadingAtAsync(cancellationToken);
             await EvaluateAlertsForSensorGlucoseAsync(recordList, cancellationToken);
+
+            // V4 writes bypass the legacy entry sink; emit the realtime "entries" create here.
+            await _sensorGlucoseEvents.OnCreatedAsync(recordList, cancellationToken);
 
             _logger.LogDebug("Published {Count} SensorGlucose records for {Source}", recordList.Count, source);
             return true;
