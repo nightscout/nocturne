@@ -84,6 +84,7 @@ export default defineConfig(({ mode }) => {
               },
             },
             instanceKey: INSTANCE_KEY,
+            baseDomain: env.BASE_DOMAIN || undefined,
           })
             .then((bridge) => {
               console.log("✓ WebSocket bridge initialized successfully");

@@ -15,6 +15,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rimraf dist",
+    "test": "vitest run",
     "prepublishOnly": "pnpm run build"
   },
   "keywords": [
@@ -36,7 +37,8 @@
     "@types/node": "^20.10.6",
     "@types/tough-cookie": "^4.0.5",
     "rimraf": "^5.0.5",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.6"
   },
   "engines": {
     "node": ">=24"

@@ -2,6 +2,7 @@ import { Server as SocketIOServerClass, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import logger from './logger.js';
 import type { ClientInfo, AlarmData, ServerStats } from '../types.js';
+import type { TenantAuthorizer } from './tenant-authorizer.js';
 
 interface SocketIOConfig {
   cors?: {
@@ -14,29 +15,76 @@ interface SocketIOConfig {
   pingInterval?: number;
 }
 
+/** Pick the host the connection arrived on: the proxy-forwarded host if present
+ *  (X-Forwarded-Host), otherwise the Host header. Returns the first value when a
+ *  header is repeated.
+ *
+ *  Trust model: X-Forwarded-Host is NOT sanitized at the edge — the YARP gateway
+ *  forwards it as-is and nothing overwrites it, so a client can set it to any
+ *  value. Safety does not depend on trusting this header. The chosen host is
+ *  replayed to the API authorization probe together with the client's OWN cookie,
+ *  and the API applies its per-tenant read policy: a spoofed host only re-points
+ *  the probe at another tenant, and a private tenant still rejects a non-member
+ *  cookie, so spoofing can expose only data that is already public. The API
+ *  resolves tenants from the same header in TenantResolutionMiddleware, so the
+ *  bridge adds no new trust assumption. */
+export function pickHandshakeHost(
+  headers: Record<string, string | string[] | undefined>,
+): string | undefined {
+  const value = headers['x-forwarded-host'] ?? headers['host'];
+  const single = Array.isArray(value) ? value[0] : value;
+  return single || undefined;
+}
+
+/** Resolve the tenant slug a host belongs to. A subdomain resolves to its slug;
+ *  the apex domain resolves to the sole tenant when exactly one exists, mirroring
+ *  the API's tenant resolution so a single tenant served on the root domain works
+ *  without a subdomain. Returns null when the host is foreign or the apex can't be
+ *  resolved to a single tenant. */
+export function resolveTenantSlug(
+  host: string | undefined,
+  baseDomain: string,
+  tenantSlugs: string[],
+): string | null {
+  if (!host) return null;
+
+  const hostname = host.split(':')[0];
+  const baseDomainHost = baseDomain.split(':')[0];
+
+  if (hostname.endsWith(`.${baseDomainHost}`)) {
+    const slug = hostname.slice(0, -(baseDomainHost.length + 1));
+    return slug || null;
+  }
+
+  if (hostname === baseDomainHost && tenantSlugs.length === 1) {
+    return tenantSlugs[0];
+  }
+
+  return null;
+}
+
 class SocketIOServer {
   private io: SocketIOServerClass | null = null;
   private httpServer: HttpServer;
   private clients: Map<string, ClientInfo> = new Map();
   private config: SocketIOConfig;
-  private baseDomain?: string;
+  private baseDomain: string;
   private tenantSlugs: string[];
+  private authorizer?: TenantAuthorizer;
 
   constructor(
     httpServer: HttpServer,
     config: SocketIOConfig = {},
-    baseDomain?: string,
+    baseDomain: string,
     tenantSlugs: string[] = [],
+    authorizer?: TenantAuthorizer,
   ) {
     this.httpServer = httpServer;
     this.baseDomain = baseDomain;
     this.tenantSlugs = tenantSlugs;
+    this.authorizer = authorizer;
     this.config = {
-      cors: config.cors || {
-        origin: '*',
-        methods: ['GET', 'POST'],
-        credentials: true
-      },
+      cors: config.cors ?? { origin: '*', methods: ['GET', 'POST'], credentials: true },
       transports: config.transports || ['websocket', 'polling'],
       pingTimeout: config.pingTimeout || 60000,
       pingInterval: config.pingInterval || 25000
@@ -54,6 +102,7 @@ class SocketIOServer {
           pingInterval: this.config.pingInterval
         });
 
+        this.setupHandshakeAuth();
         this.setupEventHandlers();
 
         logger.info('Socket.IO server attached to HTTP server');
@@ -64,6 +113,48 @@ class SocketIOServer {
         reject(error);
       }
     });
+  }
+
+  /** Authorize every handshake before it can join a tenant room. The tenant is
+   *  resolved from the connection's Host, then the connection is authorized
+   *  against the API's per-tenant read policy (see TenantAuthorizer) by
+   *  forwarding the same Host and session cookie. Unauthorized handshakes are
+   *  rejected so the socket never receives broadcasts. */
+  private setupHandshakeAuth(): void {
+    if (!this.io) return;
+    this.io.use((socket, next) => this.authorizeHandshake(socket, next));
+  }
+
+  /** Resolve the tenant for a handshake and authorize it. Sets
+   *  `socket.data.tenantSlug` for room assignment on success; calls `next` with
+   *  an error to reject. Exposed for unit testing. */
+  async authorizeHandshake(socket: Socket, next: (err?: Error) => void): Promise<void> {
+    try {
+      const host = pickHandshakeHost(socket.handshake.headers);
+      const tenantSlug = resolveTenantSlug(host, this.baseDomain, this.tenantSlugs);
+      if (!tenantSlug) {
+        logger.warn(`Rejecting connection ${socket.id}: no resolvable tenant`);
+        return next(new Error('tenant_unresolved'));
+      }
+
+      if (!this.authorizer) {
+        logger.error(`Rejecting connection ${socket.id}: no authorizer configured`);
+        return next(new Error('authorization_unavailable'));
+      }
+
+      const authorized = await this.authorizer.isAuthorized(host!, socket.handshake.headers['cookie']);
+      if (!authorized) {
+        logger.warn(`Rejecting connection ${socket.id}: unauthorized for tenant ${tenantSlug}`);
+        return next(new Error('unauthorized'));
+      }
+
+      socket.data.tenantSlug = tenantSlug;
+      next();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`Rejecting connection ${socket.id}: authorization error: ${message}`);
+      next(new Error('authorization_error'));
+    }
   }
 
   private setupEventHandlers(): void {
@@ -82,16 +173,12 @@ class SocketIOServer {
       logger.info(`Client connected: ${clientId} from ${clientInfo.address}`);
       logger.debug(`Total connected clients: ${this.clients.size}`);
 
-      // In multi-tenant mode, join the client to a tenant-specific room
-      // based on the X-Forwarded-Host header set by the reverse proxy.
-      if (this.baseDomain) {
-        const tenantSlug = this.extractTenantSlug(socket);
-        if (tenantSlug) {
-          socket.join(`tenant:${tenantSlug}`);
-          logger.info(`Client ${clientId} joined tenant room: ${tenantSlug}`);
-        } else {
-          logger.warn(`Client ${clientId} connected without resolvable tenant`);
-        }
+      // Join the client to the tenant room resolved and authorized during the
+      // handshake (see setupHandshakeAuth).
+      const tenantSlug = socket.data.tenantSlug as string | undefined;
+      if (tenantSlug) {
+        socket.join(`tenant:${tenantSlug}`);
+        logger.info(`Client ${clientId} joined tenant room: ${tenantSlug}`);
       }
 
       // Handle client disconnection
@@ -101,24 +188,6 @@ class SocketIOServer {
         logger.debug(`Total connected clients: ${this.clients.size}`);
       });
 
-      // Handle client authentication if needed
-      socket.on('authenticate', () => {
-        logger.debug(`Client ${clientId} attempting authentication`);
-        // TODO: Implement authentication logic if required
-        socket.emit('authenticated', { success: true });
-      });
-
-      // Handle client joining rooms (for targeted messaging)
-      socket.on('join', (room: string) => {
-        socket.join(room);
-        logger.debug(`Client ${clientId} joined room: ${room}`);
-      });
-
-      socket.on('leave', (room: string) => {
-        socket.leave(room);
-        logger.debug(`Client ${clientId} left room: ${room}`);
-      });
-
       // Send initial connection acknowledgment
       socket.emit('connect_ack', {
         clientId: clientId,
@@ -126,35 +195,6 @@ class SocketIOServer {
         version: '1.0.0'
       });
     });
-  }
-
-  /** Extract tenant slug from the Socket.IO handshake headers.
-   *  Checks X-Forwarded-Host first (set by YARP's X-Forwarded transform),
-   *  then falls back to Host (preserved by RequestHeaderOriginalHost).
-   *  Apex-domain connections fall back to the sole tenant when exactly one
-   *  exists, mirroring the API's TenantResolutionMiddleware behavior so
-   *  self-hosted single-tenant deployments work without a subdomain. */
-  private extractTenantSlug(socket: Socket): string | null {
-    if (!this.baseDomain) return null;
-
-    const forwardedHost = socket.handshake.headers['x-forwarded-host'];
-    const rawHost = socket.handshake.headers['host'];
-    const candidate = Array.isArray(forwardedHost) ? forwardedHost[0] : (forwardedHost || rawHost);
-    if (!candidate) return null;
-
-    const hostname = candidate.split(':')[0];
-    const baseDomainHost = this.baseDomain.split(':')[0];
-
-    if (hostname.endsWith(`.${baseDomainHost}`)) {
-      const slug = hostname.slice(0, -(baseDomainHost.length + 1));
-      return slug || null;
-    }
-
-    if (hostname === baseDomainHost && this.tenantSlugs.length === 1) {
-      return this.tenantSlugs[0];
-    }
-
-    return null;
   }
 
   /** Return the Socket.IO emit target: tenant room if scoped, or all clients. */
