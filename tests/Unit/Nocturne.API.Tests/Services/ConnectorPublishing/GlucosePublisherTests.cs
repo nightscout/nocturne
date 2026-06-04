@@ -80,21 +80,28 @@ public class GlucosePublisherTests
         _mockPatientDeviceRepository
             .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<PatientDevice>());
-        _mockSensorGlucoseRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
 
         var records = new List<SensorGlucose>
         {
-            new() { Mgdl = 120, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
+            new() { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-5), DataSource = DataSources.DexcomConnector },
+            new() { Mgdl = 130, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
         };
+
+        // BulkCreateAsync dedupes by LegacyId and returns only the rows actually inserted — here a
+        // subset (the second reading); the first overlaps an already-stored reading from a prior poll.
+        var inserted = new List<SensorGlucose> { records[1] };
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(inserted);
 
         var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector);
 
         result.Should().BeTrue();
+        // The broadcast must be the deduped insert result, not the raw input list, so already-stored
+        // readings from overlapping connector poll windows are not re-broadcast.
         _mockSensorGlucoseEvents.Verify(
             e => e.OnCreatedAsync(
-                It.Is<IReadOnlyList<SensorGlucose>>(l => l.Count == 1),
+                It.Is<IReadOnlyList<SensorGlucose>>(l => l.Count == 1 && l[0].Mgdl == 130),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }

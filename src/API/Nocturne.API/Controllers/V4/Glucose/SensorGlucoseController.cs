@@ -111,6 +111,10 @@ public class SensorGlucoseController(
         try
         {
             var updated = await Repository.UpdateAsync(id, model, ct);
+
+            // V4 writes bypass the legacy entry sink; emit the realtime "entries" update here.
+            await glucoseEvents.OnUpdatedAsync(updated, ct);
+
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -196,5 +200,12 @@ public class SensorGlucoseController(
         await glucoseEvents.OnCreatedAsync(new[] { created }, ct);
 
         return created;
+    }
+
+    protected override async Task OnAfterRestoreAsync(SensorGlucose restored, CancellationToken ct)
+    {
+        // A restored reading reappears in the dataset; broadcast it as an "entries" create so the
+        // web client re-adds it. V4 restores bypass the legacy entry sink.
+        await glucoseEvents.OnCreatedAsync(new[] { restored }, ct);
     }
 }

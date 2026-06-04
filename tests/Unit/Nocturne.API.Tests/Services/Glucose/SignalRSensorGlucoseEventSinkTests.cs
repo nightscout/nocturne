@@ -65,6 +65,46 @@ public class SignalRSensorGlucoseEventSinkTests
     }
 
     [Fact]
+    public async Task OnUpdatedAsync_BroadcastsMappedEntry_OnTheEntriesCollection()
+    {
+        // Arrange
+        Entry? broadcast = null;
+        string? collection = null;
+        WriteEffectOptions? options = null;
+        _sideEffects
+            .Setup(s => s.OnUpdatedAsync(
+                It.IsAny<string>(),
+                It.IsAny<Entry>(),
+                It.IsAny<WriteEffectOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<string, Entry, WriteEffectOptions?, CancellationToken>(
+                (col, rec, opts, _) => { collection = col; broadcast = rec; options = opts; })
+            .Returns(Task.CompletedTask);
+
+        var reading = new SensorGlucose
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = DateTime.UtcNow,
+            Mgdl = 95,
+        };
+
+        var sink = CreateSink();
+
+        // Act
+        await sink.OnUpdatedAsync(reading);
+
+        // Assert — an edited V4 glucose reading must surface as an "entries" update in Entry shape.
+        collection.Should().Be("entries");
+        broadcast.Should().NotBeNull();
+        broadcast!.Type.Should().Be("sgv");
+        broadcast.Sgv.Should().Be(95);
+        broadcast.Id.Should().Be(reading.Id.ToString());
+        // Parity with SignalREntryEventSink: updates pass BroadcastDataUpdate=false (the update path emits no dataUpdate anyway).
+        options.Should().NotBeNull();
+        options!.BroadcastDataUpdate.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task OnCreatedAsync_DoesNothing_ForEmptyBatch()
     {
         var sink = CreateSink();

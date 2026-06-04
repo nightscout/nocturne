@@ -81,12 +81,14 @@ internal sealed class GlucosePublisher : IGlucosePublisher
             if (recordList.Count == 0) return true;
 
             await StampPatientDeviceIdsAsync(recordList, source, cancellationToken);
-            await _sensorGlucoseRepository.BulkCreateAsync(recordList, cancellationToken);
+            var created = (await _sensorGlucoseRepository.BulkCreateAsync(recordList, cancellationToken)).ToList();
             await UpdateLastReadingAtAsync(cancellationToken);
             await EvaluateAlertsForSensorGlucoseAsync(recordList, cancellationToken);
 
-            // V4 writes bypass the legacy entry sink; emit the realtime "entries" create here.
-            await _sensorGlucoseEvents.OnCreatedAsync(recordList, cancellationToken);
+            // V4 writes bypass the legacy entry sink; emit the realtime "entries" create for the rows
+            // actually inserted. BulkCreateAsync dedupes by LegacyId, so connectors polling overlapping
+            // windows don't re-broadcast already-stored readings. Matches SensorGlucoseController.
+            await _sensorGlucoseEvents.OnCreatedAsync(created, cancellationToken);
 
             _logger.LogDebug("Published {Count} SensorGlucose records for {Source}", recordList.Count, source);
             return true;

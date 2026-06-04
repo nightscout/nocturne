@@ -134,4 +134,55 @@ public class SensorGlucoseControllerTests
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
+
+    [Fact]
+    public async Task Update_BroadcastsRealtimeEvent_ForUpdatedReading()
+    {
+        // Arrange
+        var id = Guid.NewGuid();
+        var input = new UpsertSensorGlucoseRequest { Timestamp = DateTimeOffset.UtcNow, Mgdl = 95 };
+        var existing = new SensorGlucose { Id = id, Timestamp = input.Timestamp.UtcDateTime, Mgdl = 120 };
+        var updated = new SensorGlucose { Id = id, Timestamp = input.Timestamp.UtcDateTime, Mgdl = 95 };
+
+        _repoMock
+            .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        _repoMock
+            .Setup(r => r.UpdateAsync(id, It.IsAny<SensorGlucose>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(updated);
+
+        var controller = CreateController();
+
+        // Act
+        await controller.Update(id, input);
+
+        // Assert — an edited V4 reading must emit a real-time update so live dashboards reflect the change.
+        _eventsMock.Verify(
+            e => e.OnUpdatedAsync(updated, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Restore_BroadcastsRealtimeEvent_ForRestoredReading()
+    {
+        // Arrange
+        var id = Guid.NewGuid();
+        var restored = new SensorGlucose { Id = id, Timestamp = DateTime.UtcNow, Mgdl = 110 };
+
+        _repoMock
+            .Setup(r => r.RestoreAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(restored);
+
+        var controller = CreateController();
+
+        // Act
+        await controller.Restore(id);
+
+        // Assert — a restored reading reappears, so it must surface as a real-time create.
+        _eventsMock.Verify(
+            e => e.OnCreatedAsync(
+                It.Is<IReadOnlyList<SensorGlucose>>(l => l.Count == 1 && l[0] == restored),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
 }

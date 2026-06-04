@@ -16,7 +16,7 @@ namespace Nocturne.API.Services.Glucose;
 /// V4-native glucose ingestion — the <c>POST /api/v4/glucose/sensor</c> controller and the connector
 /// <see cref="Nocturne.API.Services.ConnectorPublishing.GlucosePublisher"/> — writes directly to the
 /// SensorGlucose repository, bypassing the legacy <see cref="SignalREntryEventSink"/>, so without this
-/// sink those readings produce no real-time <c>create</c> event. Broadcasts as the <c>entries</c>
+/// sink those readings produce no real-time <c>create</c> or <c>update</c> event. Broadcasts as the <c>entries</c>
 /// collection (what the web client and the SignalR→Socket.IO bridge subscribe to). Entries written via
 /// the legacy path are decomposed to SensorGlucose by the decomposition pipeline, not this sink, so
 /// there is no double broadcast. Cache invalidation and options mirror <see cref="SignalREntryEventSink"/>.
@@ -51,12 +51,12 @@ public class SignalRSensorGlucoseEventSink : IDataEventSink<SensorGlucose>
         _logger = logger;
     }
 
-    private WriteEffectOptions BuildWriteOptions() => new()
+    private WriteEffectOptions BuildWriteOptions(bool broadcastDataUpdate = true) => new()
     {
         CacheKeysToRemove = [CacheKeyBuilder.BuildCurrentEntriesKey(TenantCacheId)],
         CachePatternsToClear = [CacheKeyBuilder.BuildRecentEntriesPattern(TenantCacheId)],
         DecomposeToV4 = false,
-        BroadcastDataUpdate = true,
+        BroadcastDataUpdate = broadcastDataUpdate,
     };
 
     public Task OnCreatedAsync(SensorGlucose item, CancellationToken ct = default) =>
@@ -75,6 +75,21 @@ public class SignalRSensorGlucoseEventSink : IDataEventSink<SensorGlucose>
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to process create side effects for {Count} sensor glucose readings", items.Count);
+        }
+    }
+
+    public async Task OnUpdatedAsync(SensorGlucose item, CancellationToken ct = default)
+    {
+        try
+        {
+            var entry = SensorGlucoseToEntryMapper.ToEntry(item);
+            // BroadcastDataUpdate=false mirrors SignalREntryEventSink.OnUpdatedAsync; the update path
+            // emits no dataUpdate regardless (IWriteSideEffects honours the flag only on create).
+            await _sideEffects.OnUpdatedAsync(CollectionName, entry, BuildWriteOptions(broadcastDataUpdate: false), ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process update side effects for sensor glucose reading {Id}", item.Id);
         }
     }
 }
