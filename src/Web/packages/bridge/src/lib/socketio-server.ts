@@ -2,7 +2,7 @@ import { Server as SocketIOServerClass, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import logger from './logger.js';
 import type { ClientInfo, AlarmData, ServerStats } from '../types.js';
-import type { TenantAuthorizer } from './tenant-authorizer.js';
+import { verifyHandshakeTicket, normalizeHandshakeHost } from './handshake-ticket.js';
 
 interface SocketIOConfig {
   cors?: {
@@ -70,19 +70,19 @@ class SocketIOServer {
   private config: SocketIOConfig;
   private baseDomain: string;
   private tenantSlugs: string[];
-  private authorizer?: TenantAuthorizer;
+  private signingSecret: string;
 
   constructor(
     httpServer: HttpServer,
     config: SocketIOConfig = {},
     baseDomain: string,
     tenantSlugs: string[] = [],
-    authorizer?: TenantAuthorizer,
+    signingSecret: string = '',
   ) {
     this.httpServer = httpServer;
     this.baseDomain = baseDomain;
     this.tenantSlugs = tenantSlugs;
-    this.authorizer = authorizer;
+    this.signingSecret = signingSecret;
     this.config = {
       cors: config.cors ?? { origin: '*', methods: ['GET', 'POST'], credentials: true },
       transports: config.transports || ['websocket', 'polling'],
@@ -116,16 +116,19 @@ class SocketIOServer {
   }
 
   /** Authorize every handshake before it can join a tenant room. The tenant is
-   *  resolved from the connection's Host, then the connection is authorized
-   *  against the API's per-tenant read policy (see TenantAuthorizer) by
-   *  forwarding the same Host and session cookie. Unauthorized handshakes are
-   *  rejected so the socket never receives broadcasts. */
+   *  resolved from the connection's Host, and the connection must present a valid
+   *  handshake ticket (see handshake-ticket.ts) in its Socket.IO `auth` payload.
+   *  The ticket is minted by the web app's `/realtime/ticket` endpoint only after
+   *  it has replayed the connection's read against the API's per-tenant read
+   *  policy, so verifying the ticket here mirrors that policy without a
+   *  per-connection API call. Unauthorized handshakes are rejected so the socket
+   *  never receives broadcasts. */
   private setupHandshakeAuth(): void {
     if (!this.io) return;
     this.io.use((socket, next) => this.authorizeHandshake(socket, next));
   }
 
-  /** Resolve the tenant for a handshake and authorize it. Sets
+  /** Resolve the tenant for a handshake and authorize it from its ticket. Sets
    *  `socket.data.tenantSlug` for room assignment on success; calls `next` with
    *  an error to reject. Exposed for unit testing. */
   async authorizeHandshake(socket: Socket, next: (err?: Error) => void): Promise<void> {
@@ -137,14 +140,17 @@ class SocketIOServer {
         return next(new Error('tenant_unresolved'));
       }
 
-      if (!this.authorizer) {
-        logger.error(`Rejecting connection ${socket.id}: no authorizer configured`);
-        return next(new Error('authorization_unavailable'));
+      const token = (socket.handshake.auth as { token?: string } | undefined)?.token;
+      const ticket = verifyHandshakeTicket(this.signingSecret, token);
+      if (!ticket) {
+        logger.warn(`Rejecting connection ${socket.id}: missing or invalid handshake ticket for tenant ${tenantSlug}`);
+        return next(new Error('unauthorized'));
       }
 
-      const authorized = await this.authorizer.isAuthorized(host!, socket.handshake.headers['cookie']);
-      if (!authorized) {
-        logger.warn(`Rejecting connection ${socket.id}: unauthorized for tenant ${tenantSlug}`);
+      // Bind the ticket to the host the connection actually arrived on, so a
+      // ticket minted for one tenant can't be replayed on another tenant's socket.
+      if (ticket.h !== normalizeHandshakeHost(host!)) {
+        logger.warn(`Rejecting connection ${socket.id}: handshake ticket host mismatch for tenant ${tenantSlug}`);
         return next(new Error('unauthorized'));
       }
 

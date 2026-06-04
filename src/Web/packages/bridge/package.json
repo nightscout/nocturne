@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./ticket": {
+      "types": "./dist/lib/handshake-ticket.d.ts",
+      "default": "./dist/lib/handshake-ticket.js"
     }
   },
   "scripts": {

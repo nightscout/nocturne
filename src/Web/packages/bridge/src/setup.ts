@@ -5,7 +5,6 @@ import { buildConfig } from './lib/config-builder.js';
 import SocketIOServer from './lib/socketio-server.js';
 import SignalRClient from './lib/signalr-client.js';
 import MessageTranslator from './lib/message-translator.js';
-import { TenantAuthorizer } from './lib/tenant-authorizer.js';
 import logger from './lib/logger.js';
 
 /** Derive the API base URL from a SignalR hub URL (".../hubs/data" -> "..."). */
@@ -93,11 +92,14 @@ export async function setupBridge(
     logger.info(`SignalR ConfigHub URL: ${config.signalr.configHubUrl}`);
   }
 
-  // Authorize each Socket.IO handshake against the API's per-tenant read policy
-  // before it joins a tenant room.
-  const authorizer = new TenantAuthorizer({
-    apiBaseUrl: apiBaseFromHubUrl(config.signalr.hubUrl),
-  });
+  // The Socket.IO handshake is authorized by verifying a signed ticket the web
+  // app's /realtime/ticket endpoint mints after it has checked the API read
+  // policy. Both sides share INSTANCE_KEY as the HMAC secret.
+  if (!config.instanceKey) {
+    logger.warn(
+      'INSTANCE_KEY is not set — every Socket.IO handshake ticket will fail verification, so realtime will be disabled until it is configured.',
+    );
+  }
 
   // Start the Socket.IO server eagerly — it doesn't need tenant info to accept
   // browser connections. Tenant room assignment uses the Host header; the slug
@@ -108,7 +110,7 @@ export async function setupBridge(
     config.socketio,
     baseDomain,
     [],
-    authorizer,
+    config.instanceKey,
   );
 
   await socketIOServer.start();

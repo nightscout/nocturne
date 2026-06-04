@@ -25,31 +25,37 @@ export function getHashedInstanceKey(): string | null {
     : null;
 }
 
+export interface ServerHttpClientOptions {
+  accessToken?: string;
+  refreshToken?: string;
+  guestSessionToken?: string;
+  platformAccessToken?: string;
+  hashedInstanceKey?: string | null;
+  extraHeaders?: Record<string, string>;
+  responseCookies?: CookieSetter;
+  signal?: AbortSignal;
+}
+
+/** A minimal `{ fetch }` http client as consumed by the generated ApiClient. */
+export interface ServerHttpClient {
+  fetch: (url: RequestInfo, init?: RequestInit) => Promise<Response>;
+}
+
 /**
- * Create an API client with custom fetch that includes auth headers.
+ * Build a server-side fetch that forwards service auth (instance key), the
+ * caller's session cookies, and extra headers to the backend, and propagates
+ * any auth-cookie rotation back onto the outgoing SvelteKit response.
  *
- * When `responseCookies` is provided, any auth-related Set-Cookie headers
- * on the response are forwarded onto the outgoing SvelteKit response so
- * that token rotation performed by the API middleware reaches the browser.
- * Without this, SSR-initiated calls would silently rotate tokens that
- * never make it back to the client, causing the next request to fail auth
- * (since the old refresh token is now revoked).
+ * Exposed separately from {@link createServerApiClient} so callers that need a
+ * raw request against the backend (e.g. probing a legacy `/api/v1/*` endpoint
+ * the typed client doesn't surface) reuse the exact same auth-forwarding and
+ * token-rotation handling instead of reimplementing it.
  */
-export function createServerApiClient(
-  baseUrl: string,
+export function createServerHttpClient(
   fetchFn: typeof fetch,
-  options?: {
-    accessToken?: string;
-    refreshToken?: string;
-    guestSessionToken?: string;
-    platformAccessToken?: string;
-    hashedInstanceKey?: string | null;
-    extraHeaders?: Record<string, string>;
-    responseCookies?: CookieSetter;
-    signal?: AbortSignal;
-  }
-): ApiClient {
-  const httpClient = {
+  options?: ServerHttpClientOptions
+): ServerHttpClient {
+  return {
     fetch: async (url: RequestInfo, init?: RequestInit): Promise<Response> => {
       const headers = new Headers(init?.headers);
 
@@ -105,6 +111,22 @@ export function createServerApiClient(
       return response;
     },
   };
+}
 
-  return new ApiClient(baseUrl, httpClient);
+/**
+ * Create an API client with custom fetch that includes auth headers.
+ *
+ * When `responseCookies` is provided, any auth-related Set-Cookie headers
+ * on the response are forwarded onto the outgoing SvelteKit response so
+ * that token rotation performed by the API middleware reaches the browser.
+ * Without this, SSR-initiated calls would silently rotate tokens that
+ * never make it back to the client, causing the next request to fail auth
+ * (since the old refresh token is now revoked).
+ */
+export function createServerApiClient(
+  baseUrl: string,
+  fetchFn: typeof fetch,
+  options?: ServerHttpClientOptions
+): ApiClient {
+  return new ApiClient(baseUrl, createServerHttpClient(fetchFn, options));
 }

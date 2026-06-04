@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createServer } from 'http';
 import SocketIOServer, { pickHandshakeHost, resolveTenantSlug } from './socketio-server.js';
-import type { TenantAuthorizer } from './tenant-authorizer.js';
+import { signHandshakeTicket } from './handshake-ticket.js';
+
+const SECRET = 'test-instance-key-0123456789';
 
 describe('resolveTenantSlug', () => {
   const base = 'nocturne.run';
@@ -55,54 +57,89 @@ describe('pickHandshakeHost', () => {
 
 type HandshakeHeaders = Record<string, string | string[] | undefined>;
 
-function makeServer(
-  authorize: boolean | Error,
-  tenantSlugs: string[] = [],
-): { server: SocketIOServer; isAuthorized: ReturnType<typeof vi.fn> } {
-  const isAuthorized =
-    authorize instanceof Error
-      ? vi.fn(async () => {
-          throw authorize;
-        })
-      : vi.fn(async () => authorize);
-  const authorizer = { isAuthorized } as unknown as TenantAuthorizer;
-  const server = new SocketIOServer(createServer(), {}, 'nocturne.run', tenantSlugs, authorizer);
-  return { server, isAuthorized };
+function makeServer(tenantSlugs: string[] = []): SocketIOServer {
+  return new SocketIOServer(createServer(), {}, 'nocturne.run', tenantSlugs, SECRET);
 }
 
-function fakeSocket(headers: HandshakeHeaders) {
-  return { id: 'sock1', handshake: { headers }, data: {} as Record<string, unknown> };
+function fakeSocket(headers: HandshakeHeaders, auth: { token?: string } = {}) {
+  return { id: 'sock1', handshake: { headers, auth }, data: {} as Record<string, unknown> };
 }
 
 describe('SocketIOServer.authorizeHandshake', () => {
   it('rejects when the host resolves to no tenant', async () => {
-    const { server, isAuthorized } = makeServer(true);
+    const server = makeServer();
     const next = vi.fn();
 
-    await server.authorizeHandshake(fakeSocket({ host: 'evil.com' }) as never, next);
+    await server.authorizeHandshake(
+      fakeSocket({ host: 'evil.com' }, { token: signHandshakeTicket(SECRET, 'evil.com') }) as never,
+      next,
+    );
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(next.mock.calls[0][0]).toBeInstanceOf(Error);
     expect(next.mock.calls[0][0].message).toBe('tenant_unresolved');
-    expect(isAuthorized).not.toHaveBeenCalled();
   });
 
-  it('rejects an unauthorized connection to a private tenant', async () => {
-    const { server, isAuthorized } = makeServer(false);
+  it('rejects a connection that carries no ticket', async () => {
+    const server = makeServer();
     const next = vi.fn();
-    const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run', cookie: 'session=bad' });
+    const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run' });
 
     await server.authorizeHandshake(socket as never, next);
 
-    expect(isAuthorized).toHaveBeenCalledWith('rhys.nocturne.run', 'session=bad');
     expect(next.mock.calls[0][0].message).toBe('unauthorized');
     expect(socket.data.tenantSlug).toBeUndefined();
   });
 
-  it('admits an authorized connection and tags the socket with its tenant', async () => {
-    const { server } = makeServer(true);
+  it('rejects a tampered ticket', async () => {
+    const server = makeServer();
     const next = vi.fn();
-    const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run', cookie: 'session=good' });
+    const ticket = signHandshakeTicket(SECRET, 'rhys.nocturne.run');
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: ticket.slice(0, -1) + (ticket.endsWith('a') ? 'b' : 'a') },
+    );
+
+    await server.authorizeHandshake(socket as never, next);
+
+    expect(next.mock.calls[0][0].message).toBe('unauthorized');
+    expect(socket.data.tenantSlug).toBeUndefined();
+  });
+
+  it('rejects a ticket minted for a different host (no cross-tenant replay)', async () => {
+    const server = makeServer();
+    const next = vi.fn();
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'someone-else.nocturne.run') },
+    );
+
+    await server.authorizeHandshake(socket as never, next);
+
+    expect(next.mock.calls[0][0].message).toBe('unauthorized');
+    expect(socket.data.tenantSlug).toBeUndefined();
+  });
+
+  it('rejects an expired ticket', async () => {
+    const server = makeServer();
+    const next = vi.fn();
+    // Sign a ticket that expired one minute ago.
+    const expired = signHandshakeTicket(SECRET, 'rhys.nocturne.run', -60_000);
+    const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run' }, { token: expired });
+
+    await server.authorizeHandshake(socket as never, next);
+
+    expect(next.mock.calls[0][0].message).toBe('unauthorized');
+    expect(socket.data.tenantSlug).toBeUndefined();
+  });
+
+  it('admits a valid ticket and tags the socket with its tenant', async () => {
+    const server = makeServer();
+    const next = vi.fn();
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run') },
+    );
 
     await server.authorizeHandshake(socket as never, next);
 
@@ -110,37 +147,31 @@ describe('SocketIOServer.authorizeHandshake', () => {
     expect(socket.data.tenantSlug).toBe('rhys');
   });
 
-  it('admits a public-tenant connection that carries no cookie', async () => {
-    const { server, isAuthorized } = makeServer(true);
+  it('ignores a port difference between the ticket and the connection host', async () => {
+    const server = makeServer();
     const next = vi.fn();
-    const socket = fakeSocket({ 'x-forwarded-host': 'public.nocturne.run' });
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run:443') },
+    );
 
     await server.authorizeHandshake(socket as never, next);
 
-    expect(isAuthorized).toHaveBeenCalledWith('public.nocturne.run', undefined);
     expect(next).toHaveBeenCalledWith();
-    expect(socket.data.tenantSlug).toBe('public');
+    expect(socket.data.tenantSlug).toBe('rhys');
   });
 
-  it('admits an apex connection for the sole tenant', async () => {
-    const { server } = makeServer(true, ['only']);
+  it('admits an apex connection for the sole tenant with an apex ticket', async () => {
+    const server = makeServer(['only']);
     const next = vi.fn();
-    const socket = fakeSocket({ host: 'nocturne.run' });
+    const socket = fakeSocket(
+      { host: 'nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'nocturne.run') },
+    );
 
     await server.authorizeHandshake(socket as never, next);
 
     expect(next).toHaveBeenCalledWith();
     expect(socket.data.tenantSlug).toBe('only');
-  });
-
-  it('rejects with no admission when authorization throws (fails closed)', async () => {
-    const { server } = makeServer(new Error('boom'));
-    const next = vi.fn();
-    const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run', cookie: 'session=x' });
-
-    await server.authorizeHandshake(socket as never, next);
-
-    expect(next.mock.calls[0][0].message).toBe('authorization_error');
-    expect(socket.data.tenantSlug).toBeUndefined();
   });
 });
