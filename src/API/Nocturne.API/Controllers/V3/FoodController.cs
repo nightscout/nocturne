@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Repositories;
@@ -280,6 +281,7 @@ public class FoodController : BaseV3Controller<Food>
     /// <returns>Created food records</returns>
     [HttpPost]
     [Authorize]
+    [RequireScope(OAuthScopes.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food")]
     [ProducesResponseType(typeof(Food[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -372,6 +374,7 @@ public class FoodController : BaseV3Controller<Food>
     /// <returns>Updated food record</returns>
     [HttpPut("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.FoodReadWrite)]
     [NightscoutEndpoint("/api/v3/food/{id}")]
     [ProducesResponseType(typeof(Food), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -509,6 +512,7 @@ public class FoodController : BaseV3Controller<Food>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v3/food/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]

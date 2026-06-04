@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
@@ -159,6 +160,7 @@ public class ProfileController : BaseV3Controller<Profile>
     /// <returns>Created profiles</returns>
     [HttpPost]
     [Authorize]
+    [RequireScope(OAuthScopes.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/profile")]
     [ProducesResponseType(typeof(Profile[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -222,6 +224,7 @@ public class ProfileController : BaseV3Controller<Profile>
     /// <returns>Updated profile</returns>
     [HttpPut("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/profile/{id}")]
     [ProducesResponseType(typeof(Profile), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -291,6 +294,7 @@ public class ProfileController : BaseV3Controller<Profile>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v3/profile/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
