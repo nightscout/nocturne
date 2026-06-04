@@ -83,7 +83,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/Web/packages/app/src/lib/api/generated/**
+          git add src/Web/packages/app/src/lib/api/generated src/Web/packages/app/src/lib/api/api-client.generated.ts
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
