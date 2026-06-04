@@ -72,8 +72,17 @@ public class MigrationJobService : IMigrationJobService
         CancellationToken ct = default
     )
     {
+        // Never start a migration without a resolved tenant. The job writes via the detached
+        // background task, so an empty/unresolved tenant here would otherwise fall back to a
+        // stale pooled DbContext tenant and import a third party's data into the wrong tenant.
+        if (tenantContext is null || tenantContext.TenantId == Guid.Empty)
+        {
+            throw new InvalidOperationException(
+                "A migration requires a resolved tenant context; refusing to start without one.");
+        }
+
         var jobId = Guid.CreateVersion7();
-        var tenantId = tenantContext?.TenantId ?? Guid.Empty;
+        var tenantId = tenantContext.TenantId;
         var sourceDesc =
             request.Mode == MigrationMode.Api
                 ? request.NightscoutUrl
@@ -407,6 +416,11 @@ internal class MigrationJob
         if (_tenantContext is not null)
         {
             scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(_tenantContext);
+            // Pin the RLS tenant on the pooled DbContext too: setting ITenantAccessor alone does
+            // not retrofit an already-leased context (TenantConnectionInterceptor reads
+            // NocturneDbContext.TenantId on connection open). Without this the detached migration
+            // task could write under a stale pooled tenant. Mirrors ConnectorBackgroundService.
+            scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = _tenantContext.TenantId;
         }
         return scope;
     }

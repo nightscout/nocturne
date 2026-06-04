@@ -136,6 +136,7 @@ public class TenantResolutionMiddleware
             // Single tenant: auto-resolve from the apex domain.
             tenantAccessor.SetTenant(soleTenant);
             context.Items["TenantContext"] = soleTenant;
+            PinTenantOnScopedDbContext(context, soleTenant.TenantId);
             await _next(context);
             return;
         }
@@ -165,8 +166,26 @@ public class TenantResolutionMiddleware
 
         tenantAccessor.SetTenant(tenantContext);
         context.Items["TenantContext"] = tenantContext;
+        PinTenantOnScopedDbContext(context, tenantContext.TenantId);
 
         await _next(context);
+    }
+
+    /// <summary>
+    /// Pins the resolved tenant onto the request-scoped <see cref="NocturneDbContext"/>.
+    /// The scoped context is pool-leased (<c>AddPooledDbContextFactory</c>) and its
+    /// <c>TenantId</c> is a custom property that pooling does not reset, so without this a
+    /// request can inherit a previous lessee's tenant. The <c>TenantConnectionInterceptor</c>
+    /// reads <c>TenantId</c> to scope Row-Level Security on connection open, so any
+    /// directly-injected context (e.g. connector-configuration reads) would otherwise run under
+    /// a stale tenant — most visibly on unauthenticated flows (setup/onboarding) that have no
+    /// auth handler to set it.
+    /// </summary>
+    private static void PinTenantOnScopedDbContext(HttpContext context, Guid tenantId)
+    {
+        var db = context.RequestServices.GetService<NocturneDbContext>();
+        if (db is not null)
+            db.TenantId = tenantId;
     }
 
     private string? ExtractSubdomain(string hostname)

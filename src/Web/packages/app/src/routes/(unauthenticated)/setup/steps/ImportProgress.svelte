@@ -113,21 +113,11 @@
         }
       }
 
-      // No active job found — kick one off using saved connector credentials
+      // This component only MONITORS an existing migration — it never starts one.
+      // The import is kicked off explicitly when the user connects their source
+      // (see the setup page's handleMigrationConnected), so a job should already
+      // exist by now. If none is found there is nothing to monitor.
       if (!resolvedJobId) {
-        try {
-          const jobInfo =
-            await migrationRemote.startFromConnector("nightscout");
-          resolvedJobId = jobInfo?.id;
-        } catch {
-          error = "Failed to start migration";
-          loading = false;
-          return;
-        }
-      }
-
-      if (!resolvedJobId) {
-        error = "Failed to start migration";
         loading = false;
         return;
       }

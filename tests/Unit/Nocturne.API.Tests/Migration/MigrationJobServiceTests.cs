@@ -91,4 +91,24 @@ public class MigrationJobServiceTests
         historyA.Should().ContainSingle(h => h.Id == jobA.Id);
         historyA.Should().OnlyContain(h => h.Id == jobA.Id);
     }
+
+    [Fact]
+    public async Task StartMigrationAsync_throws_when_tenant_context_is_null()
+    {
+        var service = CreateService();
+
+        // Refusing to start without a resolved tenant prevents the detached migration task from
+        // falling back to a stale pooled DbContext tenant and importing into the wrong tenant.
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.StartMigrationAsync(ApiRequest(), tenantContext: null));
+    }
+
+    [Fact]
+    public async Task StartMigrationAsync_throws_when_tenant_id_is_empty()
+    {
+        var service = CreateService();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.StartMigrationAsync(ApiRequest(), Tenant(Guid.Empty)));
+    }
 }
