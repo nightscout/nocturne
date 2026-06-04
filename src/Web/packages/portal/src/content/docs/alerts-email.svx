@@ -47,8 +47,8 @@ per day -- more than enough for most alert configurations.
 ### Option A: Admin UI
 
 1. Sign in to your Nocturne instance as an admin
-2. Go to **Settings > Admin > Platform Settings**
-3. Find or add the **Resend** provider and fill in:
+2. Go to **Settings > Admin > Integrations**
+3. Find the **Resend (Email)** card and fill in:
 
 | Field | Value |
 |-------|-------|

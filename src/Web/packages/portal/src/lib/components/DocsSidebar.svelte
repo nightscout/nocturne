@@ -1,6 +1,6 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, Shield, Bell, Code2, KeyRound, ChevronRight, ChevronDown } from "@lucide/svelte";
+    import { Rocket, Download, Settings, Shield, Bell, Bot, Code2, KeyRound, ChevronRight, ChevronDown } from "@lucide/svelte";
 
     const navSections = [
         {
@@ -35,6 +35,17 @@
             icon: Bell,
             items: [
                 { href: "/docs/alerts/email", label: "Email (Resend)" },
+            ],
+        },
+        {
+            title: "Chat Bots",
+            icon: Bot,
+            items: [
+                { href: "/docs/bots", label: "Overview" },
+                { href: "/docs/bots/discord", label: "Discord" },
+                { href: "/docs/bots/slack", label: "Slack" },
+                { href: "/docs/bots/telegram", label: "Telegram" },
+                { href: "/docs/bots/whatsapp", label: "WhatsApp" },
             ],
         },
         {

@@ -1,0 +1,127 @@
+---
+title: Chat Bots
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Chat Bots
+
+Nocturne ships a multi-platform bot that lets people **query glucose** and **receive alerts**
+from the messaging apps they already use. Four platforms are supported:
+
+- [Discord](/docs/bots/discord)
+- [Slack](/docs/bots/slack)
+- [Telegram](/docs/bots/telegram)
+- [WhatsApp](/docs/bots/whatsapp)
+
+Email delivery is handled by a separate provider — see [Email Alerts (Resend)](/docs/alerts/email).
+
+All four platforms follow the same shape: create an app on the platform, collect its
+credentials, point its webhook at your Nocturne instance, and enter the credentials in
+Nocturne. The per-platform pages cover the steps unique to each one; this page covers the
+parts they share.
+
+## What the bot can do
+
+Once a platform is connected and a user has linked their account, they can:
+
+| Command | What it does |
+|---------|--------------|
+| `/bg` _(or `/glucose`)_ | Show the latest glucose reading and trend |
+| `/connect` | Link the chat account to a Nocturne account |
+| `/disconnect` | Unlink a Nocturne account |
+| `/status` | Show linked accounts and their status |
+
+The bot can also **deliver alerts**. Add the platform as a delivery channel on an alert rule
+(see **Receiving alerts** below) and excursions are pushed to the linked chat — with
+**Acknowledge** and **Resolve** actions built into the message.
+
+## Linking accounts
+
+A chat account has to be linked to a Nocturne account before it can see any glucose data.
+PHI is never stored on the chat platform — every reading is fetched over HTTPS through the
+Nocturne API at request time, scoped to the linked account.
+
+To link, a user runs `/connect` in the chat app. The bot replies with a one-time
+authorization link on your instance; signing in there ties their chat user ID to a Nocturne
+account. One chat user can link **several** accounts (e.g. a parent following two children),
+each given a short **label** used to disambiguate: `/bg lily`. One link is the **default**
+and is used when no label is given.
+
+<Callout type="info" title="BASE_DOMAIN is required">
+  The bot builds <code>/connect</code> authorization links from your instance's
+  <code>BASE_DOMAIN</code>. This is already set on any working Nocturne deployment; if links
+  point at the wrong host, check that value first.
+</Callout>
+
+## Configuring credentials
+
+Every platform's credentials can be supplied two ways. Pick whichever fits your deployment.
+
+### Option A: Admin UI
+
+1. Sign in to your Nocturne instance as an admin.
+2. Go to **Settings > Admin > Integrations**.
+3. Find the platform's card, fill in its fields, turn the **Enabled** switch on, and click **Save**.
+
+Credentials entered here are **encrypted at rest** and stored per-instance. The fields are
+write-only — once saved, a field shows a **Set** badge and the input stays blank; leave it
+blank on a later save to keep the existing value.
+
+<Callout type="warning" title="Restart after saving">
+  The bot reads its configuration once at startup. After saving or removing credentials in
+  the Admin UI, <strong>restart the Nocturne web service</strong> for the change to take
+  effect.
+</Callout>
+
+### Option B: Environment variables
+
+For declarative, infrastructure-as-code deployments, set the platform's variables in your
+`.env` or container environment and restart. The exact variable names are listed on each
+platform's page.
+
+<Callout type="info" title="Admin UI wins">
+  If a platform is configured through the Admin UI, those values are used and the matching
+  environment variables for that platform are ignored. Manage each platform in one place,
+  not both.
+</Callout>
+
+<Callout type="tip" title="Encryption key">
+  Saving credentials in the Admin UI requires the instance encryption key
+  (<code>INSTANCE_KEY</code>) to be configured. It already is on any standard deployment.
+</Callout>
+
+## Webhooks
+
+Each platform delivers messages to Nocturne by calling a webhook endpoint. You register these
+URLs in the platform's developer console (the per-platform pages say exactly where). Replace
+`your-instance.com` with your Nocturne domain:
+
+| Platform | Webhook endpoint |
+|----------|------------------|
+| Discord | `https://your-instance.com/api/v4/webhooks/discord` |
+| Slack | `https://your-instance.com/api/v4/webhooks/slack` |
+| Telegram | `https://your-instance.com/api/v4/webhooks/telegram` |
+| WhatsApp | `https://your-instance.com/api/v4/webhooks/whatsapp` |
+
+## Receiving alerts
+
+To push alerts to a connected platform:
+
+1. Go to **Settings > Alerts**.
+2. Create or edit an alert rule.
+3. Under **Delivery channels**, add the platform.
+4. Save the rule.
+
+The recipient must have a linked account on that platform. When the rule fires, the alert is
+delivered to their chat with inline **Acknowledge** and **Resolve** actions.
+
+## See also
+
+- [Discord](/docs/bots/discord)
+- [Slack](/docs/bots/slack)
+- [Telegram](/docs/bots/telegram)
+- [WhatsApp](/docs/bots/whatsapp)
+- [Email Alerts (Resend)](/docs/alerts/email)

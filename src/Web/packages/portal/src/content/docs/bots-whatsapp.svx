@@ -1,0 +1,92 @@
+---
+title: WhatsApp Bot
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# WhatsApp Bot
+
+Connect the WhatsApp Cloud API so people can query glucose and receive alerts over WhatsApp.
+This page covers the WhatsApp-specific steps; for account linking, alert delivery, and the
+shared concepts, see [Chat Bots](/docs/bots).
+
+## 1. Set up the WhatsApp Cloud API
+
+WhatsApp messaging runs through Meta's Cloud API.
+
+1. In the [Meta for Developers](https://developers.facebook.com/) console, create (or open) an
+   app and add the **WhatsApp** product.
+2. In **WhatsApp > API Setup**, note the **Phone number ID** for your sending number.
+3. Generate an **access token** for the app. A temporary token works for testing; for
+   production, create a System User with a long-lived token so it doesn't expire.
+
+## 2. Collect the credentials
+
+| Field | Where to find it |
+|-------|------------------|
+| **Access Token** | **WhatsApp > API Setup** (or a System User token in Business Settings) |
+| **Phone Number ID** | **WhatsApp > API Setup** — the number's ID, not the phone number itself |
+| **App Secret** | **App settings > Basic > App Secret** |
+| **Verify Token** | A value *you* choose — any random string (see step 4) |
+
+## 3. Configure Nocturne
+
+Enter the values using either method (see [Chat Bots](/docs/bots) for the full workflow).
+
+### Option A: Admin UI
+
+At **Settings > Admin > Integrations**, fill in the **WhatsApp** card:
+
+| Field | Value |
+|-------|-------|
+| **Access Token** | The access token from step 2 |
+| **App Secret** | The app secret from step 2 |
+| **Phone Number ID** | The phone number ID from step 2 |
+| **Verify Token** | The verify token you chose |
+
+Turn **Enabled** on, click **Save**, and restart the Nocturne web service.
+
+### Option B: Environment variables
+
+```bash
+WHATSAPP_ACCESS_TOKEN=...
+WHATSAPP_APP_SECRET=...
+WHATSAPP_PHONE_NUMBER_ID=...
+WHATSAPP_VERIFY_TOKEN=...
+```
+
+Then restart Nocturne. The verify token here must match the one you set in the Meta console
+(step 4).
+
+## 4. Configure the webhook
+
+1. In the Meta console, open **WhatsApp > Configuration > Webhook** and click **Edit**.
+2. Set the **Callback URL** to:
+
+   ```
+   https://your-instance.com/api/v4/webhooks/whatsapp
+   ```
+
+3. Set the **Verify Token** to the *same* value you entered in Nocturne in step 3.
+4. Click **Verify and Save**. Meta sends a verification request that Nocturne answers using
+   the matching verify token.
+5. Under **Webhook fields**, subscribe to **messages**.
+
+<Callout type="warning" title="The verify tokens must match">
+  Webhook verification fails unless the verify token in the Meta console is identical to the
+  one saved in Nocturne. Save the credentials and restart <em>before</em> verifying the
+  webhook.
+</Callout>
+
+## 5. Test it
+
+1. Message your WhatsApp business number and send `connect`, then complete the link.
+2. Send `bg` and confirm the latest reading comes back.
+
+<Callout type="info" title="The 24-hour window">
+  Meta only lets a business send free-form messages within 24 hours of the user's last
+  message. Alerts that fire outside that window may require an approved message template —
+  see Meta's WhatsApp messaging documentation.
+</Callout>
