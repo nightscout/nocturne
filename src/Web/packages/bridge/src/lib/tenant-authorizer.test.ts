@@ -44,6 +44,9 @@ describe('TenantAuthorizer.isAuthorized', () => {
     expect(url).toBe('http://api:8080/api/v1/entries?count=1');
     expect(init.headers?.['X-Forwarded-Host']).toBe('rhys.nocturne.run');
     expect(init.headers?.['Cookie']).toBe('session=abc');
+    // Must bypass the API response cache, or a cached authed 200 could authorize an
+    // unauthenticated handshake (the cache keys on the constant internal Host).
+    expect(init.headers?.['Cache-Control']).toBe('no-cache, no-store');
   });
 
   it('omits the Cookie header when the handshake carries no cookie (public path)', async () => {

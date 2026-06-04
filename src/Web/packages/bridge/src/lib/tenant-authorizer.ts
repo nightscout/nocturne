@@ -52,7 +52,17 @@ export class TenantAuthorizer {
    * allowed to read the data of the tenant that Host resolves to.
    */
   async isAuthorized(host: string, cookieHeader: string | undefined): Promise<boolean> {
-    const headers: Record<string, string> = { 'X-Forwarded-Host': host };
+    const headers: Record<string, string> = {
+      'X-Forwarded-Host': host,
+      // Bypass the API's server-side response cache. UseResponseCaching runs before
+      // authentication and keys on the raw Host, which is the same constant internal
+      // host for every tenant's probe — so without this, an authorized probe's cached
+      // 200 would be replayed to authorize a later unauthenticated handshake. 'no-cache'
+      // forces the cache to revalidate so the request reaches the auth pipeline;
+      // 'no-store' keeps this probe out of the cache. ('no-store' alone does NOT bypass
+      // the lookup.)
+      'Cache-Control': 'no-cache, no-store',
+    };
     if (cookieHeader) headers['Cookie'] = cookieHeader;
 
     const controller = new AbortController();
