@@ -638,8 +638,15 @@ class Program
                 .PublishAsDockerComposeService((_, _) => { });
         }
 
-        builder.AddMermaidDiagramPublisher();
-        builder.AddPortainerComposePublisher();
+        // These steps depend on the "publish-compose" pipeline step, which only
+        // exists in publish mode: AddDockerComposeEnvironment does not add the
+        // environment resource (the step's provider) to the model in run mode, so
+        // registering them in run mode fails pipeline validation during startup.
+        if (builder.ExecutionContext.IsPublishMode)
+        {
+            builder.AddMermaidDiagramPublisher();
+            builder.AddPortainerComposePublisher();
+        }
 
         var app = builder.Build();
         await app.RunAsync();
