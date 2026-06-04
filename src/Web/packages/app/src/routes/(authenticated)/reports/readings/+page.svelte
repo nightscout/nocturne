@@ -1,22 +1,28 @@
 <script lang="ts">
   import { GlucoseChartCard } from "$lib/components/dashboard/glucose-chart";
-  import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
-  import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { useResourceContext } from "$lib/hooks/resource-context.svelte";
 
   // Get shared date params from context (set by reports layout)
   // Default: 7 days for day-by-day readings view
   const reportsParams = requireDateParamsContext(7);
 
-  // Create resource with automatic layout registration
-  const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Readings" }
-  );
+  // GlucoseChartCard self-fetches its own data; this page only supplies the range.
+  const dateRange = $derived.by(() => {
+    const { start, end } = reportsParams.getDateRange();
+    return { from: start, to: end };
+  });
+
+  // No page-level fetch, so report ready state to the layout ResourceGuard directly.
+  useResourceContext({
+    loading: () => false,
+    error: () => null,
+    hasData: () => true,
+    errorTitle: "Error Loading Readings",
+    refetch: () => {},
+  });
 </script>
 
-{#if reportsResource.current}
-  <div class="p-3 @md:p-6">
-    <GlucoseChartCard dateRange={reportsResource.current.dateRange} />
-  </div>
-{/if}
+<div class="p-3 @md:p-6">
+  <GlucoseChartCard {dateRange} />
+</div>

@@ -42,7 +42,6 @@
   const data = $derived({
     entries: reportsResource.current?.entries ?? [],
     boluses: reportsResource.current?.boluses ?? [],
-    carbIntakes: reportsResource.current?.carbIntakes ?? [],
     insulinDeliveryStats: reportsResource.current?.insulinDeliveryStats,
     profileSummary: reportsResource.current?.profileSummary,
     analysis: reportsResource.current?.analysis,

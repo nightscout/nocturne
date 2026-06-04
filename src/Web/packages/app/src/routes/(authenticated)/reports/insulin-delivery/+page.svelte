@@ -25,7 +25,7 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
-  import { getReportsData } from "$api/reports.remote";
+  import { getBasalReportData } from "$api/reports.remote";
   import { getMultiPeriodStatistics, getDailyBasalBolusRatios } from "$api/generated/statistics.generated.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -36,7 +36,7 @@
 
   // Create primary resource with automatic layout registration
   const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
+    () => getBasalReportData(reportsParams.dateRangeInput),
     { errorTitle: "Error Loading Insulin Delivery Data" }
   );
 

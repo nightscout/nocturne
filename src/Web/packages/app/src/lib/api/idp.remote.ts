@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { getRequestEvent, query } from "$app/server";
 import { error } from "@sveltejs/kit";
-import { DiabetesPopulation } from "$lib/api";
+import { fetchAllGlucose } from "./glucose-pagination";
 
 /**
  * Input schema for date range queries. Uses nullish() to accept both null and
@@ -64,107 +64,29 @@ export const getIdpData = query(DateRangeSchema.optional(), async (input) => {
   const { apiClient } = locals;
   const { startDate, endDate } = calculateDateRange(input);
 
-  const pageSize = 1000;
-
-  // Fetch sensor glucose readings
-  const glucoseResult = await apiClient.sensorGlucose.getAll(
-    startDate,
-    endDate,
-    10000
-  );
-  const entries = glucoseResult.data ?? [];
-
-  // Paginate boluses
-  let allBoluses: Awaited<ReturnType<typeof apiClient.bolus.getAll>>["data"] =
-    [];
-  let offset = 0;
-  let hasMore = true;
-
-  while (hasMore) {
-    const batch = await apiClient.bolus.getAll(
-      startDate,
-      endDate,
-      pageSize,
-      offset
-    );
-    allBoluses = allBoluses!.concat(batch.data ?? []);
-
-    if ((batch.data?.length ?? 0) < pageSize) {
-      hasMore = false;
-    } else {
-      offset += pageSize;
-    }
-
-    if (offset >= 50000) {
-      console.warn("Bolus fetch reached safety limit of 50,000 records");
-      hasMore = false;
-    }
-  }
-
-  // Paginate carb intakes
-  let allCarbIntakes: Awaited<
-    ReturnType<typeof apiClient.nutrition.getCarbIntakes>
-  >["data"] = [];
-  offset = 0;
-  hasMore = true;
-
-  while (hasMore) {
-    const batch = await apiClient.nutrition.getCarbIntakes(
-      startDate,
-      endDate,
-      pageSize,
-      offset
-    );
-    allCarbIntakes = allCarbIntakes!.concat(batch.data ?? []);
-
-    if ((batch.data?.length ?? 0) < pageSize) {
-      hasMore = false;
-    } else {
-      offset += pageSize;
-    }
-
-    if (offset >= 50000) {
-      console.warn("CarbIntake fetch reached safety limit of 50,000 records");
-      hasMore = false;
-    }
-  }
-
-  const boluses = allBoluses!;
-  const carbIntakes = allCarbIntakes!;
-  const population = DiabetesPopulation.Type1Adult; // TODO: Get from user settings
-
-  // Fetch insulin delivery stats, profile summary, extended glucose analytics,
-  // averaged stats, and basal analysis in parallel
-  const [
-    insulinDeliveryStats,
-    profileSummary,
-    analysis,
-    averagedStats,
-    basalAnalysis,
-    aidSystemMetrics,
-  ] = await Promise.all([
-    apiClient.statistics.getInsulinDeliveryStatistics(startDate, endDate),
-    apiClient.profile.getProfileSummary(startDate, endDate),
-    apiClient.statistics.analyzeGlucoseDataExtended({
-      entries,
-      boluses,
-      carbIntakes,
-      population,
-    }),
-    apiClient.statistics.calculateAveragedStats(entries),
-    apiClient.statistics.getBasalAnalysis(startDate, endDate),
-    apiClient.statistics.getAidSystemMetrics(startDate, endDate),
+  // Raw readings (paginated) and boluses for the charts.
+  const [entries, bolusResult] = await Promise.all([
+    fetchAllGlucose(apiClient, startDate, endDate),
+    apiClient.bolus.getAll(startDate, endDate, 10000),
   ]);
+  const boluses = bolusResult.data ?? [];
+
+  // Insulin/profile/AID stats and server-side glucose analytics in parallel.
+  const [insulinDeliveryStats, profileSummary, rangeAnalytics, aidSystemMetrics] =
+    await Promise.all([
+      apiClient.statistics.getInsulinDeliveryStatistics(startDate, endDate),
+      apiClient.profile.getProfileSummary(startDate, endDate),
+      apiClient.statistics.getRangeAnalytics(startDate, endDate),
+      apiClient.statistics.getAidSystemMetrics(startDate, endDate),
+    ]);
 
   return {
     entries,
     boluses,
-    carbIntakes,
     insulinDeliveryStats,
     profileSummary,
-    analysis,
-    averagedStats,
-    basalAnalysis,
+    analysis: rangeAnalytics.analysis,
+    averagedStats: rangeAnalytics.averagedStats,
     aidSystemMetrics,
     dateRange: {
       from: startDate.toISOString(),

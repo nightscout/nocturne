@@ -7,7 +7,7 @@
   import * as Select from "$lib/components/ui/select";
   import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import { getReportsData, type DateRangeInput } from "$api/reports.remote";
+  import { getReportsAnalysis, type DateRangeInput } from "$api/reports.remote";
   import { bg, bgLabel } from "$lib/utils/formatting";
   import { getResourceContext } from "$lib/hooks/resource-context.svelte";
 
@@ -114,8 +114,8 @@
   // Call queries directly in reactive context — SvelteKit query() returns a
   // reactive QueryResult, not a Promise. Using $derived ensures the queries
   // re-run when inputs change.
-  const queryA = $derived(getReportsData(inputA));
-  const queryB = $derived(getReportsData(inputB));
+  const queryA = $derived(getReportsAnalysis(inputA));
+  const queryB = $derived(getReportsAnalysis(inputB));
 
   // Sync to layout's ResourceContext using $effect.pre (matching contextResource's
   // approach). $effect.pre runs before DOM updates, which is critical: the layout's

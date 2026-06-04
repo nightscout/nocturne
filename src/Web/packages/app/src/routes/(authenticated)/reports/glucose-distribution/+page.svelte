@@ -3,7 +3,7 @@
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
   import { Button } from "$lib/components/ui/button";
-  import { getReportsData } from "$api/reports.remote";
+  import { getReportsAnalysis } from "$api/reports.remote";
   import HourlyGlucoseDistributionChart from "$lib/components/reports/HourlyGlucoseDistributionChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -12,7 +12,7 @@
   const reportsParams = requireDateParamsContext(14);
 
   const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
+    () => getReportsAnalysis(reportsParams.dateRangeInput),
     { errorTitle: "Error Loading Glucose Distribution" }
   );
 
