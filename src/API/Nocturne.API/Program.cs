@@ -157,6 +157,7 @@ builder.Services.AddScoped<ReadAccessAuditFilter>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<NightscoutJsonFilter>();
+    options.Filters.Add<TenantCacheVaryFilter>();
     options.Filters.AddService<ReadAccessAuditFilter>();
 })
 .ConfigureApplicationPartManager(manager =>
@@ -318,10 +319,15 @@ var app = builder.Build();
 // Configure middleware pipeline
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-app.UseResponseCaching();
 app.UseCors();
 app.UseStaticFiles();
 app.UseForwardedHeaders();
+
+// Response caching must run after UseForwardedHeaders so its cache key uses the per-tenant
+// Host (rewritten from X-Forwarded-Host) rather than the constant gateway destination host
+// (the gateway suppresses the original Host). Paired with TenantCacheVaryFilter (Vary: Cookie),
+// this keeps tenant-scoped responses isolated per tenant and per credential in the shared cache.
+app.UseResponseCaching();
 
 // Strip .json suffixes before routing so /api/v1/treatments.json matches
 // the TreatmentsController route /api/v1/treatments. Must run before
