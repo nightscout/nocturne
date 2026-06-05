@@ -210,9 +210,39 @@ public class RefreshTokenServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task RotateRefreshTokenAsync_ReuseOutsideGracePeriod_RevokesFamily()
+    public async Task RotateRefreshTokenAsync_ReuseOutsideGracePeriod_WithSessionId_RevokesOnlyThatSession()
     {
-        // Arrange — revoked token reused after 5 minutes (well past grace period)
+        // Arrange — revoked token (tagged with a session id) reused well past the grace period.
+        _jwtService.Setup(j => j.HashRefreshToken("stolen")).Returns("hash-stolen");
+
+        _repository.Setup(r => r.FindByHashAsync("hash-stolen", default))
+            .ReturnsAsync(MakeRecord(
+                revokedAt: DateTime.UtcNow.AddMinutes(-5),
+                expiresAt: DateTime.UtcNow.AddHours(1),
+                replacedByTokenId: Guid.CreateVersion7(),
+                oidcSessionId: "session-abc"));
+
+        var service = CreateService();
+
+        // Act
+        await service.RotateRefreshTokenAsync("stolen");
+
+        // Assert — only the affected session's chain is revoked, not every session the subject has.
+        _repository.Verify(r => r.RevokeByOidcSessionAsync(
+            "session-abc",
+            "Token reuse detected",
+            default));
+        _repository.Verify(
+            r => r.RevokeAllForSubjectAsync(It.IsAny<Guid>(), It.IsAny<string>(), default),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task RotateRefreshTokenAsync_ReuseOutsideGracePeriod_NoSessionId_RevokesAllForSubject()
+    {
+        // Arrange — a legacy token issued before sessions were tagged (no session id),
+        // reused well past the grace period, falls back to a subject-wide revocation.
         _jwtService.Setup(j => j.HashRefreshToken("stolen")).Returns("hash-stolen");
 
         _repository.Setup(r => r.FindByHashAsync("hash-stolen", default))
@@ -231,6 +261,9 @@ public class RefreshTokenServiceTests
             _subjectId,
             "Token reuse detected",
             default));
+        _repository.Verify(
+            r => r.RevokeByOidcSessionAsync(It.IsAny<string>(), It.IsAny<string>(), default),
+            Times.Never);
     }
 
     [Fact]
@@ -311,12 +344,13 @@ public class RefreshTokenServiceTests
         Guid? id = null,
         DateTime? revokedAt = null,
         DateTime? expiresAt = null,
-        Guid? replacedByTokenId = null) =>
+        Guid? replacedByTokenId = null,
+        string? oidcSessionId = null) =>
         new(
             Id: id ?? Guid.CreateVersion7(),
             TokenHash: "hash",
             SubjectId: _subjectId,
-            OidcSessionId: null,
+            OidcSessionId: oidcSessionId,
             DeviceDescription: null,
             IpAddress: null,
             UserAgent: null,

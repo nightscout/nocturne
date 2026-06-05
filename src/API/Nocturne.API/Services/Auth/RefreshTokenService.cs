@@ -191,7 +191,7 @@ public class RefreshTokenService : IRefreshTokenService
     /// Handles presentation of an already-revoked refresh token. Reuse of a rotated token
     /// within <see cref="RotationGracePeriod"/> is a concurrent-request race (the client had
     /// not yet received the rotated cookie); beyond it, reuse signals the token leaked and the
-    /// whole family is revoked. Tokens revoked for any other reason are simply rejected.
+    /// token family is revoked. Tokens revoked for any other reason are simply rejected.
     /// </summary>
     private async Task<string?> HandleReuseOfRevokedTokenAsync(RefreshTokenRecord oldRecord)
     {
@@ -212,13 +212,29 @@ public class RefreshTokenService : IRefreshTokenService
             throw new TokenRotationRaceException();
         }
 
-        // Outside the grace period — this looks like actual token theft.
-        _logger.LogWarning(
-            "Refresh token reuse detected for subject {SubjectId} ({Elapsed:F0}s after rotation). " +
-            "Revoking all tokens in the family.",
-            oldRecord.SubjectId, timeSinceRevocation.TotalSeconds);
+        // Outside the grace period — this looks like actual token theft. Revoke the affected
+        // session's chain rather than every session the subject has, so one compromised (or
+        // misbehaving) device doesn't sign the user out everywhere. Tokens issued before
+        // sessions were tagged have no session id; fall back to a subject-wide revocation.
+        if (!string.IsNullOrEmpty(oldRecord.OidcSessionId))
+        {
+            _logger.LogWarning(
+                "Refresh token reuse detected for subject {SubjectId} ({Elapsed:F0}s after rotation). " +
+                "Revoking session {OidcSessionId}.",
+                oldRecord.SubjectId, timeSinceRevocation.TotalSeconds, oldRecord.OidcSessionId);
 
-        await _repository.RevokeAllForSubjectAsync(oldRecord.SubjectId, "Token reuse detected");
+            await _repository.RevokeByOidcSessionAsync(oldRecord.OidcSessionId, "Token reuse detected");
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Refresh token reuse detected for subject {SubjectId} ({Elapsed:F0}s after rotation), " +
+                "no session id on token — revoking all of the subject's tokens.",
+                oldRecord.SubjectId, timeSinceRevocation.TotalSeconds);
+
+            await _repository.RevokeAllForSubjectAsync(oldRecord.SubjectId, "Token reuse detected");
+        }
+
         return null;
     }
 
