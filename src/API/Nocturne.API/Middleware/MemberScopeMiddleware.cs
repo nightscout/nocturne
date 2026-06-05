@@ -143,8 +143,19 @@ public class MemberScopeMiddleware
 
         if (effectivePermissions.Contains("*"))
         {
-            // Superuser — grant all scopes directly
+            // Superuser — grant all scopes AND a wildcard permission trie. Both must be set:
+            // GrantedScopes drives RequireScope checks, while the PermissionTrie drives the
+            // HasPermissions policy (the legacy v1 endpoints). Session tokens carry only the
+            // subject's global role permissions — empty for a normal tenant owner/admin whose
+            // permissions come from membership — so the trie built by AuthenticationMiddleware
+            // is empty. Without rebuilding it here, HasPermissions-gated endpoints would 403
+            // for a tenant superuser on their own tenant (matching the InstanceKey/PlatformAccess
+            // branch above, which sets both).
             context.Items["GrantedScopes"] = (IReadOnlySet<string>)effectivePermissions;
+
+            var superuserTrie = new PermissionTrie();
+            superuserTrie.Add(["*"]);
+            context.Items["PermissionTrie"] = superuserTrie;
         }
         else
         {
