@@ -25,6 +25,16 @@ export function getHashedInstanceKey(): string | null {
     : null;
 }
 
+/**
+ * Header naming the trusted service presenting the instance key. The API's
+ * InstanceKeyHandler only authenticates the instance key as admin when this
+ * marker is present, so a bare key accidentally forwarded onto an end-user
+ * request cannot elevate that request and bypass per-tenant public access.
+ * Must stay in sync with `ServiceNames.Headers.InstanceService` on the API.
+ */
+const INSTANCE_SERVICE_HEADER = "X-Instance-Service";
+const INSTANCE_SERVICE_NAME = "nocturne-web";
+
 export interface ServerHttpClientOptions {
   accessToken?: string;
   refreshToken?: string;
@@ -61,6 +71,8 @@ export function createServerHttpClient(
 
       if (options?.hashedInstanceKey) {
         headers.set("X-Instance-Key", options.hashedInstanceKey);
+        // Declare this as a genuine service call so the API honors the key.
+        headers.set(INSTANCE_SERVICE_HEADER, INSTANCE_SERVICE_NAME);
       }
 
       if (options?.extraHeaders) {

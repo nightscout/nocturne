@@ -74,7 +74,12 @@ const authHandle: Handle = async ({ event, resolve }) => {
         headers["X-Forwarded-Proto"] = getOriginalProto(event.request);
 
         const hashedKey = getHashedInstanceKey();
-        if (hashedKey) headers["X-Instance-Key"] = hashedKey;
+        if (hashedKey) {
+          headers["X-Instance-Key"] = hashedKey;
+          // Genuine SSR service call — declare the service so the API honors
+          // the instance key (a bare key is ignored).
+          headers["X-Instance-Service"] = "nocturne-web";
+        }
 
         const sessionRes = await fetch(`${apiBaseUrl}/api/auth/oidc/session`, { headers });
         const session = await sessionRes.json();
@@ -276,8 +281,6 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
       );
     }
 
-    const hashedInstanceKey = getHashedInstanceKey();
-
     // Construct the target URL
     const targetUrl = new URL(event.url.pathname + event.url.search, apiBaseUrl);
 
@@ -289,9 +292,14 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
       headers.set("X-Forwarded-Host", effectiveHost);
     }
     headers.set("X-Forwarded-Proto", getOriginalProto(event.request));
-    if (hashedInstanceKey) {
-      headers.set("X-Instance-Key", hashedInstanceKey);
-    }
+    // NB: this proxies end-user browser calls to /api, so it forwards ONLY the
+    // user's own credentials (cookies) — never the instance key. Attaching the
+    // instance key here would authenticate anonymous visitors as admin and
+    // bypass per-tenant public access.
+    // Strip any client-supplied instance-service / instance-key headers so a
+    // browser can't smuggle service auth through the proxy.
+    headers.delete("X-Instance-Key");
+    headers.delete("X-Instance-Service");
 
     // Forward auth and guest session cookies for authentication
     const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
@@ -364,12 +372,17 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   // `responseCookies` lets any token rotation performed by the backend's
   // session middleware (during remote function / load function calls) flow
   // back to the browser as Set-Cookie on the outgoing SvelteKit response.
+  //
+  // NB: this client carries ONLY the end user's credentials (cookies) — it
+  // deliberately does NOT attach the instance key. Forwarding the instance key
+  // on user-originated requests elevated anonymous visitors to admin and
+  // bypassed per-tenant public access. Genuine service calls (bot dispatch,
+  // webhooks, realtime tickets) build their own instance-key client explicitly.
   event.locals.apiClient = createServerApiClient(apiBaseUrl, event.fetch, {
     accessToken,
     refreshToken,
     guestSessionToken,
     platformAccessToken,
-    hashedInstanceKey: getHashedInstanceKey(),
     extraHeaders,
     responseCookies: event.cookies,
     signal: event.request.signal,

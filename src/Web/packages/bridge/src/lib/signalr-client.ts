@@ -85,7 +85,12 @@ class SignalRClient {
           .update(this.instanceKey)
           .digest("hex");
         this.configConnection = this.buildConnection(this.configHubUrl, {
-          headers: { "X-Instance-Key": keyHash },
+          // X-Instance-Service marks this as a genuine service call so the
+          // API honors the instance key (a bare key is ignored).
+          headers: {
+            "X-Instance-Key": keyHash,
+            "X-Instance-Service": "nocturne-bridge",
+          },
         });
         this.setupConfigEventHandlers();
 

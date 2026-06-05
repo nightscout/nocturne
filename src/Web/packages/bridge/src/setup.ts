@@ -26,7 +26,12 @@ async function discoverTenants(
   logger.info(`Discovering tenants from ${url}`);
 
   const response = await fetch(url, {
-    headers: { 'X-Instance-Key': instanceKeyHash },
+    // X-Instance-Service marks this as a genuine service call so the API's
+    // InstanceKeyHandler honors the instance key (a bare key is ignored).
+    headers: {
+      'X-Instance-Key': instanceKeyHash,
+      'X-Instance-Service': 'nocturne-bridge',
+    },
   });
 
   if (!response.ok) {

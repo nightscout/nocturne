@@ -32,9 +32,23 @@ public class InstanceKeyHandler : IAuthHandler
 
     public Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
-        var header = context.Request.Headers["X-Instance-Key"].FirstOrDefault();
+        var header = context.Request.Headers[ServiceNames.Headers.InstanceKey].FirstOrDefault();
         if (string.IsNullOrEmpty(header))
             return Task.FromResult(AuthResult.Skip());
+
+        // Require an explicit service marker. A bare instance key with no service
+        // declaration is treated as "not an intended service credential" and is
+        // skipped, so the request falls through to public-access / unauthenticated
+        // handling. This prevents an instance key accidentally forwarded onto an
+        // anonymous browser request (e.g. by the SSR proxy) from elevating that
+        // request to admin and bypassing per-tenant public-access controls.
+        var serviceMarker = context.Request.Headers[ServiceNames.Headers.InstanceService].FirstOrDefault();
+        if (string.IsNullOrEmpty(serviceMarker))
+        {
+            _logger.LogDebug(
+                "X-Instance-Key present without an X-Instance-Service marker; skipping instance-key auth");
+            return Task.FromResult(AuthResult.Skip());
+        }
 
         if (string.IsNullOrEmpty(_instanceKeyHash))
         {
