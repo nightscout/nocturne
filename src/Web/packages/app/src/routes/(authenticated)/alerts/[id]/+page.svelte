@@ -631,7 +631,7 @@
 
 <Dialog.Root bind:open={replayOpen}>
   <Dialog.Content
-    class="flex h-[90vh] max-h-[90vh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:w-[95vw]"
+    class="flex h-[90vh] max-h-[90vh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:w-[95vw] sm:max-w-7xl"
   >
     <Dialog.Header class="border-b px-4 py-3">
       <Dialog.Title class="flex items-center gap-2">

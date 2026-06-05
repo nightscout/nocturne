@@ -499,7 +499,9 @@
   {/each}
 {/snippet}
 
-<div class="@container flex h-full min-h-0 flex-col gap-4">
+<div
+  class="@container flex h-full min-h-0 flex-col gap-4 overflow-y-auto @2xl:overflow-y-hidden"
+>
   <div class="flex flex-wrap items-center gap-2">
     <Popover.Root bind:open={datePickerOpen}>
       <Popover.Trigger>
@@ -593,7 +595,7 @@
 
     {#if xDomain}
       <div
-        class="grid flex-1 min-h-0 gap-4 @3xl:grid-cols-[minmax(0,1fr)_320px] @3xl:items-stretch"
+        class="grid gap-4 @2xl:min-h-0 @2xl:flex-1 @2xl:grid-cols-[minmax(0,1fr)_280px] @2xl:items-stretch @4xl:grid-cols-[minmax(0,1fr)_320px]"
       >
         <!-- Chart + playback + events list (left on wide containers, full width on narrow) -->
         <div class="flex min-w-0 min-h-0 flex-col gap-4">
@@ -644,19 +646,19 @@
 
           {#if isEmpty}
             <div
-              class="flex-1 min-h-0 rounded-md border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground"
+              class="@2xl:flex-1 @2xl:min-h-0 rounded-md border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground"
             >
               No events would have fired in this window.
             </div>
           {:else if firedMarkers.length === 0}
             <div
-              class="flex-1 min-h-0 rounded-md border border-dashed py-6 text-center text-xs text-muted-foreground"
+              class="@2xl:flex-1 @2xl:min-h-0 rounded-md border border-dashed py-6 text-center text-xs text-muted-foreground"
             >
               No events yet — playhead at start of window.
             </div>
           {:else}
             <div
-              class="flex-1 min-h-0 overflow-y-auto rounded-md border divide-y"
+              class="max-h-72 overflow-y-auto rounded-md border divide-y @2xl:max-h-none @2xl:flex-1 @2xl:min-h-0"
             >
               {#each firedMarkers as m, i (`${m.ev.ruleId ?? "x"}:${m.tMs}:${m.ev.kind ?? ""}:${i}`)}
                 {@const dimmed = currentTimeMs != null && m.tMs > currentTimeMs}
@@ -706,7 +708,7 @@
 
         <!-- Rule sidebar (right on wide containers, stacked under on narrow) -->
         {#if currentTimeMs != null}
-          <div class="min-h-0 overflow-y-auto">
+          <div class="@2xl:min-h-0 @2xl:overflow-y-auto">
             <RuleSidebar
               rules={allRules}
               {editingRuleId}
