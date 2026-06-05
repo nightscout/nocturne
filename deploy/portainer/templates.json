@@ -53,6 +53,17 @@
           "description": "Root domain only, e.g. example.com (not app.example.com \u2014 subdomains are generated per tenant)"
         },
         {
+          "name": "OTEL_EXPORTER_OTLP_ENDPOINT",
+          "label": "OpenTelemetry OTLP endpoint",
+          "description": "Collector URL to export metrics/traces/logs to, e.g. http://otel-collector:4317. Leave empty to disable telemetry."
+        },
+        {
+          "name": "OTEL_EXPORTER_OTLP_PROTOCOL",
+          "label": "OpenTelemetry OTLP protocol",
+          "default": "grpc",
+          "description": "grpc (port 4317) or http/protobuf (port 4318). Only used when the endpoint is set."
+        },
+        {
           "name": "NOCTURNE_API_IMAGE",
           "label": "API image",
           "default": "ghcr.io/nightscout/nocturne/nocturne-api:latest"

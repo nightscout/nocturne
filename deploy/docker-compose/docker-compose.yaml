@@ -30,6 +30,8 @@ services:
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       HTTP_PORTS: "8080"
       INSTANCE_KEY: "${INSTANCE_KEY}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "${OTEL_EXPORTER_OTLP_PROTOCOL}"
       ConnectionStrings__nocturne-postgres: "Host=nocturne-postgres-server;Port=5432;Database=nocturne;Username=nocturne_app;Password=${POSTGRES_APP_PASSWORD}"
       ConnectionStrings__nocturne-postgres-migrator: "Host=nocturne-postgres-server;Port=5432;Database=nocturne;Username=nocturne_migrator;Password=${POSTGRES_MIGRATOR_PASSWORD}"
       DemoService__Enabled: "false"
@@ -66,6 +68,8 @@ services:
       WHATSAPP_APP_SECRET: "${WHATSAPP_APP_SECRET}"
       WHATSAPP_PHONE_NUMBER_ID: "${WHATSAPP_PHONE_NUMBER_ID}"
       ORIGIN: "https://${BASE_DOMAIN}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "${OTEL_EXPORTER_OTLP_PROTOCOL}"
       NOCTURNE_POSTGRES_URI: "postgresql://nocturne_web:${POSTGRES_WEB_PASSWORD}@nocturne-postgres-server:5432/nocturne"
     expose:
       - "8000"

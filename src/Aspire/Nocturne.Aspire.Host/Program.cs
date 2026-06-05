@@ -250,6 +250,23 @@ class Program
             secret: false
         );
 
+        // OpenTelemetry export. Optional and off by default: the OTLP exporters
+        // (API .NET SDK and web Node SDK) only start when the endpoint is set, so
+        // an empty default means telemetry is collected in-process and dropped
+        // with negligible overhead. Wired into the API and web containers in
+        // publish mode only — in run mode Aspire injects its own dashboard
+        // endpoint, which we must not override. Protocol defaults to grpc so the
+        // .NET and Node SDKs agree (their out-of-the-box defaults differ).
+        var otelExporterEndpoint = builder.AddParameter("otel-exporter-otlp-endpoint", "", secret: false)
+            .WithPublishMetadata(
+                "OpenTelemetry OTLP endpoint",
+                "Collector URL to export metrics/traces/logs to, e.g. http://otel-collector:4317. Leave empty to disable telemetry.");
+        var otelExporterProtocol = builder.AddParameter("otel-exporter-otlp-protocol", "grpc", secret: false)
+            .WithPublishMetadata(
+                "OpenTelemetry OTLP protocol",
+                "grpc (port 4317) or http/protobuf (port 4318). Only used when the endpoint is set.",
+                defaultValue: "grpc");
+
         // ------------------------------------------------------------------
         // Nocturne API
         // ------------------------------------------------------------------
@@ -270,6 +287,14 @@ class Program
                 imageLabel: "API image",
                 imageDefault: "ghcr.io/nightscout/nocturne/nocturne-api:latest")
             .WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
+
+        // Operator-supplied OTLP export (publish mode only — run mode uses
+        // Aspire's auto-injected dashboard endpoint). Empty endpoint = disabled.
+        if (builder.ExecutionContext.IsPublishMode)
+        {
+            api.WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", otelExporterEndpoint)
+                .WithEnvironment("OTEL_EXPORTER_OTLP_PROTOCOL", otelExporterProtocol);
+        }
 
         if (
             managedDatabase != null
@@ -364,7 +389,10 @@ class Program
                 .WithEnvironment("WHATSAPP_APP_SECRET", whatsappAppSecret)
                 .WithEnvironment("WHATSAPP_PHONE_NUMBER_ID", whatsappPhoneNumberId);
             // PUBLIC_DEFAULT_LANGUAGE comes from the web app's own .env.
-            // OTEL_EXPORTER_OTLP_ENDPOINT is injected by Aspire automatically.
+            // OTEL_EXPORTER_OTLP_ENDPOINT: in run mode Aspire injects the
+            // dashboard endpoint automatically; in publish mode the operator-
+            // supplied otel-exporter-otlp-endpoint param is wired on the
+            // publish-mode (dockerWeb) branch below.
         }
 
         IResourceBuilder<IResourceWithEndpoints> web;
@@ -421,6 +449,12 @@ class Program
                 "ORIGIN",
                 ReferenceExpression.Create($"https://{baseDomain}")
             );
+
+            // Operator-supplied OTLP export, mirroring the API. The web's Node
+            // SDK (instrumentation.server.ts) starts only when the endpoint is
+            // set. Run-mode (viteWeb) keeps Aspire's auto-injected endpoint.
+            dockerWeb.WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", otelExporterEndpoint)
+                .WithEnvironment("OTEL_EXPORTER_OTLP_PROTOCOL", otelExporterProtocol);
 
             if (postgresServer != null && postgresWebPassword != null)
             {

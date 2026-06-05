@@ -1,6 +1,6 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, Shield, Bell, Bot, Code2, KeyRound, ChevronRight, ChevronDown } from "@lucide/svelte";
+    import { Rocket, Download, Settings, Shield, Bell, Bot, Code2, KeyRound, Activity, ChevronRight, ChevronDown } from "@lucide/svelte";
 
     const navSections = [
         {
@@ -53,6 +53,13 @@
             icon: Settings,
             items: [
                 { href: "/docs/configuration", label: "Configuration Guide" },
+            ],
+        },
+        {
+            title: "Observability",
+            icon: Activity,
+            items: [
+                { href: "/docs/observability", label: "OpenTelemetry" },
             ],
         },
         {

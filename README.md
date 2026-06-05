@@ -39,7 +39,7 @@ Nocturne/
 - **Real-time** - SignalR hubs for live data streaming
 - **Data Connectors** - Dexcom Share, Glooko, LibreLinkUp, MiniMed CareLink, MyFitnessPal, Nightscout, and MyLife
 - **PostgreSQL** - Modern relational database with EF Core migrations
-- **Observability** - OpenTelemetry integration for monitoring (Soon)
+- **Observability** - OpenTelemetry (OTLP) export for metrics, traces, and logs
 - **Containerized** - Docker support for all services
 
 ## Quick Start with Aspire (Development)
@@ -184,6 +184,15 @@ dotnet ef database update
 API documentation is available via [Scalar](https://scalar.com/) at `https://localhost:1612/scalar` when running locally.
 
 Nocturne aims to match Nightscout's API 1:1, so any Nightscout API endpoint should be usable. Nocturne-only endpoints are scoped to v4.
+
+## Observability
+
+Both the API and web containers are instrumented with OpenTelemetry and export metrics, traces, and logs over **OTLP push** when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. With no endpoint configured, telemetry is collected in-process and discarded with negligible overhead, so there is nothing to turn off on a default install. There is no Prometheus `/metrics` scrape endpoint — to use Prometheus/Grafana, run an OpenTelemetry Collector with an `otlp` receiver and a `prometheus` exporter.
+
+- **Docker Compose:** add the `OTEL_*` variables to the `nocturne-api` and `nocturne-web` services.
+- **Kubernetes (Helm):** set `observability.otlp.enabled: true` and `observability.otlp.endpoint` (lights up both containers). See the [Helm chart README](deploy/helm/nocturne/README.md#observability).
+
+Full setup guide: [Observability docs](src/Web/packages/portal/src/content/docs/observability.svx).
 
 ## Other stuff
 
