@@ -13,7 +13,7 @@ flowchart TD
     end
 
     Internet --> gateway
-    gateway -->|"/api/auth/oidc/{**catch-all}\n/api/oauth/{**catch-all}\n/api/v4/dev-only/{**catch-all}\n/scalar\n/scalar/{**catch-all}\n/openapi/{**catch-all}\n/.well-known/{**catch-all}"| nocturne_api
+    gateway -->|"/api/auth/oidc/{**catch-all}\n/api/oauth/{**catch-all}\n/api/v4/dev-only/{**catch-all}\n/api/auth/platform-access/{**catch-all}\n/api/auth/platform-access\n/scalar\n/scalar/{**catch-all}\n/openapi/{**catch-all}\n/.well-known/{**catch-all}"| nocturne_api
     gateway -->|"/api/{**catch-all}\n/auth/bot/{**catch-all}\n/** (fallback)"| nocturne_web
     nocturne_api -->|Reference| nocturne_postgres_server
     nocturne_api -->|Reference| nocturne_web
