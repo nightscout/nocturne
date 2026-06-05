@@ -6,6 +6,8 @@ import svelte from 'eslint-plugin-svelte';
 import globals from 'globals';
 import ts from 'typescript-eslint';
 
+import noImperativeRemoteQuery from "./tools/eslint/no-imperative-remote-query.js";
+
 export default ts.config(
   js.configs.recommended,
   ...ts.configs.recommended,
@@ -41,6 +43,20 @@ export default ts.config(
           assertionStyle: "never"
         }
       ]
+    }
+  },
+  {
+    // Guard against the year-overview/alerts-polling regression class: a remote
+    // query() awaited or `.then()`-chained imperatively (outside a reactive
+    // context) throws "not created in a reactive context ... Use .run()".
+    files: ["**/*.svelte", "**/*.svelte.ts"],
+    plugins: {
+      nocturne: {
+        rules: { "no-imperative-remote-query": noImperativeRemoteQuery }
+      }
+    },
+    rules: {
+      "nocturne/no-imperative-remote-query": "warn"
     }
   }
 );
