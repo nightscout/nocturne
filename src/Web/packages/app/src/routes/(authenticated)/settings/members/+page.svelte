@@ -2,14 +2,15 @@
   import { page } from "$app/state";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
-  import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import {
     Users,
     Check,
     AlertTriangle,
     Link,
     ShieldAlert,
+    Globe,
   } from "lucide-svelte";
   import { getCurrentTenantId } from "../current-tenant.remote";
   import { getMembers } from "$lib/api/generated/memberInvites.generated.remote";
@@ -23,6 +24,7 @@
     setMemberRoles,
     setMemberPermissions,
     setMemberLimitTo24Hours,
+    setPublicAccess,
   } from "$lib/api/generated/memberInvites.generated.remote";
   import { coachmark } from "@nocturne/coach";
   import {
@@ -51,6 +53,9 @@
   const canEditMemberRoles = $derived(
     hasStar || effectivePermissions.includes("members.manage"),
   );
+  const canManageSharing = $derived(
+    hasStar || effectivePermissions.includes("sharing.manage"),
+  );
 
   // Tenant
   const tenantIdQuery = getCurrentTenantId();
@@ -69,7 +74,7 @@
   const allRoles = $derived(rolesQuery.current ?? []);
   const pendingRequests = $derived(pendingRequestsQuery?.current ?? []);
 
-  const publicMember = $derived(allMembers.find((m) => m.name === "Public"));
+  const publicMember = $derived(allMembers.find((m) => m.isSystemSubject));
   const sharingConfigured = $derived(
     (publicMember?.roles ?? []).length > 0 ||
       (publicMember?.directPermissions ?? []).length > 0,
@@ -85,10 +90,19 @@
   let expandedMember = $state<string | null>(null);
   let isSavingMember = $state(false);
   let isRevokingInvite = $state<string | null>(null);
+  let isTogglingPublic = $state(false);
 
-  // Visible members (filtered by optimistic removals)
+  /** Surface a server-provided message when present, else a generic fallback. */
+  function messageFrom(e: unknown, fallback: string): string {
+    return (e as { body?: { message?: string } })?.body?.message ?? fallback;
+  }
+
+  // Visible members — system subjects (e.g. Public) are managed via the
+  // dedicated public-access toggle below, not as removable/editable cards.
   const visibleMembers = $derived(
-    allMembers.filter((m) => !removingMemberIds.has(m.subjectId!)),
+    allMembers.filter(
+      (m) => !m.isSystemSubject && !removingMemberIds.has(m.subjectId!),
+    ),
   );
 
   function clearMessages() {
@@ -120,11 +134,28 @@
       successMessage = "Member updated successfully.";
       expandedMember = null;
       clearMessages();
-    } catch {
-      errorMessage = "Failed to update member. Please try again.";
+    } catch (e) {
+      errorMessage = messageFrom(e, "Failed to update member. Please try again.");
       clearMessages();
     } finally {
       isSavingMember = false;
+    }
+  }
+
+  async function handlePublicAccessToggle(enabled: boolean) {
+    isTogglingPublic = true;
+    errorMessage = null;
+    try {
+      await setPublicAccess({ enabled });
+      successMessage = enabled
+        ? "Public access enabled. Anyone with the link can now view your data."
+        : "Public access disabled. Viewing now requires signing in.";
+      clearMessages();
+    } catch (e) {
+      errorMessage = messageFrom(e, "Failed to update public access. Please try again.");
+      clearMessages();
+    } finally {
+      isTogglingPublic = false;
     }
   }
 
@@ -238,15 +269,15 @@
               isSaving={isSavingMember}
               onToggleExpand={() => toggleExpandMember(member.subjectId!)}
               onSaveRoles={(roleIds, permissions) =>
-                saveMemberChanges(member.subjectId!, roleIds, permissions)}
+                saveMemberChanges(member.id!, roleIds, permissions)}
               onSaveLimitTo24Hours={async (limitTo24Hours) => {
                 try {
                   await setMemberLimitTo24Hours({
-                    id: member.subjectId!,
+                    id: member.id!,
                     request: { limitTo24Hours },
                   });
-                } catch {
-                  errorMessage = "Failed to update member. Please try again.";
+                } catch (e) {
+                  errorMessage = messageFrom(e, "Failed to update member. Please try again.");
                   clearMessages();
                 }
               }}
@@ -258,8 +289,8 @@
                   await removeMember({ id: tenantId, subjectId: member.subjectId });
                   successMessage = "Member removed successfully.";
                   clearMessages();
-                } catch {
-                  errorMessage = "Failed to remove member. Please try again.";
+                } catch (e) {
+                  errorMessage = messageFrom(e, "Failed to remove member. Please try again.");
                   removingMemberIds = new Set([...removingMemberIds].filter(x => x !== member.subjectId));
                   clearMessages();
                 }
@@ -297,6 +328,39 @@
           </button>
         {/if}
       {/if}
+    </div>
+  {/if}
+
+  <!-- Public access -->
+  {#if canManageSharing}
+    <div class="space-y-4">
+      <h2 class="text-lg font-semibold flex items-center gap-2">
+        <Globe class="h-5 w-5" />
+        Public access
+      </h2>
+      <Card.Root>
+        <Card.Content class="flex items-start gap-3 p-4">
+          <Checkbox
+            id="public-access-toggle"
+            checked={sharingConfigured}
+            disabled={isTogglingPublic}
+            onCheckedChange={(checked: boolean) =>
+              handlePublicAccessToggle(checked)}
+          />
+          <div class="flex-1 space-y-0.5">
+            <label
+              for="public-access-toggle"
+              class="text-sm font-medium cursor-pointer select-none"
+            >
+              Make data publicly visible
+            </label>
+            <p class="text-xs text-muted-foreground">
+              Anyone with the link can view your glucose data without signing
+              in. Turn this off to require sign-in.
+            </p>
+          </div>
+        </Card.Content>
+      </Card.Root>
     </div>
   {/if}
 

@@ -34146,6 +34146,9 @@
             "type": "string",
             "nullable": true
           },
+          "isSystemSubject": {
+            "type": "boolean"
+          },
           "roles": {
             "type": "array",
             "items": {

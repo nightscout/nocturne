@@ -30101,6 +30101,7 @@ export interface TenantMemberDto {
     id?: string;
     subjectId?: string;
     name?: string | undefined;
+    isSystemSubject?: boolean;
     roles?: TenantMemberRoleDto[];
     directPermissions?: string[] | undefined;
     label?: string | undefined;

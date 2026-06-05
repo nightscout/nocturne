@@ -253,12 +253,9 @@
     });
   }
 
-  // Helper to check if subject is a system subject (property may not exist in API)
+  // Helper to check if subject is a system subject
   function isSystemSubjectCheck(subject: TenantMemberDto): boolean {
-    return (
-      "isSystemSubject" in subject &&
-      (subject as TenantMemberDto & { isSystemSubject?: boolean }).isSystemSubject === true
-    );
+    return subject.isSystemSubject === true;
   }
 
   // Get subject type icon

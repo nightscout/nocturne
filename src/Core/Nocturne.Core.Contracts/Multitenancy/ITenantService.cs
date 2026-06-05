@@ -64,6 +64,7 @@ public record TenantMemberDto(
     Guid Id,
     Guid SubjectId,
     string? Name,
+    bool IsSystemSubject,
     List<TenantMemberRoleDto> Roles,
     List<string>? DirectPermissions,
     string? Label,
