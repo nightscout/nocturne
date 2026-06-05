@@ -87,7 +87,7 @@ public static class PortainerComposePublisherExtensions
 
                 var composePath = Path.Combine(outputPath, "docker-compose.yaml");
                 var rawCompose = await File.ReadAllTextAsync(composePath, ctx.CancellationToken);
-                var portainerCompose = InlineInitScript(rawCompose, initScriptPath);
+                var portainerCompose = HardenPostgresStartup(InlineInitScript(rawCompose, initScriptPath));
 
                 await File.WriteAllTextAsync(
                     Path.Combine(outputPath, "docker-compose.portainer.yaml"),
@@ -99,12 +99,14 @@ public static class PortainerComposePublisherExtensions
             dependsOn: "publish-compose",
             requiredBy: WellKnownPipelineSteps.Publish);
 
-        // Make the standard docker-compose.yaml self-contained too: inline the
-        // init script as a Compose config instead of a ./init bind-mount, so the
-        // release only needs to ship docker-compose.yaml + .env (no separate init
-        // directory to download). Idempotent — a no-op if already inlined.
+        // Harden the standard docker-compose.yaml: (1) inline the init script as a
+        // Compose config instead of a ./init bind-mount, so the release only needs
+        // to ship docker-compose.yaml + .env (no separate init directory); and
+        // (2) give Postgres a real healthcheck and gate the API's dependency on
+        // service_healthy, so `docker compose up` waits for the database to be
+        // ready before the API runs migrations. Idempotent.
         builder.Pipeline.AddStep(
-            name: "inline-main-compose-init",
+            name: "harden-main-compose",
             action: async ctx =>
             {
                 var outputService = ctx.Services.GetRequiredService<IPipelineOutputService>();
@@ -112,13 +114,13 @@ public static class PortainerComposePublisherExtensions
 
                 var composePath = Path.Combine(outputPath, "docker-compose.yaml");
                 var rawCompose = await File.ReadAllTextAsync(composePath, ctx.CancellationToken);
-                var inlined = InlineInitScript(rawCompose, initScriptPath);
+                var transformed = HardenPostgresStartup(InlineInitScript(rawCompose, initScriptPath));
 
-                if (!ReferenceEquals(inlined, rawCompose))
+                if (transformed != rawCompose)
                 {
-                    await File.WriteAllTextAsync(composePath, inlined, ctx.CancellationToken);
+                    await File.WriteAllTextAsync(composePath, transformed, ctx.CancellationToken);
                     ctx.Logger.LogInformation(
-                        "[compose] Inlined init script into docker-compose.yaml (self-contained)");
+                        "[compose] Inlined init script + added Postgres healthcheck/service_healthy gate");
                 }
             },
             dependsOn: "publish-compose",
@@ -207,6 +209,83 @@ public static class PortainerComposePublisherExtensions
         var topLevelConfigs = new YamlMappingNode();
         topLevelConfigs.Children[new YamlScalarNode("nocturne-init")] = configContent;
         root.Children[new YamlScalarNode("configs")] = topLevelConfigs;
+
+        var sb = new StringBuilder();
+        using (var writer = new StringWriter(sb))
+            yaml.Save(writer, assignAnchors: false);
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Adds a readiness healthcheck to the postgres service and flips any
+    /// dependent's <c>depends_on</c> condition from <c>service_started</c> to
+    /// <c>service_healthy</c>, so `docker compose up` waits for the database to
+    /// accept connections before starting the API (which migrates on boot).
+    ///
+    /// The healthcheck targets the real TCP listener (127.0.0.1:5432). The
+    /// postgres image's first-boot init runs a temporary socket-only server, so
+    /// a TCP probe correctly reports "not ready" during init and only goes
+    /// healthy once the real server is up — avoiding a premature healthy status.
+    /// Returns the compose unchanged if no postgres service is present.
+    /// </summary>
+    private static string HardenPostgresStartup(string composeYaml)
+    {
+        var yaml = new YamlStream();
+        using (var reader = new StringReader(composeYaml))
+            yaml.Load(reader);
+
+        var root = (YamlMappingNode)yaml.Documents[0].RootNode;
+        var services = (YamlMappingNode)root["services"];
+
+        string? postgresName = null;
+        YamlMappingNode? postgresService = null;
+        foreach (var entry in services)
+        {
+            var name = ((YamlScalarNode)entry.Key).Value;
+            if (name?.Contains("postgres", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                postgresName = name;
+                postgresService = (YamlMappingNode)entry.Value;
+                break;
+            }
+        }
+
+        if (postgresService is null || postgresName is null)
+            return composeYaml;
+
+        // Add the healthcheck (skip if one already exists).
+        if (!postgresService.Children.ContainsKey(new YamlScalarNode("healthcheck")))
+        {
+            var healthcheck = new YamlMappingNode
+            {
+                {
+                    new YamlScalarNode("test"),
+                    new YamlSequenceNode(
+                        new YamlScalarNode("CMD-SHELL"),
+                        new YamlScalarNode("pg_isready -h 127.0.0.1 -p 5432"))
+                },
+                { new YamlScalarNode("interval"), new YamlScalarNode("5s") },
+                { new YamlScalarNode("timeout"), new YamlScalarNode("5s") },
+                { new YamlScalarNode("retries"), new YamlScalarNode("12") { Style = ScalarStyle.Plain } },
+                { new YamlScalarNode("start_period"), new YamlScalarNode("60s") },
+            };
+            postgresService.Children[new YamlScalarNode("healthcheck")] = healthcheck;
+        }
+
+        // Flip every service that waits on postgres to require it to be healthy.
+        foreach (var entry in services)
+        {
+            if (entry.Value is YamlMappingNode svc
+                && svc.Children.TryGetValue(new YamlScalarNode("depends_on"), out var dep)
+                && dep is YamlMappingNode depMap
+                && depMap.Children.TryGetValue(new YamlScalarNode(postgresName), out var cond)
+                && cond is YamlMappingNode condMap)
+            {
+                condMap.Children[new YamlScalarNode("condition")] =
+                    new YamlScalarNode("service_healthy");
+            }
+        }
 
         var sb = new StringBuilder();
         using (var writer = new StringWriter(sb))

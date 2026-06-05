@@ -23,6 +23,14 @@ services:
     - source: nocturne-init
       target: /docker-entrypoint-initdb.d/00-init.sh
       mode: 493
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -h 127.0.0.1 -p 5432
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
   nocturne-api:
     image: "${NOCTURNE_API_IMAGE}"
     environment:
@@ -40,7 +48,7 @@ services:
     - "8080"
     depends_on:
       nocturne-postgres-server:
-        condition: "service_started"
+        condition: service_healthy
     networks:
     - "aspire"
   nocturne-web:
