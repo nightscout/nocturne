@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Models;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Services;
 
 namespace Nocturne.API.Controllers.V4.Platform;
@@ -25,6 +28,8 @@ public class ServicesController : ControllerBase
     private readonly IConnectorSyncService _connectorSyncService;
     private readonly ILogger<ServicesController> _logger;
     private readonly IConfiguration _configuration;
+    private readonly ITenantAccessor _tenantAccessor;
+    private readonly BaseDomainOptions _baseDomain;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ServicesController"/>.
@@ -34,12 +39,16 @@ public class ServicesController : ControllerBase
     /// <param name="connectorSyncService">Service for triggering on-demand connector syncs.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="configuration">Application configuration for base URL resolution.</param>
+    /// <param name="tenantAccessor">Resolved tenant context, used to build the tenant's subdomain base URL.</param>
+    /// <param name="baseDomain">Platform base-domain options used to construct the tenant subdomain.</param>
     public ServicesController(
         IDataSourceService dataSourceService,
         IConnectorHealthService connectorHealthService,
         IConnectorSyncService connectorSyncService,
         ILogger<ServicesController> logger,
-        IConfiguration configuration
+        IConfiguration configuration,
+        ITenantAccessor tenantAccessor,
+        IOptions<BaseDomainOptions> baseDomain
     )
     {
         _dataSourceService = dataSourceService;
@@ -47,6 +56,8 @@ public class ServicesController : ControllerBase
         _connectorSyncService = connectorSyncService;
         _logger = logger;
         _configuration = configuration;
+        _tenantAccessor = tenantAccessor;
+        _baseDomain = baseDomain.Value;
     }
 
     /// <summary>
@@ -592,14 +603,24 @@ public class ServicesController : ControllerBase
 
     private string GetBaseUrl()
     {
-        // Try to get configured base URL first
+        // Prefer the tenant's own subdomain ({slug}.{base-domain}). This is the URL
+        // external uploaders (xDrip+, Loop, AAPS) must target, and it differs per
+        // tenant — unlike the configured BaseUrl (apex) or the internal request host
+        // seen when the web app calls this endpoint server-side.
+        var slug = _tenantAccessor.Context?.Slug;
+        var baseDomain = _baseDomain.BaseDomain;
+        if (!string.IsNullOrEmpty(slug) && !string.IsNullOrEmpty(baseDomain))
+        {
+            return $"https://{slug}.{baseDomain.TrimEnd('/')}";
+        }
+
+        // Self-host / single-instance fallback: configured base URL, then request host.
         var configuredUrl = _configuration["BaseUrl"];
         if (!string.IsNullOrEmpty(configuredUrl))
         {
             return configuredUrl.TrimEnd('/');
         }
 
-        // Fall back to request URL
         var request = HttpContext.Request;
         return $"{request.Scheme}://{request.Host}";
     }

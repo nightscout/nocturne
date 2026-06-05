@@ -258,7 +258,7 @@
     if (metadataLoading) return;
     metadataLoading = true;
     try {
-      const result = await getAvailableYears().run();
+      const result = await getAvailableYears();
       availableYears = result.years ?? [];
       availableDataSources = result.availableDataSources ?? [];
       metadataLoaded = true;
@@ -278,7 +278,7 @@
       if (selectedDataSources.length > 0) {
         params.dataSources = selectedDataSources;
       }
-      const result = await getDailySummary(params).run();
+      const result = await getDailySummary(params);
       const days = result.days ?? [];
       yearData = new Map([...yearData, [year, days]]);
       loadGriTimeline(year);
@@ -298,7 +298,7 @@
         year,
         dataSources:
           selectedDataSources.length > 0 ? selectedDataSources : undefined,
-      }).run();
+      });
       const periods = result.periods ?? [];
       griTimelineData = new Map([...griTimelineData, [year, periods]]);
     } catch (err) {
