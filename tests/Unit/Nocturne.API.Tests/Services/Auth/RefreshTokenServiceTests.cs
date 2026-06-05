@@ -131,7 +131,7 @@ public class RefreshTokenServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task RotateRefreshTokenAsync_ValidToken_RevokesOldCreatesNew()
+    public async Task RotateRefreshTokenAsync_ValidToken_AtomicallyClaimsRotationAndCreatesNew()
     {
         // Arrange
         var oldTokenId = Guid.CreateVersion7();
@@ -145,6 +145,10 @@ public class RefreshTokenServiceTests
                 revokedAt: null,
                 expiresAt: DateTime.UtcNow.AddHours(1)));
 
+        // This caller wins the atomic rotation claim.
+        _repository.Setup(r => r.TryMarkRotatedAsync(oldTokenId, It.IsAny<Guid>(), default))
+            .ReturnsAsync(true);
+
         var service = CreateService();
 
         // Act
@@ -153,17 +157,55 @@ public class RefreshTokenServiceTests
         // Assert
         result.Should().Be("new-token");
 
-        _repository.Verify(r => r.RevokeAsync(
+        // Rotation is claimed atomically (not via the unconditional RevokeAsync).
+        _repository.Verify(r => r.TryMarkRotatedAsync(
             oldTokenId,
-            "Rotated",
-            It.IsAny<Guid?>(),
+            It.IsAny<Guid>(),
             default));
+        _repository.Verify(
+            r => r.RevokeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid?>(), default),
+            Times.Never);
 
         _repository.Verify(r => r.CreateAsync(
             It.Is<RefreshTokenRecord>(rec =>
                 rec.TokenHash == "hash-new" &&
                 rec.SubjectId == _subjectId),
             default));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task RotateRefreshTokenAsync_LostAtomicClaim_ThrowsRaceWithoutForkingOrNuking()
+    {
+        // Arrange — token reads as active, but a concurrent request wins the atomic claim,
+        // so TryMarkRotatedAsync reports we lost the race. This is the SSR fan-out case
+        // (many parallel requests carrying the same cookie) that previously forked the
+        // token family into many siblings.
+        var oldTokenId = Guid.CreateVersion7();
+        _jwtService.Setup(j => j.HashRefreshToken("old-token")).Returns("hash-old");
+        _jwtService.Setup(j => j.GenerateRefreshToken()).Returns("new-token");
+        _jwtService.Setup(j => j.HashRefreshToken("new-token")).Returns("hash-new");
+
+        _repository.Setup(r => r.FindByHashAsync("hash-old", default))
+            .ReturnsAsync(MakeRecord(
+                id: oldTokenId,
+                revokedAt: null,
+                expiresAt: DateTime.UtcNow.AddHours(1)));
+
+        _repository.Setup(r => r.TryMarkRotatedAsync(oldTokenId, It.IsAny<Guid>(), default))
+            .ReturnsAsync(false);
+
+        var service = CreateService();
+
+        // Act & Assert — benign race: throws rather than authenticating with a forked token.
+        await service.Invoking(s => s.RotateRefreshTokenAsync("old-token"))
+            .Should().ThrowAsync<TokenRotationRaceException>();
+
+        // No second successor is created (no fork) and no session-wide revocation happens.
+        _repository.Verify(r => r.CreateAsync(It.IsAny<RefreshTokenRecord>(), default), Times.Never);
+        _repository.Verify(
+            r => r.RevokeAllForSubjectAsync(It.IsAny<Guid>(), It.IsAny<string>(), default),
+            Times.Never);
     }
 
     [Fact]

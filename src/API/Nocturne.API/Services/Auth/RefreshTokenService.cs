@@ -112,6 +112,15 @@ public class RefreshTokenService : IRefreshTokenService
         return record.SubjectId;
     }
 
+    /// <summary>
+    /// Window during which reuse of a just-rotated refresh token is treated as a benign
+    /// concurrent-request race rather than token theft. An SSR web app fans out several
+    /// parallel requests per navigation (page load, preload, proxied API and remote-function
+    /// calls) that all carry the same refresh-token cookie, so a client can legitimately
+    /// present a token that another in-flight request rotated moments earlier.
+    /// </summary>
+    private static readonly TimeSpan RotationGracePeriod = TimeSpan.FromSeconds(60);
+
     /// <inheritdoc />
     public async Task<string?> RotateRefreshTokenAsync(
         string oldRefreshToken,
@@ -122,36 +131,23 @@ public class RefreshTokenService : IRefreshTokenService
 
         var oldRecord = await _repository.FindByHashAsync(tokenHash);
 
-        if (oldRecord == null || oldRecord.RevokedAt != null || oldRecord.ExpiresAt < DateTime.UtcNow)
+        if (oldRecord == null || oldRecord.ExpiresAt < DateTime.UtcNow)
         {
-            if (oldRecord != null && oldRecord.RevokedAt != null && oldRecord.ReplacedByTokenId.HasValue)
-            {
-                // Check if this is a race condition (concurrent requests using the
-                // same token shortly after rotation) vs actual token theft.
-                // A 30-second grace period prevents nuking all tokens when parallel
-                // requests (SSR + preload, two tabs, page load + API call) both
-                // attempt to refresh with the same token.
-                var timeSinceRevocation = DateTime.UtcNow - oldRecord.RevokedAt.Value;
-                if (timeSinceRevocation < TimeSpan.FromSeconds(30))
-                {
-                    _logger.LogDebug(
-                        "Refresh token reuse within grace period ({Elapsed:F1}s) for subject {SubjectId}. " +
-                        "Likely a concurrent request — skipping family revocation.",
-                        timeSinceRevocation.TotalSeconds, oldRecord.SubjectId);
-                    throw new TokenRotationRaceException();
-                }
-
-                // Outside grace period — this looks like actual token theft
-                _logger.LogWarning(
-                    "Refresh token reuse detected for subject {SubjectId}. Revoking all tokens in the family.",
-                    oldRecord.SubjectId);
-
-                await _repository.RevokeAllForSubjectAsync(oldRecord.SubjectId, "Token reuse detected");
-            }
+            // Unknown or expired token — nothing to rotate.
             return null;
         }
 
-        // Create new refresh token
+        if (oldRecord.RevokedAt != null)
+        {
+            // Already revoked: decide whether this is a benign concurrent/stale-client
+            // reuse or genuine token theft.
+            return await HandleReuseOfRevokedTokenAsync(oldRecord);
+        }
+
+        // Token is currently active. Mint the replacement up front, then atomically claim the
+        // rotation: of N concurrent requests carrying this token, only one can flip the row
+        // from active to revoked. This stops the family forking into many siblings (which
+        // later surface as "reuse" and trigger a whole-session revocation).
         var newRefreshToken = _jwtService.GenerateRefreshToken();
         var newTokenHash = _jwtService.HashRefreshToken(newRefreshToken);
 
@@ -170,8 +166,17 @@ public class RefreshTokenService : IRefreshTokenService
             ReplacedByTokenId: null,
             LastUsedAt: null);
 
-        // Revoke old token and link to new one
-        await _repository.RevokeAsync(oldRecord.Id, "Rotated", newRecord.Id);
+        var claimed = await _repository.TryMarkRotatedAsync(oldRecord.Id, newRecord.Id);
+        if (!claimed)
+        {
+            // A concurrent request rotated this token between our read and our claim. Treat
+            // it as a benign race: don't create a second successor (no fork) and don't revoke
+            // the family — the request that won carries the new cookie back to the client.
+            _logger.LogDebug(
+                "Lost refresh-token rotation race for subject {SubjectId} — a concurrent request rotated first.",
+                oldRecord.SubjectId);
+            throw new TokenRotationRaceException();
+        }
 
         await _repository.CreateAsync(newRecord);
 
@@ -180,6 +185,41 @@ public class RefreshTokenService : IRefreshTokenService
             oldRecord.SubjectId, oldRecord.Id, newRecord.Id);
 
         return newRefreshToken;
+    }
+
+    /// <summary>
+    /// Handles presentation of an already-revoked refresh token. Reuse of a rotated token
+    /// within <see cref="RotationGracePeriod"/> is a concurrent-request race (the client had
+    /// not yet received the rotated cookie); beyond it, reuse signals the token leaked and the
+    /// whole family is revoked. Tokens revoked for any other reason are simply rejected.
+    /// </summary>
+    private async Task<string?> HandleReuseOfRevokedTokenAsync(RefreshTokenRecord oldRecord)
+    {
+        // Only a rotated token (one that links to a successor) participates in reuse handling;
+        // a token revoked by logout, manual revocation, or a prior family revocation is rejected.
+        if (!oldRecord.ReplacedByTokenId.HasValue)
+        {
+            return null;
+        }
+
+        var timeSinceRevocation = DateTime.UtcNow - oldRecord.RevokedAt!.Value;
+        if (timeSinceRevocation < RotationGracePeriod)
+        {
+            _logger.LogDebug(
+                "Refresh token reuse within grace period ({Elapsed:F1}s) for subject {SubjectId} — " +
+                "concurrent request, skipping family revocation.",
+                timeSinceRevocation.TotalSeconds, oldRecord.SubjectId);
+            throw new TokenRotationRaceException();
+        }
+
+        // Outside the grace period — this looks like actual token theft.
+        _logger.LogWarning(
+            "Refresh token reuse detected for subject {SubjectId} ({Elapsed:F0}s after rotation). " +
+            "Revoking all tokens in the family.",
+            oldRecord.SubjectId, timeSinceRevocation.TotalSeconds);
+
+        await _repository.RevokeAllForSubjectAsync(oldRecord.SubjectId, "Token reuse detected");
+        return null;
     }
 
     /// <inheritdoc />
