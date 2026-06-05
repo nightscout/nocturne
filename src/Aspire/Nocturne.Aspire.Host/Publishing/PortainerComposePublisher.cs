@@ -99,6 +99,31 @@ public static class PortainerComposePublisherExtensions
             dependsOn: "publish-compose",
             requiredBy: WellKnownPipelineSteps.Publish);
 
+        // Make the standard docker-compose.yaml self-contained too: inline the
+        // init script as a Compose config instead of a ./init bind-mount, so the
+        // release only needs to ship docker-compose.yaml + .env (no separate init
+        // directory to download). Idempotent — a no-op if already inlined.
+        builder.Pipeline.AddStep(
+            name: "inline-main-compose-init",
+            action: async ctx =>
+            {
+                var outputService = ctx.Services.GetRequiredService<IPipelineOutputService>();
+                var outputPath = outputService.GetOutputDirectory();
+
+                var composePath = Path.Combine(outputPath, "docker-compose.yaml");
+                var rawCompose = await File.ReadAllTextAsync(composePath, ctx.CancellationToken);
+                var inlined = InlineInitScript(rawCompose, initScriptPath);
+
+                if (!ReferenceEquals(inlined, rawCompose))
+                {
+                    await File.WriteAllTextAsync(composePath, inlined, ctx.CancellationToken);
+                    ctx.Logger.LogInformation(
+                        "[compose] Inlined init script into docker-compose.yaml (self-contained)");
+                }
+            },
+            dependsOn: "publish-compose",
+            requiredBy: WellKnownPipelineSteps.Publish);
+
         return builder;
     }
 

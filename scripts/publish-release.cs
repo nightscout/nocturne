@@ -81,17 +81,15 @@ try
             (string?)n["default"]))
         .ToArray();
 
-    var initScriptSource = Path.Combine(repoRoot, "docs", "postgres", "container-init", "00-init.sh");
     var groups = ParseAspireEnv(Path.Combine(tempDir, ".env"), envMetadata);
     var envExample = GenerateEnvExample(groups, envMetadata);
 
-    // deploy/docker-compose/ — raw aspire output, bind-mount approach.
+    // deploy/docker-compose/ — self-contained aspire output. The init script is
+    // inlined into the compose as a config (see PortainerComposePublisher), so no
+    // separate init/ directory is shipped; the bundle is just compose + .env.
     var deployDockerComposeDir = Path.Combine(repoRoot, "deploy", "docker-compose");
     Directory.CreateDirectory(deployDockerComposeDir);
     File.Copy(composePath, Path.Combine(deployDockerComposeDir, "docker-compose.yaml"), overwrite: true);
-    var deployInitDir = Path.Combine(deployDockerComposeDir, "init");
-    Directory.CreateDirectory(deployInitDir);
-    File.Copy(initScriptSource, Path.Combine(deployInitDir, "00-init.sh"), overwrite: true);
     File.WriteAllText(Path.Combine(deployDockerComposeDir, ".env.example"), envExample);
     Console.WriteLine("[publish-release] Updated deploy/docker-compose/");
 

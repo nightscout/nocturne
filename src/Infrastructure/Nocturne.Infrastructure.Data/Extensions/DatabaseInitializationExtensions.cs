@@ -36,6 +36,25 @@ public static class DatabaseInitializationExtensions
 
             dataSource = new NpgsqlDataSourceBuilder(migratorConnectionString).Build();
 
+            // On a cold start (e.g. `docker compose up -d` with a fresh volume) the
+            // database container may not be accepting TCP connections yet when the
+            // API starts — the Compose dependency only waits for the container to
+            // start, not for Postgres to finish initializing. Wait for the database
+            // to become connectable before migrating. Only transient connection
+            // failures are retried; server-side errors (auth/role/missing-db) fall
+            // through to the diagnostic handlers below on the first attempt.
+            await WaitForConnectableAsync(
+                async ct =>
+                {
+                    await using var probe = dataSource.CreateConnection();
+                    await probe.OpenAsync(ct);
+                },
+                IsTransientConnectionFailure,
+                maxAttempts: 30,
+                retryDelay: TimeSpan.FromSeconds(2),
+                logger,
+                cancellationToken);
+
             var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
             optionsBuilder.UseNpgsql(dataSource);
             optionsBuilder.AddInterceptors(interceptor);
@@ -79,6 +98,56 @@ public static class DatabaseInitializationExtensions
             }
         }
     }
+
+    /// <summary>
+    /// Repeatedly invokes <paramref name="probe"/> until it succeeds or the
+    /// attempt budget is exhausted. Exceptions matching <paramref name="isTransient"/>
+    /// are retried after <paramref name="retryDelay"/>; all others propagate
+    /// immediately. Returns the number of attempts made on success.
+    /// </summary>
+    internal static async Task<int> WaitForConnectableAsync(
+        Func<CancellationToken, Task> probe,
+        Func<Exception, bool> isTransient,
+        int maxAttempts,
+        TimeSpan retryDelay,
+        ILogger logger,
+        CancellationToken cancellationToken = default)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await probe(cancellationToken);
+                if (attempt > 1)
+                    logger.LogInformation(
+                        "Database became reachable after {Attempts} attempt(s).", attempt);
+                return attempt;
+            }
+            catch (Exception ex) when (attempt < maxAttempts && isTransient(ex))
+            {
+                logger.LogWarning(
+                    "Database not reachable yet (attempt {Attempt}/{Max}): {Message}. Retrying in {Delay}s...",
+                    attempt, maxAttempts, ex.Message, retryDelay.TotalSeconds);
+                await Task.Delay(retryDelay, cancellationToken);
+            }
+        }
+    }
+
+    /// <summary>
+    /// True for connection-level failures meaning the database is not yet
+    /// reachable (refused/timeout/reset) — worth retrying on startup. A
+    /// <see cref="PostgresException"/> means the server responded and rejected
+    /// the request (bad auth, missing role/db): not transient, so the caller's
+    /// diagnostic handlers can surface the real cause instead of looping.
+    /// </summary>
+    internal static bool IsTransientConnectionFailure(Exception ex) => ex switch
+    {
+        PostgresException => false,
+        NpgsqlException => true,
+        System.Net.Sockets.SocketException => true,
+        TimeoutException => true,
+        _ => false,
+    };
 
     /// <summary>
     /// Validates runtime database configuration after migrations have run and
