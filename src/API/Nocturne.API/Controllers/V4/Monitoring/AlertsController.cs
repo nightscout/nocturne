@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -21,7 +22,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alerts")]
 public class AlertsController : ControllerBase
 {
-    private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
+    private readonly ITenantDbContextFactory _contextFactory;
     private readonly IAlertAcknowledgementService _acknowledgementService;
     private readonly IAlertDeliveryService _deliveryService;
     private readonly ITenantAccessor _tenantAccessor;
@@ -30,13 +31,13 @@ public class AlertsController : ControllerBase
     /// <summary>
     /// Initializes a new instance of <see cref="AlertsController"/>.
     /// </summary>
-    /// <param name="contextFactory">Factory for creating <see cref="NocturneDbContext"/> instances.</param>
+    /// <param name="contextFactory">Tenant-scoped factory for creating <see cref="NocturneDbContext"/> instances.</param>
     /// <param name="acknowledgementService">Service for acknowledging alert excursions.</param>
     /// <param name="deliveryService">Service for marking alert delivery outcomes.</param>
     /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
     /// <param name="logger">Logger instance.</param>
     public AlertsController(
-        IDbContextFactory<NocturneDbContext> contextFactory,
+        ITenantDbContextFactory contextFactory,
         IAlertAcknowledgementService acknowledgementService,
         IAlertDeliveryService deliveryService,
         ITenantAccessor tenantAccessor,
@@ -57,7 +58,7 @@ public class AlertsController : ControllerBase
     [ProducesResponseType(typeof(List<ActiveExcursionResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<ActiveExcursionResponse>>> GetActiveAlerts(CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var excursions = await db.AlertExcursions
             .AsNoTracking()
@@ -110,7 +111,7 @@ public class AlertsController : ControllerBase
         if (pageSize < 1) pageSize = 1;
         if (pageSize > 100) pageSize = 100;
 
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var query = db.AlertExcursions
             .AsNoTracking()
@@ -198,7 +199,7 @@ public class AlertsController : ControllerBase
     public async Task<ActionResult> SnoozeInstance(
         Guid instanceId, [FromBody] SnoozeRequest request, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var instance = await db.AlertInstances
             .Include(i => i.AlertExcursion)
@@ -262,7 +263,7 @@ public class AlertsController : ControllerBase
     public async Task<ActionResult<List<PendingDeliveryResponse>>> GetPendingDeliveries(
         [FromQuery] ChannelType[] channelType, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var query = db.AlertDeliveries
             .AsNoTracking()

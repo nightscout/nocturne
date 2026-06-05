@@ -10,6 +10,16 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 /// Repository for alert orchestration queries and mutations.
 /// Methods are virtual to allow mocking with CallBase in tests.
 /// </summary>
+/// <remarks>
+/// Every method leases a context from the pooled factory and pins <c>context.TenantId</c>
+/// before touching any <c>ITenantScoped</c> table. Pooling does not reset that property, and
+/// both the EF global query filter and PostgreSQL Row-Level Security derive the active tenant
+/// from it — leaving it unset would scope reads/writes to whatever tenant the previous lessee
+/// left on the context (or fail closed under RLS when it lands as <see cref="Guid.Empty"/>).
+/// Cross-tenant sweeps cannot be expressed as a single query because the RLS policy
+/// (<c>tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid</c>) admits
+/// no "see all" value for the non-bypass app role, so they iterate active tenants explicitly.
+/// </remarks>
 public class AlertRepository : IAlertRepository
 {
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
@@ -33,6 +43,7 @@ public class AlertRepository : IAlertRepository
         Guid tenantId, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
 
         return await context.AlertRules
             .AsNoTracking()
@@ -47,9 +58,10 @@ public class AlertRepository : IAlertRepository
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<AlertRuleChannelSnapshot>> GetChannelsForRuleAsync(
-        Guid ruleId, CancellationToken ct)
+        Guid tenantId, Guid ruleId, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
 
         return await context.AlertRuleChannels
             .AsNoTracking()
@@ -66,6 +78,7 @@ public class AlertRepository : IAlertRepository
         CreateAlertInstanceRequest request, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = request.TenantId;
 
         var entity = new AlertInstanceEntity
         {
@@ -87,9 +100,10 @@ public class AlertRepository : IAlertRepository
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(
-        Guid excursionId, CancellationToken ct)
+        Guid tenantId, Guid excursionId, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
 
         return await context.AlertInstances
             .AsNoTracking()
@@ -103,9 +117,10 @@ public class AlertRepository : IAlertRepository
 
     /// <inheritdoc/>
     public virtual async Task ResolveInstancesForExcursionAsync(
-        Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct)
+        Guid tenantId, Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
 
         await context.AlertInstances
             .Where(i => i.AlertExcursionId == excursionId
@@ -125,6 +140,7 @@ public class AlertRepository : IAlertRepository
         UpdateAlertInstanceRequest request, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = request.TenantId;
 
         var entity = await context.AlertInstances
             .FirstOrDefaultAsync(i => i.Id == request.Id, ct);
@@ -147,14 +163,16 @@ public class AlertRepository : IAlertRepository
     /// <summary>
     /// Marks pending deliveries as expired for a set of alert instances.
     /// </summary>
+    /// <param name="tenantId">The unique identifier of the tenant.</param>
     /// <param name="instanceIds">The unique identifiers of the alert instances.</param>
     /// <param name="ct">The cancellation token.</param>
     public virtual async Task ExpirePendingDeliveriesAsync(
-        IReadOnlyList<Guid> instanceIds, CancellationToken ct)
+        Guid tenantId, IReadOnlyList<Guid> instanceIds, CancellationToken ct)
     {
         if (instanceIds.Count == 0) return;
 
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
 
         await context.AlertDeliveries
             .Where(d => instanceIds.Contains(d.AlertInstanceId)
@@ -173,6 +191,7 @@ public class AlertRepository : IAlertRepository
         Guid tenantId, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
 
         return await context.AlertExcursions
             .AsNoTracking()
@@ -188,32 +207,39 @@ public class AlertRepository : IAlertRepository
     public virtual async Task<IReadOnlyList<HysteresisExcursionSnapshot>> GetExcursionsInHysteresisAsync(
         CancellationToken ct)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-
         // Cross-tenant scan — sweep evaluates every tenant in a single tick, then sets
-        // tenant context per-excursion before invoking the tracker.
-        return await context.AlertExcursions
-            .AsNoTracking()
-            .IgnoreQueryFilters()
-            .Where(e => e.HysteresisStartedAt != null && e.EndedAt == null)
-            .Select(e => new HysteresisExcursionSnapshot(
-                e.Id, e.TenantId, e.AlertRuleId, e.HysteresisStartedAt))
-            .ToListAsync(ct);
+        // tenant context per-excursion before invoking the tracker. RLS scopes each query to
+        // one tenant, so iterate active tenants rather than relying on IgnoreQueryFilters
+        // (which bypasses the EF filter but not the fail-closed RLS policy).
+        var results = new List<HysteresisExcursionSnapshot>();
+        foreach (var tenantId in await GetActiveTenantIdsAsync(ct))
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(ct);
+            context.TenantId = tenantId;
+
+            var rows = await context.AlertExcursions
+                .AsNoTracking()
+                .Where(e => e.HysteresisStartedAt != null && e.EndedAt == null)
+                .Select(e => new HysteresisExcursionSnapshot(
+                    e.Id, e.TenantId, e.AlertRuleId, e.HysteresisStartedAt))
+                .ToListAsync(ct);
+            results.AddRange(rows);
+        }
+
+        return results;
     }
 
     /// <inheritdoc/>
     public virtual async Task<IReadOnlyList<string>> GetInAppDestinationsForExcursionAsync(
-        Guid excursionId, CancellationToken ct)
+        Guid tenantId, Guid excursionId, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
 
-        // Cross-tenant safe: the excursionId is unique and the InApp destination is just the
-        // userId. IgnoreQueryFilters mirrors the pattern in GetAutoResolveExcursionsAsync.
         return await context.AlertDeliveries
             .AsNoTracking()
-            .IgnoreQueryFilters()
             .Where(d => d.ChannelType == ChannelType.InApp)
-            .Join(context.AlertInstances.AsNoTracking().IgnoreQueryFilters(),
+            .Join(context.AlertInstances.AsNoTracking(),
                 d => d.AlertInstanceId, i => i.Id, (d, i) => new { d, i })
             .Where(x => x.i.AlertExcursionId == excursionId
                         && !string.IsNullOrEmpty(x.d.Destination))
@@ -226,27 +252,34 @@ public class AlertRepository : IAlertRepository
     public virtual async Task<IReadOnlyList<AutoResolveExcursionSnapshot>> GetAutoResolveExcursionsAsync(
         CancellationToken ct)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        // Cross-tenant scan: the sweep evaluates every tenant's auto-resolvable excursions in a
+        // single tick. RLS scopes each query to one tenant, so iterate active tenants.
+        var results = new List<AutoResolveExcursionSnapshot>();
+        foreach (var tenantId in await GetActiveTenantIdsAsync(ct))
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(ct);
+            context.TenantId = tenantId;
 
-        // Cross-tenant scan: bypass the global tenant filter since the sweep evaluates
-        // every tenant's auto-resolvable excursions in a single tick.
-        return await context.AlertExcursions
-            .AsNoTracking()
-            .IgnoreQueryFilters()
-            .Where(e => e.EndedAt == null)
-            .Join(context.AlertRules.AsNoTracking().IgnoreQueryFilters(),
-                e => e.AlertRuleId, r => r.Id, (e, r) => new { e, r })
-            .Where(x => x.r.IsEnabled
-                        && x.r.AutoResolveEnabled
-                        && x.r.AutoResolveParams != null)
-            .Select(x => new AutoResolveExcursionSnapshot(
-                x.e.Id,
-                x.e.TenantId,
-                new AlertRuleSnapshot(
-                    x.r.Id, x.r.TenantId, x.r.Name, x.r.ConditionType,
-                    x.r.ConditionParams, x.r.Severity, x.r.ClientConfiguration, x.r.SortOrder,
-                    x.r.AutoResolveEnabled, x.r.AutoResolveParams, x.r.AllowThroughDnd)))
-            .ToListAsync(ct);
+            var rows = await context.AlertExcursions
+                .AsNoTracking()
+                .Where(e => e.EndedAt == null)
+                .Join(context.AlertRules.AsNoTracking(),
+                    e => e.AlertRuleId, r => r.Id, (e, r) => new { e, r })
+                .Where(x => x.r.IsEnabled
+                            && x.r.AutoResolveEnabled
+                            && x.r.AutoResolveParams != null)
+                .Select(x => new AutoResolveExcursionSnapshot(
+                    x.e.Id,
+                    x.e.TenantId,
+                    new AlertRuleSnapshot(
+                        x.r.Id, x.r.TenantId, x.r.Name, x.r.ConditionType,
+                        x.r.ConditionParams, x.r.Severity, x.r.ClientConfiguration, x.r.SortOrder,
+                        x.r.AutoResolveEnabled, x.r.AutoResolveParams, x.r.AllowThroughDnd)))
+                .ToListAsync(ct);
+            results.AddRange(rows);
+        }
+
+        return results;
     }
 
     /// <summary>
@@ -259,6 +292,10 @@ public class AlertRepository : IAlertRepository
         Guid tenantId, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        // patient_records is RLS-protected; stamp the tenant context before any scoped read so
+        // the interceptor sets app.current_tenant_id. tenants is not tenant-scoped, so it is
+        // readable regardless, but pinning up front keeps the whole method consistent.
+        context.TenantId = tenantId;
 
         var tenant = await context.Tenants
             .AsNoTracking()
@@ -268,11 +305,6 @@ public class AlertRepository : IAlertRepository
 
         if (tenant is null) return null;
 
-        // patient_records is RLS-protected; the factory-built context lands with TenantId
-        // unset (this method takes tenantId as a parameter — it can be called for any
-        // tenant from background services). Stamp the tenant context before the read so
-        // the interceptor sets app.current_tenant_id and the row is visible.
-        context.TenantId = tenantId;
         var preferredName = await context.PatientRecords
             .AsNoTracking()
             .Select(p => p.PreferredName)
@@ -288,11 +320,8 @@ public class AlertRepository : IAlertRepository
         Guid tenantId, Guid instanceId, string reason, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
 
-        // Tenant filter is defence-in-depth: RLS already scopes the query, but the
-        // factory-built context can land with TenantId=Guid.Empty in some paths
-        // (see project_alert_repo_tenant_filter_bug in MEMORY) and the explicit
-        // predicate keeps this method honest if that ever happens here.
         var instance = await context.AlertInstances
             .FirstOrDefaultAsync(i => i.Id == instanceId && i.TenantId == tenantId, ct);
         if (instance is null) return;
@@ -313,9 +342,8 @@ public class AlertRepository : IAlertRepository
         Guid tenantId, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
 
-        // RLS scopes the query to the active tenant; the explicit predicate is defence-in-depth
-        // for tests / paths that bypass the tenant accessor middleware.
         var row = await context.TenantAlertSettings
             .AsNoTracking()
             .Where(s => s.TenantId == tenantId)
@@ -339,13 +367,22 @@ public class AlertRepository : IAlertRepository
     public virtual async Task<IReadOnlyList<SignalLossRuleSnapshot>> GetEnabledSignalLossRulesAsync(
         CancellationToken ct)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        // Cross-tenant scan: iterate active tenants so RLS scopes each query correctly.
+        var results = new List<SignalLossRuleSnapshot>();
+        foreach (var tenantId in await GetActiveTenantIdsAsync(ct))
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(ct);
+            context.TenantId = tenantId;
 
-        return await context.AlertRules
-            .AsNoTracking()
-            .Where(r => r.IsEnabled && r.ConditionType == AlertConditionType.SignalLoss)
-            .Select(r => new SignalLossRuleSnapshot(r.Id, r.TenantId, r.ConditionParams))
-            .ToListAsync(ct);
+            var rows = await context.AlertRules
+                .AsNoTracking()
+                .Where(r => r.IsEnabled && r.ConditionType == AlertConditionType.SignalLoss)
+                .Select(r => new SignalLossRuleSnapshot(r.Id, r.TenantId, r.ConditionParams))
+                .ToListAsync(ct);
+            results.AddRange(rows);
+        }
+
+        return results;
     }
 
     /// <summary>
@@ -358,6 +395,7 @@ public class AlertRepository : IAlertRepository
         Guid tenantId, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
 
         return await context.SensorGlucose
             .AsNoTracking()
@@ -376,25 +414,34 @@ public class AlertRepository : IAlertRepository
     public virtual async Task<IReadOnlyList<SnoozedInstanceSnapshot>> GetExpiredSnoozedInstancesAsync(
         DateTime asOf, CancellationToken ct)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        // Cross-tenant scan: iterate active tenants so RLS scopes each query correctly.
+        var results = new List<SnoozedInstanceSnapshot>();
+        foreach (var tenantId in await GetActiveTenantIdsAsync(ct))
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(ct);
+            context.TenantId = tenantId;
 
-        return await context.AlertInstances
-            .AsNoTracking()
-            .Where(i => i.SnoozedUntil != null
-                        && i.SnoozedUntil <= asOf
-                        && i.Status != "resolved")
-            .Join(context.AlertExcursions,
-                i => i.AlertExcursionId,
-                e => e.Id,
-                (i, e) => new { Instance = i, Excursion = e })
-            .Join(context.AlertRules,
-                x => x.Excursion.AlertRuleId,
-                r => r.Id,
-                (x, r) => new SnoozedInstanceSnapshot(
-                    x.Instance.Id, x.Instance.TenantId, x.Instance.AlertExcursionId,
-                    x.Instance.Status, x.Instance.SnoozeCount,
-                    r.Id, r.ConditionType, r.ConditionParams, r.ClientConfiguration))
-            .ToListAsync(ct);
+            var rows = await context.AlertInstances
+                .AsNoTracking()
+                .Where(i => i.SnoozedUntil != null
+                            && i.SnoozedUntil <= asOf
+                            && i.Status != "resolved")
+                .Join(context.AlertExcursions,
+                    i => i.AlertExcursionId,
+                    e => e.Id,
+                    (i, e) => new { Instance = i, Excursion = e })
+                .Join(context.AlertRules,
+                    x => x.Excursion.AlertRuleId,
+                    r => r.Id,
+                    (x, r) => new SnoozedInstanceSnapshot(
+                        x.Instance.Id, x.Instance.TenantId, x.Instance.AlertExcursionId,
+                        x.Instance.Status, x.Instance.SnoozeCount,
+                        r.Id, r.ConditionType, r.ConditionParams, r.ClientConfiguration))
+                .ToListAsync(ct);
+            results.AddRange(rows);
+        }
+
+        return results;
     }
 
     /// <summary>
@@ -408,6 +455,7 @@ public class AlertRepository : IAlertRepository
         Guid tenantId, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
 
         var rows = await context.AlertExcursions
             .AsNoTracking()
@@ -437,5 +485,20 @@ public class AlertRepository : IAlertRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
         await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Lists the ids of every active tenant. Reads the <c>tenants</c> table, which is not
+    /// tenant-scoped (no RLS policy), so it is queryable without a pinned tenant context and
+    /// drives the per-tenant iteration of the cross-tenant sweeps.
+    /// </summary>
+    private async Task<IReadOnlyList<Guid>> GetActiveTenantIdsAsync(CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        return await context.Tenants
+            .AsNoTracking()
+            .Where(t => t.IsActive)
+            .Select(t => t.Id)
+            .ToListAsync(ct);
     }
 }

@@ -277,6 +277,7 @@ public class AlertSweepService : BackgroundService
                 if (extend)
                 {
                     await repository.UpdateInstanceAsync(new UpdateAlertInstanceRequest(
+                        tenantId,
                         instance.InstanceId,
                         SnoozedUntil: now.AddMinutes(cfg.ExtendMinutes),
                         SnoozeCount: instance.SnoozeCount + 1), ct);
@@ -288,6 +289,7 @@ public class AlertSweepService : BackgroundService
                 else
                 {
                     await repository.UpdateInstanceAsync(new UpdateAlertInstanceRequest(
+                        tenantId,
                         instance.InstanceId,
                         SnoozedUntil: DateTime.MinValue), ct);
 

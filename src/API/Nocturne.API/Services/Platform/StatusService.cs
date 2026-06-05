@@ -770,6 +770,11 @@ public class StatusService : IStatusService
     private async Task<DateTime?> LastModifiedAsync(Func<NocturneDbContext, Task<DateTime?>> query)
     {
         await using var ctx = await _dbContextFactory.CreateDbContextAsync();
+        // Pooled contexts do not reset TenantId, so a context leased from the factory carries
+        // the previous lessee's tenant. Pin the resolved tenant before querying so the
+        // tenant-scoped collections (entries/treatments/profile/devicestatus/food/settings) and
+        // RLS scope to this tenant rather than leaking another tenant's last-modified timestamps.
+        ctx.TenantId = _tenantAccessor.Context?.TenantId ?? Guid.Empty;
         return await query(ctx);
     }
 

@@ -39,15 +39,15 @@ internal sealed class ExcursionResolutionHandler(
         var excursionId = transition.ExcursionId.Value;
         var now = timeProvider.GetUtcNow().UtcDateTime;
 
-        var instances = await repository.GetInstancesForExcursionAsync(excursionId, ct);
+        var instances = await repository.GetInstancesForExcursionAsync(tenantId, excursionId, ct);
         var instanceIds = instances.Select(i => i.Id).ToList();
 
         var reason = transition.CloseReason?.ToWireString();
-        await repository.ResolveInstancesForExcursionAsync(excursionId, now, reason, ct);
+        await repository.ResolveInstancesForExcursionAsync(tenantId, excursionId, now, reason, ct);
 
         if (instanceIds.Count > 0)
         {
-            await repository.ExpirePendingDeliveriesAsync(instanceIds, ct);
+            await repository.ExpirePendingDeliveriesAsync(tenantId, instanceIds, ct);
         }
 
         try
@@ -65,7 +65,7 @@ internal sealed class ExcursionResolutionHandler(
             logger.LogWarning(ex, "Failed to broadcast alert_resolved for excursion {ExcursionId}", excursionId);
         }
 
-        await ArchiveInAppNotificationsAsync(excursionId, ct);
+        await ArchiveInAppNotificationsAsync(tenantId, excursionId, ct);
 
         logger.LogInformation(
             "Excursion {ExcursionId} resolved (reason={Reason}), {Count} instances closed",
@@ -77,12 +77,12 @@ internal sealed class ExcursionResolutionHandler(
     /// excursion, so the bell/toast row clears once the alert is no longer firing.
     /// Iterates the unique InApp recipient userIds — one notification can exist per user.
     /// </summary>
-    private async Task ArchiveInAppNotificationsAsync(Guid excursionId, CancellationToken ct)
+    private async Task ArchiveInAppNotificationsAsync(Guid tenantId, Guid excursionId, CancellationToken ct)
     {
         IReadOnlyList<string> destinations;
         try
         {
-            destinations = await repository.GetInAppDestinationsForExcursionAsync(excursionId, ct);
+            destinations = await repository.GetInAppDestinationsForExcursionAsync(tenantId, excursionId, ct);
         }
         catch (Exception ex)
         {
