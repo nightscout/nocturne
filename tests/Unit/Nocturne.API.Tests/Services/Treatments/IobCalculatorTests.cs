@@ -19,6 +19,7 @@ public class IobCalculatorTests
     private readonly IobCalculator _calculator;
     private readonly Mock<IApsSnapshotRepository> _apsSnapshotRepo;
     private readonly Mock<IPumpSnapshotRepository> _pumpSnapshotRepo;
+    private readonly Mock<IBasalRateResolver> _basalRateResolver;
 
     private const double DefaultDIA = 3.0;
     private const double DefaultSensitivity = 95.0;
@@ -36,8 +37,8 @@ public class IobCalculatorTests
             .Setup(s => s.GetSensitivityAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DefaultSensitivity);
 
-        var basalRateResolver = new Mock<IBasalRateResolver>();
-        basalRateResolver
+        _basalRateResolver = new Mock<IBasalRateResolver>();
+        _basalRateResolver
             .Setup(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(DefaultBasalRate);
 
@@ -55,7 +56,7 @@ public class IobCalculatorTests
         _calculator = new IobCalculator(
             therapySettings.Object,
             sensitivityResolver.Object,
-            basalRateResolver.Object,
+            _basalRateResolver.Object,
             _apsSnapshotRepo.Object,
             _pumpSnapshotRepo.Object
         );
@@ -195,6 +196,85 @@ public class IobCalculatorTests
         var result = _calculator.CalcTempBasal(tempBasal, now);
 
         Assert.True(result.IobContrib > 0, "TempBasal with rate > scheduled should have non-zero IOB");
+    }
+
+    #endregion
+
+    #region TherapySnapshot overloads (async-free chart hot path)
+
+    // A snapshot whose in-memory lookups return the same values as the mocked async resolvers
+    // (DIA 3.0, sensitivity 95.0, basal rate 1.0), so the snapshot overloads must produce
+    // numerically identical results to the legacy async-resolver path.
+    private static TherapySnapshot MatchingSnapshot() => new(
+        dia: DefaultDIA,
+        peakMinutes: 75,
+        carbsPerHour: 30.0,
+        timezone: null,
+        ccpPercentage: null,
+        ccpTimeshiftMs: 0,
+        sensitivityEntries: new[] { new ScheduleEntry { TimeAsSeconds = 0, Value = DefaultSensitivity } },
+        carbRatioEntries: null,
+        basalEntries: new[] { new ScheduleEntry { TimeAsSeconds = 0, Value = DefaultBasalRate } });
+
+    [Fact]
+    public void CalcBolus_SnapshotOverload_MatchesAsyncResolverPath()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var bolus = new Bolus
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 40 * 60 * 1000).UtcDateTime,
+            Insulin = 2.5,
+        };
+
+        var viaAsync = _calculator.CalcBolus(bolus, now);
+        var viaSnapshot = _calculator.CalcBolus(bolus, MatchingSnapshot(), now);
+
+        Assert.Equal(viaAsync.IobContrib, viaSnapshot.IobContrib, 9);
+        Assert.Equal(viaAsync.ActivityContrib, viaSnapshot.ActivityContrib, 9);
+
+        // And it must not touch the async resolvers.
+        _basalRateResolver.Verify(b => b.GetBasalRateAsync(It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public void FromTempBasals_SnapshotOverload_MatchesAsyncPath()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        // Null ScheduledRate forces resolution — the erik case. Snapshot must supply it in-memory.
+        var tempBasal = new TempBasal
+        {
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 60 * 60 * 1000).UtcDateTime,
+            EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 30 * 60 * 1000).UtcDateTime,
+            Rate = 2.0,
+            ScheduledRate = null,
+            Origin = TempBasalOrigin.Algorithm,
+        };
+
+        // viaAsync resolves the scheduled rate via the (mocked) async resolver; viaSnapshot reads
+        // it from the in-memory snapshot. Both supply 1.0 here, so results must be identical.
+        var viaAsync = _calculator.FromTempBasals([tempBasal], now);
+        var viaSnapshot = _calculator.FromTempBasals([tempBasal], MatchingSnapshot(), now);
+
+        Assert.Equal(viaAsync.BasalIob, viaSnapshot.BasalIob);
+        Assert.NotNull(viaSnapshot.BasalIob);
+        Assert.True(viaSnapshot.BasalIob!.Value > 0);
+    }
+
+    [Fact]
+    public void FromBoluses_SnapshotOverload_MatchesAsyncPath()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var boluses = new List<Bolus>
+        {
+            new() { Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 20 * 60 * 1000).UtcDateTime, Insulin = 1.5 },
+            new() { Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 90 * 60 * 1000).UtcDateTime, Insulin = 3.0 },
+        };
+
+        var viaAsync = _calculator.FromBoluses(boluses, now);
+        var viaSnapshot = _calculator.FromBoluses(boluses, MatchingSnapshot(), now);
+
+        Assert.Equal(viaAsync.Iob, viaSnapshot.Iob, 9);
+        Assert.Equal(viaAsync.Activity!.Value, viaSnapshot.Activity!.Value, 9);
     }
 
     #endregion

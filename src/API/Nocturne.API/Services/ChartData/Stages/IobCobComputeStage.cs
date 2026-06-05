@@ -174,6 +174,10 @@ internal sealed class IobCobComputeStage(
         {
             ct.ThrowIfCancellationRequested();
 
+            // One in-memory therapy snapshot per tick drives every profile lookup below
+            // (DIA, sensitivity, scheduled basal rate, carb ratio) with zero DB round trips.
+            var snapshot = timeline.SnapshotAt(t);
+
             // Admit newly-elapsed entries (Mills/StartMills <= t)
             while (insulinHi < sortedBoluses.Count && sortedBoluses[insulinHi].Mills <= t)
                 insulinHi++;
@@ -198,7 +202,7 @@ internal sealed class IobCobComputeStage(
 
             var insulinCount = insulinHi - insulinLo;
             var iobResult = insulinCount > 0
-                ? iobCalculator.FromBoluses(sortedBoluses.GetRange(insulinLo, insulinCount), t)
+                ? iobCalculator.FromBoluses(sortedBoluses.GetRange(insulinLo, insulinCount), snapshot, t)
                 : new IobResult { Iob = 0 };
 
             var basalIob = 0.0;
@@ -207,6 +211,7 @@ internal sealed class IobCobComputeStage(
             {
                 var basalResult = iobCalculator.FromTempBasals(
                     sortedTempBasals.GetRange(basalLo, basalCount),
+                    snapshot,
                     t
                 );
                 basalIob = basalResult.BasalIob ?? 0;
@@ -225,6 +230,7 @@ internal sealed class IobCobComputeStage(
                     sortedTempBasals is not null && basalCount > 0
                         ? sortedTempBasals.GetRange(basalLo, basalCount)
                         : null,
+                    snapshot,
                     t
                 )
                 : new CobResult { Cob = 0 };
