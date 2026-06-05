@@ -258,7 +258,7 @@
     if (metadataLoading) return;
     metadataLoading = true;
     try {
-      const result = await getAvailableYears();
+      const result = await getAvailableYears().run();
       availableYears = result.years ?? [];
       availableDataSources = result.availableDataSources ?? [];
       metadataLoaded = true;
@@ -278,7 +278,7 @@
       if (selectedDataSources.length > 0) {
         params.dataSources = selectedDataSources;
       }
-      const result = await getDailySummary(params);
+      const result = await getDailySummary(params).run();
       const days = result.days ?? [];
       yearData = new Map([...yearData, [year, days]]);
       loadGriTimeline(year);
@@ -298,7 +298,7 @@
         year,
         dataSources:
           selectedDataSources.length > 0 ? selectedDataSources : undefined,
-      });
+      }).run();
       const periods = result.periods ?? [];
       griTimelineData = new Map([...griTimelineData, [year, periods]]);
     } catch (err) {
@@ -433,11 +433,15 @@
   // Lifecycle
   // =========================================================================
 
-  onMount(async () => {
-    await loadMetadata();
-    if (sortedYears.length > 0) {
-      loadYearData(sortedYears[0]);
-    }
+  onMount(() => {
+    // `.run()` rejects when called during the render/effect flush, so defer the
+    // bootstrap to a microtask — onMount's synchronous body still counts as render.
+    queueMicrotask(async () => {
+      await loadMetadata();
+      if (sortedYears.length > 0) {
+        loadYearData(sortedYears[0]);
+      }
+    });
   });
 
   $effect(() => {
