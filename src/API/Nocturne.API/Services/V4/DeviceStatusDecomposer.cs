@@ -244,6 +244,29 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
 
         if (!priorSuspended && nowSuspended)
         {
+            // Guard against duplicate open spans. An uploader can emit two device statuses for the
+            // same suspend event sharing the SAME ingest Timestamp but different pump clocks (e.g.
+            // Trio uploads paired snapshots). Because GetLatestBeforeAsync uses a strict `<` on
+            // Timestamp, the second such snapshot cannot see its sibling as prior and reads
+            // prior=not-suspended — a spurious false→true transition. Opening a second span here
+            // leaves an orphan the single resume can't fully close, latching the pump "suspended"
+            // indefinitely. If a Suspended span is already open, this observation is already
+            // covered; do nothing.
+            var existingOpen = await _stateSpanService.GetStateSpansAsync(
+                category: StateSpanCategory.PumpMode,
+                state: PumpModeState.Suspended.ToString(),
+                active: true,
+                count: 1,
+                cancellationToken: ct);
+
+            if (existingOpen.Any())
+            {
+                _logger.LogDebug(
+                    "Skipped opening duplicate PumpMode/Suspended StateSpan for snapshot {SnapshotId}; a suspension is already active",
+                    newSnapshot.Id);
+                return;
+            }
+
             var span = new StateSpan
             {
                 Category = StateSpanCategory.PumpMode,
@@ -262,15 +285,17 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
         }
         else // priorSuspended && !nowSuspended
         {
-            var openSpans = await _stateSpanService.GetStateSpansAsync(
+            // Close ALL active Suspended spans, not just one: leftover duplicates (created before
+            // the open-guard above, or by concurrent decomposition) must all be closed on resume,
+            // otherwise an orphan keeps the pump latched "suspended".
+            var openSpans = (await _stateSpanService.GetStateSpansAsync(
                 category: StateSpanCategory.PumpMode,
                 state: PumpModeState.Suspended.ToString(),
                 active: true,
-                count: 1,
-                cancellationToken: ct);
+                count: int.MaxValue,
+                cancellationToken: ct)).ToList();
 
-            var openSpan = openSpans.FirstOrDefault();
-            if (openSpan is null)
+            if (openSpans.Count == 0)
             {
                 // No open span exists — the suspended=true state predates the StateSpan feature
                 // or the opening snapshot was never decomposed. Create a retroactive closed span
@@ -302,12 +327,15 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
                 return;
             }
 
-            openSpan.EndTimestamp = transitionAt;
-            var closed = await _stateSpanService.UpsertStateSpanAsync(openSpan, ct);
-            result.UpdatedRecords.Add(closed);
-            _logger.LogDebug(
-                "Closed PumpMode/Suspended StateSpan {SpanId} at {EndTimestamp}",
-                openSpan.Id, transitionAt);
+            foreach (var openSpan in openSpans)
+            {
+                openSpan.EndTimestamp = transitionAt;
+                var closed = await _stateSpanService.UpsertStateSpanAsync(openSpan, ct);
+                result.UpdatedRecords.Add(closed);
+                _logger.LogDebug(
+                    "Closed PumpMode/Suspended StateSpan {SpanId} at {EndTimestamp}",
+                    openSpan.Id, transitionAt);
+            }
         }
     }
 

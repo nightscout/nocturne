@@ -325,4 +325,91 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
             It.IsAny<CancellationToken>()),
             Times.Exactly(2));
     }
+
+    [Fact]
+    public async Task FalseToTrue_WhenSuspendedSpanAlreadyOpen_DoesNotOpenDuplicate()
+    {
+        // Regression (Erik / Trio): the uploader emits two suspended=true device statuses for the
+        // same suspend event sharing the SAME ingest Timestamp but different pump clocks. Because
+        // GetLatestBeforeAsync uses a strict `<` on Timestamp, the second snapshot can't see its
+        // sibling as prior and reads prior=not-suspended — a false→true transition that would open
+        // a SECOND Suspended span. The lone resume then closes only one span, leaving the other
+        // open-ended forever, so the dashboard reports the pump "suspended the whole time".
+        // Invariant: at most one open Suspended span. A false→true transition while one is already
+        // open must be a no-op.
+        var prior = new V4Models.PumpSnapshot { Suspended = false, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
+        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(prior);
+
+        var alreadyOpen = new StateSpan
+        {
+            Id = "open-1",
+            Category = StateSpanCategory.PumpMode,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = new DateTime(2024, 1, 1, 11, 30, 0, DateTimeKind.Utc),
+            EndTimestamp = null,
+        };
+        _stateSpanServiceMock
+            .Setup(s => s.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
+                null, null, null, true,
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { alreadyOpen });
+
+        var ds = MakeDeviceStatus("legacy-dup", 1704110400000, suspended: true);
+
+        await _decomposer.DecomposeAsync(ds);
+
+        // A suspension is already active; no new span should be opened.
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task TrueToFalse_ClosesAllOpenSuspendedSpans()
+    {
+        // Defense-in-depth: if duplicate open Suspended spans already exist (e.g. records created
+        // before the open-guard fix), a resume must close ALL of them — not just one — so the pump
+        // doesn't stay latched "suspended" on a leftover open span.
+        var prior = new V4Models.PumpSnapshot { Suspended = true, Timestamp = new DateTime(2024, 1, 1, 11, 0, 0, DateTimeKind.Utc) };
+        _pumpRepoMock.Setup(r => r.GetLatestBeforeAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(prior);
+
+        var open1 = new StateSpan
+        {
+            Id = "open-1",
+            Category = StateSpanCategory.PumpMode,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = prior.Timestamp,
+            EndTimestamp = null,
+        };
+        var open2 = new StateSpan
+        {
+            Id = "open-2",
+            Category = StateSpanCategory.PumpMode,
+            State = PumpModeState.Suspended.ToString(),
+            StartTimestamp = prior.Timestamp.AddSeconds(2),
+            EndTimestamp = null,
+        };
+        _stateSpanServiceMock
+            .Setup(s => s.GetStateSpansAsync(
+                StateSpanCategory.PumpMode, PumpModeState.Suspended.ToString(),
+                null, null, null, true,
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { open1, open2 });
+
+        var ds = MakeDeviceStatus("legacy-close-all", 1704110400000, suspended: false);
+
+        await _decomposer.DecomposeAsync(ds);
+
+        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
+            It.Is<StateSpan>(span => span.Id == "open-1" && span.EndTimestamp != null),
+            It.IsAny<CancellationToken>()),
+            Times.Once);
+        _stateSpanServiceMock.Verify(s => s.UpsertStateSpanAsync(
+            It.Is<StateSpan>(span => span.Id == "open-2" && span.EndTimestamp != null),
+            It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
 }
