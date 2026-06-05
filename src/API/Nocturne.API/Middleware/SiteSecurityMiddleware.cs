@@ -119,6 +119,14 @@ public class SiteSecurityMiddleware
             return true;
         }
 
+        // On-demand TLS authorization for the bundled Caddy proxy. Caddy's
+        // unauthenticated internal "ask" call must stay reachable even under
+        // lockdown, or no tenant-subdomain certificate can ever be issued.
+        if (path.StartsWith("/api/v4/platform/tls-authorize"))
+        {
+            return true;
+        }
+
         // Health check and status endpoints for monitoring
         if (path.StartsWith("/health") ||
             path == "/" ||

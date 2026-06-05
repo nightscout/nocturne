@@ -25,20 +25,32 @@
     <ul class="list-disc list-inside space-y-2 text-muted-foreground mb-8">
         <li>A Linux server, VPS, or Raspberry Pi with SSH access</li>
         <li>Docker Engine 24+ and Docker Compose 2.23.1+ installed</li>
-        <li>A domain name (recommended) or static IP address</li>
+        <li>
+            A domain with a DNS <strong>A</strong> record pointing at your server
+            (<code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">example.com</code>).
+            To run more than one tenant, also add a wildcard
+            <strong>A</strong> record
+            (<code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">*.example.com</code>)
+            so each tenant subdomain resolves.
+        </li>
+        <li>Ports <strong>80</strong> and <strong>443</strong> open to the internet — the bundled proxy uses them to obtain and serve TLS certificates.</li>
     </ul>
 
     <SystemRequirements />
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Step 1: Download the release bundle</h2>
     <p class="text-muted-foreground mb-4">
-        Download <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.yaml</code>
-        and <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env.example</code> from the
+        Download the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose</code>
+        bundle from the
         <a href="https://github.com/nightscout/nocturne/releases/latest" class="text-primary hover:underline">
             latest GitHub Release
-        </a>.
+        </a>. Keep the bundled
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">init/</code> and
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">caddy/</code> directories
+        next to <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.yaml</code> —
+        the database init script and TLS proxy config are mounted from them.
     </p>
-    <CodeBlock code={"mkdir nocturne && cd nocturne\n# Download both files from the release page, then:\ncp .env.example .env"} class="mb-4" />
+    <CodeBlock code={"mkdir nocturne && cd nocturne\n# Download and extract the docker-compose bundle from the release page, then:\ncp .env.example .env"} class="mb-4" />
 
     <details class="mb-8">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">View docker-compose.yaml</summary>
@@ -59,6 +71,22 @@
     <p class="text-muted-foreground mb-8">
         Docker will pull the images and start all services. First run takes a few minutes.
     </p>
+
+    <h2 class="text-2xl font-bold mt-8 mb-4">HTTPS is automatic</h2>
+    <p class="text-muted-foreground mb-4">
+        The bundled Caddy reverse proxy obtains and renews Let's Encrypt TLS
+        certificates automatically — no API keys or certificate files to manage.
+        Set <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">BASE_DOMAIN</code>,
+        point your DNS at the server, and open ports 80 and 443. The apex domain
+        is issued a certificate on first start, and each tenant subdomain gets one
+        on demand the first time it is visited.
+    </p>
+    <p class="text-muted-foreground mb-4">
+        Already run your own reverse proxy (nginx, Traefik, Caddy)? Use the
+        bring-your-own-proxy override to disable the bundled Caddy and expose the
+        gateway on plain HTTP port 8080 for your proxy to forward to:
+    </p>
+    <CodeBlock code={"docker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d"} class="mb-8" />
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Step 4: Verify the installation</h2>
     <VerificationSteps />

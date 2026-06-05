@@ -95,42 +95,50 @@ services:
       REVERSEPROXY__ROUTES__route2__CLUSTERID: "cluster_nocturne-api"
       REVERSEPROXY__ROUTES__route2__TRANSFORMS__0__X-Forwarded: "Off"
       REVERSEPROXY__ROUTES__route2__TRANSFORMS__0__HeaderPrefix: "X-Forwarded-"
-      REVERSEPROXY__ROUTES__route3__MATCH__PATH: "/api/{**catch-all}"
-      REVERSEPROXY__ROUTES__route3__CLUSTERID: "cluster_nocturne-web"
+      REVERSEPROXY__ROUTES__route3__MATCH__PATH: "/api/auth/platform-access/{**catch-all}"
+      REVERSEPROXY__ROUTES__route3__CLUSTERID: "cluster_nocturne-api"
       REVERSEPROXY__ROUTES__route3__TRANSFORMS__0__X-Forwarded: "Off"
       REVERSEPROXY__ROUTES__route3__TRANSFORMS__0__HeaderPrefix: "X-Forwarded-"
-      REVERSEPROXY__ROUTES__route4__MATCH__PATH: "/auth/bot/{**catch-all}"
-      REVERSEPROXY__ROUTES__route4__CLUSTERID: "cluster_nocturne-web"
+      REVERSEPROXY__ROUTES__route4__MATCH__PATH: "/api/auth/platform-access"
+      REVERSEPROXY__ROUTES__route4__CLUSTERID: "cluster_nocturne-api"
       REVERSEPROXY__ROUTES__route4__TRANSFORMS__0__X-Forwarded: "Off"
       REVERSEPROXY__ROUTES__route4__TRANSFORMS__0__HeaderPrefix: "X-Forwarded-"
-      REVERSEPROXY__ROUTES__route5__MATCH__PATH: "/scalar"
-      REVERSEPROXY__ROUTES__route5__CLUSTERID: "cluster_nocturne-api"
+      REVERSEPROXY__ROUTES__route5__MATCH__PATH: "/api/{**catch-all}"
+      REVERSEPROXY__ROUTES__route5__CLUSTERID: "cluster_nocturne-web"
       REVERSEPROXY__ROUTES__route5__TRANSFORMS__0__X-Forwarded: "Off"
       REVERSEPROXY__ROUTES__route5__TRANSFORMS__0__HeaderPrefix: "X-Forwarded-"
-      REVERSEPROXY__ROUTES__route6__MATCH__PATH: "/scalar/{**catch-all}"
-      REVERSEPROXY__ROUTES__route6__CLUSTERID: "cluster_nocturne-api"
+      REVERSEPROXY__ROUTES__route6__MATCH__PATH: "/auth/bot/{**catch-all}"
+      REVERSEPROXY__ROUTES__route6__CLUSTERID: "cluster_nocturne-web"
       REVERSEPROXY__ROUTES__route6__TRANSFORMS__0__X-Forwarded: "Off"
       REVERSEPROXY__ROUTES__route6__TRANSFORMS__0__HeaderPrefix: "X-Forwarded-"
-      REVERSEPROXY__ROUTES__route7__MATCH__PATH: "/openapi/{**catch-all}"
+      REVERSEPROXY__ROUTES__route7__MATCH__PATH: "/scalar"
       REVERSEPROXY__ROUTES__route7__CLUSTERID: "cluster_nocturne-api"
       REVERSEPROXY__ROUTES__route7__TRANSFORMS__0__X-Forwarded: "Off"
       REVERSEPROXY__ROUTES__route7__TRANSFORMS__0__HeaderPrefix: "X-Forwarded-"
-      REVERSEPROXY__ROUTES__route8__MATCH__PATH: "/.well-known/{**catch-all}"
+      REVERSEPROXY__ROUTES__route8__MATCH__PATH: "/scalar/{**catch-all}"
       REVERSEPROXY__ROUTES__route8__CLUSTERID: "cluster_nocturne-api"
       REVERSEPROXY__ROUTES__route8__TRANSFORMS__0__X-Forwarded: "Off"
       REVERSEPROXY__ROUTES__route8__TRANSFORMS__0__HeaderPrefix: "X-Forwarded-"
-      REVERSEPROXY__ROUTES__route9__MATCH__PATH: "/{**catchall}"
-      REVERSEPROXY__ROUTES__route9__CLUSTERID: "cluster_nocturne-web"
+      REVERSEPROXY__ROUTES__route9__MATCH__PATH: "/openapi/{**catch-all}"
+      REVERSEPROXY__ROUTES__route9__CLUSTERID: "cluster_nocturne-api"
       REVERSEPROXY__ROUTES__route9__TRANSFORMS__0__X-Forwarded: "Off"
       REVERSEPROXY__ROUTES__route9__TRANSFORMS__0__HeaderPrefix: "X-Forwarded-"
+      REVERSEPROXY__ROUTES__route10__MATCH__PATH: "/.well-known/{**catch-all}"
+      REVERSEPROXY__ROUTES__route10__CLUSTERID: "cluster_nocturne-api"
+      REVERSEPROXY__ROUTES__route10__TRANSFORMS__0__X-Forwarded: "Off"
+      REVERSEPROXY__ROUTES__route10__TRANSFORMS__0__HeaderPrefix: "X-Forwarded-"
+      REVERSEPROXY__ROUTES__route11__MATCH__PATH: "/{**catchall}"
+      REVERSEPROXY__ROUTES__route11__CLUSTERID: "cluster_nocturne-web"
+      REVERSEPROXY__ROUTES__route11__TRANSFORMS__0__X-Forwarded: "Off"
+      REVERSEPROXY__ROUTES__route11__TRANSFORMS__0__HeaderPrefix: "X-Forwarded-"
       REVERSEPROXY__CLUSTERS__cluster_nocturne-api__DESTINATIONS__destination1__ADDRESS: "http://nocturne-api"
       REVERSEPROXY__CLUSTERS__cluster_nocturne-web__DESTINATIONS__destination1__ADDRESS: "http://nocturne-web"
       NOCTURNE_API_HTTP: "http://nocturne-api:8080"
       services__nocturne-api__http__0: "http://nocturne-api:8080"
       NOCTURNE_WEB_HTTP: "http://nocturne-web:8000"
       services__nocturne-web__http__0: "http://nocturne-web:8000"
-    ports:
-    - "8080:5000"
+    expose:
+    - "5000"
     depends_on:
       nocturne-api:
         condition: "service_started"
@@ -138,6 +146,32 @@ services:
         condition: "service_started"
     networks:
     - "aspire"
+  caddy:
+    image: "caddy:2"
+    environment:
+      BASE_DOMAIN: "${BASE_DOMAIN}"
+    ports:
+    - "80:80"
+    - "443:443"
+    - "443:443/udp"
+    volumes:
+    - type: "volume"
+      target: "/data"
+      source: "caddy-data"
+      read_only: false
+    - type: "volume"
+      target: "/config"
+      source: "caddy-config"
+      read_only: false
+    depends_on:
+      gateway:
+        condition: "service_started"
+    networks:
+    - "aspire"
+    configs:
+    - source: nocturne-caddyfile
+      target: /etc/caddy/Caddyfile
+      mode: 420
   watchtower:
     image: "ghcr.io/nicholas-fedor/watchtower:latest"
     environment:
@@ -157,6 +191,10 @@ networks:
     driver: "bridge"
 volumes:
   nocturne-postgres-data:
+    driver: "local"
+  caddy-data:
+    driver: "local"
+  caddy-config:
     driver: "local"
 configs:
   nocturne-init:
@@ -226,4 +264,37 @@ configs:
       ALTER DEFAULT PRIVILEGES FOR ROLE nocturne_migrator IN SCHEMA public
           GRANT USAGE, SELECT ON SEQUENCES TO nocturne_app;
       SQL
+  nocturne-caddyfile:
+    content: |
+      # Nocturne edge TLS terminator.
+      #
+      # Automatic HTTPS with Let's Encrypt, fronting the internal YARP gateway.
+      # The only required configuration is BASE_DOMAIN (set in .env); Caddy obtains
+      # and renews all certificates with no API keys.
+      #
+      #   - {$$BASE_DOMAIN}    the apex (single-tenant deployments live here) — cert
+      #                       issued via the HTTP-01 challenge.
+      #   - *.{$$BASE_DOMAIN}  per-tenant subdomains — certs minted on demand on first
+      #                       request via HTTP-01. The on_demand "ask" endpoint lets
+      #                       the API confirm a hostname is a real tenant before Caddy
+      #                       requests a certificate, so only valid subdomains issue.
+      #
+      # To front Nocturne with your own reverse proxy instead, disable this service
+      # (see docker-compose.byo-proxy.yaml) and the gateway is exposed on plain HTTP.
+      {
+      	on_demand_tls {
+      		ask http://nocturne-api:8080/api/v4/platform/tls-authorize
+      	}
+      }
+
+      {$$BASE_DOMAIN} {
+      	reverse_proxy gateway:5000
+      }
+
+      *.{$$BASE_DOMAIN} {
+      	tls {
+      		on_demand
+      	}
+      	reverse_proxy gateway:5000
+      }
 ...

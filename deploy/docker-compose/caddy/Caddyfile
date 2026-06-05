@@ -1,0 +1,31 @@
+# Nocturne edge TLS terminator.
+#
+# Automatic HTTPS with Let's Encrypt, fronting the internal YARP gateway.
+# The only required configuration is BASE_DOMAIN (set in .env); Caddy obtains
+# and renews all certificates with no API keys.
+#
+#   - {$BASE_DOMAIN}    the apex (single-tenant deployments live here) — cert
+#                       issued via the HTTP-01 challenge.
+#   - *.{$BASE_DOMAIN}  per-tenant subdomains — certs minted on demand on first
+#                       request via HTTP-01. The on_demand "ask" endpoint lets
+#                       the API confirm a hostname is a real tenant before Caddy
+#                       requests a certificate, so only valid subdomains issue.
+#
+# To front Nocturne with your own reverse proxy instead, disable this service
+# (see docker-compose.byo-proxy.yaml) and the gateway is exposed on plain HTTP.
+{
+	on_demand_tls {
+		ask http://nocturne-api:8080/api/v4/platform/tls-authorize
+	}
+}
+
+{$BASE_DOMAIN} {
+	reverse_proxy gateway:5000
+}
+
+*.{$BASE_DOMAIN} {
+	tls {
+		on_demand
+	}
+	reverse_proxy gateway:5000
+}

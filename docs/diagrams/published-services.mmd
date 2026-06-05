@@ -3,7 +3,6 @@ flowchart LR
     Internet((Internet))
 
     subgraph ext["External"]
-        gateway["gateway\n:8080"]
     end
 
     subgraph net["aspire network"]
@@ -13,6 +12,8 @@ flowchart LR
             nocturne_web_frontend["Frontend"]
             nocturne_web_bff["BFF"]
         end
+        gateway["gateway"]
+        caddy["caddy"]
         watchtower["watchtower"]
     end
 
@@ -23,4 +24,5 @@ flowchart LR
     nocturne_web_bff --> nocturne_postgres_server
     gateway --> nocturne_api
     gateway --> nocturne_web_frontend
+    caddy --> gateway
     nocturne_web_frontend --> nocturne_web_bff

@@ -92,7 +92,7 @@ public class TenantResolutionMiddleware
         // Check X-Forwarded-Host first (set by reverse proxies), then fall back to Host
         var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(':')[0]
                    ?? context.Request.Host.Host;
-        var slug = ExtractSubdomain(host);
+        var slug = SubdomainParser.Extract(host, _config.BaseDomain);
         var path = context.Request.Path.Value ?? "";
         var isTenantlessAllowedPath =
             TenantlessAllowedPaths.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase)) ||
@@ -186,19 +186,6 @@ public class TenantResolutionMiddleware
         var db = context.RequestServices.GetService<NocturneDbContext>();
         if (db is not null)
             db.TenantId = tenantId;
-    }
-
-    private string? ExtractSubdomain(string hostname)
-    {
-        // Strip port from BaseDomain for hostname comparison
-        // (Host.Host already excludes port, but BaseDomain may include it for frontend URL construction)
-        var baseDomainHost = _config.BaseDomain.Split(':')[0];
-
-        if (!hostname.EndsWith($".{baseDomainHost}", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        var subdomain = hostname[..^(baseDomainHost.Length + 1)];
-        return string.IsNullOrEmpty(subdomain) ? null : subdomain;
     }
 
     /// <summary>
