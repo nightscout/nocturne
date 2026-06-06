@@ -34,31 +34,36 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url }) => {
     }
   }
 
+  // Fetch tenant status once — it drives both the anonymous-access gate and the demo banner.
+  // Default to no anonymous access on failure (fail safe: require sign-in rather than over-expose).
+  let status: Awaited<ReturnType<typeof locals.apiClient.status.getStatus>> | null = null;
+  try {
+    status = await locals.apiClient.status.getStatus();
+  } catch {
+    // Swallow — handled below by the conservative defaults.
+  }
+  const anonymousReadAccess = status?.anonymousReadAccess ?? false;
+
+  // Redirect anonymous visitors to login when this tenant does not grant anonymous read access
+  // (a private tenant). Public tenants keep serving their read-only dashboard, so the shell is
+  // never rendered for a visitor who would otherwise see a burst of 401s and a client bounce.
   if (!locals.isAuthenticated || !locals.user) {
-    if (locals.requireAuthentication) {
+    if (!anonymousReadAccess) {
       const returnUrl = encodeURIComponent(url.pathname + url.search);
       throw redirect(303, `/auth/login?returnUrl=${returnUrl}`);
     }
   }
 
   // Enable realtime glucose data for:
-  // - Public sites (requireAuthentication: false) — authDefaultRoles grants readable
-  // - Authenticated users with glucose read permissions
+  // - Authenticated users with a glucose read permission
+  // - Anonymous visitors on a tenant that grants public read access
   // The API enforces authorization on each endpoint as defense in depth.
-  const canViewRealtimeData =
-    !locals.requireAuthentication ||
-    hasGlucoseReadPermission(locals.effectivePermissions ?? []);
+  const canViewRealtimeData = locals.isAuthenticated
+    ? hasGlucoseReadPermission(locals.effectivePermissions ?? [])
+    : anonymousReadAccess;
 
-  // Fetch demo status for the banner (non-blocking — default to non-demo on failure)
-  let isDemo = false;
-  let nextResetAt: string | null = null;
-  try {
-    const status = await locals.apiClient.status.getStatus();
-    isDemo = status.isDemo ?? false;
-    nextResetAt = status.nextResetAt ? status.nextResetAt.toISOString() : null;
-  } catch {
-    // Swallow — demo banner is non-critical
-  }
+  const isDemo = status?.isDemo ?? false;
+  const nextResetAt = status?.nextResetAt ? status.nextResetAt.toISOString() : null;
 
   return {
     user: locals.user ?? null,
