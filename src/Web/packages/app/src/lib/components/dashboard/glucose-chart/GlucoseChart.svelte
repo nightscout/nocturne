@@ -133,6 +133,7 @@
   // ---- Entry lookup helpers ----
   function findAllNearbyEntries(time: Date): EntryRecord[] {
     const nearby: EntryRecord[] = [];
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
     const seen = new Set<string>();
 
     const allMarkers = [
@@ -164,7 +165,8 @@
       realtimeStore.findEntryByTreatmentId(treatmentId) ?? null;
 
     if (!entry) {
-      const result = await getEntryByTreatmentId({ treatmentId });
+      const result = await getEntryByTreatmentId({ treatmentId }).run();
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- generated entry shape bridged to the app EntryRecord union
       entry = result as EntryRecord | null;
     }
 
@@ -242,7 +244,7 @@
     {@render annotations?.(ctx)}
     <ChartHighlight />
   {/snippet}
-  {#snippet overlays(_ctx)}
+  {#snippet overlays()}
     <ChartTooltip {tooltipExtras} />
   {/snippet}
 </GlucoseChartShell>

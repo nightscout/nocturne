@@ -40,6 +40,7 @@
 
   function findAllNearbyEntries(time: Date): EntryRecord[] {
     const nearby: EntryRecord[] = [];
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
     const seen = new Set<string>();
 
     const allMarkers = [
@@ -73,7 +74,8 @@
 
     // Slow path: fetch from API via remote function
     if (!entry) {
-      const result = await getEntryByTreatmentId({ treatmentId });
+      const result = await getEntryByTreatmentId({ treatmentId }).run();
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- generated entry shape bridged to the app EntryRecord union
       entry = result as EntryRecord | null;
     }
 

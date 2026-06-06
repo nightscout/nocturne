@@ -24,7 +24,6 @@
     type ColorScheme,
   } from "$lib/stores/appearance-store.svelte";
   import HaloDialConfigurator from "$lib/components/settings/HaloDialConfigurator.svelte";
-  import type { HaloDialConfig } from "$lib/components/dashboard/halo-dial/config";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import TitleFaviconSettings from "$lib/components/settings/TitleFaviconSettings.svelte";
   import DashboardWidgetConfigurator from "$lib/components/settings/DashboardWidgetConfigurator.svelte";
@@ -72,6 +71,7 @@
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import { browser } from "$app/environment";
+  import { resolve } from "$app/paths";
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { page } from "$app/state";
   import { coachmark } from "@nocturne/coach";
@@ -133,20 +133,21 @@
   );
 
   // Glucose processing settings
-  let glucoseProcessingPreference = $state<string | null>(null);
-  let sourceDefaults = $state<Array<{ match: string; field: string; processing: string }>>([]);
+  const preferenceQuery = getPreference();
+  const sourceDefaultsQuery = getSourceDefaults();
+  let glucoseProcessingPreference: string | null = $derived(
+    preferenceQuery.current?.preferredGlucoseProcessing ?? null,
+  );
+  let sourceDefaults: Array<{ match: string; field: string; processing: string }> =
+    $derived(
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- zod types the rule fields as optional, but the API always returns them populated
+      (sourceDefaultsQuery.current?.rules ?? []) as Array<{
+        match: string;
+        field: string;
+        processing: string;
+      }>,
+    );
   let sourceDefaultsDialogOpen = $state(false);
-
-  $effect(() => {
-    if (browser) {
-      getPreference().then((result) => {
-        glucoseProcessingPreference = result?.preferredGlucoseProcessing ?? null;
-      });
-      getSourceDefaults().then((result) => {
-        sourceDefaults = result?.rules ?? [];
-      });
-    }
-  });
 </script>
 
 <svelte:head>
@@ -389,6 +390,7 @@
               type="single"
               value={currentColorScheme}
               onValueChange={(value) => {
+                // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to the ColorScheme options by the sibling SelectItems
                 setColorScheme(value as ColorScheme);
               }}
             >
@@ -438,7 +440,7 @@
             </div>
             <Switch
               checked={nightModeSchedule.current}
-              onCheckedChange={(checked) => {
+              onCheckedChange={(checked: boolean) => {
                 nightModeSchedule.current = checked;
               }}
             />
@@ -500,6 +502,7 @@
               type="single"
               value={glucoseUnits.current}
               onValueChange={(value) => {
+                // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to the glucose unit options by the sibling SelectItems
                 glucoseUnits.current = value as "mg/dl" | "mmol";
               }}
             >
@@ -521,6 +524,7 @@
               type="single"
               value={timeFormat.current}
               onValueChange={(value) => {
+                // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to the time format options by the sibling SelectItems
                 timeFormat.current = value as "12" | "24";
               }}
             >
@@ -624,6 +628,7 @@
                 type="single"
                 value={chartLineColorMode.current}
                 onValueChange={(value: string) => {
+                  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to the line color mode options by the sibling SelectItems
                   chartLineColorMode.current = value as "single" | "threshold" | "continuous";
                 }}
               >
@@ -675,6 +680,7 @@
                   type="single"
                   value={chartPointColorMode.current}
                   onValueChange={(value: string) => {
+                    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to the point color mode options by the sibling SelectItems
                     chartPointColorMode.current = value as "single" | "threshold" | "continuous";
                   }}
                 >
@@ -714,6 +720,7 @@
               type="single"
               value={chartAreaMode.current}
               onValueChange={(value: string) => {
+                // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to the area fill options by the sibling SelectItems
                 chartAreaMode.current = value as "off" | "baseline" | "deviation";
               }}
             >
@@ -928,7 +935,7 @@
           </div>
           <Switch
             checked={store.features?.trackerPills?.enabled ?? true}
-            onCheckedChange={(checked) => {
+            onCheckedChange={(checked: boolean) => {
               if (!store.features) return;
               if (!store.features.trackerPills) {
                 store.features.trackerPills = {
@@ -943,7 +950,7 @@
 
         <p class="text-xs text-muted-foreground">
           Each tracker's dashboard visibility is configured in
-          <a href="/settings/trackers" class="text-primary hover:underline">
+          <a href={resolve("/settings/trackers")} class="text-primary hover:underline">
             Settings → Trackers
           </a>
         </p>

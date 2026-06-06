@@ -22,6 +22,7 @@
     chartAreaOpacity,
   } from "$lib/stores/appearance-store.svelte";
   import type { PredictionDisplayMode } from "$lib/stores/appearance-store.svelte";
+  import type { SystemEventType } from "$lib/api";
   import PredictionSettings from "../PredictionSettings.svelte";
   import MiniOverviewChart from "../MiniOverviewChart.svelte";
   import GlucoseChartShell from "./GlucoseChartShell.svelte";
@@ -97,7 +98,6 @@
   });
 
   // ===== POINT INSPECTION =====
-  // svelte-ignore state_referenced_locally
   const inspection = createPointInspection(
     engine.finders,
     () => engine.glucoseData,
@@ -207,6 +207,7 @@
 
   function findAllNearbyEntries(time: Date): EntryRecord[] {
     const nearby: EntryRecord[] = [];
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
     const seen = new Set<string>();
     const allMarkers = [
       ...engine.bolusMarkers,
@@ -235,7 +236,8 @@
       realtimeStore.findEntryByTreatmentId(treatmentId) ?? null;
 
     if (!entry) {
-      const result = await getEntryByTreatmentId({ treatmentId });
+      const result = await getEntryByTreatmentId({ treatmentId }).run();
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- generated entry shape bridged to the app EntryRecord union
       entry = result as EntryRecord | null;
     }
 
@@ -306,6 +308,17 @@
       engine.displayDateRangeWithPredictions.to,
     ],
   );
+
+  const legendSystemEvents = $derived(
+    engine.displaySystemEvents.map(
+      (e): { id?: string; eventType?: SystemEventType; color?: string } => ({
+        id: e.id,
+        // @ts-expect-error -- engine types eventType as string; runtime value is a SystemEventType
+        eventType: e.eventType,
+        color: e.color,
+      }),
+    ),
+  );
 </script>
 
 {#snippet chartBody()}
@@ -343,7 +356,7 @@
         {legend}
         brushDomain={brushDomain}
       >
-        {#snippet tracks(ctx)}
+        {#snippet tracks()}
           <BasalTrack />
           <SwimLaneTrack />
           <ThresholdRules />
@@ -366,7 +379,7 @@
           <BasalInjectionMarkers />
           <ChartHighlight />
         {/snippet}
-        {#snippet overlays(_ctx)}
+        {#snippet overlays()}
           <ChartTooltip />
         {/snippet}
       </GlucoseChartShell>
@@ -416,7 +429,7 @@
       onToggleProfileSpans={() => legend.toggle("profileSpans")}
       onToggleActivitySpans={() => legend.toggle("activitySpans")}
       deviceEventMarkers={engine.deviceEventMarkers}
-      systemEvents={engine.displaySystemEvents}
+      systemEvents={legendSystemEvents}
       pumpModeSpans={engine.displayPumpModeSpans}
       scheduledTrackerMarkers={engine.displayTrackerMarkers}
       currentPumpMode={engine.currentPumpMode}

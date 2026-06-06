@@ -46,7 +46,6 @@
     Users,
     PlayCircle,
     History as HistoryIcon,
-    SlidersHorizontal,
     RefreshCw,
   } from "lucide-svelte";
   import { getSidebarReportItems } from "$lib/navigation/report-navigation";
@@ -80,6 +79,8 @@
 
   // Defer localStorage check to after hydration so SSR and client initial render
   // both produce the same DOM (avoids hydration mismatch from conditional rendering).
+  // $derived would read localStorage during hydration and reintroduce the mismatch.
+  // eslint-disable-next-line svelte/prefer-writable-derived -- $effect defers the localStorage read past hydration; $derived would not
   let langPrefKnown = $state(false);
   $effect(() => {
     langPrefKnown = hasLanguagePreference();
@@ -135,49 +136,16 @@
     }
   });
 
-  /**
-   * Fetch available tenants from the API. Only populates targets when
-   * subdomain-based multitenancy is active (baseDomain is set).
-   */
-  async function loadTenantTargets() {
-    if (!baseDomain || isGuestSession) return;
-    try {
-      const tenants = await getMyTenants();
-      totalTenantCount = (tenants ?? []).length;
-      defaultTenantSlug = (tenants ?? [])[0]?.slug ?? null;
-      isCurrentTenantMember = (tenants ?? []).some((t) => t.slug === currentSlug);
-      tenantTargetsLoaded = true;
-
-      tenantTargets = (tenants ?? [])
-        .filter(
-          (t): t is typeof t & { id: string; slug: string } =>
-            !!t.id && !!t.slug && t.slug !== currentSlug,
-        )
-        .map((t) => ({
-          id: t.id,
-          slug: t.slug,
-          displayName: t.displayName ?? null,
-        }));
-
-      // Pre-select based on current subdomain
-      selectedTenantSlug =
-        currentSlug && currentSlug !== defaultTenantSlug
-          ? currentSlug
-          : null;
-    } catch {
-      // Silently fail
-    }
-  }
+  // Available tenants for the subdomain switcher.
+  const myTenantsQuery = getMyTenants();
 
   function handleTenantChange(value: string | undefined) {
     if (!value || !baseDomain) return;
 
-    let targetSlug: string | null = null;
-    if (value === "__self__") {
-      targetSlug = currentSlug;
-    } else {
-      targetSlug = tenantTargets.find((t) => t.id === value)?.slug ?? null;
-    }
+    const targetSlug: string | null =
+      value === "__self__"
+        ? currentSlug
+        : (tenantTargets.find((t) => t.id === value)?.slug ?? null);
 
     if (targetSlug && targetSlug !== currentSlug) {
       const host = `${targetSlug}.${baseDomain}`;
@@ -191,12 +159,32 @@
       : target.slug;
   }
 
-  // Use $effect so this runs when `user` becomes available after client-side
-  // login navigation (onMount alone misses that case).
+  // Use $effect (not onMount) so this also runs when `user` becomes available
+  // after client-side login navigation.
   $effect(() => {
-    if (user) {
-      loadTenantTargets();
-    }
+    if (!user || !baseDomain || isGuestSession) return;
+    const tenants = myTenantsQuery.current;
+    if (tenants === undefined) return;
+
+    totalTenantCount = (tenants ?? []).length;
+    defaultTenantSlug = (tenants ?? [])[0]?.slug ?? null;
+    isCurrentTenantMember = (tenants ?? []).some((t) => t.slug === currentSlug);
+    tenantTargetsLoaded = true;
+
+    tenantTargets = (tenants ?? [])
+      .filter(
+        (t): t is typeof t & { id: string; slug: string } =>
+          !!t.id && !!t.slug && t.slug !== currentSlug,
+      )
+      .map((t) => ({
+        id: t.id,
+        slug: t.slug,
+        displayName: t.displayName ?? null,
+      }));
+
+    // Pre-select based on current subdomain
+    selectedTenantSlug =
+      currentSlug && currentSlug !== defaultTenantSlug ? currentSlug : null;
   });
 
   type NavItem = {
@@ -478,7 +466,7 @@
           {#if !selectedTenantSlug}
             My Data
           {:else}
-            {#each tenantTargets as target}
+            {#each tenantTargets as target (target.id)}
               {#if target.slug === selectedTenantSlug}
                 {formatTenantLabel(target)}
               {/if}
@@ -487,7 +475,7 @@
         </Select.Trigger>
         <Select.Content>
           <Select.Item value="__self__">My Data</Select.Item>
-          {#each tenantTargets as target}
+          {#each tenantTargets as target (target.id)}
             <Select.Item value={target.id}>
               {formatTenantLabel(target)}
             </Select.Item>
@@ -503,7 +491,7 @@
       <Sidebar.GroupLabel>Navigation</Sidebar.GroupLabel>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
-          {#each navigation as item}
+          {#each navigation as item (item.title)}
             {#if item.children}
               <!-- Collapsible submenu -->
               <Collapsible.Root
@@ -530,7 +518,7 @@
                 </Sidebar.MenuItem>
                 <Collapsible.Content>
                   <Sidebar.MenuSub>
-                    {#each item.children as child}
+                    {#each item.children as child (child.title)}
                       <Sidebar.MenuSubItem>
                         {#if child.href === "/alerts/dnd"}
                           <SidebarDndToggle />
@@ -553,6 +541,7 @@
               <Sidebar.MenuItem>
                 <Sidebar.MenuButton isActive={isActive(item)}>
                   {#snippet child({ props })}
+                    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a runtime string | undefined from NavItem; resolve() requires a literal route id and throws on undefined -->
                     <a href={item.href} {...props}>
                       <item.icon class="h-4 w-4" />
                       <span class="group-data-[collapsible=icon]:hidden">

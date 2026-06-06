@@ -31,7 +31,6 @@
   let carbs = $state<number>(0);
   let selectedTime = $state<string>(""); // HH:mm format for time input
   let isLoading = $state(false);
-  let foodEntry = $state<ConnectorFoodEntry | null>(null);
 
   // Extract data from notification OR match
   const treatmentId = $derived(
@@ -54,6 +53,13 @@
       : Number(notification?.metadata?.["consumedAtMills"]) || 0
   );
   const foodEntryId = $derived(match?.foodEntryId ?? notification?.sourceId ?? "");
+
+  const foodEntryQuery = $derived(
+    open && foodEntryId ? getFoodEntry(foodEntryId) : null,
+  );
+  const foodEntry = $derived<ConnectorFoodEntry | null>(
+    foodEntryQuery?.current ?? null,
+  );
 
   // Get food name from match (immediately) or foodEntry (after load)
   const foodName = $derived(
@@ -114,24 +120,13 @@
       carbs = foodEntryCarbs;
       selectedTime = formatTimeInput(treatmentMills);
       selectedDate = formatDateInput(treatmentMills);
-      loadFoodEntry();
     }
   });
-
-  async function loadFoodEntry() {
-    if (!foodEntryId) return;
-    try {
-      foodEntry = await getFoodEntry(foodEntryId);
-    } catch (err) {
-      console.error("Failed to load food entry:", err);
-    }
-  }
 
   function resetAndClose() {
     carbs = 0;
     selectedTime = "";
     selectedDate = "";
-    foodEntry = null;
     isLoading = false;
     open = false;
     onOpenChange(false);
