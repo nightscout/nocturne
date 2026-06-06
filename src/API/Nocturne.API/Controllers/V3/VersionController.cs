@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Platform;
@@ -14,6 +15,7 @@ namespace Nocturne.API.Controllers.V3;
 [ApiController]
 [Tags("V3 Version")]
 [Route("api/v3/[controller]")]
+[AllowAnonymous]
 public class VersionController : ControllerBase
 {
     private readonly IVersionService _versionService;

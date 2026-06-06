@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Compatibility;
 using Nocturne.Connectors.Nightscout.Configurations;
@@ -19,6 +20,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 [Tags("TenantAdmin")]
 [Route("api/v4/nightscout-transition")]
 [Produces("application/json")]
+[RequireAdmin]
 public class NightscoutTransitionController : ControllerBase
 {
     private readonly NightscoutConnectorConfiguration? _nightscoutConfig;

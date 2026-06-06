@@ -4,6 +4,7 @@ using System.Reflection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -33,6 +34,7 @@ public class StatusService : IStatusService
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly PublicAccessCacheService _publicAccessCacheService;
     private readonly ILogger<StatusService> _logger;
 
     private string TenantCacheId => _tenantAccessor.Context?.TenantId.ToString()
@@ -46,6 +48,7 @@ public class StatusService : IStatusService
         IDbContextFactory<NocturneDbContext> dbContextFactory,
         IHttpContextAccessor httpContextAccessor,
         ITenantAccessor tenantAccessor,
+        PublicAccessCacheService publicAccessCacheService,
         ILogger<StatusService> logger
     )
     {
@@ -56,6 +59,7 @@ public class StatusService : IStatusService
         _dbContextFactory = dbContextFactory;
         _httpContextAccessor = httpContextAccessor;
         _tenantAccessor = tenantAccessor;
+        _publicAccessCacheService = publicAccessCacheService;
         _logger = logger;
     }
 
@@ -163,6 +167,26 @@ public class StatusService : IStatusService
             }
         }
 
+        // Resolve whether this tenant grants anonymous read access (its public subject carries a
+        // read permission). Tenant-level and caller-independent, so safe to include in the cached
+        // per-tenant response; the web app uses it to gate anonymous dashboard access.
+        var anonymousReadAccess = false;
+        var publicTenantId = _tenantAccessor.Context?.TenantId;
+        if (publicTenantId.HasValue)
+        {
+            try
+            {
+                var publicAccess = await _publicAccessCacheService.GetPublicAccessAsync(publicTenantId.Value);
+                anonymousReadAccess = publicAccess is not null && GrantsReadAccess(publicAccess.EffectivePermissions);
+            }
+            catch (Exception ex)
+            {
+                // Resolving public access must not break the status endpoint. Fail safe: report no
+                // anonymous access so the web app requires sign-in rather than over-exposing.
+                _logger.LogWarning(ex, "Failed to resolve anonymous read access for tenant {TenantId}", publicTenantId.Value);
+            }
+        }
+
         var response = new StatusResponse
         {
             Status = "ok",
@@ -179,6 +203,7 @@ public class StatusService : IStatusService
             RuntimeState = _demoModeService.IsEnabled ? "demo" : "loaded",
             IsDemo = isDemo,
             NextResetAt = nextResetAt,
+            AnonymousReadAccess = anonymousReadAccess,
         };
 
         _logger.LogDebug(
@@ -190,6 +215,19 @@ public class StatusService : IStatusService
 
         return response;
     }
+
+    // Permissions that grant read access to dashboard data. Mirrors the web app's
+    // GLUCOSE_READ_PERMISSIONS so the per-tenant anonymousReadAccess flag matches the client's
+    // view of whether an anonymous visitor can see the dashboard (public tenants grant the Public
+    // subject granular scopes such as glucose.readwrite, not just the coarse readable/api:*:read).
+    private static readonly string[] ReadPermissions =
+        ["*", "api:*", "api:*:read", "readable", "glucose.read", "glucose.readwrite", "health.read", "health.readwrite"];
+
+    /// <summary>
+    /// Returns whether a permission set grants read access to dashboard data.
+    /// </summary>
+    private static bool GrantsReadAccess(IEnumerable<string> permissions)
+        => permissions.Any(p => ReadPermissions.Contains(p));
 
     /// <summary>
     /// Get the application version string

@@ -160,6 +160,7 @@
     boluscalcEnabled: false,
     authorized: null,
     runtimeState: loaded,
-    head: {Scrubbed}
+    head: {Scrubbed},
+    anonymousReadAccess: false
   }
 }

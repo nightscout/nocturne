@@ -22,6 +22,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 [Tags("Identity")]
 [Route("api/v4/member-invites")]
 [Produces("application/json")]
+[Authorize]
 public class MemberInviteController : ControllerBase
 {
     private readonly IMemberInviteService _memberInviteService;

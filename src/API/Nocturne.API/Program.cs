@@ -161,12 +161,8 @@ builder.Services.AddControllers(options =>
     options.Filters.AddService<ReadAccessAuditFilter>();
 })
 .ConfigureApplicationPartManager(manager =>
-{
-    if (!builder.Environment.IsDevelopment())
-    {
-        manager.FeatureProviders.Add(new RemoveDevOnlyControllersFeatureProvider());
-    }
-});
+    AuthorizationConfiguration.ConfigureControllerDiscovery(
+        manager, builder.Environment.IsDevelopment()));
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddProblemDetails();
@@ -282,12 +278,7 @@ builder
         };
     });
 
-builder.Services.AddTransient<IAuthorizationHandler, HasPermissionsHandler>();
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy(PolicyNames.HasPermissions, policy =>
-        policy.Requirements.Add(new HasPermissionsRequirement()));
-});
+builder.Services.AddNocturneAuthorization();
 
 // Configure CORS for frontend with credentials support
 // Note: AllowAnyOrigin() cannot be combined with AllowCredentials() per CORS spec
@@ -487,7 +478,7 @@ app.MapGet(
             }
         );
     }
-);
+).AllowAnonymous();
 
 app.MapDefaultEndpoints();
 
@@ -563,22 +554,6 @@ static bool IsRunningInNSwagContext()
     }
 
     return false;
-}
-
-/// <summary>
-/// Removes controllers in the .DevOnly namespace from non-development environments.
-/// Defined here to avoid creating a Nocturne.API.Infrastructure namespace that
-/// collides with relative namespace resolution in other files.
-/// </summary>
-file class RemoveDevOnlyControllersFeatureProvider
-    : Microsoft.AspNetCore.Mvc.Controllers.ControllerFeatureProvider
-{
-    protected override bool IsController(System.Reflection.TypeInfo typeInfo)
-    {
-        if (typeInfo.Namespace?.Contains(".DevOnly", StringComparison.Ordinal) == true)
-            return false;
-        return base.IsController(typeInfo);
-    }
 }
 
 // Make Program accessible for testing

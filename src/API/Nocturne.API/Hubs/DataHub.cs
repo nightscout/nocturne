@@ -14,6 +14,9 @@ namespace Nocturne.API.Hubs;
 /// <summary>
 /// SignalR hub for real-time data updates, replacing socket.io main data connection
 /// </summary>
+// Connections authenticate in-band after negotiate and are reachable only via the internal
+// realtime bridge, so the HTTP fallback authorization policy must not gate the handshake.
+[AllowAnonymous]
 public class DataHub : TenantAwareHub
 {
     private readonly ILogger<DataHub> _logger;

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -14,6 +15,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 [ApiController]
 [Tags("TenantAdmin")]
 [Route("api/v4/migration")]
+[RequireAdmin]
 public class MigrationController : ControllerBase
 {
     private readonly IMigrationJobService _migrationService;
