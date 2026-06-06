@@ -63,7 +63,7 @@ public class MembershipRequestService : IMembershipRequestService
 
         // Find all tenant members whose roles include "members.manage" or "*"
         var membersToNotify = await _dbContext.TenantMembers
-            .Where(m => m.TenantId == tenantId && m.RevokedAt == null)
+            .Where(m => m.TenantId == tenantId)
             .Where(m => m.MemberRoles.Any(mr =>
                 mr.TenantRole.Permissions.Any(p => p == "members.manage" || p == "*")))
             .Select(m => m.SubjectId)

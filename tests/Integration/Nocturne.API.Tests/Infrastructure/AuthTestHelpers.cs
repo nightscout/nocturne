@@ -476,6 +476,25 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
+    /// Creates an HttpClient targeting a specific tenant by slug with ONLY a Bearer
+    /// access token (no api-secret). Use this to exercise the subject-membership
+    /// authorization gate in <c>AuthenticationMiddleware</c>: an api-secret header
+    /// authenticates as an admin API key on the resolved tenant and bypasses the
+    /// membership check, so it would mask cross-tenant authorization failures.
+    /// </summary>
+    public static HttpClient CreateTenantBearerClient(
+        AspireIntegrationTestFixture fixture,
+        string slug,
+        string baseDomain,
+        string accessToken)
+    {
+        var client = fixture.CreateHttpClient("nocturne-api", "api");
+        client.DefaultRequestHeaders.Host = $"{slug}.{baseDomain}";
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
+        return client;
+    }
+
+    /// <summary>
     /// Extracts the base domain (host:port) from an HttpClient's BaseAddress.
     /// </summary>
     public static string GetBaseDomain(HttpClient apiClient)

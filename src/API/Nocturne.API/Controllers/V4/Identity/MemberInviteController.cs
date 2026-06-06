@@ -148,7 +148,7 @@ public class MemberInviteController : ControllerBase
         var member = await _dbContext.TenantMembers
             .Include(m => m.MemberRoles)
             .Include(m => m.Subject)
-            .Where(m => m.Id == id && m.TenantId == tenantId && m.RevokedAt == null)
+            .Where(m => m.Id == id && m.TenantId == tenantId)
             .FirstOrDefaultAsync(ct);
 
         if (member == null)
@@ -212,7 +212,7 @@ public class MemberInviteController : ControllerBase
         var member = await _dbContext.TenantMembers
             .Include(m => m.MemberRoles)
             .Include(m => m.Subject)
-            .Where(m => m.Id == id && m.TenantId == tenantId && m.RevokedAt == null)
+            .Where(m => m.Id == id && m.TenantId == tenantId)
             .FirstOrDefaultAsync(ct);
 
         if (member == null)
@@ -246,7 +246,7 @@ public class MemberInviteController : ControllerBase
 
         var tenantId = _tenantAccessor.TenantId;
         var member = await _dbContext.TenantMembers
-            .Where(m => m.Id == id && m.TenantId == tenantId && m.RevokedAt == null)
+            .Where(m => m.Id == id && m.TenantId == tenantId)
             .FirstOrDefaultAsync(ct);
 
         if (member == null)
@@ -276,7 +276,7 @@ public class MemberInviteController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
         var member = await _dbContext.TenantMembers
             .Include(m => m.Subject)
-            .Where(m => m.Id == id && m.TenantId == tenantId && m.RevokedAt == null)
+            .Where(m => m.Id == id && m.TenantId == tenantId)
             .FirstOrDefaultAsync(ct);
 
         if (member == null)
@@ -315,8 +315,7 @@ public class MemberInviteController : ControllerBase
             .Include(m => m.Subject)
             .Where(m => m.TenantId == tenantId
                 && m.Subject!.IsSystemSubject
-                && m.Subject.Name == "Public"
-                && m.RevokedAt == null)
+                && m.Subject.Name == "Public")
             .FirstOrDefaultAsync(ct);
 
         if (member == null)

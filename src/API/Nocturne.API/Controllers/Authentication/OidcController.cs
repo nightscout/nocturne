@@ -199,17 +199,37 @@ public class OidcController : ControllerBase
         // Clear state cookie (single use)
         ClearStateCookie();
 
+        // The callback runs on the tenant subdomain (OidcCallbackRedirectMiddleware has already
+        // bounced apex callbacks to {slug}.{baseDomain}), so the resolved tenant is the one being
+        // logged into. Pass it through so a session is only issued to a member of that tenant.
+        var currentTenantId = (HttpContext.Items["TenantContext"] as TenantContext)?.TenantId;
+
         // Handle the callback
         var result = await _authService.HandleCallbackAsync(
             code,
             state,
             expectedState,
             GetClientIpAddress(),
-            Request.Headers.UserAgent
+            Request.Headers.UserAgent,
+            currentTenantId
         );
 
         if (!result.Success)
         {
+            // Authenticated identity that is not a member of this tenant: issue no session and
+            // send them to the tenant login page, which offers the request-membership option
+            // when the tenant allows access requests.
+            if (result.IsAccessDenied)
+            {
+                // CompleteLoginAsync has already logged the denial with the tenant id.
+                await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
+                    ipAddress: GetClientIpAddress(), userAgent: Request.Headers.UserAgent,
+                    errorMessage: "not_a_member",
+                    detailsJson: JsonSerializer.Serialize(new { method = "oidc", reason = "not_a_member" }));
+
+                return RedirectToLogin();
+            }
+
             _logger.LogWarning(
                 "OIDC callback failed: {Error} - {Description}",
                 result.Error,
@@ -813,6 +833,13 @@ public class OidcController : ControllerBase
             $"/auth/error?error={Uri.EscapeDataString(error)}&description={Uri.EscapeDataString(description)}";
         return Redirect(returnUrl);
     }
+
+    /// <summary>
+    /// Redirect to the tenant login page. Used when an authenticated identity is denied because
+    /// it is not a member of the tenant; the login page surfaces the request-membership option
+    /// when the tenant allows access requests.
+    /// </summary>
+    private IActionResult RedirectToLogin() => Redirect("/auth/login");
 
     #endregion
 }

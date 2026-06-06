@@ -34,13 +34,18 @@ public interface IOidcAuthService
     /// <param name="expectedState">Expected state value from cookie</param>
     /// <param name="ipAddress">Client IP address</param>
     /// <param name="userAgent">User agent string</param>
+    /// <param name="currentTenantId">
+    /// The tenant the login is being performed against (the resolved subdomain tenant).
+    /// When set, the resolved subject must be a member of this tenant or no session is issued.
+    /// </param>
     /// <returns>Authentication result with session tokens</returns>
     Task<OidcCallbackResult> HandleCallbackAsync(
         string code,
         string state,
         string expectedState,
         string? ipAddress = null,
-        string? userAgent = null
+        string? userAgent = null,
+        Guid? currentTenantId = null
     );
 
     /// <summary>
@@ -209,6 +214,19 @@ public class OidcCallbackResult
     public string? ReturnUrl { get; set; }
 
     /// <summary>
+    /// True when authentication succeeded but the subject is not a member of the tenant
+    /// being logged into. No session is issued; the caller should redirect to the tenant's
+    /// login page (where the request-membership option is offered when the tenant allows it).
+    /// </summary>
+    public bool IsAccessDenied { get; set; }
+
+    /// <summary>
+    /// Subject resolved from the OIDC identity, when known. Set for successful and
+    /// access-denied results so the caller can write an accurate audit entry.
+    /// </summary>
+    public Guid? SubjectId { get; set; }
+
+    /// <summary>
     /// Create a successful result
     /// </summary>
     public static OidcCallbackResult Succeeded(
@@ -222,6 +240,7 @@ public class OidcCallbackResult
             Tokens = tokens,
             UserInfo = userInfo,
             ReturnUrl = returnUrl,
+            SubjectId = tokens.SubjectId,
         };
 
     /// <summary>
@@ -233,6 +252,21 @@ public class OidcCallbackResult
             Success = false,
             Error = error,
             ErrorDescription = description,
+        };
+
+    /// <summary>
+    /// Create an access-denied result for an authenticated identity that is not a member
+    /// of the tenant being logged into. No session is issued.
+    /// </summary>
+    public static OidcCallbackResult NotAMember(Guid subjectId, string? returnUrl = null) =>
+        new()
+        {
+            Success = false,
+            IsAccessDenied = true,
+            SubjectId = subjectId,
+            Error = "not_a_member",
+            ErrorDescription = "You are not a member of this account.",
+            ReturnUrl = returnUrl,
         };
 }
 

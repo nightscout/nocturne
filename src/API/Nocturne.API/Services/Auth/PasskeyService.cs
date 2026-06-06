@@ -255,6 +255,7 @@ public class PasskeyService : IPasskeyService
             ?? throw new InvalidOperationException("Credential not found.");
 
         // Verify the credential's subject is a member of the current tenant
+        // (the global query filter on TenantMemberEntity already excludes revoked memberships).
         var isMember = await _dbContext.TenantMembers
             .AnyAsync(tm => tm.TenantId == tenantId && tm.SubjectId == storedCredential.SubjectId);
         if (!isMember)

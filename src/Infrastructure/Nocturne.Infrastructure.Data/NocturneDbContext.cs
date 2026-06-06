@@ -541,6 +541,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         // Configure per-tenant global query filters
         ConfigureTenantFilters(modelBuilder);
 
+        // Tenant membership is "active" only while not revoked. Enforcing this once here
+        // keeps every membership query (auth gates, setup detection, admin listings) from
+        // having to repeat `RevokedAt == null`. The matching partial unique index
+        // (ix_tenant_members_tenant_subject, filtered on revoked_at IS NULL) lets a revoked
+        // membership coexist with a fresh active one, so re-adds remain valid.
+        modelBuilder.Entity<TenantMemberEntity>().HasQueryFilter(tm => tm.RevokedAt == null);
+
         // Configure cascade deletes from tenant to all tenant-scoped entities
         ConfigureTenantCascadeDeletes(modelBuilder);
 

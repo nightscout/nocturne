@@ -124,8 +124,7 @@ public class MemberScopeMiddleware
             .Include(tm => tm.MemberRoles)
                 .ThenInclude(mr => mr.TenantRole)
             .Where(tm => tm.SubjectId == authContext.SubjectId.Value
-                         && tm.TenantId == authContext.TenantId.Value
-                         && tm.RevokedAt == null)
+                         && tm.TenantId == authContext.TenantId.Value)
             .FirstOrDefaultAsync();
 
         if (membership == null)
