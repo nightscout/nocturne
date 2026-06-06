@@ -44,6 +44,13 @@ export const load: LayoutServerLoad = async ({ locals, cookies, url }) => {
   }
   const anonymousReadAccess = status?.anonymousReadAccess ?? false;
 
+  // A fresh instance with no resolved tenant reports "setup_required" — send it to setup rather
+  // than bouncing an anonymous visitor to login. (checkOnboarding fails open on a missing cookie
+  // or an unreachable auth-status call, so this is the authoritative no-tenant signal.)
+  if (status?.status === "setup_required") {
+    throw redirect(303, "/setup");
+  }
+
   // Redirect anonymous visitors to login when this tenant does not grant anonymous read access
   // (a private tenant). Public tenants keep serving their read-only dashboard, so the shell is
   // never rendered for a visitor who would otherwise see a burst of 401s and a client bounce.
