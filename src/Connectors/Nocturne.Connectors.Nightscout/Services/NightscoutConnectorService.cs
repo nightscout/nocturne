@@ -43,6 +43,11 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     protected override string ConnectorSource => DataSources.NightscoutConnector;
     public override string ServiceName => "Nightscout";
 
+    // A Nightscout instance is a full data export, so the initial sync (no prior data) imports the
+    // source's entire history rather than the default bounded window — capping the first backfill
+    // would silently drop older records. Catch-up syncs still resume from each type's own cursor.
+    protected override DateTime? InitialSyncFloor => null;
+
     public override List<SyncDataType> SupportedDataTypes =>
     [
         SyncDataType.Glucose,

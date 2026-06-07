@@ -37,7 +37,7 @@ public class Program
         var demoHost = builder.Configuration["DemoService:DemoHost"] ?? "demo.localhost";
         var instanceKey = builder.Configuration["DemoService:InstanceKey"] ?? "";
         var instanceKeyHash = !string.IsNullOrEmpty(instanceKey)
-            ? Nocturne.Connectors.Core.Utilities.HashUtils.Sha1Hex(instanceKey)
+            ? Nocturne.Connectors.Core.Utilities.HashUtils.Sha256Hex(instanceKey)
             : "";
 
         builder.Services.AddHttpClient("DemoAdmin", client =>

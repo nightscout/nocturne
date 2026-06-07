@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.API.Authorization;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
@@ -33,10 +34,10 @@ public class InstanceKeyHandlerTests
                 [ServiceNames.ConfigKeys.InstanceKey] = PlainKey,
             })
             .Build();
-        return new InstanceKeyHandler(config, NullLogger<InstanceKeyHandler>.Instance);
+        return new InstanceKeyHandler(new InstanceKeyValidator(config), NullLogger<InstanceKeyHandler>.Instance);
     }
 
-    private static string ValidHash => HashUtils.Sha1Hex(PlainKey);
+    private static string ValidHash => HashUtils.Sha256Hex(PlainKey);
 
     [Fact]
     public async Task ValidInstanceKey_WithoutServiceMarker_Skips()

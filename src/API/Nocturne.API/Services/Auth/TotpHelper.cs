@@ -5,6 +5,10 @@ namespace Nocturne.API.Services.Auth;
 
 /// <summary>
 /// RFC 6238 TOTP computation helper. HMAC-SHA1, 6-digit codes, 30-second time step.
+/// HMAC-SHA1 is fixed by the ecosystem, not a choice: authenticator apps default to it
+/// (the provisioning URI omits the algorithm parameter, i.e. SHA-1), and many ignore a
+/// SHA-256 request outright. HMAC's security does not depend on SHA-1 collision
+/// resistance, so this is intentionally NOT migrated alongside the instance key.
 /// </summary>
 public static class TotpHelper
 {

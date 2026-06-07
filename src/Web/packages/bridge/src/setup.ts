@@ -126,7 +126,7 @@ export async function setupBridge(
   // from accepting browser connections.
   logger.info(`Bridge tenant discovery starting (baseDomain: ${baseDomain})`);
 
-  const instanceKeyHash = createHash('sha1')
+  const instanceKeyHash = createHash('sha256')
     .update(config.instanceKey)
     .digest('hex')
     .toLowerCase();
