@@ -111,6 +111,23 @@ public static class TenantPermissions
     ];
 
     /// <summary>
+    /// Read scopes that may be granted to the Public subject for anonymous share-link access.
+    /// These map directly to the data categories shown in the Sharing &amp; Privacy UI. The owner
+    /// chooses which subset is visible to anyone holding the public link.
+    /// </summary>
+    public static readonly HashSet<string> PublicShareScopes =
+    [
+        GlucoseRead, StatisticsRead, TreatmentsRead, DevicesRead,
+        HeartRateRead, StepCountRead, FoodRead, ReportsRead,
+    ];
+
+    /// <summary>
+    /// Scopes granted to the Public subject when a share link is first enabled. Mirrors the legacy
+    /// Viewer-role default (glucose + statistics) so existing behaviour is preserved.
+    /// </summary>
+    public static readonly List<string> DefaultPublicShareScopes = [GlucoseRead, StatisticsRead];
+
+    /// <summary>
     /// Seed role slugs.
     /// </summary>
     public static class SeedRoles

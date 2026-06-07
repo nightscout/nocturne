@@ -66,10 +66,6 @@
 
   const { user = null, tenantCount = 0, effectivePermissions = [], isPlatformAdmin = false, isGuestSession = false }: Props = $props();
 
-  const canManageRoles = $derived(
-    effectivePermissions.includes("roles.manage") ||
-      effectivePermissions.includes("*"),
-  );
   const canViewAudit = $derived(
     effectivePermissions.includes("audit.read") ||
       effectivePermissions.includes("audit.manage") ||
@@ -318,10 +314,7 @@
           icon: Timer,
         },
         { title: "Connectors & Apps", href: "/settings/connectors", icon: Plug },
-        { title: "Members", href: "/settings/members", icon: Users },
-        ...(canManageRoles
-          ? [{ title: "Roles", href: "/settings/roles", icon: Shield }]
-          : []),
+        { title: "Sharing & Privacy", href: "/settings/members", icon: Users },
         ...(canViewAudit
           ? [{ title: "Audit Log", href: "/settings/audit", icon: ScrollText }]
           : []),

@@ -5,8 +5,8 @@
 import { getRequestEvent, query, command } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
-import { CreateMembershipRequestRequestSchema, ApproveMembershipRequestRequestSchema } from '$lib/api/generated/schemas';
-import { type CreateMembershipRequestRequest, type ApproveMembershipRequestRequest } from '$api';
+import { CreateMembershipRequestRequestSchema, ApproveMembershipRequestRequestSchema, UpdateMembershipRequestSettingsRequestSchema } from '$lib/api/generated/schemas';
+import { type CreateMembershipRequestRequest, type ApproveMembershipRequestRequest, type UpdateMembershipRequestSettingsRequest } from '$api';
 
 /** List all pending membership requests for the current tenant. */
 export const getPendingRequests = query(async () => {
@@ -108,5 +108,49 @@ export const denyRequest = command(z.string(), async (id) => {
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to deny request');
+  }
+});
+
+/** Get whether this tenant currently lets people request to become a member. */
+export const getMembershipRequestSettings = query(async () => {
+  const apiClient = getRequestEvent().locals.apiClient;
+  try {
+    return await apiClient.membershipRequest.getMembershipRequestSettings();
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
+    console.error('Error in membershipRequest.getMembershipRequestSettings:', err);
+    const e = err as any;
+    const body = e?.body ?? e?.response;
+    const errors = body?.errors ?? e?.errors;
+    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
+    throw error(500, message ?? 'Failed to get membership request settings');
+  }
+});
+
+/** Enable or disable whether people can request to become a member. Independent of public access. */
+export const setMembershipRequestSettings = command(UpdateMembershipRequestSettingsRequestSchema, async (request) => {
+  const apiClient = getRequestEvent().locals.apiClient;
+  try {
+    const result = await apiClient.membershipRequest.setMembershipRequestSettings(request as UpdateMembershipRequestSettingsRequest);
+    await Promise.all([
+      getMembershipRequestSettings(undefined).refresh()
+    ]);
+    return result;
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { throw error(401, 'Unauthorized'); }
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
+    console.error('Error in membershipRequest.setMembershipRequestSettings:', err);
+    const e = err as any;
+    const body = e?.body ?? e?.response;
+    const errors = body?.errors ?? e?.errors;
+    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
+    throw error(500, message ?? 'Failed to set membership request settings');
   }
 });

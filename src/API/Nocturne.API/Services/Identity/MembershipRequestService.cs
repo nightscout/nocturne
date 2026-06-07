@@ -35,6 +35,13 @@ public class MembershipRequestService : IMembershipRequestService
     {
         _dbContext.TenantId = tenantId;
 
+        var tenant = await _dbContext.Tenants.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        if (tenant == null)
+            return new CreateMembershipRequestResult(false, "Tenant not found.");
+        if (!tenant.AllowAccessRequests)
+            return new CreateMembershipRequestResult(false, "This profile is not accepting membership requests.");
+
         var existingPending = await _dbContext.MembershipRequests
             .AnyAsync(r => r.SubjectId == subjectId && r.Status == "pending", ct);
 
@@ -214,5 +221,26 @@ public class MembershipRequestService : IMembershipRequestService
             cancellationToken: ct);
 
         return new DecideMembershipRequestResult(true, null);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> GetAllowRequestsAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        var tenant = await _dbContext.Tenants.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == tenantId, ct)
+            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
+        return tenant.AllowAccessRequests;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SetAllowRequestsAsync(Guid tenantId, bool allowRequests, CancellationToken ct = default)
+    {
+        var tenant = await _dbContext.Tenants
+            .FirstOrDefaultAsync(t => t.Id == tenantId, ct)
+            ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
+
+        tenant.AllowAccessRequests = allowRequests;
+        await _dbContext.SaveChangesAsync(ct);
+        return tenant.AllowAccessRequests;
     }
 }

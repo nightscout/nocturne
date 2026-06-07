@@ -7,15 +7,18 @@ using Xunit;
 namespace Nocturne.API.Tests.Controllers.V1;
 
 /// <summary>
-/// Regression tests that verify Nightscout V1 API authentication compatibility.
+/// Regression tests for V1 API authentication on the <b>bare tenant host</b>
+/// (<c>{slug}.{baseDomain}</c>).
 ///
-/// Original Nightscout V1 API contract:
-///   - All GET (read) endpoints are completely public (no authentication)
-///   - All POST/PUT/DELETE (write) endpoints require the api-secret header
+/// As of the public-share-link feature the bare host is <b>login-only</b>: anonymous reads are no
+/// longer served there even when the tenant's Public subject carries a read role. Anonymous public
+/// read moved to the rotatable share host (<c>{token}.share.{baseDomain}</c>), covered by the
+/// share-host / AuthenticationMiddleware suites. So on the bare host:
+///   - GET (read) endpoints require authentication (api-secret or session) — unauthenticated → 401
+///   - POST/PUT/DELETE (write) endpoints require the api-secret header
 ///   - The api-secret header contains a SHA1 hash of the configured secret
 ///
-/// These tests ensure [Authorize] / [AllowAnonymous] attributes on V1 controllers
-/// never regress and break compatibility with existing Nightscout clients.
+/// These tests ensure the bare-host authentication contract never regresses.
 /// </summary>
 [Trait("Category", "Unit")]
 public class V1AuthenticationRegressionTests : IClassFixture<AuthenticationTestFactory>, IDisposable
@@ -44,7 +47,7 @@ public class V1AuthenticationRegressionTests : IClassFixture<AuthenticationTestF
     }
 
     // ====================================================================
-    // GET endpoints: must be publicly accessible (AllowAnonymous)
+    // GET endpoints on the bare host: login-only (unauthenticated → 401)
     // ====================================================================
 
     [Theory]
@@ -58,12 +61,32 @@ public class V1AuthenticationRegressionTests : IClassFixture<AuthenticationTestF
     [InlineData("/api/v1/profile/current")]
     [InlineData("/api/v1/activity")]
     [InlineData("/api/v1/adminnotifies")]
-    public async Task V1_GetEndpoints_ShouldBeAccessibleWithoutAuthentication(string endpoint)
+    public async Task V1_GetEndpoints_OnBareHost_RejectUnauthenticatedRequests(string endpoint)
     {
         // Act
         var response = await _anonymousClient.GetAsync(endpoint);
 
-        // Assert - should NOT be 401 or 403 (may be 200, 204, 304, etc.)
+        // Assert - the bare host is login-only; anonymous read moved to the share host.
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/entries")]
+    [InlineData("/api/v1/entries/current")]
+    [InlineData("/api/v1/entries/sgv")]
+    [InlineData("/api/v1/treatments")]
+    [InlineData("/api/v1/devicestatus")]
+    [InlineData("/api/v1/food")]
+    [InlineData("/api/v1/profile")]
+    [InlineData("/api/v1/profile/current")]
+    [InlineData("/api/v1/activity")]
+    [InlineData("/api/v1/adminnotifies")]
+    public async Task V1_GetEndpoints_WithValidApiSecret_AreAccessible(string endpoint)
+    {
+        // Act
+        var response = await _authenticatedClient.GetAsync(endpoint);
+
+        // Assert - authenticated reads work (may be 200, 204, 304, etc.) but never 401/403.
         Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
     }

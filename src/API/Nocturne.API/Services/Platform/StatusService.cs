@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -27,6 +28,9 @@ namespace Nocturne.API.Services.Platform;
 /// <seealso cref="IDemoModeService"/>
 public class StatusService : IStatusService
 {
+    /// <summary>Process start time, captured once, used to report real server uptime.</summary>
+    private static readonly DateTime ProcessStartUtc = Process.GetCurrentProcess().StartTime.ToUniversalTime();
+
     private readonly IConfiguration _configuration;
     private readonly ICacheService _cacheService;
     private readonly IDemoModeService _demoModeService;
@@ -536,7 +540,6 @@ public class StatusService : IStatusService
         _logger.LogDebug("Generating V3 system status response");
 
         var basicStatus = await GetSystemStatusAsync();
-        var startTime = Environment.TickCount64;
 
         var storageVersion = await GetPostgresVersionAsync();
 
@@ -562,7 +565,7 @@ public class StatusService : IStatusService
             {
                 Authorization = GetAuthorizationInfo(),
                 Permissions = GetApiPermissions(),
-                UptimeMs = Environment.TickCount64 - startTime,
+                UptimeMs = (long)(DateTime.UtcNow - ProcessStartUtc).TotalMilliseconds,
                 Collections = GetAvailableCollections(),
                 ApiVersions = GetSupportedApiVersions(),
             },

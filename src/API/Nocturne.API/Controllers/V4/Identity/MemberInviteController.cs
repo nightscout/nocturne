@@ -293,72 +293,6 @@ public class MemberInviteController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// Toggle public (unauthenticated) read access for this tenant.
-    /// Assigns or removes the viewer role on the Public system subject.
-    /// </summary>
-    [HttpPut("public-access")]
-    [RemoteCommand(Invalidates = ["GetMembers"])]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> SetPublicAccess(
-        [FromBody] SetPublicAccessRequest request,
-        [FromServices] PublicAccessCacheService publicAccessCache,
-        CancellationToken ct)
-    {
-        if (!HasPermission(TenantPermissions.SharingManage))
-            return Forbid();
-
-        var tenantId = _tenantAccessor.TenantId;
-
-        var member = await _dbContext.TenantMembers
-            .Include(m => m.MemberRoles)
-            .Include(m => m.Subject)
-            .Where(m => m.TenantId == tenantId
-                && m.Subject!.IsSystemSubject
-                && m.Subject.Name == "Public")
-            .FirstOrDefaultAsync(ct);
-
-        if (member == null)
-            return Problem(detail: "Public subject membership not found", statusCode: 404, title: "Not Found");
-
-        var now = DateTime.UtcNow;
-
-        if (request.Enabled)
-        {
-            // Assign viewer role if not already assigned
-            var viewerRole = await _dbContext.TenantRoles
-                .FirstOrDefaultAsync(r => r.TenantId == tenantId
-                    && r.Slug == TenantPermissions.SeedRoles.Viewer, ct);
-
-            if (viewerRole == null)
-                return Problem(detail: "Viewer role not found", statusCode: 500, title: "Internal Server Error");
-
-            var alreadyAssigned = member.MemberRoles.Any(mr => mr.TenantRoleId == viewerRole.Id);
-            if (!alreadyAssigned)
-            {
-                _dbContext.TenantMemberRoles.Add(new TenantMemberRoleEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantMemberId = member.Id,
-                    TenantRoleId = viewerRole.Id,
-                    SysCreatedAt = now,
-                });
-            }
-        }
-        else
-        {
-            // Remove all roles from Public member
-            _dbContext.TenantMemberRoles.RemoveRange(member.MemberRoles);
-        }
-
-        member.SysUpdatedAt = now;
-        await _dbContext.SaveChangesAsync(ct);
-        publicAccessCache.Evict(tenantId);
-
-        return NoContent();
-    }
-
     private bool HasPermission(string permission)
     {
         var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
@@ -370,4 +304,3 @@ public class MemberInviteController : ControllerBase
 public record SetMemberRolesRequest(List<Guid> RoleIds);
 public record SetMemberPermissionsRequest(List<string>? DirectPermissions);
 public record SetMemberLimitTo24HoursRequest(bool LimitTo24Hours);
-public record SetPublicAccessRequest(bool Enabled);

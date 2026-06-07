@@ -208,10 +208,13 @@ public class AuthenticationMiddleware
             }
         }
 
-        // For unauthenticated requests with a resolved tenant, try to resolve
-        // the Public system subject's permissions for public/read-only access
+        // Public read access is granted only when the request arrived via a valid share token
+        // ({token}.share.{baseDomain}); TenantResolutionMiddleware sets ShareAccess. The bare
+        // {slug}.{baseDomain} host is login-only — an unauthenticated request there gets nothing,
+        // even when the tenant's Public subject carries a read role.
         resolvedAuth = context.Items["AuthContext"] as AuthContext;
         if (resolvedAuth is { IsAuthenticated: false }
+            && context.Items["ShareAccess"] is true
             && context.Items["TenantContext"] is TenantContext publicTenantCtx)
         {
             var publicAccess = await _publicAccessCacheService.GetPublicAccessAsync(publicTenantCtx.TenantId);
@@ -252,6 +255,14 @@ public class AuthenticationMiddleware
     /// <returns>An <see cref="AuthContext"/> representing the authentication result.</returns>
     private async Task<AuthContext> AuthenticateRequestAsync(HttpContext context)
     {
+        // Public share host ({token}.share.{baseDomain}): never honor credentials. The share host
+        // serves only the anonymous read-only view, so a logged-in owner's session cookie must not
+        // authenticate the request — the host can never resolve to more than public read access.
+        if (context.Items["ShareAccess"] is true)
+        {
+            return AuthContext.Unauthenticated();
+        }
+
         foreach (var handler in _handlers)
         {
             try

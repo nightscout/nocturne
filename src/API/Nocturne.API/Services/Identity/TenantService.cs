@@ -53,7 +53,7 @@ public partial class TenantService : ITenantService
         // Abuse vectors
         "account", "billing", "security", "password", "verify",
         // Platform
-        "monitoring", "alerts", "bridge", "connect",
+        "monitoring", "alerts", "bridge", "connect", "share",
         // Reserved words
         "null", "undefined", "default", "test", "example",
         // Healthcare

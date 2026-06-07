@@ -1788,6 +1788,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_tenants_slug")
             .IsUnique();
 
+        // Unique share token for public dashboard resolution. Postgres allows multiple
+        // NULLs in a unique index, so tenants without sharing enabled don't collide.
+        modelBuilder.Entity<TenantEntity>()
+            .HasIndex(t => t.ShareToken)
+            .HasDatabaseName("ix_tenants_share_token")
+            .IsUnique();
+
         modelBuilder.Entity<TenantMemberEntity>()
             .HasIndex(tm => tm.SubjectId)
             .HasDatabaseName("ix_tenant_members_subject_id");

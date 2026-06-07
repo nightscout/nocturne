@@ -12,7 +12,7 @@ import {
 import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
-import { getOriginalProto, getEffectiveHost } from "$lib/server/request-host";
+import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from "$lib/server/request-host";
 // WUCHALE-DISABLED: wuchale temporarily disabled
 // import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
 // import * as main from '../../../locales/main.loader.server.svelte.js'
@@ -517,5 +517,16 @@ const resetBitsId: Handle = async ({ event, resolve }) => {
   return resolve(event);
 };
 
+// Public share host: keep the token-bearing URL out of Referer headers and search indexes on
+// every response (SSR page, /api proxy, realtime ticket), not just the page document.
+const shareHostSecurityHandle: Handle = async ({ event, resolve }) => {
+  const response = await resolve(event);
+  if (isShareHost(getOriginalHost(event.request))) {
+    response.headers.set("Referrer-Policy", "no-referrer");
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
+  return response;
+};
+
 // Chain the auth handler, site security handler, proxy handler, and API client handler
-export const handle: Handle = sequence(resetBitsId, authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);
+export const handle: Handle = sequence(shareHostSecurityHandle, resetBitsId, authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);

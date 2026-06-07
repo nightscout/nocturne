@@ -161,6 +161,6 @@
     authorized: null,
     runtimeState: loaded,
     head: {Scrubbed},
-    anonymousReadAccess: false
+    anonymousReadAccess: true
   }
 }

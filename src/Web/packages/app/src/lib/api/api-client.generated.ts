@@ -82,6 +82,7 @@ import {
   SensorGlucoseClient,
   ServicesClient,
   SetupClient,
+  ShareLinkClient,
   StateSpansClient,
   StatisticsClient,
   StatusClient,
@@ -187,6 +188,7 @@ export class ApiClient {
   public readonly sensorGlucose: SensorGlucoseClient;
   public readonly services: ServicesClient;
   public readonly setup: SetupClient;
+  public readonly shareLink: ShareLinkClient;
   public readonly stateSpans: StateSpansClient;
   public readonly statistics: StatisticsClient;
   public readonly status: StatusClient;
@@ -292,6 +294,7 @@ export class ApiClient {
     this.sensorGlucose = new SensorGlucoseClient(apiBaseUrl, http);
     this.services = new ServicesClient(apiBaseUrl, http);
     this.setup = new SetupClient(apiBaseUrl, http);
+    this.shareLink = new ShareLinkClient(apiBaseUrl, http);
     this.stateSpans = new StateSpansClient(apiBaseUrl, http);
     this.statistics = new StatisticsClient(apiBaseUrl, http);
     this.status = new StatusClient(apiBaseUrl, http);
