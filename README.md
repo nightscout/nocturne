@@ -159,6 +159,13 @@ curl -fsS -X PUT "https://alice.$BASE_DOMAIN/api/v4/connectors/config/Dexcom/sec
 
 When the human is ready, they open the site and register the first passkey through the normal wizard — recovery codes and all — exactly as on a brand-new instance. Their pre-configured connectors and data are already there. (A bare `X-Instance-Key` without the `X-Instance-Service` marker is ignored, so an instance key accidentally forwarded onto a browser request can't bypass setup.)
 
+### Troubleshooting
+
+**Redirected to `/setup` even though a tenant is already configured.** Two usual causes:
+
+- **`BASE_DOMAIN` is unset.** The API resolves tenants as `{slug}.{BASE_DOMAIN}`, and the WebSocket bridge requires it. If it's empty, host→tenant resolution fails and the dashboard bounces to `/setup` (and the bridge logs `BASE_DOMAIN is required`). Set it in `.env` to the domain you serve Nocturne on, for **both** the API and web containers, then recreate them.
+- **Single-tenant install served at the base domain.** If your one tenant lives at the apex (`https://<BASE_DOMAIN>/`, no subdomain), update to the latest image — older builds reported `setup_required` for `/api/v4/status` on the apex and bounced configured single-tenant installs to `/setup`.
+
 ### Generating locally
 
 If you have the .NET 10 SDK and Aspire CLI installed, you can generate the production bundle from source:

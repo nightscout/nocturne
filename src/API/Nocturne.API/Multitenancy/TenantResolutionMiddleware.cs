@@ -98,6 +98,25 @@ public class TenantResolutionMiddleware
             TenantlessAllowedPaths.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase)) ||
             TenantlessAllowedPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 
+        // On the apex (no subdomain), GET /api/v4/status is tenant-scoped yet listed as
+        // tenantless-allowed (so a fresh apex doesn't 404). On a single-tenant install,
+        // resolve the sole tenant so status reflects it instead of reporting
+        // "setup_required" — which would bounce a fully configured single-tenant install
+        // to /setup. Falls through to the normal tenantless passthrough when zero or
+        // multiple tenants exist, so multi-tenant apex behavior is unchanged.
+        if (slug == null && path.Equals("/api/v4/status", StringComparison.OrdinalIgnoreCase))
+        {
+            var soleStatusTenant = await GetSoleTenantAsync(context.RequestServices);
+            if (soleStatusTenant != null)
+            {
+                tenantAccessor.SetTenant(soleStatusTenant);
+                context.Items["TenantContext"] = soleStatusTenant;
+                PinTenantOnScopedDbContext(context, soleStatusTenant.TenantId);
+                await _next(context);
+                return;
+            }
+        }
+
         // Tenantless-allowed paths on the apex (no slug) operate across tenants.
         if (slug == null && isTenantlessAllowedPath)
         {
