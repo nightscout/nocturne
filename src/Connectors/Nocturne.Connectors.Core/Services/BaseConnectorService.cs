@@ -222,7 +222,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     Calculate the optimal "since" timestamp for fetching glucose entries
     ///     Uses catch-up logic to fetch from the most recent entry, or falls back to default lookback
     /// </summary>
-    protected async Task<DateTime> CalculateSinceTimestampAsync(
+    protected async Task<DateTime?> CalculateSinceTimestampAsync(
         TConfig config,
         DateTime? defaultSince = null
     )
@@ -240,7 +240,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     Calculate the optimal "since" timestamp for fetching treatments
     ///     Uses catch-up logic to fetch from the most recent treatment, or falls back to default lookback
     /// </summary>
-    protected async Task<DateTime> CalculateTreatmentSinceTimestampAsync(
+    protected async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(
         TConfig config,
         DateTime? defaultSince = null
     )
@@ -303,24 +303,45 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     /// <summary>
     ///     Helper method to calculate the since timestamp from a latest timestamp.
-    ///     Falls back to a 6-month initial window when no prior data exists.
+    ///     When no prior data exists, falls back to <see cref="InitialSyncFloor"/> — which may be
+    ///     <c>null</c> (no lower bound) for connectors that import the source's full history.
     /// </summary>
-    private DateTime CalculateSinceFromTimestamp(DateTime? latestTimestamp, string dataType)
+    private DateTime? CalculateSinceFromTimestamp(DateTime? latestTimestamp, string dataType)
     {
         var catchUpSince = TryCalculateCatchUpSince(latestTimestamp, dataType);
         if (catchUpSince.HasValue)
             return catchUpSince.Value;
 
-        // Fallback to 6 months for initial sync if no existing data found
-        var fallbackSince = DateTime.UtcNow.AddMonths(-6);
-        _logger?.LogInformation(
-            "No existing {DataType} found for {ConnectorSource}, performing initial sync from {Since:yyyy-MM-dd HH:mm:ss} UTC",
-            dataType,
-            ConnectorSource,
-            fallbackSince
-        );
+        // No prior data: this is the initial sync. Most connectors bound the first backfill to
+        // InitialSyncFloor; a null floor means "no lower bound" — import the source's full history.
+        var fallbackSince = InitialSyncFloor;
+        if (fallbackSince.HasValue)
+            _logger?.LogInformation(
+                "No existing {DataType} found for {ConnectorSource}, performing initial sync from {Since:yyyy-MM-dd HH:mm:ss} UTC",
+                dataType,
+                ConnectorSource,
+                fallbackSince.Value
+            );
+        else
+            _logger?.LogInformation(
+                "No existing {DataType} found for {ConnectorSource}, performing initial sync over the source's full history",
+                dataType,
+                ConnectorSource
+            );
         return fallbackSince;
     }
+
+    /// <summary>
+    ///     Lower bound applied to an initial sync when no prior data exists for a data type.
+    ///     Connectors whose source is a full data export (e.g. Nightscout) override this to return
+    ///     <c>null</c> so the first backfill imports the entire history; the default bounds the
+    ///     initial window to <see cref="DefaultInitialSyncFloor"/> so a first sync against a
+    ///     long-running source is not unbounded.
+    /// </summary>
+    protected virtual DateTime? InitialSyncFloor => DefaultInitialSyncFloor();
+
+    /// <summary>The default initial backfill window: six months before now.</summary>
+    protected static DateTime DefaultInitialSyncFloor() => DateTime.UtcNow.AddMonths(-6);
 
     /// <summary>
     ///     Core synchronization logic that processes data types sequentially.
