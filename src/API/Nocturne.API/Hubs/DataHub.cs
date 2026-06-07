@@ -78,8 +78,8 @@ public class DataHub : TenantAwareHub
                         ?? configuration?[ServiceNames.ConfigKeys.InstanceKey];
                     if (!string.IsNullOrEmpty(configuredSecret))
                     {
-                        // Calculate SHA1 hash of the configured secret
-                        var expectedHash = HashUtils.Sha1Hex(configuredSecret);
+                        // Calculate SHA-256 hash of the configured secret
+                        var expectedHash = HashUtils.Sha256Hex(configuredSecret);
 
                         // Compare with provided secret (should be the hashed value)
                         isAuthorized = authData.Secret.ToLowerInvariant() == expectedHash;

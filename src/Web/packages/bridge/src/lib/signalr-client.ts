@@ -81,7 +81,7 @@ class SignalRClient {
       }
 
       if (this.configHubUrl) {
-        const keyHash = createHash("sha1")
+        const keyHash = createHash("sha256")
           .update(this.instanceKey)
           .digest("hex");
         this.configConnection = this.buildConnection(this.configHubUrl, {
@@ -290,7 +290,7 @@ class SignalRClient {
       );
     }
     try {
-      const secretHash = createHash("sha1")
+      const secretHash = createHash("sha256")
         .update(this.instanceKey)
         .digest("hex")
         .toLowerCase();
@@ -350,7 +350,7 @@ class SignalRClient {
     }
 
     try {
-      const secretHash = createHash("sha1")
+      const secretHash = createHash("sha256")
         .update(this.instanceKey)
         .digest("hex")
         .toLowerCase();

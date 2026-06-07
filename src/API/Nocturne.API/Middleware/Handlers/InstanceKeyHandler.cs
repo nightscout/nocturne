@@ -1,14 +1,14 @@
-using Nocturne.Connectors.Core.Utilities;
-using Nocturne.Core.Constants;
+using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Middleware.Handlers;
 
 /// <summary>
 /// Authentication handler for instance key (infrastructure service authentication).
-/// Validates the SHA1 hash of the instance key sent in the X-Instance-Key header.
-/// Used by internal services (SSR, WebSocket bridge) to authenticate with the API.
-/// Grants full admin (*) permissions.
+/// Validates the SHA1 hash of the instance key sent in the X-Instance-Key header
+/// (with an X-Instance-Service marker) via <see cref="IInstanceKeyValidator"/>.
+/// Used by internal services (SSR, WebSocket bridge) and trusted automation to
+/// authenticate with the API. Grants full admin (*) permissions.
 /// </summary>
 public class InstanceKeyHandler : IAuthHandler
 {
@@ -16,68 +16,50 @@ public class InstanceKeyHandler : IAuthHandler
 
     public string Name => "InstanceKeyHandler";
 
-    private readonly string _instanceKeyHash;
+    private readonly IInstanceKeyValidator _validator;
     private readonly ILogger<InstanceKeyHandler> _logger;
 
-    public InstanceKeyHandler(IConfiguration configuration, ILogger<InstanceKeyHandler> logger)
+    public InstanceKeyHandler(IInstanceKeyValidator validator, ILogger<InstanceKeyHandler> logger)
     {
+        _validator = validator;
         _logger = logger;
-
-        var instanceKey =
-            configuration[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
-            ?? configuration[ServiceNames.ConfigKeys.InstanceKey]
-            ?? "";
-        _instanceKeyHash = !string.IsNullOrEmpty(instanceKey) ? HashUtils.Sha1Hex(instanceKey) : "";
     }
 
     public Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
-        var header = context.Request.Headers[ServiceNames.Headers.InstanceKey].FirstOrDefault();
-        if (string.IsNullOrEmpty(header))
-            return Task.FromResult(AuthResult.Skip());
-
-        // Require an explicit service marker. A bare instance key with no service
-        // declaration is treated as "not an intended service credential" and is
-        // skipped, so the request falls through to public-access / unauthenticated
-        // handling. This prevents an instance key accidentally forwarded onto an
-        // anonymous browser request (e.g. by the SSR proxy) from elevating that
-        // request to admin and bypassing per-tenant public-access controls.
-        var serviceMarker = context.Request.Headers[ServiceNames.Headers.InstanceService].FirstOrDefault();
-        if (string.IsNullOrEmpty(serviceMarker))
+        switch (_validator.Classify(context))
         {
-            _logger.LogDebug(
-                "X-Instance-Key present without an X-Instance-Service marker; skipping instance-key auth");
-            return Task.FromResult(AuthResult.Skip());
+            case InstanceKeyRequestKind.Absent:
+                // No header, or a bare key with no service marker — fall through to
+                // public-access / unauthenticated handling.
+                return Task.FromResult(AuthResult.Skip());
+
+            case InstanceKeyRequestKind.NotConfigured:
+                _logger.LogWarning("X-Instance-Key header provided but no instance key configured");
+                return Task.FromResult(AuthResult.Failure("Instance key not configured"));
+
+            case InstanceKeyRequestKind.Invalid:
+                _logger.LogWarning("Invalid instance key provided");
+                return Task.FromResult(AuthResult.Failure("Invalid instance key"));
+
+            default:
+                _logger.LogDebug("Instance key authentication successful");
+                return Task.FromResult(AuthResult.Success(new AuthContext
+                {
+                    IsAuthenticated = true,
+                    AuthType = AuthType.InstanceKey,
+                    SubjectName = "instance-service",
+                    Permissions = ["*"],
+                    Roles = ["admin"],
+                    // The instance key is the highest-trust service credential in
+                    // the system (shared only with trusted in-cluster services). It
+                    // already skips tenant membership checks and grants permission
+                    // wildcard, so it must also carry platform_admin so that cross-
+                    // tenant admin endpoints (e.g. /api/v4/admin/tenants/provision)
+                    // are callable by provisioners. Without this, external admin
+                    // calls authenticated via X-Instance-Key get 403 Forbidden.
+                    IsPlatformAdmin = true,
+                }));
         }
-
-        if (string.IsNullOrEmpty(_instanceKeyHash))
-        {
-            _logger.LogWarning("X-Instance-Key header provided but no instance key configured");
-            return Task.FromResult(AuthResult.Failure("Instance key not configured"));
-        }
-
-        if (!string.Equals(header, _instanceKeyHash, StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogWarning("Invalid instance key provided");
-            return Task.FromResult(AuthResult.Failure("Invalid instance key"));
-        }
-
-        _logger.LogDebug("Instance key authentication successful");
-        return Task.FromResult(AuthResult.Success(new AuthContext
-        {
-            IsAuthenticated = true,
-            AuthType = AuthType.InstanceKey,
-            SubjectName = "instance-service",
-            Permissions = ["*"],
-            Roles = ["admin"],
-            // The instance key is the highest-trust service credential in
-            // the system (shared only with trusted in-cluster services). It
-            // already skips tenant membership checks and grants permission
-            // wildcard, so it must also carry platform_admin so that cross-
-            // tenant admin endpoints (e.g. /api/v4/admin/tenants/provision)
-            // are callable by provisioners. Without this, external admin
-            // calls authenticated via X-Instance-Key get 403 Forbidden.
-            IsPlatformAdmin = true,
-        }));
     }
 }

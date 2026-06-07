@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Fido2NetLib;
+using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services;
 using Nocturne.API.Middleware.Handlers;
@@ -229,6 +230,10 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantMemberService, TenantMemberService>();
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<ITenantService, TenantService>();
+
+        // Shared by InstanceKeyHandler (authentication) and TenantSetupMiddleware
+        // (setup-gate bypass) so instance-key validation rules live in one place.
+        services.AddSingleton<IInstanceKeyValidator, InstanceKeyValidator>();
 
         // Auth handlers (executed in priority order, lowest first)
         services.AddSingleton<IAuthHandler, PlatformAccessCookieHandler>(); // Priority 40

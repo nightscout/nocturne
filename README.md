@@ -130,6 +130,35 @@ docker compose up -d
 
 The production compose includes [Watchtower](https://github.com/nicholas-fedor/watchtower) for automatic container updates (checks daily), and omits the Aspire dashboard and Scalar API explorer. Watchtower will automatically pull new images as they are published — no manual updates needed.
 
+### First-run setup
+
+A fresh install has no tenants, so the API answers every request with `503 {"error":"setup_required"}` until the first owner secures the instance. This is expected — it's the signal for the web UI to show the setup wizard.
+
+**In a browser (normal path).** Open your Nocturne site (the apex `https://<BASE_DOMAIN>/`). The setup wizard walks you through creating the first tenant and registering a passkey (or linking an OIDC provider). When it completes you're shown a set of recovery codes — save them. That's the whole setup.
+
+**Headless / automated setup (no browser).** Trusted automation can stand up a tenant — create it, configure connectors, change settings, push data — before any human registers a passkey, using the `INSTANCE_KEY` from your `.env`. The instance key is the highest-trust service credential (cross-tenant platform admin), so treat it like a root password. Requests authenticate with two headers: `X-Instance-Key` carrying the **SHA-256 hex of `INSTANCE_KEY`**, and an `X-Instance-Service` marker naming the caller.
+
+```bash
+# The X-Instance-Key header is the SHA-256 hex of your raw INSTANCE_KEY, not the key itself.
+KEY_HASH=$(printf %s "$INSTANCE_KEY" | sha256sum | cut -d' ' -f1)
+
+# 1. Create the first tenant. This endpoint is anonymous and tenantless — call it on the apex.
+curl -fsS -X POST "https://$BASE_DOMAIN/api/v4/setup/tenant" \
+  -H 'Content-Type: application/json' \
+  -d '{"slug":"alice","displayName":"Alice"}'
+
+# 2. Configure the tenant as trusted automation. Target the tenant's subdomain and
+#    present the instance key + service marker. Normal tenant traffic still gets 503
+#    until a human completes setup, but instance-key calls are allowed through.
+curl -fsS -X PUT "https://alice.$BASE_DOMAIN/api/v4/connectors/config/Dexcom/secrets" \
+  -H "X-Instance-Key: $KEY_HASH" \
+  -H 'X-Instance-Service: nocturne-setup-agent' \
+  -H 'Content-Type: application/json' \
+  -d '{ "username": "...", "password": "..." }'
+```
+
+When the human is ready, they open the site and register the first passkey through the normal wizard — recovery codes and all — exactly as on a brand-new instance. Their pre-configured connectors and data are already there. (A bare `X-Instance-Key` without the `X-Instance-Service` marker is ignored, so an instance key accidentally forwarded onto a browser request can't bypass setup.)
+
 ### Generating locally
 
 If you have the .NET 10 SDK and Aspire CLI installed, you can generate the production bundle from source:

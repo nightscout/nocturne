@@ -21,7 +21,7 @@ export function getApiBaseUrl(): string | null {
 export function getHashedInstanceKey(): string | null {
   const instanceKey = env.INSTANCE_KEY;
   return instanceKey
-    ? createHash("sha1").update(instanceKey).digest("hex").toLowerCase()
+    ? createHash("sha256").update(instanceKey).digest("hex").toLowerCase()
     : null;
 }
 

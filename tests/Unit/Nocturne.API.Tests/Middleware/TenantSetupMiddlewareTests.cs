@@ -5,10 +5,13 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Authorization;
 using Nocturne.API.Middleware;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -22,6 +25,11 @@ public class TenantSetupMiddlewareTests : IDisposable
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<ITenantAccessor> _tenantAccessor;
     private readonly Guid _tenantId = Guid.CreateVersion7();
+
+    // Default validator with no instance key configured — Classify() always returns
+    // Absent, so it never bypasses. Used by every test that isn't exercising the bypass.
+    private readonly IInstanceKeyValidator _noInstanceKey =
+        new InstanceKeyValidator(new ConfigurationBuilder().Build());
 
     public TenantSetupMiddlewareTests()
     {
@@ -83,7 +91,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.Response.Body = new MemoryStream();
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -125,7 +133,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -141,7 +149,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -197,7 +205,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build();
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -267,7 +275,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -308,7 +316,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -329,7 +337,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.SetEndpoint(CreateEndpoint(new AllowDuringSetupAttribute()));
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -344,7 +352,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.SetEndpoint(CreateEndpoint());
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -359,7 +367,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         // (no SetEndpoint call)
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -379,7 +387,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.Response.Body = new MemoryStream();
 
         // Act — tenant is resolved (simulating single-tenant auto-resolution)
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
@@ -420,7 +428,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue();
@@ -477,7 +485,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue("OIDC identity alone should satisfy the setup check");
@@ -559,7 +567,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act — middleware checks tenant B
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         nextCalled.Should().BeTrue(
@@ -625,7 +633,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build(onNext: () => nextCalled = true);
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert — should pass through cleanly, no 503, no recovery mode
         nextCalled.Should().BeTrue();
@@ -658,12 +666,116 @@ public class TenantSetupMiddlewareTests : IDisposable
         var (mw, ctx) = Build();
 
         // Act
-        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext);
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, _noInstanceKey);
 
         // Assert
         ctx.Response.StatusCode.Should().Be(503);
         ctx.Response.Body.Seek(0, SeekOrigin.Begin);
         var body = await new StreamReader(ctx.Response.Body).ReadToEndAsync();
         body.Should().Contain("setup_required");
+    }
+
+    private static IInstanceKeyValidator ValidatorFor(string instanceKey)
+        => new InstanceKeyValidator(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [ServiceNames.ConfigKeys.InstanceKey] = instanceKey,
+            })
+            .Build());
+
+    [Fact]
+    public async Task WhenValidInstanceKeyRequest_BypassesSetupGate_WithNoCredentials()
+    {
+        // Arrange — tenant has no owner credential (would normally 503), but the caller
+        // presents a valid instance-key service credential (header + service marker).
+        const string key = "bootstrap-key";
+        var nextCalled = false;
+        var (mw, ctx) = Build(onNext: () => nextCalled = true);
+        ctx.Request.Headers[ServiceNames.Headers.InstanceKey] = HashUtils.Sha256Hex(key);
+        ctx.Request.Headers[ServiceNames.Headers.InstanceService] = "nocturne-setup-agent";
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, ValidatorFor(key));
+
+        // Assert
+        nextCalled.Should().BeTrue("a trusted instance-key caller must reach config endpoints during setup");
+        ctx.Response.StatusCode.Should().NotBe(503);
+    }
+
+    [Fact]
+    public async Task WhenInstanceKeyRequest_DuringRecoveryMode_BypassesGate()
+    {
+        // Arrange — tenant is in recovery mode (a healthy member plus an orphaned subject),
+        // which normally 503s. A valid instance-key caller must still get through.
+        var healthySubjectId = Guid.CreateVersion7();
+        var orphanedSubjectId = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = healthySubjectId, Name = "Healthy", IsActive = true, IsSystemSubject = false,
+        });
+        _dbContext.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(), SubjectId = healthySubjectId,
+            CredentialId = System.Text.Encoding.UTF8.GetBytes("cred-1"), PublicKey = [], SignCount = 0,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = healthySubjectId,
+        });
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = orphanedSubjectId, Name = "Orphaned", IsActive = true, IsSystemSubject = false,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = _tenantId, SubjectId = orphanedSubjectId,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        const string key = "bootstrap-key";
+        var nextCalled = false;
+        var (mw, ctx) = Build(onNext: () => nextCalled = true);
+        ctx.Request.Headers[ServiceNames.Headers.InstanceKey] = HashUtils.Sha256Hex(key);
+        ctx.Request.Headers[ServiceNames.Headers.InstanceService] = "nocturne-setup-agent";
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, ValidatorFor(key));
+
+        // Assert
+        nextCalled.Should().BeTrue();
+        ctx.Response.StatusCode.Should().NotBe(503);
+    }
+
+    [Fact]
+    public async Task WhenInstanceKeyHeaderHasNoServiceMarker_StillBlocks()
+    {
+        // Arrange — a bare instance key without the X-Instance-Service marker must NOT
+        // bypass, mirroring InstanceKeyHandler: a key accidentally forwarded onto a
+        // browser request should not slip past the setup gate.
+        const string key = "bootstrap-key";
+        var (mw, ctx) = Build();
+        ctx.Request.Headers[ServiceNames.Headers.InstanceKey] = HashUtils.Sha256Hex(key);
+        // no X-Instance-Service marker
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, ValidatorFor(key));
+
+        // Assert
+        ctx.Response.StatusCode.Should().Be(503);
+    }
+
+    [Fact]
+    public async Task WhenInstanceKeyHashIsWrong_StillBlocks()
+    {
+        // Arrange — a service marker plus a non-matching key hash must not bypass.
+        var (mw, ctx) = Build();
+        ctx.Request.Headers[ServiceNames.Headers.InstanceKey] = HashUtils.Sha256Hex("not-the-key");
+        ctx.Request.Headers[ServiceNames.Headers.InstanceService] = "nocturne-setup-agent";
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbContext, ValidatorFor("bootstrap-key"));
+
+        // Assert
+        ctx.Response.StatusCode.Should().Be(503);
     }
 }
