@@ -50,11 +50,6 @@ export function getEffectiveHost(
   return host;
 }
 
-/**
- * True when the host is a public share link of the form {token}.share.{baseDomain}.
- * The bare {slug}.{baseDomain} host and the literal share.{baseDomain} label are not share hosts.
- * Mirrors the API's TenantResolutionMiddleware, which gates anonymous read on this host shape.
- */
-export function isShareHost(host: string | null | undefined): boolean {
-  return host != null && /^[^.]+\.share\./i.test(host);
-}
+// Re-exported from the shared (non-server) module so the client 401 interceptor and these server
+// hooks share one definition of the share-host shape. See $lib/share-host.
+export { isShareHost } from "$lib/share-host";
