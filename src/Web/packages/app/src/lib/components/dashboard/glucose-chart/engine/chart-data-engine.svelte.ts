@@ -1,5 +1,12 @@
 import { untrack } from "svelte";
-import { type BasalPoint, BasalDeliveryOrigin } from "$lib/api";
+import {
+  type BasalPoint,
+  BasalDeliveryOrigin,
+  type DeviceEventType,
+  type SystemEventType,
+  type StateSpanCategory,
+  type TrackerCategory,
+} from "$lib/api";
 import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
 import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
 import { getChartData } from "$api/chart-data.remote";
@@ -41,6 +48,7 @@ export interface BolusMarkerData {
   time: Date;
   insulin?: number;
   bolusType?: string;
+  isOverride?: boolean;
   treatmentId?: string;
   dataSource?: string;
   [key: string]: unknown;
@@ -59,7 +67,7 @@ export interface CarbMarkerData {
 /** A device event marker from the chart data */
 export interface DeviceEventMarkerData {
   time: Date;
-  eventType?: string;
+  eventType?: DeviceEventType;
   color: string;
   treatmentId?: string;
   [key: string]: unknown;
@@ -69,7 +77,7 @@ export interface DeviceEventMarkerData {
 export interface SystemEventMarkerData {
   time: Date;
   id?: string;
-  eventType?: string;
+  eventType?: SystemEventType;
   color: string;
   [key: string]: unknown;
 }
@@ -94,7 +102,7 @@ export interface BgCheckMarkerData {
 export interface TrackerMarkerData {
   time: Date;
   id?: string;
-  category?: string;
+  category?: TrackerCategory;
   color: string;
   [key: string]: unknown;
 }
@@ -102,7 +110,7 @@ export interface TrackerMarkerData {
 /** A state span (pump mode, override, profile, activity, temp basal, basal delivery) */
 export interface StateSpan {
   id?: string;
-  category?: string;
+  category?: StateSpanCategory;
   state?: string;
   startTime: Date;
   endTime: Date | null;

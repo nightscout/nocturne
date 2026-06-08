@@ -48,7 +48,7 @@
   </Label>
   <Popover.Root bind:open={popoverOpen}>
     <Popover.Trigger>
-      {#snippet child({ props })}
+      {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
           variant="outline"
           role="combobox"

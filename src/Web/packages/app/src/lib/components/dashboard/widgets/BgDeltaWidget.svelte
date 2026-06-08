@@ -4,7 +4,6 @@
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { formatGlucoseDelta, getUnitLabel, time } from "$lib/utils/formatting";
   import { timeAgo } from "$lib/utils";
-  import { onMount } from "svelte";
   import {
     BatteryCharging,
     BatteryFull,

@@ -12,5 +12,6 @@ export const load: LayoutServerLoad = async ({ locals }) => {
     isAuthenticated: locals.isAuthenticated,
     effectivePermissions: locals.effectivePermissions ?? [],
     isPlatformAdmin: locals.isPlatformAdmin,
+    isPlatformAccessGrant: locals.isPlatformAccessGrant ?? false,
   };
 };

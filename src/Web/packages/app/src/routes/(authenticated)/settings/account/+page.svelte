@@ -63,8 +63,12 @@
 
   // Passkey add flow
   let isRegistering = $state(false);
+  let isSavingPasskey = $state(false);
   let showLabelDialog = $state(false);
   let newPasskeyLabel = $state("");
+  // Attestation captured from the WebAuthn ceremony, held until the user names the
+  // passkey so register/complete can persist the label alongside the credential.
+  let pendingPasskey = $state<{ attestationResponseJson: string; challengeToken: string } | null>(null);
 
   // Passkey remove flow
   let isRemoving = $state<string | null>(null);
@@ -139,11 +143,13 @@
 
       const attestation = await startRegistration({ optionsJSON: options });
 
-      await registerComplete({
+      // Defer completion until the user names the passkey, so the label is persisted
+      // with the credential (register/complete accepts it). Completing here would save
+      // the credential before the label was ever entered.
+      pendingPasskey = {
         attestationResponseJson: JSON.stringify(attestation),
         challengeToken,
-      });
-
+      };
       newPasskeyLabel = "";
       showLabelDialog = true;
     } catch (err) {
@@ -153,11 +159,33 @@
     }
   }
 
-  function handleLabelDialogClose() {
-    showLabelDialog = false;
+  /** Finish registration, persisting the entered label (or none, when skipped). */
+  async function completePasskeyRegistration() {
+    if (!pendingPasskey || isSavingPasskey) return;
+    isSavingPasskey = true;
+    errorMessage = null;
+
+    try {
+      await registerComplete({
+        attestationResponseJson: pendingPasskey.attestationResponseJson,
+        challengeToken: pendingPasskey.challengeToken,
+        label: newPasskeyLabel.trim() || undefined,
+      });
+      showLabelDialog = false;
+      pendingPasskey = null;
+      newPasskeyLabel = "";
+      successMessage = "Passkey added successfully.";
+      clearMessages();
+    } catch (err) {
+      errorMessage = err instanceof Error ? err.message : "Failed to register passkey.";
+    } finally {
+      isSavingPasskey = false;
+    }
+  }
+
+  function skipPasskeyLabel() {
     newPasskeyLabel = "";
-    successMessage = "Passkey added successfully.";
-    clearMessages();
+    completePasskeyRegistration();
   }
 
   // ============================================================================
@@ -546,10 +574,13 @@
       </div>
     </div>
     <Dialog.Footer>
-      <Button variant="outline" onclick={handleLabelDialogClose}>
+      <Button variant="outline" disabled={isSavingPasskey} onclick={skipPasskeyLabel}>
         Skip
       </Button>
-      <Button onclick={handleLabelDialogClose}>
+      <Button disabled={isSavingPasskey} onclick={completePasskeyRegistration}>
+        {#if isSavingPasskey}
+          <Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
+        {/if}
         Save
       </Button>
     </Dialog.Footer>

@@ -160,7 +160,7 @@
             >
               <Checkbox
                 checked={checked[index] ?? false}
-                onCheckedChange={(v) => (checked[index] = v === true)}
+                onCheckedChange={(v: boolean) => (checked[index] = v === true)}
               />
               <span
                 class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-sm font-semibold tabular-nums text-primary shrink-0 {checked[index] ? 'line-through' : ''}"
@@ -205,7 +205,7 @@
                 bind:value={newLabel}
                 placeholder="Item name..."
                 class="flex-1 h-8 text-sm"
-                onkeydown={(e) => e.key === "Enter" && addItem()}
+                onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addItem()}
               />
               <Button size="sm" class="h-8" onclick={addItem} disabled={!newLabel.trim()}>
                 Add
@@ -245,7 +245,7 @@
               bind:value={newLabel}
               placeholder="Item name..."
               class="flex-1 h-8 text-sm"
-              onkeydown={(e) => e.key === "Enter" && addItem()}
+              onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addItem()}
             />
             <Button size="sm" class="h-8" onclick={addItem} disabled={!newLabel.trim()}>
               Add

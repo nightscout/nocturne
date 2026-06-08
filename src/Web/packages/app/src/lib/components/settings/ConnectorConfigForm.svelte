@@ -327,7 +327,8 @@
         </div>
         <Switch
           checked={Boolean(getPropertyValue(propName))}
-          onCheckedChange={(checked) => setPropertyValue(propName, checked)}
+          onCheckedChange={(checked: boolean) =>
+            setPropertyValue(propName, checked)}
         />
       </div>
     {:else if propSchema.enum}
@@ -399,7 +400,7 @@
         value={String(getPropertyValue(propName) ?? "")}
         min={propSchema.minimum}
         max={propSchema.maximum}
-        oninput={(e) => {
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
           const target = e.currentTarget;
           const value =
             propSchema.type === "integer"
@@ -457,7 +458,8 @@
         minlength={propSchema.minLength}
         maxlength={propSchema.maxLength}
         pattern={propSchema.pattern}
-        oninput={(e) => setPropertyValue(propName, e.currentTarget.value)}
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+          setPropertyValue(propName, e.currentTarget.value)}
       />
       {#if meta.description}
         <p class="text-sm text-muted-foreground">{meta.description}</p>
@@ -564,7 +566,8 @@
                 type={visibleSecrets.has(name) ? "text" : "password"}
                 value={getSecretValue(name)}
                 placeholder="Enter to update (leave blank to keep current)"
-                oninput={(e) => setSecretValue(name, e.currentTarget.value)}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                  setSecretValue(name, e.currentTarget.value)}
                 class="flex-1"
               />
               <Button

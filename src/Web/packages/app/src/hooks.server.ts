@@ -50,6 +50,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
   event.locals.user = null;
   event.locals.isAuthenticated = false;
   event.locals.isPlatformAdmin = false;
+  event.locals.isPlatformAccessGrant = false;
 
   const apiBaseUrl = getApiBaseUrl();
 
@@ -141,6 +142,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
       event.locals.user = user;
       event.locals.isAuthenticated = true;
       event.locals.isPlatformAdmin = session.isPlatformAdmin ?? false;
+      event.locals.isPlatformAccessGrant = session.isPlatformAccessGrant ?? false;
 
       // Fetch effective permissions (granted scopes) for the current tenant
       try {

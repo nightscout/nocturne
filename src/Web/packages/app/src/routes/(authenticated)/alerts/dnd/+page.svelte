@@ -35,7 +35,7 @@
   // Convert a UTC ISO string into a `datetime-local` input value (YYYY-MM-
   // DDTHH:mm) in the *browser's* local zone — keeps the form usable without
   // re-implementing tz conversion. The save path round-trips back to UTC.
-  function isoToLocal(iso: string | null | undefined): string {
+  function isoToLocal(iso: string | Date | null | undefined): string {
     if (!iso) return "";
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
@@ -138,7 +138,7 @@
         <Switch
           id="dnd-manual"
           checked={dndManualActive}
-          onCheckedChange={(c) => (dndManualActive = c)}
+          onCheckedChange={(c: boolean) => (dndManualActive = c)}
         />
       </div>
       {#if dndManualActive}
@@ -148,7 +148,8 @@
             id="dnd-until"
             type="datetime-local"
             value={dndManualUntilLocal}
-            oninput={(e) => (dndManualUntilLocal = e.currentTarget.value)}
+            oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+              (dndManualUntilLocal = e.currentTarget.value)}
           />
           <p class="text-xs text-muted-foreground">Leave blank to keep DND on indefinitely.</p>
         </div>
@@ -167,7 +168,7 @@
         <Switch
           id="dnd-schedule"
           checked={dndScheduleEnabled}
-          onCheckedChange={(c) => (dndScheduleEnabled = c)}
+          onCheckedChange={(c: boolean) => (dndScheduleEnabled = c)}
         />
       </div>
       {#if dndScheduleEnabled}
@@ -178,7 +179,8 @@
               id="dnd-start"
               type="time"
               value={dndScheduleStart}
-              oninput={(e) => (dndScheduleStart = e.currentTarget.value)}
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                (dndScheduleStart = e.currentTarget.value)}
             />
           </div>
           <div class="space-y-2">
@@ -187,7 +189,8 @@
               id="dnd-end"
               type="time"
               value={dndScheduleEnd}
-              oninput={(e) => (dndScheduleEnd = e.currentTarget.value)}
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                (dndScheduleEnd = e.currentTarget.value)}
             />
           </div>
         </div>

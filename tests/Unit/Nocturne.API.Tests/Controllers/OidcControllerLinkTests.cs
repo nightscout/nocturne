@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data.Entities;
@@ -19,6 +20,7 @@ public class OidcControllerLinkTests
     private readonly Mock<IOidcProviderService> _providerService = new();
     private readonly Mock<ISubjectService> _subjectService = new();
     private readonly Mock<IAuthAuditService> _auditService = new();
+    private readonly Mock<ITenantMemberService> _tenantMemberService = new();
     private readonly OidcOptions _options;
     private readonly OidcController _controller;
 
@@ -43,6 +45,7 @@ public class OidcControllerLinkTests
             _providerService.Object,
             _subjectService.Object,
             _auditService.Object,
+            _tenantMemberService.Object,
             Options.Create(_options),
             configuration,
             NullLogger<OidcController>.Instance);

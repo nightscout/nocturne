@@ -59,7 +59,7 @@
           step="0.1"
           min="0"
           value={portions}
-          oninput={(e) =>
+          oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
             onPortionsChange?.(parseFloat(e.currentTarget.value) || 0)}
         />
       </div>
@@ -72,7 +72,7 @@
         step="0.1"
         min="0"
         value={entryCarbs}
-        oninput={(e) =>
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
           onCarbsChange?.(parseFloat(e.currentTarget.value) || 0)}
       />
     </div>

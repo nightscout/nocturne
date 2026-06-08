@@ -409,7 +409,7 @@
               ></span>
               <Input
                 value={p.label}
-                oninput={(e) =>
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
                   (periods = {
                     ...periods,
                     [cfg.side]: { ...p, label: e.currentTarget.value },

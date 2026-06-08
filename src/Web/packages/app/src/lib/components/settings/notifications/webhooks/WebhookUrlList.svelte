@@ -34,7 +34,7 @@
         value={url}
         placeholder="https://example.com/webhook"
         disabled={disabled}
-        oninput={(e) =>
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
           updateUrl(index, (e.currentTarget as HTMLInputElement).value)
         }
       />

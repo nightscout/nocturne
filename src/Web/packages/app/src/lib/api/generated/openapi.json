@@ -34418,6 +34418,9 @@
           "sysCreatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "isPlatformAdmin": {
+            "type": "boolean"
           }
         }
       },
@@ -36586,6 +36589,9 @@
           },
           "conditionType": {
             "$ref": "#/components/schemas/AlertConditionType"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/AlertRuleSeverity"
           },
           "startedAt": {
             "type": "string",
@@ -46968,6 +46974,10 @@
           "isPlatformAdmin": {
             "type": "boolean",
             "description": "Whether this subject has platform-level admin access"
+          },
+          "isPlatformAccessGrant": {
+            "type": "boolean",
+            "description": "Whether this session is a short-lived platform-admin access grant on a tenant the\nsubject is NOT a member of (as opposed to ordinary membership). Authoritative signal\nfor the \"platform admin access\" indicator in the UI."
           },
           "avatarUrl": {
             "type": "string",

@@ -173,7 +173,7 @@
           <div class="flex items-center gap-3">
             <Switch
               checked={readAuditEnabled}
-              onCheckedChange={(v) => (readAuditEnabled = v === true)}
+              onCheckedChange={(v: boolean) => (readAuditEnabled = v === true)}
             />
             <Label>Read Access Logging</Label>
           </div>

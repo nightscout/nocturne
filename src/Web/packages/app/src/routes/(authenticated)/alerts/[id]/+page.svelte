@@ -12,10 +12,7 @@
   } from "$api/generated/alertRules.generated.remote";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
   import { AlertRuleSeverity, AlertConditionType } from "$api-clients";
-  import type {
-    AlertRuleResponse,
-    HistoryExcursionResponse,
-  } from "$api-clients";
+  import type { HistoryExcursionResponse } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -62,7 +59,7 @@
 
   // ---- Page state ------------------------------------------------------
   // The dynamic [id] segment is "new" when creating, otherwise a UUID.
-  let ruleId = $derived(page.params.id);
+  let ruleId = $derived(page.params.id ?? "");
   let isNew = $derived(ruleId === "new");
 
   let saving = $state(false);
@@ -353,7 +350,7 @@
               <Switch
                 id="rule-enabled"
                 checked={state.isEnabled}
-                onCheckedChange={(c) => {
+                onCheckedChange={(c: boolean) => {
                   state.isEnabled = c;
                 }}
               />
@@ -367,7 +364,7 @@
                 type="text"
                 placeholder="Approaching low"
                 value={state.name}
-                oninput={(e) => {
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                   state.name = e.currentTarget.value;
                 }}
               />
@@ -379,7 +376,7 @@
                 rows={2}
                 placeholder="Why this alert exists, what it should trigger"
                 value={state.description}
-                oninput={(e) => {
+                oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) => {
                   state.description = e.currentTarget.value;
                 }}
               />
@@ -405,7 +402,7 @@
               <Checkbox
                 id="rule-allow-dnd"
                 checked={state.allowThroughDnd}
-                onCheckedChange={(c) => {
+                onCheckedChange={(c: boolean) => {
                   state.allowThroughDnd = c === true;
                 }}
               />
@@ -495,7 +492,7 @@
                   min="1"
                   class="max-w-32"
                   value={smartSnoozeMinutes}
-                  oninput={(e) => {
+                  oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                     const n = Number(e.currentTarget.value);
                     if (Number.isFinite(n))
                       state.clientConfig.snooze.smartSnoozeExtendMinutes = n;

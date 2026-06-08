@@ -12,7 +12,8 @@ public interface IPasskeyService
     Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(Guid subjectId, string username, Guid tenantId);
 
     /// <summary>Validates the attestation response and stores the new passkey credential.</summary>
-    Task<PasskeyCredentialResult> CompleteRegistrationAsync(string attestationResponseJson, string challengeToken, Guid tenantId);
+    /// <param name="label">Optional user-assigned label for the credential.</param>
+    Task<PasskeyCredentialResult> CompleteRegistrationAsync(string attestationResponseJson, string challengeToken, Guid tenantId, string? label = null);
 
     /// <summary>Generates assertion options for a discoverable (usernameless) login flow.</summary>
     Task<PasskeyAssertionOptions> GenerateDiscoverableAssertionOptionsAsync(Guid tenantId);

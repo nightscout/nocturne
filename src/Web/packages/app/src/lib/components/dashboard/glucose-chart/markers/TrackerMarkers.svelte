@@ -8,7 +8,7 @@
   const chartCtx = getChartContext();
 
   const visible = $derived(ctx.legend?.scheduledTrackers ?? true);
-  const markers = $derived(ctx.engine.trackerMarkers);
+  const markers = $derived(ctx.engine.displayTrackerMarkers);
   const basalTop = $derived(ctx.layout.basal?.top ?? 0);
 </script>
 

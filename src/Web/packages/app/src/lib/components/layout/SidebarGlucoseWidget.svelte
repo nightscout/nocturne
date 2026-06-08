@@ -41,12 +41,13 @@
     deviceEvents: false,
     alarms: false,
     scheduledTrackers: false,
+    basalInjections: false,
     overrideSpans: false,
     profileSpans: false,
     activitySpans: false,
     pumpModes: false,
     expandedPumpModes: false,
-    toggle() {},
+    toggle(_key: string) {},
   };
 
   // Collapsed state needs basic BG info

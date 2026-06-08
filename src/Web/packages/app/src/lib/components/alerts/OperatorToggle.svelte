@@ -39,7 +39,7 @@
 <ToggleGroup.Root
   type="single"
   {value}
-  onValueChange={(next) => {
+  onValueChange={(next: string) => {
     if (next === "and" || next === "or") onChange(next);
   }}
   class="rounded-md border bg-background p-0.5 font-medium"

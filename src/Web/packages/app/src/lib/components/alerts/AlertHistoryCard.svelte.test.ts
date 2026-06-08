@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import AlertHistoryCard from "./AlertHistoryCard.svelte";
 
 describe("AlertHistoryCard", () => {

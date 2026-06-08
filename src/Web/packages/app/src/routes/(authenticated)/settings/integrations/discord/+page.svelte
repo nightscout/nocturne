@@ -102,7 +102,7 @@
 		try {
 			const result = await initiateDiscordLink(undefined);
 			if (result && "error" in result) {
-				actionError = result.error;
+				actionError = result.error ?? null;
 			} else if (result && "redirectUrl" in result) {
 				window.location.href = result.redirectUrl;
 				return;

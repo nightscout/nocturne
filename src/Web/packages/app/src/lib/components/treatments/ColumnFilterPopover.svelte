@@ -37,7 +37,7 @@
 
 <Popover.Root bind:open>
   <Popover.Trigger>
-    {#snippet child({ props })}
+    {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
         variant="ghost"
         size="sm"

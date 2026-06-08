@@ -36,7 +36,7 @@
 
 <Popover.Root bind:open>
   <Popover.Trigger bind:ref={triggerRef}>
-    {#snippet child({ props })}
+    {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
         variant="outline"
         class={cn("w-full justify-between", className)}

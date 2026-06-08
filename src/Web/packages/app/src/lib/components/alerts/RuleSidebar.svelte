@@ -31,7 +31,6 @@
   import type { AlertRuleResponse } from "$api-clients";
   import type { ConditionNode } from "./types";
   import {
-    assignLeafIds,
     composeRuleTruth,
     type LeafTransitionLog,
   } from "./leafEval";
@@ -297,7 +296,7 @@
         </Collapsible.Trigger>
         <Switch
           checked={!disabled}
-          onCheckedChange={(c) => id && toggleDisabled(id, c)}
+          onCheckedChange={(c: boolean) => id && toggleDisabled(id, c)}
           aria-label={disabled ? `Enable ${rule.name}` : `Disable ${rule.name}`}
         />
       </div>

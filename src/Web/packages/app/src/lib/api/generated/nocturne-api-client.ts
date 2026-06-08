@@ -30396,6 +30396,7 @@ export interface TenantMemberDto {
     limitTo24Hours?: boolean;
     lastUsedAt?: Date | undefined;
     sysCreatedAt?: Date;
+    isPlatformAdmin?: boolean;
 }
 
 export interface TenantMemberRoleDto {
@@ -31136,6 +31137,7 @@ export interface ActiveExcursionResponse {
     alertRuleId?: string;
     ruleName?: string;
     conditionType?: AlertConditionType;
+    severity?: AlertRuleSeverity;
     startedAt?: Date;
     acknowledgedAt?: Date | undefined;
     acknowledgedBy?: string | undefined;
@@ -34423,6 +34425,10 @@ export interface SessionInfo {
     preferredLanguage?: string | undefined;
     /** Whether this subject has platform-level admin access */
     isPlatformAdmin?: boolean;
+    /** Whether this session is a short-lived platform-admin access grant on a tenant the
+subject is NOT a member of (as opposed to ordinary membership). Authoritative signal
+for the "platform admin access" indicator in the UI. */
+    isPlatformAccessGrant?: boolean;
     /** URL to the subject's avatar image */
     avatarUrl?: string | undefined;
 }

@@ -103,7 +103,7 @@
 <svelte:boundary>
   <Popover.Root bind:open={isOpen}>
     <Popover.Trigger>
-      {#snippet child({ props })}
+      {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
           {...props}
           variant="ghost"

@@ -94,7 +94,7 @@
         <Label>Show units</Label>
         <Checkbox
           checked={element.showUnits !== false}
-          onCheckedChange={(v) => onUpdateElement({ showUnits: !!v })}
+          onCheckedChange={(v: boolean) => onUpdateElement({ showUnits: !!v })}
         />
       </div>
     {/if}
@@ -165,7 +165,8 @@
         <Label>Text</Label>
         <Textarea
           value={element.text ?? ""}
-          oninput={(e) => onUpdateElement({ text: e.currentTarget.value })}
+          oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) =>
+            onUpdateElement({ text: e.currentTarget.value })}
           rows={2}
           placeholder="Enter text..."
         />
@@ -288,7 +289,7 @@
         <div class="flex items-center gap-2">
           <Checkbox
             checked={element.chartConfig?.asBackground ?? false}
-            onCheckedChange={(v) =>
+            onCheckedChange={(v: boolean) =>
               onUpdateElement({
                 chartConfig: {
                   ...element.chartConfig,
@@ -305,7 +306,7 @@
             <Slider
               type="single"
               value={element.width || 400}
-              onValueChange={(v) => onUpdateElement({ width: v })}
+              onValueChange={(v: number) => onUpdateElement({ width: v })}
               min={200}
               max={800}
               step={20}
@@ -316,7 +317,7 @@
             <Slider
               type="single"
               value={element.height || 200}
-              onValueChange={(v) => onUpdateElement({ height: v })}
+              onValueChange={(v: number) => onUpdateElement({ height: v })}
               min={100}
               max={500}
               step={20}
@@ -353,7 +354,7 @@
                   checked={element.chartConfig?.[
                     key as keyof typeof element.chartConfig
                   ] ?? defaultValue}
-                  onCheckedChange={(v) =>
+                  onCheckedChange={(v: boolean) =>
                     onUpdateElement({
                       chartConfig: {
                         ...element.chartConfig,

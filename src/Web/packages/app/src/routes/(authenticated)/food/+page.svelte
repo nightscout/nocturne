@@ -20,7 +20,6 @@
   onMount(() => state.load());
 
   const giLevels: GiLevel[] = ['low', 'medium', 'high'];
-  const giLabels: Record<GiLevel, string> = { low: 'Low', medium: 'Med', high: 'High' };
 
   async function handleAdd(food: Food) {
     await state.addFood(food);

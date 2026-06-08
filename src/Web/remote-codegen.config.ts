@@ -45,7 +45,7 @@ export default {
       `const e = err as any;\n` +
       `    const body = e?.body ?? e?.response;\n` +
       `    const errors = body?.errors ?? e?.errors;\n` +
-      `    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
+      `    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
       `    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;\n` +
       `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');\n` +
       `    throw error(500, message ?? 'Failed to ${functionName}')`,

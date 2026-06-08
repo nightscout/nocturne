@@ -209,7 +209,8 @@ public partial class TenantService : ITenantService
                     m.Label,
                     m.LimitTo24Hours,
                     m.LastUsedAt,
-                    m.SysCreatedAt))
+                    m.SysCreatedAt,
+                    m.Subject != null && m.Subject.IsPlatformAdmin))
                 .ToList());
     }
 
