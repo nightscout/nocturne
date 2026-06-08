@@ -9,6 +9,23 @@ export default {
   },
   nswagClientPath: './generated/nocturne-api-client',
   errorHandling: {
+    // The default redirects queries to /auth/login on 401. For a public share
+    // host ({token}.share.{baseDomain}) the viewer is anonymous by design and has
+    // no account to sign into — and the dashboard fetches categories the tenant
+    // may not have shared, each 401ing — so the default bounces them to login
+    // ("flash of dashboard, then redirect"). On a share host, surface 401 as a
+    // normal error instead so unshared categories just fail their widget rather
+    // than navigating away. Host detection mirrors $lib/share-host's isShareHost
+    // (inlined — generated code can't import it). Commands/forms already throw
+    // error(401) and never redirected.
+    on401: (kind: string) =>
+      kind === 'query'
+        ? `const { request, url } = getRequestEvent();\n` +
+          `    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';\n` +
+          `    if (/^[^.]+\\.share\\./i.test(shareHost)) throw error(401, 'Unauthorized');\n` +
+          '    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`)'
+        : `throw error(401, 'Unauthorized')`,
+
     // Forward the server's actual error message for 403 so the FE can show
     // a meaningful reason (e.g. "Insufficient permissions for …") instead of
     // a bare "Forbidden".
