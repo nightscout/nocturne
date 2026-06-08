@@ -21,7 +21,7 @@
         lineTop={basalTop + 20}
         lineBottom={chartCtx.height}
         units={marker.units}
-        insulinName={marker.insulinName}
+        insulinName={marker.insulinName ?? undefined}
       />
     {/each}
   </ChartClipPath>

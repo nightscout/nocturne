@@ -28,6 +28,8 @@
     Bell,
     BellOff,
     CalendarClock,
+    CalendarDays,
+    Moon,
   } from "lucide-svelte";
   import type { ConditionNode } from "./types";
   import type { TrendBucket } from "./types";
@@ -85,6 +87,8 @@
     bell: Bell,
     "bell-off": BellOff,
     "calendar-clock": CalendarClock,
+    "calendar-days": CalendarDays,
+    moon: Moon,
   };
 
   // Map the alert builder's trend buckets to the shared `Direction` enum so
@@ -237,7 +241,7 @@
       </div>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
-          {#snippet child({ props })}
+          {#snippet child({ props }: { props: Record<string, unknown> })}
             <Button
               {...props}
               variant="ghost"
@@ -309,7 +313,7 @@
         min="1"
         class="h-7 w-16 px-2 text-right text-xs tabular-nums"
         value={sustainedNode.sustained.minutes ?? 15}
-        oninput={(e) => {
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
           if (sustainedNode?.sustained) {
             const n = Number(e.currentTarget.value);
             sustainedNode.sustained.minutes = Number.isFinite(n)
@@ -335,7 +339,7 @@
     {/if}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
-        {#snippet child({ props })}
+        {#snippet child({ props }: { props: Record<string, unknown> })}
           <Button
             {...props}
             variant="ghost"

@@ -3,7 +3,11 @@
   import { Button } from "$lib/components/ui/button";
   import { TrackerCategoryIcon } from "$lib/components/icons";
   import { cn } from "$lib/utils";
-  import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
+  import type {
+    TrackerInstanceDto,
+    TrackerDefinitionDto,
+    TrackerCategory,
+  } from "$api";
 
   let {
     event,
@@ -19,7 +23,7 @@
       eventType: "start" | "due" | "completed";
       date: string;
     };
-    category: number;
+    category: TrackerCategory;
     startTime: string | null;
     level: string;
     formatTrackerAge: (hours: number | undefined) => string;

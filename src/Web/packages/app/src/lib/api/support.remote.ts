@@ -39,7 +39,7 @@ function buildIssueFormData(params: IssueParams): FormData {
   return formData;
 }
 
-export const createIssue = command(async (params: IssueParams) => {
+export const createIssue = command("unchecked", async (params: IssueParams) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     const formData = buildIssueFormData(params);
@@ -70,7 +70,9 @@ export const createIssue = command(async (params: IssueParams) => {
   }
 });
 
-export const createOperatorIssue = command(async (params: IssueParams) => {
+export const createOperatorIssue = command(
+  "unchecked",
+  async (params: IssueParams) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
     // Resolve operator URL server-side to prevent SSRF via client-supplied URLs

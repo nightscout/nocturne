@@ -7,7 +7,7 @@ import { quintOut } from "svelte/easing";
 export const [sendRow, receiveRow] = crossfade({
 	duration: 220,
 	easing: quintOut,
-	fallback(node) {
+	fallback(_node) {
 		return {
 			duration: 160,
 			easing: quintOut,

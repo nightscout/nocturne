@@ -314,7 +314,6 @@
     engine.displaySystemEvents.map(
       (e): { id?: string; eventType?: SystemEventType; color?: string } => ({
         id: e.id,
-        // @ts-expect-error -- engine types eventType as string; runtime value is a SystemEventType
         eventType: e.eventType,
         color: e.color,
       }),

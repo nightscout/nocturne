@@ -425,7 +425,7 @@
           {/if}
           <DropdownMenu.Root>
             <DropdownMenu.Trigger>
-              {#snippet child({ props })}
+              {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button {...props} size="sm">
                   <Plus class="mr-1 h-4 w-4" />
                   Add Treatment

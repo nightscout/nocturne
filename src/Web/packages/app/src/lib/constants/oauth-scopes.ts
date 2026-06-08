@@ -20,6 +20,8 @@ export const OAUTH_SCOPE_DESCRIPTIONS: Readonly<Record<OAuthScope, string>> = {
   [OAuthScope.HeartRateReadWrite]: "View and record heart rate data",
   [OAuthScope.StepCountRead]: "View step count data",
   [OAuthScope.StepCountReadWrite]: "View and record step count data",
+  [OAuthScope.FoodRead]: "View food data",
+  [OAuthScope.FoodReadWrite]: "View and record food data",
   [OAuthScope.StatisticsRead]: "View statistics",
   [OAuthScope.HealthRead]: "View all health data (read-only)",
   [OAuthScope.HealthReadWrite]: "View and update all health data",

@@ -43,7 +43,7 @@
       value={element.size ||
         ELEMENT_INFO[element.type as ClockElementType]?.defaultSize ||
         20}
-      onValueChange={(v) => onUpdateElement({ size: v })}
+      onValueChange={(v: number) => onUpdateElement({ size: v })}
       min={ELEMENT_INFO[element.type as ClockElementType]?.minSize ?? 10}
       max={ELEMENT_INFO[element.type as ClockElementType]?.maxSize ?? 100}
       step={1}
@@ -94,7 +94,7 @@
     <div class="flex items-center gap-2">
       <Checkbox
         checked={element.style?.color === "dynamic"}
-        onCheckedChange={(v) =>
+        onCheckedChange={(v: boolean) =>
           onUpdateStyle({
             color: v ? "dynamic" : "#ffffff",
           })}
@@ -115,7 +115,7 @@
         <Input
           type="text"
           value={element.style?.color ?? "#ffffff"}
-          oninput={(e) =>
+          oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
             onUpdateStyle({
               color: e.currentTarget.value,
             })}
@@ -133,7 +133,7 @@
     <Slider
       type="single"
       value={Math.round((element.style?.opacity ?? 1.0) * 100)}
-      onValueChange={(v) => onUpdateStyle({ opacity: v / 100 })}
+      onValueChange={(v: number) => onUpdateStyle({ opacity: v / 100 })}
       min={10}
       max={100}
       step={5}
@@ -154,7 +154,7 @@
           <Input
             type="text"
             value={key}
-            oninput={(e) => {
+            oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
               const newKey = e.currentTarget.value;
               if (newKey && newKey !== key) {
                 onRemoveCustomStyle(key);
@@ -167,7 +167,8 @@
           <Input
             type="text"
             {value}
-            oninput={(e) => onUpdateCustomStyle(key, e.currentTarget.value)}
+            oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+              onUpdateCustomStyle(key, e.currentTarget.value)}
             placeholder="value"
             class="min-w-0 flex-1"
           />

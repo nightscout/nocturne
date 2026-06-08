@@ -33,7 +33,7 @@
 			size="sm"
 			class="h-6 w-6 p-0"
 			aria-label={favorite ? 'Remove from favorites' : 'Add to favorites'}
-			onclick={(e) => e.stopPropagation()}
+			onclick={(e: MouseEvent) => e.stopPropagation()}
 		>
 			<Star class="h-3.5 w-3.5" fill={favorite ? 'currentColor' : 'none'} style={favorite ? 'color: var(--carbs-strong)' : undefined} />
 		</Toggle>

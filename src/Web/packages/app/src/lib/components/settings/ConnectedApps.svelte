@@ -143,7 +143,7 @@
             </div>
             <AlertDialog.Root>
               <AlertDialog.Trigger>
-                {#snippet child({ props })}
+                {#snippet child({ props }: { props: Record<string, unknown> })}
                   <Button
                     {...props}
                     type="button"

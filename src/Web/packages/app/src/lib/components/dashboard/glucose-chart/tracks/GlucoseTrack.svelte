@@ -10,6 +10,7 @@
   } from "layerchart";
   import { curveMonotoneX } from "d3";
   import { getGlucoseChartContext } from "../chart-context.svelte";
+  import type { GlucosePoint } from "../engine/chart-data-engine.svelte";
   import { bg } from "$lib/utils/formatting";
   import {
     getGlucoseColor,
@@ -121,35 +122,35 @@
   />
 {/if}
 
-<ChartClipPath>
-  {#snippet splineOrArea(stroke: string)}
-    {#if areaMode === "off"}
-      <Spline
-        data={glucoseData}
-        x={(d) => d.time}
-        y={(d) => glucoseScale(d.sgv)}
-        {stroke}
-        class="stroke-2 fill-none"
-        motion="spring"
-        curve={curveMonotoneX}
-      />
-    {:else}
-      <LinearGradient stops={fillStops} units="userSpaceOnUse" vertical>
-        {#snippet children({ gradient: fillGrad })}
-          <Area
-            data={glucoseData}
-            x={(d) => d.time}
-            y={(d) => glucoseScale(d.sgv)}
-            {y0}
-            line={{ stroke, class: "stroke-2" }}
-            fill={fillGrad}
-            curve={curveMonotoneX}
-          />
-        {/snippet}
-      </LinearGradient>
-    {/if}
-  {/snippet}
+{#snippet splineOrArea(stroke: string)}
+  {#if areaMode === "off"}
+    <Spline
+      data={glucoseData}
+      x={(d) => d.time}
+      y={(d) => glucoseScale(d.sgv)}
+      {stroke}
+      class="stroke-2 fill-none"
+      motion="spring"
+      curve={curveMonotoneX}
+    />
+  {:else}
+    <LinearGradient stops={fillStops} units="userSpaceOnUse" vertical>
+      {#snippet children({ gradient: fillGrad })}
+        <Area
+          data={glucoseData}
+          x={(d: GlucosePoint) => d.time}
+          y1={(d: GlucosePoint) => glucoseScale(d.sgv)}
+          {y0}
+          line={{ stroke, class: "stroke-2" }}
+          fill={fillGrad}
+          curve={curveMonotoneX}
+        />
+      {/snippet}
+    </LinearGradient>
+  {/if}
+{/snippet}
 
+<ChartClipPath>
   {#if lineColorMode === "single"}
     {@render splineOrArea(lineColor)}
   {:else}

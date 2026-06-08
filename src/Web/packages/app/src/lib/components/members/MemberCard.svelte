@@ -147,7 +147,7 @@
         {#if canManage}
           <AlertDialog.Root>
             <AlertDialog.Trigger>
-              {#snippet child({ props })}
+              {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button
                   {...props}
                   variant="outline"
@@ -244,7 +244,7 @@
       <!-- Direct permissions (collapsible) -->
       <Collapsible.Root
         open={showDirectPermissions}
-        onOpenChange={(open) => (showDirectPermissions = open)}
+        onOpenChange={(open: boolean) => (showDirectPermissions = open)}
       >
         <Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
           {#if showDirectPermissions}
@@ -270,7 +270,7 @@
         <Checkbox
           id="member-limit-24h-{member.subjectId}"
           checked={editingLimitTo24Hours}
-          onCheckedChange={(checked) => { editingLimitTo24Hours = checked === true; }}
+          onCheckedChange={(checked: boolean) => { editingLimitTo24Hours = checked === true; }}
         />
         <div class="flex-1">
           <label

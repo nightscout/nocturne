@@ -117,7 +117,7 @@
 		<!-- Unit -->
 		<div class="flex flex-col gap-1.5">
 			<span class="text-muted-foreground font-semibold" style="font-size: 11px">Unit</span>
-			<ToggleGroup.Root type="single" value={draft.unit ?? 'g'} onValueChange={(v) => { if (v) draft.unit = v; }} variant="outline" size="sm" class="w-full">
+			<ToggleGroup.Root type="single" value={draft.unit ?? 'g'} onValueChange={(v: string) => { if (v) draft.unit = v; }} variant="outline" size="sm" class="w-full">
 				{#each FOOD_UNITS as u (u)}
 					<ToggleGroup.Item value={u} class="flex-1">{u}</ToggleGroup.Item>
 				{/each}
@@ -132,7 +132,7 @@
 		<!-- GI -->
 		<div class="flex flex-col gap-1.5">
 			<span class="text-muted-foreground font-semibold" style="font-size: 11px">Glycemic Index</span>
-			<ToggleGroup.Root type="single" value={giFromInt(draft.gi)} onValueChange={(v) => { if (v) draft.gi = giToInt(v as GiLevel); }} variant="outline" size="sm" class="w-full">
+			<ToggleGroup.Root type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (v) draft.gi = giToInt(v as GiLevel); }} variant="outline" size="sm" class="w-full">
 				{#each giLevels as g (g)}
 					<ToggleGroup.Item value={g} class="flex-1 capitalize gap-1.5">
 						<GiIcon level={g} size={7} />{g}

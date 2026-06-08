@@ -23,6 +23,8 @@
     Bell,
     BellOff,
     CalendarClock,
+    CalendarDays,
+    Moon,
   } from "lucide-svelte";
   import {
     LEAF_FACTS,
@@ -60,6 +62,8 @@
     bell: Bell,
     "bell-off": BellOff,
     "calendar-clock": CalendarClock,
+    "calendar-days": CalendarDays,
+    moon: Moon,
   };
 
   const PICKER_BTN =
@@ -68,7 +72,7 @@
 
 <Popover.Root>
   <Popover.Trigger>
-    {#snippet child({ props })}
+    {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
         {...props}
         variant="outline"

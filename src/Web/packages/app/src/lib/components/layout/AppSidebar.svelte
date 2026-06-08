@@ -54,8 +54,6 @@
   interface Props {
     /** Current authenticated user (passed from layout data) */
     user?: AuthUser | null;
-    /** Number of tenants the user is a member of */
-    tenantCount?: number;
     /** Effective permissions for the current user */
     effectivePermissions?: string[];
     /** Whether the current user is a platform administrator */
@@ -66,7 +64,7 @@
     isGuestSession?: boolean;
   }
 
-  const { user = null, tenantCount = 0, effectivePermissions = [], isPlatformAdmin = false, isPlatformAccessGrant = false, isGuestSession = false }: Props = $props();
+  const { user = null, effectivePermissions = [], isPlatformAdmin = false, isPlatformAccessGrant = false, isGuestSession = false }: Props = $props();
 
   const canViewAudit = $derived(
     effectivePermissions.includes("audit.read") ||
@@ -244,7 +242,7 @@
     },
     );
 
-    if (tenantCount >= 2) {
+    if (totalTenantCount >= 2) {
       items.push({
         title: "Tenants",
         href: "/tenants",

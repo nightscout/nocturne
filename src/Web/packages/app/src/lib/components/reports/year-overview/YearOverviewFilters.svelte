@@ -77,7 +77,7 @@
     {#if presentDataTypes.length > 0}
       <Popover.Root>
         <Popover.Trigger>
-          {#snippet child({ props })}
+          {#snippet child({ props }: { props: Record<string, unknown> })}
             <Button variant="outline" size="sm" class="gap-1.5" {...props}>
               <SlidersHorizontal class="h-3.5 w-3.5" />
               Types

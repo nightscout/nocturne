@@ -146,7 +146,7 @@
 <div class={className}>
   <Popover.Root bind:open={comboboxOpen}>
     <Popover.Trigger bind:ref={comboboxTriggerRef}>
-      {#snippet child({ props })}
+      {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
           variant="outline"
           class="w-full justify-between font-normal"
@@ -278,7 +278,7 @@
   <!-- Category Selection Popup for new subcategories -->
   <Popover.Root bind:open={categorySelectionOpen}>
     <Popover.Trigger bind:ref={categorySelectionTriggerRef} class="hidden">
-      {#snippet child({ props })}
+      {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button {...props}>Hidden trigger</Button>
       {/snippet}
     </Popover.Trigger>

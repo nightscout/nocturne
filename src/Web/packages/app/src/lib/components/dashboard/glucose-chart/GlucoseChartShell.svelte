@@ -134,8 +134,8 @@
               e.xDomain.length === 2
             ) {
               onSelectionChange?.([
-                new Date(e.xDomain[0]),
-                new Date(e.xDomain[1]),
+                new Date(e.xDomain[0]!),
+                new Date(e.xDomain[1]!),
               ]);
             }
           }}

@@ -356,6 +356,7 @@
   }
 
   function openClock() {
+    if (!clockFaceId) return;
     goto(resolve("/(unauthenticated)/clock/[id]", { id: clockFaceId }));
   }
 
@@ -392,17 +393,8 @@
 
 {#snippet chartElementPreview(element: InternalElement)}
   <GlucoseChartCard
-    compact={true}
     heightClass="h-full"
     defaultFocusHours={element.hours || 3}
-    initialShowIob={element.chartConfig?.showIob ?? false}
-    initialShowCob={element.chartConfig?.showCob ?? false}
-    initialShowBasal={element.chartConfig?.showBasal ?? false}
-    initialShowBolus={element.chartConfig?.showBolus ?? true}
-    initialShowCarbs={element.chartConfig?.showCarbs ?? true}
-    initialShowDeviceEvents={element.chartConfig?.showDeviceEvents ?? false}
-    initialShowAlarms={element.chartConfig?.showAlarms ?? false}
-    initialShowScheduledTrackers={element.chartConfig?.showTrackers ?? false}
     showPredictions={element.chartConfig?.showPredictions ?? false}
   />
 {/snippet}

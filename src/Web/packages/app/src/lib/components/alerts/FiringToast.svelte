@@ -24,7 +24,6 @@
   // Polling cadence — kept aligned with AlertBanner so we don't double-poll.
   const POLL_MS = 10_000;
 
-  let alerts = $state<ActiveExcursionResponse[]>([]);
   // Toasts are appended whenever a new alert id appears; users dismiss them
   // explicitly. We don't auto-dismiss so the trust gesture is intentional.
   let queue = $state<ActiveExcursionResponse[]>([]);
@@ -37,7 +36,6 @@
     try {
       const result = await getActiveAlerts().run();
       const list = Array.isArray(result) ? result : [];
-      alerts = list;
       const fresh: ActiveExcursionResponse[] = [];
       for (const a of list) {
         const id = a.id ?? "";
@@ -140,11 +138,6 @@
                 just now
               </span>
             </div>
-            {#if a.subjectName}
-              <div class="text-xs text-muted-foreground truncate">
-                {a.subjectName}
-              </div>
-            {/if}
             <div class="mt-2 flex flex-wrap items-center gap-1">
               <Button
                 type="button"
@@ -206,7 +199,7 @@
                 variant="ghost"
                 size="sm"
                 class="h-7 px-2 text-xs"
-                onclick={() => muteRule(a.id ?? "", a.ruleId)}
+                onclick={() => muteRule(a.id ?? "", a.alertRuleId)}
                 disabled={busyForId === a.id}
                 title="Mute the rule"
               >

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ComponentProps } from "svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -324,7 +325,8 @@
               class="pl-10"
               bind:value={username}
               disabled={isLoading}
-              onkeydown={(e) => e.key === "Enter" && handleUsernameLogin()}
+              onkeydown={(e: KeyboardEvent) =>
+                e.key === "Enter" && handleUsernameLogin()}
             />
           </div>
         </div>
@@ -402,7 +404,8 @@
               class="pl-10 font-mono"
               bind:value={recoveryCode}
               disabled={isLoading}
-              onkeydown={(e) => e.key === "Enter" && handleRecoveryCode()}
+              onkeydown={(e: KeyboardEvent) =>
+                e.key === "Enter" && handleRecoveryCode()}
             />
           </div>
         </div>
@@ -454,7 +457,11 @@
           <Label>Authenticator code</Label>
           <div class="flex justify-center">
             <InputOTP.Root maxlength={6} bind:value={totpCode} onComplete={handleTotpLogin}>
-              {#snippet children({ cells })}
+              {#snippet children({
+                cells,
+              }: {
+                cells: ComponentProps<typeof InputOTP.Slot>["cell"][];
+              })}
                 <InputOTP.Group>
                   {#each cells.slice(0, 3) as cell}
                     <InputOTP.Slot {cell} />

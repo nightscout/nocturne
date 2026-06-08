@@ -74,6 +74,7 @@ public class AlertsController : ControllerBase
             AlertRuleId = e.AlertRuleId,
             RuleName = e.AlertRule?.Name ?? string.Empty,
             ConditionType = e.AlertRule?.ConditionType ?? AlertConditionType.Threshold,
+            Severity = e.AlertRule?.Severity ?? AlertRuleSeverity.Warning,
             StartedAt = e.StartedAt,
             AcknowledgedAt = e.AcknowledgedAt,
             AcknowledgedBy = e.AcknowledgedBy,
@@ -298,6 +299,7 @@ public class ActiveExcursionResponse
     public Guid AlertRuleId { get; set; }
     public string RuleName { get; set; } = string.Empty;
     public AlertConditionType ConditionType { get; set; } = AlertConditionType.Threshold;
+    public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Warning;
     public DateTime StartedAt { get; set; }
     public DateTime? AcknowledgedAt { get; set; }
     public string? AcknowledgedBy { get; set; }
