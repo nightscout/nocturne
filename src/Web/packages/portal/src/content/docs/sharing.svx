@@ -1,0 +1,155 @@
+---
+title: Sharing your data
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Sharing your data
+
+Nocturne gives you three ways to let someone else see your data, each built for
+a different situation — a one-off clinic visit, an always-on screen at daycare,
+or a person who needs their own ongoing login. This page explains what each one
+does and when to reach for it.
+
+You'll find all of these in your account under **Settings > Sharing & Privacy**.
+Nothing is shared until you turn it on, and you can revoke any of it at any time.
+
+## At a glance
+
+| Option | Best for | Needs a login? | Expires |
+|--------|----------|----------------|---------|
+| Temporary guest link | A one-off look — a clinic visit | No | After 48 hours, one use |
+| Public access link | An always-on screen — a daycare | No | Never (until you turn it off) |
+| Member account | An ongoing helper — a teacher or nurse | Yes | Never (until you remove them) |
+
+## Temporary guest link
+
+A guest link gives someone a **read-only view of your data without an account**.
+You create it, hand over the link (or the short code), and it lets them look —
+they can't change anything. It **expires automatically after 48 hours** and can
+only be used once, so there's nothing to remember to switch off afterwards.
+
+You can revoke a guest link at any time before it's used, and once it's been
+opened you can see when it was accessed and roughly from where. You can have a
+handful of active guest links at once — one per person you're sharing with.
+
+<Callout type="tip" title="When to use it: an endocrinologist's visit">
+  You're seeing your endo on Tuesday and want them to look at your recent data on
+  their own screen. Create a guest link labelled <strong>"Dr. Smith"</strong>,
+  send it ahead of the appointment, and forget about it — it stops working on its
+  own a couple of days later. No account to set up for a one-off visit, and
+  nothing left switched on afterwards.
+</Callout>
+
+If you see the same clinician regularly, give them a **member account** with the
+Clinician role instead, so they always have access without a new link each visit.
+
+## Public access link
+
+Public access turns on a single read-only link that **anyone you give it to can
+open — with no login and no invite**. Because there's no sign-in, treat the link
+itself as the key: anyone who has it can see whatever you've chosen to share.
+
+You stay in control of two things:
+
+- **What's visible.** Toggle individual categories on or off — blood glucose,
+  statistics, treatments, device status, heart rate, step count, food, and
+  reports. Everything you don't switch on stays private.
+- **How far back.** Choose _All history_ or limit viewers to the _Last 24 hours_
+  so older data is never exposed.
+
+There's no expiry — the link works until you turn public access off. You can
+**regenerate** it at any time, which instantly breaks the old link, and you can
+see when it was last viewed.
+
+<Callout type="tip" title="When to use it: a daycare">
+  The daycare wants to keep your child's current glucose up on a tablet at the
+  desk, and staff change shift through the day. Turn on public access, share
+  <em>blood glucose</em> (and maybe <em>statistics</em>) only, and set the window
+  to <em>Last 24 hours</em>. Everyone on shift sees the same screen with no logins
+  to hand around, and they never see older history. If a device goes missing or
+  the room changes, regenerate the link and the old one stops working.
+</Callout>
+
+<Callout type="warning" title="Anyone with the link can open it">
+  There's no sign-in on a public link, and you can't control who it gets forwarded
+  to once it's out. Share the minimum categories the setting actually needs, keep
+  the 24-hour window on, and regenerate the link if you ever think it has spread
+  too far.
+</Callout>
+
+## Member accounts & roles
+
+For someone who needs ongoing access, invite them as a **member**. They get their
+own login and you choose a **role** that decides what they can see and do. You
+send an invite link (it expires in 7 days); they sign in or create an account to
+accept, and from then on they have access until you change their role or remove
+them.
+
+Roles are the easiest way to set access. The common ones, from least to most
+access:
+
+| Role | What they can do |
+|------|------------------|
+| Viewer | See blood glucose and time-in-range statistics. Read-only — a quick glance. |
+| Clinician | Read-only access across all data, including therapy settings and reports. For a doctor reviewing your numbers. |
+| Caretaker | Everything a Clinician sees, plus the ability to log treatments and manage alerts. For someone who actively helps day to day. |
+| Administrator | Full access to data and settings, including inviting and managing other people. For a co-parent or trusted manager. |
+| Owner | You. Full control of the account; can't be removed. |
+
+When you invite someone you can also tick **Only last 24 hours** to limit them to
+recent data, the same way the public link works.
+
+<Callout type="tip" title="When to use it: a teacher and a school nurse">
+  At school, two people need access for the whole term, and they need different
+  things. Invite the <strong>teacher as a Viewer</strong> — they just need to
+  glance at the current glucose during class. Invite the
+  <strong>school nurse as a Caretaker</strong>, so they can also log a treatment
+  or manage an alert if they step in. Each has their own login, you can see them
+  in your member list, and when the year ends you remove them in one click.
+</Callout>
+
+## Requesting access
+
+Inviting someone is one direction — you reach out and hand them a link.
+**Membership requests** are the other direction: you let people **ask you** for
+access, and nothing is granted until you approve it.
+
+Turn on **membership requests** under **Settings > Sharing & Privacy**, and
+anyone who reaches your instance and signs in can send a request — optionally
+with a short note saying who they are. This works whether or not public access
+is on, and the request **never grants access on its own**; it waits in a queue.
+
+You review requests under **Settings > Access Requests**: each one shows who
+asked, their note, and when. Pick a role (plus any limits, like _Only last 24
+hours_) and approve to add them as a member — or deny it. It's the same roles as
+an invite; the only difference is who started the conversation.
+
+<Callout type="tip" title="When to use it: a relative who wants to follow along">
+  A grandparent asks to keep an eye on your child's glucose. Rather than
+  collecting their email and sending an invite, switch membership requests on and
+  point them at your instance. They sign in, request access, and you approve them
+  as a <strong>Viewer</strong> when it suits you — or deny it if you change your
+  mind.
+</Callout>
+
+## Which should I use?
+
+- **One-off, short-lived look** (a single appointment) → **temporary guest link**.
+  It cleans itself up after 48 hours.
+- **A screen lots of people glance at** (a daycare, a classroom display) →
+  **public access link**, with minimal categories and the 24-hour window.
+- **A named person who needs ongoing access** (a regular clinician, a teacher, a
+  nurse, a family member) → a **member account** with the right role.
+- **Someone who should come to you** (you'd rather approve people than collect
+  details and hand out links) → turn on **membership requests** and approve each
+  one with the right role.
+
+## Turning access back off
+
+All three are reversible from **Settings > Sharing & Privacy**: revoke a guest
+link, turn off (or regenerate) the public link, or change a member's role or
+remove them entirely. Guest links also expire on their own. When in doubt, share
+the least you can for the shortest time you can — you can always grant more later.

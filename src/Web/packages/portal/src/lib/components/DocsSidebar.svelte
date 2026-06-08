@@ -1,6 +1,6 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, Shield, Bell, Bot, Code2, KeyRound, Activity, ChevronRight, ChevronDown } from "@lucide/svelte";
+    import { Rocket, Download, Settings, Shield, Share2, Bell, Bot, Code2, KeyRound, Activity, ChevronRight, ChevronDown } from "@lucide/svelte";
 
     const navSections = [
         {
@@ -28,6 +28,13 @@
                 { href: "/docs/authentication/google", label: "Sign in with Google" },
                 { href: "/docs/authentication/github", label: "Sign in with GitHub" },
                 { href: "/docs/authentication/oidc", label: "Generic OIDC" },
+            ],
+        },
+        {
+            title: "Sharing & Privacy",
+            icon: Share2,
+            items: [
+                { href: "/docs/sharing", label: "Sharing your data" },
             ],
         },
         {
