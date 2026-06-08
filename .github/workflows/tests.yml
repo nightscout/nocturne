@@ -35,13 +35,12 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
       - name: Test
         run: |
-          # Nocturne.API.Tests excluded: 29 unit test failures pending fix (#157)
           # Build per-project to avoid Windows-only projects (Desktop, Widgets)
           for proj in tests/Unit/*/; do
             csproj=$(find "$proj" -maxdepth 1 -name "*.csproj" | head -1)
             [ -z "$csproj" ] && continue
             dotnet test "$csproj" \
-              --filter "Category!=Integration&Category!=Performance&Category!=E2E&FullyQualifiedName!~Nocturne.API.Tests" \
+              --filter "Category!=Integration&Category!=Performance&Category!=E2E" \
               --logger "trx;LogFileName=unit.trx" \
               -p:GenerateNSwagClient=false \
               || exit 1
@@ -52,9 +51,34 @@ jobs:
           name: unit-trx
           path: "**/*.trx"
 
-  # Integration tests deferred (#158): all integration test projects either have
-  # no integration-tagged tests, Testcontainers issues, or broken project
-  # references. Will be added once individual projects are fixed.
+  # Database integration tests: bare-Postgres Testcontainers (no Aspire), so they
+  # run reliably on GitHub-hosted runners where Docker is available. Other
+  # integration projects stay deferred until their fixtures/references are fixed.
+  integration-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0"
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      - name: Integration tests (Infrastructure.Data — RLS + DataProtection)
+        run: |
+          dotnet test tests/Integration/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
+            --filter "Category!=Performance&Category!=E2E" \
+            --logger "trx;LogFileName=integration-db.trx" \
+            -p:GenerateNSwagClient=false \
+            || exit 1
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: integration-db-trx
+          path: "**/*.trx"
 
   # E2E tests deferred: Aspire.Hosting.Testing hangs on GitHub Actions runners —
   # DCP resource orchestration never completes. Tests pass locally. Revisit when
