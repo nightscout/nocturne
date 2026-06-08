@@ -2,8 +2,10 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Interceptors;
+using Nocturne.Infrastructure.Data.Security;
 using Npgsql;
 
 namespace Nocturne.Infrastructure.Data.Extensions;
@@ -89,6 +91,65 @@ public static class DatabaseInitializationExtensions
                 $"Database '{csb.Database}' does not exist. Create it as a superuser " +
                 "(`CREATE DATABASE ...`), then run docs/postgres/bootstrap-roles.sql against it.",
                 ex);
+        }
+        finally
+        {
+            if (dataSource is not null)
+            {
+                await dataSource.DisposeAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reconciles the per-category public-share RLS policy on every tenant-scoped table to
+    /// match the C# category map. Runs under the migrator role right after migrations so the
+    /// live policies are always derived from <see cref="ShareDataCategories"/> — adding a
+    /// tenant-scoped entity makes its policy appear on the next startup, and a table with no
+    /// governing scope is hidden from shares (fail-safe). Idempotent: drops and recreates the
+    /// policy each run, so a changed category mapping is applied without a hand-written migration.
+    /// </summary>
+    /// <param name="migratorConnectionString">Connection string for the schema-owning migrator role.</param>
+    /// <param name="logger">Logger for progress and diagnostics.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    public static async Task ReconcileShareRlsPoliciesAsync(
+        string migratorConnectionString,
+        ILogger logger,
+        CancellationToken cancellationToken = default)
+    {
+        NpgsqlDataSource? dataSource = null;
+        try
+        {
+            logger.LogInformation(
+                "Reconciling per-category public-share RLS policies under migrator role...");
+
+            dataSource = new NpgsqlDataSourceBuilder(migratorConnectionString).Build();
+
+            // Resolve tenant-scoped table names from the EF model (built offline, no connection).
+            var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
+            optionsBuilder.UseNpgsql(dataSource);
+            using var context = new NocturneDbContext(optionsBuilder.Options);
+            var tables = ShareRlsPolicy.TenantScopedTableNames(context.Model);
+
+            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+            foreach (var table in tables)
+            {
+                var governingScope = ShareDataCategories.GoverningScopeFor(table);
+                // Wrap each table's DROP+CREATE in a transaction so the "RLS enabled, no
+                // restrictive policy" state is never observable to a concurrent reader.
+                await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+                await using (var command = connection.CreateCommand())
+                {
+                    command.Transaction = transaction;
+                    command.CommandText = ShareRlsPolicy.BuildPolicySql(table, governingScope);
+                    await command.ExecuteNonQueryAsync(cancellationToken);
+                }
+                await transaction.CommitAsync(cancellationToken);
+            }
+
+            logger.LogInformation(
+                "Reconciled share RLS policy '{Policy}' on {Count} tenant-scoped tables.",
+                ShareRlsPolicy.PolicyName, tables.Count);
         }
         finally
         {

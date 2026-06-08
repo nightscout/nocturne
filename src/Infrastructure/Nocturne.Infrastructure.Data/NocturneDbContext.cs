@@ -38,6 +38,22 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public IAuditContext? AuditContext { get; set; }
 
     /// <summary>
+    /// True when this context serves an anonymous public share request. Set per-lease
+    /// wherever <see cref="TenantId"/> is set (known pre-auth at tenant resolution). The
+    /// <see cref="Interceptors.TenantConnectionInterceptor"/> carries it to the
+    /// <c>app.is_share</c> GUC, which gates the per-category public-share RLS policies.
+    /// </summary>
+    public bool IsShareContext { get; set; }
+
+    /// <summary>
+    /// Comma-separated governing read scopes a public share may see, or <c>null</c> for
+    /// non-shares. Set only on the factory-created context (post-auth, once the share's
+    /// categories are resolved); carried to the <c>app.visible_categories</c> GUC. A share
+    /// context with no CSV denies all categorized data (fail-closed).
+    /// </summary>
+    public string? VisibleCategories { get; set; }
+
+    /// <summary>
     /// Gets or sets the Foods table for food database
     /// </summary>
     public DbSet<FoodEntity> Foods { get; set; }

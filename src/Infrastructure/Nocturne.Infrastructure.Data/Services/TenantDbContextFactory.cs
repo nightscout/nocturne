@@ -21,13 +21,23 @@ public interface ITenantDbContextFactory
 
 internal sealed class TenantDbContextFactory(
     IDbContextFactory<NocturneDbContext> pool,
-    ITenantAccessor? tenantAccessor) : ITenantDbContextFactory
+    ITenantAccessor? tenantAccessor,
+    ICategoryReadContext? categoryReadContext) : ITenantDbContextFactory
 {
     public async ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
     {
         var ctx = await pool.CreateDbContextAsync(ct);
         if (tenantAccessor?.IsResolved == true)
             ctx.TenantId = tenantAccessor.TenantId;
+
+        // Set the share carrier unconditionally so a pooled context never inherits a prior
+        // lessee's share flag or CSV (pooling does not reset custom properties). The CSV is
+        // resolved post-auth, so it is carried only here, on the factory path; a share whose
+        // CSV is null is denied all categorized data by the RLS policy (fail-closed).
+        var isShare = categoryReadContext?.IsShare == true;
+        ctx.IsShareContext = isShare;
+        ctx.VisibleCategories = isShare ? categoryReadContext!.VisibleCategoriesCsv : null;
+
         return ctx;
     }
 }

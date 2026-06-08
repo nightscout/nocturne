@@ -302,6 +302,11 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         // empty tenant and silently return nothing, so every connector authenticates with empty
         // credentials and no data syncs.
         dbContext.TenantId = tenantId;
+        // A pooled context that last served a public share keeps IsShareContext=true (pooling
+        // does not reset custom properties); clear the share carrier so the connector's reads
+        // are not denied by the per-category share RLS policy.
+        dbContext.IsShareContext = false;
+        dbContext.VisibleCategories = null;
 
         // Load per-tenant config via the loader
         var loader = scope.ServiceProvider.GetRequiredService<IConnectorConfigurationLoader<TConfig>>();

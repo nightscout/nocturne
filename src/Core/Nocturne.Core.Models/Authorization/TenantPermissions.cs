@@ -36,8 +36,6 @@ public static class TenantPermissions
     public const string FoodRead = "food.read";
     /// <summary>Read and write access to food records within the tenant.</summary>
     public const string FoodReadWrite = "food.readwrite";
-    /// <summary>Read-only access to aggregated statistics within the tenant.</summary>
-    public const string StatisticsRead = "statistics.read";
     /// <summary>Read-only access to generated reports within the tenant.</summary>
     public const string ReportsRead = "reports.read";
 
@@ -95,7 +93,6 @@ public static class TenantPermissions
         HeartRateRead, HeartRateReadWrite,
         StepCountRead, StepCountReadWrite,
         FoodRead, FoodReadWrite,
-        StatisticsRead,
         ReportsRead,
         TherapyRead, TherapyReadWrite,
         AlertsRead, AlertsReadWrite,
@@ -117,15 +114,15 @@ public static class TenantPermissions
     /// </summary>
     public static readonly HashSet<string> PublicShareScopes =
     [
-        GlucoseRead, StatisticsRead, TreatmentsRead, DevicesRead,
+        GlucoseRead, TreatmentsRead, DevicesRead,
         HeartRateRead, StepCountRead, FoodRead, ReportsRead,
     ];
 
     /// <summary>
-    /// Scopes granted to the Public subject when a share link is first enabled. Mirrors the legacy
-    /// Viewer-role default (glucose + statistics) so existing behaviour is preserved.
+    /// Scopes granted to the Public subject when a share link is first enabled. Defaults to glucose
+    /// only; the owner opts into additional categories from <see cref="PublicShareScopes"/>.
     /// </summary>
-    public static readonly List<string> DefaultPublicShareScopes = [GlucoseRead, StatisticsRead];
+    public static readonly List<string> DefaultPublicShareScopes = [GlucoseRead];
 
     /// <summary>
     /// Seed role slugs.
@@ -150,7 +147,7 @@ public static class TenantPermissions
         [
             GlucoseReadWrite, TreatmentsReadWrite, DevicesReadWrite,
             HeartRateReadWrite, StepCountReadWrite, FoodReadWrite,
-            StatisticsRead, ReportsRead,
+            ReportsRead,
             TherapyReadWrite, AlertsReadWrite,
             IdentityRead,
             MembersInvite, MembersManage, TenantSettings, RolesManage, SharingManage, SharingGuest,
@@ -160,17 +157,17 @@ public static class TenantPermissions
         [
             GlucoseRead, TreatmentsReadWrite, DevicesRead,
             FoodRead, HeartRateRead, StepCountRead,
-            StatisticsRead, ReportsRead,
+            ReportsRead,
             TherapyRead, AlertsReadWrite,
         ],
         [SeedRoles.Clinician] =
         [
             GlucoseRead, TreatmentsRead, DevicesRead,
             FoodRead, HeartRateRead, StepCountRead,
-            StatisticsRead, ReportsRead,
+            ReportsRead,
             TherapyRead, AlertsRead,
         ],
-        [SeedRoles.Viewer] = [GlucoseRead, StatisticsRead],
+        [SeedRoles.Viewer] = [GlucoseRead, ReportsRead],
         [SeedRoles.Denied] = [],
     };
 

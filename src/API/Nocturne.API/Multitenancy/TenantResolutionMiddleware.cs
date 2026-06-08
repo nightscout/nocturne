@@ -120,6 +120,9 @@ public class TenantResolutionMiddleware
             tenantAccessor.SetTenant(shareTenant);
             context.Items["TenantContext"] = shareTenant;
             context.Items["ShareAccess"] = true;
+            // Mark the share before pinning the scoped context so the carrier is in place
+            // for both the scoped-direct and the factory DbContext paths.
+            context.RequestServices.GetRequiredService<ICategoryReadContext>().MarkShare();
             PinTenantOnScopedDbContext(context, shareTenant.TenantId);
             await _next(context);
             return;
@@ -235,8 +238,14 @@ public class TenantResolutionMiddleware
     private static void PinTenantOnScopedDbContext(HttpContext context, Guid tenantId)
     {
         var db = context.RequestServices.GetService<NocturneDbContext>();
-        if (db is not null)
-            db.TenantId = tenantId;
+        if (db is null)
+            return;
+        db.TenantId = tenantId;
+        // Set the share carrier unconditionally so a pooled context never inherits a prior
+        // lessee's share state. The scoped-direct context carries only the marker (known
+        // pre-auth) and leaves the CSV null, so a share reading PHI on this path is denied.
+        db.IsShareContext = context.RequestServices.GetService<ICategoryReadContext>()?.IsShare == true;
+        db.VisibleCategories = null;
     }
 
     private const string ShareSubdomainLabel = "share";

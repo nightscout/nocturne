@@ -1,6 +1,5 @@
 import {
   Droplet,
-  PieChart,
   Syringe,
   Cpu,
   HeartPulse,
@@ -26,9 +25,8 @@ export interface PublicDataCategory {
 
 export const publicDataCategories: PublicDataCategory[] = [
   { scope: "glucose.read", name: "Blood Glucose", description: "CGM readings and current value", icon: Droplet },
-  { scope: "statistics.read", name: "Statistics", description: "Time-in-range, A1c, and averages", icon: PieChart },
   { scope: "treatments.read", name: "Treatments", description: "Insulin doses and carb entries", icon: Syringe },
-  { scope: "devices.read", name: "Device Status", description: "Pump, CGM, and phone status", icon: Cpu },
+  { scope: "devices.read", name: "Device Status", description: "Pump, CGM, and closed-loop status, including IOB and automated insulin", icon: Cpu },
   { scope: "heartrate.read", name: "Heart Rate", description: "Data from wearables", icon: HeartPulse },
   { scope: "stepcount.read", name: "Step Count", description: "Daily activity totals", icon: Footprints },
   { scope: "food.read", name: "Food & Meals", description: "Meals and nutrition log", icon: Utensils },

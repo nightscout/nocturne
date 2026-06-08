@@ -13,6 +13,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Multitenancy;
@@ -43,6 +44,7 @@ public sealed class TenantResolutionMiddlewareShareTokenTests : IDisposable
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
         services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>().CreateDbContext());
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
+        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
         services.AddMemoryCache();
         services.AddSingleton<ShareTokenCacheService>();
         _root = services.BuildServiceProvider();
@@ -92,6 +94,9 @@ public sealed class TenantResolutionMiddlewareShareTokenTests : IDisposable
         nextCalled.Should().BeTrue();
         ((bool)ctx.Items["ShareAccess"]!).Should().BeTrue();
         (ctx.Items["TenantContext"] as TenantContext)!.TenantId.Should().Be(_tenantId);
+        // The RLS carrier is marked pre-auth on both the request context and the pinned DbContext.
+        ctx.RequestServices.GetRequiredService<ICategoryReadContext>().IsShare.Should().BeTrue();
+        ctx.RequestServices.GetRequiredService<NocturneDbContext>().IsShareContext.Should().BeTrue();
     }
 
     [Fact]
@@ -112,6 +117,9 @@ public sealed class TenantResolutionMiddlewareShareTokenTests : IDisposable
         nextCalled.Should().BeTrue();
         ctx.Items.ContainsKey("ShareAccess").Should().BeFalse();
         (ctx.Items["TenantContext"] as TenantContext)!.TenantId.Should().Be(_tenantId);
+        // A bare slug host is not a share: the carrier stays off, so RLS opens for the owner.
+        ctx.RequestServices.GetRequiredService<ICategoryReadContext>().IsShare.Should().BeFalse();
+        ctx.RequestServices.GetRequiredService<NocturneDbContext>().IsShareContext.Should().BeFalse();
     }
 
     [Fact]

@@ -62,6 +62,11 @@ public class RlsCompletenessFixture : IAsyncLifetime
             MigratorConnectionString,
             NullLogger.Instance,
             new TenantConnectionInterceptor());
+
+        // Apply the per-category public-share RLS policies, exactly as the API does at startup.
+        await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(
+            MigratorConnectionString,
+            NullLogger.Instance);
     }
 
     public async Task DisposeAsync()

@@ -503,6 +503,10 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         var interceptor = scope.ServiceProvider.GetRequiredService<TenantConnectionInterceptor>();
         await DatabaseInitializationExtensions.RunMigrationsAsync(migratorConnectionString, logger, interceptor);
+
+        // Apply the per-category public-share RLS policies, derived from the C# category map,
+        // so they cannot drift from the code. Runs under the migrator role like migrations.
+        await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(migratorConnectionString, logger);
     }
 
     // Validate RLS, ownership, default privileges, and NoResetOnClose under the app role.

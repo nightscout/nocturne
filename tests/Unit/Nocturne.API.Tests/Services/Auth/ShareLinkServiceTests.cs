@@ -157,7 +157,6 @@ public sealed class ShareLinkServiceTests : IDisposable
 
         dto.Scopes.Should().Contain([
             TenantPermissions.GlucoseRead,
-            TenantPermissions.StatisticsRead,
             TenantPermissions.TreatmentsRead,
         ]);
         dto.Scopes.Should().OnlyContain(s => TenantPermissions.PublicShareScopes.Contains(s));

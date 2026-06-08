@@ -112,8 +112,19 @@ public static class ServiceCollectionExtensions
             {
                 context.TenantId = tenantAccessor.TenantId;
             }
+            // Set the share carrier unconditionally so a pooled context never inherits a
+            // prior lessee's state. The directly-injected scoped context carries only the
+            // marker and always leaves the CSV null — a share that reads PHI on this path is
+            // denied (fail-closed); share PHI reads should go through ITenantDbContextFactory,
+            // which carries the CSV.
+            context.IsShareContext = sp.GetService<ICategoryReadContext>()?.IsShare == true;
+            context.VisibleCategories = null;
             return context;
         });
+
+        // Per-request public-share category context, read by the factory and the scoped
+        // context above to stamp the RLS carrier properties.
+        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
 
         // Register tenant-aware context factory for V4 repositories
         services.AddScoped<ITenantDbContextFactory, TenantDbContextFactory>();
@@ -254,8 +265,19 @@ public static class ServiceCollectionExtensions
             {
                 context.TenantId = tenantAccessor.TenantId;
             }
+            // Set the share carrier unconditionally so a pooled context never inherits a
+            // prior lessee's state. The directly-injected scoped context carries only the
+            // marker and always leaves the CSV null — a share that reads PHI on this path is
+            // denied (fail-closed); share PHI reads should go through ITenantDbContextFactory,
+            // which carries the CSV.
+            context.IsShareContext = sp.GetService<ICategoryReadContext>()?.IsShare == true;
+            context.VisibleCategories = null;
             return context;
         });
+
+        // Per-request public-share category context, read by the factory and the scoped
+        // context above to stamp the RLS carrier properties.
+        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
 
         // Register tenant-aware context factory for V4 repositories
         services.AddScoped<ITenantDbContextFactory, TenantDbContextFactory>();

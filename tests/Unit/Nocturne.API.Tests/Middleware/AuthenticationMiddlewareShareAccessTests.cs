@@ -16,6 +16,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -58,11 +59,18 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
     private static DefaultHttpContext ContextFor(bool shareAccess)
     {
-        var ctx = new DefaultHttpContext();
+        var services = new ServiceCollection();
+        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        var ctx = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         ctx.Items["TenantContext"] =
             new TenantContext(TestDatabaseSeeder.TenantId, "acme", "Acme", true, false);
         if (shareAccess)
+        {
             ctx.Items["ShareAccess"] = true;
+            // TenantResolutionMiddleware marks the share upstream; simulate that here so the
+            // post-auth CSV set-point is exercised.
+            ctx.RequestServices.GetRequiredService<ICategoryReadContext>().MarkShare();
+        }
         return ctx;
     }
 
@@ -76,6 +84,9 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         var auth = ctx.Items["AuthContext"] as AuthContext;
         auth!.IsAuthenticated.Should().BeFalse();
         auth.SubjectId.Should().Be(TestDatabaseSeeder.PublicSubjectId);
+        // The post-auth CSV set-point ran: the share carries a (possibly empty) visible-categories
+        // value, never null — null on a share would fail-open at the policy.
+        ctx.RequestServices.GetRequiredService<ICategoryReadContext>().VisibleCategoriesCsv.Should().NotBeNull();
     }
 
     [Fact]

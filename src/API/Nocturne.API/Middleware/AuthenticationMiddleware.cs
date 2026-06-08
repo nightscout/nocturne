@@ -237,6 +237,12 @@ public class AuthenticationMiddleware
                 var publicScopes = ScopeTranslator.FromPermissions(publicAccess.EffectivePermissions);
                 context.Items["GrantedScopes"] = publicScopes;
 
+                // Carry the share's visible categories to the DbContext factory for
+                // per-category RLS. Resolved here (post-auth); a share whose CSV is never
+                // set is denied all categorized data by the policy (fail-closed).
+                context.RequestServices.GetService<ICategoryReadContext>()
+                    ?.SetVisibleCategories(ShareDataCategories.ComputeVisibleCategoriesCsv(publicScopes));
+
                 context.Items["AuthenticationContext"] = MapToLegacyContext(publicAuthContext);
 
                 _logger.LogDebug(
