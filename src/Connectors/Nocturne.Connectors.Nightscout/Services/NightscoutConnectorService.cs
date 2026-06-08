@@ -680,6 +680,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return await ExecuteWithRetryAsync(
             async () => await FetchDataCoreAsync<T>(url),
             _retryDelayStrategy,
+            maxRetries: _currentConfig.MaxRetryAttempts,
             operationName: operationName);
     }
 

@@ -1,3 +1,5 @@
+using System.Net;
+using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
@@ -27,6 +29,13 @@ public class BaseConnectorServiceTests
         public override Task<bool> AuthenticateAsync() => Task.FromResult(true);
         public override Task<IEnumerable<Nocturne.Core.Models.Entry>> FetchGlucoseDataAsync(DateTime? since = null)
             => Task.FromResult(Enumerable.Empty<Nocturne.Core.Models.Entry>());
+
+        // Exposes the protected retry helper so its attempt-count behaviour can be tested directly.
+        public Task<string?> InvokeExecuteWithRetryAsync(
+            Func<Task<string?>> operation,
+            IRetryDelayStrategy retryDelayStrategy,
+            int maxRetries)
+            => ExecuteWithRetryAsync(operation, retryDelayStrategy, maxRetries: maxRetries);
     }
 
     public class TestConfig : BaseConnectorConfiguration
@@ -71,5 +80,48 @@ public class BaseConnectorServiceTests
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
             new TestConnectorService(httpClient, null!));
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_RetryableError_AttemptsUpToMaxRetries()
+    {
+        // Arrange: a connector configured to attempt 5 times, hitting a retryable 503 every time
+        var service = new TestConnectorService(new HttpClient(), Mock.Of<ILogger<TestConnectorService>>());
+        var attempts = 0;
+        Func<Task<string?>> alwaysFails = () =>
+        {
+            attempts++;
+            throw new HttpRequestException("unavailable", null, HttpStatusCode.ServiceUnavailable);
+        };
+
+        // Act: the helper exhausts every attempt then surfaces the last error
+        var act = async () =>
+            await service.InvokeExecuteWithRetryAsync(alwaysFails, Mock.Of<IRetryDelayStrategy>(), maxRetries: 5);
+
+        // Assert
+        await act.Should().ThrowAsync<HttpRequestException>();
+        attempts.Should().Be(5, "maxRetries should drive the number of attempts");
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_ZeroMaxRetries_AttemptsExactlyOnce()
+    {
+        // Arrange: MaxRetryAttempts of 0 must still try once (clamped to a floor of 1),
+        // not skip the operation entirely
+        var service = new TestConnectorService(new HttpClient(), Mock.Of<ILogger<TestConnectorService>>());
+        var attempts = 0;
+        Func<Task<string?>> alwaysFails = () =>
+        {
+            attempts++;
+            throw new HttpRequestException("unavailable", null, HttpStatusCode.ServiceUnavailable);
+        };
+
+        // Act
+        var act = async () =>
+            await service.InvokeExecuteWithRetryAsync(alwaysFails, Mock.Of<IRetryDelayStrategy>(), maxRetries: 0);
+
+        // Assert
+        await act.Should().ThrowAsync<HttpRequestException>();
+        attempts.Should().Be(1, "0 is clamped to a single attempt");
     }
 }

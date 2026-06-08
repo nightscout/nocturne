@@ -156,6 +156,7 @@ public class LibreConnectorService(
                 _selectedConnection = null;
                 return await AuthenticateWithConfigAsync(config);
             },
+            maxRetries: config.MaxRetryAttempts,
             operationName: "FetchSensorGlucoseData"
         );
 

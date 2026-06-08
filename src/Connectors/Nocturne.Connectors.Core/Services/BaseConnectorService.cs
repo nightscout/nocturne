@@ -1181,7 +1181,11 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// <param name="operation">The async operation to execute</param>
     /// <param name="retryStrategy">Strategy for calculating retry delays</param>
     /// <param name="reAuthenticateOnUnauthorized">Optional callback to re-authenticate on 401 responses</param>
-    /// <param name="maxRetries">Maximum number of retry attempts (default: 3)</param>
+    /// <param name="maxRetries">
+    ///     Maximum number of attempts (default: 3). Clamped to a floor of 1 so a connector's
+    ///     configured MaxRetryAttempts of 0 still makes a single attempt instead of skipping
+    ///     the operation entirely.
+    /// </param>
     /// <param name="operationName">Name of the operation for logging</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The result of the operation, or default(T) on failure</returns>
@@ -1194,6 +1198,10 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         CancellationToken cancellationToken = default
     )
     {
+        // Connectors pass their configured MaxRetryAttempts, which allows 0; the loop needs at
+        // least one attempt for the operation to run.
+        maxRetries = Math.Max(1, maxRetries);
+
         var opName = operationName ?? "operation";
         HttpRequestException? lastException = null;
 
