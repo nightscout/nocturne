@@ -41,4 +41,15 @@ public class TenantMemberService : ITenantMemberService
         return await context.TenantMembers.AsNoTracking()
             .CountAsync(tm => tm.TenantId == tenantId, ct);
     }
+
+    public async Task<List<string>> GetMemberRoleNamesAsync(Guid subjectId, Guid tenantId, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreateDbContextAsync(ct);
+        return await context.TenantMembers.AsNoTracking()
+            .Where(tm => tm.SubjectId == subjectId && tm.TenantId == tenantId)
+            .SelectMany(tm => tm.MemberRoles)
+            .Select(mr => mr.TenantRole.Name)
+            .Distinct()
+            .ToListAsync(ct);
+    }
 }

@@ -41,6 +41,7 @@ public class OidcController : ControllerBase
     private readonly IOidcProviderService _providerService;
     private readonly ISubjectService _subjectService;
     private readonly IAuthAuditService _auditService;
+    private readonly ITenantMemberService _tenantMemberService;
     private readonly OidcOptions _options;
     private readonly IConfiguration _configuration;
     private readonly ILogger<OidcController> _logger;
@@ -53,6 +54,7 @@ public class OidcController : ControllerBase
         IOidcProviderService providerService,
         ISubjectService subjectService,
         IAuthAuditService auditService,
+        ITenantMemberService tenantMemberService,
         IOptions<OidcOptions> options,
         IConfiguration configuration,
         ILogger<OidcController> logger
@@ -62,6 +64,7 @@ public class OidcController : ControllerBase
         _providerService = providerService;
         _subjectService = subjectService;
         _auditService = auditService;
+        _tenantMemberService = tenantMemberService;
         _options = options.Value;
         _configuration = configuration;
         _logger = logger;
@@ -617,6 +620,18 @@ public class OidcController : ControllerBase
             ? await _authService.GetUserInfoAsync(authContext.SubjectId.Value)
             : null;
 
+        // Surface the subject's roles within the CURRENT tenant rather than the global
+        // subject roles carried on the auth context — the latter are empty for ordinary
+        // members, so the account/profile UI showed "No roles assigned". Platform-access
+        // grants (a non-member operator) and service auth keep their context roles.
+        var roles = authContext.Roles;
+        if (authContext is { SubjectId: not null, TenantId: not null }
+            && authContext.AuthType is not (AuthType.PlatformAccess or AuthType.ApiKey or AuthType.InstanceKey))
+        {
+            roles = await _tenantMemberService.GetMemberRoleNamesAsync(
+                authContext.SubjectId.Value, authContext.TenantId.Value);
+        }
+
         return Ok(
             new SessionInfo
             {
@@ -624,11 +639,12 @@ public class OidcController : ControllerBase
                 SubjectId = authContext.SubjectId,
                 Name = authContext.SubjectName ?? userInfo?.Name,
                 Email = authContext.Email ?? userInfo?.Email,
-                Roles = authContext.Roles,
+                Roles = roles,
                 Permissions = authContext.Permissions,
                 ExpiresAt = authContext.ExpiresAt,
                 PreferredLanguage = userInfo?.PreferredLanguage,
                 IsPlatformAdmin = authContext.IsPlatformAdmin,
+                IsPlatformAccessGrant = authContext.AuthType == AuthType.PlatformAccess,
                 AvatarUrl = userInfo?.AvatarUrl,
             }
         );
@@ -942,6 +958,13 @@ public class SessionInfo
     /// Whether this subject has platform-level admin access
     /// </summary>
     public bool IsPlatformAdmin { get; set; }
+
+    /// <summary>
+    /// Whether this session is a short-lived platform-admin access grant on a tenant the
+    /// subject is NOT a member of (as opposed to ordinary membership). Authoritative signal
+    /// for the "platform admin access" indicator in the UI.
+    /// </summary>
+    public bool IsPlatformAccessGrant { get; set; }
 
     /// <summary>
     /// URL to the subject's avatar image

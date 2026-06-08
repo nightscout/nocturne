@@ -72,8 +72,8 @@
     testingProvider = true;
     testResult = null;
     try {
-      const { testOidcProviderConfig } = await import("../../../routes/(authenticated)/settings/admin/oidc-providers.remote");
-      testResult = await testOidcProviderConfig({
+      const { testUnsaved } = await import("$lib/api/generated/oidcProviderAdmins.generated.remote");
+      testResult = await testUnsaved({
         issuerUrl: providerIssuerUrl,
         clientId: providerClientId,
         clientSecret: providerClientSecret || undefined,

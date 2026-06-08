@@ -60,11 +60,13 @@
     effectivePermissions?: string[];
     /** Whether the current user is a platform administrator */
     isPlatformAdmin?: boolean;
+    /** Whether this session is a platform-admin access grant on a non-member tenant */
+    isPlatformAccessGrant?: boolean;
     /** Whether the current session is a guest link session (read-only) */
     isGuestSession?: boolean;
   }
 
-  const { user = null, tenantCount = 0, effectivePermissions = [], isPlatformAdmin = false, isGuestSession = false }: Props = $props();
+  const { user = null, tenantCount = 0, effectivePermissions = [], isPlatformAdmin = false, isPlatformAccessGrant = false, isGuestSession = false }: Props = $props();
 
   const canViewAudit = $derived(
     effectivePermissions.includes("audit.read") ||
@@ -94,24 +96,14 @@
   let defaultTenantSlug = $state<string | null>(null);
   let baseDomain = $state<string | null>(null);
   let currentSlug = $state<string | null>(null);
-  // Whether the authenticated subject is a member of the tenant on the current
-  // subdomain, and whether that has been determined yet.
-  let isCurrentTenantMember = $state(false);
-  let tenantTargetsLoaded = $state(false);
 
   /**
-   * Platform-admin "access" mode: the only way to be authenticated on a tenant
-   * subdomain you are NOT a member of is via a short-lived platform-access grant.
-   * So a platform admin on a non-member tenant is viewing it via that mechanism
-   * (not normal membership). Surfaced distinctly so it's never mistaken for it.
+   * Platform-admin "access" mode: the session is a short-lived platform-access grant on a
+   * tenant the operator is NOT a member of. This is the backend's authoritative signal
+   * (AuthType.PlatformAccess) rather than an inference from the subdomain slug, so it can
+   * never be mistaken for ordinary membership.
    */
-  const isPlatformAccessView = $derived(
-    isPlatformAdmin &&
-      !isGuestSession &&
-      tenantTargetsLoaded &&
-      !!currentSlug &&
-      !isCurrentTenantMember,
-  );
+  const isPlatformAccessView = $derived(isPlatformAccessGrant && !isGuestSession);
   // Minutes left on the access grant (its JWT expiry flows through to the session).
   const grantExpiresInMin = $derived(
     user?.expiresAt
@@ -164,8 +156,6 @@
 
     totalTenantCount = (tenants ?? []).length;
     defaultTenantSlug = (tenants ?? [])[0]?.slug ?? null;
-    isCurrentTenantMember = (tenants ?? []).some((t) => t.slug === currentSlug);
-    tenantTargetsLoaded = true;
 
     tenantTargets = (tenants ?? [])
       .filter(

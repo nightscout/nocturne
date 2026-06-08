@@ -140,7 +140,7 @@ public class PasskeyController : ControllerBase
         try
         {
             var result = await _passkeyService.CompleteRegistrationAsync(
-                request.AttestationResponseJson, request.ChallengeToken, tenantId);
+                request.AttestationResponseJson, request.ChallengeToken, tenantId, request.Label);
 
             return Ok(new PasskeyRegisterCompleteResponse
             {

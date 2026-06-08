@@ -70,7 +70,8 @@ public record TenantMemberDto(
     string? Label,
     bool LimitTo24Hours,
     DateTime? LastUsedAt,
-    DateTime SysCreatedAt);
+    DateTime SysCreatedAt,
+    bool IsPlatformAdmin);
 
 /// <summary>
 /// Lightweight role reference attached to a <see cref="TenantMemberDto"/>.

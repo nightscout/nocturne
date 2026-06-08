@@ -19,10 +19,12 @@
     AlertTriangle,
     Info,
     X,
+    ShieldCheck,
   } from "lucide-svelte";
   import * as Alert from "$lib/components/ui/alert";
   import * as tenantRemote from "$api/generated/tenants.generated.remote";
-  import type { TenantDetailDto } from "$api";
+  import * as adminSubjectsRemote from "../admin-subjects.remote";
+  import type { TenantDetailDto, TenantMemberDto } from "$api";
   import { getCurrentTenantId } from "../../current-tenant.remote";
   import { getTransitionStatus } from "../../../tenants/transition-status.remote";
 
@@ -104,6 +106,43 @@
       // error is handled by remote
     } finally {
       editSaving = false;
+    }
+  }
+
+  // Platform-admin management (relocated here from the admin Users tab). Platform admin is a
+  // global, instance-wide capability granted per subject; here it's managed among this tenant's
+  // members.
+  let platformAdminError = $state<string | null>(null);
+  let platformAdminSavingId = $state<string | null>(null);
+
+  // Real members only — the Public/system subject can't be a platform admin.
+  const manageableMembers = $derived(
+    (tenant?.members ?? []).filter((m) => !m.isSystemSubject),
+  );
+
+  async function togglePlatformAdmin(member: TenantMemberDto) {
+    if (!member.subjectId || !tenant) return;
+    platformAdminError = null;
+    platformAdminSavingId = member.subjectId;
+    const next = !member.isPlatformAdmin;
+    try {
+      await adminSubjectsRemote.setPlatformAdmin({
+        subjectId: member.subjectId,
+        isPlatformAdmin: next,
+      });
+      tenant = {
+        ...tenant,
+        members: (tenant.members ?? []).map((m) =>
+          m.subjectId === member.subjectId ? { ...m, isPlatformAdmin: next } : m,
+        ),
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      platformAdminError = message.includes("last_platform_admin")
+        ? "Cannot demote the last platform admin. Promote another user first."
+        : "Failed to update platform admin status.";
+    } finally {
+      platformAdminSavingId = null;
     }
   }
 </script>
@@ -188,6 +227,61 @@
             </p>
           </div>
         </div>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <ShieldCheck class="h-5 w-5" />
+          Platform Administrators
+        </CardTitle>
+        <CardDescription>
+          Platform admins can manage every tenant on this instance. Grant or
+          revoke it for members of this tenant.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-3">
+        {#if platformAdminError}
+          <Alert.Root variant="destructive">
+            <AlertTriangle class="h-4 w-4" />
+            <Alert.Description>{platformAdminError}</Alert.Description>
+          </Alert.Root>
+        {/if}
+        {#if manageableMembers.length === 0}
+          <p class="text-sm text-muted-foreground">No members to manage.</p>
+        {:else}
+          {#each manageableMembers as member (member.subjectId)}
+            <div
+              class="flex items-center justify-between gap-4 rounded-md border p-3"
+            >
+              <div class="min-w-0">
+                <p class="text-sm font-medium truncate">
+                  {member.name ?? "Unnamed user"}
+                </p>
+                {#if member.isPlatformAdmin}
+                  <Badge variant="default" class="mt-1 text-xs">
+                    <ShieldCheck class="mr-1 h-3 w-3" />
+                    Platform admin
+                  </Badge>
+                {/if}
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                {#if platformAdminSavingId === member.subjectId}
+                  <Loader2 class="h-4 w-4 animate-spin text-muted-foreground" />
+                {/if}
+                <Switch
+                  checked={member.isPlatformAdmin}
+                  disabled={platformAdminSavingId === member.subjectId}
+                  onCheckedChange={() => togglePlatformAdmin(member)}
+                  aria-label={member.isPlatformAdmin
+                    ? `Revoke platform admin from ${member.name}`
+                    : `Grant platform admin to ${member.name}`}
+                />
+              </div>
+            </div>
+          {/each}
+        {/if}
       </CardContent>
     </Card>
   {/if}
