@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -100,6 +101,11 @@ public static class ServiceCollectionExtensions
             poolSize: 128
         );
 
+        // Reset the four pooled-context carriers to fail-closed defaults on every lease
+        // (pooling does not reset custom properties), so the raw IDbContextFactory callers
+        // cannot inherit a prior lessee's tenant or share state. See CarrierResettingDbContextFactory.
+        DecorateWithCarrierReset(services);
+
         // Register scoped NocturneDbContext that sets TenantId from ITenantAccessor.
         // All existing constructor injections of NocturneDbContext continue to work.
         // The context is returned to the pool when the scope ends.
@@ -112,13 +118,11 @@ public static class ServiceCollectionExtensions
             {
                 context.TenantId = tenantAccessor.TenantId;
             }
-            // Set the share carrier unconditionally so a pooled context never inherits a
-            // prior lessee's state. The directly-injected scoped context carries only the
-            // marker and always leaves the CSV null — a share that reads PHI on this path is
-            // denied (fail-closed); share PHI reads should go through ITenantDbContextFactory,
-            // which carries the CSV.
+            // Mark the scoped context as a share when the request is one. Carrier defaults (CSV
+            // null) are already set by CarrierResettingDbContextFactory; this path never resolves
+            // the CSV, so a share reading PHI here is denied (fail-closed) — share PHI reads go
+            // through ITenantDbContextFactory, which carries the CSV.
             context.IsShareContext = sp.GetService<ICategoryReadContext>()?.IsShare == true;
-            context.VisibleCategories = null;
             return context;
         });
 
@@ -144,6 +148,33 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();
 
         return services;
+    }
+
+    // Replaces the registered pooled IDbContextFactory<NocturneDbContext> with a decorator that
+    // resets the carrier properties on every lease. Applied immediately after
+    // AddPooledDbContextFactory so the descriptor it wraps is the pooling factory.
+    private static void DecorateWithCarrierReset(IServiceCollection services)
+    {
+        var descriptor = services.LastOrDefault(
+            d => d.ServiceType == typeof(IDbContextFactory<NocturneDbContext>))
+            ?? throw new InvalidOperationException(
+                "AddPooledDbContextFactory<NocturneDbContext> must be registered before decorating it.");
+
+        services.Remove(descriptor);
+        services.Add(new ServiceDescriptor(
+            typeof(IDbContextFactory<NocturneDbContext>),
+            sp => new CarrierResettingDbContextFactory(ResolveInner(descriptor, sp)),
+            descriptor.Lifetime));
+    }
+
+    private static IDbContextFactory<NocturneDbContext> ResolveInner(
+        ServiceDescriptor descriptor, IServiceProvider sp)
+    {
+        var inner =
+            descriptor.ImplementationInstance
+            ?? descriptor.ImplementationFactory?.Invoke(sp)
+            ?? ActivatorUtilities.CreateInstance(sp, descriptor.ImplementationType!);
+        return (IDbContextFactory<NocturneDbContext>)inner;
     }
 
     /// <summary>
@@ -240,6 +271,11 @@ public static class ServiceCollectionExtensions
             poolSize: 128
         );
 
+        // Reset the four pooled-context carriers to fail-closed defaults on every lease
+        // (pooling does not reset custom properties), so the raw IDbContextFactory callers
+        // cannot inherit a prior lessee's tenant or share state. See CarrierResettingDbContextFactory.
+        DecorateWithCarrierReset(services);
+
         // Register scoped DbContext, repositories, and shared services.
         AddDataServices(services);
 
@@ -265,13 +301,11 @@ public static class ServiceCollectionExtensions
             {
                 context.TenantId = tenantAccessor.TenantId;
             }
-            // Set the share carrier unconditionally so a pooled context never inherits a
-            // prior lessee's state. The directly-injected scoped context carries only the
-            // marker and always leaves the CSV null — a share that reads PHI on this path is
-            // denied (fail-closed); share PHI reads should go through ITenantDbContextFactory,
-            // which carries the CSV.
+            // Mark the scoped context as a share when the request is one. Carrier defaults (CSV
+            // null) are already set by CarrierResettingDbContextFactory; this path never resolves
+            // the CSV, so a share reading PHI here is denied (fail-closed) — share PHI reads go
+            // through ITenantDbContextFactory, which carries the CSV.
             context.IsShareContext = sp.GetService<ICategoryReadContext>()?.IsShare == true;
-            context.VisibleCategories = null;
             return context;
         });
 

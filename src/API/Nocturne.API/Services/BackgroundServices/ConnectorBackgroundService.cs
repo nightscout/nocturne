@@ -292,21 +292,14 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         dbContext.AuditContext = SystemAuditContext.ForService($"connector:{ConnectorName}");
 
-        // Pin the RLS tenant on the scoped DbContext. NocturneDbContext is leased from a pool
-        // (AddPooledDbContextFactory) and its TenantId is NOT reset between leases, so a context
-        // can arrive carrying a previous lessee's tenant. On HTTP requests the auth handlers set
-        // dbContext.TenantId explicitly; background syncs have no such handler, so we must set it
-        // here. Setting ITenantAccessor alone does not retro-fit the already-leased context — the
-        // TenantConnectionInterceptor reads NocturneDbContext.TenantId to configure RLS on connection
-        // open. Without this, tenant-scoped reads (connector config + secrets) run under a stale or
-        // empty tenant and silently return nothing, so every connector authenticates with empty
-        // credentials and no data syncs.
+        // Pin the RLS tenant on the scoped DbContext. NocturneDbContext is pooled and the
+        // CarrierResettingDbContextFactory leases it with TenantId reset to Guid.Empty; the scoped
+        // registration re-pins from ITenantAccessor, and background syncs set it explicitly here
+        // because the flow depends on it — the TenantConnectionInterceptor reads
+        // NocturneDbContext.TenantId to configure RLS on connection open, and without a real tenant
+        // the tenant-scoped reads (connector config + secrets) silently return nothing, so every
+        // connector authenticates with empty credentials and no data syncs.
         dbContext.TenantId = tenantId;
-        // A pooled context that last served a public share keeps IsShareContext=true (pooling
-        // does not reset custom properties); clear the share carrier so the connector's reads
-        // are not denied by the per-category share RLS policy.
-        dbContext.IsShareContext = false;
-        dbContext.VisibleCategories = null;
 
         // Load per-tenant config via the loader
         var loader = scope.ServiceProvider.GetRequiredService<IConnectorConfigurationLoader<TConfig>>();

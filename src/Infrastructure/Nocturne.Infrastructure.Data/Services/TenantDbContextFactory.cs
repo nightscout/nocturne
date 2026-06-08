@@ -30,10 +30,10 @@ internal sealed class TenantDbContextFactory(
         if (tenantAccessor?.IsResolved == true)
             ctx.TenantId = tenantAccessor.TenantId;
 
-        // Set the share carrier unconditionally so a pooled context never inherits a prior
-        // lessee's share flag or CSV (pooling does not reset custom properties). The CSV is
-        // resolved post-auth, so it is carried only here, on the factory path; a share whose
-        // CSV is null is denied all categorized data by the RLS policy (fail-closed).
+        // Carry the real share flag and category CSV for this request; the CSV is resolved
+        // post-auth and is carried only on this factory path. Carrier defaults are already set by
+        // CarrierResettingDbContextFactory; a share whose CSV is null is denied all categorized
+        // data by the RLS policy (fail-closed).
         var isShare = categoryReadContext?.IsShare == true;
         ctx.IsShareContext = isShare;
         ctx.VisibleCategories = isShare ? categoryReadContext!.VisibleCategoriesCsv : null;
