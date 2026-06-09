@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Linq;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Pipelines;
@@ -223,17 +224,11 @@ public static class PortainerComposePublisherExtensions
             return composeYaml;
 
         var volumesList = (YamlSequenceNode)volumesNode;
-        YamlNode? bindMountEntry = null;
-        foreach (var item in volumesList)
-        {
-            if (item is YamlMappingNode volumeMap
+        var bindMountEntry = volumesList
+            .Where(item => item is YamlMappingNode volumeMap
                 && volumeMap.Children.TryGetValue("source", out var src)
                 && ((YamlScalarNode)src).Value == "./caddy/Caddyfile")
-            {
-                bindMountEntry = item;
-                break;
-            }
-        }
+            .FirstOrDefault();
 
         if (bindMountEntry is null)
             return composeYaml;
