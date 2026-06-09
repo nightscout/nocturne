@@ -32,8 +32,8 @@ public static class PortainerComposePublisherExtensions
             Path.Combine(builder.AppHostDirectory, "..", "..", ".."));
         var initScriptPath = Path.Combine(
             solutionRoot, "docs", "postgres", "container-init", "00-init.sh");
-        var caddyfilePath = Path.Combine(
-            builder.AppHostDirectory, "caddy", "Caddyfile");
+        var caddyDirectoryPath = Path.Combine(builder.AppHostDirectory, "caddy");
+        var caddyfilePath = Path.Combine(caddyDirectoryPath, "Caddyfile");
 
         builder.Pipeline.AddStep(
             name: "env-metadata",
