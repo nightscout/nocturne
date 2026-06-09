@@ -150,40 +150,40 @@ services:
       NOCTURNE_WEB_HTTP: "http://nocturne-web:8000"
       services__nocturne-web__http__0: "http://nocturne-web:8000"
     expose:
-      - "5000"
+    - "5000"
     depends_on:
       nocturne-api:
         condition: "service_started"
       nocturne-web:
         condition: "service_started"
     networks:
-      - "aspire"
+    - "aspire"
   caddy:
     image: "caddy:2"
     environment:
       BASE_DOMAIN: "${BASE_DOMAIN}"
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+    - "80:80"
+    - "443:443"
+    - "443:443/udp"
     volumes:
-      - type: "bind"
-        target: "/etc/caddy/Caddyfile"
-        source: "./caddy/Caddyfile"
-        read_only: true
-      - type: "volume"
-        target: "/data"
-        source: "caddy-data"
-        read_only: false
-      - type: "volume"
-        target: "/config"
-        source: "caddy-config"
-        read_only: false
+    - type: "bind"
+      target: "/etc/caddy/Caddyfile"
+      source: "./caddy/Caddyfile"
+      read_only: true
+    - type: "volume"
+      target: "/data"
+      source: "caddy-data"
+      read_only: false
+    - type: "volume"
+      target: "/config"
+      source: "caddy-config"
+      read_only: false
     depends_on:
       gateway:
         condition: "service_started"
     networks:
-      - "aspire"
+    - "aspire"
   watchtower:
     image: "ghcr.io/nicholas-fedor/watchtower:latest"
     environment:

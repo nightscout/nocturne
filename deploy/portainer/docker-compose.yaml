@@ -23,6 +23,14 @@ services:
     - source: nocturne-init
       target: /docker-entrypoint-initdb.d/00-init.sh
       mode: 493
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -h 127.0.0.1 -p 5432
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
   nocturne-api:
     image: "${NOCTURNE_API_IMAGE}"
     environment:
@@ -30,6 +38,8 @@ services:
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       HTTP_PORTS: "8080"
       INSTANCE_KEY: "${INSTANCE_KEY}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "${OTEL_EXPORTER_OTLP_PROTOCOL}"
       ConnectionStrings__nocturne-postgres: "Host=nocturne-postgres-server;Port=5432;Database=nocturne;Username=nocturne_app;Password=${POSTGRES_APP_PASSWORD}"
       ConnectionStrings__nocturne-postgres-migrator: "Host=nocturne-postgres-server;Port=5432;Database=nocturne;Username=nocturne_migrator;Password=${POSTGRES_MIGRATOR_PASSWORD}"
       DemoService__Enabled: "false"
@@ -40,7 +50,7 @@ services:
     - "8080"
     depends_on:
       nocturne-postgres-server:
-        condition: "service_started"
+        condition: service_healthy
     networks:
     - "aspire"
   nocturne-web:
@@ -66,6 +76,8 @@ services:
       WHATSAPP_APP_SECRET: "${WHATSAPP_APP_SECRET}"
       WHATSAPP_PHONE_NUMBER_ID: "${WHATSAPP_PHONE_NUMBER_ID}"
       ORIGIN: "https://${BASE_DOMAIN}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "${OTEL_EXPORTER_OTLP_PROTOCOL}"
       NOCTURNE_POSTGRES_URI: "postgresql://nocturne_web:${POSTGRES_WEB_PASSWORD}@nocturne-postgres-server:5432/nocturne"
     expose:
     - "8000"
