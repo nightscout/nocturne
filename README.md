@@ -39,7 +39,7 @@ Nocturne/
 - **Real-time** - SignalR hubs for live data streaming
 - **Data Connectors** - Dexcom Share, Glooko, LibreLinkUp, MiniMed CareLink, MyFitnessPal, Nightscout, and MyLife
 - **PostgreSQL** - Modern relational database with EF Core migrations
-- **Observability** - OpenTelemetry integration for monitoring (Soon)
+- **Observability** - OpenTelemetry (OTLP) export for metrics, traces, and logs
 - **Containerized** - Docker support for all services
 
 ## Quick Start with Aspire (Development)
@@ -130,6 +130,42 @@ docker compose up -d
 
 The production compose includes [Watchtower](https://github.com/nicholas-fedor/watchtower) for automatic container updates (checks daily), and omits the Aspire dashboard and Scalar API explorer. Watchtower will automatically pull new images as they are published — no manual updates needed.
 
+### First-run setup
+
+A fresh install has no tenants, so the API answers every request with `503 {"error":"setup_required"}` until the first owner secures the instance. This is expected — it's the signal for the web UI to show the setup wizard.
+
+**In a browser (normal path).** Open your Nocturne site (the apex `https://<BASE_DOMAIN>/`). The setup wizard walks you through creating the first tenant and registering a passkey (or linking an OIDC provider). When it completes you're shown a set of recovery codes — save them. That's the whole setup.
+
+**Headless / automated setup (no browser).** Trusted automation can stand up a tenant — create it, configure connectors, change settings, push data — before any human registers a passkey, using the `INSTANCE_KEY` from your `.env`. The instance key is the highest-trust service credential (cross-tenant platform admin), so treat it like a root password. Requests authenticate with two headers: `X-Instance-Key` carrying the **SHA-256 hex of `INSTANCE_KEY`**, and an `X-Instance-Service` marker naming the caller.
+
+```bash
+# The X-Instance-Key header is the SHA-256 hex of your raw INSTANCE_KEY, not the key itself.
+KEY_HASH=$(printf %s "$INSTANCE_KEY" | sha256sum | cut -d' ' -f1)
+
+# 1. Create the first tenant. This endpoint is anonymous and tenantless — call it on the apex.
+curl -fsS -X POST "https://$BASE_DOMAIN/api/v4/setup/tenant" \
+  -H 'Content-Type: application/json' \
+  -d '{"slug":"alice","displayName":"Alice"}'
+
+# 2. Configure the tenant as trusted automation. Target the tenant's subdomain and
+#    present the instance key + service marker. Normal tenant traffic still gets 503
+#    until a human completes setup, but instance-key calls are allowed through.
+curl -fsS -X PUT "https://alice.$BASE_DOMAIN/api/v4/connectors/config/Dexcom/secrets" \
+  -H "X-Instance-Key: $KEY_HASH" \
+  -H 'X-Instance-Service: nocturne-setup-agent' \
+  -H 'Content-Type: application/json' \
+  -d '{ "username": "...", "password": "..." }'
+```
+
+When the human is ready, they open the site and register the first passkey through the normal wizard — recovery codes and all — exactly as on a brand-new instance. Their pre-configured connectors and data are already there. (A bare `X-Instance-Key` without the `X-Instance-Service` marker is ignored, so an instance key accidentally forwarded onto a browser request can't bypass setup.)
+
+### Troubleshooting
+
+**Redirected to `/setup` even though a tenant is already configured.** Two usual causes:
+
+- **`BASE_DOMAIN` is unset.** The API resolves tenants as `{slug}.{BASE_DOMAIN}`, and the WebSocket bridge requires it. If it's empty, host→tenant resolution fails and the dashboard bounces to `/setup` (and the bridge logs `BASE_DOMAIN is required`). Set it in `.env` to the domain you serve Nocturne on, for **both** the API and web containers, then recreate them.
+- **Single-tenant install served at the base domain.** If your one tenant lives at the apex (`https://<BASE_DOMAIN>/`, no subdomain), update to the latest image — older builds reported `setup_required` for `/api/v4/status` on the apex and bounced configured single-tenant installs to `/setup`.
+
 ### Generating locally
 
 If you have the .NET 10 SDK and Aspire CLI installed, you can generate the production bundle from source:
@@ -184,6 +220,15 @@ dotnet ef database update
 API documentation is available via [Scalar](https://scalar.com/) at `https://localhost:1612/scalar` when running locally.
 
 Nocturne aims to match Nightscout's API 1:1, so any Nightscout API endpoint should be usable. Nocturne-only endpoints are scoped to v4.
+
+## Observability
+
+Both the API and web containers are instrumented with OpenTelemetry and export metrics, traces, and logs over **OTLP push** when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. With no endpoint configured, telemetry is collected in-process and discarded with negligible overhead, so there is nothing to turn off on a default install. There is no Prometheus `/metrics` scrape endpoint — to use Prometheus/Grafana, run an OpenTelemetry Collector with an `otlp` receiver and a `prometheus` exporter.
+
+- **Docker Compose:** add the `OTEL_*` variables to the `nocturne-api` and `nocturne-web` services.
+- **Kubernetes (Helm):** set `observability.otlp.enabled: true` and `observability.otlp.endpoint` (lights up both containers). See the [Helm chart README](deploy/helm/nocturne/README.md#observability).
+
+Full setup guide: [Observability docs](src/Web/packages/portal/src/content/docs/observability.svx).
 
 ## Other stuff
 

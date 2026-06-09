@@ -102,7 +102,7 @@
 		try {
 			const result = await initiateDiscordLink(undefined);
 			if (result && "error" in result) {
-				actionError = result.error;
+				actionError = result.error ?? null;
 			} else if (result && "redirectUrl" in result) {
 				window.location.href = result.redirectUrl;
 				return;
@@ -121,7 +121,7 @@
 	);
 </script>
 
-<div class="container mx-auto max-w-2xl p-6 space-y-6">
+<div class="@container container mx-auto max-w-2xl p-3 @md:p-6 space-y-6">
 	<div>
 		<h1 class="text-2xl font-bold">Discord Integration</h1>
 		<p class="text-muted-foreground">
@@ -266,8 +266,9 @@
 				</Button>
 			{:else}
 				<p class="text-xs text-muted-foreground">
-					Discord OAuth2 is not configured on this instance. Ask the administrator to set
-					<code>DISCORD_APPLICATION_ID</code> and <code>DISCORD_CLIENT_SECRET</code>, or run
+					Discord OAuth2 is not configured on this instance. Ask the administrator to add the
+					Application ID and Client Secret under Settings &gt; Admin &gt; Integrations (or set
+					<code>DISCORD_APPLICATION_ID</code> and <code>DISCORD_CLIENT_SECRET</code>), or run
 					<code>/connect</code> directly from Discord.
 				</p>
 			{/if}

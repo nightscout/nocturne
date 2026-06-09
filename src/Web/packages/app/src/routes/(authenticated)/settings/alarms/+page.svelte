@@ -8,6 +8,6 @@
   });
 </script>
 
-<div class="container mx-auto max-w-4xl p-6">
+<div class="@container container mx-auto max-w-4xl p-3 @md:p-6">
   <p class="text-muted-foreground">Redirecting to Alerts...</p>
 </div>

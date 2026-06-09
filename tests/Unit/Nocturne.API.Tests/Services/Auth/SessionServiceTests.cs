@@ -128,6 +128,54 @@ public class SessionServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task IssueSessionAsync_NoProviderSessionId_GeneratesOne()
+    {
+        // Arrange — the identity provider supplied no session id (Google omits `sid`; the
+        // passkey/TOTP/setup paths have none). Without a generated id the token chain could
+        // only be revoked subject-wide.
+        var contextWithoutSession = _context with { OidcSessionId = null };
+        string? capturedSessionId = null;
+        _refreshTokenService.Setup(r => r.CreateRefreshTokenAsync(
+                _subjectId, It.IsAny<string?>(), contextWithoutSession.DeviceDescription,
+                contextWithoutSession.IpAddress, contextWithoutSession.UserAgent))
+            .Callback<Guid, string?, string?, string?, string?>(
+                (_, sid, _, _, _) => capturedSessionId = sid)
+            .ReturnsAsync(TestRefreshToken);
+
+        var service = CreateService();
+
+        // Act
+        await service.IssueSessionAsync(_subjectId, contextWithoutSession);
+
+        // Assert — a stable session id is minted so the chain can be revoked on its own.
+        capturedSessionId.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task IssueSessionAsync_ProviderSessionId_IsPreserved()
+    {
+        // Arrange — when the provider does supply a session id, keep it (ties us to the
+        // provider's session for front-channel logout).
+        string? capturedSessionId = null;
+        _refreshTokenService.Setup(r => r.CreateRefreshTokenAsync(
+                _subjectId, It.IsAny<string?>(), _context.DeviceDescription,
+                _context.IpAddress, _context.UserAgent))
+            .Callback<Guid, string?, string?, string?, string?>(
+                (_, sid, _, _, _) => capturedSessionId = sid)
+            .ReturnsAsync(TestRefreshToken);
+
+        var service = CreateService();
+
+        // Act
+        await service.IssueSessionAsync(_subjectId, _context);
+
+        // Assert
+        capturedSessionId.Should().Be("oidc-session-123");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public async Task IssueSessionAsync_ExpiresInSeconds_MatchesJwtLifetime()
     {
         // Arrange

@@ -10,8 +10,10 @@ using Nocturne.Connectors.Glooko.Mappers;
 using Nocturne.Connectors.Glooko.Models;
 using Nocturne.Connectors.Glooko.Utilities;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Glooko.Services;
@@ -27,6 +29,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     private readonly IRateLimitingStrategy _rateLimitingStrategy;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly GlookoAuthTokenProvider _tokenProvider;
+    private readonly ITimezoneTimelineService? _timezoneTimelineService;
     private readonly ILogger<GlookoConnectorService> _glookoLogger;
 
     public GlookoConnectorService(
@@ -37,7 +40,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         IRateLimitingStrategy rateLimitingStrategy,
         GlookoAuthTokenProvider tokenProvider,
         IConnectorPublisher? publisher = null,
-        IMealMatchingService? mealMatchingService = null
+        IMealMatchingService? mealMatchingService = null,
+        ITimezoneTimelineService? timezoneTimelineService = null
     )
         : base(httpClient, serverResolver, logger, publisher)
     {
@@ -46,6 +50,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
+        _timezoneTimelineService = timezoneTimelineService;
         _glookoLogger = logger;
     }
 
@@ -55,6 +60,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     public override List<SyncDataType> SupportedDataTypes =>
     [
         SyncDataType.Glucose,
+        SyncDataType.ManualBG,
         SyncDataType.Boluses,
         SyncDataType.CarbIntake,
         SyncDataType.StateSpans,
@@ -243,9 +249,11 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     {
         var patientCode = _userData?.GlookoCode;
 
-        var series = _syncConfig!.V3IncludeCgmBackfill
-            ? GlookoConstants.V3GraphSeries.Concat(GlookoConstants.V3CgmBackfillSeries)
-            : GlookoConstants.V3GraphSeries;
+        var series = GlookoConstants.V3GraphSeries
+            .Concat(GlookoConstants.V3PumpModeSeries);
+
+        if (_syncConfig!.V3IncludeCgmBackfill)
+            series = series.Concat(GlookoConstants.V3CgmBackfillSeries);
 
         var seriesParams = string.Join("&", series.Select(s => $"series[]={s}"));
 
@@ -291,10 +299,19 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             var enabledTypes = config.GetEnabledDataTypes(SupportedDataTypes);
             var activeTypes = request.DataTypes.Where(t => enabledTypes.Contains(t)).ToHashSet();
 
+            // Resolve the tenant's timezone timeline before mapping any records. The account's home
+            // zone (from the V3 profile) seeds the timeline's origin on first sync; thereafter the
+            // user's travel/relocation entries drive per-record conversion. Falls back to the legacy
+            // static offset when the timeline is empty (e.g. V2-only accounts, or profile tz unknown).
+            await ConfigureTimezoneTimelineAsync(config, cancellationToken);
+
+            // The request window is real-UTC; Glooko queries expect fake-UTC (local wall-clock). Pad by
+            // a day each side so a non-zero offset between the two never clips edge data (dedup absorbs
+            // the overlap).
             var from = request.From.HasValue
-                ? _timeMapper.ToGlookoTime(request.From.Value)
-                : _timeMapper.ToGlookoTime(DateTime.UtcNow.AddMonths(-6));
-            var to = _timeMapper.ToGlookoTime(DateTime.UtcNow);
+                ? _timeMapper.ToGlookoTime(request.From.Value).AddDays(-1)
+                : _timeMapper.ToGlookoTime(DateTime.UtcNow.AddMonths(-6)).AddDays(-1);
+            var to = _timeMapper.ToGlookoTime(DateTime.UtcNow).AddDays(1);
 
             var chunks = DateChunker.Chunk(from, to, TimeSpan.FromDays(14)).ToList();
 
@@ -352,6 +369,14 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                             result.ItemsSynced[SyncDataType.Profiles] = profiles.Count;
                             _logger.LogInformation("[{ConnectorSource}] Published {Count} profiles from device settings",
                                 ConnectorSource, profiles.Count);
+                        }
+
+                        var profileStateSpans = _profileMapper.TransformDeviceSettingsToStateSpans(deviceSettings);
+                        if (profileStateSpans.Count > 0)
+                        {
+                            await PublishStateSpanDataAsync(profileStateSpans, config, cancellationToken);
+                            _logger.LogInformation("[{ConnectorSource}] Published {Count} profile state spans from device settings",
+                                ConnectorSource, profileStateSpans.Count);
                         }
                     }
                 }
@@ -541,6 +566,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         if (activeTypes.Contains(SyncDataType.StateSpans))
         {
             var stateSpans = _stateSpanMapper.TransformV3ToStateSpans(v3Data);
+            stateSpans.AddRange(_stateSpanMapper.TransformV3PumpModeToStateSpans(v3Data));
             if (stateSpans.Count > 0)
                 await PublishStateSpanDataAsync(stateSpans, config, cancellationToken);
 
@@ -781,9 +807,10 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     }
 
     private string? _meterUnits;
+    private string? _timezone;
 
     /// <summary>
-    ///     Fetches user profile from v3 API to get meter units setting.
+    ///     Fetches user profile from v3 API to get meter units and the account's home timezone.
     /// </summary>
     public async Task<GlookoV3UsersResponse?> FetchV3UserProfileAsync()
     {
@@ -798,8 +825,9 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             if (profile?.CurrentUser != null)
             {
                 _meterUnits = profile.CurrentUser.MeterUnits;
-                _logger.LogInformation("[{ConnectorSource}] User profile loaded. MeterUnits: {Units}",
-                    ConnectorSource, _meterUnits);
+                _timezone = profile.CurrentUser.Timezone;
+                _logger.LogInformation("[{ConnectorSource}] User profile loaded. MeterUnits: {Units}, Timezone: {Timezone}",
+                    ConnectorSource, _meterUnits, _timezone ?? "(none)");
             }
 
             return profile;
@@ -808,6 +836,39 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         {
             _logger.LogError(ex, "Error fetching Glooko v3 user profile");
             return null;
+        }
+    }
+
+    /// <summary>
+    ///     Builds and installs the tenant's timezone timeline on the shared time mapper for this sync.
+    ///     For V3 accounts it fetches the profile (capturing the home zone and meter units in one call)
+    ///     and seeds the timeline origin from that zone on first sync. When no timezone service is wired
+    ///     or the timeline is empty, conversion falls back to the legacy static offset.
+    /// </summary>
+    private async Task ConfigureTimezoneTimelineAsync(GlookoConnectorConfiguration config, CancellationToken cancellationToken)
+    {
+        if (_timezoneTimelineService is null || _timeMapper is null)
+            return;
+
+        try
+        {
+            if (config.UseV3Api && string.IsNullOrEmpty(_meterUnits))
+                await FetchV3UserProfileAsync();
+
+            if (!string.IsNullOrWhiteSpace(_timezone))
+                await _timezoneTimelineService.EnsureOriginAsync(_timezone, cancellationToken);
+
+            var resolver = await _timezoneTimelineService.GetResolverAsync(config.TimezoneOffset, cancellationToken);
+            _timeMapper.UseTimeline(resolver);
+
+            _logger.LogInformation(
+                "[{ConnectorSource}] Timezone timeline configured (entries present: {HasEntries}, home zone: {Zone})",
+                ConnectorSource, resolver.HasEntries, _timezone ?? "(none)");
+        }
+        catch (Exception ex)
+        {
+            // Never fail a sync over timeline setup — fall back to the static offset.
+            _logger.LogWarning(ex, "[{ConnectorSource}] Failed to configure timezone timeline; using static offset", ConnectorSource);
         }
     }
 

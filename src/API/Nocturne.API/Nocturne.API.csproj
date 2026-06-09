@@ -40,6 +40,7 @@
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="ShiroTrie" />
     <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="SocketIOClient" />
     <PackageReference Include="Wasmtime" />
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Yarp.ReverseProxy" />

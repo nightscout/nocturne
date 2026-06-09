@@ -196,7 +196,9 @@ postgresql:
 # and a `prometheus` / `prometheusremotewrite` exporter; point the chart's
 # observability.otlp.endpoint at the collector.
 #
-# The web container has no OpenTelemetry SDK and is not instrumented here.
+# The web container has its own Node OpenTelemetry SDK, gated on the same
+# OTEL_EXPORTER_OTLP_ENDPOINT. A single observability.otlp.enabled switch wires
+# up both the API and web containers.
 observability:
   otlp:
     enabled: false

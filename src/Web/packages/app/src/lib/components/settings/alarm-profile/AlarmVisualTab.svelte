@@ -33,7 +33,7 @@
   });
 </script>
 
-<div class="space-y-6">
+<div class="space-y-6 @container">
   <!-- Preview Section -->
   <div class="p-4 rounded-lg border bg-muted/30">
     <div class="flex items-center justify-between mb-3">
@@ -62,7 +62,7 @@
   </div>
 
   {#if profile.visual.screenFlash}
-    <div class="grid gap-4 sm:grid-cols-2 p-4 bg-muted/50 rounded-lg">
+    <div class="grid gap-4 @sm:grid-cols-2 p-4 bg-muted/50 rounded-lg">
       <div class="space-y-2">
         <Label>Flash Color</Label>
         <div class="flex items-center gap-2">

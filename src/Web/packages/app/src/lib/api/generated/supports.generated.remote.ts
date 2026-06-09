@@ -19,7 +19,7 @@ export const createIssue = command(async () => {
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to create issue');
@@ -33,13 +33,16 @@ export const getFallbackUrl = query(z.object({ template: z.string().optional(), 
     return await apiClient.support.getFallbackUrl(params?.template, params?.title, params?.body);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in support.getFallbackUrl:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get fallback url');
@@ -54,13 +57,16 @@ export const getSupportConfig = query(async () => {
     return await apiClient.support.getSupportConfig();
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in support.getSupportConfig:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get support config');

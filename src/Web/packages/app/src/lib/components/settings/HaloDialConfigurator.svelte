@@ -80,9 +80,9 @@
     </CardTitle>
     <CardDescription>Configure the halo dial display</CardDescription>
   </CardHeader>
-  <CardContent class="space-y-4">
+  <CardContent class="space-y-4 @container">
     <!-- Section 1: Ring Settings -->
-    <div class="grid gap-4 sm:grid-cols-2">
+    <div class="grid gap-4 @sm:grid-cols-2">
       <div class="space-y-2">
         <Label>Color mode</Label>
         <Select.Root
@@ -160,7 +160,7 @@
     <Separator />
 
     <!-- Section 2: Center & Arcs -->
-    <div class="grid gap-4 sm:grid-cols-2">
+    <div class="grid gap-4 @sm:grid-cols-2">
       <div class="space-y-2">
         <Label>Center sub-element</Label>
         <Select.Root
@@ -234,7 +234,7 @@
             min={1}
             step={0.5}
             value={value.iobMaxUnits}
-            oninput={(e) => {
+            oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
               const n = Number((e.currentTarget as HTMLInputElement).value);
               if (n > 0) update({ iobMaxUnits: n });
             }}
@@ -250,7 +250,7 @@
             min={1}
             step={5}
             value={value.cobMaxGrams}
-            oninput={(e) => {
+            oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
               const n = Number((e.currentTarget as HTMLInputElement).value);
               if (n > 0) update({ cobMaxGrams: n });
             }}
@@ -276,7 +276,7 @@
             type="multiple"
             size="sm"
             value={(value.corners?.[cornerKey] ?? []) as string[]}
-            onValueChange={(v) => updateCorner(cornerKey, v)}
+            onValueChange={(v: string[]) => updateCorner(cornerKey, v)}
           >
             {#each cornerElements as el (el)}
               <ToggleGroup.Item

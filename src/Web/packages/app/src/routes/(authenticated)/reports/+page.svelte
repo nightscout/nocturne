@@ -183,7 +183,7 @@
     </div>
   </div>
 {:else}
-  <div class="min-h-screen">
+  <div class="@container min-h-screen">
     <!-- Hero Section with Key Metrics -->
     <section
       class="relative overflow-hidden bg-linear-to-b from-slate-50 via-white to-transparent pb-8 pt-6 dark:from-slate-900 dark:via-slate-950 dark:to-transparent"
@@ -200,7 +200,7 @@
         ></div>
       </div>
 
-      <div class="container relative mx-auto max-w-6xl px-4">
+      <div class="container relative mx-auto max-w-6xl px-3">
         <!-- Header -->
         <div
           class="mb-8 text-center"
@@ -220,7 +220,7 @@
             })}
           </div>
           <h1
-            class="bg-linear-to-r from-slate-900 via-slate-700 to-slate-800 bg-clip-text text-4xl font-bold tracking-tight text-transparent dark:from-white dark:via-slate-200 dark:to-slate-300 md:text-5xl"
+            class="bg-linear-to-r from-slate-900 via-slate-700 to-slate-800 bg-clip-text text-4xl font-bold tracking-tight text-transparent dark:from-white dark:via-slate-200 dark:to-slate-300 @lg:text-5xl"
           >
             Your Glucose Report
           </h1>
@@ -238,7 +238,7 @@
             in:fly={{ y: 30, duration: 700, delay: 200, easing: cubicOut }}
           >
             <div
-              class="relative overflow-hidden rounded-3xl bg-white p-8 shadow-xl shadow-slate-200/50 dark:bg-slate-900 dark:shadow-none dark:ring-1 dark:ring-white/10"
+              class="relative overflow-hidden rounded-3xl bg-white p-5 shadow-xl shadow-slate-200/50 @lg:p-6 @3xl:p-8 dark:bg-slate-900 dark:shadow-none dark:ring-1 dark:ring-white/10"
             >
               <!-- Gradient accent bar -->
               <div
@@ -248,18 +248,20 @@
                 )}
               ></div>
 
-              <div class="grid items-center gap-8 lg:grid-cols-[1fr,auto,1fr]">
+              <div
+                class="grid items-center gap-6 @3xl:grid-cols-[1fr_auto_1fr] @3xl:gap-8"
+              >
                 <!-- Left: Time in Range highlight -->
-                <div class="text-center lg:text-left">
+                <div class="text-center @3xl:text-left">
                   <div class="mb-1 text-sm font-medium text-muted-foreground">
                     Time in Range
                   </div>
                   <div
-                    class="flex items-baseline justify-center gap-2 lg:justify-start"
+                    class="flex items-baseline justify-center gap-2 @3xl:justify-start"
                   >
                     <span
                       class={cn(
-                        "bg-linear-to-r bg-clip-text text-6xl font-bold tabular-nums text-transparent md:text-7xl",
+                        "bg-linear-to-r bg-clip-text text-6xl font-bold tabular-nums text-transparent @lg:text-7xl",
                         getStatusColor(tirStatus)
                       )}
                     >
@@ -277,7 +279,7 @@
 
                 <!-- Center: TIR Chart -->
                 <div
-                  class="flex justify-center h-96"
+                  class="flex h-64 justify-center @sm:h-72 @3xl:h-96"
                   in:scale={{
                     start: 0.9,
                     duration: 600,
@@ -289,78 +291,84 @@
                 </div>
 
                 <!-- Right: Secondary metrics -->
-                <div class="grid grid-cols-2 gap-4 lg:gap-6">
-                  <div
-                    class="rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
-                  >
+                <div class="space-y-4">
+                  <div class="grid grid-cols-2 gap-3 @sm:gap-4 @3xl:gap-6">
                     <div
-                      class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                      class="min-w-0 rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
                     >
-                      Est. A1C
+                      <div
+                        class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                      >
+                        Est. A1C
+                      </div>
+                      <div
+                        class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
+                      >
+                        {variability?.estimatedA1c?.toFixed(1) ?? "–"}
+                        <span class="text-lg font-normal text-muted-foreground">
+                          %
+                        </span>
+                      </div>
                     </div>
                     <div
-                      class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
+                      class="min-w-0 rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
                     >
-                      {variability?.estimatedA1c?.toFixed(1) ?? "–"}
-                      <span class="text-lg font-normal text-muted-foreground">
-                        %
-                      </span>
+                      <div
+                        class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                      >
+                        Variability
+                      </div>
+                      <div
+                        class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
+                      >
+                        {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}
+                        <span class="text-lg font-normal text-muted-foreground">
+                          %
+                        </span>
+                      </div>
                     </div>
-                    <ReliabilityBadge reliability={analysis?.reliability} />
+                    <div
+                      class="min-w-0 rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
+                    >
+                      <div
+                        class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                      >
+                        Average
+                      </div>
+                      <div
+                        class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
+                      >
+                        {stats?.mean
+                          ? formatGlucoseValue(stats.mean, units)
+                          : "–"}
+                        <span class="text-sm font-normal text-muted-foreground">
+                          {glucoseFormatting.unitLabel}
+                        </span>
+                      </div>
+                    </div>
+                    <div
+                      class="min-w-0 rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
+                    >
+                      <div
+                        class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                      >
+                        Time Low
+                      </div>
+                      <div
+                        class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
+                      >
+                        {((tir?.low ?? 0) + (tir?.veryLow ?? 0)).toFixed(1)}
+                        <span class="text-lg font-normal text-muted-foreground">
+                          %
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div
-                    class="rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
-                  >
-                    <div
-                      class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                    >
-                      Variability
+                  {#if analysis?.reliability?.meetsReliabilityCriteria === false}
+                    <div class="flex justify-center">
+                      <ReliabilityBadge reliability={analysis.reliability} />
                     </div>
-                    <div
-                      class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
-                    >
-                      {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}
-                      <span class="text-lg font-normal text-muted-foreground">
-                        %
-                      </span>
-                    </div>
-                  </div>
-                  <div
-                    class="rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
-                  >
-                    <div
-                      class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                    >
-                      Average
-                    </div>
-                    <div
-                      class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
-                    >
-                      {stats?.mean
-                        ? formatGlucoseValue(stats.mean, units)
-                        : "–"}
-                      <span class="text-sm font-normal text-muted-foreground">
-                        {glucoseFormatting.unitLabel}
-                      </span>
-                    </div>
-                  </div>
-                  <div
-                    class="rounded-2xl bg-slate-50 p-4 text-center dark:bg-slate-800/50"
-                  >
-                    <div
-                      class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                    >
-                      Time Low
-                    </div>
-                    <div
-                      class="mt-1 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-100"
-                    >
-                      {((tir?.low ?? 0) + (tir?.veryLow ?? 0)).toFixed(1)}
-                      <span class="text-lg font-normal text-muted-foreground">
-                        %
-                      </span>
-                    </div>
-                  </div>
+                  {/if}
                 </div>
               </div>
             </div>
@@ -368,13 +376,15 @@
 
           <!-- AGP Preview -->
           <div
-            class="rounded-2xl bg-white p-6 shadow-lg shadow-slate-200/30 dark:bg-slate-900/80 dark:shadow-none dark:ring-1 dark:ring-white/5"
+            class="rounded-2xl bg-white p-4 shadow-lg shadow-slate-200/30 @sm:p-6 dark:bg-slate-900/80 dark:shadow-none dark:ring-1 dark:ring-white/5"
             in:fly={{ y: 30, duration: 600, delay: 350, easing: cubicOut }}
           >
-            <div class="mb-4 flex items-center justify-between">
-              <div>
+            <div
+              class="mb-4 flex flex-col gap-3 @sm:flex-row @sm:items-center @sm:justify-between"
+            >
+              <div class="min-w-0">
                 <h2 class="flex items-center gap-2 text-lg font-semibold">
-                  <Activity class="h-5 w-5 text-muted-foreground" />
+                  <Activity class="h-5 w-5 shrink-0 text-muted-foreground" />
                   Your Typical Day
                 </h2>
                 <p class="text-sm text-muted-foreground">
@@ -385,13 +395,13 @@
                 href="/reports/agp"
                 variant="ghost"
                 size="sm"
-                class="gap-1.5"
+                class="shrink-0 gap-1.5 self-start @sm:self-auto"
               >
                 Full Report
                 <ArrowRight class="h-4 w-4" />
               </Button>
             </div>
-            <div class="h-56">
+            <div class="h-64">
               <AmbulatoryGlucoseProfile {averagedStats} />
             </div>
           </div>
@@ -417,7 +427,7 @@
     </section>
 
     <!-- Quick Actions -->
-    <section class="container mx-auto max-w-6xl px-4 py-6">
+    <section class="container mx-auto max-w-6xl px-3 py-6">
       <div
         class="flex flex-wrap items-center justify-center gap-3"
         in:fly={{ y: 20, duration: 500, delay: 450, easing: cubicOut }}
@@ -449,7 +459,7 @@
     </section>
 
     <!-- Report Categories -->
-    <section class="container mx-auto max-w-6xl px-4 pb-16 pt-8">
+    <section class="container mx-auto max-w-6xl px-3 pb-16 pt-8">
       <div
         class="mb-10 text-center"
         in:fly={{ y: 20, duration: 500, delay: 500, easing: cubicOut }}
@@ -460,7 +470,7 @@
         </p>
       </div>
 
-      <div class="grid gap-6 md:grid-cols-2" {@attach coachmark({
+      <div class="grid gap-6 @3xl:grid-cols-2" {@attach coachmark({
         key: "setup-reports.categories",
         title: "Start with Executive Summary",
         description: "It combines your key metrics into a single page \u2014 great for clinic visits or sharing with your endo.",
@@ -557,7 +567,7 @@
     </section>
 
     <!-- Footer Note -->
-    <section class="container mx-auto max-w-6xl px-4 pb-12">
+    <section class="container mx-auto max-w-6xl px-3 pb-12">
       <div
         class="rounded-2xl bg-slate-50 p-6 text-center dark:bg-slate-900/50"
         in:fade={{ duration: 400, delay: 800 }}

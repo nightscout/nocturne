@@ -14,4 +14,12 @@ public interface IDevicePublisher
         IEnumerable<DeviceEvent> records,
         string source,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the timestamp of the most recent device-status record for the current tenant,
+    /// used by connectors to resume catch-up from where they left off, or <c>null</c> if none exist.
+    /// </summary>
+    Task<DateTime?> GetLatestDeviceStatusTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default);
 }

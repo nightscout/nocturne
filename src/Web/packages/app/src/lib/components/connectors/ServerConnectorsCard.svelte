@@ -33,6 +33,7 @@
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import { mapConnectorStatus } from "$lib/utils/connector-display";
+  import type { SyncMessageType } from "$lib/websocket/types";
 
   interface SyncProgress {
     phase: string;
@@ -40,6 +41,8 @@
     completedDataTypes: string[];
     totalDataTypes: number;
     itemsSyncedSoFar: Record<string, number>;
+    messageType: SyncMessageType | null;
+    messageParams: Record<string, string> | null;
   }
 
   interface Props {
@@ -96,9 +99,9 @@
   }
 </script>
 
-<Card>
+<Card class="@container">
   <CardHeader>
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
       <div>
         <CardTitle class="flex items-center gap-2">
           <Cloud class="h-5 w-5" />
@@ -144,7 +147,7 @@
     </div>
   </CardHeader>
   <CardContent>
-    <div class="grid gap-3 sm:grid-cols-2">
+    <div class="grid gap-3 @xl:grid-cols-2">
       {#each availableConnectors as connector}
         {@const connectorStatusInfo = connectorStatuses.find(
           (cs) => cs.id === connector.id
@@ -189,7 +192,7 @@
                   size="icon"
                   class="absolute right-3 top-1/2 -translate-y-1/2"
                   disabled={quickSyncingById[connector.id] === true}
-                  onclick={(event) => {
+                  onclick={(event: MouseEvent) => {
                     event.stopPropagation();
                     onQuickSync(connector.id!);
                   }}
@@ -279,7 +282,7 @@
                 <Button
                   variant="ghost"
                   size="sm"
-                  onclick={(e) => e.stopPropagation()}
+                  onclick={(e: MouseEvent) => e.stopPropagation()}
                 >
                   <a
                     href={connector.documentationUrl}

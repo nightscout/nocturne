@@ -219,7 +219,7 @@
       <Dialog.Title>Edit Food Entry</Dialog.Title>
     </Dialog.Header>
 
-    <form class="space-y-4" onsubmit={handleSubmit}>
+    <form class="@container space-y-4" onsubmit={handleSubmit}>
 
       {#if entry}
         <!-- Show carbs context -->
@@ -268,7 +268,7 @@
           {/if}
         </div>
 
-        <div class="grid gap-4 md:grid-cols-2">
+        <div class="grid gap-4 @lg:grid-cols-2">
           {#if !isOtherEntry}
             <div class="space-y-2">
               <Label for="edit-portions">Portions</Label>
@@ -278,7 +278,7 @@
                 step="0.1"
                 min="0"
                 value={editPortions}
-                oninput={(e) =>
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
                   handlePortionsChange(parseFloat(e.currentTarget.value) || 0)}
               />
             </div>
@@ -291,7 +291,7 @@
               step="0.1"
               min="0"
               value={editCarbs}
-              oninput={(e) =>
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
                 handleCarbsChange(parseFloat(e.currentTarget.value) || 0)}
             />
           </div>
@@ -311,7 +311,7 @@
           </Button>
         {/if}
 
-        <div class="grid gap-4 md:grid-cols-2">
+        <div class="grid gap-4 @lg:grid-cols-2">
           <div class="space-y-2">
             <Label for="edit-offset">Time offset (min)</Label>
             <Input

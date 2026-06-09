@@ -29,7 +29,7 @@
           </div>
         </div>
       </CardHeader>
-      <CardContent class="space-y-4">
+      <CardContent class="space-y-4 @container">
         <!-- Vary the content based on card index for visual variety -->
         {#if i % 3 === 0}
           <!-- Toggle rows -->
@@ -49,7 +49,7 @@
           </div>
         {:else if i % 3 === 1}
           <!-- Grid of inputs -->
-          <div class="grid gap-4 sm:grid-cols-2">
+          <div class="grid gap-4 @sm:grid-cols-2">
             <div class="space-y-2">
               <Skeleton class="h-4 w-24" />
               <Skeleton class="h-10 w-full rounded-md" />

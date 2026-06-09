@@ -1,0 +1,65 @@
+name: "CodeQL Advanced"
+
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      # Regenerated on every API change — no human-authored code to scan
+      - "src/Web/packages/app/src/lib/api/generated/**"
+      # Compiled translation outputs — not source code
+      - "src/Web/locales/**"
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '17 13 * * 6'
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
+    # Skip bot-authored pushes (e.g. the regenerate API client commit) even if
+    # paths-ignore didn't catch it (e.g. a regenerate commit that also touches
+    # other files).
+    if: github.actor != 'github-actions[bot]'
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - language: actions
+          build-mode: none
+        - language: csharp
+          build-mode: none
+        - language: javascript-typescript
+          build-mode: none
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.build-mode }}
+
+    - name: Run manual build steps
+      if: matrix.build-mode == 'manual'
+      shell: bash
+      run: |
+        echo 'If you are using a "manual" build mode for one or more of the' \
+          'languages you are analyzing, replace this with the commands to build' \
+          'your code, for example:'
+        echo '  make bootstrap'
+        echo '  make release'
+        exit 1
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4
+      with:
+        category: "/language:${{matrix.language}}"

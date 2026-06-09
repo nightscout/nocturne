@@ -29,6 +29,7 @@ internal sealed class ChatBotProvider(
         ChannelType.TelegramDm,
         ChannelType.TelegramGroup,
         ChannelType.WhatsAppDm,
+        ChannelType.ResendEmail,
     ];
 
     /// <summary>

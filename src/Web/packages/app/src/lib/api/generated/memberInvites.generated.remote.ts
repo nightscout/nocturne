@@ -5,8 +5,8 @@
 import { getRequestEvent, query, command } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
-import { SetMemberRolesRequestSchema, SetMemberPermissionsRequestSchema, SetMemberLimitTo24HoursRequestSchema, SetPublicAccessRequestSchema } from '$lib/api/generated/schemas';
-import { type SetMemberRolesRequest, type SetMemberPermissionsRequest, type SetMemberLimitTo24HoursRequest, type SetPublicAccessRequest } from '$api';
+import { SetMemberRolesRequestSchema, SetMemberPermissionsRequestSchema, SetMemberLimitTo24HoursRequestSchema } from '$lib/api/generated/schemas';
+import { type SetMemberRolesRequest, type SetMemberPermissionsRequest, type SetMemberLimitTo24HoursRequest } from '$api';
 
 /** Get invite info for the accept page (anonymous). */
 export const getInviteInfo = query(z.string(), async (token) => {
@@ -15,13 +15,16 @@ export const getInviteInfo = query(z.string(), async (token) => {
     return await apiClient.memberInvite.getInviteInfo(token);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in memberInvite.getInviteInfo:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get invite info');
@@ -42,7 +45,7 @@ export const acceptInvite = command(z.string(), async (token) => {
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to accept invite');
@@ -56,13 +59,16 @@ export const getMembers = query(async () => {
     return await apiClient.memberInvite.getMembers();
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in memberInvite.getMembers:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get members');
@@ -76,13 +82,16 @@ export const getFollowers = query(async () => {
     return await apiClient.memberInvite.getFollowers();
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in memberInvite.getFollowers:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get followers');
@@ -106,7 +115,7 @@ export const setMemberRoles = command(z.object({ id: z.string(), request: SetMem
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to set member roles');
@@ -130,7 +139,7 @@ export const setMemberPermissions = command(z.object({ id: z.string(), request: 
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to set member permissions');
@@ -144,13 +153,16 @@ export const getEffectivePermissions = query(z.string(), async (id) => {
     return await apiClient.memberInvite.getEffectivePermissions(id);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in memberInvite.getEffectivePermissions:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get effective permissions');
@@ -174,34 +186,9 @@ export const setMemberLimitTo24Hours = command(z.object({ id: z.string(), reques
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to set member limit to24 hours');
-  }
-});
-
-/** Toggle public (unauthenticated) read access for this tenant.
-Assigns or removes the viewer role on the Public system subject. */
-export const setPublicAccess = command(SetPublicAccessRequestSchema, async (request) => {
-  const apiClient = getRequestEvent().locals.apiClient;
-  try {
-    await apiClient.memberInvite.setPublicAccess(request as SetPublicAccessRequest);
-    await Promise.all([
-      getMembers(undefined).refresh()
-    ]);
-    return { success: true };
-  } catch (err) {
-    const status = (err as any)?.status;
-    if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
-    console.error('Error in memberInvite.setPublicAccess:', err);
-    const e = err as any;
-    const body = e?.body ?? e?.response;
-    const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
-    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
-    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, message ?? 'Failed to set public access');
   }
 });

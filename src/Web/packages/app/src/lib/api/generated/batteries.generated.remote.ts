@@ -13,13 +13,16 @@ export const getCurrentBatteryStatus = query(z.object({ recentMinutes: z.number(
     return await apiClient.battery.getCurrentBatteryStatus(params?.recentMinutes);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in battery.getCurrentBatteryStatus:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get current battery status');
@@ -33,13 +36,16 @@ export const getBatteryReadings = query(z.object({ device: z.string().optional()
     return await apiClient.battery.getBatteryReadings(params?.device, params?.from, params?.to);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in battery.getBatteryReadings:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get battery readings');
@@ -53,13 +59,16 @@ export const getBatteryStatistics = query(z.object({ device: z.string().optional
     return await apiClient.battery.getBatteryStatistics(params?.device, params?.from, params?.to);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in battery.getBatteryStatistics:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get battery statistics');
@@ -73,13 +82,16 @@ export const getChargeCycles = query(z.object({ device: z.string().optional(), f
     return await apiClient.battery.getChargeCycles(params?.device, params?.from, params?.to, params?.limit);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in battery.getChargeCycles:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get charge cycles');
@@ -93,13 +105,16 @@ export const getKnownDevices = query(async () => {
     return await apiClient.battery.getKnownDevices();
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in battery.getKnownDevices:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get known devices');

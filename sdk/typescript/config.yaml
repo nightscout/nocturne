@@ -5,6 +5,8 @@ globalProperties:
 additionalProperties:
   npmName: "@nightscoutfoundation/nocturne"
   npmVersion: "0.1.0"
+  gitUserId: "nightscout"
+  gitRepoId: "nocturne"
   supportsES6: true
   typescriptThreePlus: true
   withInterfaces: true

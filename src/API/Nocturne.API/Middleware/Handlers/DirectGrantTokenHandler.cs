@@ -70,6 +70,7 @@ public class DirectGrantTokenHandler : IAuthHandler
         var tokenHash = ComputeSha256Hex(token);
 
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+        dbContext.TenantId = tenantCtx.TenantId;
 
         var grant = await dbContext.OAuthGrants
             .AsNoTracking()
@@ -89,7 +90,7 @@ public class DirectGrantTokenHandler : IAuthHandler
         // Update last used metadata (fire and forget via separate context)
         var ipAddress = context.Connection.RemoteIpAddress?.ToString();
         var userAgent = context.Request.Headers.UserAgent.FirstOrDefault();
-        _ = UpdateLastUsedAsync(grant.Id, ipAddress, userAgent);
+        _ = UpdateLastUsedAsync(grant.Id, tenantCtx.TenantId, ipAddress, userAgent);
 
         _logger.LogDebug("Direct grant authentication successful for grant {GrantId}, subject {SubjectId}",
             grant.Id, grant.SubjectId);
@@ -105,11 +106,12 @@ public class DirectGrantTokenHandler : IAuthHandler
         });
     }
 
-    private async Task UpdateLastUsedAsync(Guid grantId, string? ipAddress, string? userAgent)
+    private async Task UpdateLastUsedAsync(Guid grantId, Guid tenantId, string? ipAddress, string? userAgent)
     {
         try
         {
             await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+            dbContext.TenantId = tenantId;
             await dbContext.OAuthGrants
                 .IgnoreQueryFilters()
                 .Where(g => g.Id == grantId)

@@ -86,25 +86,23 @@
   {:else}
     <!-- Pending foods for new carb intakes -->
     <div class="rounded-lg border p-4 space-y-3">
-      <div class="flex items-center justify-between">
-        <div class="space-y-1">
-          <div class="text-sm font-semibold">Foods</div>
-          <div class="text-xs text-muted-foreground">
-            Link foods to this carb intake.
-          </div>
+      <div class="space-y-1">
+        <div class="text-sm font-semibold">Foods</div>
+        <div class="text-xs text-muted-foreground">
+          Link foods to this carb intake.
         </div>
-        <Button type="button" size="sm" onclick={() => (showAddFood = true)}>
-          <Plus class="mr-1 h-4 w-4" />
-          Add Food
-        </Button>
       </div>
 
       {#if pendingFoods.length === 0}
-        <div
-          class="rounded-md border border-dashed p-4 text-sm text-muted-foreground"
+        <Button
+          type="button"
+          variant="ghost"
+          onclick={() => (showAddFood = true)}
+          class="h-auto w-full justify-center rounded-md border border-dashed p-4 text-sm font-normal text-muted-foreground"
         >
-          No foods added yet.
-        </div>
+          <Plus class="mr-1.5 h-4 w-4" />
+          Add a food to this carb entry
+        </Button>
       {:else}
         <div class="space-y-2">
           {#each pendingFoods as food, index (index)}
@@ -138,6 +136,16 @@
             </Badge>
           </div>
         {/if}
+
+        <Button
+          type="button"
+          variant="ghost"
+          onclick={() => (showAddFood = true)}
+          class="h-auto w-full justify-center rounded-md border border-dashed p-3 text-sm font-normal text-muted-foreground"
+        >
+          <Plus class="mr-1.5 h-4 w-4" />
+          Add food
+        </Button>
       {/if}
     </div>
 

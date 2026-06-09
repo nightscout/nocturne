@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
@@ -196,6 +197,7 @@ public class TreatmentsController : ControllerBase
     /// <returns>Created treatments with assigned IDs</returns>
     [HttpPost]
     [Authorize]
+    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v1/treatments")]
     [ProducesResponseType(typeof(Treatment[]), 200)]
     [ProducesResponseType(400)]
@@ -303,6 +305,7 @@ public class TreatmentsController : ControllerBase
     /// <returns>Updated treatment</returns>
     [HttpPut("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v1/treatments/:id")]
     [ProducesResponseType(typeof(Treatment), 200)]
     [ProducesResponseType(404)]
@@ -379,6 +382,7 @@ public class TreatmentsController : ControllerBase
     /// <returns>Success status</returns>
     [HttpDelete("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v1/treatments/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
@@ -429,6 +433,7 @@ public class TreatmentsController : ControllerBase
     /// <returns>Number of treatments deleted</returns>
     [HttpDelete]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v1/treatments")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(400)]

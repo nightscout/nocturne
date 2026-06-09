@@ -173,7 +173,7 @@
     const sign = d > 0 ? "+" : "";
     return `${sign}${d.toFixed(0)}`;
   }
-  function fmtMinutes(ms: number): string {
+  function fmtMinutes(_ms: number): string {
     if (lastUpdated === 0) return "—";
     const mins = Math.floor((now - lastUpdated) / 60000);
     if (mins < 1) return "now";

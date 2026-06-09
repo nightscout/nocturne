@@ -279,5 +279,13 @@ public enum AuthType
     /// <summary>
     /// Guest session (temporary read-only access via guest code)
     /// </summary>
-    Guest
+    Guest,
+
+    /// <summary>
+    /// Platform-admin tenant access. A short-lived, tenant-pinned grant minted by
+    /// <c>PlatformAccessController</c> that lets a platform admin act on a tenant they
+    /// are not a member of, with full (superuser) permissions. Distinct from a normal
+    /// session so audit entries are marked as out-of-tenant platform access.
+    /// </summary>
+    PlatformAccess
 }

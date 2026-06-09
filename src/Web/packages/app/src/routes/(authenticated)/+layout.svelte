@@ -35,7 +35,7 @@
   // WebSocket config - defaults, can be overridden in production
   const config = {
     url: typeof window !== "undefined" ? window.location.origin : "",
-    reconnectAttempts: 10,
+    reconnectAttempts: Infinity,
     reconnectDelay: 5000,
     maxReconnectDelay: 30000,
     pingTimeout: 60000,
@@ -207,9 +207,9 @@
 <CoachMarkProvider adapter={coachMarkAdapter} {sequences} onBeforeNavigate={beforeNavigate}>
   <CoachParamHandler />
   <Sidebar.Provider>
-    <AppSidebar user={data.user} tenantCount={data.tenantCount} effectivePermissions={data.effectivePermissions} isPlatformAdmin={data.isPlatformAdmin} isGuestSession={data.isGuestSession} />
-    <MobileHeader />
+    <AppSidebar user={data.user} effectivePermissions={data.effectivePermissions} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} />
     <Sidebar.Inset>
+      <MobileHeader />
       {#if data.isDemo}
         <DemoBanner nextResetAt={data.nextResetAt} />
       {/if}

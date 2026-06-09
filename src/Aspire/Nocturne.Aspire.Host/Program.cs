@@ -7,10 +7,10 @@ using Aspire.Hosting.Yarp.Transforms;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Nocturne.Aspire.Host;
+using Nocturne.Aspire.Host.Publishing;
 using Nocturne.Aspire.Hosting;
 using Nocturne.Aspire.Scalar;
 using Nocturne.Core.Constants;
-using Scalar.Aspire;
 using Yarp.ReverseProxy.Transforms;
 
 class Program
@@ -25,10 +25,6 @@ class Program
         // ------------------------------------------------------------------
         var includeDashboard = builder.Configuration.GetValue(
             "Aspire:OptionalServices:AspireDashboard:Enabled",
-            true
-        );
-        var includeScalar = builder.Configuration.GetValue(
-            "Aspire:OptionalServices:Scalar:Enabled",
             true
         );
         var enableWatchtower = builder.Configuration.GetValue(
@@ -75,12 +71,17 @@ class Program
             // (or env var Parameters__postgres-username) automatically.
             var postgresUsername = builder.AddParameter(
                 ServiceNames.Parameters.PostgresUsername,
+                ServiceNames.Defaults.PostgresUsername,
                 secret: false
-            );
+            ).WithPublishMetadata(
+                "PostgreSQL bootstrap username",
+                defaultValue: ServiceNames.Defaults.PostgresUsername);
             var postgresPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresPassword,
                 secret: true
-            );
+            ).WithPublishMetadata(
+                "PostgreSQL bootstrap password",
+                "Used only at first container start to create runtime roles");
 
             // Non-bootstrap role passwords. The Postgres container's init
             // script reads them via env vars and creates nocturne_migrator
@@ -88,15 +89,21 @@ class Program
             postgresMigratorPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresMigratorPassword,
                 secret: true
-            );
+            ).WithPublishMetadata(
+                "Migrator role password",
+                "Password for nocturne_migrator — owns the schema, runs EF migrations");
             postgresAppPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresAppPassword,
                 secret: true
-            );
+            ).WithPublishMetadata(
+                "App role password",
+                "Password for nocturne_app — runtime role, cannot bypass Row Level Security");
             postgresWebPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresWebPassword,
                 secret: true
-            );
+            ).WithPublishMetadata(
+                "Web role password",
+                "Password for nocturne_web — bot-framework state, cannot bypass Row Level Security");
 
             // Container init lives in docs/postgres/container-init. Only
             // 00-init.sh is mounted into /docker-entrypoint-initdb.d so the
@@ -195,7 +202,10 @@ class Program
         // Secret parameters. AddParameter handles dashboard prompting and
         // env var override (Parameters__name) for free.
         // ------------------------------------------------------------------
-        var instanceKey = builder.AddParameter(ServiceNames.Parameters.InstanceKey, secret: true);
+        var instanceKey = builder.AddParameter(ServiceNames.Parameters.InstanceKey, secret: true)
+            .WithPublishMetadata(
+                "Instance key",
+                "Minimum 12 characters — used for JWT signing and service authentication");
 
         // Discord bot credentials. Optional — only required if Discord bot
         // features are enabled for a deployment. Empty-string defaults let
@@ -213,7 +223,10 @@ class Program
         // Platform base domain — the single hostname all services derive URLs from.
         // Production should set this to e.g. "nocturne.run" via user-secrets.
         // Injected as "BaseDomain" into both the API and SvelteKit.
-        var baseDomain = builder.AddParameter("base-domain", "");
+        var baseDomain = builder.AddParameter("base-domain", "")
+            .WithPublishMetadata(
+                "Base domain",
+                "Root domain only, e.g. example.com (not app.example.com — subdomains are generated per tenant)");
 
         // Chat platform credentials. All optional — a deployment that only
         // uses Discord shouldn't need to supply Telegram/Slack/WhatsApp
@@ -237,16 +250,51 @@ class Program
             secret: false
         );
 
+        // OpenTelemetry export. Optional and off by default: the OTLP exporters
+        // (API .NET SDK and web Node SDK) only start when the endpoint is set, so
+        // an empty default means telemetry is collected in-process and dropped
+        // with negligible overhead. Wired into the API and web containers in
+        // publish mode only — in run mode Aspire injects its own dashboard
+        // endpoint, which we must not override. Protocol defaults to grpc so the
+        // .NET and Node SDKs agree (their out-of-the-box defaults differ).
+        var otelExporterEndpoint = builder.AddParameter("otel-exporter-otlp-endpoint", "", secret: false)
+            .WithPublishMetadata(
+                "OpenTelemetry OTLP endpoint",
+                "Collector URL to export metrics/traces/logs to, e.g. http://otel-collector:4317. Leave empty to disable telemetry.");
+        var otelExporterProtocol = builder.AddParameter("otel-exporter-otlp-protocol", "grpc", secret: false)
+            .WithPublishMetadata(
+                "OpenTelemetry OTLP protocol",
+                "grpc (port 4317) or http/protobuf (port 4318). Only used when the endpoint is set.",
+                defaultValue: "grpc");
+
         // ------------------------------------------------------------------
         // Nocturne API
         // ------------------------------------------------------------------
         var api = builder
+            // Run mode: no port → Aspire assigns a dynamic one. Publish mode:
+            // pin the in-container listen port so the generated compose bakes a
+            // concrete http://nocturne-api:8080 (mirrors the web service's fixed
+            // internal port) instead of an empty NOCTURNE_API_PORT placeholder.
+            // This port is never host-published — YARP is the only entry point.
             .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
-            .WithHttpEndpoint(name: "http")
+            .WithHttpEndpoint(
+                name: "http",
+                targetPort: builder.ExecutionContext.IsPublishMode ? 8080 : null)
             .PublishAsDockerComposeService((_, _) => { })
             .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
             .WithRemoteImageTag("latest")
+            .WithPublishImageMetadata(
+                imageLabel: "API image",
+                imageDefault: "ghcr.io/nightscout/nocturne/nocturne-api:latest")
             .WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
+
+        // Operator-supplied OTLP export (publish mode only — run mode uses
+        // Aspire's auto-injected dashboard endpoint). Empty endpoint = disabled.
+        if (builder.ExecutionContext.IsPublishMode)
+        {
+            api.WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", otelExporterEndpoint)
+                .WithEnvironment("OTEL_EXPORTER_OTLP_PROTOCOL", otelExporterProtocol);
+        }
 
         if (
             managedDatabase != null
@@ -341,7 +389,10 @@ class Program
                 .WithEnvironment("WHATSAPP_APP_SECRET", whatsappAppSecret)
                 .WithEnvironment("WHATSAPP_PHONE_NUMBER_ID", whatsappPhoneNumberId);
             // PUBLIC_DEFAULT_LANGUAGE comes from the web app's own .env.
-            // OTEL_EXPORTER_OTLP_ENDPOINT is injected by Aspire automatically.
+            // OTEL_EXPORTER_OTLP_ENDPOINT: in run mode Aspire injects the
+            // dashboard endpoint automatically; in publish mode the operator-
+            // supplied otel-exporter-otlp-endpoint param is wired on the
+            // publish-mode (dockerWeb) branch below.
         }
 
         IResourceBuilder<IResourceWithEndpoints> web;
@@ -384,7 +435,10 @@ class Program
                 .WaitFor(api)
                 .PublishAsDockerComposeService((_, _) => { })
                 .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-web")
-                .WithRemoteImageTag("latest");
+                .WithRemoteImageTag("latest")
+                .WithPublishImageMetadata(
+                    imageLabel: "Web image",
+                    imageDefault: "ghcr.io/nightscout/nocturne/nocturne-web:latest");
 
             ConfigureWebEnvironment(dockerWeb);
 
@@ -395,6 +449,12 @@ class Program
                 "ORIGIN",
                 ReferenceExpression.Create($"https://{baseDomain}")
             );
+
+            // Operator-supplied OTLP export, mirroring the API. The web's Node
+            // SDK (instrumentation.server.ts) starts only when the endpoint is
+            // set. Run-mode (viteWeb) keeps Aspire's auto-injected endpoint.
+            dockerWeb.WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", otelExporterEndpoint)
+                .WithEnvironment("OTEL_EXPORTER_OTLP_PROTOCOL", otelExporterProtocol);
 
             if (postgresServer != null && postgresWebPassword != null)
             {
@@ -410,64 +470,9 @@ class Program
 
         // API needs WEB_URL to POST chat bot alert dispatches to the SvelteKit app
         api.WithEnvironment("WEB_URL", web.GetEndpoint("http"));
+        api.WithEnvironment("SCALAR_CUSTOM_CSS", NocturneScalarTheme.Build(solutionRoot));
 
         var webEndpoints = (IResourceBuilder<IResourceWithEndpoints>)web;
-
-        // ------------------------------------------------------------------
-        // Scalar API reference (optional)
-        // ------------------------------------------------------------------
-        IResourceBuilder<IResourceWithEndpoints>? scalar = null;
-        IResourceBuilder<IResourceWithEndpoints>? scalarBootstrap = null;
-        if (includeScalar)
-        {
-            var scalarResource = builder
-                .AddScalarApiReference(
-                    "scalar",
-                    options =>
-                    {
-                        options.WithTheme(ScalarTheme.Mars);
-                        options.WithCustomCss(NocturneScalarTheme.Build(solutionRoot));
-                        options.EnablePersistentAuthentication();
-                        options.AddPreferredSecuritySchemes("oauth2");
-                        options.AddAuthorizationCodeFlow(
-                            "oauth2",
-                            flow =>
-                            {
-                                flow.WithAuthorizationUrl("/api/oauth/authorize");
-                                flow.WithTokenUrl("/api/oauth/token");
-                                flow.WithPkce(Pkce.Sha256);
-                                flow.WithSelectedScopes(["*"]);
-                            }
-                        );
-                    }
-                )
-                .WithApiReference(
-                    api,
-                    options =>
-                    {
-                        options
-                            .AddDocument("nocturne", "Nocturne API")
-                            .AddDocument("nightscout", "Nightscout API")
-                            .WithOpenApiRoutePattern("/openapi/{documentName}.json");
-                    }
-                );
-
-            scalar = scalarResource;
-
-            // Tiny ASP.NET reverse proxy that fronts the Scalar.Aspire
-            // sidecar and splices MermaidLazyLoader.HeadContent into the
-            // Scalar HTML head. Needed because Scalar.Aspire 0.8.x has no
-            // head-content hook and Aspire.Hosting.Yarp can't do body
-            // rewriting (JSON-config transforms only).
-            scalarBootstrap = builder
-                .AddProject<Projects.Nocturne_Aspire_ScalarBootstrap>(
-                    "scalar-bootstrap",
-                    launchProfileName: null
-                )
-                .WithHttpEndpoint(name: "http")
-                .WithReference(scalarResource)
-                .WaitFor(scalarResource);
-        }
 
         // ------------------------------------------------------------------
         // YARP Gateway — single external HTTPS endpoint fronting all services.
@@ -543,6 +548,13 @@ class Program
                 yarp.AddRoute("/api/v4/dev-only/{**catch-all}", api.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
+                // Platform-admin tenant-access grant → API (sets the .basedomain grant cookie on a
+                // browser navigation; must come before /api/ → web catch-all)
+                yarp.AddRoute("/api/auth/platform-access/{**catch-all}", api.GetEndpoint("http"))
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                yarp.AddRoute("/api/auth/platform-access", api.GetEndpoint("http"))
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+
                 // Bot webhooks, remote functions → web
                 yarp.AddRoute("/api/{**catch-all}", webEndpoints.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
@@ -551,28 +563,11 @@ class Program
                 yarp.AddRoute("/auth/bot/{**catch-all}", webEndpoints.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
-                // API docs (Scalar UI)
-                // When the Scalar Aspire container is running (dev with OAuth PKCE),
-                // proxy to it. Otherwise, the API serves Scalar natively.
-                if (scalarBootstrap != null && scalar != null)
-                {
-                    // /scalar/* goes via the bootstrap (HTML rewriter), which
-                    // forwards to the Scalar sidecar. /scalar-proxy/* skips
-                    // the rewriter — those are runtime API requests proxied
-                    // by Scalar back to the API and can be large.
-                    yarp.AddRoute("/scalar/{**catch-all}", scalarBootstrap.GetEndpoint("http"))
-                        .WithTransformPathRemovePrefix("/scalar")
-                        .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
-                    yarp.AddRoute("/scalar-proxy/{**catch-all}", scalar.GetEndpoint("http"))
-                        .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
-                }
-                else
-                {
-                    yarp.AddRoute("/scalar", api.GetEndpoint("http"))
-                        .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
-                    yarp.AddRoute("/scalar/{**catch-all}", api.GetEndpoint("http"))
-                        .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
-                }
+                // API docs (Scalar UI) — served directly by the API via Scalar.AspNetCore
+                yarp.AddRoute("/scalar", api.GetEndpoint("http"))
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                yarp.AddRoute("/scalar/{**catch-all}", api.GetEndpoint("http"))
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
                 yarp.AddRoute("/openapi/{**catch-all}", api.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
@@ -675,6 +670,16 @@ class Program
                 .WithEnvironment("WATCHTOWER_INCLUDE_STOPPED", "false")
                 .WithEnvironment("WATCHTOWER_REVIVE_STOPPED", "false")
                 .PublishAsDockerComposeService((_, _) => { });
+        }
+
+        // These steps depend on the "publish-compose" pipeline step, which only
+        // exists in publish mode: AddDockerComposeEnvironment does not add the
+        // environment resource (the step's provider) to the model in run mode, so
+        // registering them in run mode fails pipeline validation during startup.
+        if (builder.ExecutionContext.IsPublishMode)
+        {
+            builder.AddMermaidDiagramPublisher();
+            builder.AddPortainerComposePublisher();
         }
 
         var app = builder.Build();

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -17,16 +18,16 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alert-sounds")]
 public class AlertCustomSoundsController : ControllerBase
 {
-    private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
+    private readonly ITenantDbContextFactory _contextFactory;
     private readonly ILogger<AlertCustomSoundsController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertCustomSoundsController"/>.
     /// </summary>
-    /// <param name="contextFactory">Factory for creating <see cref="NocturneDbContext"/> instances.</param>
+    /// <param name="contextFactory">Tenant-scoped factory for creating <see cref="NocturneDbContext"/> instances.</param>
     /// <param name="logger">Logger instance.</param>
     public AlertCustomSoundsController(
-        IDbContextFactory<NocturneDbContext> contextFactory,
+        ITenantDbContextFactory contextFactory,
         ILogger<AlertCustomSoundsController> logger)
     {
         _contextFactory = contextFactory;
@@ -53,7 +54,7 @@ public class AlertCustomSoundsController : ControllerBase
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms, ct);
 
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var entity = new AlertCustomSoundEntity
         {
@@ -89,7 +90,7 @@ public class AlertCustomSoundsController : ControllerBase
     [ProducesResponseType(typeof(List<AlertCustomSoundResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<AlertCustomSoundResponse>>> GetSounds(CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var sounds = await db.AlertCustomSounds
             .AsNoTracking()
@@ -115,7 +116,7 @@ public class AlertCustomSoundsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> StreamSound(Guid id, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var entity = await db.AlertCustomSounds
             .AsNoTracking()
@@ -137,7 +138,7 @@ public class AlertCustomSoundsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteSound(Guid id, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var entity = await db.AlertCustomSounds
             .FirstOrDefaultAsync(s => s.Id == id, ct);

@@ -40,9 +40,18 @@ public class SessionService : ISessionService
             Email = subject.Email,
         };
 
+        // Tag the session with a stable id so a token chain can be revoked on its own.
+        // Prefer the identity provider's session id (`sid`) when present — it ties us to the
+        // provider's session for front-channel logout — otherwise mint our own. Most providers
+        // (e.g. Google) omit `sid`, and the passkey/TOTP/setup paths have none, so without this
+        // the id would be null and reuse detection could only revoke a subject's entire fleet.
+        var oidcSessionId = string.IsNullOrEmpty(context.OidcSessionId)
+            ? Guid.CreateVersion7().ToString("N")
+            : context.OidcSessionId;
+
         var accessToken = _jwtService.GenerateAccessToken(subjectInfo, permissions, roles);
         var refreshToken = await _refreshTokenService.CreateRefreshTokenAsync(
-            subjectId, context.OidcSessionId, context.DeviceDescription,
+            subjectId, oidcSessionId, context.DeviceDescription,
             context.IpAddress, context.UserAgent);
         var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
 

@@ -410,7 +410,7 @@
 {/snippet}
 
 {#snippet expandedDetailSnippet({ row }: { row: ReadAccessAuditDto })}
-  <div class="grid grid-cols-1 gap-3 px-4 py-3 text-sm sm:grid-cols-2">
+  <div class="@container grid grid-cols-1 gap-3 px-4 py-3 text-sm @sm:grid-cols-2">
     {#if row.authType}
       <div>
         <span class="font-medium text-muted-foreground">Auth Type</span>
@@ -428,7 +428,7 @@
     {#if row.queryParameters}
       {@const params = parseQueryParameters(row.queryParameters)}
       {#if Object.keys(params).length > 0}
-        <div class="sm:col-span-2">
+        <div class="@sm:col-span-2">
           <span class="font-medium text-muted-foreground"
             >Query Parameters</span
           >

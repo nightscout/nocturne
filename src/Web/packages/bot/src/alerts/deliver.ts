@@ -5,18 +5,29 @@ import { createLogger } from "../lib/logger.js";
 
 const logger = createLogger();
 
+const DIRECT_CHANNEL_TYPES = new Set([
+  "discord_dm",
+  "slack_dm",
+  "telegram_dm",
+  "whatsapp_dm",
+  "resend_email",
+]);
+
 export class AlertDeliveryHandler {
   constructor(
     private bot: Chat,
     private api: BotApiClient,
   ) {}
 
+  private isDirect(channelType: string): boolean {
+    return DIRECT_CHANNEL_TYPES.has(channelType);
+  }
+
   async deliver(event: AlertDispatchEvent): Promise<void> {
     const { deliveryId, channelType, destination, payload } = event;
 
     try {
-      const isDM = channelType.endsWith("_dm");
-      const target = isDM
+      const target = this.isDirect(channelType)
         ? await this.bot.openDM(destination)
         : this.bot.channel(destination);
 

@@ -21,16 +21,16 @@
     bgCheck: Droplet,
     note: FileText,
     deviceEvent: Smartphone,
+    basalInjection: Syringe,
   } as const;
 </script>
 
 <Tabs.Root
   value={activeCategory}
-  onValueChange={(v) => onChange(v as EntryCategoryId | "all")}
+  onValueChange={(v: string) => onChange(v as EntryCategoryId | "all")}
 >
   <Tabs.List
-    class="grid w-full h-auto gap-2 bg-transparent p-0"
-    style="grid-template-columns: repeat({Object.keys(ENTRY_CATEGORIES).length + 1}, minmax(0, 1fr));"
+    class="grid h-auto w-full grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-2 bg-transparent p-0"
   >
     <Tabs.Trigger
       value="all"

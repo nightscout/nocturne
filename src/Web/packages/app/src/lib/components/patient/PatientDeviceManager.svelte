@@ -200,8 +200,8 @@
           if (deviceList.createForm.result) resetInlineForm();
         })}
       >
-        <Card.Content class="space-y-4">
-          <div class="grid gap-4 sm:grid-cols-2">
+        <Card.Content class="@container space-y-4">
+          <div class="grid gap-4 @sm:grid-cols-2">
             <div class="space-y-2">
               <Label for="device-category">Device Category</Label>
               <Select.Root type="single" name="deviceCategory" bind:value={inlineCategory}>
@@ -379,7 +379,7 @@
         {#if editing?.id}
           <input type="hidden" name="id" value={editing.id} />
         {/if}
-        <div class="space-y-4 py-4">
+        <div class="@container space-y-4 py-4">
           <div class="space-y-2">
             <Label for="device-category">Category</Label>
             <Select.Root type="single" name="deviceCategory" bind:value={deviceCategory}>
@@ -394,7 +394,7 @@
             </Select.Root>
           </div>
 
-          <div class="grid gap-4 sm:grid-cols-2">
+          <div class="grid gap-4 @sm:grid-cols-2">
             <div class="space-y-2">
               <Label for="device-manufacturer">Manufacturer</Label>
               <Input
@@ -443,7 +443,7 @@
             />
           </div>
 
-          <div class="grid gap-4 sm:grid-cols-2">
+          <div class="grid gap-4 @sm:grid-cols-2">
             <div class="space-y-2">
               <Label for="device-start">Start Date</Label>
               <Input

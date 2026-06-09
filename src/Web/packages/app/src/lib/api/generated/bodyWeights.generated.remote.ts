@@ -15,13 +15,16 @@ export const getBodyWeights = query(z.object({ count: z.number().optional(), ski
     return await apiClient.bodyWeight.getBodyWeights(params?.count, params?.skip);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in bodyWeight.getBodyWeights:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get body weights');
@@ -45,7 +48,7 @@ export const create = command(BodyWeightSchema, async (request) => {
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to create');
@@ -59,13 +62,16 @@ export const getBodyWeight = query(z.string(), async (id) => {
     return await apiClient.bodyWeight.getBodyWeight(id);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in bodyWeight.getBodyWeight:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get body weight');
@@ -90,7 +96,7 @@ export const updateBodyWeight = command(z.object({ id: z.string(), request: Body
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to update body weight');
@@ -115,7 +121,7 @@ export const deleteBodyWeight = command(z.string(), async (id) => {
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to delete body weight');

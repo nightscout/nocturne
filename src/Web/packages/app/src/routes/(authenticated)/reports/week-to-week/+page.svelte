@@ -108,7 +108,7 @@
 </script>
 
 {#if reportsResource.current}
-<div class="space-y-6 p-4">
+<div class="@container space-y-6 p-3 @md:p-6">
   <!-- Controls -->
   <Card.Root>
     <Card.Content class="p-4">

@@ -24,7 +24,6 @@
   // Polling cadence — kept aligned with AlertBanner so we don't double-poll.
   const POLL_MS = 10_000;
 
-  let alerts = $state<ActiveExcursionResponse[]>([]);
   // Toasts are appended whenever a new alert id appears; users dismiss them
   // explicitly. We don't auto-dismiss so the trust gesture is intentional.
   let queue = $state<ActiveExcursionResponse[]>([]);
@@ -35,9 +34,8 @@
 
   async function poll(): Promise<void> {
     try {
-      const result = await getActiveAlerts();
+      const result = await getActiveAlerts().run();
       const list = Array.isArray(result) ? result : [];
-      alerts = list;
       const fresh: ActiveExcursionResponse[] = [];
       for (const a of list) {
         const id = a.id ?? "";
@@ -47,7 +45,9 @@
       }
       if (fresh.length > 0) queue = [...fresh, ...queue];
       // Remove toasts that were acknowledged elsewhere (other tab, banner, etc.)
-      const ackedIds = new Set(list.filter((a) => a.acknowledgedAt).map((a) => a.id));
+      const ackedIds = new Set(
+        list.filter((a) => a.acknowledgedAt).map((a) => a.id)
+      );
       if (ackedIds.size > 0) queue = queue.filter((a) => !ackedIds.has(a.id));
     } catch {
       // Silent: polling shouldn't surface transient errors.
@@ -55,7 +55,9 @@
   }
 
   onMount(() => {
-    poll();
+    // Defer the first poll out of render so the query's `.run()` is valid;
+    // setInterval ticks already run outside render.
+    queueMicrotask(poll);
     pollTimer = setInterval(poll, POLL_MS);
   });
 
@@ -118,7 +120,10 @@
       >
         <div class="flex items-start gap-2">
           <span
-            class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full {severity('critical', 'chip')}"
+            class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full {severity(
+              'critical',
+              'chip'
+            )}"
           >
             <Bell class="h-4 w-4" />
           </span>
@@ -133,11 +138,6 @@
                 just now
               </span>
             </div>
-            {#if a.subjectName}
-              <div class="text-xs text-muted-foreground truncate">
-                {a.subjectName}
-              </div>
-            {/if}
             <div class="mt-2 flex flex-wrap items-center gap-1">
               <Button
                 type="button"
@@ -199,7 +199,7 @@
                 variant="ghost"
                 size="sm"
                 class="h-7 px-2 text-xs"
-                onclick={() => muteRule(a.id ?? "", a.ruleId)}
+                onclick={() => muteRule(a.id ?? "", a.alertRuleId)}
                 disabled={busyForId === a.id}
                 title="Mute the rule"
               >

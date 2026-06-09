@@ -16,7 +16,6 @@ namespace Nocturne.API.Services.ChartData;
 /// </summary>
 internal sealed class BasalSeriesBuilder(
     ITherapySettingsResolver therapySettingsResolver,
-    ITherapyTimelineResolver therapyTimelineResolver,
     ILogger<BasalSeriesBuilder> logger
 ) : IBasalSeriesBuilder
 {
@@ -25,11 +24,10 @@ internal sealed class BasalSeriesBuilder(
         long startTime,
         long endTime,
         double defaultBasalRate,
+        TherapyTimeline timeline,
         CancellationToken ct = default
     )
     {
-        // Build once — reused by both gap-fill and profile-only paths to avoid per-tick resolver round-trips.
-        var timeline = await therapyTimelineResolver.BuildAsync(startTime, endTime + 1, ct: ct);
         var hasData = await therapySettingsResolver.HasDataAsync(ct);
 
         var series = new List<BasalPoint>();

@@ -12,6 +12,7 @@ import {
 import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from "$lib/server/request-host";
 // WUCHALE-DISABLED: wuchale temporarily disabled
 // import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
 // import * as main from '../../../locales/main.loader.server.svelte.js'
@@ -22,46 +23,6 @@ import { LANGUAGE_COOKIE_NAME } from "$lib/stores/appearance-store.svelte";
 
 /** Static asset paths that bypass all middleware. */
 const STATIC_ASSET_PREFIXES = ["/_app", "/assets", "/favicon.ico"] as const;
-
-/**
- * Get the original client-facing host from the request.
- * YARP suppresses the original Host header when transforms are configured,
- * replacing it with the internal destination host. The original host is
- * preserved in X-Forwarded-Host, which we must read first.
- */
-function getOriginalHost(request: Request): string | null {
-  return request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-}
-
-/**
- * Get the original client-facing protocol from the request.
- * When behind a TLS-terminating reverse proxy (YARP), the internal request
- * is plain HTTP but X-Forwarded-Proto carries the original scheme. We must
- * forward this to internal API calls so the API's HTTPS enforcement
- * middleware treats them as secure.
- */
-function getOriginalProto(request: Request): string {
-  return request.headers.get("x-forwarded-proto") ?? (request.url.startsWith("https") ? "https" : "http");
-}
-
-/**
- * Cookie set during setup to carry the tenant slug while the user is still
- * on the apex domain. httpOnly, 1-hour TTL, cleaned up by markSetupComplete.
- * Read by hooks that create API clients so they can prepend the slug to
- * X-Forwarded-Host for correct tenant resolution.
- */
-const SETUP_TENANT_COOKIE = "nocturne-setup-tenant";
-
-/**
- * Returns the effective host for API calls, prepending the setup tenant slug
- * when available so the apex domain resolves to the correct tenant.
- */
-function getEffectiveHost(request: Request, cookies: { get(name: string): string | undefined }): string | null {
-  const host = getOriginalHost(request);
-  const slug = cookies.get(SETUP_TENANT_COOKIE);
-  if (slug && host && !host.startsWith(`${slug}.`)) return `${slug}.${host}`;
-  return host;
-}
 
 /** Route prefixes that bypass requireAuthentication enforcement. */
 const PUBLIC_PREFIXES = ["/auth", "/api", "/setup", "/clock", "/invite", "/terms", "/privacy", "/guest"] as const;
@@ -89,6 +50,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
   event.locals.user = null;
   event.locals.isAuthenticated = false;
   event.locals.isPlatformAdmin = false;
+  event.locals.isPlatformAccessGrant = false;
 
   const apiBaseUrl = getApiBaseUrl();
 
@@ -113,7 +75,12 @@ const authHandle: Handle = async ({ event, resolve }) => {
         headers["X-Forwarded-Proto"] = getOriginalProto(event.request);
 
         const hashedKey = getHashedInstanceKey();
-        if (hashedKey) headers["X-Instance-Key"] = hashedKey;
+        if (hashedKey) {
+          headers["X-Instance-Key"] = hashedKey;
+          // Genuine SSR service call — declare the service so the API honors
+          // the instance key (a bare key is ignored).
+          headers["X-Instance-Service"] = "nocturne-web";
+        }
 
         const sessionRes = await fetch(`${apiBaseUrl}/api/auth/oidc/session`, { headers });
         const session = await sessionRes.json();
@@ -144,12 +111,14 @@ const authHandle: Handle = async ({ event, resolve }) => {
     // performed by the API (via SessionCookieHandler auto-refresh) back to
     // the browser, so rotated refresh tokens don't silently disappear.
     const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
+    const platformAccessToken = event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
     const forwardedHost = getEffectiveHost(event.request, event.cookies);
     const authExtraHeaders: Record<string, string> = { "X-Forwarded-Proto": getOriginalProto(event.request) };
     if (forwardedHost) authExtraHeaders["X-Forwarded-Host"] = forwardedHost;
     const apiClient = createServerApiClient(apiBaseUrl, fetch, {
       accessToken,
       refreshToken,
+      platformAccessToken,
       hashedInstanceKey: getHashedInstanceKey(),
       extraHeaders: authExtraHeaders,
       responseCookies: event.cookies,
@@ -173,6 +142,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
       event.locals.user = user;
       event.locals.isAuthenticated = true;
       event.locals.isPlatformAdmin = session.isPlatformAdmin ?? false;
+      event.locals.isPlatformAccessGrant = session.isPlatformAccessGrant ?? false;
 
       // Fetch effective permissions (granted scopes) for the current tenant
       try {
@@ -313,8 +283,6 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
       );
     }
 
-    const hashedInstanceKey = getHashedInstanceKey();
-
     // Construct the target URL
     const targetUrl = new URL(event.url.pathname + event.url.search, apiBaseUrl);
 
@@ -326,14 +294,20 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
       headers.set("X-Forwarded-Host", effectiveHost);
     }
     headers.set("X-Forwarded-Proto", getOriginalProto(event.request));
-    if (hashedInstanceKey) {
-      headers.set("X-Instance-Key", hashedInstanceKey);
-    }
+    // NB: this proxies end-user browser calls to /api, so it forwards ONLY the
+    // user's own credentials (cookies) — never the instance key. Attaching the
+    // instance key here would authenticate anonymous visitors as admin and
+    // bypass per-tenant public access.
+    // Strip any client-supplied instance-service / instance-key headers so a
+    // browser can't smuggle service auth through the proxy.
+    headers.delete("X-Instance-Key");
+    headers.delete("X-Instance-Service");
 
     // Forward auth and guest session cookies for authentication
     const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
     const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
     const guestSession = event.cookies.get("nocturne-guest-session");
+    const platformAccess = event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
     const cookies: string[] = [];
     if (accessToken) {
       cookies.push(`${AUTH_COOKIE_NAMES.accessToken}=${accessToken}`);
@@ -343,6 +317,9 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
     }
     if (guestSession) {
       cookies.push(`nocturne-guest-session=${guestSession}`);
+    }
+    if (platformAccess) {
+      cookies.push(`${AUTH_COOKIE_NAMES.platformAccess}=${platformAccess}`);
     }
     if (cookies.length > 0) {
       headers.set("Cookie", cookies.join("; "));
@@ -381,6 +358,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
   const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
   const guestSessionToken = event.cookies.get("nocturne-guest-session");
+  const platformAccessToken = event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
 
   const extraHeaders: Record<string, string> = {
     "X-Forwarded-Proto": getOriginalProto(event.request),
@@ -396,11 +374,17 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   // `responseCookies` lets any token rotation performed by the backend's
   // session middleware (during remote function / load function calls) flow
   // back to the browser as Set-Cookie on the outgoing SvelteKit response.
+  //
+  // NB: this client carries ONLY the end user's credentials (cookies) — it
+  // deliberately does NOT attach the instance key. Forwarding the instance key
+  // on user-originated requests elevated anonymous visitors to admin and
+  // bypassed per-tenant public access. Genuine service calls (bot dispatch,
+  // webhooks, realtime tickets) build their own instance-key client explicitly.
   event.locals.apiClient = createServerApiClient(apiBaseUrl, event.fetch, {
     accessToken,
     refreshToken,
     guestSessionToken,
-    hashedInstanceKey: getHashedInstanceKey(),
+    platformAccessToken,
     extraHeaders,
     responseCookies: event.cookies,
     signal: event.request.signal,
@@ -535,5 +519,16 @@ const resetBitsId: Handle = async ({ event, resolve }) => {
   return resolve(event);
 };
 
+// Public share host: keep the token-bearing URL out of Referer headers and search indexes on
+// every response (SSR page, /api proxy, realtime ticket), not just the page document.
+const shareHostSecurityHandle: Handle = async ({ event, resolve }) => {
+  const response = await resolve(event);
+  if (isShareHost(getOriginalHost(event.request))) {
+    response.headers.set("Referrer-Policy", "no-referrer");
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
+  return response;
+};
+
 // Chain the auth handler, site security handler, proxy handler, and API client handler
-export const handle: Handle = sequence(resetBitsId, authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);
+export const handle: Handle = sequence(shareHostSecurityHandle, resetBitsId, authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);

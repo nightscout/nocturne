@@ -39,4 +39,12 @@ public interface IMetadataPublisher
         IEnumerable<Note> records,
         string source,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the timestamp of the most recent activity record for the current tenant,
+    /// used by connectors to resume catch-up from where they left off, or <c>null</c> if none exist.
+    /// </summary>
+    Task<DateTime?> GetLatestActivityTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default);
 }

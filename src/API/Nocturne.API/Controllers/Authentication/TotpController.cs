@@ -9,6 +9,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -37,6 +38,8 @@ public class TotpController : ControllerBase
     private readonly ISessionService _sessionService;
     private readonly ISubjectService _subjectService;
     private readonly IAuthAuditService _auditService;
+    private readonly ITenantAccessor _tenantAccessor;
+    private readonly ITenantMemberService _tenantMemberService;
     private readonly OidcOptions _oidcOptions;
     private readonly ILogger<TotpController> _logger;
 
@@ -48,6 +51,8 @@ public class TotpController : ControllerBase
         ISessionService sessionService,
         ISubjectService subjectService,
         IAuthAuditService auditService,
+        ITenantAccessor tenantAccessor,
+        ITenantMemberService tenantMemberService,
         IOptions<OidcOptions> oidcOptions,
         ILogger<TotpController> logger)
     {
@@ -55,6 +60,8 @@ public class TotpController : ControllerBase
         _sessionService = sessionService;
         _subjectService = subjectService;
         _auditService = auditService;
+        _tenantAccessor = tenantAccessor;
+        _tenantMemberService = tenantMemberService;
         _oidcOptions = oidcOptions.Value;
         _logger = logger;
     }
@@ -228,6 +235,18 @@ public class TotpController : ControllerBase
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, subjectId: null, success: false,
                 ipAddress: ip, userAgent: ua,
                 detailsJson: JsonSerializer.Serialize(new { method = "totp", username = request.Username }));
+            return Problem(detail: "Invalid username or code", statusCode: 400, title: "Bad Request");
+        }
+
+        // VerifyLoginAsync resolves the subject by username globally, so a member of another
+        // tenant with a valid TOTP credential could otherwise be issued a session here. Require
+        // membership of the tenant being logged into; respond as for an invalid code so the
+        // failure does not reveal that the account exists on a different tenant.
+        if (!await _tenantMemberService.IsMemberAsync(result.SubjectId, _tenantAccessor.TenantId))
+        {
+            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
+                ipAddress: ip, userAgent: ua,
+                detailsJson: JsonSerializer.Serialize(new { method = "totp", reason = "not_a_member" }));
             return Problem(detail: "Invalid username or code", statusCode: 400, title: "Bad Request");
         }
 

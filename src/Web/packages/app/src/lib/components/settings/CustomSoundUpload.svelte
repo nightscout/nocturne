@@ -157,7 +157,7 @@
 
     <Dialog bind:open={uploadDialogOpen}>
       <DialogTrigger>
-        {#snippet child({ props })}
+        {#snippet child({ props }: { props: Record<string, unknown> })}
           <Button variant="outline" size="sm" {...props}>
             <Upload class="h-4 w-4 mr-2" />
             Upload Sound

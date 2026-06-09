@@ -141,17 +141,18 @@ public static class Extensions
         // Note: For production deployments exposed to the internet, consider
         // adding authentication or restricting access via network policies
 
-        // All health checks must pass for app to be considered ready to accept traffic after starting
+        // All health checks must pass for app to be considered ready to accept traffic after starting.
+        // AllowAnonymous so the probes stay reachable under a default authorization policy.
         app.MapHealthChecks("/health", new HealthCheckOptions
         {
             ResponseWriter = WriteResponse
-        });
+        }).AllowAnonymous();
 
         // Only health checks tagged with the "live" tag must pass for app to be considered alive
         app.MapHealthChecks(
             "/alive",
             new HealthCheckOptions { Predicate = r => r.Tags.Contains("live") }
-        );
+        ).AllowAnonymous();
 
         return app;
     }

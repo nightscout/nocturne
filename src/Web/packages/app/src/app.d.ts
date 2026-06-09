@@ -63,6 +63,11 @@ declare global {
 			 */
 			isPlatformAdmin: boolean;
 			/**
+			 * Whether the current session is a short-lived platform-admin access grant on a
+			 * tenant the subject is not a member of (distinct from ordinary membership)
+			 */
+			isPlatformAccessGrant: boolean;
+			/**
 			 * Whether the current session is a guest link session (read-only, no subjectId)
 			 */
 			isGuestSession?: boolean;
@@ -92,7 +97,11 @@ declare global {
 		interface PageData extends Partial<BasePageData> {
 			[key: string]: any;
 		}
-		// interface PageState {}
+		// Shallow-routing state. Dialogs key their browser-history entries here
+		// (see useDialogHistory) so the back button can dismiss them.
+		interface PageState {
+			[key: string]: unknown;
+		}
 		// interface Platform {}
 	}
 }

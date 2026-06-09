@@ -159,6 +159,8 @@ function invertNode(node: ConditionNode): ConditionNode | null {
 			// Domain inversion isn't unambiguous; let the user fill these in.
 			return null;
 	}
+	// Any condition type without a dedicated inverse is skipped.
+	return null;
 }
 
 function invertOperator(op: ComparisonOperator): ComparisonOperator {

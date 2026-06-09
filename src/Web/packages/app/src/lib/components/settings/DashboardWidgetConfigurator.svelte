@@ -123,7 +123,7 @@
       Customize the {maxWidgets} widgets shown above the glucose chart. Drag to reorder.
     </CardDescription>
   </CardHeader>
-  <CardContent class="space-y-4">
+  <CardContent class="space-y-4 @container">
     {#if true}
       {@const allAvailableWidgets = getAvailableWidgets()}
       {@const availableWidgets = allAvailableWidgets.filter(
@@ -191,7 +191,7 @@
           <span class="text-sm font-medium text-muted-foreground">
             Available Widgets {#if !canAddMore}(max {maxWidgets} reached){/if}
           </span>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div class="grid grid-cols-1 @sm:grid-cols-2 gap-2">
             {#each availableWidgets as widgetId (widgetId)}
               {@const Icon = getIcon(widgetId)}
               <button

@@ -72,12 +72,6 @@
   const normalizedSlug = $derived(slug.trim().toLowerCase());
   const debouncedSlug = new Debounced(() => normalizedSlug, 400);
 
-  const slugValidation = $derived.by(() => {
-    const value = debouncedSlug.current;
-    if (!value || value.length < 3) return null;
-    return validateSlug({ slug: value });
-  });
-
   $effect(() => {
     const value = normalizedSlug;
 
@@ -95,10 +89,10 @@
       return;
     }
 
-    const result = slugValidation;
-    if (!result) return;
+    const result = validateSlug({ slug: value });
 
-    if (result.loading) {
+    // loading=true: fetch in progress; !current: result not yet populated
+    if (result.loading || !result.current) {
       validating = true;
       return;
     }
@@ -110,11 +104,10 @@
       return;
     }
 
-    const data = result.current;
-    if (data?.isValid) {
+    if (result.current.isValid) {
       slugValid = true;
     } else {
-      slugError = data?.message ?? "Invalid slug";
+      slugError = result.current.message ?? "Invalid slug";
     }
   });
 
@@ -149,7 +142,7 @@
   }
 </script>
 
-<div class="container max-w-4xl space-y-6 p-6">
+<div class="@container container max-w-4xl space-y-6 p-6">
   <div class="flex items-center gap-3">
     <Building2 class="h-8 w-8 text-primary" />
     <div>
@@ -206,7 +199,7 @@
         </CardContent>
       </Card>
     {:else}
-      <div class="grid gap-4 md:grid-cols-2">
+      <div class="grid gap-4 @xl:grid-cols-2">
         {#each tenants as tenant (tenant.id)}
           <Card>
             <CardHeader class="pb-3">

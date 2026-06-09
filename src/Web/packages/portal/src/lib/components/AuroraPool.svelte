@@ -494,17 +494,17 @@
   onpointermove={onPointerMove}
   onpointerup={onPointerUp}
 >
-  <!-- Mobile: static chip wrap (unchanged from original) -->
-  <div class="md:hidden absolute top-16 left-0 right-0 px-5">
-    <div class="flex flex-wrap gap-1.5 justify-center">
+  <!-- Mobile: static chip wrap -->
+  <div class="md:hidden absolute top-[72px] left-0 right-0 px-4">
+    <div class="flex flex-wrap gap-x-1.5 gap-y-2 justify-center">
       {#each CHIP_DEFS as def}
         <div
-          class="flex items-center gap-1.5 bg-[oklch(0.10_0.028_261/85%)] border border-[oklch(1_0_0/20%)] rounded-full py-1 pr-2.5 pl-1 backdrop-blur-sm"
+          class="flex items-center gap-1.5 bg-[oklch(0.10_0.028_261/85%)] border border-[oklch(1_0_0/20%)] rounded-full py-0.5 pr-2 pl-0.5 backdrop-blur-sm max-w-full"
         >
           <img
             src="/logos/{def.file}"
             alt=""
-            class="size-4 rounded object-cover"
+            class="size-3.5 rounded object-cover shrink-0"
           />
           <span class="text-[10px] font-semibold text-white whitespace-nowrap"
             >{def.name}</span

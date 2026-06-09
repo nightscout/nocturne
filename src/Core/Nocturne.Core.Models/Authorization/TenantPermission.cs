@@ -50,9 +50,6 @@ public enum TenantPermission
     [EnumMember(Value = "food.readwrite"), JsonStringEnumMemberName("food.readwrite")]
     FoodReadWrite,
 
-    [EnumMember(Value = "statistics.read"), JsonStringEnumMemberName("statistics.read")]
-    StatisticsRead,
-
     [EnumMember(Value = "reports.read"), JsonStringEnumMemberName("reports.read")]
     ReportsRead,
 

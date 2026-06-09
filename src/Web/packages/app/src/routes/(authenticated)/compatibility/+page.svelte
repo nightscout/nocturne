@@ -216,9 +216,9 @@
   }
 </script>
 
-<div class="container mx-auto p-6 space-y-6">
+<div class="@container container mx-auto p-6 space-y-6">
   <!-- Header -->
-  <div class="flex justify-between items-center">
+  <div class="flex flex-col gap-3 @lg:flex-row @lg:justify-between @lg:items-center">
     <h1 class="text-3xl font-bold">Compatibility Testing</h1>
     <div class="flex gap-2 items-center">
       <span class="text-sm text-gray-500">
@@ -238,7 +238,7 @@
   <!-- Configuration Card -->
   <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
     <h2 class="text-xl font-semibold mb-4">Configuration</h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
       <div>
         <p class="text-sm text-gray-500 dark:text-gray-400">Nightscout URL</p>
         <p class="font-mono text-sm">
@@ -253,7 +253,7 @@
   </div>
 
   <!-- Metrics Cards -->
-  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+  <div class="grid grid-cols-1 @xl:grid-cols-2 @5xl:grid-cols-4 gap-4">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-2">
         Total Requests
@@ -289,7 +289,7 @@
   <!-- Filters -->
   <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
     <h2 class="text-xl font-semibold mb-4">Filters</h2>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-4 gap-4">
       <div>
         <label for="filterPath" class="block text-sm font-medium mb-1">
           Request Path

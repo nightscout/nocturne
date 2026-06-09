@@ -64,6 +64,7 @@ function getPumpModeColor(state: string): string {
     Exercise: "var(--pump-mode-exercise)",
     Suspended: "var(--pump-mode-suspended)",
     Off: "var(--pump-mode-off)",
+    Liberty: "var(--pump-mode-liberty)",
   };
   return stateColors[state] ?? "var(--muted-foreground)";
 }

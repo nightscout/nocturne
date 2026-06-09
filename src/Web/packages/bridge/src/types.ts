@@ -25,10 +25,11 @@ export interface BridgeConfig {
     format?: string;
   };
   instanceKey: string;
-  /** Base domain for multi-tenant mode (e.g. "nocturne.run"). When set, the
-   *  bridge discovers active tenants from the API and creates a SignalR
-   *  connection per tenant with the correct X-Forwarded-Host header. Socket.IO
-   *  clients are routed to tenant-specific rooms. */
+  /** Base domain the bridge runs under (e.g. "nocturne.run"). Required at
+   *  runtime: the bridge discovers active tenants from the API, opens a SignalR
+   *  connection per tenant, and routes Socket.IO clients to tenant rooms keyed by
+   *  the Host they connect on. Kept optional in the type because it is sourced
+   *  from the environment; setupBridge throws when it is absent. */
   baseDomain?: string;
 }
 

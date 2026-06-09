@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Repositories;
@@ -177,6 +178,7 @@ public class SettingsController : BaseV3Controller<Settings>
     /// <returns>Created settings records</returns>
     [HttpPost]
     [Authorize]
+    [RequireScope(OAuthScopes.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/settings")]
     [ProducesResponseType(typeof(Settings[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -248,6 +250,7 @@ public class SettingsController : BaseV3Controller<Settings>
     /// <returns>Updated settings record</returns>
     [HttpPut("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v3/settings/{id}")]
     [ProducesResponseType(typeof(Settings), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -321,6 +324,7 @@ public class SettingsController : BaseV3Controller<Settings>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v3/settings/{id}")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]

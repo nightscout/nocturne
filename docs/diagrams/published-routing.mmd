@@ -1,0 +1,23 @@
+flowchart TD
+    Internet((Internet))
+
+    subgraph ext["External"]
+        gateway["gateway\n:8080"]
+    end
+
+    subgraph net["Internal (aspire network)"]
+        nocturne_postgres_server[("nocturne-postgres-server")]
+        nocturne_api["nocturne-api"]
+        nocturne_web["nocturne-web"]
+        watchtower["watchtower"]
+    end
+
+    Internet --> gateway
+    gateway -->|"/api/auth/oidc/{**catch-all}\n/api/oauth/{**catch-all}\n/api/v4/dev-only/{**catch-all}\n/api/auth/platform-access/{**catch-all}\n/api/auth/platform-access\n/scalar\n/scalar/{**catch-all}\n/openapi/{**catch-all}\n/.well-known/{**catch-all}"| nocturne_api
+    gateway -->|"/api/{**catch-all}\n/auth/bot/{**catch-all}\n/** (fallback)"| nocturne_web
+    nocturne_api -->|Reference| nocturne_postgres_server
+    nocturne_api -->|Reference| nocturne_web
+    nocturne_web -->|Reference| nocturne_api
+    nocturne_web -->|Reference| nocturne_postgres_server
+    gateway -->|Reference| nocturne_api
+    gateway -->|Reference| nocturne_web

@@ -101,7 +101,7 @@
 
 <form
   id="food-form"
-  class="border-t pt-4 space-y-4"
+  class="@container border-t pt-4 space-y-4"
   {onsubmit}
 >
   <!-- Hidden fields for food record -->
@@ -114,7 +114,7 @@
   <input type="hidden" name="position" value="0" />
 
   <!-- Name and Category row -->
-  <div class="grid gap-4 md:grid-cols-3">
+  <div class="grid gap-4 @lg:grid-cols-3">
     <div class="space-y-2">
       <Label for="food-name">Name</Label>
       <Input id="food-name" name="name" bind:value={foodName} />
@@ -189,7 +189,7 @@
     </Collapsible.Trigger>
     <Collapsible.Content class="pt-3 space-y-4">
       <!-- Portion and unit row -->
-      <div class="grid gap-4 md:grid-cols-4">
+      <div class="grid gap-4 @lg:grid-cols-4">
         <div class="space-y-2">
           <Label for="food-portion">Portion Size</Label>
           <Input
@@ -204,7 +204,7 @@
           <input type="hidden" name="unit" value={foodUnit} />
           <Popover.Root bind:open={unitOpen}>
             <Popover.Trigger bind:ref={unitTriggerRef}>
-              {#snippet child({ props })}
+              {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button
                   variant="outline"
                   class="w-full justify-between"
@@ -257,7 +257,7 @@
           <input type="hidden" name="gi" value={foodGi} />
           <Popover.Root bind:open={giOpen}>
             <Popover.Trigger bind:ref={giTriggerRef}>
-              {#snippet child({ props })}
+              {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button
                   variant="outline"
                   class="w-full justify-between"
@@ -299,7 +299,7 @@
       </div>
 
       <!-- Additional nutrients row -->
-      <div class="grid gap-4 md:grid-cols-3">
+      <div class="grid gap-4 @lg:grid-cols-3">
         <div class="space-y-2">
           <Label for="food-fat">Fat (g)</Label>
           <Input id="food-fat" name="fat" type="number" bind:value={foodFat} />

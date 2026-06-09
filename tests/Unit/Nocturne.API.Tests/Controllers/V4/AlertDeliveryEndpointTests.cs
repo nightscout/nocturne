@@ -10,6 +10,7 @@ using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4;
@@ -17,7 +18,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 [Trait("Category", "Unit")]
 public class AlertDeliveryEndpointTests
 {
-    private readonly Mock<IDbContextFactory<NocturneDbContext>> _contextFactoryMock = new();
+    private readonly Mock<ITenantDbContextFactory> _contextFactoryMock = new();
     private readonly Mock<IAlertAcknowledgementService> _acknowledgementServiceMock = new();
     private readonly Mock<IAlertDeliveryService> _deliveryServiceMock = new();
     private readonly Mock<ITenantAccessor> _tenantAccessorMock = new();

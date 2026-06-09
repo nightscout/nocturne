@@ -17,8 +17,8 @@
 </script>
 
 <!-- Toolbar -->
-<div class="space-y-4">
-  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+<div class="@container space-y-4">
+  <div class="flex flex-col gap-4 @sm:flex-row @sm:items-center @sm:justify-between">
     <!-- Search -->
     <div class="flex flex-1 items-center gap-2">
       <Input

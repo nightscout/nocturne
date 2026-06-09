@@ -43,6 +43,10 @@ public class PlatformSettingsService
             new("botToken", "Bot Token", true),
             new("publicKey", "Public Key", true),
             new("applicationId", "Application ID", true),
+            // Optional: only needed for the in-app "Link my Discord account"
+            // OAuth2 flow. The bot itself works without it (users link via
+            // the /connect command). Application ID doubles as the client ID.
+            new("clientSecret", "Client Secret", false),
         ],
         ["slack"] =
         [
@@ -59,6 +63,13 @@ public class PlatformSettingsService
             new("appSecret", "App Secret", true),
             new("phoneNumberId", "Phone Number ID", true),
             new("verifyToken", "Verify Token", true),
+        ],
+        ["resend"] =
+        [
+            new("apiKey", "API Key", true),
+            new("fromAddress", "From Address", true),
+            new("fromName", "From Name", false),
+            new("webhookSecret", "Webhook Secret", false),
         ],
     };
 

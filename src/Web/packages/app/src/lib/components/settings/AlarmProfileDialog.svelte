@@ -174,13 +174,15 @@
       </Tabs>
     </div>
 
-    <DialogFooter class="border-t pt-4">
-      <div class="flex items-center justify-between w-full">
+    <DialogFooter class="border-t pt-4 @container">
+      <div
+        class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between w-full"
+      >
         <div class="flex items-center gap-2">
           <Switch bind:checked={editedProfile.enabled} />
           <Label>Alarm Enabled</Label>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
           <Button variant="outline" onclick={onCancel}>Cancel</Button>
           <Button onclick={handleSave}>Save Alarm</Button>
         </div>

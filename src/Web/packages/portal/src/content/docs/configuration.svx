@@ -4,61 +4,114 @@ title: Configuration Guide
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
+  import CodeBlock from '$lib/components/docs/CodeBlock.svelte';
+  import envExample from '$lib/release/docker-compose/.env.example?raw';
 </script>
 
 # Configuration Guide
 
-Learn how to configure connectors, settings, and customize your Nocturne instance.
+Nocturne has two layers of configuration:
 
-<Callout type="warning" title="Placeholder content">
-  This guide will be expanded with detailed instructions.
+- **Environment variables** set the infrastructure — the domain, the database
+  connections, secrets, and optional telemetry and chat bots. You set these once,
+  before the first start, in your `.env` file (Docker Compose) or the guided form
+  (Portainer). This page covers them.
+- **The running app** handles everything per-tenant and per-user — data
+  connectors, display preferences, sharing, alerts, and sign-in providers. These
+  are managed in the Nocturne UI after the instance is up, with no restart. They
+  have their own guides, linked under **Beyond environment variables** at the
+  bottom of this page.
+
+## Environment variables
+
+Set these in the `.env` file you copy from `.env.example`
+([Docker Compose](/docs/installation/docker-compose)) or in the deployment form
+when you launch the [Portainer](/docs/installation/portainer) template. Both
+methods use the same variables.
+
+Here is the `.env.example` that ships with every release, pulled in at build time
+so it always matches the current images:
+
+<CodeBlock code={envExample} maxHeight="440px" />
+
+<Callout type="info" title="This list stays current automatically">
+  The block above is the real <code>.env.example</code> from the release bundle —
+  there is no separate hand-maintained list to drift out of date. A few optional
+  integrations (email alerts, extra OpenTelemetry tuning) read additional
+  variables that are documented in their own guides rather than shipped in the
+  example.
 </Callout>
 
-## Environment Variables
+### Required
 
-Nocturne is configured primarily through environment variables. Key settings include:
+These have no default and must be set before the first start:
 
-| Variable | Description |
-|---|---|
-| `INSTANCE_KEY` | Instance key for JWT signing, encryption, and service authentication |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `DISPLAY_UNITS` | mg/dL or mmol/L |
-| `TIME_FORMAT` | 12 or 24 hour format |
+- **`BASE_DOMAIN`** — the root domain only (e.g. `example.com`, **not**
+  `app.example.com`). Each tenant gets a subdomain generated from this.
+- **`INSTANCE_KEY`** — minimum 12 characters. Used for JWT signing and
+  service-to-service authentication. Treat it like a password and keep it stable;
+  changing it invalidates existing sessions.
+- **The four PostgreSQL passwords** — `POSTGRES_PASSWORD`,
+  `POSTGRES_MIGRATOR_PASSWORD`, `POSTGRES_APP_PASSWORD`, and
+  `POSTGRES_WEB_PASSWORD`.
 
-## Data Connectors
+<Callout type="warning" title="Passwords are read only at first start">
+  The PostgreSQL passwords are used once, when the database volume is first
+  created, to provision the runtime roles. Changing them later does **not** re-key
+  an existing database. Use a long random value for <code>INSTANCE_KEY</code> and
+  each password — the install pages include a generator.
+</Callout>
 
-Connectors pull data from external sources. Each connector has its own configuration:
+### Database roles
 
-### Dexcom Share
+Nocturne enforces PostgreSQL Row Level Security and never connects as a role that
+can bypass it, so it uses three non-privileged roles instead of one superuser:
 
-Connect to Dexcom Share to automatically sync your G6, G7, or ONE data.
+| Role | Password variable | Purpose |
+|------|-------------------|---------|
+| `nocturne_migrator` | `POSTGRES_MIGRATOR_PASSWORD` | Owns the schema, runs migrations |
+| `nocturne_app` | `POSTGRES_APP_PASSWORD` | Runtime API connection — cannot bypass RLS |
+| `nocturne_web` | `POSTGRES_WEB_PASSWORD` | Bot-framework state — cannot bypass RLS |
 
-- Requires Dexcom account username and password
-- Select US or International server based on your account region
-- Data syncs every 5 minutes
+`POSTGRES_USERNAME` and `POSTGRES_PASSWORD` are the bootstrap superuser the
+bundled Postgres container uses on first start to create those three roles.
 
-### LibreView / LibreLinkUp
+Running against a managed database (RDS, Cloud SQL, Supabase, Neon) or an existing
+server instead of the bundled container? See
+[Bring Your Own PostgreSQL](/docs/installation/byo-postgres) — you create the
+roles yourself and point Nocturne at them with connection strings.
 
-Connect to Abbott's LibreView or LibreLinkUp for Freestyle Libre data.
+### Optional
 
-- Requires LibreView/LibreLinkUp credentials
-- Supports Libre 2 and Libre 3 sensors
+| Group | Variables | What it enables |
+|-------|-----------|-----------------|
+| **Telemetry** | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` | Export metrics, traces, and logs to an OTLP collector. Off while the endpoint is empty. See [Observability](/docs/observability). |
+| **Discord** | `DISCORD_*` | The Discord bot. See [Discord](/docs/bots/discord). |
+| **Slack** | `SLACK_*` | The Slack bot. See [Slack](/docs/bots/slack). |
+| **Telegram** | `TELEGRAM_*` | The Telegram bot. See [Telegram](/docs/bots/telegram). |
+| **WhatsApp** | `WHATSAPP_*` | The WhatsApp bot. See [WhatsApp](/docs/bots/whatsapp). |
 
-### Nightscout Proxy
+Leave any bot variables blank or commented out if you don't use that platform —
+nothing here is required for a working install.
 
-Pull data from an existing Nightscout instance.
+### Image pinning
 
-- Requires Nightscout URL and API secret
-- Great for running Nocturne alongside existing Nightscout
+`NOCTURNE_API_IMAGE` and `NOCTURNE_WEB_IMAGE` default to the `:latest` tag on
+GHCR. Pin them to a specific version tag to control exactly when your instance
+updates.
 
-## Nightscout Compatibility
+## Beyond environment variables
 
-Nocturne aims for full compatibility with Nightscout clients. To configure your existing apps:
+The rest of Nocturne's configuration lives in the running app, not the
+environment, and can change at any time without a restart:
 
-1. Change the Nightscout URL to your Nocturne instance
-2. Use the same API secret you configured for Nocturne
-3. Enable any required plugins in the Nocturne settings
-
-## Advanced Configuration
-
-For advanced configuration options including HTTPS setup, reverse proxy configuration, and multi-user setups, see the detailed guides in the documentation.
+- **Data connectors** — Dexcom, LibreLinkUp, Glooko, Nightscout, and others are
+  added and authenticated in the Nocturne UI, per tenant, after deployment. No
+  Compose changes required.
+- **Display units (mg/dL or mmol/L) and time format** — per-user preferences in
+  account settings, not server-wide variables.
+- **Sharing and public links** — see [Sharing your data](/docs/sharing).
+- **Email alerts (Resend)** — configured from the admin UI, or optionally via
+  environment variables. See [Email Alerts](/docs/alerts/email).
+- **Sign-in providers** — passkeys are always on; Google, GitHub, and generic
+  OIDC are enabled per instance. See [Authentication](/docs/authentication).

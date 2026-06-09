@@ -9,6 +9,7 @@
 import {
   COOKIE_ACCESS_TOKEN_NAME,
   COOKIE_REFRESH_TOKEN_NAME,
+  COOKIE_PLATFORM_ACCESS_NAME,
 } from "./constants";
 
 export function getAccessTokenCookieName(): string {
@@ -22,5 +23,6 @@ export function getRefreshTokenCookieName(): string {
 export const AUTH_COOKIE_NAMES = {
   accessToken: COOKIE_ACCESS_TOKEN_NAME,
   refreshToken: COOKIE_REFRESH_TOKEN_NAME,
+  platformAccess: COOKIE_PLATFORM_ACCESS_NAME,
   isAuthenticated: "IsAuthenticated",
 } as const;

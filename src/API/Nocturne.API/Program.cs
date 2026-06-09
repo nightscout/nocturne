@@ -125,7 +125,8 @@ else
 builder.Services.AddDiscrepancyAnalysisRepository();
 builder.Services.AddAlertRepositories();
 
-builder.Services.AddDataProtection();
+builder.Services.AddDataProtection()
+    .PersistKeysToNocturneDb();
 
 // Add compatibility proxy services
 builder.Services.AddCompatibilityProxyServices(builder.Configuration);
@@ -156,15 +157,12 @@ builder.Services.AddScoped<ReadAccessAuditFilter>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<NightscoutJsonFilter>();
+    options.Filters.Add<TenantCacheVaryFilter>();
     options.Filters.AddService<ReadAccessAuditFilter>();
 })
 .ConfigureApplicationPartManager(manager =>
-{
-    if (!builder.Environment.IsDevelopment())
-    {
-        manager.FeatureProviders.Add(new RemoveDevOnlyControllersFeatureProvider());
-    }
-});
+    AuthorizationConfiguration.ConfigureControllerDiscovery(
+        manager, builder.Environment.IsDevelopment()));
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddProblemDetails();
@@ -280,12 +278,7 @@ builder
         };
     });
 
-builder.Services.AddTransient<IAuthorizationHandler, HasPermissionsHandler>();
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy(PolicyNames.HasPermissions, policy =>
-        policy.Requirements.Add(new HasPermissionsRequirement()));
-});
+builder.Services.AddNocturneAuthorization();
 
 // Configure CORS for frontend with credentials support
 // Note: AllowAnyOrigin() cannot be combined with AllowCredentials() per CORS spec
@@ -317,10 +310,15 @@ var app = builder.Build();
 // Configure middleware pipeline
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-app.UseResponseCaching();
 app.UseCors();
 app.UseStaticFiles();
 app.UseForwardedHeaders();
+
+// Response caching must run after UseForwardedHeaders so its cache key uses the per-tenant
+// Host (rewritten from X-Forwarded-Host) rather than the constant gateway destination host
+// (the gateway suppresses the original Host). Paired with TenantCacheVaryFilter (Vary: Cookie),
+// this keeps tenant-scoped responses isolated per tenant and per credential in the shared cache.
+app.UseResponseCaching();
 
 // Strip .json suffixes before routing so /api/v1/treatments.json matches
 // the TreatmentsController route /api/v1/treatments. Must run before
@@ -395,6 +393,8 @@ app.MapHub<HomeAssistantHub>("/hubs/home-assistant");
 // Serve OpenAPI specs at /openapi/{documentName}.json
 app.MapOpenApi();
 
+var scalarCss = app.Configuration["SCALAR_CUSTOM_CSS"];
+
 // Scalar interactive API docs at /scalar/{documentName}
 app.MapScalarApiReference(options =>
 {
@@ -403,6 +403,9 @@ app.MapScalarApiReference(options =>
     options.AddDocument("nocturne", "Nocturne API", isDefault: true);
     options.AddDocument("nightscout", "Nightscout API");
     options.AddHeadContent(MermaidLazyLoader.HeadContent);
+    if (!string.IsNullOrEmpty(scalarCss))
+        options.WithCustomCss(scalarCss);
+    options.EnablePersistentAuthentication();
 
     // Pre-configure authentication so Scalar's "Authorize" UI works out of the box.
     options
@@ -475,7 +478,7 @@ app.MapGet(
             }
         );
     }
-);
+).AllowAnonymous();
 
 app.MapDefaultEndpoints();
 
@@ -500,6 +503,10 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         var interceptor = scope.ServiceProvider.GetRequiredService<TenantConnectionInterceptor>();
         await DatabaseInitializationExtensions.RunMigrationsAsync(migratorConnectionString, logger, interceptor);
+
+        // Apply the per-category public-share RLS policies, derived from the C# category map,
+        // so they cannot drift from the code. Runs under the migrator role like migrations.
+        await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(migratorConnectionString, logger);
     }
 
     // Validate RLS, ownership, default privileges, and NoResetOnClose under the app role.
@@ -551,22 +558,6 @@ static bool IsRunningInNSwagContext()
     }
 
     return false;
-}
-
-/// <summary>
-/// Removes controllers in the .DevOnly namespace from non-development environments.
-/// Defined here to avoid creating a Nocturne.API.Infrastructure namespace that
-/// collides with relative namespace resolution in other files.
-/// </summary>
-file class RemoveDevOnlyControllersFeatureProvider
-    : Microsoft.AspNetCore.Mvc.Controllers.ControllerFeatureProvider
-{
-    protected override bool IsController(System.Reflection.TypeInfo typeInfo)
-    {
-        if (typeInfo.Namespace?.Contains(".DevOnly", StringComparison.Ordinal) == true)
-            return false;
-        return base.IsController(typeInfo);
-    }
 }
 
 // Make Program accessible for testing

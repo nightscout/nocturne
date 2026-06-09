@@ -174,7 +174,7 @@
 </script>
 
 <Dialog.Root bind:open onOpenChange={(isOpen) => !isOpen && handleClose()}>
-  <Dialog.Content class="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+  <Dialog.Content class="@container max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Edit class="h-5 w-5" />
@@ -209,7 +209,7 @@
                 <Input
                   id="profile-name"
                   value={editedProfile.defaultProfile ?? ""}
-                  onchange={(e) =>
+                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
                     updateProfileField("defaultProfile", e.currentTarget.value)}
                 />
               </div>
@@ -274,7 +274,7 @@
                   min="0"
                   max="10"
                   value={storeData.dia ?? 4}
-                  onchange={(e) =>
+                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
                     updateStoreField("dia", Number(e.currentTarget.value))}
                 />
               </div>
@@ -289,7 +289,7 @@
                   min="0"
                   max="100"
                   value={storeData.carbs_hr ?? 20}
-                  onchange={(e) =>
+                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
                     updateStoreField("carbs_hr", Number(e.currentTarget.value))}
                 />
               </div>
@@ -351,7 +351,7 @@
               </div>
             </div>
 
-            <div class="grid md:grid-cols-2 gap-6">
+            <div class="grid @lg:grid-cols-2 gap-6">
               <!-- Target Low -->
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
@@ -381,7 +381,9 @@
                             type="time"
                             value={tv.time ?? "00:00"}
                             class="w-24"
-                            onchange={(e) =>
+                            onchange={(e: Event & {
+                              currentTarget: HTMLInputElement;
+                            }) =>
                               updateTimeValue(
                                 "target_low",
                                 i,
@@ -396,7 +398,9 @@
                             step="1"
                             value={tv.value ?? 0}
                             class="w-20"
-                            onchange={(e) =>
+                            onchange={(e: Event & {
+                              currentTarget: HTMLInputElement;
+                            }) =>
                               updateTimeValue(
                                 "target_low",
                                 i,
@@ -450,7 +454,9 @@
                             type="time"
                             value={tv.time ?? "00:00"}
                             class="w-24"
-                            onchange={(e) =>
+                            onchange={(e: Event & {
+                              currentTarget: HTMLInputElement;
+                            }) =>
                               updateTimeValue(
                                 "target_high",
                                 i,
@@ -465,7 +471,9 @@
                             step="1"
                             value={tv.value ?? 0}
                             class="w-20"
-                            onchange={(e) =>
+                            onchange={(e: Event & {
+                              currentTarget: HTMLInputElement;
+                            }) =>
                               updateTimeValue(
                                 "target_high",
                                 i,
@@ -588,7 +596,7 @@
                 type="time"
                 value={tv.time ?? "00:00"}
                 class="w-28"
-                onchange={(e) =>
+                onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
                   updateTimeValue(field, i, "time", e.currentTarget.value)}
               />
             </Table.Cell>
@@ -598,7 +606,7 @@
                 step="0.1"
                 value={tv.value ?? 0}
                 class="ml-auto w-24 text-right"
-                onchange={(e) =>
+                onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
                   updateTimeValue(
                     field,
                     i,

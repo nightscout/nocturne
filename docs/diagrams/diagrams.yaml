@@ -10,6 +10,16 @@ diagrams:
     title: Request Flow
     description: HTTP request path from client through YARP to the database.
 
+  - source: published-routing.mmd
+    title: Published Routing
+    description: YARP path-based routing rules and service topology as emitted by aspire publish.
+    auto: aspire-publish
+
+  - source: published-services.mmd
+    title: Published Services
+    description: Service topology and network layout as emitted by aspire publish.
+    auto: aspire-publish
+
   - source: type-safety-pipeline.mmd
     title: Type Safety Pipeline
     description: End-to-end type safety from .NET domain models through NSwag, Zod, and remote codegen to SvelteKit.

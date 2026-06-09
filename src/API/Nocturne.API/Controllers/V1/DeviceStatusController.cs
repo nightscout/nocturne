@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Effects;
@@ -165,6 +166,7 @@ public class DeviceStatusController : ControllerBase
     /// <returns>Created device status entries with assigned IDs</returns>
     [HttpPost]
     [Authorize]
+    [RequireScope(OAuthScopes.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v1/devicestatus")]
     [ProducesResponseType(typeof(DeviceStatus[]), 200)]
     [ProducesResponseType(400)]
@@ -276,6 +278,7 @@ public class DeviceStatusController : ControllerBase
     /// <returns>Success status</returns>
     [HttpDelete("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v1/devicestatus/:id")]
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
@@ -340,6 +343,7 @@ public class DeviceStatusController : ControllerBase
     /// <returns>Number of deleted entries</returns>
     [HttpDelete]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v1/devicestatus")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(400)]

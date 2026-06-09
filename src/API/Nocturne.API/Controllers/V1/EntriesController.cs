@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Legacy;
 using Nocturne.Core.Contracts.Glucose;
@@ -527,6 +528,7 @@ public class EntriesController : ControllerBase
     /// <returns>Created entries with assigned IDs</returns>
     [HttpPost]
     [Authorize]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -808,6 +810,7 @@ public class EntriesController : ControllerBase
     /// <returns>Updated entry</returns>
     [HttpPut("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -896,6 +899,7 @@ public class EntriesController : ControllerBase
     /// <returns>Confirmation of deletion</returns>
     [HttpDelete("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v1/entries/{id}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -984,6 +988,7 @@ public class EntriesController : ControllerBase
     /// <returns>Confirmation of bulk deletion</returns>
     [HttpDelete]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v1/entries")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
@@ -1063,6 +1068,8 @@ public class EntriesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token for async operations</param>
     /// <returns>Async processing response with correlation ID and status URL</returns>
     [HttpPost("async")]
+    [Authorize]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v1/entries/async")]
     [ProducesResponseType(typeof(AsyncProcessingResponse), 202)]
     [ProducesResponseType(typeof(object), 400)]

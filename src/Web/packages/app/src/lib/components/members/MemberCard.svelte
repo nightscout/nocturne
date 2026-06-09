@@ -107,7 +107,7 @@
   }
 </script>
 
-<Card.Root>
+<Card.Root class="@container">
   <Card.Header>
     <div class="flex items-start justify-between gap-4">
       <div class="space-y-1 flex-1 min-w-0">
@@ -147,7 +147,7 @@
         {#if canManage}
           <AlertDialog.Root>
             <AlertDialog.Trigger>
-              {#snippet child({ props })}
+              {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button
                   {...props}
                   variant="outline"
@@ -189,7 +189,7 @@
       <!-- Role selection -->
       <div class="space-y-2">
         <Label>Roles</Label>
-        <div class="grid gap-2 sm:grid-cols-2">
+        <div class="grid gap-2 @sm:grid-cols-2">
           {#each roles as role (role.id)}
             {@const isOwnerSelf = role.slug === "owner" && member.subjectId === currentSubjectId}
             {@const isOwnerRole = editingRoleIds.includes(role.id ?? '')}
@@ -244,7 +244,7 @@
       <!-- Direct permissions (collapsible) -->
       <Collapsible.Root
         open={showDirectPermissions}
-        onOpenChange={(open) => (showDirectPermissions = open)}
+        onOpenChange={(open: boolean) => (showDirectPermissions = open)}
       >
         <Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
           {#if showDirectPermissions}
@@ -270,7 +270,7 @@
         <Checkbox
           id="member-limit-24h-{member.subjectId}"
           checked={editingLimitTo24Hours}
-          onCheckedChange={(checked) => { editingLimitTo24Hours = checked === true; }}
+          onCheckedChange={(checked: boolean) => { editingLimitTo24Hours = checked === true; }}
         />
         <div class="flex-1">
           <label

@@ -1,0 +1,26 @@
+flowchart LR
+
+    Internet((Internet))
+
+    subgraph ext["External"]
+        gateway["gateway\n:8080"]
+    end
+
+    subgraph net["aspire network"]
+        nocturne_postgres_server[("nocturne-postgres-server")]
+        nocturne_api["nocturne-api"]
+        subgraph nocturne_web_group["nocturne-web"]
+            nocturne_web_frontend["Frontend"]
+            nocturne_web_bff["BFF"]
+        end
+        watchtower["watchtower"]
+    end
+
+    Internet --> gateway
+    nocturne_api --> nocturne_postgres_server
+    nocturne_api --> nocturne_web_bff
+    nocturne_web_bff --> nocturne_api
+    nocturne_web_bff --> nocturne_postgres_server
+    gateway --> nocturne_api
+    gateway --> nocturne_web_frontend
+    nocturne_web_frontend --> nocturne_web_bff

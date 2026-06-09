@@ -83,6 +83,29 @@ public static class GlookoConstants
     /// </summary>
     public static readonly string[] V3CgmBackfillSeries = ["cgmHigh", "cgmNormal", "cgmLow"];
 
+    /// <summary>
+    ///     Pump mode series requested from the v3 graph/data endpoint.
+    ///     Device-family-prefixed series covering CamAPS FX, Control-IQ, Omnipod 5, Basal-iQ, and generic pumps.
+    /// </summary>
+    public static readonly string[] V3PumpModeSeries =
+    [
+        // CamAPS FX
+        "pumpCamapsAutomaticMode", "pumpCamapsManualMode", "pumpCamapsBoostMode",
+        "pumpCamapsEaseOffMode", "pumpCamapsLibertyMode",
+        "pumpCamapsPumpDeliverySuspendedMode",
+        "pumpCamapsNoPumpConnectivityMode", "pumpCamapsBluetoothTurnedOffMode", "pumpCamapsNoCgmMode",
+        // Control-IQ
+        "pumpControliqAutomaticMode", "pumpControliqManualMode",
+        "pumpControliqSleepMode", "pumpControliqExerciseMode",
+        // Omnipod 5
+        "pumpOp5AutomaticMode", "pumpOp5ManualMode",
+        "pumpOp5LimitedMode", "pumpOp5HypoprotectMode",
+        // Basal-iQ
+        "pumpBasaliqAutomaticMode", "pumpBasaliqManualMode",
+        // Generic
+        "pumpGenericAutomaticMode", "pumpGenericManualMode",
+    ];
+
     // -- HTTP -----------------------------------------------------------------
 
     /// <summary>

@@ -29,21 +29,21 @@
     let current = $derived(REPORTS[idx]);
 </script>
 
+<div class="@container" style:height="{height}px">
 <div
-    class="rounded-[14px] overflow-hidden border border-white/10 bg-[oklch(0.10_0.025_261)] grid"
-    style:height="{height}px"
-    style="grid-template-columns: 168px 1fr"
+    class="h-full rounded-[14px] overflow-hidden border border-white/10 bg-[oklch(0.10_0.025_261)] grid
+        grid-cols-[96px_minmax(0,1fr)] @sm:grid-cols-[130px_minmax(0,1fr)] @lg:grid-cols-[168px_minmax(0,1fr)]"
 >
     <!-- Sidebar list -->
     <div class="bg-[oklch(0.15_0.03_261)] border-r border-white/[0.08] py-3 overflow-hidden flex flex-col">
         {#each REPORTS as r, i (r.kind)}
             <div
-                class="px-4 py-2 text-[13px] flex items-center justify-between transition-all duration-300 border-l-[3px] shrink-0
+                class="px-3 @sm:px-4 py-2 text-[12px] @sm:text-[13px] flex items-center justify-between gap-1 transition-all duration-300 border-l-[3px] shrink-0
                     {i === idx
                         ? 'text-foreground bg-glucose-in-range/[0.14] border-glucose-in-range font-semibold'
                         : 'text-[oklch(0.65_0.02_261)] border-transparent font-medium'}"
             >
-                <span>{r.short}</span>
+                <span class="truncate">{r.short}</span>
                 {#if i === idx}
                     <Check class="size-3 text-glucose-in-range shrink-0" />
                 {/if}
@@ -52,7 +52,7 @@
     </div>
 
     <!-- Preview pane -->
-    <div class="p-[18px] flex flex-col gap-2.5 min-h-0">
+    <div class="p-3 @sm:p-[18px] flex flex-col gap-2.5 min-h-0 min-w-0">
         <div class="flex items-baseline justify-between gap-2 shrink-0">
             <div class="min-w-0">
                 <div class="text-[17px] font-bold text-foreground truncate">{current.name}</div>
@@ -223,4 +223,5 @@
             {/if}
         </div>
     </div>
+</div>
 </div>

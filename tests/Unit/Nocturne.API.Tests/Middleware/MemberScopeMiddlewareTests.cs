@@ -1,8 +1,13 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Middleware;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
 using Xunit;
 
 namespace Nocturne.API.Tests.Middleware;
@@ -94,6 +99,32 @@ public class MemberScopeMiddlewareTests
     }
 
     [Fact]
+    public async Task PlatformAccess_AlwaysGetsSuperuserAccess()
+    {
+        // A platform-admin tenant-access grant (verified + tenant-pinned by
+        // PlatformAccessCookieHandler) gets full superuser on the granted tenant,
+        // with no membership lookup.
+        var (middleware, context) = Build(new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.PlatformAccess,
+            SubjectId = _subjectId,
+            TenantId = _tenantId,
+            Scopes = [],
+        });
+
+        await middleware.InvokeAsync(context);
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().Contain("*");
+
+        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        permissionTrie.Should().NotBeNull();
+        permissionTrie!.Check("*").Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ApiKey_WithMultipleScopes_GrantsOnlyThoseScopes()
     {
         var (middleware, context) = Build(new AuthContext
@@ -122,6 +153,59 @@ public class MemberScopeMiddlewareTests
         permissionTrie.Check("api:treatments:read").Should().BeTrue();
         permissionTrie.Check("api:treatments:create").Should().BeTrue();
         permissionTrie.Check("api:profile:read").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task TenantMemberWithWildcardRole_GetsSuperuserPermissionTrie()
+    {
+        // Arrange — a tenant owner whose membership role grants "*", but whose session token
+        // carries no permissions. Session tokens are minted from the subject's GLOBAL roles,
+        // which are empty for a normal owner (their access comes from tenant membership), so
+        // AuthenticationMiddleware leaves an empty PermissionTrie. The superuser branch must
+        // rebuild it, or HasPermissions-gated endpoints (the legacy v1 API, e.g. the realtime
+        // /api/v1/entries probe) would 403 for the owner on their own tenant.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        using (var seed = new NocturneDbContext(options))
+        {
+            seed.Database.EnsureCreated();
+            // Seeds the default tenant with TestSubjectId as owner (the "*" wildcard role).
+            TestDatabaseSeeder.Seed(seed);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped(_ => new NocturneDbContext(options));
+        using var provider = services.BuildServiceProvider();
+
+        var context = new DefaultHttpContext { RequestServices = provider };
+        context.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.SessionCookie,
+            SubjectId = TestDatabaseSeeder.TestSubjectId,
+            TenantId = TestDatabaseSeeder.TenantId,
+            Permissions = [], // session JWT carries no permissions
+        };
+        // As AuthenticationMiddleware would set it for a token with no permissions.
+        context.Items["PermissionTrie"] = new PermissionTrie();
+        context.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>();
+
+        var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+
+        // Act
+        await middleware.InvokeAsync(context);
+
+        // Assert — a non-empty wildcard trie so the HasPermissions policy succeeds.
+        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        permissionTrie.Should().NotBeNull();
+        permissionTrie!.IsEmpty.Should().BeFalse();
+        permissionTrie.Check("*").Should().BeTrue();
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes!.Should().Contain("*");
     }
 
     private (MemberScopeMiddleware middleware, DefaultHttpContext context) Build(AuthContext authContext)

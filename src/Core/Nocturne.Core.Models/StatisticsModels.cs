@@ -1719,6 +1719,21 @@ public class ExtendedGlucoseAnalytics : GlucoseAnalytics
 }
 
 /// <summary>
+/// Bundled result of the server-side range-analytics endpoint: extended glucose
+/// analytics plus time-of-day averaged stats for the requested window.
+/// </summary>
+/// <seealso cref="ExtendedGlucoseAnalytics"/>
+/// <seealso cref="AveragedStats"/>
+public class ReportAnalysisResult
+{
+    /// <summary>Extended glucose analytics (TIR, GMI, GRI, variability, hypo/hyper, etc.).</summary>
+    public ExtendedGlucoseAnalytics Analysis { get; set; } = new();
+
+    /// <summary>Time-of-day averaged statistics for AGP-style charts.</summary>
+    public IEnumerable<AveragedStats> AveragedStats { get; set; } = [];
+}
+
+/// <summary>
 /// Data point for site change impact analysis
 /// Represents averaged glucose at a specific time offset from site change
 /// </summary>

@@ -39,6 +39,8 @@
   const POLL_INTERVAL_MS = 10_000;
   const POLL_TIMEOUT_MS = 60_000;
 
+  const dataSourcesQuery = getActiveDataSources();
+
   const connectPageUrl = $derived(buildConnectPageUrl(instanceUrl));
   const deepLink = $derived(buildXdripDeepLink(instanceUrl));
 
@@ -87,7 +89,8 @@
 
   async function checkStatus() {
     try {
-      const sources = (await getActiveDataSources()) ?? [];
+      await dataSourcesQuery.refresh();
+      const sources = dataSourcesQuery.current ?? [];
       if (isXdripDetected(sources)) {
         connectionState = "connected";
         stopPolling();
@@ -141,7 +144,7 @@
         clientId: info.clientId ?? "",
         displayName: info.clientDisplayName ?? null,
         isKnown: info.isKnownClient ?? false,
-        scopes: (info.scopes ?? []).filter(Boolean) as string[],
+        scopes: (info.scopes ?? []).filter(Boolean),
       };
     } catch {
       deviceLookupError = "Invalid or expired device code. Please check and try again.";
@@ -323,7 +326,7 @@
             disabled={deviceApproveLoading}
             onclick={handleDenyDevice}
           >
-            {#if deviceApproveLoading && deviceDenied !== true}
+            {#if deviceApproveLoading}
               <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             {/if}
             Deny

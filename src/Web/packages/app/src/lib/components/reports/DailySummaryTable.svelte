@@ -22,7 +22,8 @@
   let { dailyDataPoints, thresholds }: Props = $props();
 </script>
 
-<div class="bg-white shadow-lg rounded-lg p-4 md:p-6">
+<div class="@container">
+<div class="bg-white shadow-lg rounded-lg p-4 @lg:p-6">
   <h2 class="text-xl font-semibold text-gray-700 mb-4">Daily Summary</h2>
   <Table>
     <TableCaption class="text-sm text-gray-500 mt-2">
@@ -122,4 +123,5 @@
       {/each}
     </TableBody>
   </Table>
+</div>
 </div>

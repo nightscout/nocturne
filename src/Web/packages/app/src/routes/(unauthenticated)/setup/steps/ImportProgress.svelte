@@ -113,27 +113,23 @@
         }
       }
 
-      // No active job found — kick one off using saved connector credentials
+      // This component only MONITORS an existing migration — it never starts one.
+      // The import is kicked off explicitly when the user connects their source
+      // (see the setup page's handleMigrationConnected), so a job should already
+      // exist by now. If none is found there is nothing to monitor.
       if (!resolvedJobId) {
-        try {
-          const jobInfo =
-            await migrationRemote.startFromConnector("nightscout");
-          resolvedJobId = jobInfo?.id;
-        } catch {
-          error = "Failed to start migration";
-          loading = false;
-          return;
-        }
-      }
-
-      if (!resolvedJobId) {
-        error = "Failed to start migration";
         loading = false;
         return;
       }
 
       loading = false;
       let firstPoll = true;
+      let consecutiveFailures = 0;
+      // The migration runs server-side on a detached background task — it continues even if
+      // this screen is closed. A single failed status poll (a transient network blip, or the
+      // API being briefly busy importing a large dataset) must therefore NOT abort the UI.
+      // Tolerate a few consecutive failures before surfacing an error.
+      const MAX_CONSECUTIVE_FAILURES = 5;
 
       // Poll loop — update real data from backend
       // startedAt is set after the first successful poll of a live (non-complete) migration
@@ -141,6 +137,7 @@
         try {
           const status = await migrationRemote.getStatus(resolvedJobId);
           if (!active) break;
+          consecutiveFailures = 0; // a successful poll clears the transient-failure streak
 
           realProgress = status.progressPercentage ?? 0;
           currentOperation = status.currentOperation ?? null;
@@ -192,8 +189,14 @@
           await new Promise((resolve) => setTimeout(resolve, 2000));
         } catch {
           if (!active) break;
-          error = "Lost connection to migration status";
-          break;
+          consecutiveFailures++;
+          // Only give up — and tell the user — once polling has failed repeatedly. The import
+          // itself keeps running on the server regardless of what we show here.
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            error = "Lost connection to migration status";
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
         }
       }
     }

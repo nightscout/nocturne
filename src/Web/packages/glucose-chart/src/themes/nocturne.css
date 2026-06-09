@@ -56,6 +56,7 @@
     0.6 0.22 30
   ); /* Red-orange - insulin suspended */
   --pump-mode-off: oklch(0.4 0.05 270); /* Dark gray - pump off */
+  --pump-mode-liberty: oklch(0.65 0.13 200); /* Cyan - liberty mode */
 
   /* System Event Severity */
   --system-event-alarm: oklch(0.577 0.245 27.325); /* Red - critical alarm */

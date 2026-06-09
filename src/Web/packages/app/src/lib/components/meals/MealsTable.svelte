@@ -89,7 +89,7 @@
 </script>
 
 <Card.Root>
-  <Card.Content class="p-0">
+  <Card.Content class="@container p-0">
     {#if isLoading}
       <div class="flex items-center justify-center p-12">
         <Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
@@ -322,7 +322,7 @@
                             Foods ({meal.foods?.length})
                           </div>
                           <div
-                            class="grid gap-2 md:grid-cols-2 lg:grid-cols-3"
+                            class="grid gap-2 @xl:grid-cols-2 @4xl:grid-cols-3"
                           >
                             {#each meal.foods ?? [] as food}
                               <div class="rounded-lg border bg-card p-3 text-sm transition-colors group relative hover:bg-accent/50">

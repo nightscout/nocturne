@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Entries;
+using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.V4;
@@ -444,23 +445,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     // -------------------------------------------------------------------------
 
     private static Entry ProjectSensorGlucoseToEntry(SensorGlucose sg) =>
-        new()
-        {
-            Id = sg.Id.ToString(),
-            Type = "sgv",
-            Mills = sg.Mills,
-            Sgv = sg.Mgdl,
-            Mgdl = sg.Mgdl,
-            Mmol = sg.Mmol,
-            Mbg = 0,
-            Direction = sg.Direction?.ToString(),
-            Trend = sg.Trend.HasValue ? (int?)sg.Trend.Value : null,
-            TrendRate = sg.TrendRate,
-            Noise = sg.Noise,
-            Device = sg.Device,
-            App = sg.App,
-            DataSource = sg.DataSource,
-        };
+        SensorGlucoseToEntryMapper.ToEntry(sg);
 
     private static Treatment ProjectMealBolus(Bolus bolus, CarbIntake carb, List<TreatmentFood> foods) =>
         new()

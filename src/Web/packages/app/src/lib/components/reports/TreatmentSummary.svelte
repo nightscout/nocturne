@@ -52,11 +52,11 @@
   }
 </script>
 
-<div class="bg-white shadow-lg rounded-lg p-4 md:p-6 mb-6">
+<div class="@container bg-white shadow-lg rounded-lg p-4 @lg:p-6 mb-6">
   <h2 class="text-xl font-semibold text-gray-700 mb-4">
     Overall Treatment Summary
   </h2>
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+  <div class="grid grid-cols-1 @4xl:grid-cols-3 gap-4">
     {#each dailyDataPoints as day}
       {@const totalInsulin = getTotalInsulin(day.treatmentSummary)}
       {@const totalCarbs = getTotalCarbs(day.treatmentSummary)}

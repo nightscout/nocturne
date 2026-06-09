@@ -82,9 +82,9 @@
   }
 </script>
 
-<div class="space-y-4">
+<div class="@container space-y-4">
   <!-- Category and Formulation Select -->
-  <div class="grid gap-4 sm:grid-cols-2">
+  <div class="grid gap-4 @sm:grid-cols-2">
     <div class="space-y-2">
       <Label for="insulin-category">Category</Label>
       <Select.Root
@@ -154,7 +154,7 @@
   </div>
 
   <!-- Name and Role Select -->
-  <div class="grid gap-4 sm:grid-cols-2">
+  <div class="grid gap-4 @sm:grid-cols-2">
     <div class="space-y-2">
       <Label for="insulin-name">Brand / Name</Label>
       <Input
@@ -189,7 +189,7 @@
   </div>
 
   <!-- DIA, Peak, Concentration -->
-  <div class="grid gap-4 sm:grid-cols-3">
+  <div class="grid gap-4 @sm:grid-cols-3">
     <div class="space-y-2">
       <Label for="insulin-dia">Duration of Insulin Action</Label>
       <div class="flex items-center gap-2">
@@ -239,7 +239,7 @@
 
   {#if showExtendedFields}
     <!-- Start/End Dates -->
-    <div class="grid gap-4 sm:grid-cols-2">
+    <div class="grid gap-4 @sm:grid-cols-2">
       <div class="space-y-2">
         <Label for="insulin-start">Start Date</Label>
         <Input

@@ -15,7 +15,7 @@ permissions:
 env:
   DOTNET_VERSION: "10.0.x"
   NODE_VERSION: "24"
-  PNPM_VERSION: "9"
+  PNPM_VERSION: "10"
 
 jobs:
   generate-spec:
@@ -267,16 +267,21 @@ jobs:
           name: openapi-v4-spec
           path: sdk/
 
+      - name: Install OpenAPI Generator
+        run: brew install openapi-generator
+
       - name: Generate Swift SDK
         run: |
-          docker run --rm \
-            -v "$(pwd)/sdk:/sdk" \
-            openapitools/openapi-generator-cli:latest generate \
-            -i /sdk/openapi-v4.json \
-            -c /sdk/swift/config.yaml \
-            -o /sdk/swift/out \
-            --ignore-file-override /sdk/swift/.openapi-generator-ignore \
+          openapi-generator generate \
+            -i sdk/openapi-v4.json \
+            -c sdk/swift/config.yaml \
+            -o sdk/swift/out \
+            --ignore-file-override sdk/swift/.openapi-generator-ignore \
             --additional-properties=podVersion=${{ needs.generate-spec.outputs.sdk_version }}
+
+      - name: Fix Swift type inference in generated code
+        run: |
+          python3 sdk/swift/fix-generated.py sdk/swift/out/Sources
 
       - name: Build
         working-directory: sdk/swift/out
@@ -365,6 +370,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: sdk/python/out/dist/
+          skip-existing: true
 
   publish-java:
     needs: generate-spec

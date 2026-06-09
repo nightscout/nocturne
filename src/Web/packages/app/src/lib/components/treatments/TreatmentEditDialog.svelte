@@ -11,7 +11,6 @@
     DeviceEventType,
     PatientInsulin,
     InsulinFormulation,
-    InsulinCategory,
     BasalInjection,
     CreateBasalInjectionRequest,
   } from "$lib/api";
@@ -22,6 +21,13 @@
     getEntryStyle,
   } from "$lib/constants/entry-categories";
   import * as Dialog from "$lib/components/ui/dialog";
+  import * as Sheet from "$lib/components/ui/sheet";
+  import { IsMobile } from "$lib/hooks/is-mobile.svelte";
+  import { untrack } from "svelte";
+  import {
+    useDialogHistory,
+    type DialogHistoryParam,
+  } from "$lib/hooks/dialog-history.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -47,7 +53,6 @@
   import BasalInjectionFormFields from "./edit-dialog/BasalInjectionFormFields.svelte";
   import LinkedRecordsPanel from "./edit-dialog/LinkedRecordsPanel.svelte";
   import InsulinFormFields from "$lib/components/patient/InsulinFormFields.svelte";
-  import { insulinCategoryLabels } from "$lib/components/patient/labels";
 
   interface Props {
     open: boolean;
@@ -57,6 +62,12 @@
     onClose: () => void;
     onSave: (record: EntryRecord) => void;
     onDelete?: (record: EntryRecord) => void;
+    /**
+     * When set, the open dialog is reflected in this URL search param so it can
+     * be reloaded / deep-linked (the owning page resolves the param on load).
+     * Omit for plain back-button dismissal via an opaque history flag.
+     */
+    historyParam?: DialogHistoryParam;
   }
 
   let {
@@ -67,7 +78,20 @@
     onClose,
     onSave,
     onDelete,
+    historyParam,
   }: Props = $props();
+
+  // On mobile, present the editor as a bottom sheet instead of a centered dialog.
+  const isMobile = new IsMobile();
+
+  // Let the browser back button (and mobile back gesture) dismiss the dialog.
+  // `historyParam` is stable config supplied at mount, so reading it once is
+  // intentional (untrack avoids the reactive-capture warning).
+  useDialogHistory(
+    () => open,
+    () => onClose(),
+    { param: untrack(() => historyParam) },
+  );
 
   // Override record for viewing linked records (null = use the `record` prop)
   let overrideRecord = $state<EntryRecord | null>(null);
@@ -301,6 +325,10 @@
     activeRecord ? kindIcon[activeRecord.kind] : null
   );
 
+  // A record without an id is being created rather than edited. Drives the
+  // title/description/button copy and suppresses edit-only chrome.
+  let isCreate = $derived(!activeRecord?.data.id);
+
   function handleSubmit() {
     if (!activeRecord) return;
 
@@ -402,8 +430,24 @@
   }
 </script>
 
-<Dialog.Root bind:open onOpenChange={(o) => !o && onClose()}>
-  <Dialog.Content class="max-w-lg max-h-[90vh] overflow-y-auto">
+{#if isMobile.current}
+  <Sheet.Root bind:open onOpenChange={(o) => !o && onClose()}>
+    <Sheet.Content
+      side="bottom"
+      class="max-h-[90vh] overflow-y-auto rounded-t-xl p-6"
+    >
+      {@render dialogBody()}
+    </Sheet.Content>
+  </Sheet.Root>
+{:else}
+  <Dialog.Root bind:open onOpenChange={(o) => !o && onClose()}>
+    <Dialog.Content class="max-w-lg max-h-[90vh] overflow-y-auto">
+      {@render dialogBody()}
+    </Dialog.Content>
+  </Dialog.Root>
+{/if}
+
+{#snippet dialogBody()}
     {#if activeRecord && activeCategory && activeStyle && ActiveKindIcon}
       <Dialog.Header>
         <Dialog.Title class="flex items-center gap-2">
@@ -414,10 +458,12 @@
             <ActiveKindIcon class="mr-1 h-3.5 w-3.5" />
             {activeCategory.name}
           </Badge>
-          Edit Record
+          {isCreate ? "Add Record" : "Edit Record"}
         </Dialog.Title>
         <Dialog.Description>
-          Edit the details of this {activeCategory.name.toLowerCase()} record.
+          {isCreate
+            ? `Log a new ${activeCategory.name.toLowerCase()} record.`
+            : `Edit the details of this ${activeCategory.name.toLowerCase()} record.`}
         </Dialog.Description>
       </Dialog.Header>
 
@@ -429,6 +475,7 @@
         class="space-y-4"
       >
         <!-- Read-only metadata -->
+        {#if !isCreate}
         <div
           class="flex flex-wrap gap-4 text-sm text-muted-foreground bg-muted/30 rounded-lg p-3"
         >
@@ -449,6 +496,7 @@
             </div>
           {/if}
         </div>
+        {/if}
 
         <!-- Date and Time -->
         <div class="space-y-2">
@@ -457,7 +505,7 @@
             id="datetime"
             type="datetime-local"
             value={millsToInputValue(editMills)}
-            onchange={(e) => {
+            onchange={(e: Event & { currentTarget: HTMLInputElement }) => {
               const val = e.currentTarget.value;
               if (val) editMills = new Date(val).getTime();
             }}
@@ -515,7 +563,11 @@
             Cancel
           </Button>
           <Button type="submit" disabled={isLoading}>
-            {isLoading ? "Saving..." : "Save Changes"}
+            {isLoading
+              ? "Saving..."
+              : isCreate
+                ? "Create Record"
+                : "Save Changes"}
           </Button>
         </Dialog.Footer>
       </form>
@@ -586,5 +638,4 @@
         </Dialog.Description>
       </Dialog.Header>
     {/if}
-  </Dialog.Content>
-</Dialog.Root>
+{/snippet}

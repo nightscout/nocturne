@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
@@ -51,6 +52,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("loop")]
     [Authorize]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v2/notifications/loop")]
     [ProducesResponseType(typeof(NotificationV2Response), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationV2Response), StatusCodes.Status400BadRequest)]
@@ -137,6 +139,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost]
     [Authorize]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v2/notifications")]
     [ProducesResponseType(typeof(NotificationV2Response), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationV2Response), StatusCodes.Status400BadRequest)]

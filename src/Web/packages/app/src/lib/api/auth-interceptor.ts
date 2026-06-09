@@ -5,6 +5,7 @@
  */
 
 import { browser } from "$app/environment";
+import { isShareHost } from "$lib/share-host";
 
 /**
  * Auth interceptor state
@@ -35,6 +36,13 @@ class AuthInterceptorState {
     }
 
     if (!browser) {
+      return;
+    }
+
+    // Public share-host viewers are anonymous by design: the tenant shares only some data
+    // categories, so a 401 on an unshared one is expected and must not bounce the viewer to
+    // login — they have no account to sign into. Mirrors the guest-session exemption above.
+    if (isShareHost(window.location.hostname)) {
       return;
     }
 

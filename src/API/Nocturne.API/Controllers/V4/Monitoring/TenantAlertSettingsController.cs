@@ -2,9 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
-using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -26,15 +26,11 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Tags("Monitoring")]
 public class TenantAlertSettingsController : ControllerBase
 {
-    private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
-    private readonly ITenantAccessor _tenantAccessor;
+    private readonly ITenantDbContextFactory _contextFactory;
 
-    public TenantAlertSettingsController(
-        IDbContextFactory<NocturneDbContext> contextFactory,
-        ITenantAccessor tenantAccessor)
+    public TenantAlertSettingsController(ITenantDbContextFactory contextFactory)
     {
         _contextFactory = contextFactory;
-        _tenantAccessor = tenantAccessor;
     }
 
     /// <summary>
@@ -45,8 +41,7 @@ public class TenantAlertSettingsController : ControllerBase
     [ProducesResponseType(typeof(TenantAlertSettingsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<TenantAlertSettingsResponse>> Get(CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = _tenantAccessor.TenantId;
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var entity = await db.TenantAlertSettings.FirstOrDefaultAsync(ct);
         if (entity is null)
@@ -69,8 +64,7 @@ public class TenantAlertSettingsController : ControllerBase
     public async Task<ActionResult<TenantAlertSettingsResponse>> Update(
         [FromBody] UpdateTenantAlertSettingsRequest request, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = _tenantAccessor.TenantId;
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var entity = await db.TenantAlertSettings.FirstOrDefaultAsync(ct);
         var isNew = entity is null;

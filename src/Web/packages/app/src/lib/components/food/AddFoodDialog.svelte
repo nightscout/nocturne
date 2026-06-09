@@ -142,7 +142,7 @@
 </script>
 
 <Dialog.Root bind:open {onOpenChange}>
-  <Dialog.Content class="max-w-2xl max-h-[90vh] overflow-y-auto">
+  <Dialog.Content class="@container max-w-2xl max-h-[90vh] overflow-y-auto">
     <Dialog.Header>
       <Dialog.Title>{dialogTitle}</Dialog.Title>
       <Dialog.Description>
@@ -158,7 +158,7 @@
         <input type="hidden" name="_id" value={editingFoodId} />
         <input type="hidden" name="type" value="food" />
         <!-- Name and Category row -->
-        <div class="grid gap-4 md:grid-cols-3">
+        <div class="grid gap-4 @lg:grid-cols-3">
           <div class="space-y-2">
             <Label for="food-name">Name</Label>
             <Input id="food-name" name="name" bind:value={foodName} />
@@ -184,7 +184,7 @@
           <h3 class="text-sm font-medium text-muted-foreground">
             Key Nutritional Info
           </h3>
-          <div class="grid gap-4 md:grid-cols-4">
+          <div class="grid gap-4 @lg:grid-cols-4">
             <div class="space-y-2">
               <Label for="food-carbs" class="text-base font-semibold">
                 Carbs (g)
@@ -224,7 +224,7 @@
           <h3 class="text-sm font-medium text-muted-foreground">
             Additional Macros
           </h3>
-          <div class="grid gap-4 md:grid-cols-3">
+          <div class="grid gap-4 @lg:grid-cols-3">
             <div class="space-y-2">
               <Label for="food-fat">Fat (g)</Label>
               <Input id="food-fat" name="n:fat" type="number" bind:value={foodFat} />
@@ -255,7 +255,7 @@
       <div class="space-y-4">
         <input type="hidden" name="type" value="food" />
         <!-- Name and Category row -->
-        <div class="grid gap-4 md:grid-cols-3">
+        <div class="grid gap-4 @lg:grid-cols-3">
           <div class="space-y-2">
             <Label for="food-name">Name</Label>
             <Input id="food-name" name="name" bind:value={foodName} />
@@ -281,7 +281,7 @@
           <h3 class="text-sm font-medium text-muted-foreground">
             Key Nutritional Info
           </h3>
-          <div class="grid gap-4 md:grid-cols-4">
+          <div class="grid gap-4 @lg:grid-cols-4">
             <div class="space-y-2">
               <Label for="food-carbs" class="text-base font-semibold">
                 Carbs (g)
@@ -321,7 +321,7 @@
           <h3 class="text-sm font-medium text-muted-foreground">
             Additional Macros
           </h3>
-          <div class="grid gap-4 md:grid-cols-3">
+          <div class="grid gap-4 @lg:grid-cols-3">
             <div class="space-y-2">
               <Label for="food-fat">Fat (g)</Label>
               <Input id="food-fat" name="n:fat" type="number" bind:value={foodFat} />

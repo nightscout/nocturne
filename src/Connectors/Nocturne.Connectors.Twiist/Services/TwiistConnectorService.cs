@@ -226,6 +226,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
                 accessToken = newToken;
                 return true;
             },
+            maxRetries: config.MaxRetryAttempts,
             operationName: "FetchTwiistPackage");
 
         return result;

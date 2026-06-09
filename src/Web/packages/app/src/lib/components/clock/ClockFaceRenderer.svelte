@@ -25,6 +25,14 @@
     TrackerDefinitionDto,
   } from "$lib/api";
   import { getDefinitions } from "$api/generated/trackers.generated.remote";
+  import {
+    advance,
+    angleToVel,
+    computeAngleToCorner,
+    randomNonAxialAngle,
+    type Vec2,
+  } from "$lib/components/clock/screensaver-math";
+  import ScreensaverPulse, { PULSE_DURATION_MS } from "$lib/components/clock/ScreensaverPulse.svelte";
 
   interface Props {
     config: ClockFaceConfig;
@@ -34,9 +42,17 @@
     showCharts?: boolean;
     /** Additional CSS class for the container */
     class?: string;
+    /** Enable bouncing screensaver mode. Only honour from fullscreen views. */
+    screensaver?: boolean;
   }
 
-  let { config, scale = 1, showCharts = true, class: className = "" }: Props = $props();
+  let {
+    config,
+    scale = 1,
+    showCharts = true,
+    class: className = "",
+    screensaver = false,
+  }: Props = $props();
 
   const realtimeStore = getRealtimeStore();
 
@@ -123,18 +139,10 @@
   }
 
   // Tracker definitions
-  let trackerDefinitions = $state<TrackerDefinitionDto[]>([]);
-  $effect(() => {
-    if (browser) {
-      getDefinitions({})
-        .then((defs) => {
-          trackerDefinitions = defs;
-        })
-        .catch(() => {
-          trackerDefinitions = [];
-        });
-    }
-  });
+  const definitionsQuery = getDefinitions({});
+  const trackerDefinitions = $derived<TrackerDefinitionDto[]>(
+    definitionsQuery.current ?? [],
+  );
 
   // Get tracker definition by ID
   function getTrackerDefinition(definitionId: string | undefined) {
@@ -262,12 +270,150 @@
       ? (100 - (config.settings.backgroundOpacity ?? 100)) / 100
       : 0
   );
+
+  // Screensaver bouncing state
+  const SCREENSAVER_SPEED = 60; // px/sec
+  const CORNER_HIT_MIN_MS = 10 * 60 * 1000;
+  const CORNER_HIT_MAX_MS = 20 * 60 * 1000;
+  const CORNER_ARM_LEAD_MS = 30 * 1000;
+
+  let bouncerRef: HTMLDivElement | null = $state(null);
+  let blockSize = $state({ w: 0, h: 0 });
+  let viewportSize = $state({ w: 0, h: 0 });
+  let pos = $state<Vec2>({ x: 0, y: 0 });
+  let vel = $state<Vec2>({ x: 0, y: 0 });
+  let pulses = $state<{ id: number; x: number; y: number }[]>([]);
+  let pulseSeq = 0;
+
+  let nextCornerHitAt = 0;
+  let armedForCorner = false;
+
+  function scheduleNextCornerHit() {
+    const span = CORNER_HIT_MAX_MS - CORNER_HIT_MIN_MS;
+    nextCornerHitAt = Date.now() + CORNER_HIT_MIN_MS + Math.random() * span;
+    armedForCorner = false;
+  }
+
+  function emitPulse(x: number, y: number) {
+    const id = ++pulseSeq;
+    pulses = [...pulses, { id, x, y }];
+    setTimeout(() => {
+      pulses = pulses.filter((p) => p.id !== id);
+    }, PULSE_DURATION_MS + 100);
+  }
+
+  function pickCorner(): Vec2 {
+    const maxX = Math.max(0, viewportSize.w - blockSize.w);
+    const maxY = Math.max(0, viewportSize.h - blockSize.h);
+    const corners: Vec2[] = [
+      { x: 0, y: 0 },
+      { x: maxX, y: 0 },
+      { x: 0, y: maxY },
+      { x: maxX, y: maxY },
+    ];
+    return corners[Math.floor(Math.random() * corners.length)];
+  }
+
+  $effect(() => {
+    if (!browser || !screensaver || !bouncerRef) return;
+    const ro = new ResizeObserver((entries) => {
+      const e = entries[0];
+      if (!e) return;
+      blockSize = { w: e.contentRect.width, h: e.contentRect.height };
+    });
+    ro.observe(bouncerRef);
+    return () => ro.disconnect();
+  });
+
+  $effect(() => {
+    if (!browser || !screensaver) return;
+
+    const updateViewport = () => {
+      viewportSize = { w: window.innerWidth, h: window.innerHeight };
+    };
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+
+    const angle = randomNonAxialAngle(Math.random);
+    vel = angleToVel(angle, SCREENSAVER_SPEED);
+    scheduleNextCornerHit();
+
+    let raf = 0;
+    let lastT = 0;
+    let positioned = false;
+
+    const tick = (t: number) => {
+      if (document.visibilityState !== "visible") {
+        lastT = 0;
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      if (blockSize.w <= 0 || blockSize.h <= 0) {
+        lastT = 0;
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      if (!positioned) {
+        pos = {
+          x: Math.random() * Math.max(0, viewportSize.w - blockSize.w),
+          y: Math.random() * Math.max(0, viewportSize.h - blockSize.h),
+        };
+        positioned = true;
+      }
+      if (lastT === 0) lastT = t;
+      const dt = Math.min(0.05, (t - lastT) / 1000);
+      lastT = t;
+
+      const now = Date.now();
+      if (!armedForCorner && now >= nextCornerHitAt - CORNER_ARM_LEAD_MS) {
+        armedForCorner = true;
+      }
+
+      const result = advance(
+        pos,
+        vel,
+        {
+          blockW: blockSize.w,
+          blockH: blockSize.h,
+          viewportW: viewportSize.w,
+          viewportH: viewportSize.h,
+        },
+        dt
+      );
+
+      pos = result.pos;
+      vel = result.vel;
+
+      const hitX = result.hitLeft || result.hitRight;
+      const hitY = result.hitTop || result.hitBottom;
+
+      if (armedForCorner && (hitX || hitY) && !(hitX && hitY)) {
+        // Just bounced off one wall. Steer the new trajectory to a corner
+        // from the post-bounce position so the direction change is hidden
+        // inside the bounce.
+        const target = pickCorner();
+        vel = computeAngleToCorner(pos, target, SCREENSAVER_SPEED);
+      }
+
+      if (hitX && hitY) {
+        const cx = result.hitLeft ? 0 : viewportSize.w;
+        const cy = result.hitTop ? 0 : viewportSize.h;
+        emitPulse(cx, cy);
+        if (armedForCorner) scheduleNextCornerHit();
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", updateViewport);
+    };
+  });
 </script>
 
-<div
-  class="{className} relative flex flex-col items-center justify-center overflow-hidden"
-  style={bgStyle}
->
+{#snippet body()}
   <!-- Background overlay for image opacity -->
   {#if config?.settings?.backgroundImage}
     <div
@@ -285,7 +431,7 @@
       })}
       <div class="absolute inset-0 z-0">
         <GlucoseChartShell engine={bgChartEngine} heightClass="h-full">
-          {#snippet tracks(_ctx)}
+          {#snippet tracks()}
             {#if backgroundChart.chartConfig?.showBasal ?? false}
               <BasalTrack />
             {/if}
@@ -304,7 +450,7 @@
               <TrackerMarkers />
             {/if}
           {/snippet}
-          {#snippet overlays(_ctx)}
+          {#snippet overlays()}
             <ChartTooltip />
           {/snippet}
         </GlucoseChartShell>
@@ -331,9 +477,9 @@
     class="relative z-10 flex flex-col items-center p-2"
     style="gap: {3 * scale}px;"
   >
-    {#each config?.rows ?? [] as row}
+    {#each config?.rows ?? [] as row, rowIndex (rowIndex)}
       <div class="flex items-center" style="gap: {2 * scale}px;">
-        {#each row.elements ?? [] as element}
+        {#each row.elements ?? [] as element, elementIndex (elementIndex)}
           {#if !(element.type === "chart" && element.chartConfig?.asBackground)}
             {#if element.type === "chart"}
               {#if showCharts}
@@ -346,7 +492,7 @@
                   style="width: {(element.width || 400) * scale}px; height: {(element.height || 200) * scale}px;"
                 >
                   <GlucoseChartShell engine={inlineEngine} heightClass="h-full">
-                    {#snippet tracks(_ctx)}
+                    {#snippet tracks()}
                       {#if element.chartConfig?.showBasal ?? false}
                         <BasalTrack />
                       {/if}
@@ -365,7 +511,7 @@
                         <TrackerMarkers />
                       {/if}
                     {/snippet}
-                    {#snippet overlays(_ctx)}
+                    {#snippet overlays()}
                       <ChartTooltip />
                     {/snippet}
                   </GlucoseChartShell>
@@ -444,4 +590,31 @@
       </div>
     {/each}
   </div>
-</div>
+{/snippet}
+
+{#if screensaver}
+  <div class="{className} fixed inset-0 overflow-hidden bg-black">
+    <div
+      bind:this={bouncerRef}
+      class="absolute"
+      style="transform: translate3d({pos.x}px, {pos.y}px, 0); will-change: transform;"
+    >
+      <div
+        class="relative flex flex-col items-center justify-center overflow-hidden"
+        style={bgStyle}
+      >
+        {@render body()}
+      </div>
+    </div>
+    {#each pulses as p (p.id)}
+      <ScreensaverPulse x={p.x} y={p.y} />
+    {/each}
+  </div>
+{:else}
+  <div
+    class="{className} relative flex flex-col items-center justify-center overflow-hidden"
+    style={bgStyle}
+  >
+    {@render body()}
+  </div>
+{/if}

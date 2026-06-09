@@ -82,7 +82,7 @@
   ];
 </script>
 
-<div class="space-y-6">
+<div class="space-y-6 @container">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-3">
       <Volume2 class="h-5 w-5 text-muted-foreground" />
@@ -203,7 +203,7 @@
 
       {#if profile.audio.ascendingVolume}
         <div
-          class="grid gap-4 sm:grid-cols-3 p-4 bg-muted/50 rounded-lg"
+          class="grid gap-4 @sm:grid-cols-3 p-4 bg-muted/50 rounded-lg"
         >
           <div class="space-y-2">
             <Label class="text-sm">Start Volume</Label>

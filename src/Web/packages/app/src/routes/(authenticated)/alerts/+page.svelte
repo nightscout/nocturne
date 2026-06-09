@@ -20,6 +20,7 @@
     ActiveExcursionResponse,
     TenantAlertSettingsResponse,
   } from "$api-clients";
+  import { AlertRuleSeverity } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
   import {
@@ -58,7 +59,7 @@
     // backend exposes it.
     if (s?.dndManualActive || s?.dndScheduleEnabled) return "dnd";
     if (active.length === 0) return "ok";
-    if (active.some((a) => a.severity === "critical")) return "bad";
+    if (active.some((a) => a.severity === AlertRuleSeverity.Critical)) return "bad";
     return "warn";
   }
 
@@ -103,7 +104,6 @@
         dndScheduleEnabled: false,
         dndScheduleStart: current.dndScheduleStart,
         dndScheduleEnd: current.dndScheduleEnd,
-        timezone: current.timezone ?? "UTC",
       });
       await dndQuery.refresh();
     } finally {
@@ -134,7 +134,7 @@
   <title>Alerts · Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-5xl p-4 lg:p-6 space-y-6">
+<div class="@container container mx-auto max-w-5xl p-3 @md:p-6 space-y-6">
   <!-- Header -->
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div class="flex items-center gap-3">
@@ -188,15 +188,17 @@
       return Number.isFinite(t) && t >= cutoff;
     }).length}
 
-    <!-- Armed status strip -->
-    <ArmedStatusStrip
-      state={armedState}
-      onDisableDnd={armedState === "dnd" && dnd ? () => handleDisableDnd(dnd) : undefined}
-      {disablingDnd}
-    />
+    <!-- Armed status strip — only meaningful once at least one rule exists. -->
+    {#if totalCount > 0}
+      <ArmedStatusStrip
+        state={armedState}
+        onDisableDnd={armedState === "dnd" && dnd ? () => handleDisableDnd(dnd) : undefined}
+        {disablingDnd}
+      />
+    {/if}
 
     <!-- Stat row -->
-    <div class="grid gap-3 sm:grid-cols-3">
+    <div class="grid gap-3 @md:grid-cols-3">
       <Card>
         <CardContent>
           <p class="text-xs uppercase tracking-wider text-muted-foreground">Rules enabled</p>
@@ -229,12 +231,12 @@
     {#if activeAlerts.length > 0}
       <Card class="border-destructive/40 bg-destructive/5">
         <CardHeader>
-          <div class="flex items-center justify-between">
-            <CardTitle class="flex items-center gap-2 text-destructive">
-              <AlertTriangle class="h-5 w-5" />
-              Active alerts ({activeAlerts.length})
+          <div class="flex flex-col gap-2 @sm:flex-row @sm:items-center @sm:justify-between">
+            <CardTitle class="flex min-w-0 items-center gap-2 text-destructive">
+              <AlertTriangle class="h-5 w-5 shrink-0" />
+              <span class="truncate">Active alerts ({activeAlerts.length})</span>
             </CardTitle>
-            <Button variant="outline" size="sm" onclick={handleAcknowledge} disabled={acknowledging}>
+            <Button class="@sm:shrink-0" variant="outline" size="sm" onclick={handleAcknowledge} disabled={acknowledging}>
               {#if acknowledging}
                 <Loader2 class="h-4 w-4 mr-2 animate-spin" />
               {:else}
@@ -255,7 +257,7 @@
                 </p>
               </div>
               {#if a.acknowledgedAt}
-                <Badge variant="secondary">Acknowledged</Badge>
+                <Badge variant="secondary" class="shrink-0">Acknowledged</Badge>
               {/if}
             </div>
           {/each}

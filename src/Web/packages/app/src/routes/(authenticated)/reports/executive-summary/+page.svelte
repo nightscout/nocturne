@@ -124,7 +124,7 @@
 </svelte:head>
 
 {#if reportsResource.current}
-  <div class="@container container mx-auto px-4 py-6 space-y-8 max-w-6xl">
+  <div class="@container container mx-auto space-y-8 p-3 @md:p-6 max-w-6xl">
     <!-- Print-Friendly Header -->
     <div class="print:block hidden text-center mb-8">
       <h1 class="text-2xl font-bold">Diabetes Management Report</h1>

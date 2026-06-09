@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
@@ -50,6 +51,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("notifications/ack")]
     [Authorize]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v1/notifications/ack")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]
@@ -295,6 +297,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("adminnotifies")]
     [Authorize]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v1/adminnotifies (POST)")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]
@@ -381,6 +384,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpDelete("adminnotifies")]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v1/adminnotifies (DELETE)")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(
@@ -445,6 +449,7 @@ public class NotificationsController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("notifications/pushover")]
     [Authorize]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v1/notifications/pushover")]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(NotificationAckResponse), StatusCodes.Status400BadRequest)]

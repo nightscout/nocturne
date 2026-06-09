@@ -21,6 +21,7 @@
     slack: "Slack",
     telegram: "Telegram",
     whatsapp: "WhatsApp",
+    resend: "Resend (Email)",
   };
 
   let { platforms, onSave, onDelete } = $props<{
@@ -132,7 +133,7 @@
             <Switch
               id="switch-{category}"
               checked={state.enabled}
-              onCheckedChange={(checked) => (state.enabled = checked)}
+              onCheckedChange={(checked: boolean) => (state.enabled = checked)}
             />
           </div>
         </CardHeader>

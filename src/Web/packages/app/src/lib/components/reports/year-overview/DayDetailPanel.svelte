@@ -5,6 +5,7 @@
   import { slide } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { formatGlucoseValue } from "$lib/utils/formatting";
+  import type { GlucoseUnits } from "$lib/utils/formatting";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
 
   let {
@@ -19,7 +20,7 @@
     navigateToDayInReview,
   } = $props<{
     selectedDay: any; // Using any for brevity in this refactor, but it's CalendarDatum
-    units: string;
+    units: GlucoseUnits;
     unitLabel: string;
     formatSelectedDate: (dateStr: string) => string;
     formatUnits: (value: number | null) => string;

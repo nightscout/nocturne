@@ -73,6 +73,7 @@
   --pump-mode-exercise: oklch(0.6 0.15 195);
   --pump-mode-suspended: oklch(0.55 0.25 29);
   --pump-mode-off: oklch(0.4 0.01 250);
+  --pump-mode-liberty: oklch(0.7 0.13 200);
 
   /* System Event Severity */
   --system-event-alarm: oklch(0.55 0.25 29);

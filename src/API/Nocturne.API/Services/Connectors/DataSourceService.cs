@@ -505,7 +505,7 @@ public class DataSourceService : IDataSourceService
                 Platform = UploaderPlatform.iOS,
                 Category = UploaderCategory.AidSystem,
                 Icon = "trio",
-                Url = "https://diy-trio.org",
+                Url = "https://triodocs.org",
             },
             new()
             {

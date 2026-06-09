@@ -74,6 +74,9 @@ public enum ChartColor
     [EnumMember(Value = "pump-mode-off"), JsonStringEnumMemberName("pump-mode-off")]
     PumpModeOff,
 
+    [EnumMember(Value = "pump-mode-liberty"), JsonStringEnumMemberName("pump-mode-liberty")]
+    PumpModeLiberty,
+
     // System events
     [EnumMember(Value = "system-event-alarm"), JsonStringEnumMemberName("system-event-alarm")]
     SystemEventAlarm,

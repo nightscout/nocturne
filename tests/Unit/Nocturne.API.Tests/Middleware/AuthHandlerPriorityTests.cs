@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Middleware;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Auth;
@@ -35,7 +36,7 @@ public class AuthHandlerPriorityTests
     public void InstanceKeyHandler_ShouldRunAfter_SessionCookieHandler()
     {
         var instanceKeyHandler = new InstanceKeyHandler(
-            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
+            new InstanceKeyValidator(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()),
             NullLogger<InstanceKeyHandler>.Instance);
 
         var sessionCookieHandler = new SessionCookieHandler(
@@ -53,7 +54,7 @@ public class AuthHandlerPriorityTests
     public void InstanceKeyHandler_ShouldRunBefore_OidcTokenHandler()
     {
         var instanceKeyHandler = new InstanceKeyHandler(
-            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
+            new InstanceKeyValidator(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()),
             NullLogger<InstanceKeyHandler>.Instance);
 
         instanceKeyHandler.Priority.Should().BeLessThan(100,

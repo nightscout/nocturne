@@ -23,6 +23,7 @@ public sealed class BotHealthService
         ["slack"] = ChannelType.SlackDm,
         ["telegram"] = ChannelType.Telegram,
         ["whatsapp"] = ChannelType.WhatsApp,
+        ["resend"] = ChannelType.ResendEmail,
     };
 
     private static readonly HashSet<ChannelType> AlwaysAvailable =

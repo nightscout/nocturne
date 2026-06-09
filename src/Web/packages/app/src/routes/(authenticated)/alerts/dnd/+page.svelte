@@ -35,7 +35,7 @@
   // Convert a UTC ISO string into a `datetime-local` input value (YYYY-MM-
   // DDTHH:mm) in the *browser's* local zone — keeps the form usable without
   // re-implementing tz conversion. The save path round-trips back to UTC.
-  function isoToLocal(iso: string | null | undefined): string {
+  function isoToLocal(iso: string | Date | null | undefined): string {
     if (!iso) return "";
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
@@ -92,8 +92,8 @@
   <title>Do Not Disturb · Alerts · Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-3xl p-4 lg:p-6 space-y-6">
-  <div class="flex items-center justify-between gap-2">
+<div class="@container container mx-auto max-w-3xl p-3 @md:p-6 space-y-6">
+  <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
     <div class="flex items-center gap-2">
       <Button
         type="button"
@@ -113,7 +113,7 @@
         </p>
       </div>
     </div>
-    <Button onclick={save} disabled={saving || !seeded}>
+    <Button class="shrink-0" onclick={save} disabled={saving || !seeded}>
       {#if saving}
         <Loader2 class="h-4 w-4 mr-2 animate-spin" />
       {:else}
@@ -138,7 +138,7 @@
         <Switch
           id="dnd-manual"
           checked={dndManualActive}
-          onCheckedChange={(c) => (dndManualActive = c)}
+          onCheckedChange={(c: boolean) => (dndManualActive = c)}
         />
       </div>
       {#if dndManualActive}
@@ -148,7 +148,8 @@
             id="dnd-until"
             type="datetime-local"
             value={dndManualUntilLocal}
-            oninput={(e) => (dndManualUntilLocal = e.currentTarget.value)}
+            oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+              (dndManualUntilLocal = e.currentTarget.value)}
           />
           <p class="text-xs text-muted-foreground">Leave blank to keep DND on indefinitely.</p>
         </div>
@@ -167,18 +168,19 @@
         <Switch
           id="dnd-schedule"
           checked={dndScheduleEnabled}
-          onCheckedChange={(c) => (dndScheduleEnabled = c)}
+          onCheckedChange={(c: boolean) => (dndScheduleEnabled = c)}
         />
       </div>
       {#if dndScheduleEnabled}
-        <div class="grid gap-4 sm:grid-cols-2">
+        <div class="grid gap-4 @sm:grid-cols-2">
           <div class="space-y-2">
             <Label for="dnd-start">From</Label>
             <Input
               id="dnd-start"
               type="time"
               value={dndScheduleStart}
-              oninput={(e) => (dndScheduleStart = e.currentTarget.value)}
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                (dndScheduleStart = e.currentTarget.value)}
             />
           </div>
           <div class="space-y-2">
@@ -187,7 +189,8 @@
               id="dnd-end"
               type="time"
               value={dndScheduleEnd}
-              oninput={(e) => (dndScheduleEnd = e.currentTarget.value)}
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                (dndScheduleEnd = e.currentTarget.value)}
             />
           </div>
         </div>

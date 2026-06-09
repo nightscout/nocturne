@@ -14,7 +14,10 @@
 //   SKIP_API          Skip API container build (default: false)
 //   SKIP_WEB          Skip Web container build (default: false)
 
+#:project Shared/Shared.csproj
+
 using System.Diagnostics;
+using static ProcessHelpers;
 
 var repoRoot = Directory.GetCurrentDirectory();
 var version = args.Length > 0 && !args[0].StartsWith("--") ? args[0] : "dev";
@@ -139,8 +142,6 @@ Console.WriteLine($"    nocturne-web:{version}");
 
 return 0;
 
-// -- Helpers ---------------------------------------------------------------
-
 static string ExtractGitHubRepo(string remoteUrl)
 {
     // Handles both HTTPS and SSH remote URLs
@@ -150,35 +151,4 @@ static string ExtractGitHubRepo(string remoteUrl)
         remoteUrl, @"github\.com[:/](.+?)(?:\.git)?$");
     return match.Success ? match.Groups[1].Value.ToLowerInvariant() : throw new InvalidOperationException(
         $"Could not detect IMAGE_REPOSITORY from git remote: {remoteUrl}. Set IMAGE_REPOSITORY env var.");
-}
-
-static void Run(string command, string[] arguments, string? workingDir = null)
-{
-    var psi = new ProcessStartInfo(command)
-    {
-        UseShellExecute = false,
-        WorkingDirectory = workingDir ?? Directory.GetCurrentDirectory(),
-    };
-    foreach (var arg in arguments) psi.ArgumentList.Add(arg);
-
-    using var process = Process.Start(psi) ?? throw new InvalidOperationException($"Failed to start: {command}");
-    process.WaitForExit();
-
-    if (process.ExitCode != 0)
-        throw new InvalidOperationException($"Command failed with exit code {process.ExitCode}: {command} {string.Join(' ', arguments)}");
-}
-
-static string RunCapture(string command, string[] arguments)
-{
-    var psi = new ProcessStartInfo(command)
-    {
-        RedirectStandardOutput = true,
-        UseShellExecute = false,
-    };
-    foreach (var arg in arguments) psi.ArgumentList.Add(arg);
-
-    using var process = Process.Start(psi)!;
-    var output = process.StandardOutput.ReadToEnd();
-    process.WaitForExit();
-    return output;
 }

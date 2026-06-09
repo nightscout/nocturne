@@ -217,6 +217,8 @@ public class AuditController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
 
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        // Pin the tenant on the pooled context so the global query filter and the RLS
+        // session variable both scope to this tenant — pooling does not reset TenantId.
         db.TenantId = tenantId;
 
         // Mutation audit must outlive any soft-deleted entity it describes, otherwise

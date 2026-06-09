@@ -9,9 +9,11 @@ import {
 /**
  * Adapts a NocturneApiClient to the BotApiClient interface used by @nocturne/bot.
  *
- * Call with `locals.apiClient` inside a request handler to build the
- * **unscoped** (apex) version, or use `buildScopedBotApiClient` for a client
- * whose X-Forwarded-Host routes to a specific tenant subdomain.
+ * Wrap an instance-key-authenticated client built by
+ * {@link buildUnscopedBotApiClient} (apex / cross-tenant) or
+ * {@link buildScopedBotApiClient} (a specific tenant subdomain). The bot acts
+ * as a trusted service, so it must use an explicit instance-key client — never
+ * `locals.apiClient`, which carries only the end user's credentials.
  */
 export function buildBotApiClient(api: ApiClient): BotApiClient {
   return {
@@ -91,6 +93,30 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
       },
     },
   };
+}
+
+/**
+ * Builds the **unscoped** (apex / cross-tenant) BotApiClient using an explicit
+ * instance-key client. Pass the forwarded host/proto headers from the incoming
+ * request so tenant resolution and HTTPS enforcement on the API match what the
+ * caller intended (the bot dispatch route relies on X-Forwarded-Host to target
+ * the correct tenant).
+ */
+export function buildUnscopedBotApiClient(
+  fetchFn: typeof globalThis.fetch,
+  extraHeaders?: Record<string, string>,
+): BotApiClient {
+  const apiBaseUrl = getApiBaseUrl();
+  if (!apiBaseUrl) {
+    throw new Error("API base URL not configured");
+  }
+
+  const apiClient = createServerApiClient(apiBaseUrl, fetchFn, {
+    hashedInstanceKey: getHashedInstanceKey(),
+    extraHeaders,
+  });
+
+  return buildBotApiClient(apiClient);
 }
 
 /**

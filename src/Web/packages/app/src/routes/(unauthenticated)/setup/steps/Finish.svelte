@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { setPublicAccess } from "$api/generated/memberInvites.generated.remote";
+  import { rotateShareLink, disableShareLink } from "$api/generated/shareLinks.generated.remote";
   import {
     Check,
     ChartLine,
@@ -28,8 +28,13 @@
   async function handlePublicToggle() {
     isToggling = true;
     try {
-      await setPublicAccess({ enabled: !isPublic });
-      isPublic = !isPublic;
+      if (isPublic) {
+        await disableShareLink();
+        isPublic = false;
+      } else {
+        await rotateShareLink();
+        isPublic = true;
+      }
     } finally {
       isToggling = false;
     }
@@ -137,8 +142,8 @@
       <div class="flex items-start gap-2">
         <Globe class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <div class="flex flex-col gap-0.5">
-          <span class="text-sm text-white">Make my data publicly visible</span>
-          <span class="text-xs text-white/50">Anyone can view your glucose data without signing in. You can change this later in Members settings.</span>
+          <span class="text-sm text-white">Create a public share link</span>
+          <span class="text-xs text-white/50">Anyone with the link can view your glucose data without signing in. Copy, rotate, or disable it later in Members settings.</span>
         </div>
       </div>
     </label>

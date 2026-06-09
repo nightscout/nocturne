@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { browser } from "$app/environment";
   import { page } from "$app/state";
   import { toast } from "svelte-sonner";
@@ -67,18 +68,10 @@
   const direction = $derived(realtimeStore.direction);
 
   // Tracker definitions
-  let trackerDefinitions = $state<TrackerDefinitionDto[]>([]);
-  $effect(() => {
-    if (browser) {
-      getDefinitions({})
-        .then((defs) => {
-          trackerDefinitions = defs;
-        })
-        .catch(() => {
-          trackerDefinitions = [];
-        });
-    }
-  });
+  const definitionsQuery = getDefinitions({});
+  const trackerDefinitions = $derived<TrackerDefinitionDto[]>(
+    definitionsQuery.current ?? [],
+  );
 
   // Time for preview
   let currentTime = $state(new Date());
@@ -356,14 +349,15 @@
     } catch (err) {
       console.error("Failed to load clock face:", err);
       toast.error("Failed to load clock face");
-      goto("/clock");
+      goto(resolve("/clock"));
     } finally {
       loading = false;
     }
   }
 
   function openClock() {
-    goto(`/clock/${clockFaceId}`);
+    if (!clockFaceId) return;
+    goto(resolve("/(unauthenticated)/clock/[id]", { id: clockFaceId }));
   }
 
   function copyLink() {
@@ -399,17 +393,8 @@
 
 {#snippet chartElementPreview(element: InternalElement)}
   <GlucoseChartCard
-    compact={true}
     heightClass="h-full"
     defaultFocusHours={element.hours || 3}
-    initialShowIob={element.chartConfig?.showIob ?? false}
-    initialShowCob={element.chartConfig?.showCob ?? false}
-    initialShowBasal={element.chartConfig?.showBasal ?? false}
-    initialShowBolus={element.chartConfig?.showBolus ?? true}
-    initialShowCarbs={element.chartConfig?.showCarbs ?? true}
-    initialShowDeviceEvents={element.chartConfig?.showDeviceEvents ?? false}
-    initialShowAlarms={element.chartConfig?.showAlarms ?? false}
-    initialShowScheduledTrackers={element.chartConfig?.showTrackers ?? false}
     showPredictions={element.chartConfig?.showPredictions ?? false}
   />
 {/snippet}

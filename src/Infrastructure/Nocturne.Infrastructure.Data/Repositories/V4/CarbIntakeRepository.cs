@@ -279,6 +279,13 @@ public class CarbIntakeRepository : ICarbIntakeRepository
             query = query.Where(e => e.Timestamp >= from.Value);
         if (to.HasValue)
             query = query.Where(e => e.Timestamp <= to.Value);
+
+        // Exclude non-primary duplicates from cross-connector deduplication so the
+        // count matches the rows GetAsync returns (otherwise pagination totals are
+        // inflated by duplicate meals imported from multiple connectors).
+        query = query.Where(b => !ctx.LinkedRecords
+            .Any(lr => lr.RecordType == "carbintake" && !lr.IsPrimary && lr.RecordId == b.Id));
+
         return await query.CountAsync(ct);
     }
 

@@ -2,8 +2,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
+using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -29,6 +31,7 @@ public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
     IGlucoseProcessingResolver glucoseResolver,
     IAlertOrchestrator alertOrchestrator,
+    IDataEventSink<SensorGlucose> glucoseEvents,
     ILogger<SensorGlucoseController> logger)
     : V4CrudControllerBase<SensorGlucose, UpsertSensorGlucoseRequest, UpsertSensorGlucoseRequest, ISensorGlucoseRepository>(repo)
 {
@@ -108,6 +111,10 @@ public class SensorGlucoseController(
         try
         {
             var updated = await Repository.UpdateAsync(id, model, ct);
+
+            // V4 writes bypass the legacy entry sink; emit the realtime "entries" update here.
+            await glucoseEvents.OnUpdatedAsync(updated, ct);
+
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -161,6 +168,9 @@ public class SensorGlucoseController(
             }
         }
 
+        // V4 writes bypass the legacy entry sink; emit the realtime "entries" create here.
+        await glucoseEvents.OnCreatedAsync(createdArray, ct);
+
         return StatusCode(201, createdArray);
     }
 
@@ -186,6 +196,16 @@ public class SensorGlucoseController(
             logger.LogWarning(ex, "Alert evaluation failed after V4 SensorGlucose creation");
         }
 
+        // V4 writes bypass the legacy entry sink; emit the realtime "entries" create here.
+        await glucoseEvents.OnCreatedAsync(new[] { created }, ct);
+
         return created;
+    }
+
+    protected override async Task OnAfterRestoreAsync(SensorGlucose restored, CancellationToken ct)
+    {
+        // A restored reading reappears in the dataset; broadcast it as an "entries" create so the
+        // web client re-adds it. V4 restores bypass the legacy entry sink.
+        await glucoseEvents.OnCreatedAsync(new[] { restored }, ct);
     }
 }

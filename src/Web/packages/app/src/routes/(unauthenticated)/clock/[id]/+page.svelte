@@ -146,25 +146,28 @@
   <!-- Clock Display -->
   <ClockFaceRenderer
     config={clockConfig}
+    screensaver={clockConfig.settings?.screensaverMode ?? false}
     class="fixed inset-0 h-screen w-screen transition-colors duration-500"
   />
 
-  <!-- Show time if configured or stale -->
-  {#if showTime}
-    <div class="fixed bottom-20 left-1/2 z-20 -translate-x-1/2">
-      <div class="flex items-center gap-2 text-2xl text-white/80">
-        <ClockIcon class="size-6" />
-        {formatTime()}
+  {#if !(clockConfig.settings?.screensaverMode ?? false)}
+    <!-- Show time if configured or stale -->
+    {#if showTime}
+      <div class="fixed bottom-20 left-1/2 z-20 -translate-x-1/2">
+        <div class="flex items-center gap-2 text-2xl text-white/80">
+          <ClockIcon class="size-6" />
+          {formatTime()}
+        </div>
       </div>
-    </div>
-  {/if}
+    {/if}
 
-  <!-- Stale indicator -->
-  {#if isStale}
-    <div class="fixed bottom-8 left-1/2 z-20 -translate-x-1/2">
-      <Badge variant="outline" class="border-white/50 px-4 py-2 text-white">
-        Data is {timeSince} old
-      </Badge>
-    </div>
+    <!-- Stale indicator -->
+    {#if isStale}
+      <div class="fixed bottom-8 left-1/2 z-20 -translate-x-1/2">
+        <Badge variant="outline" class="border-white/50 px-4 py-2 text-white">
+          Data is {timeSince} old
+        </Badge>
+      </div>
+    {/if}
   {/if}
 {/if}

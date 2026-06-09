@@ -5,6 +5,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [svelte(), tailwindcss()],
+  resolve: { dedupe: ["@internationalized/date", "bits-ui"] },
   test: {
     include: ["src/**/*.svelte.test.ts"],
     setupFiles: ["vitest-browser-svelte", "./vitest.browser.setup.ts"],

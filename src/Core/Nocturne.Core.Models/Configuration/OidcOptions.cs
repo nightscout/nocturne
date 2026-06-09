@@ -109,6 +109,14 @@ public class CookieSettings
     /// Name of the refresh token cookie
     /// </summary>
     public string RefreshTokenName { get; set; } = ".Nocturne.RefreshToken";
+
+    /// <summary>
+    /// Name of the platform-admin tenant-access grant cookie. Holds a short-lived,
+    /// tenant-pinned JWT that confers out-of-tenant superuser access. Kept separate
+    /// from the normal session cookie so it can be issued/cleared independently and so
+    /// audit entries can mark the access as out-of-tenant platform access.
+    /// </summary>
+    public string PlatformAccessName { get; set; } = ".Nocturne.PlatformAccess";
 }
 
 /// <summary>

@@ -74,7 +74,7 @@
         <div
                 class="sticky top-14 md:top-0 z-20 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60"
         >
-            <div class="flex h-14 items-center justify-between gap-2 px-4">
+            <div class="flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
                 <div class="flex items-center gap-2">
                     <!-- Report info -->
                     <div class="flex items-center gap-3">
@@ -104,7 +104,7 @@
     {/if}
 
     <!-- Main Content -->
-    <main class="relative px-6 py-6">
+    <main class="relative">
         {#if useResourceGuard}
             <ResourceGuard
                 loading={resourceCtx.loading}

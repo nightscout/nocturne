@@ -17,13 +17,16 @@ export const getProfileSummary = query(z.object({ from: z.coerce.date().optional
     return await apiClient.profile.getProfileSummary(params?.from, params?.to);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getProfileSummary:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get profile summary');
@@ -48,7 +51,7 @@ export const setDefaultProfile = command(z.string(), async (profileName) => {
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to set default profile');
@@ -62,13 +65,16 @@ export const getTherapySettings = query(z.object({ from: z.coerce.date().optiona
     return await apiClient.profile.getTherapySettings(params?.from, params?.to, params?.limit, params?.offset, params?.sort, params?.device, params?.source);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getTherapySettings:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get therapy settings');
@@ -93,7 +99,7 @@ export const createTherapySettings = form(formCoerce(TherapySettingsSchema) as a
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to create therapy settings');
@@ -107,13 +113,16 @@ export const getTherapySettingsByName = query(z.string(), async (profileName) =>
     return await apiClient.profile.getTherapySettingsByName(profileName);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getTherapySettingsByName:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get therapy settings by name');
@@ -127,13 +136,16 @@ export const getTherapySettingsById = query(z.string(), async (id) => {
     return await apiClient.profile.getTherapySettingsById(id);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getTherapySettingsById:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get therapy settings by id');
@@ -159,7 +171,7 @@ export const updateTherapySettings = form(formCoerce(z.object({ id: z.string(), 
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to update therapy settings');
@@ -184,7 +196,7 @@ export const deleteTherapySettings = command(z.string(), async (id) => {
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to delete therapy settings');
@@ -198,13 +210,16 @@ export const getBasalSchedulesByName = query(z.string(), async (profileName) => 
     return await apiClient.profile.getBasalSchedulesByName(profileName);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getBasalSchedulesByName:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get basal schedules by name');
@@ -218,13 +233,16 @@ export const getBasalScheduleById = query(z.string(), async (id) => {
     return await apiClient.profile.getBasalScheduleById(id);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getBasalScheduleById:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get basal schedule by id');
@@ -248,7 +266,7 @@ export const createBasalSchedule = form(formCoerce(BasalScheduleSchema) as any, 
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to create basal schedule');
@@ -273,7 +291,7 @@ export const updateBasalSchedule = form(formCoerce(z.object({ id: z.string(), re
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to update basal schedule');
@@ -297,7 +315,7 @@ export const deleteBasalSchedule = command(z.string(), async (id) => {
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to delete basal schedule');
@@ -311,13 +329,16 @@ export const getCarbRatioSchedulesByName = query(z.string(), async (profileName)
     return await apiClient.profile.getCarbRatioSchedulesByName(profileName);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getCarbRatioSchedulesByName:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get carb ratio schedules by name');
@@ -331,13 +352,16 @@ export const getCarbRatioScheduleById = query(z.string(), async (id) => {
     return await apiClient.profile.getCarbRatioScheduleById(id);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getCarbRatioScheduleById:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get carb ratio schedule by id');
@@ -361,7 +385,7 @@ export const createCarbRatioSchedule = command(CarbRatioScheduleSchema, async (r
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to create carb ratio schedule');
@@ -386,7 +410,7 @@ export const updateCarbRatioSchedule = command(z.object({ id: z.string(), reques
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to update carb ratio schedule');
@@ -410,7 +434,7 @@ export const deleteCarbRatioSchedule = command(z.string(), async (id) => {
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to delete carb ratio schedule');
@@ -424,13 +448,16 @@ export const getSensitivitySchedulesByName = query(z.string(), async (profileNam
     return await apiClient.profile.getSensitivitySchedulesByName(profileName);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getSensitivitySchedulesByName:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get sensitivity schedules by name');
@@ -444,13 +471,16 @@ export const getSensitivityScheduleById = query(z.string(), async (id) => {
     return await apiClient.profile.getSensitivityScheduleById(id);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getSensitivityScheduleById:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get sensitivity schedule by id');
@@ -474,7 +504,7 @@ export const createSensitivitySchedule = command(SensitivityScheduleSchema, asyn
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to create sensitivity schedule');
@@ -499,7 +529,7 @@ export const updateSensitivitySchedule = command(z.object({ id: z.string(), requ
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to update sensitivity schedule');
@@ -523,7 +553,7 @@ export const deleteSensitivitySchedule = command(z.string(), async (id) => {
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to delete sensitivity schedule');
@@ -537,13 +567,16 @@ export const getTargetRangeSchedulesByName = query(z.string(), async (profileNam
     return await apiClient.profile.getTargetRangeSchedulesByName(profileName);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getTargetRangeSchedulesByName:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get target range schedules by name');
@@ -557,13 +590,16 @@ export const getTargetRangeScheduleById = query(z.string(), async (id) => {
     return await apiClient.profile.getTargetRangeScheduleById(id);
   } catch (err) {
     const status = (err as any)?.status;
-    if (status === 401) { const { url } = getRequestEvent(); throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
+    if (status === 401) { const { request, url } = getRequestEvent();
+    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';
+    if (/^[^.]+\.share\./i.test(shareHost)) throw error(401, 'Unauthorized');
+    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`); }
     if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
     console.error('Error in profile.getTargetRangeScheduleById:', err);
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to get target range schedule by id');
@@ -587,7 +623,7 @@ export const createTargetRangeSchedule = command(TargetRangeScheduleSchema, asyn
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to create target range schedule');
@@ -612,7 +648,7 @@ export const updateTargetRangeSchedule = command(z.object({ id: z.string(), requ
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to update target range schedule');
@@ -636,7 +672,7 @@ export const deleteTargetRangeSchedule = command(z.string(), async (id) => {
     const e = err as any;
     const body = e?.body ?? e?.response;
     const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to delete target range schedule');

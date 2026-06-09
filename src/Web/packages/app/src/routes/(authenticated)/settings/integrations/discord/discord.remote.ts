@@ -7,21 +7,22 @@
  */
 import { getRequestEvent, query, command } from "$app/server";
 import { signOAuthLinkState } from "$lib/server/bot/oauth-state";
+import { getDiscordOAuthConfig } from "$lib/server/bot/platform-credentials";
 
 /**
- * Get Discord integration configuration from server environment.
+ * Get Discord integration configuration. Credentials resolve from the
+ * admin-UI platform settings first, then the environment (see
+ * getDiscordOAuthConfig).
  */
 export const getDiscordConfig = query(async () => {
-  const { url } = getRequestEvent();
+  const { url, fetch } = getRequestEvent();
 
-  const discordApplicationId = process.env.DISCORD_APPLICATION_ID ?? null;
-  const isOauthConfigured =
-    !!process.env.DISCORD_APPLICATION_ID && !!process.env.DISCORD_CLIENT_SECRET;
+  const { applicationId, clientSecret } = await getDiscordOAuthConfig(fetch);
   const baseDomain = process.env.BASE_DOMAIN ?? null;
 
   return {
-    discordApplicationId,
-    isOauthConfigured,
+    discordApplicationId: applicationId,
+    isOauthConfigured: !!applicationId && !!clientSecret,
     baseDomain,
     currentHost: url.host,
   };
@@ -32,9 +33,9 @@ export const getDiscordConfig = query(async () => {
  * Needs server-only crypto (HMAC signing) and process.env access.
  */
 export const initiateDiscordLink = command(async () => {
-  const { url } = getRequestEvent();
+  const { url, fetch } = getRequestEvent();
 
-  const clientId = process.env.DISCORD_APPLICATION_ID;
+  const { applicationId: clientId } = await getDiscordOAuthConfig(fetch);
   const baseDomain = process.env.BASE_DOMAIN;
   if (!clientId || !baseDomain) {
     return { error: "Discord OAuth2 is not configured on this server." };

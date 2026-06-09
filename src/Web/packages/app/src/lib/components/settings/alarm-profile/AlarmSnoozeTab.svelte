@@ -34,14 +34,14 @@
   }
 </script>
 
-<div class="space-y-6">
+<div class="space-y-6 @container">
   <div class="space-y-4">
     <h4 class="font-medium flex items-center gap-2">
       <Timer class="h-4 w-4" />
       Snooze Settings
     </h4>
 
-    <div class="grid gap-4 sm:grid-cols-2">
+    <div class="grid gap-4 @sm:grid-cols-2">
       <div class="space-y-2">
         <Label>Default Snooze</Label>
         <div class="flex items-center gap-2">
@@ -120,7 +120,7 @@
     </div>
 
     {#if profile.reraise.enabled}
-      <div class="grid gap-4 sm:grid-cols-2 p-4 bg-muted/50 rounded-lg">
+      <div class="grid gap-4 @sm:grid-cols-2 p-4 bg-muted/50 rounded-lg">
         <div class="space-y-2">
           <Label>Re-raise every</Label>
           <div class="flex items-center gap-2">
@@ -169,7 +169,7 @@
           <br />
           For low alarms: extend if glucose is rising.
         </p>
-        <div class="grid gap-4 sm:grid-cols-3">
+        <div class="grid gap-4 @sm:grid-cols-3">
           <div class="space-y-2">
             <Label class="text-sm">Min Delta</Label>
             <div class="flex items-center gap-2">

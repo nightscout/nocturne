@@ -7,7 +7,7 @@
   import * as Select from "$lib/components/ui/select";
   import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
-  import { getReportsData, type DateRangeInput } from "$api/reports.remote";
+  import { getReportsAnalysis, type DateRangeInput } from "$api/reports.remote";
   import { bg, bgLabel } from "$lib/utils/formatting";
   import { getResourceContext } from "$lib/hooks/resource-context.svelte";
 
@@ -114,8 +114,8 @@
   // Call queries directly in reactive context — SvelteKit query() returns a
   // reactive QueryResult, not a Promise. Using $derived ensures the queries
   // re-run when inputs change.
-  const queryA = $derived(getReportsData(inputA));
-  const queryB = $derived(getReportsData(inputB));
+  const queryA = $derived(getReportsAnalysis(inputA));
+  const queryB = $derived(getReportsAnalysis(inputB));
 
   // Sync to layout's ResourceContext using $effect.pre (matching contextResource's
   // approach). $effect.pre runs before DOM updates, which is critical: the layout's
@@ -359,7 +359,7 @@
   ]);
 </script>
 
-<div class="space-y-6">
+<div class="@container space-y-6 p-3 @md:p-6">
   <!-- Period controls -->
   <Card.Root>
     <Card.Content class="space-y-4 p-4">
@@ -398,7 +398,7 @@
         </Button>
       </div>
 
-      <div class="grid gap-4 md:grid-cols-2">
+      <div class="grid gap-4 @xl:grid-cols-2">
         {#each sideConfigs as cfg (cfg.side)}
           {@const p = periods[cfg.side]}
           <div class="rounded-md border border-border bg-card p-3">
@@ -409,7 +409,7 @@
               ></span>
               <Input
                 value={p.label}
-                oninput={(e) =>
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
                   (periods = {
                     ...periods,
                     [cfg.side]: { ...p, label: e.currentTarget.value },
@@ -490,17 +490,16 @@
       <div class="space-y-1">
         {#each diffRows as row (row.key)}
           <div
-            class="grid items-center gap-4 rounded border border-border bg-card px-3 py-2.5"
-            style="grid-template-columns: minmax(140px, 1fr) 90px 90px minmax(120px, 2fr) 100px;"
+            class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded border border-border bg-card px-3 py-2.5 @2xl:grid @2xl:flex-nowrap @2xl:gap-4 @2xl:[grid-template-columns:minmax(140px,1fr)_90px_90px_minmax(120px,2fr)_100px]"
           >
-            <div class="text-sm font-medium">{row.label}</div>
-            <div class="text-right font-mono text-sm tabular-nums text-muted-foreground">
+            <div class="w-full text-sm font-medium @2xl:w-auto">{row.label}</div>
+            <div class="font-mono text-sm tabular-nums text-muted-foreground @2xl:text-right">
               {valueText(row.key, row.av)}
             </div>
-            <div class="text-right font-mono text-sm font-semibold tabular-nums">
+            <div class="font-mono text-sm font-semibold tabular-nums @2xl:text-right">
               {valueText(row.key, row.bv)}
             </div>
-            <div class="relative h-2 overflow-hidden rounded-full bg-muted">
+            <div class="relative order-last h-2 w-full overflow-hidden rounded-full bg-muted @2xl:order-none @2xl:w-auto">
               <div class="absolute top-0 bottom-0 left-1/2 w-px bg-border"></div>
               <div
                 class="absolute top-0 bottom-0 rounded-full transition-all duration-200"
@@ -508,7 +507,7 @@
               ></div>
             </div>
             <div
-              class="text-right font-mono text-xs font-semibold tabular-nums"
+              class="ml-auto font-mono text-xs font-semibold tabular-nums @2xl:ml-0 @2xl:text-right"
               style="color: {row.verdict === 'better'
                 ? 'var(--glucose-in-range)'
                 : row.verdict === 'worse'
@@ -538,7 +537,7 @@
       </Card.Description>
     </Card.Header>
     <Card.Content>
-      <div class="grid gap-6 md:grid-cols-2">
+      <div class="grid gap-6 @xl:grid-cols-2">
         {#each tirColumns as col (col.key)}
           <div class="flex flex-col">
             <div class="mb-3 flex items-center gap-2">

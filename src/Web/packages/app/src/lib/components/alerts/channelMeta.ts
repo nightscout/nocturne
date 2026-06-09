@@ -148,6 +148,17 @@ export const CHANNEL_META: ChannelMetaEntry[] = [
     destinationPlaceholder: "+15551234567",
     destinationRequired: true,
   },
+  {
+    type: ChannelType.ResendEmail,
+    label: "Email",
+    description: "Send alerts to an email address via Resend",
+    logo: "/logos/email.jpg",
+    platform: "resend",
+    destinationInput: "text",
+    destinationLabel: "Email Address",
+    destinationPlaceholder: "user@example.com",
+    destinationRequired: true,
+  },
 ];
 
 const CHANNEL_META_BY_TYPE: Map<string, ChannelMetaEntry> = new Map(

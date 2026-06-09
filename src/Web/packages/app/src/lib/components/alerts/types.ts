@@ -326,7 +326,7 @@ function makeDefault(kind: ConditionKind): ConditionNode {
 		case "temp_basal":
 			return {
 				type: "temp_basal",
-				temp_basal: { metric: "rate", operator: ">=", value: 1 },
+				temp_basal: { metric: TempBasalMetric.Rate, operator: ">=", value: 1 },
 			};
 		case "uploader_battery":
 			return {
@@ -433,7 +433,7 @@ export function nodeFromApi(
 	if (params === null || params === undefined) return null;
 	const k = kind as ConditionKind;
 	const node: ConditionNode = { type: k, _uid: newUid() };
-	(node as Record<string, unknown>)[k] = params;
+	(node as unknown as Record<string, unknown>)[k] = params;
 	// Defensive: a malformed loop-staleness rule with a `<`/`<=` operator would
 	// render an unselectable value in the editor (the dropdown only offers `>`
 	// and `>=`). Coerce on inbound and warn so we notice if it ever happens.
@@ -497,7 +497,7 @@ export function stripEditorFields(node: ConditionNode): ConditionNode {
 				child: stripEditorFields(node.sustained.child),
 			};
 		} else {
-			(cleaned as Record<string, unknown>)[k] = value;
+			(cleaned as unknown as Record<string, unknown>)[k] = value;
 		}
 	}
 	return cleaned;
@@ -511,7 +511,7 @@ export function nodeToApi(
 	node: ConditionNode | null,
 ): { conditionType: string; conditionParams: unknown } | null {
 	if (!node) return null;
-	const params = (node as Record<string, unknown>)[node.type];
+	const params = (node as unknown as Record<string, unknown>)[node.type];
 	return { conditionType: node.type, conditionParams: params ?? {} };
 }
 

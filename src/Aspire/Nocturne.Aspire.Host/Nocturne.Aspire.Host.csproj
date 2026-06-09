@@ -16,12 +16,11 @@
         <PackageReference Include="CommunityToolkit.Aspire.Hosting.NodeJS.Extensions" />
         <PackageReference Include="CommunityToolkit.Aspire.Hosting.Rust" />
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-        <PackageReference Include="Scalar.Aspire" />
         <PackageReference Include="Spectre.Console" />
+        <PackageReference Include="YamlDotNet" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\API\Nocturne.API\Nocturne.API.csproj" />
-        <ProjectReference Include="..\Nocturne.Aspire.ScalarBootstrap\Nocturne.Aspire.ScalarBootstrap.csproj" />
         <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj" IsAspireProjectResource="false" />
         <ProjectReference Include="..\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj" IsAspireProjectResource="false" />
         <ProjectReference Include="..\Nocturne.Aspire.Hosting\Nocturne.Aspire.Hosting.csproj" IsAspireProjectResource="false" />

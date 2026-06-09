@@ -23,8 +23,9 @@
   }>();
 </script>
 
+<div class="@container">
 <div
-  class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+  class="mb-6 flex flex-col gap-4 @sm:flex-row @sm:items-center @sm:justify-between"
 >
   <div class="flex items-center gap-3">
     <div
@@ -76,7 +77,7 @@
     {#if presentDataTypes.length > 0}
       <Popover.Root>
         <Popover.Trigger>
-          {#snippet child({ props })}
+          {#snippet child({ props }: { props: Record<string, unknown> })}
             <Button variant="outline" size="sm" class="gap-1.5" {...props}>
               <SlidersHorizontal class="h-3.5 w-3.5" />
               Types
@@ -122,4 +123,5 @@
       </Popover.Root>
     {/if}
   </div>
+</div>
 </div>

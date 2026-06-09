@@ -46,11 +46,11 @@ public class TenantRoleServiceTests : IDisposable
     [Fact]
     public async Task CreateRoleAsync_CreatesCustomRole()
     {
-        var result = await _service.CreateRoleAsync(_tenantId, "School Nurse", "Read-only for school staff", ["glucose.read", "statistics.read"]);
+        var result = await _service.CreateRoleAsync(_tenantId, "School Nurse", "Read-only for school staff", ["glucose.read", "reports.read"]);
         result.Name.Should().Be("School Nurse");
         result.Slug.Should().Be("school-nurse");
         result.Description.Should().Be("Read-only for school staff");
-        result.Permissions.Should().BeEquivalentTo(["glucose.read", "statistics.read"]);
+        result.Permissions.Should().BeEquivalentTo(["glucose.read", "reports.read"]);
         result.IsSystem.Should().BeFalse();
     }
 
@@ -121,7 +121,7 @@ public class TenantRoleServiceTests : IDisposable
         await _context.SaveChangesAsync();
 
         var effective = await _service.GetEffectivePermissionsAsync(member.Id);
-        effective.Should().BeEquivalentTo(["glucose.read", "statistics.read", "treatments.read"]);
+        effective.Should().BeEquivalentTo(["glucose.read", "reports.read", "treatments.read"]);
     }
 
     public void Dispose() => _context.Dispose();

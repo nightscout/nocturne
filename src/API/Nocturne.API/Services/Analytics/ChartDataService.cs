@@ -34,6 +34,7 @@ public class ChartDataService : IChartDataService
     private readonly ITempBasalRepository _tempBasalRepository;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
     private readonly IBasalRateResolver _basalRateResolver;
+    private readonly ITherapyTimelineResolver _therapyTimelineResolver;
     private readonly ILogger<ChartDataService> _logger;
 
     /// <summary>
@@ -45,6 +46,7 @@ public class ChartDataService : IChartDataService
     /// <param name="tempBasalRepository">Repository for fetching temp basal records.</param>
     /// <param name="therapySettingsResolver">Resolves whether therapy settings (profile) data exists.</param>
     /// <param name="basalRateResolver">Resolves the active basal rate at a point in time.</param>
+    /// <param name="therapyTimelineResolver">Builds the therapy timeline that <see cref="IBasalSeriesBuilder"/> consumes.</param>
     /// <param name="logger">The logger instance.</param>
     public ChartDataService(
         IEnumerable<IChartDataStage> pipeline,
@@ -53,6 +55,7 @@ public class ChartDataService : IChartDataService
         ITempBasalRepository tempBasalRepository,
         ITherapySettingsResolver therapySettingsResolver,
         IBasalRateResolver basalRateResolver,
+        ITherapyTimelineResolver therapyTimelineResolver,
         ILogger<ChartDataService> logger
     )
     {
@@ -62,6 +65,7 @@ public class ChartDataService : IChartDataService
         _tempBasalRepository = tempBasalRepository;
         _therapySettingsResolver = therapySettingsResolver;
         _basalRateResolver = basalRateResolver;
+        _therapyTimelineResolver = therapyTimelineResolver;
         _logger = logger;
     }
 
@@ -113,11 +117,18 @@ public class ChartDataService : IChartDataService
             ct: cancellationToken
         )).ToList();
 
+        var timeline = await _therapyTimelineResolver.BuildAsync(
+            startTime,
+            endTime + 1,
+            ct: cancellationToken
+        );
+
         return await _basalSeriesBuilder.BuildAsync(
             tempBasals,
             startTime,
             endTime,
             defaultBasalRate,
+            timeline,
             cancellationToken
         );
     }

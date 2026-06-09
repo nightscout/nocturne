@@ -44,7 +44,7 @@
   <!-- Calendar Grid Skeleton -->
   <div class="flex-1 p-4">
     <Card.Root class="h-full">
-      <Card.Content class="p-4 h-full flex flex-col">
+      <Card.Content class="@container p-4 h-full flex flex-col">
         <!-- Day of week headers -->
         <div class="grid grid-cols-7 gap-1 mb-2">
           {#each Array(7) as _}
@@ -71,7 +71,7 @@
         </div>
 
         <!-- Month Summary Skeleton -->
-        <div class="mt-4 pt-4 border-t grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="mt-4 pt-4 border-t grid grid-cols-2 @lg:grid-cols-4 gap-4">
           {#each Array(4) as _}
             <div class="text-center">
               <Skeleton class="h-8 w-16 mx-auto mb-1" />

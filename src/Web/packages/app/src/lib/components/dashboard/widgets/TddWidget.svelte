@@ -52,15 +52,19 @@
 
     <!-- Use insulinDelivery for insulin values (single source of truth) -->
     {@const todayBolus = todayDelivery?.totalBolus ?? 0}
-    {@const todayBasal = todayDelivery?.totalBasal ?? 0}
-    {@const todayTotal = todayDelivery?.tdd ?? (todayBolus + todayBasal)}
+    {@const todayAuto = todayDelivery?.microBolusInsulin ?? 0}
+    {@const todayBasal = Math.max(0, (todayDelivery?.totalBasal ?? 0) - todayAuto)}
+    {@const todayTotal = todayDelivery?.tdd ?? (todayBolus + todayAuto + todayBasal)}
 
-    {@const avgBolus = avgDelivery?.tdd ? (avgDelivery.tdd * (avgDelivery.bolusPercent ?? 0) / 100) : 0}
-    {@const avgBasal = avgDelivery?.tdd ? (avgDelivery.tdd * (avgDelivery.basalPercent ?? 0) / 100) : 0}
+    {@const periodDays = stats?.last90Days?.periodDays ?? 90}
+    {@const avgBolus = (avgDelivery?.totalBolus ?? 0) / periodDays}
+    {@const avgAuto = (avgDelivery?.microBolusInsulin ?? 0) / periodDays}
+    {@const avgBasal = Math.max(0, ((avgDelivery?.totalBasal ?? 0) - (avgDelivery?.microBolusInsulin ?? 0)) / periodDays)}
     {@const avgTotal = avgDelivery?.tdd ?? 0}
 
     <!-- Select which values to display based on toggle -->
     {@const bolus = showAverage ? avgBolus : todayBolus}
+    {@const auto = showAverage ? avgAuto : todayAuto}
     {@const basal = showAverage ? avgBasal : todayBasal}
     {@const total = showAverage ? avgTotal : todayTotal}
     {@const carbs = showAverage ? avgCarbs : todayCarbs}
@@ -68,6 +72,7 @@
     {#if total > 0 || carbs > 0}
       {@const segmentData = [
         { key: "Bolus", value: bolus, color: "var(--iob-bolus)" },
+        { key: "Auto", value: auto, color: "var(--iob-temporary)" },
         { key: "Basal", value: basal, color: "var(--iob-basal)" },
       ].filter(s => s.value > 0)}
 
@@ -78,7 +83,7 @@
               data={segmentData}
               key="key"
               value="value"
-              cRange={["var(--iob-bolus)", "var(--iob-basal)"]}
+              cRange={segmentData.map(s => s.color)}
               innerRadius={-20}
               cornerRadius={2}
               padAngle={0.02}
@@ -110,6 +115,15 @@
           ></span>
           Bolus {bolus.toFixed(1)}U
         </span>
+        {#if auto > 0}
+          <span class="flex items-center gap-1.5">
+            <span
+              class="w-2 h-2 rounded-full"
+              style="background-color: var(--iob-temporary);"
+            ></span>
+            Auto {auto.toFixed(1)}U
+          </span>
+        {/if}
         <span class="flex items-center gap-1.5">
           <span
             class="w-2 h-2 rounded-full"

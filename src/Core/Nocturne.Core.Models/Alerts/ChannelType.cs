@@ -63,4 +63,8 @@ public enum ChannelType
     /// <summary>Home Assistant integration delivery via dedicated SignalR hub.</summary>
     [EnumMember(Value = "home_assistant"), JsonStringEnumMemberName("home_assistant")]
     HomeAssistant,
+
+    /// <summary>Email delivery via Resend.</summary>
+    [EnumMember(Value = "resend_email"), JsonStringEnumMemberName("resend_email")]
+    ResendEmail,
 }

@@ -140,6 +140,131 @@ public class GlookoStateSpanMapper
         return stateSpans;
     }
 
+    public List<StateSpan> TransformV3PumpModeToStateSpans(GlookoV3GraphResponse graphData)
+    {
+        var stateSpans = new List<StateSpan>();
+
+        if (graphData?.Series == null)
+            return stateSpans;
+
+        var series = graphData.Series;
+
+        // PumpMode mappings
+        MapPumpModeSeries(stateSpans, series.PumpCamapsAutomaticMode, "camaps_automatic", PumpModeState.Automatic);
+        MapPumpModeSeries(stateSpans, series.PumpCamapsManualMode, "camaps_manual", PumpModeState.Manual);
+        MapPumpModeSeries(stateSpans, series.PumpCamapsBoostMode, "camaps_boost", PumpModeState.Boost);
+        MapPumpModeSeries(stateSpans, series.PumpCamapsEaseOffMode, "camaps_easeoff", PumpModeState.EaseOff);
+        MapPumpModeSeries(stateSpans, series.PumpCamapsLibertyMode, "camaps_liberty", PumpModeState.Liberty);
+        MapPumpModeSeries(stateSpans, series.PumpCamapsPumpDeliverySuspendedMode, "camaps_suspended", PumpModeState.Suspended);
+        MapPumpModeSeries(stateSpans, series.PumpControliqAutomaticMode, "controliq_automatic", PumpModeState.Automatic);
+        MapPumpModeSeries(stateSpans, series.PumpControliqManualMode, "controliq_manual", PumpModeState.Manual);
+        MapPumpModeSeries(stateSpans, series.PumpControliqSleepMode, "controliq_sleep", PumpModeState.Sleep);
+        MapPumpModeSeries(stateSpans, series.PumpControliqExerciseMode, "controliq_exercise", PumpModeState.Exercise);
+        MapPumpModeSeries(stateSpans, series.PumpOp5AutomaticMode, "op5_automatic", PumpModeState.Automatic);
+        MapPumpModeSeries(stateSpans, series.PumpOp5ManualMode, "op5_manual", PumpModeState.Manual);
+        MapPumpModeSeries(stateSpans, series.PumpOp5LimitedMode, "op5_limited", PumpModeState.Limited);
+        MapPumpModeSeries(stateSpans, series.PumpOp5HypoprotectMode, "op5_hypoprotect", PumpModeState.Limited);
+        MapPumpModeSeries(stateSpans, series.PumpBasaliqAutomaticMode, "basaliq_automatic", PumpModeState.Automatic);
+        MapPumpModeSeries(stateSpans, series.PumpBasaliqManualMode, "basaliq_manual", PumpModeState.Manual);
+        MapPumpModeSeries(stateSpans, series.PumpGenericAutomaticMode, "generic_automatic", PumpModeState.Automatic);
+        MapPumpModeSeries(stateSpans, series.PumpGenericManualMode, "generic_manual", PumpModeState.Manual);
+
+        // PumpConnectivity mappings
+        MapPumpConnectivitySeries(stateSpans, series.PumpCamapsNoPumpConnectivityMode, "camaps_no_pump", PumpConnectivityState.Disconnected);
+        MapPumpConnectivitySeries(stateSpans, series.PumpCamapsBluetoothTurnedOffMode, "camaps_bt_off", PumpConnectivityState.BluetoothOff);
+        MapPumpConnectivitySeries(stateSpans, series.PumpCamapsNoCgmMode, "camaps_no_cgm", PumpConnectivityState.Disconnected);
+
+        _logger.LogInformation(
+            "[{ConnectorSource}] Transformed {Count} pump mode/connectivity state spans from v3 data",
+            _connectorSource,
+            stateSpans.Count
+        );
+
+        return stateSpans;
+    }
+
+    private void MapPumpModeSeries(
+        List<StateSpan> stateSpans,
+        GlookoV3PumpModeDataPoint[]? dataPoints,
+        string glookoType,
+        PumpModeState state)
+    {
+        if (dataPoints == null)
+            return;
+
+        foreach (var point in dataPoints)
+        {
+            if (point.Interpolated)
+                continue;
+
+            var startTimestamp = _timeMapper.GetCorrectedGlookoTime(point.X);
+            var durationSeconds = point.Duration ?? 0;
+            var endTimestamp =
+                durationSeconds > 0
+                    ? startTimestamp.AddSeconds(durationSeconds)
+                    : (DateTime?)null;
+
+            stateSpans.Add(
+                new StateSpan
+                {
+                    OriginalId = $"glooko_pumpmode_{glookoType}_{point.X}",
+                    Category = StateSpanCategory.PumpMode,
+                    State = state.ToString(),
+                    StartTimestamp = startTimestamp,
+                    EndTimestamp = endTimestamp,
+                    Source = _connectorSource,
+                    Metadata = new Dictionary<string, object>
+                    {
+                        { "label", point.Type ?? glookoType },
+                        { "glookoType", glookoType },
+                        { "durationSeconds", durationSeconds }
+                    }
+                }
+            );
+        }
+    }
+
+    private void MapPumpConnectivitySeries(
+        List<StateSpan> stateSpans,
+        GlookoV3PumpModeDataPoint[]? dataPoints,
+        string glookoType,
+        PumpConnectivityState state)
+    {
+        if (dataPoints == null)
+            return;
+
+        foreach (var point in dataPoints)
+        {
+            if (point.Interpolated)
+                continue;
+
+            var startTimestamp = _timeMapper.GetCorrectedGlookoTime(point.X);
+            var durationSeconds = point.Duration ?? 0;
+            var endTimestamp =
+                durationSeconds > 0
+                    ? startTimestamp.AddSeconds(durationSeconds)
+                    : (DateTime?)null;
+
+            stateSpans.Add(
+                new StateSpan
+                {
+                    OriginalId = $"glooko_pumpconn_{glookoType}_{point.X}",
+                    Category = StateSpanCategory.PumpConnectivity,
+                    State = state.ToString(),
+                    StartTimestamp = startTimestamp,
+                    EndTimestamp = endTimestamp,
+                    Source = _connectorSource,
+                    Metadata = new Dictionary<string, object>
+                    {
+                        { "label", point.Type ?? glookoType },
+                        { "glookoType", glookoType },
+                        { "durationSeconds", durationSeconds }
+                    }
+                }
+            );
+        }
+    }
+
     public List<StateSpan> TransformV2ToStateSpans(GlookoBatchData batchData)
     {
         var stateSpans = new List<StateSpan>();

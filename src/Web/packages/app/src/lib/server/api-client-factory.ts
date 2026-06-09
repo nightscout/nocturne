@@ -21,39 +21,58 @@ export function getApiBaseUrl(): string | null {
 export function getHashedInstanceKey(): string | null {
   const instanceKey = env.INSTANCE_KEY;
   return instanceKey
-    ? createHash("sha1").update(instanceKey).digest("hex").toLowerCase()
+    ? createHash("sha256").update(instanceKey).digest("hex").toLowerCase()
     : null;
 }
 
 /**
- * Create an API client with custom fetch that includes auth headers.
- *
- * When `responseCookies` is provided, any auth-related Set-Cookie headers
- * on the response are forwarded onto the outgoing SvelteKit response so
- * that token rotation performed by the API middleware reaches the browser.
- * Without this, SSR-initiated calls would silently rotate tokens that
- * never make it back to the client, causing the next request to fail auth
- * (since the old refresh token is now revoked).
+ * Header naming the trusted service presenting the instance key. The API's
+ * InstanceKeyHandler only authenticates the instance key as admin when this
+ * marker is present, so a bare key accidentally forwarded onto an end-user
+ * request cannot elevate that request and bypass per-tenant public access.
+ * Must stay in sync with `ServiceNames.Headers.InstanceService` on the API.
  */
-export function createServerApiClient(
-  baseUrl: string,
+const INSTANCE_SERVICE_HEADER = "X-Instance-Service";
+const INSTANCE_SERVICE_NAME = "nocturne-web";
+
+export interface ServerHttpClientOptions {
+  accessToken?: string;
+  refreshToken?: string;
+  guestSessionToken?: string;
+  platformAccessToken?: string;
+  hashedInstanceKey?: string | null;
+  extraHeaders?: Record<string, string>;
+  responseCookies?: CookieSetter;
+  signal?: AbortSignal;
+}
+
+/** A minimal `{ fetch }` http client as consumed by the generated ApiClient. */
+export interface ServerHttpClient {
+  fetch: (url: RequestInfo, init?: RequestInit) => Promise<Response>;
+}
+
+/**
+ * Build a server-side fetch that forwards service auth (instance key), the
+ * caller's session cookies, and extra headers to the backend, and propagates
+ * any auth-cookie rotation back onto the outgoing SvelteKit response.
+ *
+ * Exposed separately from {@link createServerApiClient} so callers that need a
+ * raw request against the backend (e.g. probing a legacy `/api/v1/*` endpoint
+ * the typed client doesn't surface) reuse the exact same auth-forwarding and
+ * token-rotation handling instead of reimplementing it.
+ */
+export function createServerHttpClient(
   fetchFn: typeof fetch,
-  options?: {
-    accessToken?: string;
-    refreshToken?: string;
-    guestSessionToken?: string;
-    hashedInstanceKey?: string | null;
-    extraHeaders?: Record<string, string>;
-    responseCookies?: CookieSetter;
-    signal?: AbortSignal;
-  }
-): ApiClient {
-  const httpClient = {
+  options?: ServerHttpClientOptions
+): ServerHttpClient {
+  return {
     fetch: async (url: RequestInfo, init?: RequestInit): Promise<Response> => {
       const headers = new Headers(init?.headers);
 
       if (options?.hashedInstanceKey) {
         headers.set("X-Instance-Key", options.hashedInstanceKey);
+        // Declare this as a genuine service call so the API honors the key.
+        headers.set(INSTANCE_SERVICE_HEADER, INSTANCE_SERVICE_NAME);
       }
 
       if (options?.extraHeaders) {
@@ -71,6 +90,11 @@ export function createServerApiClient(
       }
       if (options?.guestSessionToken) {
         cookies.push(`nocturne-guest-session=${options.guestSessionToken}`);
+      }
+      if (options?.platformAccessToken) {
+        cookies.push(
+          `${AUTH_COOKIE_NAMES.platformAccess}=${options.platformAccessToken}`
+        );
       }
       if (cookies.length > 0) {
         headers.set("Cookie", cookies.join("; "));
@@ -99,6 +123,22 @@ export function createServerApiClient(
       return response;
     },
   };
+}
 
-  return new ApiClient(baseUrl, httpClient);
+/**
+ * Create an API client with custom fetch that includes auth headers.
+ *
+ * When `responseCookies` is provided, any auth-related Set-Cookie headers
+ * on the response are forwarded onto the outgoing SvelteKit response so
+ * that token rotation performed by the API middleware reaches the browser.
+ * Without this, SSR-initiated calls would silently rotate tokens that
+ * never make it back to the client, causing the next request to fail auth
+ * (since the old refresh token is now revoked).
+ */
+export function createServerApiClient(
+  baseUrl: string,
+  fetchFn: typeof fetch,
+  options?: ServerHttpClientOptions
+): ApiClient {
+  return new ApiClient(baseUrl, createServerHttpClient(fetchFn, options));
 }

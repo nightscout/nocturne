@@ -297,4 +297,5 @@ export const DEFAULT_SETTINGS: ClockSettings = {
   staleMinutes: 13,
   alwaysShowTime: false,
   backgroundOpacity: 100,
+  screensaverMode: false,
 };

@@ -12,10 +12,7 @@
   } from "$api/generated/alertRules.generated.remote";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
   import { AlertRuleSeverity, AlertConditionType } from "$api-clients";
-  import type {
-    AlertRuleResponse,
-    HistoryExcursionResponse,
-  } from "$api-clients";
+  import type { HistoryExcursionResponse } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -41,6 +38,7 @@
     Loader2,
     History as HistoryIcon,
     PlayCircle,
+    CalendarDays,
   } from "lucide-svelte";
 
   import RuleBuilder from "$lib/components/alerts/RuleBuilder.svelte";
@@ -61,7 +59,7 @@
 
   // ---- Page state ------------------------------------------------------
   // The dynamic [id] segment is "new" when creating, otherwise a UUID.
-  let ruleId = $derived(page.params.id);
+  let ruleId = $derived(page.params.id ?? "");
   let isNew = $derived(ruleId === "new");
 
   let saving = $state(false);
@@ -197,6 +195,14 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
+  // Link to the Day in Review report for the calendar day a firing occurred.
+  function dayInReviewHref(at: Date | string | undefined): string | undefined {
+    if (!at) return undefined;
+    const d = at instanceof Date ? at : new Date(at);
+    if (Number.isNaN(d.getTime())) return undefined;
+    return `/reports/day-in-review?date=${ymd(d)}`;
+  }
+
   function formatHistoryRow(at: Date | string | undefined): string {
     if (!at) return "—";
     const d = at instanceof Date ? at : new Date(at);
@@ -256,7 +262,7 @@
   <title>{isNew ? "New alert" : state.name || "Alert"} · Nocturne</title>
 </svelte:head>
 
-<div class="container mx-auto p-4 lg:p-6 max-w-7xl">
+<div class="@container container mx-auto p-3 @md:p-6 max-w-7xl">
   <!-- Header -->
   <div class="mb-6 flex items-center justify-between gap-4">
     <div class="flex items-center gap-2 min-w-0">
@@ -314,9 +320,9 @@
     </div>
   {/if}
 
-  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+  <div class="grid grid-cols-1 gap-6 @3xl:grid-cols-[minmax(0,1fr)_320px] @3xl:items-start">
     <!-- Main editor column -->
-    <div class="space-y-6">
+    <div class="min-w-0 space-y-6">
       {#if loading}
         <Card>
           <CardHeader>
@@ -344,7 +350,7 @@
               <Switch
                 id="rule-enabled"
                 checked={state.isEnabled}
-                onCheckedChange={(c) => {
+                onCheckedChange={(c: boolean) => {
                   state.isEnabled = c;
                 }}
               />
@@ -358,7 +364,7 @@
                 type="text"
                 placeholder="Approaching low"
                 value={state.name}
-                oninput={(e) => {
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                   state.name = e.currentTarget.value;
                 }}
               />
@@ -370,7 +376,7 @@
                 rows={2}
                 placeholder="Why this alert exists, what it should trigger"
                 value={state.description}
-                oninput={(e) => {
+                oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) => {
                   state.description = e.currentTarget.value;
                 }}
               />
@@ -396,7 +402,7 @@
               <Checkbox
                 id="rule-allow-dnd"
                 checked={state.allowThroughDnd}
-                onCheckedChange={(c) => {
+                onCheckedChange={(c: boolean) => {
                   state.allowThroughDnd = c === true;
                 }}
               />
@@ -486,7 +492,7 @@
                   min="1"
                   class="max-w-32"
                   value={smartSnoozeMinutes}
-                  oninput={(e) => {
+                  oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                     const n = Number(e.currentTarget.value);
                     if (Number.isFinite(n))
                       state.clientConfig.snooze.smartSnoozeExtendMinutes = n;
@@ -509,7 +515,7 @@
     </div>
 
     <!-- Right rail: test alert + historic firings -->
-    <aside class="lg:sticky lg:top-6 self-start space-y-4">
+    <aside class="min-w-0 lg:sticky lg:top-6 self-start space-y-4">
       <Card>
         <CardHeader>
           <CardTitle class="text-base">Test alert</CardTitle>
@@ -575,24 +581,41 @@
             {:else}
               <div class="max-h-72 overflow-y-auto space-y-1">
                 {#each history as h (h.id)}
-                  <button
-                    type="button"
-                    class="flex w-full items-center gap-2 rounded-md border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted"
-                    onclick={() => openReplay(h.startedAt)}
+                  <div
+                    class="flex items-center gap-1 rounded-md border bg-background pr-1 hover:bg-muted"
                   >
-                    <span
-                      class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
-                      aria-hidden="true"
-                    ></span>
-                    <span class="flex-1 min-w-0 truncate tabular-nums">
-                      {formatHistoryRow(h.startedAt)}
-                    </span>
-                    {#if h.acknowledgedAt}
-                      <span class="text-[10px] text-muted-foreground shrink-0">
-                        ack
+                    <button
+                      type="button"
+                      class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs"
+                      onclick={() => openReplay(h.startedAt)}
+                      title="Replay this day in the simulator"
+                    >
+                      <span
+                        class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
+                        aria-hidden="true"
+                      ></span>
+                      <span class="min-w-0 flex-1 truncate tabular-nums">
+                        {formatHistoryRow(h.startedAt)}
                       </span>
+                      {#if h.acknowledgedAt}
+                        <span class="text-[10px] text-muted-foreground shrink-0">
+                          ack
+                        </span>
+                      {/if}
+                    </button>
+                    {#if dayInReviewHref(h.startedAt)}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="h-6 w-6 shrink-0 text-muted-foreground"
+                        href={dayInReviewHref(h.startedAt)}
+                        title="Open day in review"
+                        aria-label="Open day in review"
+                      >
+                        <CalendarDays class="h-3.5 w-3.5" />
+                      </Button>
                     {/if}
-                  </button>
+                  </div>
                 {/each}
               </div>
             {/if}
@@ -605,9 +628,9 @@
 
 <Dialog.Root bind:open={replayOpen}>
   <Dialog.Content
-    class="flex max-h-[90vh] max-w-6xl w-6xl flex-col sm:max-w-[95vw]"
+    class="flex h-[90vh] max-h-[90vh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:w-[95vw] sm:max-w-7xl"
   >
-    <Dialog.Header>
+    <Dialog.Header class="border-b px-4 py-3">
       <Dialog.Title class="flex items-center gap-2">
         <PlayCircle class="h-4 w-4" /> Replay
       </Dialog.Title>
@@ -617,7 +640,7 @@
       </Dialog.Description>
     </Dialog.Header>
 
-    <div class="flex-1 min-h-0 overflow-hidden py-2">
+    <div class="@container min-h-0 flex-1 overflow-hidden p-3 @md:p-4">
       <ReplayPanel
         initialCustomDate={replayInitialDate}
         rule={buildReplayRule}

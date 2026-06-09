@@ -1,31 +1,31 @@
 // scripts/publish-release.cs
 //
-// Generates the production Docker Compose bundle for GitHub Releases.
+// Generates the production Docker Compose bundle and commits the results to
+// deploy/ and docs/diagrams/ before tagging a release.
 //
 // Usage:
-//   dotnet run scripts/publish-release.cs [output-dir]
+//   dotnet run scripts/publish-release.cs
 //
 // Requires: .NET 10 SDK, Aspire CLI
 
-#:package YamlDotNet
+#:project Shared/Shared.csproj
 
-using System.Diagnostics;
-using System.Text;
-using YamlDotNet.RepresentationModel;
+#pragma warning disable IL2026, IL3050 // Script — never trimmed or AOT-compiled.
+
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using static ProcessHelpers;
 
 var repoRoot = Directory.GetCurrentDirectory();
-var outputDir = args.Length > 0 ? Path.GetFullPath(args[0]) : Path.Combine(repoRoot, "release-output");
 var appHostDir = Path.Combine(repoRoot, "src", "Aspire", "Nocturne.Aspire.Host");
 var tempDir = Path.Combine(Path.GetTempPath(), $"nocturne-release-{Guid.NewGuid():N}");
 
-Directory.CreateDirectory(outputDir);
 Directory.CreateDirectory(tempDir);
 
 try
 {
     Console.WriteLine("[publish-release] Generating production docker-compose...");
 
-    // Run aspire publish with production flags
     var aspireEnv = new Dictionary<string, string>
     {
         ["Aspire__OptionalServices__AspireDashboard__Enabled"] = "false",
@@ -49,40 +49,67 @@ try
     }
 
     var composePath = Path.Combine(tempDir, "docker-compose.yaml");
+    var portainerComposePath = Path.Combine(tempDir, "docker-compose.portainer.yaml");
+    var envMetadataPath = Path.Combine(tempDir, "env-metadata.json");
+
     if (!File.Exists(composePath))
     {
         Console.Error.WriteLine("[publish-release] ERROR: aspire publish did not produce docker-compose.yaml");
         return 1;
     }
 
-    // Inline the init script via docker compose configs so the compose is
-    // self-contained — no bind mounts, compatible with Portainer CE.
-    var initScriptSource = Path.Combine(repoRoot, "docs", "postgres", "container-init", "00-init.sh");
-    var composeYaml = File.ReadAllText(composePath);
-    var processedCompose = InlineInitScript(composeYaml, initScriptSource);
+    if (!File.Exists(portainerComposePath))
+    {
+        Console.Error.WriteLine("[publish-release] ERROR: aspire publish did not produce docker-compose.portainer.yaml");
+        return 1;
+    }
 
-    var composeOutputPath = Path.Combine(outputDir, "docker-compose.yaml");
-    File.WriteAllText(composeOutputPath, processedCompose);
-    Console.WriteLine($"[publish-release] Wrote {composeOutputPath}");
+    if (!File.Exists(envMetadataPath))
+    {
+        Console.Error.WriteLine("[publish-release] ERROR: aspire publish did not produce env-metadata.json");
+        return 1;
+    }
 
-    // Generate .env.example from aspire-generated .env
-    var aspireEnvPath = Path.Combine(tempDir, ".env");
-    var envExampleOutputPath = Path.Combine(outputDir, ".env.example");
-    GenerateEnvExample(aspireEnvPath, envExampleOutputPath);
-    Console.WriteLine($"[publish-release] Wrote {envExampleOutputPath}");
+    // Parse via JsonNode rather than reflection-based Deserialize: file-based
+    // apps run with reflection serialization disabled, which would throw.
+    var envMetadata = JsonNode.Parse(File.ReadAllText(envMetadataPath))!
+        .AsArray()
+        .Select(n => new EnvVarMeta(
+            (string)n!["name"]!,
+            (string)n["label"]!,
+            (string?)n["description"],
+            (string?)n["default"]))
+        .ToArray();
 
-    // Write processed compose and .env.example to deploy/portainer/ in the repo
-    // so they can be committed and used directly from the repository.
+    var groups = ParseAspireEnv(Path.Combine(tempDir, ".env"), envMetadata);
+    var envExample = GenerateEnvExample(groups, envMetadata);
+
+    // deploy/docker-compose/ — self-contained aspire output. The init script is
+    // inlined into the compose as a config (see PortainerComposePublisher), so no
+    // separate init/ directory is shipped; the bundle is just compose + .env.
+    var deployDockerComposeDir = Path.Combine(repoRoot, "deploy", "docker-compose");
+    Directory.CreateDirectory(deployDockerComposeDir);
+    File.Copy(composePath, Path.Combine(deployDockerComposeDir, "docker-compose.yaml"), overwrite: true);
+    File.WriteAllText(Path.Combine(deployDockerComposeDir, ".env.example"), envExample);
+    Console.WriteLine("[publish-release] Updated deploy/docker-compose/");
+
+    // deploy/portainer/ — self-contained compose with inlined init script.
     var deployPortainerDir = Path.Combine(repoRoot, "deploy", "portainer");
     Directory.CreateDirectory(deployPortainerDir);
-    File.WriteAllText(Path.Combine(deployPortainerDir, "docker-compose.yaml"), processedCompose);
-    File.Copy(envExampleOutputPath, Path.Combine(deployPortainerDir, ".env.example"), overwrite: true);
-    Console.WriteLine($"[publish-release] Updated deploy/portainer/ (commit these before tagging)");
+    File.Copy(portainerComposePath, Path.Combine(deployPortainerDir, "docker-compose.yaml"), overwrite: true);
+    File.WriteAllText(Path.Combine(deployPortainerDir, ".env.example"), envExample);
+    File.WriteAllText(Path.Combine(deployPortainerDir, "templates.json"), GeneratePortainerTemplate(groups, envMetadata));
+    Console.WriteLine("[publish-release] Updated deploy/portainer/");
+
+    // docs/diagrams/ — Mermaid architecture diagrams produced by MermaidDiagramPublisher.
+    var diagramsDir = Path.Combine(repoRoot, "docs", "diagrams");
+    Directory.CreateDirectory(diagramsDir);
+    foreach (var mmd in Directory.GetFiles(tempDir, "*.mmd"))
+        File.Copy(mmd, Path.Combine(diagramsDir, Path.GetFileName(mmd)), overwrite: true);
+    Console.WriteLine("[publish-release] Updated docs/diagrams/");
 
     Console.WriteLine();
-    Console.WriteLine("[publish-release] Done! Output files:");
-    Console.WriteLine($"  {composeOutputPath}");
-    Console.WriteLine($"  {envExampleOutputPath}");
+    Console.WriteLine("[publish-release] Done! Commit deploy/ and docs/diagrams/ before tagging.");
 
     return 0;
 }
@@ -92,103 +119,10 @@ finally
         Directory.Delete(tempDir, recursive: true);
 }
 
-// Replaces the ./init bind-mount on nocturne-postgres-server with a docker
-// compose configs entry that inlines the init script content directly.
-// This makes the compose self-contained and compatible with Portainer CE.
-static string InlineInitScript(string composeYaml, string initScriptPath)
+// ── env parsing ───────────────────────────────────────────────────────────────
+
+static EnvVarGroups ParseAspireEnv(string aspireEnvPath, EnvVarMeta[] metadata)
 {
-    if (!File.Exists(initScriptPath))
-        throw new FileNotFoundException(
-            $"[publish-release] Init script not found at: {initScriptPath}", initScriptPath);
-
-    var initScriptContent = File.ReadAllText(initScriptPath);
-
-    var yaml = new YamlStream();
-    using (var reader = new StringReader(composeYaml))
-        yaml.Load(reader);
-
-    var root = (YamlMappingNode)yaml.Documents[0].RootNode;
-
-    // Locate the postgres service
-    var services = (YamlMappingNode)root["services"];
-    YamlMappingNode? postgresService = null;
-    foreach (var entry in services)
-    {
-        var key = ((YamlScalarNode)entry.Key).Value ?? "";
-        if (key.Contains("postgres", StringComparison.OrdinalIgnoreCase))
-        {
-            postgresService = (YamlMappingNode)entry.Value;
-            break;
-        }
-    }
-
-    if (postgresService is null)
-        throw new InvalidOperationException("Could not find postgres service in docker-compose.yaml");
-
-    // Remove the ./init bind-mount from the postgres service volumes
-    if (postgresService.Children.TryGetValue("volumes", out var volumesNode))
-    {
-        var volumesList = (YamlSequenceNode)volumesNode;
-        YamlNode? bindMountEntry = null;
-        foreach (var item in volumesList)
-        {
-            if (item is YamlMappingNode volumeMap
-                && volumeMap.Children.TryGetValue("source", out var sourceNode)
-                && ((YamlScalarNode)sourceNode).Value == "./init")
-            {
-                bindMountEntry = item;
-                break;
-            }
-        }
-        if (bindMountEntry is null)
-            throw new InvalidOperationException(
-                "[publish-release] Could not find './init' bind-mount in postgres service volumes. " +
-                "Has the Aspire output format changed?");
-        volumesList.Children.Remove(bindMountEntry);
-    }
-
-    // Add configs reference to the postgres service
-    var configsRef = new YamlSequenceNode(
-        new YamlMappingNode(
-            new YamlScalarNode("source"), new YamlScalarNode("nocturne-init"),
-            new YamlScalarNode("target"), new YamlScalarNode("/docker-entrypoint-initdb.d/00-init.sh"),
-            new YamlScalarNode("mode"), new YamlScalarNode("493") { Style = YamlDotNet.Core.ScalarStyle.Plain }
-        )
-    );
-    postgresService.Children[new YamlScalarNode("configs")] = configsRef;
-
-    // Add top-level configs key with inlined script content
-    var configContent = new YamlMappingNode();
-    configContent.Children[new YamlScalarNode("content")] = new YamlScalarNode(initScriptContent)
-    {
-        Style = YamlDotNet.Core.ScalarStyle.Literal,
-    };
-    var topLevelConfigs = new YamlMappingNode();
-    topLevelConfigs.Children[new YamlScalarNode("nocturne-init")] = configContent;
-    root.Children[new YamlScalarNode("configs")] = topLevelConfigs;
-
-    // Serialize back to YAML
-    var sb = new StringBuilder();
-    using (var writer = new StringWriter(sb))
-        yaml.Save(writer, assignAnchors: false);
-
-    return sb.ToString();
-}
-
-static void GenerateEnvExample(
-    string aspireEnvPath,
-    string outputPath)
-{
-    // Known defaults for non-secret values
-    var defaults = new Dictionary<string, string>
-    {
-        ["NOCTURNE_API_IMAGE"] = "ghcr.io/nightscout/nocturne/nocturne-api:latest",
-        ["NOCTURNE_WEB_IMAGE"] = "ghcr.io/nightscout/nocturne/nocturne-web:latest",
-        ["NOCTURNE_API_PORT"] = "8080",
-        ["POSTGRES_USERNAME"] = "nocturne",
-    };
-
-    // Secret vars -- leave blank
     var secrets = new HashSet<string>
     {
         "POSTGRES_PASSWORD",
@@ -198,13 +132,11 @@ static void GenerateEnvExample(
         "INSTANCE_KEY",
     };
 
-    // Required config (not secrets, but must be set)
     var requiredConfig = new HashSet<string>
     {
         "BASE_DOMAIN",
     };
 
-    // Optional vars (all bot integration config — leave blank if not using)
     var optional = new HashSet<string>
     {
         "DISCORD_BOT_TOKEN",
@@ -221,22 +153,14 @@ static void GenerateEnvExample(
         "WHATSAPP_VERIFY_TOKEN",
     };
 
-    using var writer = new StreamWriter(outputPath);
-    writer.WriteLine("# Nocturne Production Environment");
-    writer.WriteLine("# See: https://github.com/nightscout/nocturne/releases");
-    writer.WriteLine("#");
-    writer.WriteLine("# Copy this file to .env and fill in the required values.");
-    writer.WriteLine("# Passwords are only used on first database initialization.");
-    writer.WriteLine();
+    var seen = new HashSet<string>();
+    var configVars = new List<(string, string)>();
+    var requiredConfigVars = new List<(string, string)>();
+    var secretVars = new List<(string, string)>();
+    var optionalVars = new List<(string, string)>();
 
     if (File.Exists(aspireEnvPath))
     {
-        var seenVars = new HashSet<string>();
-        var configVars = new List<(string name, string value)>();
-        var requiredConfigVars = new List<(string name, string value)>();
-        var secretVars = new List<(string name, string value)>();
-        var optionalVars = new List<(string name, string value)>();
-
         foreach (var line in File.ReadLines(aspireEnvPath))
         {
             if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
@@ -246,11 +170,9 @@ static void GenerateEnvExample(
             if (eqIndex < 0) continue;
 
             var name = line[..eqIndex];
+            var value = line[(eqIndex + 1)..];
 
-            if (!seenVars.Add(name)) continue;
-
-            // Skip Aspire internal bind-mount placeholder vars — they're meaningless
-            // to users after the init script has been inlined via configs.content.
+            if (!seen.Add(name)) continue;
             if (name.Contains("_BINDMOUNT_", StringComparison.OrdinalIgnoreCase)) continue;
 
             if (secrets.Contains(name))
@@ -258,75 +180,117 @@ static void GenerateEnvExample(
             else if (requiredConfig.Contains(name))
                 requiredConfigVars.Add((name, ""));
             else if (optional.Contains(name))
-                optionalVars.Add((name, defaults.GetValueOrDefault(name, "")));
+                optionalVars.Add((name, value));
             else
-                configVars.Add((name, defaults.GetValueOrDefault(name, "")));
+                configVars.Add((name, value));
         }
-
-        writer.WriteLine("# -- Configuration ---------------------------------------------");
-        writer.WriteLine();
-        foreach (var (name, value) in configVars)
-            writer.WriteLine($"{name}={value}");
-
-        writer.WriteLine();
-        writer.WriteLine("# -- Required (set these before first run) ----------------------");
-        writer.WriteLine();
-        foreach (var (name, _) in requiredConfigVars)
-            writer.WriteLine($"{name}=");
-        foreach (var (name, _) in secretVars)
-            writer.WriteLine($"{name}=");
-
-        writer.WriteLine();
-        writer.WriteLine("# -- Optional --------------------------------------------------");
-        writer.WriteLine();
-        foreach (var (name, value) in optionalVars)
-            writer.WriteLine($"# {name}=");
     }
-    else
-    {
-        // Fallback if aspire didn't generate .env
-        writer.WriteLine("NOCTURNE_API_IMAGE=ghcr.io/nightscout/nocturne/nocturne-api:latest");
-        writer.WriteLine("NOCTURNE_WEB_IMAGE=ghcr.io/nightscout/nocturne/nocturne-web:latest");
-        writer.WriteLine("NOCTURNE_API_PORT=8080");
-        writer.WriteLine("POSTGRES_USERNAME=nocturne");
-        writer.WriteLine();
-        writer.WriteLine("BASE_DOMAIN=");
-        writer.WriteLine("POSTGRES_PASSWORD=");
-        writer.WriteLine("POSTGRES_MIGRATOR_PASSWORD=");
-        writer.WriteLine("POSTGRES_APP_PASSWORD=");
-        writer.WriteLine("POSTGRES_WEB_PASSWORD=");
-        writer.WriteLine("INSTANCE_KEY=");
-    }
+
+    // Fill in defaults from env-metadata for config vars that Aspire emits as empty.
+    var metaDefaults = metadata
+        .Where(m => m.Default is not null)
+        .ToDictionary(m => m.Name, m => m.Default!);
+    configVars = [.. configVars
+        .Select(v => string.IsNullOrEmpty(v.Item2) && metaDefaults.TryGetValue(v.Item1, out var def)
+            ? (v.Item1, def)
+            : v)];
+
+    return new EnvVarGroups(configVars, requiredConfigVars, secretVars, optionalVars);
 }
 
-static int RunProcess(string command, string[] arguments, Dictionary<string, string>? env = null)
+// ── .env.example ──────────────────────────────────────────────────────────────
+
+static string GenerateEnvExample(EnvVarGroups groups, EnvVarMeta[] metadata)
 {
-    var psi = new ProcessStartInfo(command)
+    var varComments = metadata
+        .Where(m => m.Description is not null)
+        .ToDictionary(m => m.Name, m => $"# {m.Description}");
+
+    var sb = new System.Text.StringBuilder();
+    sb.AppendLine("# Nocturne Production Environment");
+    sb.AppendLine("# See: https://github.com/nightscout/nocturne/releases");
+    sb.AppendLine("#");
+    sb.AppendLine("# Copy this file to .env and fill in the required values.");
+    sb.AppendLine("# Passwords are only used on first database initialization.");
+    sb.AppendLine();
+    sb.AppendLine("# -- Configuration ---------------------------------------------");
+    sb.AppendLine();
+    foreach (var (name, value) in groups.Config)
+        sb.AppendLine($"{name}={value}");
+    sb.AppendLine();
+    sb.AppendLine("# -- Required (set these before first run) ----------------------");
+    sb.AppendLine();
+    foreach (var (name, _) in groups.RequiredConfig)
     {
-        RedirectStandardOutput = true,
-        RedirectStandardError = true,
-        UseShellExecute = false,
+        if (varComments.TryGetValue(name, out var comment))
+            sb.AppendLine(comment);
+        sb.AppendLine($"{name}=");
+    }
+    foreach (var (name, _) in groups.Secrets)
+        sb.AppendLine($"{name}=");
+    sb.AppendLine();
+    sb.AppendLine("# -- Optional --------------------------------------------------");
+    sb.AppendLine();
+    foreach (var (name, _) in groups.Optional)
+        sb.AppendLine($"# {name}=");
+
+    return sb.ToString();
+}
+
+// ── portainer templates.json ──────────────────────────────────────────────────
+
+static string GeneratePortainerTemplate(EnvVarGroups groups, EnvVarMeta[] metadata)
+{
+    // Config vars have defaults applied by ParseAspireEnv; secrets stay blank.
+    var configValues = groups.Config.ToDictionary(v => v.Name, v => v.Value);
+
+    var envArray = new JsonArray();
+    foreach (var m in metadata)
+    {
+        var defaultValue = configValues.GetValueOrDefault(m.Name);
+
+        var entry = new JsonObject { ["name"] = m.Name, ["label"] = m.Label };
+        if (!string.IsNullOrEmpty(defaultValue))
+            entry["default"] = defaultValue;
+        if (m.Description is not null)
+            entry["description"] = m.Description;
+
+        envArray.Add((JsonNode)entry);
+    }
+
+    var root = new JsonObject
+    {
+        ["version"] = "2",
+        ["templates"] = new JsonArray
+        {
+            new JsonObject
+            {
+                ["type"] = 3,
+                ["title"] = "Nocturne",
+                ["description"] = "Nightscout-compatible diabetes management API with Row Level Security and multi-tenancy.",
+                ["categories"] = new JsonArray(
+                    JsonValue.Create("diabetes"),
+                    JsonValue.Create("nightscout"),
+                    JsonValue.Create("healthcare")),
+                ["platform"] = "linux",
+                ["note"] = "After deployment, configure data connectors (Dexcom, LibreLinkUp, etc.) and chat bot integrations (Discord, Slack, Telegram, WhatsApp) through Settings → Administration in the Nocturne UI. Bot credentials are encrypted at rest.",
+                ["repository"] = new JsonObject
+                {
+                    ["url"] = "https://github.com/nightscout/nocturne",
+                    ["stackfile"] = "deploy/portainer/docker-compose.yaml"
+                },
+                ["env"] = envArray
+            }
+        }
     };
 
-    foreach (var arg in arguments)
-        psi.ArgumentList.Add(arg);
-
-    if (env is not null)
-    {
-        foreach (var (key, value) in env)
-            psi.Environment[key] = value;
-    }
-
-    using var process = Process.Start(psi)!;
-    var stdoutTask = process.StandardOutput.ReadToEndAsync();
-    var stderrTask = process.StandardError.ReadToEndAsync();
-    process.WaitForExit();
-
-    var stdout = stdoutTask.Result;
-    var stderr = stderrTask.Result;
-
-    if (!string.IsNullOrWhiteSpace(stdout)) Console.Write(stdout);
-    if (!string.IsNullOrWhiteSpace(stderr)) Console.Error.Write(stderr);
-
-    return process.ExitCode;
+    return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
 }
+
+record EnvVarGroups(
+    List<(string Name, string Value)> Config,
+    List<(string Name, string Value)> RequiredConfig,
+    List<(string Name, string Value)> Secrets,
+    List<(string Name, string Value)> Optional);
+
+record EnvVarMeta(string Name, string Label, string? Description, string? Default);

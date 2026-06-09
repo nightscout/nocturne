@@ -41,7 +41,7 @@
     <Checkbox
       id="note-announcement"
       checked={note.isAnnouncement ?? false}
-      onCheckedChange={(checked) => {
+      onCheckedChange={(checked: boolean) => {
         note.isAnnouncement = checked === true;
       }}
     />

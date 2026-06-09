@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Fido2NetLib;
+using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services;
 using Nocturne.API.Middleware.Handlers;
@@ -12,6 +13,7 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.CoachMarks;
+using Nocturne.API.Services.Timezones;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
 using Nocturne.API.Services.ConnectorPublishing;
@@ -39,6 +41,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.CoachMarks;
+using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Analytics;
@@ -60,6 +63,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -193,6 +197,10 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService<AuthorizationSeedService>();
 
         services.AddSingleton<PublicAccessCacheService>();
+        services.AddSingleton<ShareTokenCacheService>();
+        services.AddSingleton<IShareTokenGenerator, ShareTokenGenerator>();
+        services.AddScoped<IShareLinkService, ShareLinkService>();
+        services.AddHostedService<ShareTokenBackfillService>();
 
         // Passkey (WebAuthn/FIDO2) services
         services.AddScoped<IPasskeyService, PasskeyService>();
@@ -229,7 +237,12 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<ITenantService, TenantService>();
 
+        // Shared by InstanceKeyHandler (authentication) and TenantSetupMiddleware
+        // (setup-gate bypass) so instance-key validation rules live in one place.
+        services.AddSingleton<IInstanceKeyValidator, InstanceKeyValidator>();
+
         // Auth handlers (executed in priority order, lowest first)
+        services.AddSingleton<IAuthHandler, PlatformAccessCookieHandler>(); // Priority 40
         services.AddSingleton<IAuthHandler, SessionCookieHandler>(); // Priority 50
         services.AddSingleton<IAuthHandler, GuestSessionHandler>(); // Priority 52
         services.AddSingleton<GuestSessionHandler>(); // For direct cookie-setting use
@@ -424,6 +437,20 @@ public static class ServiceRegistrationExtensions
                 sinks,
                 sp.GetService<ILogger<CompositeDataEventSink<Entry>>>());
         });
+        // V4-native sensor glucose writes (POST /api/v4/glucose/sensor + connector publisher)
+        // broadcast on the real-time "entries" collection, mirroring the legacy entries path.
+        services.AddScoped<SignalRSensorGlucoseEventSink>();
+        services.AddScoped<IDataEventSink<SensorGlucose>>(sp =>
+        {
+            var sinks = new List<IDataEventSink<SensorGlucose>>
+            {
+                sp.GetRequiredService<SignalRSensorGlucoseEventSink>(),
+            };
+
+            return new CompositeDataEventSink<SensorGlucose>(
+                sinks,
+                sp.GetService<ILogger<CompositeDataEventSink<SensorGlucose>>>());
+        });
         services.AddScoped<IStateSpanService, StateSpanService>();
         services.AddScoped<DeviceStatusProjectionService>();
         services.AddScoped<IDataEventSink<DeviceStatus>>(sp =>
@@ -500,6 +527,9 @@ public static class ServiceRegistrationExtensions
 
         // Coach marks
         services.AddScoped<ICoachMarkService, CoachMarkService>();
+
+        // Timezone timeline (fake-UTC connector conversion + travel/relocation)
+        services.AddScoped<ITimezoneTimelineService, TimezoneTimelineService>();
 
         // UI and display
         services.AddScoped<IUISettingsService, UISettingsService>();
@@ -730,6 +760,9 @@ public static class ServiceRegistrationExtensions
         // Background sweep
         services.AddHostedService<AlertSweepService>();
 
+        // Periodic watermark-driven deduplication reconciliation across active tenants
+        services.AddHostedService<Nocturne.API.Services.BackgroundServices.DeduplicationReconciliationBackgroundService>();
+
         return services;
     }
 
@@ -748,6 +781,10 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IConnectorConfigurationService, ConnectorConfigurationService>();
         services.AddScoped<PlatformSettingsService>();
         services.AddScoped<IConnectorSyncService, ConnectorSyncService>();
+        services.AddScoped<IConnectorCursorResetService, ConnectorCursorResetService>();
+        // Singleton: holds the in-memory job registry so a reset started by one request can be
+        // polled by later requests. Creates its own DI scopes for the scoped reset engine.
+        services.AddSingleton<IConnectorCursorResetJobService, ConnectorCursorResetJobService>();
 
         // Connector runtime
         services.AddBaseConnectorServices();

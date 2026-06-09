@@ -27,6 +27,19 @@
 
   let spotlightClipPath = $state("");
 
+  // Mobile renders the popover as a bottom sheet anchored by CSS. Track the
+  // breakpoint so we can suppress floating-ui's inline positioning there.
+  let isMobile = $state(false);
+
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    isMobile = mq.matches;
+    const onChange = (e: MediaQueryListEvent) => (isMobile = e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  });
+
   const activeKey = $derived(ctx.activeKey);
   const mountedSteps = $derived(activeKey ? ctx.getMountedSteps(activeKey) : []);
   const currentRegistration = $derived(mountedSteps[currentLocalStep] ?? null);
@@ -150,6 +163,15 @@
         if (!currentRegistration || !popoverEl) return;
 
         updateSpotlightRect(currentRegistration.element);
+
+        // On mobile the popover is a bottom sheet positioned entirely by CSS.
+        // Applying floating-ui's inline top/left would override the CSS top:auto
+        // and fight bottom:0, stretching the sheet to fill the viewport.
+        if (isMobile) {
+          popoverEl.style.left = "";
+          popoverEl.style.top = "";
+          return;
+        }
 
         computePosition(currentRegistration.element, popoverEl, {
           strategy: "fixed",

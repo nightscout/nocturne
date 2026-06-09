@@ -140,56 +140,89 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     }
 
     /// <summary>
+    ///     Whether every required property — those marked [Required] or
+    ///     [ConnectorProperty(Required = true)] — has a value. Required secrets are merged into the
+    ///     configuration before this is evaluated, so a connector that is enabled but missing its
+    ///     credentials (e.g. enabled via the UI toggle, or saved before secrets were entered, or a
+    ///     required secret later removed) reports false here and must not sync — otherwise it polls
+    ///     every cycle with empty credentials and fails authentication forever.
+    /// </summary>
+    public bool HasRequiredConfiguration()
+    {
+        foreach (var (property, _, _) in GetRequiredProperties())
+        {
+            if (IsRequiredValueMissing(property, property.GetValue(this)))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     ///     Validates all properties marked with [Required] attribute or
     ///     [ConnectorProperty(Required = true)].
     ///     Throws ArgumentException if any required string property is null or empty.
     /// </summary>
     private void ValidateRequiredProperties()
     {
-        var properties = GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
-
-        foreach (var property in properties)
+        foreach (var (property, displayName, connectorProp) in GetRequiredProperties())
         {
-            var isRequired = false;
-            string? displayName = null;
-
-            // Check for [Required] attribute
-            if (property.GetCustomAttribute<RequiredAttribute>() != null)
-            {
-                isRequired = true;
-                displayName = property.Name;
-            }
-
-            // Check for [ConnectorProperty(Required = true)]
-            var connectorProp = property.GetCustomAttribute<ConnectorPropertyAttribute>();
-            if (connectorProp is { Required: true })
-            {
-                isRequired = true;
-                displayName = connectorProp.GetKeyName();
-            }
-
-            if (!isRequired)
+            var value = property.GetValue(this);
+            if (!IsRequiredValueMissing(property, value))
                 continue;
 
-            var value = property.GetValue(this);
-
-            // For string properties, check for null or whitespace
             if (property.PropertyType == typeof(string))
             {
-                if (!string.IsNullOrWhiteSpace(value as string)) continue;
                 var envVarHint = connectorProp != null && EnvPrefix != null
                     ? $" (set via {connectorProp.GetFullEnvVarName(EnvPrefix)} or configuration)"
                     : "";
                 throw new ArgumentException(
                     $"{ConnectorName}: {displayName} is required{envVarHint}");
             }
-            // For nullable value types, check for null
-            else if (Nullable.GetUnderlyingType(property.PropertyType) != null && value == null)
-            {
-                throw new ArgumentException(
-                    $"{ConnectorName}: {displayName} is required");
-            }
+
+            throw new ArgumentException(
+                $"{ConnectorName}: {displayName} is required");
         }
+    }
+
+    /// <summary>
+    ///     Enumerates the properties required via [Required] or [ConnectorProperty(Required = true)],
+    ///     with their display name and connector-property attribute (if any). Shared by
+    ///     <see cref="HasRequiredConfiguration"/> and <see cref="ValidateRequiredProperties"/> so
+    ///     both agree on what "required" means.
+    /// </summary>
+    private IEnumerable<(PropertyInfo Property, string DisplayName, ConnectorPropertyAttribute? ConnectorProp)>
+        GetRequiredProperties()
+    {
+        foreach (var property in GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            string? displayName = null;
+
+            if (property.GetCustomAttribute<RequiredAttribute>() != null)
+                displayName = property.Name;
+
+            var connectorProp = property.GetCustomAttribute<ConnectorPropertyAttribute>();
+            if (connectorProp is { Required: true })
+                displayName = connectorProp.GetKeyName();
+
+            if (displayName != null)
+                yield return (property, displayName, connectorProp);
+        }
+    }
+
+    /// <summary>
+    ///     Whether a required property's value counts as missing: null/whitespace for strings,
+    ///     null for nullable value types. Non-nullable value types always carry a value.
+    /// </summary>
+    private static bool IsRequiredValueMissing(PropertyInfo property, object? value)
+    {
+        if (property.PropertyType == typeof(string))
+            return string.IsNullOrWhiteSpace(value as string);
+
+        if (Nullable.GetUnderlyingType(property.PropertyType) != null)
+            return value == null;
+
+        return false;
     }
 
     /// <summary>

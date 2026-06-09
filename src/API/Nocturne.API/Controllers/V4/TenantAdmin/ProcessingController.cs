@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
@@ -10,6 +11,7 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 [ApiController]
 [Tags("TenantAdmin")]
 [Route("api/v4/processing")]
+[RequireAdmin]
 public class ProcessingController : ControllerBase
 {
     private readonly IProcessingStatusService _processingStatusService;

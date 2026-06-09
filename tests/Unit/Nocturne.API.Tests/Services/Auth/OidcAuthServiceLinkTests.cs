@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Xunit;
@@ -23,6 +24,7 @@ public class OidcAuthServiceLinkTests
     private readonly Mock<IJwtService> _jwtService = new();
     private readonly Mock<IRefreshTokenService> _refreshTokenService = new();
     private readonly Mock<IHttpClientFactory> _httpFactory = new();
+    private readonly Mock<ITenantMemberService> _tenantMemberService = new();
     private readonly Mock<IConfiguration> _configuration = new();
     private readonly OidcAuthService _service;
 
@@ -36,6 +38,7 @@ public class OidcAuthServiceLinkTests
             _jwtService.Object,
             _refreshTokenService.Object,
             _httpFactory.Object,
+            _tenantMemberService.Object,
             options,
             _configuration.Object,
             NullLogger<OidcAuthService>.Instance);

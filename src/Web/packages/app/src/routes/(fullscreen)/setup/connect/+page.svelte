@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import {
     getUploaderApps,
     getUploaderSetup,
@@ -9,7 +10,6 @@
   import type {
     UploaderApp,
     UploaderSetupResponse,
-    SyncResult,
     AvailableConnector,
   } from "$lib/api/generated/nocturne-api-client";
   import { markSetupComplete } from "../setup.remote";
@@ -42,9 +42,9 @@
     viewState = "connector";
   }
 
-  async function handleConnectorComplete(_result: SyncResult) {
+  async function handleConnectorComplete() {
     await markSetupComplete();
-    await goto("/", { invalidateAll: true });
+    await goto(resolve("/"), { invalidateAll: true });
   }
 
   function handleConnectorCancel() {
@@ -59,7 +59,7 @@
     viewState = "uploader";
 
     try {
-      const result = app.id ? await getUploaderSetup(app.id) : null;
+      const result = app.id ? await getUploaderSetup(app.id).run() : null;
       setupResponse = result ?? null;
     } catch {
       setupResponse = null;
@@ -77,7 +77,7 @@
 
   async function handleSkip() {
     await markSetupComplete();
-    await goto("/", { invalidateAll: true });
+    await goto(resolve("/"), { invalidateAll: true });
   }
 
   async function handleUploaderConnected() {
@@ -120,7 +120,7 @@
       {@const uploaderApps = (await uploaderAppsQuery) ?? []}
       {@const dataSources = (await dataSourcesQuery) ?? []}
       {@const overview = await overviewQuery}
-      {@const connectors = ((overview?.availableConnectors ?? []) as AvailableConnector[]).filter(
+      {@const connectors = (overview?.availableConnectors ?? []).filter(
         (c) => c.id?.toLowerCase() !== "nightscout"
       )}
 

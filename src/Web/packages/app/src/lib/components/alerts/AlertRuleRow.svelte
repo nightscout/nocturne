@@ -61,7 +61,7 @@
 </script>
 
 <div
-  class="flex items-center gap-3 rounded-md border bg-background px-4 py-3 {!rule.isEnabled
+  class="@container flex items-center gap-3 rounded-md border bg-background px-4 py-3 {!rule.isEnabled
     ? 'opacity-60'
     : ''}"
 >
@@ -92,7 +92,7 @@
 
   <!-- Channel icons -->
   {#if rule.channels && rule.channels.length > 0}
-    <div class="hidden items-center gap-1 sm:flex" aria-label="Channels">
+    <div class="hidden items-center gap-1 @sm:flex" aria-label="Channels">
       {#each rule.channels.slice(0, 4) as ch (ch.id)}
         {@const meta = findChannelMeta(ch.channelType)}
         <span
@@ -117,21 +117,6 @@
 
   <!-- Per-row actions -->
   <div class="flex items-center gap-1 shrink-0">
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      class="h-8 w-8"
-      onclick={onTestFire}
-      disabled={isTesting || !rule.isEnabled}
-      title="Test fire — sends a real notification"
-    >
-      {#if isTesting}
-        <Loader2 class="h-4 w-4 animate-spin" />
-      {:else}
-        <Zap class="h-4 w-4" />
-      {/if}
-    </Button>
     <Switch
       checked={rule.isEnabled ?? false}
       onCheckedChange={onToggleEnabled}
@@ -140,7 +125,7 @@
     />
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
-        {#snippet child({ props })}
+        {#snippet child({ props }: { props: Record<string, unknown> })}
           <Button
             {...props}
             type="button"
@@ -156,6 +141,17 @@
       <DropdownMenu.Content align="end">
         <DropdownMenu.Item onclick={onEdit}>
           <Pencil class="h-4 w-4 mr-2" /> Edit
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          onclick={onTestFire}
+          disabled={isTesting || !rule.isEnabled}
+        >
+          {#if isTesting}
+            <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+          {:else}
+            <Zap class="h-4 w-4 mr-2" />
+          {/if}
+          Test fire
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
         <AlertDialog.Root>

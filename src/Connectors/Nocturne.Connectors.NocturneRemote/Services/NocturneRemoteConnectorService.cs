@@ -15,7 +15,7 @@ namespace Nocturne.Connectors.NocturneRemote.Services;
 /// </summary>
 public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemoteConnectorConfiguration>
 {
-    private readonly NocturneRemoteConnectorConfiguration _config;
+    private NocturneRemoteConnectorConfiguration _config;
     private string? _resolvedBaseUrl;
     private Dictionary<string, string>? _authHeaders;
 
@@ -23,12 +23,12 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         HttpClient httpClient,
         IConnectorServerResolver<NocturneRemoteConnectorConfiguration> serverResolver,
         ILogger<NocturneRemoteConnectorService> logger,
-        NocturneRemoteConnectorConfiguration config,
+        IConnectorRegistration<NocturneRemoteConnectorConfiguration> registration,
         IConnectorPublisher? publisher = null
     )
         : base(httpClient, serverResolver, logger, publisher)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        _config = registration?.Defaults ?? throw new ArgumentNullException(nameof(registration));
     }
 
     protected override string ConnectorSource => DataSources.NocturneRemoteConnector;
@@ -93,6 +93,18 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                 _resolvedBaseUrl);
             return false;
         }
+    }
+
+    public override async Task<SyncResult> SyncDataAsync(
+        NocturneRemoteConnectorConfiguration config,
+        CancellationToken cancellationToken = default,
+        DateTime? since = null,
+        ISyncProgressReporter? progressReporter = null)
+    {
+        // Prime _config with the per-tenant config before base calls AuthenticateAsync(),
+        // which delegates to AuthenticateWithConfigAsync(_config).
+        _config = config;
+        return await base.SyncDataAsync(config, cancellationToken, since, progressReporter);
     }
 
     public override async Task<SyncResult> SyncDataAsync(

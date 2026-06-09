@@ -1,0 +1,96 @@
+---
+title: Authentication
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Authentication
+
+Nocturne is passwordless. Every account signs in with a **passkey** as its primary
+credential — there are no passwords to set, rotate, or leak. On top of passkeys you can
+optionally offer **social login** through any OpenID Connect (OIDC) provider, and every
+account keeps an **authenticator app (TOTP)** and **recovery codes** as fallbacks.
+
+This page is for operators deciding which sign-in methods to offer on their instance.
+If you're building an app or device that talks to the Nocturne API, see
+[Connecting apps](/docs/connecting-apps) instead — that's a separate flow.
+
+## Sign-in methods
+
+| Method | Availability | What it is |
+|--------|--------------|------------|
+| **Passkeys (WebAuthn)** | Always on | The primary credential. Face ID, Touch ID, Windows Hello, or a hardware security key. |
+| **Social login (OIDC)** | Optional, per instance | Google, GitHub, or any OIDC provider. |
+| **Authenticator app (TOTP)** | Fallback | Six-digit codes from an app like Aegis, 1Password, or Google Authenticator. |
+| **Recovery codes** | Fallback | One-time backup codes for when no passkey or authenticator is available. |
+
+### Passkeys
+
+Passkeys are the default and need no configuration — they're always available. A passkey
+is bound to the user's device or password manager and unlocked with biometrics or a PIN,
+so there's nothing for you to provision and no shared secret to leak.
+
+The login screen offers two passkey paths:
+
+- **Discoverable login** — the user taps *Sign in with passkey* and picks an account from
+  the prompt their device shows. No username required.
+- **Username-first** — the user enters their username, then authenticates with the passkey
+  registered to that account.
+
+<Callout type="info" title="Browser support">
+  Passkeys need a browser that supports WebAuthn. On a browser that doesn't, the login
+  screen tells the user to use an authenticator app, a recovery code, or a different
+  browser. Because TOTP and recovery codes don't depend on WebAuthn, accounts stay
+  reachable everywhere.
+</Callout>
+
+### Social login (OIDC)
+
+Social login is optional and configured per instance. When at least one provider is
+enabled, its buttons appear on the login screen under *Or continue with*. Pick a setup
+guide:
+
+- [Sign in with Google](/docs/authentication/google)
+- [Sign in with GitHub](/docs/authentication/github)
+- [Any other OIDC provider](/docs/authentication/oidc) — Okta, Auth0, Keycloak, Authentik,
+  Microsoft Entra ID, and anything else that speaks OpenID Connect
+
+<Callout type="tip" title="Providers are platform-wide">
+  OIDC providers are configured once for the whole instance — every tenant shares the
+  same set. You only register one callback URL with the provider regardless of how many
+  tenants you run.
+</Callout>
+
+### Authenticator app & recovery codes
+
+These are fallbacks that users set up from their account settings, not methods you enable
+as an operator. The login screen always exposes *Use authenticator app* and *Use a
+recovery code* entry points so an account stays reachable if a passkey is lost or a device
+is unavailable.
+
+- **Authenticator app (TOTP)** — the user enters their username and a six-digit code from
+  their authenticator app.
+- **Recovery codes** — the user enters their username and one of the one-time codes issued
+  when they set up their account.
+
+## What your users see
+
+On the login screen, in order:
+
+1. **Sign in with passkey** — the primary button. Triggers a discoverable passkey prompt.
+2. **Sign in with username** — username-first passkey login, for when the discoverable
+   prompt doesn't surface the right account.
+3. **OIDC provider buttons** — one per enabled provider, shown under *Or continue with*.
+   Only appear when social login is configured.
+4. **Use authenticator app** / **Use a recovery code** — small links for the fallback
+   methods.
+
+## Enabling each method
+
+| Method | How to enable |
+|--------|---------------|
+| Passkeys | Always on. Nothing to configure. |
+| Social login | Add a provider — see [Google](/docs/authentication/google), [GitHub](/docs/authentication/github), or [generic OIDC](/docs/authentication/oidc). |
+| Authenticator app / recovery codes | Always available. Users set these up from their account settings. |

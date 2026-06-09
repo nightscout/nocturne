@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { replaceState } from "$app/navigation";
 
   interface TreatmentSummary {
     totals?: {
@@ -28,7 +29,17 @@
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
   import * as Alert from "$lib/components/ui/alert";
-  import { Calendar, X } from "lucide-svelte";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import {
+    Calendar,
+    X,
+    Plus,
+    Syringe,
+    Utensils,
+    Droplet,
+    FileText,
+    Smartphone,
+  } from "lucide-svelte";
   import {
     formatInsulinDisplay,
     formatCarbDisplay,
@@ -46,7 +57,9 @@
     deleteEntryForm,
     bulkDeleteEntries,
     updateEntry,
+    createEntry,
   } from "./data.remote";
+  import { toCreateEntryInput, toUpdateEntryInput } from "./entry-request";
 
   // Get shared date params from context (set by reports layout)
   const reportsParams = requireDateParamsContext(7);
@@ -63,6 +76,7 @@
       bgChecks: reportsResource.current?.bgChecks,
       notes: reportsResource.current?.notes,
       deviceEvents: reportsResource.current?.deviceEvents,
+      basalInjections: reportsResource.current?.basalInjections,
     })
   );
   const dateRange = $derived(
@@ -101,6 +115,41 @@
   let editDialogOpen = $state(false);
   let editRecord = $state<EntryRecord | null>(null);
   let editLoading = $state(false);
+
+  // Reflect the open edit dialog in the URL (?edit=<kind>:<id>) so it can be
+  // reloaded and deep-linked. The token is resolved against the loaded rows.
+  const EDIT_PARAM = "edit";
+  const editHistoryParam = {
+    name: EDIT_PARAM,
+    value: () =>
+      editRecord?.data.id ? `${editRecord.kind}:${editRecord.data.id}` : "",
+  };
+
+  // On load (or deep link), open the dialog for the record named in ?edit=.
+  // Runs once data is available; clears the param if the record isn't in range.
+  let restoredFromUrl = false;
+  $effect(() => {
+    if (restoredFromUrl || !reportsResource.current) return;
+    const token = page.url.searchParams.get(EDIT_PARAM);
+    if (!token) {
+      restoredFromUrl = true;
+      return;
+    }
+    const sep = token.indexOf(":");
+    const kind = sep === -1 ? token : token.slice(0, sep);
+    const id = sep === -1 ? "" : token.slice(sep + 1);
+    const found = allRows.find((r) => r.kind === kind && r.data.id === id);
+    restoredFromUrl = true;
+    if (found) {
+      editRecord = found;
+      editDialogOpen = true;
+    } else {
+      // Stale / out-of-range link: drop the param so the URL isn't misleading.
+      const url = new URL(page.url);
+      url.searchParams.delete(EDIT_PARAM);
+      replaceState(url, page.state);
+    }
+  });
 
   const editCorrelatedRecords = $derived.by(() => {
     if (!editRecord?.data.correlationId) return [];
@@ -146,6 +195,11 @@
             if (r.data.eventType) searchable.push(r.data.eventType);
             if (r.data.notes) searchable.push(r.data.notes);
             break;
+          case "basalInjection":
+            if (r.data.insulinContext?.insulinName)
+              searchable.push(r.data.insulinContext.insulinName);
+            if (r.data.notes) searchable.push(r.data.notes);
+            break;
         }
 
         if (r.data.dataSource) searchable.push(r.data.dataSource);
@@ -164,13 +218,15 @@
   // Handlers
   function handleCategoryChange(category: EntryCategoryId | "all") {
     activeCategory = category;
-    const url = new URL(window.location.href);
+    const url = new URL(page.url);
     if (category === "all") {
       url.searchParams.delete("category");
     } else {
       url.searchParams.set("category", category);
     }
-    window.history.replaceState({}, "", url);
+    // Use SvelteKit shallow routing so `page.url` stays authoritative (the edit
+    // dialog reads it to keep its `?edit=` param in sync).
+    replaceState(url, page.state);
   }
 
   function handleSearch(e: Event) {
@@ -198,6 +254,31 @@
     editDialogOpen = true;
   }
 
+  // Build an empty record of the chosen kind to open the dialog in "create"
+  // mode. The dialog keys off the absent id to switch its title/buttons and the
+  // save handler routes id-less records to createEntry.
+  function makeBlankRecord(kind: EntryCategoryId): EntryRecord {
+    const data = {
+      mills: Date.now(),
+      utcOffset: -new Date().getTimezoneOffset(),
+    } as EntryRecord["data"];
+    return { kind, data } as EntryRecord;
+  }
+
+  function handleAddTreatment(kind: EntryCategoryId) {
+    editRecord = makeBlankRecord(kind);
+    editDialogOpen = true;
+  }
+
+  const addKindIcons: Record<EntryCategoryId, typeof Plus> = {
+    bolus: Syringe,
+    carbs: Utensils,
+    bgCheck: Droplet,
+    note: FileText,
+    deviceEvent: Smartphone,
+    basalInjection: Syringe,
+  };
+
   function handleEditClose() {
     editDialogOpen = false;
     editRecord = null;
@@ -206,18 +287,21 @@
   async function handleEditSave(record: EntryRecord) {
     editLoading = true;
     try {
-      await updateEntry({
-        kind: record.kind,
-        id: record.data.id!,
-        data: record.data as Record<string, unknown>,
-      });
-      toast.success("Record updated successfully");
+      if (record.data.id) {
+        await updateEntry(toUpdateEntryInput(record));
+        toast.success("Record updated successfully");
+      } else {
+        await createEntry(toCreateEntryInput(record));
+        toast.success("Record created successfully");
+      }
       editDialogOpen = false;
       editRecord = null;
       reportsResource.refresh();
     } catch (error) {
-      console.error("Update error:", error);
-      toast.error("Failed to update record");
+      console.error("Save error:", error);
+      toast.error(
+        record.data.id ? "Failed to update record" : "Failed to create record",
+      );
     } finally {
       editLoading = false;
     }
@@ -264,6 +348,10 @@
           : "Note";
       case "deviceEvent":
         return record.data.eventType ?? "Device Event";
+      case "basalInjection":
+        return record.data.units
+          ? `${record.data.units}U basal`
+          : "Long-acting injection";
     }
   }
 </script>
@@ -277,7 +365,7 @@
 </svelte:head>
 
 {#if reportsResource.current}
-<div class="container mx-auto space-y-6 px-4 py-6">
+<div class="@container container mx-auto space-y-6 p-3 @md:p-6">
   <!-- Header -->
   <div class="space-y-2">
     <div
@@ -311,11 +399,11 @@
 
   <!-- Filters Panel -->
   <Card.Root>
-    <Card.Content class="p-4">
+    <Card.Content class="@container p-4">
       <div
-        class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
+        class="flex flex-col gap-4 @lg:flex-row @lg:items-end @lg:justify-between"
       >
-        <div class="flex flex-1 flex-col gap-4 md:flex-row md:items-end">
+        <div class="flex flex-1 flex-col gap-4 @lg:flex-row @lg:items-end">
           <div class="flex-1 max-w-sm">
             <Label for="search" class="text-sm font-medium">Search</Label>
             <Input
@@ -335,6 +423,27 @@
               Clear filters
             </Button>
           {/if}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({ props }: { props: Record<string, unknown> })}
+                <Button {...props} size="sm">
+                  <Plus class="mr-1 h-4 w-4" />
+                  Add Treatment
+                </Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              {#each Object.entries(ENTRY_CATEGORIES) as [id, cat]}
+                {@const Icon = addKindIcons[id as EntryCategoryId]}
+                <DropdownMenu.Item
+                  onclick={() => handleAddTreatment(id as EntryCategoryId)}
+                >
+                  <Icon class="mr-2 h-4 w-4 {cat.colorClass}" />
+                  {cat.name}
+                </DropdownMenu.Item>
+              {/each}
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         </div>
       </div>
 
@@ -598,8 +707,9 @@
   record={editRecord}
   correlatedRecords={editCorrelatedRecords}
   isLoading={editLoading}
+  historyParam={editHistoryParam}
   onClose={handleEditClose}
   onSave={handleEditSave}
-  onDelete={handleEditDelete}
+  onDelete={editRecord?.data.id ? handleEditDelete : undefined}
 />
 {/if}

@@ -58,7 +58,7 @@
 </script>
 
 {#if !retrospectiveQuery.current && !retrospectiveQuery.error}
-  <Card.Root class="border-2 border-primary/20 bg-primary/5">
+  <Card.Root class="@container border-2 border-primary/20 bg-primary/5">
     <Card.Header class="pb-2">
       <Card.Title class="flex items-center gap-2 text-base">
         <Activity class="h-4 w-4" />
@@ -67,7 +67,7 @@
     </Card.Header>
     <Card.Content>
       <!-- Skeleton loading state - matches the layout below -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 @lg:grid-cols-4 gap-4">
         {#each [1, 2, 3, 4] as _}
           <div
             class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
@@ -120,7 +120,7 @@
   </Card.Root>
 {:else}
   {@const data = retrospectiveQuery.current}
-  <Card.Root class="border-2 border-primary/20 bg-primary/5">
+  <Card.Root class="@container border-2 border-primary/20 bg-primary/5">
     <Card.Header class="pb-2">
       <Card.Title class="flex items-center gap-2 text-base">
         <Activity class="h-4 w-4" />
@@ -128,7 +128,7 @@
       </Card.Title>
     </Card.Header>
     <Card.Content>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 @lg:grid-cols-4 gap-4">
         <!-- Glucose -->
         <div
           class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"

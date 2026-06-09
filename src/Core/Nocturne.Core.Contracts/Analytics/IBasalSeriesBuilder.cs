@@ -18,12 +18,18 @@ public interface IBasalSeriesBuilder
     /// <param name="startTime">Start of the time range in Unix milliseconds</param>
     /// <param name="endTime">End of the time range in Unix milliseconds</param>
     /// <param name="defaultBasalRate">Fallback basal rate when no profile data exists</param>
+    /// <param name="timeline">
+    /// Pre-built therapy timeline covering at least <c>[startTime, endTime + 1)</c>. Threaded in
+    /// from the caller so the resolver is hit once per chart-data request instead of once per
+    /// consumer.
+    /// </param>
     /// <param name="ct">Cancellation token</param>
     Task<List<BasalPoint>> BuildAsync(
         List<TempBasal> tempBasals,
         long startTime,
         long endTime,
         double defaultBasalRate,
+        TherapyTimeline timeline,
         CancellationToken ct = default
     );
 }

@@ -762,6 +762,139 @@
         }
       }
     },
+    "/api/v4/timezone-timeline": {
+      "get": {
+        "tags": [
+          "Timezone Timeline"
+        ],
+        "summary": "Get the tenant's timezone timeline, ordered by effective date.",
+        "operationId": "TimezoneTimeline_GetTimeline",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimezoneTimelineEntry"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "Timezone Timeline"
+        ],
+        "summary": "Create or update a timeline entry. EffectiveFrom is a local wall-clock date/time (the\nmoment, in local terms, that the zone took effect). A trip is two entries (out + return); a\nmove is a single entry; the origin entry covers all earlier history.",
+        "operationId": "TimezoneTimeline_Upsert",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTimezoneEntryRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimezoneTimelineEntry"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTimeline"
+        ]
+      }
+    },
+    "/api/v4/timezone-timeline/{id}": {
+      "delete": {
+        "tags": [
+          "Timezone Timeline"
+        ],
+        "summary": "Delete a timeline entry.",
+        "operationId": "TimezoneTimeline_Delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTimeline"
+        ]
+      }
+    },
+    "/api/v4/timezone-timeline/recorrect": {
+      "post": {
+        "tags": [
+          "Timezone Timeline"
+        ],
+        "summary": "Re-correct already-imported data after a timeline change by re-pulling the affected window from\nGlooko. Records re-flow the normal publish path and upsert in place on their stable\nSyncIdentifier, so timestamps move without duplicating. Intended to be called after the user\nconfirms the affected window. Runs synchronously; the window is bounded.",
+        "operationId": "TimezoneTimeline_Recorrect",
+        "requestBody": {
+          "x-name": "request",
+          "description": "Optional lower bound (UTC). When null, the connector's default window is used.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecorrectRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecorrectResult"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
     "/api/v4/insulin/basal-injections": {
       "post": {
         "tags": [
@@ -7976,6 +8109,231 @@
         "x-remote-type": "command"
       }
     },
+    "/api/v4/admin/connectors/{tenantId}": {
+      "get": {
+        "tags": [
+          "Connector Admin"
+        ],
+        "summary": "List the connectors a target tenant has configured, with their last-sync and health state.",
+        "description": "Lets an admin inspect the data gap (last successful sync, health, last error) before deciding\nto reset cursors.",
+        "operationId": "ConnectorAdmin_GetTenantConnectors",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "description": "The target tenant.",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantConnectorsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
+    "/api/v4/admin/connectors/{tenantId}/reset-cursors": {
+      "post": {
+        "tags": [
+          "Connector Admin"
+        ],
+        "summary": "Enqueue a background reset of the sync cursor for every connector configured on a target\ntenant, forcing a re-pull of history. Use after fixing a connector bug to push corrected data\nto an affected tenant.",
+        "description": "A full re-pull can take minutes per connector — far longer than gateway/proxy/browser request\ntimeouts — so the work runs on a background job that outlives the request. This returns\n202 Accepted with a job id immediately; poll GetResetJobStatus for\nper-connector progress, and CancelResetJob to stop it.",
+        "operationId": "ConnectorAdmin_ResetTenantCursors",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "description": "The target tenant whose connectors should be re-pulled.",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "Optional lower bound and data-type filter, mirroring the per-tenant reset endpoint.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminResetCursorsRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorResetJobInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
+    "/api/v4/admin/connectors/jobs/{jobId}": {
+      "get": {
+        "tags": [
+          "Connector Admin"
+        ],
+        "summary": "Get the progress of a connector cursor reset job, including per-connector outcomes as they land.",
+        "operationId": "ConnectorAdmin_GetResetJobStatus",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "description": "The job id returned by ResetTenantCursors.",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorResetJobStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
+    "/api/v4/admin/connectors/jobs/{jobId}/cancel": {
+      "post": {
+        "tags": [
+          "Connector Admin"
+        ],
+        "summary": "Request cancellation of a running connector cursor reset job. Connectors already re-pulled\nkeep their committed data; the fan-out simply stops before the next connector.",
+        "operationId": "ConnectorAdmin_CancelResetJob",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "description": "The job id to cancel.",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetResetJobStatus"
+        ]
+      }
+    },
+    "/api/auth/platform-access": {
+      "get": {
+        "tags": [
+          "Platform Access"
+        ],
+        "summary": "Mint a platform-access grant for the given tenant slug and redirect the operator into the\ntenant. Bounces through OIDC login if there is no session yet; 403s if the session is not a\nplatform admin.",
+        "operationId": "PlatformAccess_Access",
+        "parameters": [
+          {
+            "name": "tenant",
+            "in": "query",
+            "description": "Target tenant slug.",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v4/admin/platform-settings": {
       "get": {
         "tags": [
@@ -9859,6 +10217,64 @@
         "responses": {
           "200": {
             "description": "Sync result with success status and details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
+    "/api/v4/services/connectors/{id}/reset-cursor": {
+      "post": {
+        "tags": [
+          "Services"
+        ],
+        "summary": "Reset a connector's sync cursor for the current tenant and re-pull historical data.",
+        "description": "Nocturne does not persist a sync cursor — each data type resumes from the latest record\nalready stored. This endpoint forces a fresh ingest of history by running an explicit-range\nsync (an upper bound of \"now\" bypasses the per-type catch-up cursors), so the effect is a\ncursor reset. Re-ingested records are deduplicated on their idempotency keys (see the\n\"Syncing\" guide), so it is safe to run after fixing a connector bug to push corrected data\nto a tenant.\n            \nLatency: this runs synchronously. A full-history re-pull with no lower bound\nre-ingests every data type over the connector's entire history (glucose can be tens of\nthousands of records), which is a multi-minute request and may approach or exceed\nreverse-proxy / browser timeouts. Scope it with from and/or dataTypes when\npossible. The cross-tenant equivalent\n(POST /api/v4/admin/connectors/{tenantId}/reset-cursors) runs as a background job to\navoid this.",
+        "operationId": "Services_ResetConnectorCursor",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Connector ID (e.g., \"nightscout\", \"dexcom\").",
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "Optional lower bound and data-type filter. Omit from to re-pull all available history; omit dataTypes to reset every supported type.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetCursorRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "Sync result with success status and details.",
             "content": {
               "application/json": {
                 "schema": {
@@ -13388,46 +13804,6 @@
         ]
       }
     },
-    "/api/v4/member-invites/public-access": {
-      "put": {
-        "tags": [
-          "Member Invite"
-        ],
-        "summary": "Toggle public (unauthenticated) read access for this tenant.\nAssigns or removes the viewer role on the Public system subject.",
-        "operationId": "MemberInvite_SetPublicAccess",
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetPublicAccessRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 1
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetMembers"
-        ]
-      }
-    },
     "/api/v4/membership-requests": {
       "post": {
         "tags": [
@@ -13645,6 +14021,83 @@
           }
         },
         "x-remote-type": "command"
+      }
+    },
+    "/api/v4/membership-requests/settings": {
+      "get": {
+        "tags": [
+          "Membership Request"
+        ],
+        "summary": "Get whether this tenant currently lets people request to become a member.",
+        "operationId": "MembershipRequest_GetMembershipRequestSettings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipRequestSettingsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "Membership Request"
+        ],
+        "summary": "Enable or disable whether people can request to become a member. Independent of public access.",
+        "operationId": "MembershipRequest_SetMembershipRequestSettings",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMembershipRequestSettingsRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipRequestSettingsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetMembershipRequestSettings"
+        ]
       }
     },
     "/api/v4/me/permissions": {
@@ -13955,6 +14408,210 @@
         "x-remote-type": "command",
         "x-remote-invalidates": [
           "GetRoles"
+        ]
+      }
+    },
+    "/api/v4/share": {
+      "get": {
+        "tags": [
+          "Share Link"
+        ],
+        "summary": "Get the current public share link state.",
+        "operationId": "ShareLink_GetShareLink",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "delete": {
+        "tags": [
+          "Share Link"
+        ],
+        "summary": "Disable public sharing and invalidate the current link.",
+        "operationId": "ShareLink_DisableShareLink",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetShareLink"
+        ]
+      }
+    },
+    "/api/v4/share/rotate": {
+      "post": {
+        "tags": [
+          "Share Link"
+        ],
+        "summary": "Mint a new share token — enables sharing, or rotates an existing link. The previous link\nstops working immediately.",
+        "operationId": "ShareLink_RotateShareLink",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetShareLink"
+        ]
+      }
+    },
+    "/api/v4/share/full-history": {
+      "put": {
+        "tags": [
+          "Share Link"
+        ],
+        "summary": "Choose whether the public view shows full history or only the last 24 hours.",
+        "operationId": "ShareLink_SetShareLinkFullHistory",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetShareFullHistoryRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetShareLink"
+        ]
+      }
+    },
+    "/api/v4/share/scopes": {
+      "put": {
+        "tags": [
+          "Share Link"
+        ],
+        "summary": "Set which data categories anonymous viewers can see. Scopes must be read-permission atoms\ndrawn from TenantPermissions.PublicShareScopes; an empty list keeps the link live but\nshares nothing.",
+        "operationId": "ShareLink_SetShareLinkScopes",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetShareScopesRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetShareLink"
         ]
       }
     },
@@ -21875,6 +22532,64 @@
         }
       }
     },
+    "/api/v4/Statistics/range-analytics": {
+      "get": {
+        "tags": [
+          "Statistics"
+        ],
+        "summary": "Extended glucose analytics for a date range, computed server-side. Fetches glucose,\nmanual boluses, and carb intakes for the window from the database and runs\nAnalyzeGlucoseDataExtended plus\nCalculateAveragedStats.",
+        "operationId": "Statistics_GetRangeAnalytics",
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Start of the window (inclusive, UTC).",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "End of the window (exclusive, UTC).",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 2
+          },
+          {
+            "name": "population",
+            "in": "query",
+            "description": "Diabetes population for clinical target assessment. Defaults to Type 1 adult.",
+            "schema": {
+              "default": 0,
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/DiabetesPopulation"
+                }
+              ]
+            },
+            "x-position": 3
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The extended analytics and time-of-day averaged stats for the window.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportAnalysisResult"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
     "/api/v4/Statistics/gmi/{meanGlucose}": {
       "get": {
         "tags": [
@@ -25739,6 +26454,7 @@
           "EaseOff",
           "Sleep",
           "Exercise",
+          "Liberty",
           "Suspended",
           "Off"
         ],
@@ -25750,6 +26466,7 @@
           "EaseOff",
           "Sleep",
           "Exercise",
+          "Liberty",
           "Suspended",
           "Off"
         ]
@@ -26079,7 +26796,6 @@
           "StepCountReadWrite",
           "FoodRead",
           "FoodReadWrite",
-          "StatisticsRead",
           "HealthRead",
           "HealthReadWrite",
           "FullAccess"
@@ -26104,7 +26820,6 @@
           "stepcount.readwrite",
           "food.read",
           "food.readwrite",
-          "statistics.read",
           "health.read",
           "health.readwrite",
           "*"
@@ -26596,6 +27311,83 @@
           "providerId": {
             "type": "string",
             "format": "guid"
+          }
+        }
+      },
+      "TimezoneTimelineEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "UpsertTimezoneEntryRequest": {
+        "type": "object",
+        "description": "Request to create or update a timezone timeline entry.",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Existing entry id to update, or null to create.",
+            "format": "guid",
+            "nullable": true
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "description": "Local wall-clock instant from which the zone takes effect.",
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone id (e.g. \"Australia/Sydney\")."
+          }
+        }
+      },
+      "RecorrectResult": {
+        "type": "object",
+        "description": "Outcome of a re-correction re-sync.",
+        "additionalProperties": false,
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Whether the re-sync succeeded."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable status message."
+          }
+        }
+      },
+      "RecorrectRequest": {
+        "type": "object",
+        "description": "Request to re-correct imported data after a timeline change.",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Optional UTC lower bound for the re-pull window.",
+            "format": "date-time",
+            "nullable": true
           }
         }
       },
@@ -31067,6 +31859,9 @@
           "backgroundOpacity": {
             "type": "integer",
             "format": "int32"
+          },
+          "screensaverMode": {
+            "type": "boolean"
           }
         }
       },
@@ -33350,6 +34145,339 @@
           }
         }
       },
+      "TenantConnectorsDto": {
+        "type": "object",
+        "description": "A tenant and the connectors it has configured.",
+        "additionalProperties": false,
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "description": "The tenant id.",
+            "format": "guid"
+          },
+          "tenantSlug": {
+            "type": "string",
+            "description": "The tenant slug, for display."
+          },
+          "connectors": {
+            "type": "array",
+            "description": "One entry per configured connector.",
+            "items": {
+              "$ref": "#/components/schemas/TenantConnectorSummary"
+            }
+          }
+        }
+      },
+      "TenantConnectorSummary": {
+        "type": "object",
+        "description": "Sync/health summary for a single configured connector.",
+        "additionalProperties": false,
+        "properties": {
+          "connectorName": {
+            "type": "string",
+            "description": "The connector name (e.g. nightscout)."
+          },
+          "isHealthy": {
+            "type": "boolean",
+            "description": "Whether the connector last reported healthy."
+          },
+          "lastSuccessfulSync": {
+            "type": "string",
+            "description": "When the connector last completed a successful sync.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastSyncAttempt": {
+            "type": "string",
+            "description": "When the connector last attempted a sync.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastErrorMessage": {
+            "type": "string",
+            "description": "The most recent error message, if any.",
+            "nullable": true
+          }
+        }
+      },
+      "ConnectorResetJobInfo": {
+        "type": "object",
+        "description": "Summary returned when a reset job is created (202 Accepted).",
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job id, used to poll status.",
+            "format": "guid"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "The target tenant being reset.",
+            "format": "guid"
+          },
+          "tenantSlug": {
+            "type": "string",
+            "description": "The target tenant's slug, for display."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When the job was created.",
+            "format": "date-time"
+          },
+          "state": {
+            "description": "The job's current state.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConnectorResetJobState"
+              }
+            ]
+          },
+          "totalConnectors": {
+            "type": "integer",
+            "description": "How many connectors the job will reset.",
+            "format": "int32"
+          }
+        }
+      },
+      "ConnectorResetJobState": {
+        "type": "string",
+        "description": "Lifecycle state of a connector cursor reset job.",
+        "x-enumNames": [
+          "Pending",
+          "Running",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ],
+        "enum": [
+          "Pending",
+          "Running",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ]
+      },
+      "AdminResetCursorsRequest": {
+        "type": "object",
+        "description": "Request body for a cross-tenant cursor reset. Mirrors the per-tenant\nResetCursorRequest shape.",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Optional lower bound for the re-pull. When null, all available history is re-ingested.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dataTypes": {
+            "type": "array",
+            "description": "Optional set of data types to reset. When null or empty, every supported data type is reset.",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/SyncDataType"
+            }
+          }
+        }
+      },
+      "SyncDataType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Glucose",
+          "ManualBG",
+          "Calibrations",
+          "Boluses",
+          "CarbIntake",
+          "BGChecks",
+          "BolusCalculations",
+          "Notes",
+          "DeviceEvents",
+          "StateSpans",
+          "Profiles",
+          "DeviceStatus",
+          "Activity",
+          "Food"
+        ],
+        "enum": [
+          "Glucose",
+          "ManualBG",
+          "Calibrations",
+          "Boluses",
+          "CarbIntake",
+          "BGChecks",
+          "BolusCalculations",
+          "Notes",
+          "DeviceEvents",
+          "StateSpans",
+          "Profiles",
+          "DeviceStatus",
+          "Activity",
+          "Food"
+        ]
+      },
+      "ConnectorResetJobStatus": {
+        "type": "object",
+        "description": "A pollable snapshot of a reset job's progress.",
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job id.",
+            "format": "guid"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "The target tenant being reset.",
+            "format": "guid"
+          },
+          "tenantSlug": {
+            "type": "string",
+            "description": "The target tenant's slug, for display."
+          },
+          "state": {
+            "description": "The job's current lifecycle state.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConnectorResetJobState"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When the job was created.",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "description": "When the background work started, or null if not yet started.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "completedAt": {
+            "type": "string",
+            "description": "When the job reached a terminal state, or null if still running.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "An error message when the whole job failed (not a single connector).",
+            "nullable": true
+          },
+          "totalConnectors": {
+            "type": "integer",
+            "description": "Total connectors the job will reset.",
+            "format": "int32"
+          },
+          "completedConnectors": {
+            "type": "integer",
+            "description": "How many connectors have finished (succeeded or failed).",
+            "format": "int32"
+          },
+          "connectors": {
+            "type": "array",
+            "description": "Per-connector progress, in configured order.",
+            "items": {
+              "$ref": "#/components/schemas/ConnectorResetConnectorProgress"
+            }
+          }
+        }
+      },
+      "ConnectorResetConnectorProgress": {
+        "type": "object",
+        "description": "Progress for a single connector within a reset job.",
+        "additionalProperties": false,
+        "properties": {
+          "connectorName": {
+            "type": "string",
+            "description": "The connector name (e.g. nightscout)."
+          },
+          "state": {
+            "description": "The connector's current state in this job.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConnectorResetConnectorState"
+              }
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "A human-readable message for the outcome, once the connector has completed.",
+            "nullable": true
+          },
+          "result": {
+            "description": "The full sync result, once the connector has completed.",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SyncResult"
+              }
+            ]
+          }
+        }
+      },
+      "ConnectorResetConnectorState": {
+        "type": "string",
+        "description": "State of a single connector within a reset job.",
+        "x-enumNames": [
+          "Pending",
+          "Running",
+          "Succeeded",
+          "Failed"
+        ],
+        "enum": [
+          "Pending",
+          "Running",
+          "Succeeded",
+          "Failed"
+        ]
+      },
+      "SyncResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "itemsSynced": {
+            "type": "object",
+            "x-dictionaryKey": {
+              "$ref": "#/components/schemas/SyncDataType"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "lastEntryTimes": {
+            "type": "object",
+            "x-dictionaryKey": {
+              "$ref": "#/components/schemas/SyncDataType"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "PlatformSettingsSummary": {
         "type": "object",
         "additionalProperties": false,
@@ -33467,6 +34595,9 @@
             "type": "string",
             "nullable": true
           },
+          "isSystemSubject": {
+            "type": "boolean"
+          },
           "roles": {
             "type": "array",
             "items": {
@@ -33495,6 +34626,9 @@
           "sysCreatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "isPlatformAdmin": {
+            "type": "boolean"
           }
         }
       },
@@ -34566,89 +35700,6 @@
           }
         }
       },
-      "SyncResult": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "message": {
-            "type": "string"
-          },
-          "startTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "endTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "itemsSynced": {
-            "type": "object",
-            "x-dictionaryKey": {
-              "$ref": "#/components/schemas/SyncDataType"
-            },
-            "additionalProperties": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "lastEntryTimes": {
-            "type": "object",
-            "x-dictionaryKey": {
-              "$ref": "#/components/schemas/SyncDataType"
-            },
-            "additionalProperties": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            }
-          },
-          "errors": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "SyncDataType": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Glucose",
-          "ManualBG",
-          "Calibrations",
-          "Boluses",
-          "CarbIntake",
-          "BGChecks",
-          "BolusCalculations",
-          "Notes",
-          "DeviceEvents",
-          "StateSpans",
-          "Profiles",
-          "DeviceStatus",
-          "Activity",
-          "Food"
-        ],
-        "enum": [
-          "Glucose",
-          "ManualBG",
-          "Calibrations",
-          "Boluses",
-          "CarbIntake",
-          "BGChecks",
-          "BolusCalculations",
-          "Notes",
-          "DeviceEvents",
-          "StateSpans",
-          "Profiles",
-          "DeviceStatus",
-          "Activity",
-          "Food"
-        ]
-      },
       "SyncRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -34665,6 +35716,27 @@
           },
           "dataTypes": {
             "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncDataType"
+            }
+          }
+        }
+      },
+      "ResetCursorRequest": {
+        "type": "object",
+        "description": "Request body for resetting a connector's sync cursor and re-pulling history.",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Optional lower bound for the re-pull. When null, no lower bound is applied and all\navailable history is re-ingested.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dataTypes": {
+            "type": "array",
+            "description": "Optional set of data types to reset. When null or empty, every data type the connector\nsupports is re-pulled.",
+            "nullable": true,
             "items": {
               "$ref": "#/components/schemas/SyncDataType"
             }
@@ -34817,6 +35889,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "anonymousReadAccess": {
+            "type": "boolean"
           }
         }
       },
@@ -34939,7 +36014,8 @@
           "TelegramGroup",
           "WhatsApp",
           "WhatsAppDm",
-          "HomeAssistant"
+          "HomeAssistant",
+          "ResendEmail"
         ],
         "enum": [
           "web_push",
@@ -34954,7 +36030,8 @@
           "telegram_group",
           "whatsapp",
           "whatsapp_dm",
-          "home_assistant"
+          "home_assistant",
+          "resend_email"
         ]
       },
       "ChannelStatus": {
@@ -35720,6 +36797,9 @@
           },
           "conditionType": {
             "$ref": "#/components/schemas/AlertConditionType"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/AlertRuleSeverity"
           },
           "startedAt": {
             "type": "string",
@@ -37334,15 +38414,6 @@
           }
         }
       },
-      "SetPublicAccessRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          }
-        }
-      },
       "CreateMembershipRequestResult": {
         "type": "object",
         "additionalProperties": false,
@@ -37422,6 +38493,24 @@
               "type": "string",
               "format": "guid"
             }
+          }
+        }
+      },
+      "MembershipRequestSettingsDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "allowRequests": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateMembershipRequestSettingsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "allowRequests": {
+            "type": "boolean"
           }
         }
       },
@@ -37505,6 +38594,60 @@
             "nullable": true
           },
           "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ShareLinkDto": {
+        "type": "object",
+        "description": "Current state of a tenant's single public share link.",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether a public share link is currently active."
+          },
+          "url": {
+            "type": "string",
+            "description": "The full share URL when enabled; null otherwise. The raw token is never returned separately.",
+            "nullable": true
+          },
+          "fullHistory": {
+            "type": "boolean",
+            "description": "When true the public view shows full history; when false, only the last 24 hours."
+          },
+          "scopes": {
+            "type": "array",
+            "description": "The data categories anonymous viewers can see, as read-permission atoms (e.g. glucose.read).\nA subset of PublicShareScopes.\nEmpty means the link is live but nothing is shared yet.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastAccessedAt": {
+            "type": "string",
+            "description": "When the share link was last accessed, or null if never (or not yet recorded).",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "SetShareFullHistoryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fullHistory": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SetShareScopesRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "scopes": {
             "type": "array",
             "items": {
               "type": "string"
@@ -38694,6 +39837,10 @@
             "nullable": true
           },
           "legacyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "syncIdentifier": {
             "type": "string",
             "nullable": true
           },
@@ -41408,6 +42555,7 @@
           "PumpModeExercise",
           "PumpModeSuspended",
           "PumpModeOff",
+          "PumpModeLiberty",
           "SystemEventAlarm",
           "SystemEventHazard",
           "SystemEventWarning",
@@ -41450,6 +42598,7 @@
           "pump-mode-exercise",
           "pump-mode-suspended",
           "pump-mode-off",
+          "pump-mode-liberty",
           "system-event-alarm",
           "system-event-hazard",
           "system-event-warning",
@@ -44206,6 +45355,21 @@
           }
         }
       },
+      "ReportAnalysisResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "analysis": {
+            "$ref": "#/components/schemas/ExtendedGlucoseAnalytics"
+          },
+          "averagedStats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AveragedStats"
+            }
+          }
+        }
+      },
       "ClinicalAssessmentRequest": {
         "type": "object",
         "description": "Request model for clinical assessment",
@@ -46022,6 +47186,10 @@
           "isPlatformAdmin": {
             "type": "boolean",
             "description": "Whether this subject has platform-level admin access"
+          },
+          "isPlatformAccessGrant": {
+            "type": "boolean",
+            "description": "Whether this session is a short-lived platform-admin access grant on a tenant the\nsubject is NOT a member of (as opposed to ordinary membership). Authoritative signal\nfor the \"platform admin access\" indicator in the UI."
           },
           "avatarUrl": {
             "type": "string",

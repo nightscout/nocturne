@@ -28,6 +28,8 @@
     Bell,
     BellOff,
     CalendarClock,
+    CalendarDays,
+    Moon,
   } from "lucide-svelte";
   import type { ConditionNode } from "./types";
   import type { TrendBucket } from "./types";
@@ -85,6 +87,8 @@
     bell: Bell,
     "bell-off": BellOff,
     "calendar-clock": CalendarClock,
+    "calendar-days": CalendarDays,
+    moon: Moon,
   };
 
   // Map the alert builder's trend buckets to the shared `Direction` enum so
@@ -232,12 +236,12 @@
       >
         {label}
       </span>
-      <div class="flex-1">
+      <div class="min-w-0 flex-1">
         <RuleBuilder bind:node={parent.composite!.conditions[index]} {availableRules} nested />
       </div>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
-          {#snippet child({ props })}
+          {#snippet child({ props }: { props: Record<string, unknown> })}
             <Button
               {...props}
               variant="ghost"
@@ -268,7 +272,7 @@
   <!-- Leaf row (possibly wrapped in NOT/SUSTAINED) -->
   <div
     role="listitem"
-    class="group/row flex items-center gap-2 rounded-md border bg-background px-2 py-1.5 transition-opacity"
+    class="group/row flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1.5 transition-opacity"
     class:opacity-50={isDragSource}
     draggable="true"
     ondragstart={startDrag}
@@ -309,7 +313,7 @@
         min="1"
         class="h-7 w-16 px-2 text-right text-xs tabular-nums"
         value={sustainedNode.sustained.minutes ?? 15}
-        oninput={(e) => {
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
           if (sustainedNode?.sustained) {
             const n = Number(e.currentTarget.value);
             sustainedNode.sustained.minutes = Number.isFinite(n)
@@ -335,7 +339,7 @@
     {/if}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
-        {#snippet child({ props })}
+        {#snippet child({ props }: { props: Record<string, unknown> })}
           <Button
             {...props}
             variant="ghost"

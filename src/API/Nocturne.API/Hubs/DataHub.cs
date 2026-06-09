@@ -14,6 +14,9 @@ namespace Nocturne.API.Hubs;
 /// <summary>
 /// SignalR hub for real-time data updates, replacing socket.io main data connection
 /// </summary>
+// Connections authenticate in-band after negotiate and are reachable only via the internal
+// realtime bridge, so the HTTP fallback authorization policy must not gate the handshake.
+[AllowAnonymous]
 public class DataHub : TenantAwareHub
 {
     private readonly ILogger<DataHub> _logger;
@@ -75,8 +78,8 @@ public class DataHub : TenantAwareHub
                         ?? configuration?[ServiceNames.ConfigKeys.InstanceKey];
                     if (!string.IsNullOrEmpty(configuredSecret))
                     {
-                        // Calculate SHA1 hash of the configured secret
-                        var expectedHash = HashUtils.Sha1Hex(configuredSecret);
+                        // Calculate SHA-256 hash of the configured secret
+                        var expectedHash = HashUtils.Sha256Hex(configuredSecret);
 
                         // Compare with provided secret (should be the hashed value)
                         isAuthorized = authData.Secret.ToLowerInvariant() == expectedHash;

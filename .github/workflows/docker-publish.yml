@@ -75,7 +75,7 @@ jobs:
             DOCKER_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${VERSION}"
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION=${GITHUB_REF#refs/tags/v}
-            DOTNET_TAGS="${VERSION}%3Blatest"
+            DOTNET_TAGS="${VERSION}"
             DOCKER_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${VERSION},${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:latest"
           elif [[ "${{ github.ref }}" == refs/heads/master ]] || [[ "${{ github.ref }}" == refs/heads/main ]]; then
             VERSION=latest
@@ -148,6 +148,15 @@ jobs:
             -p:ContainerRegistry=${{ env.REGISTRY }} \
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-demo \
             "-p:ContainerImageTags=${{ steps.version.outputs.dotnet_tags }}"
+
+      - name: Tag dotnet containers as latest
+        if: startsWith(github.ref, 'refs/tags/v') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        run: |
+          for image in nocturne-api nocturne-demo; do
+            docker buildx imagetools create \
+              --tag ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:latest \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.version.outputs.version }}
+          done
 
       - name: Build and push Nocturne.Web container
         if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)

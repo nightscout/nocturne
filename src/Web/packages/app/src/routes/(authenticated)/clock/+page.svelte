@@ -247,7 +247,7 @@
                   variant="ghost"
                   size="icon"
                   class="opacity-0 transition-opacity group-hover:opacity-100"
-                  onclick={(e) => {
+                  onclick={(e: MouseEvent) => {
                     e.stopPropagation();
                     openDeleteDialog(face.id ?? "", face.name ?? "Untitled");
                   }}

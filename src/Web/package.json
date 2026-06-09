@@ -13,7 +13,7 @@
     "test": "pnpm --recursive test",
     "clean": "pnpm --recursive clean && rm -rf node_modules",
     "generate-api-client": "cd ../API/Nocturne.API && nswag run nswag.json",
-    "generate-zod-schemas": "node --experimental-transform-types utils/generateZodSchemas/index.ts",
+    "generate-zod-schemas": "node utils/generateZodSchemas/index.ts",
     "generate-remote-functions": "npx openapi-remote-codegen",
     "generate-api": "pnpm run generate-api-client && pnpm run generate-zod-schemas && pnpm run generate-remote-functions",
     "translations:stage": "cd ../.. && git ls-files src/Web/locales/ | xargs git update-index --no-skip-worktree && git add src/Web/locales/",
@@ -31,31 +31,6 @@
   "engines": {
     "node": ">=24",
     "pnpm": ">=9"
-  },
-  "pnpm": {
-    "overrides": {
-      "@sveltejs/vite-plugin-svelte": "^5.0.3",
-      "svelte": "^5.37.0",
-      "vite": "^6.3.5"
-    },
-    "packageExtensions": {
-      "tiptap-extension-auto-joiner": {
-        "peerDependencies": {
-          "@tiptap/core": "*",
-          "@tiptap/pm": "*"
-        }
-      },
-      "@microsoft/signalr": {
-        "dependencies": {
-          "tough-cookie": "*"
-        }
-      }
-    },
-    "onlyBuiltDependencies": [
-      "@tailwindcss/oxide",
-      "esbuild",
-      "protobufjs"
-    ]
   },
   "dependencies": {
     "@wuchale/svelte": "^0.18.1",

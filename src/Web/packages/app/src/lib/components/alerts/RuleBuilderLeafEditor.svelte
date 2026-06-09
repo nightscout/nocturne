@@ -78,6 +78,7 @@
     [PumpModeState.EaseOff]: "Ease off",
     [PumpModeState.Sleep]: "Sleep",
     [PumpModeState.Exercise]: "Exercise",
+    [PumpModeState.Liberty]: "Liberty",
     [PumpModeState.Suspended]: "Suspended",
     [PumpModeState.Off]: "Off",
   };
@@ -169,7 +170,7 @@
       step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
       class="h-7 w-20 px-2 text-right text-xs tabular-nums"
       value={bg(node.threshold.value ?? 0)}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.threshold)
           node.threshold.value = convertFromDisplayUnits(
             parseNumber(e.currentTarget.value, bg(node.threshold.value ?? 0) as number),
@@ -200,7 +201,7 @@
       step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
       class="h-7 w-20 px-2 text-right text-xs tabular-nums"
       value={bg(node.predicted.value ?? 0)}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.predicted)
           node.predicted.value = convertFromDisplayUnits(
             parseNumber(e.currentTarget.value, bg(node.predicted.value ?? 0) as number),
@@ -214,7 +215,7 @@
       min="1"
       class="h-7 w-16 px-2 text-right text-xs tabular-nums"
       value={node.predicted.within_minutes ?? 0}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.predicted)
           node.predicted.within_minutes = parseNumber(
             e.currentTarget.value,
@@ -246,7 +247,7 @@
       step={glucoseUnits.current === "mmol" ? "0.01" : "0.1"}
       class="h-7 w-20 px-2 text-right text-xs tabular-nums"
       value={bg(node.rate_of_change.rate ?? 0)}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.rate_of_change)
           node.rate_of_change.rate = convertFromDisplayUnits(
             parseNumber(e.currentTarget.value, bg(node.rate_of_change.rate ?? 0) as number),
@@ -294,7 +295,7 @@
       min="1"
       class="h-7 w-16 px-2 text-right text-xs tabular-nums"
       value={node.staleness.value ?? 0}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.staleness)
           node.staleness.value = parseNumber(
             e.currentTarget.value,
@@ -308,7 +309,7 @@
       type="time"
       class="h-7 w-24 px-2 text-xs tabular-nums"
       value={node.time_of_day.from ?? "00:00"}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.time_of_day) node.time_of_day.from = e.currentTarget.value;
       }}
     />
@@ -317,7 +318,7 @@
       type="time"
       class="h-7 w-24 px-2 text-xs tabular-nums"
       value={node.time_of_day.to ?? "23:59"}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.time_of_day) node.time_of_day.to = e.currentTarget.value;
       }}
     />
@@ -345,7 +346,7 @@
       step={node.type === "sensitivity_ratio" ? "0.01" : "0.1"}
       class="h-7 w-20 px-2 text-right text-xs tabular-nums"
       value={payload.value ?? 0}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         payload.value = parseNumber(e.currentTarget.value, payload.value ?? 0);
       }}
     />
@@ -373,7 +374,7 @@
       min="1"
       class="h-7 w-16 px-2 text-right text-xs tabular-nums"
       value={payload.minutes ?? 0}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         payload.minutes = parseNumber(e.currentTarget.value, payload.minutes ?? 0);
       }}
     />
@@ -385,7 +386,7 @@
       min="1"
       class="h-7 w-16 px-2 text-right text-xs tabular-nums"
       value={node.signal_loss.timeout_minutes ?? 0}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.signal_loss)
           node.signal_loss.timeout_minutes = parseNumber(
             e.currentTarget.value,
@@ -434,7 +435,7 @@
       step="0.1"
       class="h-7 w-20 px-2 text-right text-xs tabular-nums"
       value={node.temp_basal.value ?? 0}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.temp_basal)
           node.temp_basal.value = parseNumber(
             e.currentTarget.value,
@@ -447,9 +448,9 @@
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
       checked={payload.is_active ?? true}
-      onCheckedChange={(checked) => {
+      onCheckedChange={(checked: boolean) => {
         payload.is_active = checked;
-        if (!checked) payload.for_minutes = null;
+        if (!checked) payload.for_minutes = undefined;
       }}
     />
     <span class="text-xs text-muted-foreground">{payload.is_active ? "active" : "inactive"}</span>
@@ -461,9 +462,9 @@
         class="h-7 w-16 px-2 text-right text-xs tabular-nums"
         placeholder="any"
         value={payload.for_minutes ?? ""}
-        oninput={(e) => {
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
           const v = e.currentTarget.value;
-          payload.for_minutes = v.length > 0 ? parseNumber(v, 0) : null;
+          payload.for_minutes = v.length > 0 ? parseNumber(v, 0) : undefined;
         }}
       />
       <span class="text-xs text-muted-foreground">min</span>
@@ -510,7 +511,7 @@
       class="h-7 w-16 px-2 text-right text-xs tabular-nums"
       placeholder="any"
       value={node.alert_state.for_minutes ?? ""}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         const v = e.currentTarget.value;
         if (node.alert_state)
           node.alert_state.for_minutes = v.length > 0 ? parseNumber(v, 0) : undefined;
@@ -523,7 +524,7 @@
       type="multiple"
       size="sm"
       value={[...selected] as string[]}
-      onValueChange={(v) => {
+      onValueChange={(v: string[]) => {
         if (node.glucose_bucket)
           node.glucose_bucket.buckets = v as GlucoseBucket[];
       }}
@@ -560,7 +561,7 @@
       min="1"
       class="h-7 w-16 px-2 text-right text-xs tabular-nums"
       value={payload.minutes ?? 0}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         payload.minutes = parseNumber(e.currentTarget.value, payload.minutes ?? 0);
       }}
     />
@@ -571,9 +572,9 @@
       type="multiple"
       size="sm"
       value={[...selectedDays].map(String)}
-      onValueChange={(v) => {
+      onValueChange={(v: string[]) => {
         if (node.day_of_week)
-          node.day_of_week.days = v.map((s) => Number(s) as DayOfWeek);
+          node.day_of_week.days = v.map((s: string) => Number(s) as DayOfWeek);
       }}
       class="flex flex-wrap gap-1"
     >
@@ -603,7 +604,7 @@
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
       checked={node.pump_state.is_active ?? true}
-      onCheckedChange={(checked) => {
+      onCheckedChange={(checked: boolean) => {
         if (!node.pump_state) return;
         node.pump_state.is_active = checked;
         if (!checked) node.pump_state.for_minutes = undefined;
@@ -618,7 +619,7 @@
         class="h-7 w-16 px-2 text-right text-xs tabular-nums"
         placeholder="any"
         value={node.pump_state.for_minutes ?? ""}
-        oninput={(e) => {
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
           if (!node.pump_state) return;
           const v = e.currentTarget.value;
           node.pump_state.for_minutes = v.length > 0 ? parseNumber(v, 0) : undefined;
@@ -651,7 +652,7 @@
       class="h-7 w-28 px-2 text-xs"
       placeholder="any state"
       value={node.state_span_active.state ?? ""}
-      oninput={(e) => {
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (!node.state_span_active) return;
         const v = e.currentTarget.value;
         node.state_span_active.state = v.length > 0 ? v : undefined;
@@ -660,7 +661,7 @@
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
       checked={node.state_span_active.is_active ?? true}
-      onCheckedChange={(checked) => {
+      onCheckedChange={(checked: boolean) => {
         if (!node.state_span_active) return;
         node.state_span_active.is_active = checked;
         if (!checked) node.state_span_active.for_minutes = undefined;
@@ -675,7 +676,7 @@
         class="h-7 w-16 px-2 text-right text-xs tabular-nums"
         placeholder="any"
         value={node.state_span_active.for_minutes ?? ""}
-        oninput={(e) => {
+        oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
           if (!node.state_span_active) return;
           const v = e.currentTarget.value;
           node.state_span_active.for_minutes = v.length > 0 ? parseNumber(v, 0) : undefined;

@@ -42,7 +42,6 @@
   const data = $derived({
     entries: reportsResource.current?.entries ?? [],
     boluses: reportsResource.current?.boluses ?? [],
-    carbIntakes: reportsResource.current?.carbIntakes ?? [],
     insulinDeliveryStats: reportsResource.current?.insulinDeliveryStats,
     profileSummary: reportsResource.current?.profileSummary,
     analysis: reportsResource.current?.analysis,
@@ -83,7 +82,7 @@
 </svelte:head>
 
 {#if reportsResource.current}
-<div class="@container container mx-auto px-4 py-6 space-y-8 max-w-7xl">
+<div class="@container container mx-auto space-y-8 p-3 @md:p-6 max-w-7xl">
   <!-- Header -->
   <div class="space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-4">

@@ -62,6 +62,62 @@ internal static class MyLifePumpSettingsMapper
         return profiles;
     }
 
+    /// <summary>
+    /// Maps MyLife pump settings readouts to Profile state_spans tracking the active basal program
+    /// over time. Readouts are grouped by device serial number and sorted chronologically;
+    /// consecutive readouts produce abutting spans, with the most recent left open-ended.
+    /// Readouts with a null/empty ActiveBasalProgramName are skipped (the next readout still
+    /// closes the prior span).
+    /// </summary>
+    internal static List<StateSpan> MapToStateSpans(
+        IReadOnlyList<MyLifePumpSettingsReadout> readouts,
+        string connectorSource)
+    {
+        var stateSpans = new List<StateSpan>();
+
+        var byDevice = readouts.GroupBy(r => r.DeviceSerialNumber ?? string.Empty);
+
+        foreach (var device in byDevice)
+        {
+            var ordered = device.OrderBy(r => r.UploadDateTime).ToList();
+
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                var readout = ordered[i];
+                var profileName = readout.ActiveBasalProgramName;
+                if (string.IsNullOrWhiteSpace(profileName))
+                    continue;
+
+                var startMills = MyLifeMapperHelpers.ToUnixMilliseconds(readout.UploadDateTime);
+                var startTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(startMills).UtcDateTime;
+
+                DateTime? endTimestamp = null;
+                if (i < ordered.Count - 1)
+                {
+                    var nextMills = MyLifeMapperHelpers.ToUnixMilliseconds(ordered[i + 1].UploadDateTime);
+                    endTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(nextMills).UtcDateTime;
+                }
+
+                var deviceKey = string.IsNullOrEmpty(device.Key) ? "unknown" : device.Key;
+                stateSpans.Add(new StateSpan
+                {
+                    OriginalId = $"mylife_active_profile_{deviceKey}_{startMills}",
+                    Category = StateSpanCategory.Profile,
+                    State = ProfileState.Active.ToString(),
+                    StartTimestamp = startTimestamp,
+                    EndTimestamp = endTimestamp,
+                    Source = connectorSource,
+                    Metadata = new Dictionary<string, object>
+                    {
+                        { "profileName", profileName }
+                    }
+                });
+            }
+        }
+
+        return stateSpans;
+    }
+
     private static List<TimeValue> MapBasalEntries(List<MyLifeBasalProgramEntry>? entries)
     {
         if (entries == null || entries.Count == 0)

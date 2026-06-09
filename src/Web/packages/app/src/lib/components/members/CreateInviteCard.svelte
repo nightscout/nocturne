@@ -119,7 +119,7 @@
       after signing in.
     </Card.Description>
   </Card.Header>
-  <Card.Content>
+  <Card.Content class="@container">
     {#if createdInviteUrl}
       <div class="space-y-4">
         <div
@@ -176,7 +176,7 @@
           description: "Roles control what they can see and do. Viewer for a quick glance, Caretaker if they help manage your diabetes.",
         })}>
           <Label>Roles</Label>
-          <div class="grid gap-2 sm:grid-cols-2">
+          <div class="grid gap-2 @sm:grid-cols-2">
             {#each roles as role (role.id)}
               <div class="flex items-center gap-2">
                 <Checkbox
@@ -198,7 +198,7 @@
         <!-- Direct permissions (collapsible) -->
         <Collapsible.Root
           open={showInvitePermissions}
-          onOpenChange={(open) => (showInvitePermissions = open)}
+          onOpenChange={(open: boolean) => (showInvitePermissions = open)}
         >
           <Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
             {#if showInvitePermissions}
@@ -221,7 +221,7 @@
           <Checkbox
             id="limit-to-24-hours"
             checked={limitTo24Hours}
-            onCheckedChange={(checked) => {
+            onCheckedChange={(checked: boolean) => {
               limitTo24Hours = checked === true;
             }}
           />
@@ -244,7 +244,7 @@
           <Checkbox
             id="allow-multiple-uses"
             checked={allowMultipleUses}
-            onCheckedChange={(checked) => {
+            onCheckedChange={(checked: boolean) => {
               allowMultipleUses = checked === true;
             }}
           />

@@ -30,4 +30,10 @@ public interface IMembershipRequestService
     Task<DecideMembershipRequestResult> DenyRequestAsync(
         Guid requestId, Guid tenantId,
         Guid decidedBySubjectId, CancellationToken ct = default);
+
+    /// <summary>Whether the tenant currently accepts requests to join (<c>AllowAccessRequests</c>).</summary>
+    Task<bool> GetAllowRequestsAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>Enable or disable whether people can request to join the tenant. Returns the new value.</summary>
+    Task<bool> SetAllowRequestsAsync(Guid tenantId, bool allowRequests, CancellationToken ct = default);
 }

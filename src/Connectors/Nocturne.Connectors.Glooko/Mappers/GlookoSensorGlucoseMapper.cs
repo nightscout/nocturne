@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Connectors.Glooko.Models;
@@ -61,6 +62,9 @@ public class GlookoSensorGlucoseMapper
                 Id = Guid.CreateVersion7(),
                 Timestamp = timestamp,
                 LegacyId = $"glooko_v3_{reading.X}",
+                // Keyed on the raw fake-UTC unix (stable across timezone re-correction), so re-imports
+                // update the row in place rather than duplicating it.
+                SyncIdentifier = $"glooko_v3_{reading.X}",
                 Device = _connectorSource,
                 DataSource = _connectorSource,
                 Mgdl = mgdl,
@@ -154,17 +158,16 @@ public class GlookoSensorGlucoseMapper
         if (string.IsNullOrWhiteSpace(timestamp))
             return null;
 
-        if (!DateTime.TryParse(timestamp, out var parsedDate))
+        // RoundtripKind keeps Glooko's fake-UTC wall-clock intact (a trailing Z is the local clock, not
+        // a real offset), so the time mapper can convert it via the timezone timeline (or the static
+        // offset fallback) just like the treatment paths.
+        if (!DateTime.TryParse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedDate))
         {
             _logger.LogWarning("Failed to parse Glooko timestamp: '{Timestamp}'", timestamp);
             return null;
         }
 
-        var date = parsedDate.ToUniversalTime();
-        if (_config.TimezoneOffset != 0)
-            date = date.AddHours(-_config.TimezoneOffset);
-
-        return date;
+        return _timeMapper.GetCorrectedGlookoTime(parsedDate);
     }
 
     private SensorGlucose? ParseSensorGlucose(GlookoCgmReading reading)
@@ -183,12 +186,19 @@ public class GlookoSensorGlucoseMapper
                 ? $"glooko_cgm_{reading.Guid}"
                 : $"glooko_{date.Value.Ticks}";
 
+            // Stable across timezone re-correction: prefer Glooko's guid, else the RAW fake-UTC string
+            // (not the corrected ticks, which move when the timeline changes) — so re-imports upsert.
+            var syncId = !string.IsNullOrEmpty(reading.Guid)
+                ? $"glooko_cgm_{reading.Guid}"
+                : $"glooko_cgm_raw_{reading.Timestamp}";
+
             var now = DateTime.UtcNow;
             return new SensorGlucose
             {
                 Id = Guid.CreateVersion7(),
                 Timestamp = date.Value,
                 LegacyId = legacyId,
+                SyncIdentifier = syncId,
                 Device = _connectorSource,
                 DataSource = _connectorSource,
                 Mgdl = mgdl,

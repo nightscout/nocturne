@@ -103,6 +103,11 @@ public enum PumpModeState
     Exercise,
 
     /// <summary>
+    /// Liberty mode (CamAPS FX)
+    /// </summary>
+    Liberty,
+
+    /// <summary>
     /// Insulin delivery suspended
     /// </summary>
     Suspended,

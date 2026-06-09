@@ -3,6 +3,32 @@ packages:
 
 enableGlobalVirtualStore: true
 
+# Build-script approval. pnpm v11+ gates dependency build scripts on `allowBuilds` (a per-package
+# boolean map) and will block `pnpm install` — exiting non-zero — until each is explicitly set,
+# which in turn breaks the API project's post-build codegen target (`pnpm run generate-zod-schemas`).
+# `onlyBuiltDependencies` is the equivalent allow-list honoured by pnpm 9/10 (engines allows >=9),
+# kept here for compatibility. Keep the two lists in sync.
+allowBuilds:
+  "@tailwindcss/oxide": true
+  esbuild: true
+  protobufjs: true
+
 onlyBuiltDependencies:
   - "@tailwindcss/oxide"
   - esbuild
+  - protobufjs
+
+# Migrated from the package.json "pnpm" field, which pnpm v11+ no longer reads.
+overrides:
+  "@sveltejs/vite-plugin-svelte": "^5.0.3"
+  svelte: "^5.37.0"
+  vite: "^6.3.5"
+
+packageExtensions:
+  tiptap-extension-auto-joiner:
+    peerDependencies:
+      "@tiptap/core": "*"
+      "@tiptap/pm": "*"
+  "@microsoft/signalr":
+    dependencies:
+      tough-cookie: "*"

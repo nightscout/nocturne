@@ -59,6 +59,74 @@ public class GlookoProfileMapper
         return profiles;
     }
 
+    /// <summary>
+    ///     Emits a Profile state_span per device per settings snapshot, derived from
+    ///     <c>BasalSettings.ActiveBasalProgram</c>. Consecutive snapshots produce abutting spans;
+    ///     the most recent snapshot's span is open-ended. Snapshots with a null/empty active program
+    ///     are skipped (the next snapshot's timestamp still closes the prior span).
+    /// </summary>
+    public List<StateSpan> TransformDeviceSettingsToStateSpans(GlookoV3DeviceSettingsResponse response)
+    {
+        var stateSpans = new List<StateSpan>();
+
+        if (response.DeviceSettings?.Pumps == null)
+            return stateSpans;
+
+        foreach (var (deviceGuid, settingsSnapshots) in response.DeviceSettings.Pumps)
+        {
+            var ordered = settingsSnapshots
+                .Select(kv => (Key: kv.Key, Parsed: TryParseTimestamp(kv.Key), Settings: kv.Value))
+                .Where(x => x.Parsed.HasValue)
+                .OrderBy(x => x.Parsed!.Value)
+                .ToList();
+
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                var (_, parsed, settings) = ordered[i];
+                var profileName = settings.BasalSettings?.ActiveBasalProgram;
+                if (string.IsNullOrWhiteSpace(profileName))
+                    continue;
+
+                var startTimestamp = parsed!.Value;
+                DateTime? endTimestamp = i < ordered.Count - 1 ? ordered[i + 1].Parsed : null;
+                var startMills = new DateTimeOffset(startTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+                stateSpans.Add(new StateSpan
+                {
+                    OriginalId = $"glooko_active_profile_{deviceGuid}_{startMills}",
+                    Category = StateSpanCategory.Profile,
+                    State = ProfileState.Active.ToString(),
+                    StartTimestamp = startTimestamp,
+                    EndTimestamp = endTimestamp,
+                    Source = _connectorSource,
+                    Metadata = new Dictionary<string, object>
+                    {
+                        { "profileName", profileName }
+                    }
+                });
+            }
+        }
+
+        _logger.LogInformation(
+            "[{ConnectorSource}] Transformed {Count} profile state spans from device settings",
+            _connectorSource,
+            stateSpans.Count
+        );
+
+        return stateSpans;
+    }
+
+    private static DateTime? TryParseTimestamp(string timestamp)
+    {
+        if (string.IsNullOrWhiteSpace(timestamp))
+            return null;
+        return DateTime.TryParse(
+            timestamp,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind,
+            out var parsed) ? parsed : null;
+    }
+
     private Profile? MapSettingsToProfile(GlookoV3PumpSettings settings, string timestamp)
     {
         if (settings.PumpProfilesBasal == null && settings.ProfilesBolus == null)

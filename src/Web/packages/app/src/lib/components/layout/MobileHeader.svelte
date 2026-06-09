@@ -1,9 +1,13 @@
 <script lang="ts">
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { getDirectionInfo } from "$lib/utils";
+  import { formatGlucoseDelta } from "$lib/utils/formatting";
+  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
 
   const realtimeStore = tryGetRealtimeStore();
+
+  const units = $derived(glucoseUnits.current);
 
   // Scroll tracking state
   let lastScrollY = $state(0);
@@ -20,12 +24,6 @@
     if (bg > 250) return "bg-red-500";
     if (bg > 180) return "bg-orange-500";
     return "bg-green-500";
-  }
-
-  // Format delta with sign
-  function formatDelta(delta: number): string {
-    if (delta > 0) return `+${delta}`;
-    return String(delta);
   }
 
   // Handle scroll events
@@ -80,7 +78,7 @@
           {/if}
         </span>
         <span class="text-muted-foreground">
-          {formatDelta(realtimeStore.bgDelta)}
+          {formatGlucoseDelta(realtimeStore.bgDelta, units)}
         </span>
       </div>
     </div>

@@ -25,7 +25,7 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
-  import { getReportsData } from "$api/reports.remote";
+  import { getBasalReportData } from "$api/reports.remote";
   import { getMultiPeriodStatistics, getDailyBasalBolusRatios } from "$api/generated/statistics.generated.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -36,7 +36,7 @@
 
   // Create primary resource with automatic layout registration
   const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
+    () => getBasalReportData(reportsParams.dateRangeInput),
     { errorTitle: "Error Loading Insulin Delivery Data" }
   );
 
@@ -62,7 +62,16 @@
           return d;
         })();
     startDate.setHours(0, 0, 0, 0);
-    return { startDate, endDate };
+    // Send ISO strings, not Date objects. A Date can't be serialised as a
+    // remote-query argument ("Unknown date type"), so passing Dates left this
+    // query erroring — empty on first load, hard error when the filter dates
+    // change. The server schema is z.coerce.date(), which parses the ISO
+    // strings back to dates; the cast satisfies the generated Date arg type.
+    // Same pattern as ReplayPanel's replay() call.
+    return {
+      startDate: startDate.toISOString() as unknown as Date,
+      endDate: endDate.toISOString() as unknown as Date,
+    };
   });
   const dailyRatiosResource = $derived(getDailyBasalBolusRatios(dailyRatiosDates));
 
@@ -146,7 +155,7 @@
 </svelte:head>
 
 {#if reportsResource.current || multiPeriodStatsResource.current}
-<div class="container mx-auto max-w-7xl space-y-8 px-4 py-6">
+<div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
   <!-- Header -->
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-4">
@@ -231,8 +240,8 @@
   </Card>
 
   <!-- Key Summary Stats -->
-  <div class="grid grid-cols-2 gap-4 md:grid-cols-5">
-    <Card class="border md:col-span-1">
+  <div class="grid grid-cols-2 gap-4 @lg:grid-cols-5">
+    <Card class="border @lg:col-span-1">
       <CardContent class="pt-6 text-center">
         <div class="text-3xl font-bold tabular-nums text-primary">
           {(insulinStats.tdd ?? 0).toFixed(1)}
@@ -356,7 +365,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid gap-4 md:grid-cols-3">
+        <div class="grid gap-4 @3xl:grid-cols-3">
           <div class="rounded-lg border bg-card p-4 text-center">
             <div class="text-3xl font-bold text-blue-600">
               {insulinStats.bolusCount ?? 0}

@@ -69,14 +69,15 @@ internal sealed class IobCobComputeStage(
         var intervalMinutes = context.IntervalMinutes;
         var defaultBasalRate = context.DefaultBasalRate;
 
-        // Build once — reused by both IOB/COB and basal series to avoid per-tick resolver round-trips.
+        // Build once, then thread through both IOB/COB and the basal series so the resolver
+        // is hit a single time per chart-data request.
         var timeline = await therapyTimelineResolver.BuildAsync(startTime, endTime + 1, ct: cancellationToken);
 
         var (iobSeries, cobSeries, maxIob, maxCob) = BuildIobCobSeries(
             bolusList, carbIntakeList, startTime, endTime, intervalMinutes, tempBasalList, timeline, cancellationToken
         );
 
-        var basalSeries = await basalSeriesBuilder.BuildAsync(tempBasalList, startTime, endTime, defaultBasalRate, cancellationToken);
+        var basalSeries = await basalSeriesBuilder.BuildAsync(tempBasalList, startTime, endTime, defaultBasalRate, timeline, cancellationToken);
 
         var maxBasalRate = Math.Max(
             defaultBasalRate * 2.5,
@@ -173,6 +174,10 @@ internal sealed class IobCobComputeStage(
         {
             ct.ThrowIfCancellationRequested();
 
+            // One in-memory therapy snapshot per tick drives every profile lookup below
+            // (DIA, sensitivity, scheduled basal rate, carb ratio) with zero DB round trips.
+            var snapshot = timeline.SnapshotAt(t);
+
             // Admit newly-elapsed entries (Mills/StartMills <= t)
             while (insulinHi < sortedBoluses.Count && sortedBoluses[insulinHi].Mills <= t)
                 insulinHi++;
@@ -197,7 +202,7 @@ internal sealed class IobCobComputeStage(
 
             var insulinCount = insulinHi - insulinLo;
             var iobResult = insulinCount > 0
-                ? iobCalculator.FromBoluses(sortedBoluses.GetRange(insulinLo, insulinCount), t)
+                ? iobCalculator.FromBoluses(sortedBoluses.GetRange(insulinLo, insulinCount), snapshot, t)
                 : new IobResult { Iob = 0 };
 
             var basalIob = 0.0;
@@ -206,6 +211,7 @@ internal sealed class IobCobComputeStage(
             {
                 var basalResult = iobCalculator.FromTempBasals(
                     sortedTempBasals.GetRange(basalLo, basalCount),
+                    snapshot,
                     t
                 );
                 basalIob = basalResult.BasalIob ?? 0;
@@ -224,6 +230,7 @@ internal sealed class IobCobComputeStage(
                     sortedTempBasals is not null && basalCount > 0
                         ? sortedTempBasals.GetRange(basalLo, basalCount)
                         : null,
+                    snapshot,
                     t
                 )
                 : new CobResult { Cob = 0 };

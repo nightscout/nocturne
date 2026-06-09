@@ -81,11 +81,16 @@ class SignalRClient {
       }
 
       if (this.configHubUrl) {
-        const keyHash = createHash("sha1")
+        const keyHash = createHash("sha256")
           .update(this.instanceKey)
           .digest("hex");
         this.configConnection = this.buildConnection(this.configHubUrl, {
-          headers: { "X-Instance-Key": keyHash },
+          // X-Instance-Service marks this as a genuine service call so the
+          // API honors the instance key (a bare key is ignored).
+          headers: {
+            "X-Instance-Key": keyHash,
+            "X-Instance-Service": "nocturne-bridge",
+          },
         });
         this.setupConfigEventHandlers();
 
@@ -285,7 +290,7 @@ class SignalRClient {
       );
     }
     try {
-      const secretHash = createHash("sha1")
+      const secretHash = createHash("sha256")
         .update(this.instanceKey)
         .digest("hex")
         .toLowerCase();
@@ -345,7 +350,7 @@ class SignalRClient {
     }
 
     try {
-      const secretHash = createHash("sha1")
+      const secretHash = createHash("sha256")
         .update(this.instanceKey)
         .digest("hex")
         .toLowerCase();

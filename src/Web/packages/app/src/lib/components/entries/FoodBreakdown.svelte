@@ -102,17 +102,11 @@
 </script>
 
 <div class="rounded-lg border p-4 space-y-4">
-  <div class="flex items-center justify-between">
-    <div class="space-y-1">
-      <div class="text-sm font-semibold">Food Breakdown</div>
-      <div class="text-xs text-muted-foreground">
-        Add foods to match carbs when it helps. Partial attribution is fine.
-      </div>
+  <div class="space-y-1">
+    <div class="text-sm font-semibold">Food Breakdown</div>
+    <div class="text-xs text-muted-foreground">
+      Add foods to match carbs when it helps. Partial attribution is fine.
     </div>
-    <Button type="button" size="sm" onclick={() => (showAddFood = true)}>
-      <Plus class="mr-1 h-4 w-4" />
-      Add Food
-    </Button>
   </div>
 
   {#if isLoading}
@@ -146,11 +140,15 @@
       </div>
 
       {#if !breakdown.foods || breakdown.foods.length === 0}
-        <div
-          class="rounded-md border border-dashed p-4 text-sm text-muted-foreground"
+        <Button
+          type="button"
+          variant="ghost"
+          onclick={() => (showAddFood = true)}
+          class="h-auto w-full justify-center rounded-md border border-dashed p-4 text-sm font-normal text-muted-foreground"
         >
-          No foods added yet.
-        </div>
+          <Plus class="mr-1.5 h-4 w-4" />
+          Add a food to this carb entry
+        </Button>
       {:else}
         <div class="space-y-2">
           {#each breakdown.foods as entry (entry.id)}
@@ -186,6 +184,15 @@
             </div>
           {/each}
         </div>
+        <Button
+          type="button"
+          variant="ghost"
+          onclick={() => (showAddFood = true)}
+          class="h-auto w-full justify-center rounded-md border border-dashed p-3 text-sm font-normal text-muted-foreground"
+        >
+          <Plus class="mr-1.5 h-4 w-4" />
+          Add food
+        </Button>
       {/if}
     </div>
   {/if}

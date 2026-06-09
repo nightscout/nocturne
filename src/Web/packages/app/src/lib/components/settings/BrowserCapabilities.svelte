@@ -149,13 +149,13 @@
   {@const VibrationStatusIcon = vibrationStatus.icon}
   {@const wakelockStatus = getStatusIcon(capabilities.wakeLock)}
   {@const WakelockStatusIcon = wakelockStatus.icon}
-  <div class="space-y-4">
+  <div class="space-y-4 @container">
     <div class="flex items-center gap-2 text-sm font-medium">
       <Smartphone class="h-4 w-4" />
       Browser Capabilities
     </div>
 
-    <div class="grid gap-3 sm:grid-cols-2">
+    <div class="grid gap-3 @xl:grid-cols-2">
       <!-- Audio -->
       <button
         type="button"

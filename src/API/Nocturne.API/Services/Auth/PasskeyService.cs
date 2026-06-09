@@ -133,7 +133,7 @@ public class PasskeyService : IPasskeyService
     }
 
     public async Task<PasskeyCredentialResult> CompleteRegistrationAsync(
-        string attestationResponseJson, string challengeToken, Guid tenantId)
+        string attestationResponseJson, string challengeToken, Guid tenantId, string? label = null)
     {
         var cookie = ReadChallengeToken(challengeToken);
 
@@ -179,6 +179,7 @@ public class PasskeyService : IPasskeyService
             PublicKey = credential.PublicKey,
             SignCount = credential.SignCount,
             Transports = credential.Transports?.Select(t => t.ToString()).ToList() ?? [],
+            Label = string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
             // AaGuid is not directly exposed by Fido2NetLib v4 RegisteredPublicKeyCredential
             CreatedAt = DateTime.UtcNow,
         };
@@ -255,6 +256,7 @@ public class PasskeyService : IPasskeyService
             ?? throw new InvalidOperationException("Credential not found.");
 
         // Verify the credential's subject is a member of the current tenant
+        // (the global query filter on TenantMemberEntity already excludes revoked memberships).
         var isMember = await _dbContext.TenantMembers
             .AnyAsync(tm => tm.TenantId == tenantId && tm.SubjectId == storedCredential.SubjectId);
         if (!isMember)

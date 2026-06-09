@@ -9,6 +9,23 @@ export default {
   },
   nswagClientPath: './generated/nocturne-api-client',
   errorHandling: {
+    // The default redirects queries to /auth/login on 401. For a public share
+    // host ({token}.share.{baseDomain}) the viewer is anonymous by design and has
+    // no account to sign into — and the dashboard fetches categories the tenant
+    // may not have shared, each 401ing — so the default bounces them to login
+    // ("flash of dashboard, then redirect"). On a share host, surface 401 as a
+    // normal error instead so unshared categories just fail their widget rather
+    // than navigating away. Host detection mirrors $lib/share-host's isShareHost
+    // (inlined — generated code can't import it). Commands/forms already throw
+    // error(401) and never redirected.
+    on401: (kind: string) =>
+      kind === 'query'
+        ? `const { request, url } = getRequestEvent();\n` +
+          `    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';\n` +
+          `    if (/^[^.]+\\.share\\./i.test(shareHost)) throw error(401, 'Unauthorized');\n` +
+          '    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`)'
+        : `throw error(401, 'Unauthorized')`,
+
     // Forward the server's actual error message for 403 so the FE can show
     // a meaningful reason (e.g. "Insufficient permissions for …") instead of
     // a bare "Forbidden".
@@ -28,7 +45,7 @@ export default {
       `const e = err as any;\n` +
       `    const body = e?.body ?? e?.response;\n` +
       `    const errors = body?.errors ?? e?.errors;\n` +
-      `    const flat = errors ? Object.entries(errors).map(([k, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
+      `    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
       `    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;\n` +
       `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');\n` +
       `    throw error(500, message ?? 'Failed to ${functionName}')`,
