@@ -21,8 +21,8 @@ public static class PortainerComposePublisherExtensions
     /// <summary>
     /// Registers a publish pipeline step that produces a Portainer-compatible
     /// docker-compose.portainer.yaml alongside the standard docker-compose.yaml.
-    /// The ./init bind-mount on the postgres service is replaced with an inline
-    /// configs block so the compose is self-contained (no bind mounts required).
+    /// The ./init and ./caddy/Caddyfile bind-mounts are replaced with inline configs
+    /// blocks so both bundles are self-contained (just compose + .env, no bind mounts).
     /// </summary>
     public static IDistributedApplicationBuilder AddPortainerComposePublisher(
         this IDistributedApplicationBuilder builder)
@@ -90,8 +90,7 @@ public static class PortainerComposePublisherExtensions
 
                 var composePath = Path.Combine(outputPath, "docker-compose.yaml");
                 var rawCompose = await File.ReadAllTextAsync(composePath, ctx.CancellationToken);
-                var portainerCompose = HardenPostgresStartup(InlineInitScript(rawCompose, initScriptPath));
-                portainerCompose = InlineCaddyfile(portainerCompose, caddyfilePath);
+                var portainerCompose = SelfContainCompose(rawCompose, initScriptPath, caddyfilePath);
 
                 await File.WriteAllTextAsync(
                     Path.Combine(outputPath, "docker-compose.portainer.yaml"),
@@ -103,12 +102,12 @@ public static class PortainerComposePublisherExtensions
             dependsOn: "publish-compose",
             requiredBy: WellKnownPipelineSteps.Publish);
 
-        // Harden the standard docker-compose.yaml: (1) inline the init script as a
-        // Compose config instead of a ./init bind-mount, so the release only needs
-        // to ship docker-compose.yaml + .env (no separate init directory); and
-        // (2) give Postgres a real healthcheck and gate the API's dependency on
-        // service_healthy, so `docker compose up` waits for the database to be
-        // ready before the API runs migrations. Idempotent.
+        // Harden the standard docker-compose.yaml: (1) inline the init script and the
+        // Caddyfile as Compose configs instead of ./init and ./caddy/Caddyfile bind-mounts,
+        // so the release only needs to ship docker-compose.yaml + .env (no separate
+        // directories); and (2) give Postgres a real healthcheck and gate the API's
+        // dependency on service_healthy, so `docker compose up` waits for the database
+        // to be ready before the API runs migrations. Idempotent.
         builder.Pipeline.AddStep(
             name: "harden-main-compose",
             action: async ctx =>
@@ -118,13 +117,13 @@ public static class PortainerComposePublisherExtensions
 
                 var composePath = Path.Combine(outputPath, "docker-compose.yaml");
                 var rawCompose = await File.ReadAllTextAsync(composePath, ctx.CancellationToken);
-                var transformed = HardenPostgresStartup(InlineInitScript(rawCompose, initScriptPath));
+                var transformed = SelfContainCompose(rawCompose, initScriptPath, caddyfilePath);
 
                 if (transformed != rawCompose)
                 {
                     await File.WriteAllTextAsync(composePath, transformed, ctx.CancellationToken);
                     ctx.Logger.LogInformation(
-                        "[compose] Inlined init script + added Postgres healthcheck/service_healthy gate");
+                        "[compose] Inlined init script + Caddyfile, added Postgres healthcheck/service_healthy gate");
                 }
             },
             dependsOn: "publish-compose",
@@ -132,6 +131,18 @@ public static class PortainerComposePublisherExtensions
 
         return builder;
     }
+
+    /// <summary>
+    /// Produces a self-contained compose: inlines the init script and the Caddyfile
+    /// as Compose configs (removing the ./init and ./caddy/Caddyfile bind-mounts) and
+    /// adds the Postgres readiness healthcheck + service_healthy gate. Each transform
+    /// is idempotent and no-ops when its target isn't present, so applying it to an
+    /// already-transformed compose is safe.
+    /// </summary>
+    private static string SelfContainCompose(string composeYaml, string initScriptPath, string caddyfilePath)
+        => InlineCaddyfile(
+            HardenPostgresStartup(InlineInitScript(composeYaml, initScriptPath)),
+            caddyfilePath);
 
     /// <summary>
     /// Replaces the ./init bind-mount on the postgres service with a docker compose

@@ -44,14 +44,16 @@
         bundle from the
         <a href="https://github.com/nightscout/nocturne/releases/latest" class="text-primary hover:underline">
             latest GitHub Release
-        </a>. Keep the bundled
-        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">caddy/</code> directory
-        next to <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.yaml</code> —
-        the TLS proxy config is mounted from it. The bundle also ships a
+        </a>. The bundle is self-contained — just
+        <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.yaml</code>
+        and <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env.example</code>.
+        The database init script and the TLS proxy config are embedded directly in
+        the compose file, so there are no extra directories to keep alongside it. The
+        bundle also ships a
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.byo-proxy.yaml</code>
         override for operators who run their own reverse proxy (see below).
     </p>
-    <CodeBlock code={"mkdir nocturne && cd nocturne\n# Download and extract the docker-compose bundle from the release page, then:\ncp .env.example .env"} class="mb-4" />
+    <CodeBlock code={"mkdir nocturne && cd nocturne\n# Download docker-compose.yaml and .env.example from the release page, then:\ncp .env.example .env"} class="mb-4" />
 
     <details class="mb-8">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">View docker-compose.yaml</summary>
