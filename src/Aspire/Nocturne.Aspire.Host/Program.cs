@@ -577,7 +577,7 @@ class Program
         // ------------------------------------------------------------------
         if (builder.ExecutionContext.IsPublishMode && enableCaddy)
         {
-            var caddyfilePath = Path.Combine(builder.AppHostDirectory, "caddy", "Caddyfile");
+            var caddyfilePath = Path.Join(builder.AppHostDirectory, "caddy", "Caddyfile");
 
             builder
                 .AddContainer("caddy", "caddy", "2")
