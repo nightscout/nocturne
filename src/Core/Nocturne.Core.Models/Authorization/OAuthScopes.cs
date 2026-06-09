@@ -67,9 +67,6 @@ public static class OAuthScopes
     /// <summary>Read and write access to sharing/follower configuration.</summary>
     public const string SharingReadWrite = "sharing.readwrite";
 
-    /// <summary>Read-only access to computed statistics (time-in-range, A1c estimates, etc.).</summary>
-    public const string StatisticsRead = "statistics.read";
-
     // Full access (includes delete)
 
     /// <summary>Superuser scope granting all permissions including delete.</summary>
@@ -106,7 +103,6 @@ public static class OAuthScopes
         FoodRead,
         FoodReadWrite,
         SharingReadWrite,
-        StatisticsRead,
     };
 
     /// <summary>

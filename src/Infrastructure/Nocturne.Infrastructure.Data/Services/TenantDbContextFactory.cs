@@ -21,13 +21,23 @@ public interface ITenantDbContextFactory
 
 internal sealed class TenantDbContextFactory(
     IDbContextFactory<NocturneDbContext> pool,
-    ITenantAccessor? tenantAccessor) : ITenantDbContextFactory
+    ITenantAccessor? tenantAccessor,
+    ICategoryReadContext? categoryReadContext) : ITenantDbContextFactory
 {
     public async ValueTask<NocturneDbContext> CreateAsync(CancellationToken ct = default)
     {
         var ctx = await pool.CreateDbContextAsync(ct);
         if (tenantAccessor?.IsResolved == true)
             ctx.TenantId = tenantAccessor.TenantId;
+
+        // Carry the real share flag and category CSV for this request; the CSV is resolved
+        // post-auth and is carried only on this factory path. Carrier defaults are already set by
+        // CarrierResettingDbContextFactory; a share whose CSV is null is denied all categorized
+        // data by the RLS policy (fail-closed).
+        var isShare = categoryReadContext?.IsShare == true;
+        ctx.IsShareContext = isShare;
+        ctx.VisibleCategories = isShare ? categoryReadContext!.VisibleCategoriesCsv : null;
+
         return ctx;
     }
 }

@@ -150,6 +150,48 @@ container-init directory — it refuses to run with placeholder passwords
 and would abort container startup if Postgres picked it up. Never GRANT
 BYPASSRLS to either role.
 
+#### Per-category public-share RLS
+
+Public share links (`{token}.share.{domain}`) serve an anonymous viewer who may
+see only the categories the tenant's Public subject was granted. On top of the
+`tenant_isolation` policy, every tenant-scoped table carries a second,
+**RESTRICTIVE FOR SELECT** policy (`share_category_read`) gating reads by category:
+
+    USING ( current_setting('app.is_share', true) IS DISTINCT FROM 'true'
+         OR '<governing_scope>' = ANY(string_to_array(current_setting('app.visible_categories', true), ',')) )
+
+Two extra GUCs carry the request state to the connection (set by
+`TenantConnectionInterceptor` from two `NocturneDbContext` properties):
+
+- **`app.is_share`** — `'true'` for a public share, else `'false'`. Known
+  **pre-auth** (at tenant resolution), so it is set wherever `TenantId` is set
+  (factory, scoped-context registration, `PinTenantOnScopedDbContext`) — set
+  **unconditionally** so a pooled context never inherits a prior lessee's flag.
+- **`app.visible_categories`** — CSV of the share's governing read scopes
+  (`glucose.read,treatments.read,…`). Known only **post-auth**, so it is carried
+  **only on the `ITenantDbContextFactory` path** (`TenantDbContextFactory.CreateAsync`).
+  Share-reachable PHI reads must go through the factory; a share that reads PHI on
+  a directly-injected scoped context carries no CSV and is **denied** (fail-closed).
+
+Design notes:
+
+- **`is_share`-gated, fail-closed-for-shares.** A non-share (`is_share` ≠ `'true'`)
+  is never restricted — no platform blackout, and a rollback to an image that
+  doesn't set the GUCs returns to status-quo (over-share on owner-minted links)
+  rather than locking everyone out. A share with a missing/empty CSV is denied all
+  categorized data (`'x' = ANY(NULL/{''})` → not true).
+- **Single source of truth.** `ShareDataCategories` (Core) maps each shareable read
+  scope to the tables it governs. `ShareRlsPolicy` + the startup reconciler
+  (`DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync`, run under the
+  migrator role after migrations) (re)create the policy on every tenant-scoped
+  table from that map — so a new entity gets a policy on the next boot, and a table
+  with no governing scope is **hidden from shares** (fail-safe). A guard test asserts
+  every `ITenantScoped` table is classified.
+- **Response-cache invariant.** `ChartDataController` is `[ResponseCache]`d; RLS
+  gates the DB read, not a cache hit. Safe only because a share is its own subdomain
+  (per-tenant Host cache key, `UseForwardedHeaders` before `UseResponseCaching`).
+  A public-scope toggle has up to a 60s staleness window.
+
 ## Testing
 
 - **xUnit** + **FluentAssertions** + **Moq**

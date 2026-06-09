@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.Authorization;
 
@@ -27,6 +28,7 @@ public class OidcAuthService : IOidcAuthService
     private readonly IJwtService _jwtService;
     private readonly IRefreshTokenService _refreshTokenService;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ITenantMemberService _tenantMemberService;
     private readonly OidcOptions _options;
     private readonly IConfiguration _configuration;
     private readonly ILogger<OidcAuthService> _logger;
@@ -40,6 +42,7 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="jwtService">Service for generating Nocturne access tokens (non-rotation refresh path only).</param>
     /// <param name="refreshTokenService">Service for validating refresh tokens (non-rotation refresh path only).</param>
     /// <param name="httpClientFactory">Factory for the <c>OidcProvider</c> named HTTP client.</param>
+    /// <param name="tenantMemberService">Service for verifying tenant membership before issuing a login session.</param>
     /// <param name="options">OIDC session and state configuration options.</param>
     /// <param name="configuration">Application configuration for reading the base URL.</param>
     /// <param name="logger">Logger instance.</param>
@@ -50,6 +53,7 @@ public class OidcAuthService : IOidcAuthService
         IJwtService jwtService,
         IRefreshTokenService refreshTokenService,
         IHttpClientFactory httpClientFactory,
+        ITenantMemberService tenantMemberService,
         IOptions<OidcOptions> options,
         IConfiguration configuration,
         ILogger<OidcAuthService> logger
@@ -61,6 +65,7 @@ public class OidcAuthService : IOidcAuthService
         _jwtService = jwtService;
         _refreshTokenService = refreshTokenService;
         _httpClientFactory = httpClientFactory;
+        _tenantMemberService = tenantMemberService;
         _options = options.Value;
         _configuration = configuration;
         _logger = logger;
@@ -249,7 +254,8 @@ public class OidcAuthService : IOidcAuthService
         string state,
         string expectedState,
         string? ipAddress = null,
-        string? userAgent = null
+        string? userAgent = null,
+        Guid? currentTenantId = null
     )
     {
         var parsed = await ValidateCallbackAndParseIdTokenAsync(code, state, expectedState);
@@ -258,10 +264,27 @@ public class OidcAuthService : IOidcAuthService
             return OidcCallbackResult.Failed(parsed.Error ?? "callback_failed", parsed.ErrorDescription);
         }
 
-        var stateData = parsed.StateData!;
-        var provider = parsed.Provider!;
-        var idTokenClaims = parsed.Claims!;
+        return await CompleteLoginAsync(
+            parsed.StateData!, parsed.Provider!, parsed.Claims!, currentTenantId, ipAddress, userAgent);
+    }
 
+    /// <summary>
+    /// Completes a login after the OIDC callback has been validated and the ID token parsed:
+    /// resolves the subject from the external identity, enforces tenant membership, and issues
+    /// a session. Because an OIDC identity resolves to a <em>global</em> subject, a valid external
+    /// identity must still be a member of <paramref name="currentTenantId"/> before a session is
+    /// issued — otherwise any external identity could mint a session on any tenant's subdomain.
+    /// Extracted from <see cref="HandleCallbackAsync"/> so the membership gate can be unit-tested
+    /// without exercising the OIDC code exchange.
+    /// </summary>
+    internal async Task<OidcCallbackResult> CompleteLoginAsync(
+        OidcStateData stateData,
+        OidcProvider provider,
+        OidcIdTokenClaims idTokenClaims,
+        Guid? currentTenantId,
+        string? ipAddress,
+        string? userAgent)
+    {
         // Find or create subject
         var subject = await _subjectService.FindOrCreateFromOidcAsync(
             provider.Id,
@@ -271,6 +294,20 @@ public class OidcAuthService : IOidcAuthService
             idTokenClaims.Name ?? idTokenClaims.PreferredUsername,
             provider.DefaultRoles
         );
+
+        // Cross-tenant guard: deny — without issuing a session — when the authenticated
+        // identity is not a member of the tenant being logged into. The per-request
+        // membership gate in AuthenticationMiddleware would block this subject's data
+        // access anyway, but only after a session (and a "logged in" UI) already existed.
+        if (currentTenantId is { } tenantId
+            && !await _tenantMemberService.IsMemberAsync(subject.Id, tenantId))
+        {
+            _logger.LogWarning(
+                "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
+                subject.Id,
+                tenantId);
+            return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
+        }
 
         // Update last login
         await _subjectService.UpdateLastLoginAsync(subject.Id);

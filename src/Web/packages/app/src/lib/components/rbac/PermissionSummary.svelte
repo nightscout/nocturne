@@ -36,7 +36,6 @@
 
     // Read-only categories
     const readOnlyCategories: { name: string; atom: string }[] = [
-      { name: "Statistics", atom: "statistics.read" },
       { name: "Reports", atom: "reports.read" },
       { name: "Identity", atom: "identity.read" },
     ];

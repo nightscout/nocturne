@@ -10,7 +10,6 @@
     DataSourceInfo,
     ConnectorStatusDto,
     SyncRequest,
-    AvailableConnector,
     ConnectorCapabilities,
   } from "$lib/api/generated/nocturne-api-client";
 
@@ -55,6 +54,7 @@
   import ServerConnectorsCard, { type ConnectorStatusWithDescription } from "$lib/components/connectors/ServerConnectorsCard.svelte";
   import DataSourceManageDialog from "$lib/components/connectors/DataSourceManageDialog.svelte";
   import { getApiClient } from "$lib/api";
+  import { resolve } from "$app/paths";
   import { toast } from "svelte-sonner";
   import { getUploaderName } from "$lib/utils/uploader-labels";
   import { coachmark } from "@nocturne/coach";
@@ -99,7 +99,19 @@
   // Connector heartbeat metrics state
   let selectedConnector = $state<ConnectorStatusWithDescription | null>(null);
   let selectedConnectorCapabilities = $state<ConnectorCapabilities | null>(null);
-  let connectorCapabilitiesById = $state<Record<string, ConnectorCapabilities | null>>({});
+  // Capability descriptors per connector, keyed by connector id.
+  const connectorCapabilitiesById = $derived.by(() => {
+    const overview = servicesOverviewQuery.current;
+    const result: Record<string, ConnectorCapabilities | null> = {};
+    if (!overview?.availableConnectors?.length) return result;
+    for (const connector of overview.availableConnectors) {
+      if (connector.id) {
+        result[connector.id] =
+          getConnectorCapabilities(connector.id).current ?? null;
+      }
+    }
+    return result;
+  });
   let quickSyncingById = $state<Record<string, boolean>>({});
   let showConnectorDialog = $state(false);
 
@@ -119,16 +131,6 @@
     if (hasCompleted) {
       connectorStatusesQuery.refresh();
     }
-  });
-
-  // Fan-out load of capability descriptors once the services overview is in.
-  $effect(() => {
-    const overview = servicesOverviewQuery.current;
-    if (!overview?.availableConnectors) {
-      connectorCapabilitiesById = {};
-      return;
-    }
-    loadConnectorCapabilitiesMap(overview.availableConnectors);
   });
 
   // API token create dialog (triggered from uploader setup)
@@ -161,40 +163,10 @@
       return;
     }
     try {
-      selectedConnectorCapabilities = await getConnectorCapabilities(connectorId);
+      selectedConnectorCapabilities = await getConnectorCapabilities(connectorId).run();
     } catch (e) {
       console.error("Failed to load connector capabilities", e);
       selectedConnectorCapabilities = null;
-    }
-  }
-
-  async function loadConnectorCapabilitiesMap(connectors: AvailableConnector[]) {
-    const connectorIds = connectors
-      .map((connector) => connector.id)
-      .filter((id): id is string => !!id);
-
-    if (connectorIds.length === 0) {
-      connectorCapabilitiesById = {};
-      return;
-    }
-
-    try {
-      const results = await Promise.all(
-        connectorIds.map(async (connectorId) => ({
-          connectorId,
-          capabilities: await getConnectorCapabilities(connectorId),
-        }))
-      );
-      connectorCapabilitiesById = results.reduce(
-        (acc, result) => {
-          acc[result.connectorId] = result.capabilities;
-          return acc;
-        },
-        {} as Record<string, ConnectorCapabilities | null>
-      );
-    } catch (e) {
-      console.error("Failed to load connector capabilities map", e);
-      connectorCapabilitiesById = {};
     }
   }
 
@@ -441,7 +413,7 @@
           </div>
         {:else}
           <div class="space-y-3">
-            {#each servicesOverview.activeDataSources as source}
+            {#each servicesOverview.activeDataSources as source (source.id)}
               {@const matchingUploader = getMatchingUploader(source)}
               {@const isDemo = isDemoDataSource(source)}
               <DataSourceRow
@@ -621,7 +593,7 @@
       </CardHeader>
       <CardContent>
         <a
-          href="/settings/integrations/discord"
+          href={resolve("/settings/integrations/discord")}
           class="flex items-center justify-between rounded-lg border p-4 hover:bg-accent transition-colors"
         >
           <div class="flex items-center gap-3">

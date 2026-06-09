@@ -434,22 +434,10 @@ public class CarbIntakeRepository : ICarbIntakeRepository
 
             if (legacyIds.Count > 0)
             {
-                var existingRecords = await ctx.CarbIntakes.IgnoreQueryFilters().AsNoTracking()
-                    .Where(e => e.TenantId == ctx.TenantId)
-                    .Where(e => legacyIds.Contains(e.LegacyId!))
-                    .Select(e => new { e.LegacyId, IsSoftDeleted = e.DeletedAt != null })
-                    .ToListAsync(ct);
-
-                var existingSet = existingRecords.Select(r => r.LegacyId).ToHashSet();
-                var softDeletedCount = existingRecords.Count(r => r.IsSoftDeleted);
-
-                if (softDeletedCount > 0)
-                    _logger.LogInformation(
-                        "Skipped {Count} previously-deleted {Type} records during import",
-                        softDeletedCount, "CarbIntake");
+                var blockedLegacyIds = await ctx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>(legacyIds, ct);
 
                 entities = entities
-                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
                     .ToList();
             }
 

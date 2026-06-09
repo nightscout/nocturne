@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 
@@ -93,10 +94,63 @@ public class TenantResolutionMiddleware
         var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(':')[0]
                    ?? context.Request.Host.Host;
         var slug = SubdomainParser.Extract(host, _config.BaseDomain);
+
+        // Public share link: {token}.share.{baseDomain}. Resolve the tenant by its share token
+        // and mark the request read-only-public. An unknown token returns the same 404 as an
+        // unknown slug, so the share host can't be used as a tenant-existence oracle.
+        if (slug != null && TryExtractShareToken(slug, out var shareToken))
+        {
+            var shareCache = context.RequestServices.GetRequiredService<ShareTokenCacheService>();
+            var shareTenant = await shareCache.ResolveByTokenAsync(shareToken);
+
+            if (shareTenant == null)
+            {
+                _logger.LogDebug("Share token did not resolve to a tenant");
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            if (!shareTenant.IsActive)
+            {
+                _logger.LogWarning("Share token resolved to inactive tenant '{Slug}'", shareTenant.Slug);
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+
+            tenantAccessor.SetTenant(shareTenant);
+            context.Items["TenantContext"] = shareTenant;
+            context.Items["ShareAccess"] = true;
+            // Mark the share before pinning the scoped context so the carrier is in place
+            // for both the scoped-direct and the factory DbContext paths.
+            context.RequestServices.GetRequiredService<ICategoryReadContext>().MarkShare();
+            PinTenantOnScopedDbContext(context, shareTenant.TenantId);
+            await _next(context);
+            return;
+        }
+
         var path = context.Request.Path.Value ?? "";
         var isTenantlessAllowedPath =
             TenantlessAllowedPaths.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase)) ||
             TenantlessAllowedPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+
+        // On the apex (no subdomain), GET /api/v4/status is tenant-scoped yet listed as
+        // tenantless-allowed (so a fresh apex doesn't 404). On a single-tenant install,
+        // resolve the sole tenant so status reflects it instead of reporting
+        // "setup_required" — which would bounce a fully configured single-tenant install
+        // to /setup. Falls through to the normal tenantless passthrough when zero or
+        // multiple tenants exist, so multi-tenant apex behavior is unchanged.
+        if (slug == null && path.Equals("/api/v4/status", StringComparison.OrdinalIgnoreCase))
+        {
+            var soleStatusTenant = await GetSoleTenantAsync(context.RequestServices);
+            if (soleStatusTenant != null)
+            {
+                tenantAccessor.SetTenant(soleStatusTenant);
+                context.Items["TenantContext"] = soleStatusTenant;
+                PinTenantOnScopedDbContext(context, soleStatusTenant.TenantId);
+                await _next(context);
+                return;
+            }
+        }
 
         // Tenantless-allowed paths on the apex (no slug) operate across tenants.
         if (slug == null && isTenantlessAllowedPath)
@@ -184,8 +238,36 @@ public class TenantResolutionMiddleware
     private static void PinTenantOnScopedDbContext(HttpContext context, Guid tenantId)
     {
         var db = context.RequestServices.GetService<NocturneDbContext>();
-        if (db is not null)
-            db.TenantId = tenantId;
+        if (db is null)
+            return;
+        db.TenantId = tenantId;
+        // Set the share carrier unconditionally so a pooled context never inherits a prior
+        // lessee's share state. The scoped-direct context carries only the marker (known
+        // pre-auth) and leaves the CSV null, so a share reading PHI on this path is denied.
+        db.IsShareContext = context.RequestServices.GetService<ICategoryReadContext>()?.IsShare == true;
+        db.VisibleCategories = null;
+    }
+
+    private const string ShareSubdomainLabel = "share";
+
+    /// <summary>
+    /// Detects the public-share host form <c>{token}.share</c> (the subdomain left of the base
+    /// domain) and extracts the token. Returns false for ordinary tenant slugs, empty tokens,
+    /// or nested forms — slugs and tokens never contain dots. The token is lower-cased because
+    /// hostnames are case-insensitive and generated tokens are always lowercase.
+    /// </summary>
+    private static bool TryExtractShareToken(string subdomain, out string token)
+    {
+        const string suffix = "." + ShareSubdomainLabel;
+        if (subdomain.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            token = subdomain[..^suffix.Length].ToLowerInvariant();
+            if (token.Length > 0 && !token.Contains('.'))
+                return true;
+        }
+
+        token = string.Empty;
+        return false;
     }
 
     /// <summary>

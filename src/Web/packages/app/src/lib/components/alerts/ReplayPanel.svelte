@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, untrack } from "svelte";
+  import { onDestroy, untrack, type ComponentProps } from "svelte";
   import {
     type DateValue,
     getLocalTimeZone,
@@ -159,13 +159,16 @@
     const baseLocal = selectedDate
       ? selectedDate.toDate(getLocalTimeZone())
       : (() => {
+          // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
           const t = new Date();
           t.setHours(0, 0, 0, 0);
           return t;
         })();
 
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
     const from = new Date(baseLocal.getTime());
     from.setHours(fromHm[0], fromHm[1], 0, 0);
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
     const to = new Date(baseLocal.getTime());
     to.setHours(toHm[0], toHm[1], 0, 0);
     if (to.getTime() <= from.getTime()) {
@@ -262,13 +265,16 @@
       // types claim Date, but the request travels as JSON, so we send ISO
       // strings and cast for the type checker.
       const fromIso = range
-        ? (range.from.toISOString() as unknown as Date)
+        ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format ISO string typed as Date by the generated client
+          (range.from.toISOString() as unknown as Date)
         : undefined;
       const toIso = range
-        ? (range.to.toISOString() as unknown as Date)
+        ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format ISO string typed as Date by the generated client
+          (range.to.toISOString() as unknown as Date)
         : undefined;
       const replayResult = rule
         ? await replayDryRun({
+            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format date string typed as Date by the generated client
             date: date as unknown as Date | undefined,
             timezone: browserTimezone,
             from: fromIso,
@@ -276,6 +282,7 @@
             rule: typeof rule === "function" ? rule() : rule,
           })
         : await replay({
+            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format date string typed as Date by the generated client
             date: date as unknown as Date | undefined,
             timezone: browserTimezone,
             from: fromIso,
@@ -287,7 +294,7 @@
       // parent loaded. Falls back to the seeded availableRules prop on error.
       let rulesList: AlertRuleResponse[] = availableRules;
       try {
-        const fresh = await getRules();
+        const fresh = await getRules().run();
         if (fresh && fresh.length > 0) rulesList = fresh;
       } catch {
         // Fall through to the seed list.
@@ -297,7 +304,9 @@
       // Build per-rule tree + leaf-id maps. The rule under edit substitutes
       // its in-memory tree so the sidebar reflects the editor's current
       // typing rather than the saved version.
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
       const trees = new Map<string, ConditionNode>();
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
       const ids = new Map<string, Map<string, number>>();
       for (const r of rulesList) {
         if (!r.id) continue;
@@ -454,6 +463,10 @@
   let firedMarkers = $derived(
     currentTimeMs != null ? markers.filter((m) => m.tMs <= currentTimeMs) : []
   );
+  const overlayMarkers = $derived(
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- bridge to ReplayOverlay's structural Marker prop type
+    firedMarkers as unknown as ComponentProps<typeof ReplayOverlay>["firedMarkers"]
+  );
 
   // Auto-run on mount and on every window-selection change. We track the
   // serialised window inputs so a re-pick of the same value doesn't re-fire,
@@ -499,11 +512,13 @@
   {/each}
 {/snippet}
 
-<div class="@container flex h-full min-h-0 flex-col gap-4">
+<div
+  class="@container flex h-full min-h-0 flex-col gap-4 overflow-y-auto @2xl:overflow-y-hidden"
+>
   <div class="flex flex-wrap items-center gap-2">
     <Popover.Root bind:open={datePickerOpen}>
       <Popover.Trigger>
-        {#snippet child({ props })}
+        {#snippet child({ props }: { props: Record<string, unknown> })}
           <Button
             {...props}
             variant="outline"
@@ -593,7 +608,7 @@
 
     {#if xDomain}
       <div
-        class="grid flex-1 min-h-0 gap-4 @3xl:grid-cols-[minmax(0,1fr)_320px] @3xl:items-stretch"
+        class="grid gap-4 @2xl:min-h-0 @2xl:flex-1 @2xl:grid-cols-[minmax(0,1fr)_280px] @2xl:items-stretch @4xl:grid-cols-[minmax(0,1fr)_320px]"
       >
         <!-- Chart + playback + events list (left on wide containers, full width on narrow) -->
         <div class="flex min-w-0 min-h-0 flex-col gap-4">
@@ -609,14 +624,14 @@
                 heightClass="h-[280px]"
                 onSelectionChange={handleBrushSelection}
               >
-                {#snippet tracks(_ctx)}
+                {#snippet tracks()}
                   <BasalTrack />
                   <ThresholdRules />
                   <GlucoseTrack />
                   <IobCobTrack />
-                  <ReplayOverlay {firedMarkers} {currentDate} />
+                  <ReplayOverlay firedMarkers={overlayMarkers} {currentDate} />
                 {/snippet}
-                {#snippet overlays(_ctx)}
+                {#snippet overlays()}
                   <ChartTooltip tooltipExtras={replayTooltipExtras} />
                 {/snippet}
               </GlucoseChartShell>
@@ -644,19 +659,19 @@
 
           {#if isEmpty}
             <div
-              class="flex-1 min-h-0 rounded-md border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground"
+              class="@2xl:flex-1 @2xl:min-h-0 rounded-md border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground"
             >
               No events would have fired in this window.
             </div>
           {:else if firedMarkers.length === 0}
             <div
-              class="flex-1 min-h-0 rounded-md border border-dashed py-6 text-center text-xs text-muted-foreground"
+              class="@2xl:flex-1 @2xl:min-h-0 rounded-md border border-dashed py-6 text-center text-xs text-muted-foreground"
             >
               No events yet — playhead at start of window.
             </div>
           {:else}
             <div
-              class="flex-1 min-h-0 overflow-y-auto rounded-md border divide-y"
+              class="max-h-72 overflow-y-auto rounded-md border divide-y @2xl:max-h-none @2xl:flex-1 @2xl:min-h-0"
             >
               {#each firedMarkers as m, i (`${m.ev.ruleId ?? "x"}:${m.tMs}:${m.ev.kind ?? ""}:${i}`)}
                 {@const dimmed = currentTimeMs != null && m.tMs > currentTimeMs}
@@ -706,7 +721,7 @@
 
         <!-- Rule sidebar (right on wide containers, stacked under on narrow) -->
         {#if currentTimeMs != null}
-          <div class="min-h-0 overflow-y-auto">
+          <div class="@2xl:min-h-0 @2xl:overflow-y-auto">
             <RuleSidebar
               rules={allRules}
               {editingRuleId}
@@ -717,8 +732,8 @@
               {currentTimeMs}
               bind:disabledRuleIds
               availableRules={allRules
-                .filter((r) => r.id)
-                .map((r) => ({ id: r.id as string, name: r.name ?? "" }))}
+                .filter((r): r is AlertRuleResponse & { id: string } => !!r.id)
+                .map((r) => ({ id: r.id, name: r.name ?? "" }))}
             />
           </div>
         {/if}

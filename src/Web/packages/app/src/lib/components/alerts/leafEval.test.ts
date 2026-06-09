@@ -60,7 +60,7 @@ function makeRule(id: string, condition: ConditionNode): AlertRuleResponse {
 		id,
 		name: id,
 		conditionType: condition.type as AlertRuleResponse["conditionType"],
-		conditionParams: (condition as Record<string, unknown>)[condition.type],
+		conditionParams: (condition as unknown as Record<string, unknown>)[condition.type],
 	};
 }
 

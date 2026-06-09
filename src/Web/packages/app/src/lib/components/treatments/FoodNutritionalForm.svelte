@@ -204,7 +204,7 @@
           <input type="hidden" name="unit" value={foodUnit} />
           <Popover.Root bind:open={unitOpen}>
             <Popover.Trigger bind:ref={unitTriggerRef}>
-              {#snippet child({ props })}
+              {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button
                   variant="outline"
                   class="w-full justify-between"
@@ -257,7 +257,7 @@
           <input type="hidden" name="gi" value={foodGi} />
           <Popover.Root bind:open={giOpen}>
             <Popover.Trigger bind:ref={giTriggerRef}>
-              {#snippet child({ props })}
+              {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button
                   variant="outline"
                   class="w-full justify-between"

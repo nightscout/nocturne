@@ -112,6 +112,67 @@ public class CobCalculator(
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
+        // Insulin activity for the dynamic carb-delay calc comes from the full IOB total
+        // (boluses + temp basals + device snapshots) at the requested time.
+        double ActivityAt(long t) =>
+            iobCalculator
+                .CalculateTotalAsync(boluses ?? [], tempBasals, t, ct: default)
+                .GetAwaiter()
+                .GetResult()
+                ?.Activity ?? double.NaN;
+
+        return FromCarbIntakesCore(
+            carbIntakes,
+            currentTime,
+            GetCarbAbsorptionRateOrDefault,
+            GetSensitivityOrDefault,
+            GetCarbRatioOrDefault,
+            ActivityAt
+        );
+    }
+
+    /// <inheritdoc />
+    public CobResult FromCarbIntakes(
+        List<CarbIntake> carbIntakes,
+        List<Bolus>? boluses,
+        List<TempBasal>? tempBasals,
+        TherapySnapshot snapshot,
+        long time
+    )
+    {
+        // All resolutions come from the in-memory snapshot — no DB round trips in the tick loop.
+        // Profile-absent defaults match the legacy GetXOrDefault helpers.
+        double CarbAbsorptionAt(long _) =>
+            snapshot.CarbsPerHour > 0 ? snapshot.CarbsPerHour : DEFAULT_CARB_ABSORPTION_RATE;
+        double SensitivityAt(long t) =>
+            snapshot.SensitivityAt(t) is var s && s > 0 ? s : DEFAULT_SENSITIVITY;
+        double CarbRatioAt(long t) =>
+            snapshot.CarbRatioAt(t) is var c && c > 0 ? c : DEFAULT_CARB_RATIO;
+
+        // Temp basals carry zero insulin activity, so bolus-derived activity is the full activity
+        // signal — computed in-memory from the snapshot rather than via the async IOB total.
+        double ActivityAt(long t) =>
+            iobCalculator.FromBoluses(boluses ?? [], snapshot, t).Activity ?? double.NaN;
+
+        return FromCarbIntakesCore(
+            carbIntakes,
+            time,
+            CarbAbsorptionAt,
+            SensitivityAt,
+            CarbRatioAt,
+            ActivityAt
+        );
+    }
+
+    private CobResult FromCarbIntakesCore(
+        List<CarbIntake> carbIntakes,
+        long currentTime,
+        Func<long, double> carbAbsorptionAt,
+        Func<long, double> sensitivityAt,
+        Func<long, double> carbRatioAt,
+        Func<long, double> activityAt
+    )
+    {
         var totalCOB = 0.0;
         CarbIntake? lastCarbs = null;
         var isDecaying = 0.0;
@@ -121,7 +182,7 @@ public class CobCalculator(
 
         foreach (var carbIntake in sortedIntakes)
         {
-            var carbAbsorptionRateFromProfile = GetCarbAbsorptionRateOrDefault(carbIntake.Mills);
+            var carbAbsorptionRateFromProfile = carbAbsorptionAt(carbIntake.Mills);
 
             if (carbIntake.Carbs > 0 && carbIntake.Mills < currentTime)
             {
@@ -135,28 +196,13 @@ public class CobCalculator(
 
                 if (decaysinHr > -10)
                 {
-                    var actStartResult = iobCalculator
-                        .CalculateTotalAsync(
-                            boluses ?? [],
-                            tempBasals,
-                            lastDecayedBy,
-                            ct: default
-                        ).GetAwaiter().GetResult();
-                    var actStart = actStartResult?.Activity ?? double.NaN;
-
-                    var actEndResult = iobCalculator
-                        .CalculateTotalAsync(
-                            boluses ?? [],
-                            tempBasals,
-                            cCalc.DecayedBy.ToUnixTimeMilliseconds(),
-                            ct: default
-                        ).GetAwaiter().GetResult();
-                    var actEnd = actEndResult?.Activity ?? double.NaN;
+                    var actStart = activityAt(lastDecayedBy);
+                    var actEnd = activityAt(cCalc.DecayedBy.ToUnixTimeMilliseconds());
 
                     var avgActivity = (actStart + actEnd) / 2.0;
 
-                    var sensFromProfile = GetSensitivityOrDefault(carbIntake.Mills);
-                    var carbRatioFromProfile = GetCarbRatioOrDefault(carbIntake.Mills);
+                    var sensFromProfile = sensitivityAt(carbIntake.Mills);
+                    var carbRatioFromProfile = carbRatioAt(carbIntake.Mills);
 
                     var delayedCarbs =
                         carbRatioFromProfile * ((avgActivity * LIVER_SENS_RATIO) / sensFromProfile);
@@ -192,9 +238,9 @@ public class CobCalculator(
             }
         }
 
-        var sens = GetSensitivityOrDefault(currentTime);
-        var carbRatio = GetCarbRatioOrDefault(currentTime);
-        var carbAbsorptionRate = GetCarbAbsorptionRateOrDefault(currentTime);
+        var sens = sensitivityAt(currentTime);
+        var carbRatio = carbRatioAt(currentTime);
+        var carbAbsorptionRate = carbAbsorptionAt(currentTime);
 
         var rawCarbImpact = (((isDecaying * sens) / carbRatio) * carbAbsorptionRate) / 60.0;
 

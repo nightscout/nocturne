@@ -1,4 +1,6 @@
+using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -15,17 +17,20 @@ internal sealed class DevicePublisher : IDevicePublisher
 {
     private readonly IDeviceStatusDecomposer _decomposer;
     private readonly IDeviceEventRepository _deviceEventRepository;
+    private readonly IAuditContext _auditContext;
     private readonly IApsSnapshotRepository _apsSnapshotRepository;
     private readonly ILogger<DevicePublisher> _logger;
 
     public DevicePublisher(
         IDeviceStatusDecomposer decomposer,
         IDeviceEventRepository deviceEventRepository,
+        IAuditContext auditContext,
         IApsSnapshotRepository apsSnapshotRepository,
         ILogger<DevicePublisher> logger)
     {
         _decomposer = decomposer ?? throw new ArgumentNullException(nameof(decomposer));
         _deviceEventRepository = deviceEventRepository ?? throw new ArgumentNullException(nameof(deviceEventRepository));
+        _auditContext = auditContext;
         _apsSnapshotRepository = apsSnapshotRepository ?? throw new ArgumentNullException(nameof(apsSnapshotRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -61,7 +66,8 @@ internal sealed class DevicePublisher : IDevicePublisher
             var recordList = records.ToList();
             if (recordList.Count == 0) return true;
 
-            await _deviceEventRepository.BulkCreateAsync(recordList, cancellationToken);
+            using (SystemAuditScope.Push(_auditContext))
+                await _deviceEventRepository.BulkCreateAsync(recordList, cancellationToken);
             _logger.LogDebug("Published {Count} DeviceEvent records for {Source}", recordList.Count, source);
             return true;
         }

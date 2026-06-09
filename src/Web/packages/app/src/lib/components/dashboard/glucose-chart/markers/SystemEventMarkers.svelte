@@ -8,7 +8,7 @@
   const chartCtx = getChartContext();
 
   const visible = $derived(ctx.legend?.alarms ?? true);
-  const events = $derived(ctx.engine.systemEventMarkers);
+  const events = $derived(ctx.engine.displaySystemEvents);
   const lowY = $derived(ctx.layout.glucose.scale(ctx.engine.thresholds.low * 0.8));
 </script>
 

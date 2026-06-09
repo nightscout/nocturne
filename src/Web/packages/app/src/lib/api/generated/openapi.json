@@ -762,6 +762,139 @@
         }
       }
     },
+    "/api/v4/timezone-timeline": {
+      "get": {
+        "tags": [
+          "Timezone Timeline"
+        ],
+        "summary": "Get the tenant's timezone timeline, ordered by effective date.",
+        "operationId": "TimezoneTimeline_GetTimeline",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimezoneTimelineEntry"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "Timezone Timeline"
+        ],
+        "summary": "Create or update a timeline entry. EffectiveFrom is a local wall-clock date/time (the\nmoment, in local terms, that the zone took effect). A trip is two entries (out + return); a\nmove is a single entry; the origin entry covers all earlier history.",
+        "operationId": "TimezoneTimeline_Upsert",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTimezoneEntryRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimezoneTimelineEntry"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTimeline"
+        ]
+      }
+    },
+    "/api/v4/timezone-timeline/{id}": {
+      "delete": {
+        "tags": [
+          "Timezone Timeline"
+        ],
+        "summary": "Delete a timeline entry.",
+        "operationId": "TimezoneTimeline_Delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetTimeline"
+        ]
+      }
+    },
+    "/api/v4/timezone-timeline/recorrect": {
+      "post": {
+        "tags": [
+          "Timezone Timeline"
+        ],
+        "summary": "Re-correct already-imported data after a timeline change by re-pulling the affected window from\nGlooko. Records re-flow the normal publish path and upsert in place on their stable\nSyncIdentifier, so timestamps move without duplicating. Intended to be called after the user\nconfirms the affected window. Runs synchronously; the window is bounded.",
+        "operationId": "TimezoneTimeline_Recorrect",
+        "requestBody": {
+          "x-name": "request",
+          "description": "Optional lower bound (UTC). When null, the connector's default window is used.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecorrectRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecorrectResult"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
     "/api/v4/insulin/basal-injections": {
       "post": {
         "tags": [
@@ -13671,46 +13804,6 @@
         ]
       }
     },
-    "/api/v4/member-invites/public-access": {
-      "put": {
-        "tags": [
-          "Member Invite"
-        ],
-        "summary": "Toggle public (unauthenticated) read access for this tenant.\nAssigns or removes the viewer role on the Public system subject.",
-        "operationId": "MemberInvite_SetPublicAccess",
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetPublicAccessRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 1
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetMembers"
-        ]
-      }
-    },
     "/api/v4/membership-requests": {
       "post": {
         "tags": [
@@ -13928,6 +14021,83 @@
           }
         },
         "x-remote-type": "command"
+      }
+    },
+    "/api/v4/membership-requests/settings": {
+      "get": {
+        "tags": [
+          "Membership Request"
+        ],
+        "summary": "Get whether this tenant currently lets people request to become a member.",
+        "operationId": "MembershipRequest_GetMembershipRequestSettings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipRequestSettingsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "Membership Request"
+        ],
+        "summary": "Enable or disable whether people can request to become a member. Independent of public access.",
+        "operationId": "MembershipRequest_SetMembershipRequestSettings",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMembershipRequestSettingsRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembershipRequestSettingsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetMembershipRequestSettings"
+        ]
       }
     },
     "/api/v4/me/permissions": {
@@ -14238,6 +14408,210 @@
         "x-remote-type": "command",
         "x-remote-invalidates": [
           "GetRoles"
+        ]
+      }
+    },
+    "/api/v4/share": {
+      "get": {
+        "tags": [
+          "Share Link"
+        ],
+        "summary": "Get the current public share link state.",
+        "operationId": "ShareLink_GetShareLink",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "delete": {
+        "tags": [
+          "Share Link"
+        ],
+        "summary": "Disable public sharing and invalidate the current link.",
+        "operationId": "ShareLink_DisableShareLink",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetShareLink"
+        ]
+      }
+    },
+    "/api/v4/share/rotate": {
+      "post": {
+        "tags": [
+          "Share Link"
+        ],
+        "summary": "Mint a new share token — enables sharing, or rotates an existing link. The previous link\nstops working immediately.",
+        "operationId": "ShareLink_RotateShareLink",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetShareLink"
+        ]
+      }
+    },
+    "/api/v4/share/full-history": {
+      "put": {
+        "tags": [
+          "Share Link"
+        ],
+        "summary": "Choose whether the public view shows full history or only the last 24 hours.",
+        "operationId": "ShareLink_SetShareLinkFullHistory",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetShareFullHistoryRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetShareLink"
+        ]
+      }
+    },
+    "/api/v4/share/scopes": {
+      "put": {
+        "tags": [
+          "Share Link"
+        ],
+        "summary": "Set which data categories anonymous viewers can see. Scopes must be read-permission atoms\ndrawn from TenantPermissions.PublicShareScopes; an empty list keeps the link live but\nshares nothing.",
+        "operationId": "ShareLink_SetShareLinkScopes",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetShareScopesRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareLinkDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetShareLink"
         ]
       }
     },
@@ -26422,7 +26796,6 @@
           "StepCountReadWrite",
           "FoodRead",
           "FoodReadWrite",
-          "StatisticsRead",
           "HealthRead",
           "HealthReadWrite",
           "FullAccess"
@@ -26447,7 +26820,6 @@
           "stepcount.readwrite",
           "food.read",
           "food.readwrite",
-          "statistics.read",
           "health.read",
           "health.readwrite",
           "*"
@@ -26939,6 +27311,83 @@
           "providerId": {
             "type": "string",
             "format": "guid"
+          }
+        }
+      },
+      "TimezoneTimelineEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "UpsertTimezoneEntryRequest": {
+        "type": "object",
+        "description": "Request to create or update a timezone timeline entry.",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Existing entry id to update, or null to create.",
+            "format": "guid",
+            "nullable": true
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "description": "Local wall-clock instant from which the zone takes effect.",
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone id (e.g. \"Australia/Sydney\")."
+          }
+        }
+      },
+      "RecorrectResult": {
+        "type": "object",
+        "description": "Outcome of a re-correction re-sync.",
+        "additionalProperties": false,
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Whether the re-sync succeeded."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable status message."
+          }
+        }
+      },
+      "RecorrectRequest": {
+        "type": "object",
+        "description": "Request to re-correct imported data after a timeline change.",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Optional UTC lower bound for the re-pull window.",
+            "format": "date-time",
+            "nullable": true
           }
         }
       },
@@ -34146,6 +34595,9 @@
             "type": "string",
             "nullable": true
           },
+          "isSystemSubject": {
+            "type": "boolean"
+          },
           "roles": {
             "type": "array",
             "items": {
@@ -34174,6 +34626,9 @@
           "sysCreatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "isPlatformAdmin": {
+            "type": "boolean"
           }
         }
       },
@@ -35434,6 +35889,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "anonymousReadAccess": {
+            "type": "boolean"
           }
         }
       },
@@ -36339,6 +36797,9 @@
           },
           "conditionType": {
             "$ref": "#/components/schemas/AlertConditionType"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/AlertRuleSeverity"
           },
           "startedAt": {
             "type": "string",
@@ -37953,15 +38414,6 @@
           }
         }
       },
-      "SetPublicAccessRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          }
-        }
-      },
       "CreateMembershipRequestResult": {
         "type": "object",
         "additionalProperties": false,
@@ -38041,6 +38493,24 @@
               "type": "string",
               "format": "guid"
             }
+          }
+        }
+      },
+      "MembershipRequestSettingsDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "allowRequests": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateMembershipRequestSettingsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "allowRequests": {
+            "type": "boolean"
           }
         }
       },
@@ -38124,6 +38594,60 @@
             "nullable": true
           },
           "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ShareLinkDto": {
+        "type": "object",
+        "description": "Current state of a tenant's single public share link.",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether a public share link is currently active."
+          },
+          "url": {
+            "type": "string",
+            "description": "The full share URL when enabled; null otherwise. The raw token is never returned separately.",
+            "nullable": true
+          },
+          "fullHistory": {
+            "type": "boolean",
+            "description": "When true the public view shows full history; when false, only the last 24 hours."
+          },
+          "scopes": {
+            "type": "array",
+            "description": "The data categories anonymous viewers can see, as read-permission atoms (e.g. glucose.read).\nA subset of PublicShareScopes.\nEmpty means the link is live but nothing is shared yet.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastAccessedAt": {
+            "type": "string",
+            "description": "When the share link was last accessed, or null if never (or not yet recorded).",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "SetShareFullHistoryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "fullHistory": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SetShareScopesRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "scopes": {
             "type": "array",
             "items": {
               "type": "string"
@@ -39313,6 +39837,10 @@
             "nullable": true
           },
           "legacyId": {
+            "type": "string",
+            "nullable": true
+          },
+          "syncIdentifier": {
             "type": "string",
             "nullable": true
           },
@@ -46658,6 +47186,10 @@
           "isPlatformAdmin": {
             "type": "boolean",
             "description": "Whether this subject has platform-level admin access"
+          },
+          "isPlatformAccessGrant": {
+            "type": "boolean",
+            "description": "Whether this session is a short-lived platform-admin access grant on a tenant the\nsubject is NOT a member of (as opposed to ordinary membership). Authoritative signal\nfor the \"platform admin access\" indicator in the UI."
           },
           "avatarUrl": {
             "type": "string",

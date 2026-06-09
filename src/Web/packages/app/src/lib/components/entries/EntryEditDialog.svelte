@@ -663,7 +663,7 @@
           id="entry-timestamp"
           type="datetime-local"
           value={millsToInputValue(mills)}
-          onchange={(e) => {
+          onchange={(e: Event & { currentTarget: HTMLInputElement }) => {
             const val = e.currentTarget.value;
             if (val) mills = inputValueToMills(val);
           }}
@@ -728,7 +728,7 @@
       {#if inactiveSectionKeys.length > 0}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
-            {#snippet child({ props })}
+            {#snippet child({ props }: { props: Record<string, unknown> })}
               <Button {...props} variant="outline" size="sm" class="w-full">
                 <Plus class="mr-2 h-4 w-4" />
                 Add Section

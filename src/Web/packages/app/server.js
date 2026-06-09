@@ -1,7 +1,12 @@
-// Custom production server that integrates the WebSocket bridge with SvelteKit
-import { createServer } from 'http';
-import { handler } from './build/handler.js';
-import { setupBridge } from '@nocturne/bridge';
+// Custom production server that integrates the WebSocket bridge with SvelteKit.
+//
+// Load OpenTelemetry instrumentation before any application code. adapter-node's
+// generated entrypoint (build/index.js) imports the built instrumentation first via
+// a facade, but this custom server replaces that entrypoint, so nothing else loads
+// it. Importing it here — ahead of the app modules, which are imported dynamically
+// inside start() — lets its import-in-the-middle hook install before the modules it
+// instruments. Without this the OTLP SDK never starts and the web emits no telemetry.
+import './build/server/instrumentation.server.js';
 
 // Hardcoded WebSocket bridge tuning. These were previously env vars but are
 // internal implementation details, not per-deployment knobs. Keep in sync
@@ -21,6 +26,12 @@ const SIGNALR_CONFIG_HUB_URL = `${API_URL}/hubs/config`;
 const INSTANCE_KEY = process.env.INSTANCE_KEY || '';
 
 async function start() {
+  // Imported dynamically (after the instrumentation import above) so the OTel
+  // import hook can patch these modules and their dependencies as they load.
+  const { createServer } = await import('http');
+  const { handler } = await import('./build/handler.js');
+  const { setupBridge } = await import('@nocturne/bridge');
+
   // Create HTTP server
   const server = createServer(handler);
 

@@ -1,4 +1,10 @@
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Nocturne.API.Attributes;
+using Nocturne.API.Configuration;
 using Nocturne.API.Services.Compatibility;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Abstractions;
@@ -43,6 +49,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Compatibility metrics including success rate and response times</returns>
     [HttpGet("metrics")]
+    [RequireAdmin]
     public async Task<ActionResult<CompatibilityMetrics>> GetCompatibilityMetrics(
         [FromQuery] DateTimeOffset? fromDate = null,
         [FromQuery] DateTimeOffset? toDate = null,
@@ -80,6 +87,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of endpoint-specific compatibility metrics</returns>
     [HttpGet("endpoints")]
+    [RequireAdmin]
     public async Task<ActionResult<IEnumerable<EndpointMetrics>>> GetEndpointMetrics(
         [FromQuery] DateTimeOffset? fromDate = null,
         [FromQuery] DateTimeOffset? toDate = null,
@@ -121,6 +129,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of detailed discrepancy analyses</returns>
     [HttpGet("analyses")]
+    [RequireAdmin]
     public async Task<ActionResult<IEnumerable<DiscrepancyAnalysisDto>>> GetDiscrepancyAnalyses(
         [FromQuery] string? requestPath = null,
         [FromQuery] int? overallMatch = null,
@@ -218,6 +227,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Detailed discrepancy analysis</returns>
     [HttpGet("analyses/{id:guid}")]
+    [RequireAdmin]
     public async Task<ActionResult<DiscrepancyAnalysisDto>> GetDiscrepancyAnalysis(
         Guid id,
         CancellationToken cancellationToken = default
@@ -291,6 +301,7 @@ public class DiscrepancyController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Current compatibility status</returns>
     [HttpGet("status")]
+    [RequireAdmin]
     public async Task<ActionResult<CompatibilityStatus>> GetCompatibilityStatus(
         CancellationToken cancellationToken = default
     )
@@ -355,17 +366,28 @@ public class DiscrepancyController : ControllerBase
     /// Receive forwarded discrepancies from remote Nocturne instances
     /// </summary>
     /// <param name="request">The forwarded discrepancy data</param>
+    /// <param name="proxyOptions">Compatibility proxy options supplying the shared forwarding key.</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Acknowledgement of receipt</returns>
     [HttpPost("ingest")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(typeof(object), 400)]
     [ProducesResponseType(typeof(object), 401)]
     public async Task<ActionResult> IngestDiscrepancy(
         [FromBody] ForwardedDiscrepancyDto request,
+        [FromServices] IOptions<CompatibilityProxyConfiguration> proxyOptions,
         CancellationToken cancellationToken = default
     )
     {
+        // Inter-instance ingestion is machine-to-machine: the sending instance attaches the shared
+        // forwarding API key as a bearer token. Validate it here rather than via the user-oriented
+        // policies; ingestion stays closed when no key is configured.
+        if (!HasValidForwardingKey(proxyOptions.Value.DiscrepancyForwarding.ApiKey))
+        {
+            return Unauthorized();
+        }
+
         try
         {
             if (request == null || request.Analysis == null)
@@ -442,5 +464,29 @@ public class DiscrepancyController : ControllerBase
             );
             return Problem(detail: "Error processing forwarded discrepancy", statusCode: 500, title: "Internal Server Error");
         }
+    }
+
+    /// <summary>
+    /// Returns whether the request carries a bearer token matching the configured forwarding
+    /// API key. Returns <see langword="false"/> when no key is configured.
+    /// </summary>
+    private bool HasValidForwardingKey(string expectedKey)
+    {
+        if (string.IsNullOrEmpty(expectedKey))
+        {
+            return false;
+        }
+
+        var header = Request.Headers.Authorization.ToString();
+        const string scheme = "Bearer ";
+        if (!header.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var provided = header[scheme.Length..].Trim();
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(provided),
+            Encoding.UTF8.GetBytes(expectedKey));
     }
 }

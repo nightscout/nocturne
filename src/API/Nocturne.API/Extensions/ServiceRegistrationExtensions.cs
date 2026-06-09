@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Fido2NetLib;
+using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services;
 using Nocturne.API.Middleware.Handlers;
@@ -12,6 +13,7 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.CoachMarks;
+using Nocturne.API.Services.Timezones;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
 using Nocturne.API.Services.ConnectorPublishing;
@@ -39,6 +41,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.CoachMarks;
+using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Analytics;
@@ -194,6 +197,10 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService<AuthorizationSeedService>();
 
         services.AddSingleton<PublicAccessCacheService>();
+        services.AddSingleton<ShareTokenCacheService>();
+        services.AddSingleton<IShareTokenGenerator, ShareTokenGenerator>();
+        services.AddScoped<IShareLinkService, ShareLinkService>();
+        services.AddHostedService<ShareTokenBackfillService>();
 
         // Passkey (WebAuthn/FIDO2) services
         services.AddScoped<IPasskeyService, PasskeyService>();
@@ -229,6 +236,10 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantMemberService, TenantMemberService>();
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<ITenantService, TenantService>();
+
+        // Shared by InstanceKeyHandler (authentication) and TenantSetupMiddleware
+        // (setup-gate bypass) so instance-key validation rules live in one place.
+        services.AddSingleton<IInstanceKeyValidator, InstanceKeyValidator>();
 
         // Auth handlers (executed in priority order, lowest first)
         services.AddSingleton<IAuthHandler, PlatformAccessCookieHandler>(); // Priority 40
@@ -516,6 +527,9 @@ public static class ServiceRegistrationExtensions
 
         // Coach marks
         services.AddScoped<ICoachMarkService, CoachMarkService>();
+
+        // Timezone timeline (fake-UTC connector conversion + travel/relocation)
+        services.AddScoped<ITimezoneTimelineService, TimezoneTimelineService>();
 
         // UI and display
         services.AddScoped<IUISettingsService, UISettingsService>();

@@ -234,6 +234,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         return await ExecuteWithRetryAsync(
             async () => await FetchDiaryCoreAsync(from, to, cancellationToken),
             _retryDelayStrategy,
+            maxRetries: _config.MaxRetryAttempts,
             operationName: "FetchMyFitnessPalDiary",
             cancellationToken: cancellationToken
         );

@@ -2245,6 +2245,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "SubjectId", "CreatedAt")
                         .HasDatabaseName("ix_mutation_audit_log_subject");
 
+                    b.HasIndex("EntityType", "EntityId", "Action", "CreatedAt")
+                        .HasDatabaseName("ix_mutation_audit_log_entity_lookup");
+
                     b.ToTable("mutation_audit_log");
                 });
 
@@ -3951,6 +3954,19 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("onboarding_completed_at");
 
+                    b.Property<DateTime?>("ShareLastAccessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("share_last_accessed_at");
+
+                    b.Property<string>("ShareToken")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("share_token");
+
+                    b.Property<DateTime?>("ShareTokenSetAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("share_token_set_at");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -3969,6 +3985,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("LastReadingAt")
                         .HasDatabaseName("ix_tenants_last_reading_at");
+
+                    b.HasIndex("ShareToken")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tenants_share_token");
 
                     b.HasIndex("Slug")
                         .IsUnique()
@@ -4145,6 +4165,44 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("tenant_roles");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TimezoneTimelineEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("EffectiveFrom")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("effective_from");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Timezone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("timezone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "EffectiveFrom")
+                        .IsUnique()
+                        .HasDatabaseName("ix_timezone_timeline_tenant_effective_from");
+
+                    b.ToTable("timezone_timeline");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TotpCredentialEntity", b =>
@@ -6613,6 +6671,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("smoothed_mgdl");
 
+                    b.Property<string>("SyncIdentifier")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("sync_identifier");
+
                     b.Property<DateTime>("SysCreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("sys_created_at");
@@ -6666,6 +6729,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "Timestamp")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_sensor_glucose_tenant_timestamp");
+
+                    b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sensor_glucose_tenant_source_sync_id")
+                        .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
                     b.ToTable("sensor_glucose");
                 });
@@ -7843,6 +7911,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TimezoneTimelineEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TotpCredentialEntity", b =>

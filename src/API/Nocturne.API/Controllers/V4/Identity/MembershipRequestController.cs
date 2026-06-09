@@ -144,6 +144,43 @@ public class MembershipRequestController(
         return Ok(result);
     }
 
+    /// <summary>
+    /// Get whether this tenant currently lets people request to become a member.
+    /// </summary>
+    [HttpGet("settings")]
+    [Authorize]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(MembershipRequestSettingsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetMembershipRequestSettings(CancellationToken ct)
+    {
+        if (!HasPermission(TenantPermissions.MembersManage))
+            return Forbid();
+
+        var allow = await membershipRequestService.GetAllowRequestsAsync(tenantAccessor.TenantId, ct);
+        return Ok(new MembershipRequestSettingsDto(allow));
+    }
+
+    /// <summary>
+    /// Enable or disable whether people can request to become a member. Independent of public access.
+    /// </summary>
+    [HttpPut("settings")]
+    [Authorize]
+    [RemoteCommand(Invalidates = ["GetMembershipRequestSettings"])]
+    [ProducesResponseType(typeof(MembershipRequestSettingsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> SetMembershipRequestSettings(
+        [FromBody] UpdateMembershipRequestSettingsRequest request,
+        CancellationToken ct)
+    {
+        if (!HasPermission(TenantPermissions.MembersManage))
+            return Forbid();
+
+        var allow = await membershipRequestService.SetAllowRequestsAsync(
+            tenantAccessor.TenantId, request.AllowRequests, ct);
+        return Ok(new MembershipRequestSettingsDto(allow));
+    }
+
     private bool HasPermission(string permission)
     {
         var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
@@ -154,3 +191,5 @@ public class MembershipRequestController(
 
 public record CreateMembershipRequestRequest(string? Message);
 public record ApproveMembershipRequestRequest(List<Guid> RoleIds);
+public record MembershipRequestSettingsDto(bool AllowRequests);
+public record UpdateMembershipRequestSettingsRequest(bool AllowRequests);

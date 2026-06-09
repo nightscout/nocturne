@@ -65,6 +65,7 @@ export function mergeChartData(
 		deviceEventMarkers: mergeByTime(initial.deviceEventMarkers, historical.deviceEventMarkers),
 		systemEventMarkers: mergeSpansById(initial.systemEventMarkers, historical.systemEventMarkers),
 		trackerMarkers: mergeSpansById(initial.trackerMarkers, historical.trackerMarkers),
+		bgCheckMarkers: mergeByTime(initial.bgCheckMarkers, historical.bgCheckMarkers),
 
 		// Merge spans (keyed by id in {#each} blocks — must dedup by id)
 		pumpModeSpans: mergeSpansById(initial.pumpModeSpans, historical.pumpModeSpans),

@@ -10,6 +10,9 @@ namespace Nocturne.API.Hubs;
 /// <summary>
 /// SignalR hub for alarm notifications, replacing socket.io alarm namespace
 /// </summary>
+// Connections authenticate in-band after negotiate and are reachable only via the internal
+// realtime bridge, so the HTTP fallback authorization policy must not gate the handshake.
+[Microsoft.AspNetCore.Authorization.AllowAnonymous]
 public class AlarmHub : TenantAwareHub
 {
     private readonly ILogger<AlarmHub> _logger;

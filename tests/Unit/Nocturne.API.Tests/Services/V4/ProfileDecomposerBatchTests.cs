@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -41,6 +43,7 @@ public class ProfileDecomposerBatchTests : IDisposable
             _carbRatioScheduleRepoMock.Object,
             _sensitivityScheduleRepoMock.Object,
             _targetRangeScheduleRepoMock.Object,
+            Mock.Of<IAuditContext>(),
             NullLogger<ProfileDecomposer>.Instance);
     }
 

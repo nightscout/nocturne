@@ -97,7 +97,7 @@ public class MemberInviteServiceTests : IDisposable
             TenantId = _tenantId,
             Name = "Follower",
             Slug = "follower",
-            Permissions = [TenantPermissions.GlucoseRead, TenantPermissions.StatisticsRead],
+            Permissions = [TenantPermissions.GlucoseRead, TenantPermissions.ReportsRead],
             IsSystem = true,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,

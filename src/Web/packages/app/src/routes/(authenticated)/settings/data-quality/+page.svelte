@@ -182,7 +182,7 @@
 					</div>
 					<Switch
 						checked={store.dataQuality.compressionLowDetection?.enabled ?? true}
-						onCheckedChange={(checked) => {
+						onCheckedChange={(checked: boolean) => {
 							if (store.dataQuality?.compressionLowDetection) {
 								store.dataQuality.compressionLowDetection.enabled = checked;
 								store.markChanged();
@@ -201,7 +201,7 @@
 					</div>
 					<Switch
 						checked={store.dataQuality.compressionLowDetection?.excludeFromStatistics ?? true}
-						onCheckedChange={(checked) => {
+						onCheckedChange={(checked: boolean) => {
 							if (store.dataQuality?.compressionLowDetection) {
 								store.dataQuality.compressionLowDetection.excludeFromStatistics = checked;
 								store.markChanged();

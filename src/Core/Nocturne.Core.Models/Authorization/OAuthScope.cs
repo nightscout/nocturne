@@ -69,9 +69,6 @@ public enum OAuthScope
     [EnumMember(Value = "food.readwrite"), JsonStringEnumMemberName("food.readwrite")]
     FoodReadWrite,
 
-    [EnumMember(Value = "statistics.read"), JsonStringEnumMemberName("statistics.read")]
-    StatisticsRead,
-
     [EnumMember(Value = "health.read"), JsonStringEnumMemberName("health.read")]
     HealthRead,
 

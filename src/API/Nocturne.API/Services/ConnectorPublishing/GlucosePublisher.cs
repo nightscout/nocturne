@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Events;
@@ -26,6 +28,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IAlertOrchestrator _alertOrchestrator;
+    private readonly IAuditContext _auditContext;
     private readonly IDataEventSink<SensorGlucose> _sensorGlucoseEvents;
     private readonly ILogger<GlucosePublisher> _logger;
 
@@ -36,6 +39,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         IDbContextFactory<NocturneDbContext> contextFactory,
         ITenantAccessor tenantAccessor,
         IAlertOrchestrator alertOrchestrator,
+        IAuditContext auditContext,
         IDataEventSink<SensorGlucose> sensorGlucoseEvents,
         ILogger<GlucosePublisher> logger)
     {
@@ -45,6 +49,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
         _alertOrchestrator = alertOrchestrator ?? throw new ArgumentNullException(nameof(alertOrchestrator));
+        _auditContext = auditContext;
         _sensorGlucoseEvents = sensorGlucoseEvents ?? throw new ArgumentNullException(nameof(sensorGlucoseEvents));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -81,7 +86,9 @@ internal sealed class GlucosePublisher : IGlucosePublisher
             if (recordList.Count == 0) return true;
 
             await StampPatientDeviceIdsAsync(recordList, source, cancellationToken);
-            var created = (await _sensorGlucoseRepository.BulkCreateAsync(recordList, cancellationToken)).ToList();
+            List<SensorGlucose> created;
+            using (SystemAuditScope.Push(_auditContext))
+                created = (await _sensorGlucoseRepository.BulkCreateAsync(recordList, cancellationToken)).ToList();
             await UpdateLastReadingAtAsync(cancellationToken);
             await EvaluateAlertsForSensorGlucoseAsync(recordList, cancellationToken);
 

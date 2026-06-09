@@ -454,7 +454,7 @@
   <Checkbox
     {checked}
     {indeterminate}
-    onCheckedChange={(value) => t.toggleAllPageRowsSelected(!!value)}
+    onCheckedChange={(value: boolean) => t.toggleAllPageRowsSelected(!!value)}
     aria-label="Select all"
   />
 {/snippet}
@@ -462,7 +462,7 @@
 {#snippet selectCellSnippet({ checked, row }: { checked: boolean; row: any })}
   <Checkbox
     {checked}
-    onCheckedChange={(value) => row.toggleSelected(!!value)}
+    onCheckedChange={(value: boolean) => row.toggleSelected(!!value)}
     aria-label="Select row"
   />
 {/snippet}

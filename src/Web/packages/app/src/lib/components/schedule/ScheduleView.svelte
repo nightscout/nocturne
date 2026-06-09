@@ -214,7 +214,8 @@
                 type="time"
                 value={entry.time ?? "00:00"}
                 class="w-28"
-                onchange={(e) => updateEntryTime(i, e.currentTarget.value)}
+                onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
+                  updateEntryTime(i, e.currentTarget.value)}
               />
             </Table.Cell>
             {#if isRange}
@@ -225,7 +226,8 @@
                   {min}
                   value={entry.low ?? 0}
                   class="ml-auto w-24 text-right"
-                  onchange={(e) => updateEntryLow(i, Number(e.currentTarget.value))}
+                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
+                    updateEntryLow(i, Number(e.currentTarget.value))}
                 />
               </Table.Cell>
               <Table.Cell class="text-right">
@@ -235,7 +237,8 @@
                   {min}
                   value={entry.high ?? 0}
                   class="ml-auto w-24 text-right"
-                  onchange={(e) => updateEntryHigh(i, Number(e.currentTarget.value))}
+                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
+                    updateEntryHigh(i, Number(e.currentTarget.value))}
                 />
               </Table.Cell>
             {:else}
@@ -246,7 +249,8 @@
                   {min}
                   value={entry.value ?? 0}
                   class="ml-auto w-24 text-right"
-                  onchange={(e) => updateEntryValue(i, Number(e.currentTarget.value))}
+                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
+                    updateEntryValue(i, Number(e.currentTarget.value))}
                 />
               </Table.Cell>
             {/if}

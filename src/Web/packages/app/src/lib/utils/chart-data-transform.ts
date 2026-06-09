@@ -88,6 +88,13 @@ export function transformChartData(data: DashboardChartData) {
 			insulinName: m.insulinName,
 		})),
 
+		bgCheckMarkers: (data.bgCheckMarkers ?? []).map((m) => ({
+			time: new Date(m.time ?? 0),
+			glucose: m.glucose ?? 0,
+			glucoseType: m.glucoseType,
+			treatmentId: m.treatmentId,
+		})),
+
 		pumpModeSpans: mapSpans(data.pumpModeSpans),
 		profileSpans: mapSpans(data.profileSpans),
 		overrideSpans: mapSpans(data.overrideSpans),

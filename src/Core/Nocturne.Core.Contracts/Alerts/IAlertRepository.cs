@@ -22,7 +22,10 @@ public interface IAlertRepository
     /// Returns the flat per-rule channel list. Channels are dispatched in parallel when the
     /// rule fires; <see cref="AlertRuleChannelSnapshot.SortOrder"/> is cosmetic only.
     /// </summary>
-    Task<IReadOnlyList<AlertRuleChannelSnapshot>> GetChannelsForRuleAsync(Guid ruleId, CancellationToken ct);
+    /// <param name="tenantId">The tenant that owns the rule, used to scope the query.</param>
+    /// <param name="ruleId">The alert rule identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<AlertRuleChannelSnapshot>> GetChannelsForRuleAsync(Guid tenantId, Guid ruleId, CancellationToken ct);
 
     /// <summary>
     /// Creates a new <see cref="AlertInstanceSnapshot"/> for a triggered alert.
@@ -32,15 +35,17 @@ public interface IAlertRepository
     /// <summary>
     /// Returns all alert instances associated with a specific excursion.
     /// </summary>
+    /// <param name="tenantId">The tenant that owns the excursion, used to scope the query.</param>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A read-only list of alert instances for the excursion.</returns>
-    Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(Guid excursionId, CancellationToken ct);
+    Task<IReadOnlyList<AlertInstanceSnapshot>> GetInstancesForExcursionAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
 
     /// <summary>
     /// Resolves all active alert instances for the specified excursion, marking them
     /// with the given resolution timestamp and reason.
     /// </summary>
+    /// <param name="tenantId">The tenant that owns the excursion, used to scope the update.</param>
     /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
     /// <param name="resolvedAt">The timestamp when the excursion was resolved.</param>
     /// <param name="resolutionReason">
@@ -49,7 +54,7 @@ public interface IAlertRepository
     /// fall-back — every production call site has a reason.
     /// </param>
     /// <param name="ct">Cancellation token.</param>
-    Task ResolveInstancesForExcursionAsync(Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct);
+    Task ResolveInstancesForExcursionAsync(Guid tenantId, Guid excursionId, DateTime resolvedAt, string? resolutionReason, CancellationToken ct);
 
     /// <summary>
     /// Returns every open excursion whose owning rule has auto-resolve enabled
@@ -65,7 +70,10 @@ public interface IAlertRepository
     /// <c>ExcursionResolutionHandler</c> to auto-archive in-app notifications when the
     /// excursion closes.
     /// </summary>
-    Task<IReadOnlyList<string>> GetInAppDestinationsForExcursionAsync(Guid excursionId, CancellationToken ct);
+    /// <param name="tenantId">The tenant that owns the excursion, used to scope the query.</param>
+    /// <param name="excursionId">The <see cref="AlertExcursion"/> identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<string>> GetInAppDestinationsForExcursionAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
 
     /// <summary>
     /// Updates an existing alert instance (e.g., advancing its escalation step or snooze state).
@@ -79,10 +87,11 @@ public interface IAlertRepository
     /// Expires all pending (unsent) deliveries for the specified alert instances,
     /// typically called when instances are resolved or acknowledged.
     /// </summary>
+    /// <param name="tenantId">The tenant that owns the instances, used to scope the update.</param>
     /// <param name="instanceIds">The alert instance identifiers whose pending deliveries should be expired.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A task that completes when the deliveries have been expired.</returns>
-    Task ExpirePendingDeliveriesAsync(IReadOnlyList<Guid> instanceIds, CancellationToken ct);
+    Task ExpirePendingDeliveriesAsync(Guid tenantId, IReadOnlyList<Guid> instanceIds, CancellationToken ct);
 
     /// <summary>
     /// Counts the number of active (unresolved) excursions for a tenant.

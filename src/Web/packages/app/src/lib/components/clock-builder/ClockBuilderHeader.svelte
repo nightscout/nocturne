@@ -49,7 +49,8 @@
   <Input
     type="text"
     value={clockName}
-    oninput={(e) => onNameChange(e.currentTarget.value)}
+    oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+      onNameChange(e.currentTarget.value)}
     class="max-w-[200px] border-none bg-transparent text-center font-semibold focus-visible:ring-0"
     placeholder="Clock name"
   />

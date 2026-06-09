@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
@@ -12,6 +13,7 @@ namespace Nocturne.API.Controllers.V1;
 [ApiController]
 [Tags("V1")]
 [Route("api/v1")]
+[AllowAnonymous]
 public class AuthenticationController : ControllerBase
 {
     private readonly ILogger<AuthenticationController> _logger;

@@ -229,6 +229,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 userId = refreshedSession?.Metadata?.GetValueOrDefault("UserId");
                 return !string.IsNullOrEmpty(userId);
             },
+            maxRetries: config.MaxRetryAttempts,
             operationName: $"FetchTidepoolData({dataType})"
         );
     }

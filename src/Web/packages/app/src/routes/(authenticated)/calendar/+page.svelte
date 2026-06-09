@@ -17,9 +17,10 @@
   import { coachmark } from "@nocturne/coach";
 
   // Infer DayStats type from the query result
-  type DayStats = NonNullable<
-    Awaited<ReturnType<typeof getPunchCardData>>
-  >["months"][number]["days"][number];
+  type PunchCardMonth = NonNullable<
+    NonNullable<Awaited<ReturnType<typeof getPunchCardData>>>["months"]
+  >[number];
+  type DayStats = NonNullable<PunchCardMonth["days"]>[number];
 
   // View mode: 'tir' for Time in Range bars, 'profile' for glucose line charts
   type ViewMode = "tir" | "profile";
@@ -159,6 +160,7 @@
     const daysMap = new Map<string, DayStats>();
     if (monthData) {
       for (const day of monthData?.days || []) {
+        if (!day.date) continue;
         daysMap.set(day.date, day);
       }
     }

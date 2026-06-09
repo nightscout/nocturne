@@ -11,7 +11,6 @@
     DeviceEventType,
     PatientInsulin,
     InsulinFormulation,
-    InsulinCategory,
     BasalInjection,
     CreateBasalInjectionRequest,
   } from "$lib/api";
@@ -54,7 +53,6 @@
   import BasalInjectionFormFields from "./edit-dialog/BasalInjectionFormFields.svelte";
   import LinkedRecordsPanel from "./edit-dialog/LinkedRecordsPanel.svelte";
   import InsulinFormFields from "$lib/components/patient/InsulinFormFields.svelte";
-  import { insulinCategoryLabels } from "$lib/components/patient/labels";
 
   interface Props {
     open: boolean;
@@ -507,7 +505,7 @@
             id="datetime"
             type="datetime-local"
             value={millsToInputValue(editMills)}
-            onchange={(e) => {
+            onchange={(e: Event & { currentTarget: HTMLInputElement }) => {
               const val = e.currentTarget.value;
               if (val) editMills = new Date(val).getTime();
             }}

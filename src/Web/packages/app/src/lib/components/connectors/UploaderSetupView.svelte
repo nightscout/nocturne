@@ -96,7 +96,9 @@
   // ── Connection polling ────────────────────────────────────────
 
   let pollInterval = $state<ReturnType<typeof setInterval> | null>(null);
-  let dataSources = $state<DataSourceInfo[]>([]);
+
+  const dataSourcesQuery = getActiveDataSources();
+  const dataSources = $derived<DataSourceInfo[]>(dataSourcesQuery.current ?? []);
 
   onDestroy(() => {
     stopPolling();
@@ -132,7 +134,7 @@
         clientId: info.clientId ?? "",
         displayName: info.clientDisplayName ?? null,
         isKnown: info.isKnownClient ?? false,
-        scopes: (info.scopes ?? []).filter(Boolean) as string[],
+        scopes: (info.scopes ?? []).filter(Boolean),
       };
     } catch {
       deviceLookupError = "Invalid or expired device code. Please check and try again.";
@@ -186,8 +188,7 @@
     stopPolling();
     pollInterval = setInterval(async () => {
       try {
-        const sources = await getActiveDataSources();
-        dataSources = sources ?? [];
+        await dataSourcesQuery.refresh();
 
         // Stop polling if we detect data from the selected app
         if (app && isDetected(app.id)) {
@@ -339,7 +340,7 @@
             <div>
               <p class="mb-3 text-sm font-medium">This application is requesting permission to:</p>
               <ul class="space-y-2">
-                {#each deviceInfo.scopes as scope}
+                {#each deviceInfo.scopes as scope (scope)}
                   <li class="flex items-start gap-3 text-sm">
                     <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <span class="text-muted-foreground">{getOAuthScopeDescription(scope)}</span>

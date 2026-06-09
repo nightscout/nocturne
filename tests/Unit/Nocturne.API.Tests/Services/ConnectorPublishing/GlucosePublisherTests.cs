@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Events;
@@ -40,6 +41,7 @@ public class GlucosePublisherTests
             Mock.Of<IDbContextFactory<NocturneDbContext>>(),
             Mock.Of<ITenantAccessor>(),
             Mock.Of<IAlertOrchestrator>(),
+            Mock.Of<IAuditContext>(),
             _mockSensorGlucoseEvents.Object,
             NullLogger<GlucosePublisher>.Instance
         );

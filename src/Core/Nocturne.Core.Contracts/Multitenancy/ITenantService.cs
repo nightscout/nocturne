@@ -64,12 +64,14 @@ public record TenantMemberDto(
     Guid Id,
     Guid SubjectId,
     string? Name,
+    bool IsSystemSubject,
     List<TenantMemberRoleDto> Roles,
     List<string>? DirectPermissions,
     string? Label,
     bool LimitTo24Hours,
     DateTime? LastUsedAt,
-    DateTime SysCreatedAt);
+    DateTime SysCreatedAt,
+    bool IsPlatformAdmin);
 
 /// <summary>
 /// Lightweight role reference attached to a <see cref="TenantMemberDto"/>.

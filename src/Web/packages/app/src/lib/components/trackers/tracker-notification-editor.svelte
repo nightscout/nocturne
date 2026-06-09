@@ -148,7 +148,7 @@
             </Label>
             <Input
               value={notification.description ?? ""}
-              oninput={(e) =>
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
                 updateNotification(i, "description", e.currentTarget.value)}
               placeholder="Message shown when triggered"
             />

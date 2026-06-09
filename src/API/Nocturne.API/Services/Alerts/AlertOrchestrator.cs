@@ -199,7 +199,7 @@ internal sealed class AlertOrchestrator(
 
         // Look up the rule's flat channel list; an empty list is allowed (the user explicitly
         // chose "no delivery channels" — alert still tracked, just not pushed anywhere).
-        var channels = await repository.GetChannelsForRuleAsync(rule.Id, ct);
+        var channels = await repository.GetChannelsForRuleAsync(tenantId, rule.Id, ct);
 
         // Active excursion count + tenant subject for payload.
         var activeExcursionCount = await repository.CountActiveExcursionsAsync(tenantId, ct);

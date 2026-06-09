@@ -26,7 +26,12 @@ async function discoverTenants(
   logger.info(`Discovering tenants from ${url}`);
 
   const response = await fetch(url, {
-    headers: { 'X-Instance-Key': instanceKeyHash },
+    // X-Instance-Service marks this as a genuine service call so the API's
+    // InstanceKeyHandler honors the instance key (a bare key is ignored).
+    headers: {
+      'X-Instance-Key': instanceKeyHash,
+      'X-Instance-Service': 'nocturne-bridge',
+    },
   });
 
   if (!response.ok) {
@@ -121,7 +126,7 @@ export async function setupBridge(
   // from accepting browser connections.
   logger.info(`Bridge tenant discovery starting (baseDomain: ${baseDomain})`);
 
-  const instanceKeyHash = createHash('sha1')
+  const instanceKeyHash = createHash('sha256')
     .update(config.instanceKey)
     .digest('hex')
     .toLowerCase();

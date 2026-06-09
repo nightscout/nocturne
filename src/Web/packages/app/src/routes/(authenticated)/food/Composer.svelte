@@ -158,7 +158,7 @@
 		<!-- Unit -->
 		<div class="flex h-full flex-col gap-1">
 			<span class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Unit</span>
-			<ToggleGroup.Root type="single" value={draft.unit ?? 'g'} onValueChange={(v) => { if (v) draft = { ...draft, unit: v }; }} variant="outline" size="sm" class="w-full flex-1">
+			<ToggleGroup.Root type="single" value={draft.unit ?? 'g'} onValueChange={(v: string) => { if (v) draft = { ...draft, unit: v }; }} variant="outline" size="sm" class="w-full flex-1">
 				{#each FOOD_UNITS as u (u)}
 					<ToggleGroup.Item value={u} class="flex-1">{u}</ToggleGroup.Item>
 				{/each}
@@ -168,7 +168,7 @@
 		<!-- GI -->
 		<div class="flex h-full flex-col gap-1">
 			<span class="text-muted-foreground font-medium uppercase" style="font-size: 10px">GI</span>
-			<ToggleGroup.Root type="single" value={giFromInt(draft.gi)} onValueChange={(v) => { if (v) draft = { ...draft, gi: giToInt(v as GiLevel) }; }} variant="outline" size="sm" class="w-full flex-1">
+			<ToggleGroup.Root type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (v) draft = { ...draft, gi: giToInt(v as GiLevel) }; }} variant="outline" size="sm" class="w-full flex-1">
 				{#each giLevels as g (g)}
 					<ToggleGroup.Item value={g} class="flex-1 capitalize gap-1.5">
 						<GiIcon level={g} size={7} />{g}

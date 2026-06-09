@@ -75,7 +75,7 @@
       </div>
       <Switch
         checked={settings.enabled}
-        onCheckedChange={(checked) => {
+        onCheckedChange={(checked: boolean) => {
           settings.enabled = checked;
         }}
       />
@@ -93,7 +93,7 @@
             <Label>Show BG value</Label>
             <Switch
               checked={settings.showBgValue}
-              onCheckedChange={(checked) => {
+              onCheckedChange={(checked: boolean) => {
                 settings.showBgValue = checked;
               }}
             />
@@ -103,7 +103,7 @@
             <Label>Show direction arrow</Label>
             <Switch
               checked={settings.showDirection}
-              onCheckedChange={(checked) => {
+              onCheckedChange={(checked: boolean) => {
                 settings.showDirection = checked;
               }}
             />
@@ -113,7 +113,7 @@
             <Label>Show delta change</Label>
             <Switch
               checked={settings.showDelta}
-              onCheckedChange={(checked) => {
+              onCheckedChange={(checked: boolean) => {
                 settings.showDelta = checked;
               }}
             />
@@ -126,7 +126,7 @@
             id="customPrefix"
             placeholder="e.g., Nocturne"
             value={settings.customPrefix}
-            onchange={(e) => {
+            onchange={(e: Event & { currentTarget: HTMLInputElement }) => {
               settings.customPrefix = (e.target as HTMLInputElement).value;
             }}
           />
@@ -151,7 +151,7 @@
           </div>
           <Switch
             checked={settings.faviconEnabled}
-            onCheckedChange={(checked) => {
+            onCheckedChange={(checked: boolean) => {
               settings.faviconEnabled = checked;
             }}
           />
@@ -163,7 +163,7 @@
               <Label>Show BG value in favicon</Label>
               <Switch
                 checked={settings.faviconShowBg}
-                onCheckedChange={(checked) => {
+                onCheckedChange={(checked: boolean) => {
                   settings.faviconShowBg = checked;
                 }}
               />
@@ -173,7 +173,7 @@
               <Label>Color-code by glucose level</Label>
               <Switch
                 checked={settings.faviconColorCoded}
-                onCheckedChange={(checked) => {
+                onCheckedChange={(checked: boolean) => {
                   settings.faviconColorCoded = checked;
                 }}
               />
@@ -200,7 +200,7 @@
           </div>
           <Switch
             checked={settings.flashOnAlarm}
-            onCheckedChange={(checked) => {
+            onCheckedChange={(checked: boolean) => {
               settings.flashOnAlarm = checked;
             }}
           />

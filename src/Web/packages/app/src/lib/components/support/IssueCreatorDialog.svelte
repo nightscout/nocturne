@@ -22,6 +22,7 @@
     Copy,
   } from "lucide-svelte";
   import { createIssue, createOperatorIssue, getFallbackUrl } from "$lib/api/support.remote";
+  import type { CreateIssueResponse } from "$api-clients";
 
   interface Props {
     open: boolean;
@@ -192,8 +193,8 @@
     isDragging = false;
   }
 
-  function handleFileInput(e: Event) {
-    const input = e.target as HTMLInputElement;
+  function handleFileInput(e: Event & { currentTarget: HTMLInputElement }) {
+    const input = e.currentTarget;
     if (input.files) {
       addFiles(input.files);
       input.value = "";
@@ -294,9 +295,10 @@
         await createOperatorIssue(params);
         formState = "success";
       } else {
-        const result = await createIssue(params);
-        issueUrl = result.issueUrl;
-        issueNumber = result.issueNumber;
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- remote command result is typed `unknown`; narrow to the generated response shape
+        const result = (await createIssue(params)) as CreateIssueResponse;
+        issueUrl = result.issueUrl ?? "";
+        issueNumber = result.issueNumber ?? 0;
         formState = "success";
       }
     } catch {
@@ -304,7 +306,7 @@
       // Open fallback URL
       try {
         const body = `## Description\n\n${description}`;
-        const fallback = await getFallbackUrl({ template, title, body });
+        const fallback = await getFallbackUrl({ template, title, body }).run();
         if (fallback?.url) {
           window.open(fallback.url, "_blank");
         }
@@ -348,6 +350,7 @@
           <p class="text-sm text-muted-foreground text-center">
             Your issue #{issueNumber} has been created successfully.
           </p>
+          <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external absolute GitHub issue URL -->
           <a href={issueUrl} target="_blank" rel="noopener noreferrer">
             <Button variant="outline" class="gap-2">
               <ExternalLink class="h-4 w-4" />

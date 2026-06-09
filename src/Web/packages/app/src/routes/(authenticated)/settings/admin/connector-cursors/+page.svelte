@@ -105,10 +105,8 @@
     connectorsLoading = true;
     connectorsError = null;
     try {
-      // Refresh so re-selecting a tenant always shows current health, not a memoised snapshot.
-      const connectorsQuery = getTenantConnectors(value);
-      await connectorsQuery.refresh();
-      connectors = await connectorsQuery;
+      // One-shot fetch via .run() — re-selecting a tenant re-executes, so health is never stale.
+      connectors = await getTenantConnectors(value).run();
     } catch (err) {
       console.error("Failed to load connectors:", err);
       connectorsError = "Failed to load this tenant's connectors.";
@@ -127,19 +125,15 @@
   async function pollJob() {
     if (!activeJobId) return;
     try {
-      // Force a fresh fetch each tick — the query memoises by argument otherwise.
-      const statusQuery = getResetJobStatus(activeJobId);
-      await statusQuery.refresh();
-      const status = await statusQuery;
+      // One-shot fetch each tick — .run() re-executes every call, bypassing query memoisation.
+      const status = await getResetJobStatus(activeJobId).run();
       jobStatus = status;
 
       if (isTerminal(status.state)) {
         stopPolling();
-        // Refresh the connector list so the admin sees updated sync timestamps.
+        // Re-fetch the connector list so the admin sees updated sync timestamps.
         if (selectedTenantId) {
-          const connectorsQuery = getTenantConnectors(selectedTenantId);
-          await connectorsQuery.refresh();
-          connectors = await connectorsQuery;
+          connectors = await getTenantConnectors(selectedTenantId).run();
         }
         return;
       }

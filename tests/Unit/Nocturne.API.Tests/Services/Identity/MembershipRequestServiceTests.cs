@@ -321,4 +321,36 @@ public class MembershipRequestServiceTests : IDisposable
         pending[0].SubjectName.Should().Be("Other User");
         pending[0].Status.Should().Be("pending");
     }
+
+    // ──────────────────────────────────────────────
+    // Allow-requests settings
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetAllowRequestsAsync_DefaultsToTrue()
+    {
+        (await _service.GetAllowRequestsAsync(_tenantId)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SetAllowRequestsAsync_TogglesTheTenantFlag()
+    {
+        (await _service.SetAllowRequestsAsync(_tenantId, false)).Should().BeFalse();
+        (await _service.GetAllowRequestsAsync(_tenantId)).Should().BeFalse();
+
+        (await _service.SetAllowRequestsAsync(_tenantId, true)).Should().BeTrue();
+        (await _service.GetAllowRequestsAsync(_tenantId)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CreateRequestAsync_WhenRequestsDisabled_ReturnsFailureAndPersistsNothing()
+    {
+        await _service.SetAllowRequestsAsync(_tenantId, false);
+
+        var result = await _service.CreateRequestAsync(_tenantId, _subjectId, "Please add me");
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("not accepting");
+        (await _dbContext.MembershipRequests.AnyAsync()).Should().BeFalse();
+    }
 }

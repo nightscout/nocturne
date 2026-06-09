@@ -25,7 +25,7 @@ function and(uid: string, ...children: ConditionNode[]): ConditionNode {
 	};
 }
 
-function makeRule(id: string, name: string, condition: ConditionNode): AlertRuleResponse {
+function makeRule(id: string, name: string, _condition: ConditionNode): AlertRuleResponse {
 	return {
 		id,
 		name,

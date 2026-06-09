@@ -1037,6 +1037,187 @@ export class SetupClient {
     }
 }
 
+export class TimezoneTimelineClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get the tenant's timezone timeline, ordered by effective date.
+     */
+    getTimeline(signal?: AbortSignal): Promise<TimezoneTimelineEntry[]> {
+        let url_ = this.baseUrl + "/api/v4/timezone-timeline";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetTimeline(_response);
+        });
+    }
+
+    protected processGetTimeline(response: Response): Promise<TimezoneTimelineEntry[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TimezoneTimelineEntry[];
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TimezoneTimelineEntry[]>(null as any);
+    }
+
+    /**
+     * Create or update a timeline entry. EffectiveFrom is a local wall-clock date/time (the
+    moment, in local terms, that the zone took effect). A trip is two entries (out + return); a
+    move is a single entry; the origin entry covers all earlier history.
+     */
+    upsert(request: UpsertTimezoneEntryRequest, signal?: AbortSignal): Promise<TimezoneTimelineEntry> {
+        let url_ = this.baseUrl + "/api/v4/timezone-timeline";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processUpsert(_response);
+        });
+    }
+
+    protected processUpsert(response: Response): Promise<TimezoneTimelineEntry> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TimezoneTimelineEntry;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<TimezoneTimelineEntry>(null as any);
+    }
+
+    /**
+     * Delete a timeline entry.
+     */
+    delete(id: string, signal?: AbortSignal): Promise<FileResponse> {
+        let url_ = this.baseUrl + "/api/v4/timezone-timeline/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/octet-stream"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDelete(_response);
+        });
+    }
+
+    protected processDelete(response: Response): Promise<FileResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200 || status === 206) {
+            const contentDisposition = response.headers ? response.headers.get("content-disposition") : undefined;
+            let fileNameMatch = contentDisposition ? /filename\*=(?:(\\?['"])(.*?)\1|(?:[^\s]+'.*?')?([^;\n]*))/g.exec(contentDisposition) : undefined;
+            let fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[3] || fileNameMatch[2] : undefined;
+            if (fileName) {
+                fileName = decodeURIComponent(fileName);
+            } else {
+                fileNameMatch = contentDisposition ? /filename="?([^"]*?)"?(;|$)/g.exec(contentDisposition) : undefined;
+                fileName = fileNameMatch && fileNameMatch.length > 1 ? fileNameMatch[1] : undefined;
+            }
+            return response.blob().then(blob => { return { fileName: fileName, data: blob, status: status, headers: _headers }; });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<FileResponse>(null as any);
+    }
+
+    /**
+     * Re-correct already-imported data after a timeline change by re-pulling the affected window from
+    Glooko. Records re-flow the normal publish path and upsert in place on their stable
+    SyncIdentifier, so timestamps move without duplicating. Intended to be called after the user
+    confirms the affected window. Runs synchronously; the window is bounded.
+     * @param request Optional lower bound (UTC). When null, the connector's default window is used.
+     */
+    recorrect(request: RecorrectRequest, signal?: AbortSignal): Promise<RecorrectResult> {
+        let url_ = this.baseUrl + "/api/v4/timezone-timeline/recorrect";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processRecorrect(_response);
+        });
+    }
+
+    protected processRecorrect(response: Response): Promise<RecorrectResult> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as RecorrectResult;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<RecorrectResult>(null as any);
+    }
+}
+
 export class BasalInjectionClient {
     private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
     private baseUrl: string;
@@ -14914,51 +15095,6 @@ export class MemberInviteClient {
         }
         return Promise.resolve<void>(null as any);
     }
-
-    /**
-     * Toggle public (unauthenticated) read access for this tenant.
-    Assigns or removes the viewer role on the Public system subject.
-     */
-    setPublicAccess(request: SetPublicAccessRequest, signal?: AbortSignal): Promise<void> {
-        let url_ = this.baseUrl + "/api/v4/member-invites/public-access";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(request);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "PUT",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processSetPublicAccess(_response);
-        });
-    }
-
-    protected processSetPublicAccess(response: Response): Promise<void> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 204) {
-            return response.text().then((_responseText) => {
-            return;
-            });
-        } else if (status === 403) {
-            return response.text().then((_responseText) => {
-            let result403: any = null;
-            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result403);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<void>(null as any);
-    }
 }
 
 export class MembershipRequestClient {
@@ -15204,6 +15340,96 @@ export class MembershipRequestClient {
             });
         }
         return Promise.resolve<DecideMembershipRequestResult>(null as any);
+    }
+
+    /**
+     * Get whether this tenant currently lets people request to become a member.
+     */
+    getMembershipRequestSettings(signal?: AbortSignal): Promise<MembershipRequestSettingsDto> {
+        let url_ = this.baseUrl + "/api/v4/membership-requests/settings";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetMembershipRequestSettings(_response);
+        });
+    }
+
+    protected processGetMembershipRequestSettings(response: Response): Promise<MembershipRequestSettingsDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as MembershipRequestSettingsDto;
+            return result200;
+            });
+        } else if (status === 403) {
+            return response.text().then((_responseText) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result403);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<MembershipRequestSettingsDto>(null as any);
+    }
+
+    /**
+     * Enable or disable whether people can request to become a member. Independent of public access.
+     */
+    setMembershipRequestSettings(request: UpdateMembershipRequestSettingsRequest, signal?: AbortSignal): Promise<MembershipRequestSettingsDto> {
+        let url_ = this.baseUrl + "/api/v4/membership-requests/settings";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processSetMembershipRequestSettings(_response);
+        });
+    }
+
+    protected processSetMembershipRequestSettings(response: Response): Promise<MembershipRequestSettingsDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as MembershipRequestSettingsDto;
+            return result200;
+            });
+        } else if (status === 403) {
+            return response.text().then((_responseText) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result403);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<MembershipRequestSettingsDto>(null as any);
     }
 }
 
@@ -15580,6 +15806,249 @@ export class RoleClient {
             });
         }
         return Promise.resolve<void>(null as any);
+    }
+}
+
+export class ShareLinkClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Get the current public share link state.
+     */
+    getShareLink(signal?: AbortSignal): Promise<ShareLinkDto> {
+        let url_ = this.baseUrl + "/api/v4/share";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetShareLink(_response);
+        });
+    }
+
+    protected processGetShareLink(response: Response): Promise<ShareLinkDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ShareLinkDto;
+            return result200;
+            });
+        } else if (status === 403) {
+            return response.text().then((_responseText) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result403);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ShareLinkDto>(null as any);
+    }
+
+    /**
+     * Disable public sharing and invalidate the current link.
+     */
+    disableShareLink(signal?: AbortSignal): Promise<ShareLinkDto> {
+        let url_ = this.baseUrl + "/api/v4/share";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processDisableShareLink(_response);
+        });
+    }
+
+    protected processDisableShareLink(response: Response): Promise<ShareLinkDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ShareLinkDto;
+            return result200;
+            });
+        } else if (status === 403) {
+            return response.text().then((_responseText) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result403);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ShareLinkDto>(null as any);
+    }
+
+    /**
+     * Mint a new share token — enables sharing, or rotates an existing link. The previous link
+    stops working immediately.
+     */
+    rotateShareLink(signal?: AbortSignal): Promise<ShareLinkDto> {
+        let url_ = this.baseUrl + "/api/v4/share/rotate";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processRotateShareLink(_response);
+        });
+    }
+
+    protected processRotateShareLink(response: Response): Promise<ShareLinkDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ShareLinkDto;
+            return result200;
+            });
+        } else if (status === 403) {
+            return response.text().then((_responseText) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result403);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ShareLinkDto>(null as any);
+    }
+
+    /**
+     * Choose whether the public view shows full history or only the last 24 hours.
+     */
+    setShareLinkFullHistory(request: SetShareFullHistoryRequest, signal?: AbortSignal): Promise<ShareLinkDto> {
+        let url_ = this.baseUrl + "/api/v4/share/full-history";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processSetShareLinkFullHistory(_response);
+        });
+    }
+
+    protected processSetShareLinkFullHistory(response: Response): Promise<ShareLinkDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ShareLinkDto;
+            return result200;
+            });
+        } else if (status === 403) {
+            return response.text().then((_responseText) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result403);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ShareLinkDto>(null as any);
+    }
+
+    /**
+     * Set which data categories anonymous viewers can see. Scopes must be read-permission atoms
+    drawn from TenantPermissions.PublicShareScopes; an empty list keeps the link live but
+    shares nothing.
+     */
+    setShareLinkScopes(request: SetShareScopesRequest, signal?: AbortSignal): Promise<ShareLinkDto> {
+        let url_ = this.baseUrl + "/api/v4/share/scopes";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PUT",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processSetShareLinkScopes(_response);
+        });
+    }
+
+    protected processSetShareLinkScopes(response: Response): Promise<ShareLinkDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ShareLinkDto;
+            return result200;
+            });
+        } else if (status === 400) {
+            return response.text().then((_responseText) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
+            });
+        } else if (status === 403) {
+            return response.text().then((_responseText) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result403);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ShareLinkDto>(null as any);
     }
 }
 
@@ -27650,7 +28119,6 @@ export enum OAuthScope {
     StepCountReadWrite = "stepcount.readwrite",
     FoodRead = "food.read",
     FoodReadWrite = "food.readwrite",
-    StatisticsRead = "statistics.read",
     HealthRead = "health.read",
     HealthReadWrite = "health.readwrite",
     FullAccess = "*",
@@ -27838,6 +28306,38 @@ export interface SetupOwnerOidcRequest {
     username?: string;
     displayName?: string;
     providerId?: string;
+}
+
+export interface TimezoneTimelineEntry {
+    id?: string;
+    effectiveFrom?: Date;
+    timezone?: string;
+    createdAt?: Date | undefined;
+    updatedAt?: Date | undefined;
+}
+
+/** Request to create or update a timezone timeline entry. */
+export interface UpsertTimezoneEntryRequest {
+    /** Existing entry id to update, or null to create. */
+    id?: string | undefined;
+    /** Local wall-clock instant from which the zone takes effect. */
+    effectiveFrom?: Date;
+    /** IANA timezone id (e.g. "Australia/Sydney"). */
+    timezone?: string;
+}
+
+/** Outcome of a re-correction re-sync. */
+export interface RecorrectResult {
+    /** Whether the re-sync succeeded. */
+    success?: boolean;
+    /** Human-readable status message. */
+    message?: string;
+}
+
+/** Request to re-correct imported data after a timeline change. */
+export interface RecorrectRequest {
+    /** Optional UTC lower bound for the re-pull window. */
+    from?: Date | undefined;
 }
 
 export interface BasalInjection {
@@ -30101,12 +30601,14 @@ export interface TenantMemberDto {
     id?: string;
     subjectId?: string;
     name?: string | undefined;
+    isSystemSubject?: boolean;
     roles?: TenantMemberRoleDto[];
     directPermissions?: string[] | undefined;
     label?: string | undefined;
     limitTo24Hours?: boolean;
     lastUsedAt?: Date | undefined;
     sysCreatedAt?: Date;
+    isPlatformAdmin?: boolean;
 }
 
 export interface TenantMemberRoleDto {
@@ -30524,6 +31026,7 @@ export interface StatusResponse {
     head?: string | undefined;
     isDemo?: boolean | undefined;
     nextResetAt?: Date | undefined;
+    anonymousReadAccess?: boolean;
 }
 
 export interface CreateIssueResponse {
@@ -30846,6 +31349,7 @@ export interface ActiveExcursionResponse {
     alertRuleId?: string;
     ruleName?: string;
     conditionType?: AlertConditionType;
+    severity?: AlertRuleSeverity;
     startedAt?: Date;
     acknowledgedAt?: Date | undefined;
     acknowledgedBy?: string | undefined;
@@ -31361,10 +31865,6 @@ export interface SetMemberLimitTo24HoursRequest {
     limitTo24Hours?: boolean;
 }
 
-export interface SetPublicAccessRequest {
-    enabled?: boolean;
-}
-
 export interface CreateMembershipRequestResult {
     success?: boolean;
     error?: string | undefined;
@@ -31393,6 +31893,14 @@ export interface ApproveMembershipRequestRequest {
     roleIds?: string[];
 }
 
+export interface MembershipRequestSettingsDto {
+    allowRequests?: boolean;
+}
+
+export interface UpdateMembershipRequestSettingsRequest {
+    allowRequests?: boolean;
+}
+
 export interface CreateMyTenantRequest {
     slug?: string;
     displayName?: string;
@@ -31419,6 +31927,30 @@ export interface UpdateRoleRequest {
     name?: string;
     description?: string | undefined;
     permissions?: string[];
+}
+
+/** Current state of a tenant's single public share link. */
+export interface ShareLinkDto {
+    /** Whether a public share link is currently active. */
+    enabled?: boolean;
+    /** The full share URL when enabled; null otherwise. The raw token is never returned separately. */
+    url?: string | undefined;
+    /** When true the public view shows full history; when false, only the last 24 hours. */
+    fullHistory?: boolean;
+    /** The data categories anonymous viewers can see, as read-permission atoms (e.g. glucose.read).
+A subset of PublicShareScopes.
+Empty means the link is live but nothing is shared yet. */
+    scopes?: string[];
+    /** When the share link was last accessed, or null if never (or not yet recorded). */
+    lastAccessedAt?: Date | undefined;
+}
+
+export interface SetShareFullHistoryRequest {
+    fullHistory?: boolean;
+}
+
+export interface SetShareScopesRequest {
+    scopes?: string[];
 }
 
 export interface PaginatedResponseOfActivity {
@@ -31803,6 +32335,7 @@ export interface SensorGlucose {
     correlationId?: string | undefined;
     patientDeviceId?: string | undefined;
     legacyId?: string | undefined;
+    syncIdentifier?: string | undefined;
     createdAt?: Date;
     modifiedAt?: Date;
     mgdl?: number;
@@ -34105,6 +34638,10 @@ export interface SessionInfo {
     preferredLanguage?: string | undefined;
     /** Whether this subject has platform-level admin access */
     isPlatformAdmin?: boolean;
+    /** Whether this session is a short-lived platform-admin access grant on a tenant the
+subject is NOT a member of (as opposed to ordinary membership). Authoritative signal
+for the "platform admin access" indicator in the UI. */
+    isPlatformAccessGrant?: boolean;
     /** URL to the subject's avatar image */
     avatarUrl?: string | undefined;
 }

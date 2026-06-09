@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Platform;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -853,6 +854,7 @@ public class StatusServiceTests
             mockDbContextFactory.Object,
             _httpContextAccessor,
             _mockTenantAccessor.Object,
+            TestPublicAccessCache.Create(),
             _mockLogger.Object
         );
     }

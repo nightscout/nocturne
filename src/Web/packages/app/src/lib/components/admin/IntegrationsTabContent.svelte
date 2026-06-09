@@ -133,7 +133,7 @@
             <Switch
               id="switch-{category}"
               checked={state.enabled}
-              onCheckedChange={(checked) => (state.enabled = checked)}
+              onCheckedChange={(checked: boolean) => (state.enabled = checked)}
             />
           </div>
         </CardHeader>

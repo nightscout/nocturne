@@ -82,18 +82,16 @@ try
             (string?)n["default"]))
         .ToArray();
 
-    var initScriptSource = Path.Combine(repoRoot, "docs", "postgres", "container-init", "00-init.sh");
     var caddyfileSource = Path.Combine(repoRoot, "src", "Aspire", "Nocturne.Aspire.Host", "caddy", "Caddyfile");
     var groups = ParseAspireEnv(Path.Combine(tempDir, ".env"), envMetadata);
     var envExample = GenerateEnvExample(groups, envMetadata);
 
-    // deploy/docker-compose/ — raw aspire output, bind-mount approach.
+    // deploy/docker-compose/ — self-contained aspire output. The init script is
+    // inlined into the compose as a config (see PortainerComposePublisher), so no
+    // separate init/ directory is shipped; the bundle is just compose + .env.
     var deployDockerComposeDir = Path.Combine(repoRoot, "deploy", "docker-compose");
     Directory.CreateDirectory(deployDockerComposeDir);
     File.Copy(composePath, Path.Combine(deployDockerComposeDir, "docker-compose.yaml"), overwrite: true);
-    var deployInitDir = Path.Combine(deployDockerComposeDir, "init");
-    Directory.CreateDirectory(deployInitDir);
-    File.Copy(initScriptSource, Path.Combine(deployInitDir, "00-init.sh"), overwrite: true);
     // Ship the Caddyfile next to the compose file so the bundled TLS proxy's
     // ./caddy/Caddyfile bind-mount resolves (the portainer bundle inlines it
     // instead — see PortainerComposePublisher).

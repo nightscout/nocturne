@@ -99,9 +99,11 @@ public class NightscoutPerTypeCursorTests
         handler.RequestUrls.Single(u => u.Contains("devicestatus.json"));
 
     [Fact]
-    public async Task Treatments_OpenEndedSync_UseOwnCursor_NotGlucoseCursor()
+    public async Task Treatments_OpenEndedSync_NoPriorTreatments_ImportsFullHistory_NotGlucoseCursor()
     {
-        // Glucose is fully caught up (latest entry ~now), but no treatments exist yet.
+        // Glucose is fully caught up (latest entry ~now), but no treatments exist yet. With no
+        // prior treatments the initial backfill must import the source's full history (no lower
+        // bound) and must NOT inherit the recent glucose cursor.
         var now = DateTime.UtcNow;
         var handler = new SequentialMockHandler();
         handler.Enqueue(JsonResponse(Array.Empty<Entry>()));      // auth check
@@ -121,10 +123,29 @@ public class NightscoutPerTypeCursorTests
         var result = await service.SyncDataAsync(request, config, CancellationToken.None);
 
         result.Success.Should().BeTrue();
-        var gte = ExtractGte(TreatmentsUrl(handler));
-        gte.Should().BeBefore(now.AddMonths(-3),
-            "with no treatments yet, treatments must backfill from their own initial window (~6 months), " +
-            "not from the recent glucose cursor");
+        Uri.UnescapeDataString(TreatmentsUrl(handler)).Should().NotContain("$gte",
+            "with no treatments yet, the initial backfill imports the full history (no lower bound), " +
+            "not the recent glucose cursor");
+    }
+
+    [Fact]
+    public async Task Glucose_InitialSync_NoPriorData_ImportsFullHistory_NoLowerBound()
+    {
+        // No glucose entries exist yet → the initial background sync imports the source's full
+        // history (no lower bound), not a capped window.
+        var handler = new SequentialMockHandler();
+
+        var config = Config();
+        var service = CreateService(handler, config, latestEntry: null);
+
+        // Background entry point (no explicit since): the framework derives From/To.
+        var result = await service.SyncDataAsync(config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        var entriesPage = handler.RequestUrls.Single(u =>
+            u.Contains("entries.json") && u.Contains($"count={MaxCount}"));
+        Uri.UnescapeDataString(entriesPage).Should().NotContain("$gte",
+            "with no prior glucose data the initial sync imports the full history (no lower bound)");
     }
 
     [Fact]

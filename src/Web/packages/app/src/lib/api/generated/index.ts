@@ -8,6 +8,7 @@ export { deleteAll, updateStatus } from './coachMarks.generated.remote';
 // './insulinCatalogs.generated.remote' - all exports collide, import directly
 export { getTenants, getTransitionStatus } from './platforms.generated.remote';
 export { validateUsername, ownerOptions, ownerComplete, ownerOidc } from './setups.generated.remote';
+export { getTimeline, recorrect } from './timezoneTimelines.generated.remote';
 // './basalInjections.generated.remote' - all exports collide, import directly
 // './bolusCalculations.generated.remote' - all exports collide, import directly
 // './bolus.generated.remote' - all exports collide, import directly
@@ -25,7 +26,7 @@ export * from './profiles.generated.remote';
 export * from './userPreferences.generated.remote';
 export { approve, deny } from './accessRequests.generated.remote';
 export * from './connectorAdmins.generated.remote';
-export { upsert } from './platformSettings.generated.remote';
+// './platformSettings.generated.remote' - all exports collide, import directly
 export { addMember, removeMember, listInvites, provision, getMemberCredentials, attachOidcIdentity, removePasskeyCredential, removeOidcIdentity } from './tenants.generated.remote';
 export * from './services.generated.remote';
 // './status.generated.remote' - all exports collide, import directly
@@ -44,10 +45,11 @@ export * from './chatIdentities.generated.remote';
 export * from './guestLinks.generated.remote';
 export * from './linkedPlatforms.generated.remote';
 export * from './memberInvites.generated.remote';
-export { createRequest, getMyRequest, approveRequest, denyRequest } from './membershipRequests.generated.remote';
+export { createRequest, getMyRequest, approveRequest, denyRequest, getMembershipRequestSettings, setMembershipRequestSettings } from './membershipRequests.generated.remote';
 export * from './myPermissions.generated.remote';
 export { getMyTenants, validateSlug } from './myTenants.generated.remote';
 export * from './roles.generated.remote';
+export * from './shareLinks.generated.remote';
 export * from './activities.generated.remote';
 export { getBodyWeights, getBodyWeight, updateBodyWeight, deleteBodyWeight } from './bodyWeights.generated.remote';
 export * from './heartRates.generated.remote';

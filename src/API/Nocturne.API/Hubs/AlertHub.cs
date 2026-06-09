@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Nocturne.Core.Contracts.Alerts;
 
@@ -8,6 +9,9 @@ namespace Nocturne.API.Hubs;
 /// (dispatch, resolved, acknowledged) and can acknowledge all active excursions.
 /// Mounted at /hubs/alerts — the legacy AlarmHub remains at /hubs/alarms for compat.
 /// </summary>
+// Connections authenticate in-band after negotiate and are reachable only via the internal
+// realtime bridge, so the HTTP fallback authorization policy must not gate the handshake.
+[AllowAnonymous]
 public class AlertHub : TenantAwareHub
 {
     /// <summary>

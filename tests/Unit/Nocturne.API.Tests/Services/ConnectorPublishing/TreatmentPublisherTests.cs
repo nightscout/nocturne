@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.ConnectorPublishing;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -46,12 +48,17 @@ public class TreatmentPublisherTests
             .Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
+        _publisher = CreatePublisher(Mock.Of<IAuditContext>());
+    }
+
+    private TreatmentPublisher CreatePublisher(IAuditContext auditContext)
+    {
         var dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var dbContext = new NocturneDbContext(dbOptions);
 
-        _publisher = new TreatmentPublisher(
+        return new TreatmentPublisher(
             dbContext,
             _mockTreatmentService.Object,
             _mockBolusRepository.Object,
@@ -61,6 +68,7 @@ public class TreatmentPublisherTests
             _mockTempBasalRepository.Object,
             _mockBasalRateResolver.Object,
             _mockTherapySettingsResolver.Object,
+            auditContext,
             NullLogger<TreatmentPublisher>.Instance
         );
     }
@@ -280,6 +288,58 @@ public class TreatmentPublisherTests
         _mockBasalRateResolver.Verify(
             r => r.BuildResolverAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishTempBasalsAsync_RunsSweepDeleteUnderSystemAttribution()
+    {
+        // The delete-then-reinsert sweep must write delete audit rows with AuthType IS NULL so the
+        // dedup discriminator treats them as system-initiated and lets future resyncs through. The
+        // delete — not just the insert — is what the discriminator reads, so it has to run inside
+        // the SystemAuditScope; trace fields must survive so the rows stay tied to the request.
+        var auditContext = new AuditContext
+        {
+            AuthType = "bearer",
+            SubjectId = Guid.NewGuid(),
+            CorrelationId = "trace-1",
+            Endpoint = "POST /sync",
+        };
+        var publisher = CreatePublisher(auditContext);
+
+        string? authTypeDuringDelete = "unset";
+        string? correlationDuringDelete = null;
+        _mockTempBasalRepository
+            .Setup(r => r.DeleteBySourceAndDateRangeAsync(
+                It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Callback(() =>
+            {
+                authTypeDuringDelete = auditContext.AuthType;
+                correlationDuringDelete = auditContext.CorrelationId;
+            })
+            .ReturnsAsync(0);
+
+        var records = new List<TempBasal>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                StartTimestamp = new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc),
+                Rate = 0.5,
+                Origin = TempBasalOrigin.Algorithm,
+                DataSource = "glooko-connector",
+            }
+        };
+
+        var result = await publisher.PublishTempBasalsAsync(records, "glooko-connector");
+
+        result.Should().BeTrue();
+        authTypeDuringDelete.Should().BeNull("the sweep delete must be system-attributed");
+        correlationDuringDelete.Should().Be("trace-1", "trace fields must survive the scope");
+        auditContext.AuthType.Should().Be("bearer", "actor fields must be restored after the scope");
+        _mockTempBasalRepository.Verify(
+            r => r.DeleteBySourceAndDateRangeAsync(
+                "glooko-connector", It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

@@ -2,11 +2,14 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.V4.Platform;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Multitenancy;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V4.Platform;
@@ -25,7 +28,9 @@ public class ServicesControllerResetCursorTests
             Mock.Of<IConnectorHealthService>(),
             syncService,
             Mock.Of<ILogger<ServicesController>>(),
-            Mock.Of<IConfiguration>());
+            Mock.Of<IConfiguration>(),
+            Mock.Of<ITenantAccessor>(),
+            Options.Create(new BaseDomainOptions()));
 
     [Fact]
     public async Task ResetConnectorCursor_SetsUpperBound_ToForceExplicitRangeRePull()

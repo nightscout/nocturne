@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ConnectorPublishing;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -28,6 +29,7 @@ public class DevicePublisherTests
         _publisher = new DevicePublisher(
             _mockDecomposer.Object,
             _mockDeviceEventRepository.Object,
+            Mock.Of<IAuditContext>(),
             _mockApsSnapshotRepository.Object,
             NullLogger<DevicePublisher>.Instance
         );

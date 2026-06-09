@@ -3,7 +3,6 @@ import {
   advance,
   reflect,
   computeAngleToCorner,
-  type Vec2,
   type Bounds,
 } from "./screensaver-math";
 

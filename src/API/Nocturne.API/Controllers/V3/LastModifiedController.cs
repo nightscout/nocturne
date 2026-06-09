@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Platform;
@@ -14,6 +15,7 @@ namespace Nocturne.API.Controllers.V3;
 [ApiController]
 [Tags("V3")]
 [Route("api/v3/[controller]")]
+[AllowAnonymous]
 public class LastModifiedController : ControllerBase
 {
     private readonly IStatusService _statusService;

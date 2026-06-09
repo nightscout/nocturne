@@ -665,7 +665,7 @@ public class DevAdminController : ControllerBase
             var deviceStatusCount = await _db.ApsSnapshots.LongCountAsync(ct);
             var profileCount = await _db.TherapySettings.CountAsync(ct);
             var memberCount = await _db.TenantMembers
-                .Where(m => m.TenantId == tenant.Id && m.RevokedAt == null)
+                .Where(m => m.TenantId == tenant.Id)
                 .CountAsync(ct);
 
             var connectors = await _db.ConnectorConfigurations

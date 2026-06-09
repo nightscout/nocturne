@@ -6,6 +6,7 @@
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { formatGlucoseValue } from "$lib/utils/formatting";
+  import type { GlucoseUnits } from "$lib/utils/formatting";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
 
   let {
@@ -35,7 +36,7 @@
     getWeekColumns: (cells: any[]) => any[];
     navigateToDayInReview: (dateStr: string) => void;
     glucoseColorScale: any;
-    units: string;
+    units: GlucoseUnits;
     unitLabel: string;
     formatUnits: (value: number | null) => string;
     getVisibleCounts: (counts: Record<string, number>) => [string, number][];

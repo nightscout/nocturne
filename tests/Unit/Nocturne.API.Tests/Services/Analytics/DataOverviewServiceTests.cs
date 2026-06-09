@@ -5,6 +5,7 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -19,6 +20,8 @@ public class DataOverviewServiceTests : IDisposable
 {
     private readonly NocturneDbContext _dbContext;
     private readonly DataOverviewService _service;
+    private readonly string _dbName = $"data_overview_{Guid.NewGuid()}";
+    private static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
     // Well-known timestamps (UTC)
     // 2023-06-15 12:00:00 UTC = 1686830400000
@@ -34,13 +37,26 @@ public class DataOverviewServiceTests : IDisposable
 
     public DataOverviewServiceTests()
     {
-        _dbContext = TestDbContextFactory.CreateInMemoryContext();
-        _dbContext.TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        // Seed via a long-lived context; the service leases its own contexts from the factory.
+        // Both share the same named InMemory store and tenant, so the service sees seeded data —
+        // mirroring production, where the service queries through ITenantDbContextFactory.
+        _dbContext = TestDbContextFactory.CreateInMemoryContext(_dbName);
+        _dbContext.TenantId = TenantId;
+
+        var mockFactory = new Mock<ITenantDbContextFactory>();
+        mockFactory.Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                var ctx = TestDbContextFactory.CreateInMemoryContext(_dbName);
+                ctx.TenantId = TenantId;
+                return ctx;
+            });
+
         var mockTherapySettingsResolver = new Mock<ITherapySettingsResolver>();
         mockTherapySettingsResolver.Setup(p => p.GetTimezoneAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
         var mockStatisticsService = new Mock<IStatisticsService>();
         _service = new DataOverviewService(
-            _dbContext,
+            mockFactory.Object,
             mockTherapySettingsResolver.Object,
             mockStatisticsService.Object,
             NullLogger<DataOverviewService>.Instance

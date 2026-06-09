@@ -54,6 +54,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "nocturne.instanceKeySecretName" . }}
                   key: {{ include "nocturne.instanceKeySecretKey" . }}
+            {{- include "nocturne.observability.web.env" . | nindent 12 }}
           # No documented HTTP health endpoint on the web container in v0; using TCP probe.
           livenessProbe:
             tcpSocket:

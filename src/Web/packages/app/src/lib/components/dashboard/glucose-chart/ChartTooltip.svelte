@@ -5,6 +5,7 @@
   import { BasalDeliveryOrigin } from "$lib/api";
   import { bg, bgLabel } from "$lib/utils/formatting";
   import { getGlucoseChartContext } from "./chart-context.svelte";
+  import type { GlucosePoint } from "./engine/chart-data-engine.svelte";
 
   interface Props {
     /**
@@ -18,7 +19,7 @@
   let { tooltipExtras }: Props = $props();
 
   const ctx = getGlucoseChartContext();
-  const chartCtx = getChartContext();
+  const chartCtx = getChartContext<GlucosePoint>();
 
   // Finders — bind the generic two-arg finders to their series data
   const findBasal = (time: Date) =>

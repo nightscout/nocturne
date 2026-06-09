@@ -49,3 +49,7 @@ export function getEffectiveHost(
   if (slug && host && !host.startsWith(`${slug}.`)) return `${slug}.${host}`;
   return host;
 }
+
+// Re-exported from the shared (non-server) module so the client 401 interceptor and these server
+// hooks share one definition of the share-host shape. See $lib/share-host.
+export { isShareHost } from "$lib/share-host";

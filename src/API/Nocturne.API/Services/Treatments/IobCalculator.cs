@@ -108,6 +108,27 @@ public class IobCalculator(
             ?? PEAK_MINUTES;
         var sens = sensitivity.GetSensitivityAsync(currentTime, null).GetAwaiter().GetResult();
 
+        return CalcBolusCore(bolus, dia, peak, sens, currentTime);
+    }
+
+    /// <inheritdoc />
+    public IobContribution CalcBolus(Bolus bolus, TherapySnapshot snapshot, long time)
+    {
+        if (bolus.Insulin <= 0)
+        {
+            return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
+        }
+
+        // Same precedence as the async path: per-bolus insulin context wins, else the snapshot.
+        var dia = bolus.InsulinContext?.Dia ?? snapshot.Dia;
+        var peak = bolus.InsulinContext?.Peak ?? snapshot.PeakMinutes;
+        var sens = snapshot.SensitivityAt(time);
+
+        return CalcBolusCore(bolus, dia, peak, sens, time);
+    }
+
+    private static IobContribution CalcBolusCore(Bolus bolus, double dia, double peak, double sens, long currentTime)
+    {
         // Exact legacy algorithm constants
         var scaleFactor = SCALE_FACTOR_BASE / dia;
 
@@ -155,7 +176,18 @@ public class IobCalculator(
     public IobResult FromBoluses(List<Bolus> boluses, long? time = null)
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        return FromBolusesCore(boluses, currentTime, bolus => CalcBolus(bolus, currentTime));
+    }
 
+    /// <inheritdoc />
+    public IobResult FromBoluses(List<Bolus> boluses, TherapySnapshot snapshot, long time)
+    {
+        return FromBolusesCore(boluses, time, bolus => CalcBolus(bolus, snapshot, time));
+    }
+
+    private static IobResult FromBolusesCore(
+        List<Bolus> boluses, long currentTime, Func<Bolus, IobContribution> calc)
+    {
         if (boluses?.Any() != true)
         {
             return new IobResult
@@ -172,7 +204,7 @@ public class IobCalculator(
 
         foreach (var bolus in boluses.Where(b => b.Mills <= currentTime && b.Insulin > 0))
         {
-            var contribution = CalcBolus(bolus, currentTime);
+            var contribution = calc(bolus);
 
             totalIob += contribution.IobContrib;
             totalActivity += contribution.ActivityContrib;
@@ -208,8 +240,28 @@ public class IobCalculator(
         var scheduledBasalRate = tempBasal.ScheduledRate
             ?? basalRate.GetBasalRateAsync(tempBasal.StartMills, null).GetAwaiter().GetResult();
 
+        return CalcTempBasalCore(tempBasal, dia, scheduledBasalRate, currentTime);
+    }
+
+    /// <inheritdoc />
+    public IobContribution CalcTempBasal(TempBasal tempBasal, TherapySnapshot snapshot, long time)
+    {
+        if (!tempBasal.EndMills.HasValue)
+        {
+            return new IobContribution { IobContrib = 0, ActivityContrib = 0 };
+        }
+
+        var dia = tempBasal.InsulinContext?.Dia ?? snapshot.Dia;
+        var scheduledBasalRate = tempBasal.ScheduledRate ?? snapshot.BasalRateAt(tempBasal.StartMills);
+
+        return CalcTempBasalCore(tempBasal, dia, scheduledBasalRate, time);
+    }
+
+    private static IobContribution CalcTempBasalCore(
+        TempBasal tempBasal, double dia, double scheduledBasalRate, long currentTime)
+    {
         var treatmentStart = tempBasal.StartMills;
-        var treatmentEnd = tempBasal.EndMills.Value;
+        var treatmentEnd = tempBasal.EndMills!.Value;
 
         if (currentTime <= treatmentStart)
         {
@@ -249,7 +301,18 @@ public class IobCalculator(
     public IobResult FromTempBasals(List<TempBasal> tempBasals, long? time = null)
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        return FromTempBasalsCore(tempBasals, currentTime, tb => CalcTempBasal(tb, currentTime));
+    }
 
+    /// <inheritdoc />
+    public IobResult FromTempBasals(List<TempBasal> tempBasals, TherapySnapshot snapshot, long time)
+    {
+        return FromTempBasalsCore(tempBasals, time, tb => CalcTempBasal(tb, snapshot, time));
+    }
+
+    private static IobResult FromTempBasalsCore(
+        List<TempBasal> tempBasals, long currentTime, Func<TempBasal, IobContribution> calc)
+    {
         if (tempBasals?.Any() != true)
         {
             return new IobResult
@@ -265,7 +328,7 @@ public class IobCalculator(
 
         foreach (var tempBasal in tempBasals.Where(tb => tb.StartMills <= currentTime))
         {
-            var contribution = CalcTempBasal(tempBasal, currentTime);
+            var contribution = calc(tempBasal);
             totalBasalIob += contribution.IobContrib;
             totalActivity += contribution.ActivityContrib;
         }

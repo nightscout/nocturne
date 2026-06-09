@@ -440,7 +440,8 @@
             <Checkbox
               id="hashApiSecret"
               checked={hashApiSecret}
-              onCheckedChange={(checked) => (hashApiSecret = checked === true)}
+              onCheckedChange={(checked: boolean) =>
+                (hashApiSecret = checked === true)}
             />
             <Label for="hashApiSecret" class="font-normal text-sm">
               Hash API secret (SHA1)
@@ -488,7 +489,7 @@
           <Checkbox
             id="ignoreNocturneFields"
             checked={ignoreNocturneFields}
-            onCheckedChange={(checked) =>
+            onCheckedChange={(checked: boolean) =>
               (ignoreNocturneFields = checked === true)}
           />
           <Label for="ignoreNocturneFields" class="font-normal">
@@ -502,7 +503,8 @@
           <Checkbox
             id="hideNullValues"
             checked={hideNullValues}
-            onCheckedChange={(checked) => (hideNullValues = checked === true)}
+            onCheckedChange={(checked: boolean) =>
+              (hideNullValues = checked === true)}
           />
           <Label for="hideNullValues" class="font-normal">
             Hide null values
@@ -512,7 +514,8 @@
           <Checkbox
             id="showSideBySide"
             checked={showSideBySide}
-            onCheckedChange={(checked) => (showSideBySide = checked === true)}
+            onCheckedChange={(checked: boolean) =>
+              (showSideBySide = checked === true)}
           />
           <Label for="showSideBySide" class="font-normal">
             Show side-by-side view

@@ -94,8 +94,7 @@ public sealed class PublicAccessCacheService
             .Include(tm => tm.Subject)
             .Where(tm => tm.TenantId == tenantId
                          && tm.Subject!.IsSystemSubject
-                         && tm.Subject.Name == "Public"
-                         && tm.RevokedAt == null)
+                         && tm.Subject.Name == "Public")
             .FirstOrDefaultAsync();
 
         if (membership == null)

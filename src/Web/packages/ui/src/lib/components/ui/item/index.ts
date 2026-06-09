@@ -24,5 +24,8 @@ export {
 	Group as ItemGroup,
 };
 
-export { itemVariants, type ItemVariant, type ItemSize } from "./item.svelte";
-export { itemMediaVariants, type ItemMediaVariant } from "./item-media.svelte";
+export { itemVariants, type ItemVariant, type ItemSize } from "./item-variants";
+export {
+	itemMediaVariants,
+	type ItemMediaVariant,
+} from "./item-media-variants";

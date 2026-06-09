@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Select from "$lib/components/ui/select";
   import { formatGlucoseValue } from "$lib/utils/formatting";
+  import type { GlucoseUnits } from "$lib/utils/formatting";
 
   type HeatmapMetric = "avgGlucose" | "tir" | "bolus" | "basal" | "tdd" | "carbs";
 
@@ -17,7 +18,7 @@
     getMetricMax,
   } = $props<{
     selectedMetric: HeatmapMetric;
-    units: string;
+    units: GlucoseUnits;
     METRIC_OPTIONS: { value: HeatmapMetric; label: string }[];
     HEATMAP_DOMAIN: number[];
     HEATMAP_COLORS: string[];

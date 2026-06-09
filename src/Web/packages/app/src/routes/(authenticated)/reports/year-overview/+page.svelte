@@ -433,11 +433,15 @@
   // Lifecycle
   // =========================================================================
 
-  onMount(async () => {
-    await loadMetadata();
-    if (sortedYears.length > 0) {
-      loadYearData(sortedYears[0]);
-    }
+  onMount(() => {
+    // `.run()` rejects when called during the render/effect flush, so defer the
+    // bootstrap to a microtask — onMount's synchronous body still counts as render.
+    queueMicrotask(async () => {
+      await loadMetadata();
+      if (sortedYears.length > 0) {
+        loadYearData(sortedYears[0]);
+      }
+    });
   });
 
   $effect(() => {

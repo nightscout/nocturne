@@ -61,6 +61,20 @@ public class ConnectorConfigurationLoader<TConfig>(
                 registration.ConnectorName);
         }
 
+        // A connector can have a config row that is enabled yet missing its required credentials —
+        // enabled via the UI toggle, saved before secrets were entered, or a required secret later
+        // removed. Required secrets have been merged above, so if the connector is still missing
+        // required configuration, syncing it would authenticate with empty credentials and fail
+        // every cycle. Treat incomplete configuration as not configured and skip it, exactly like a
+        // tenant that never configured the connector at all.
+        if (config.Enabled && !config.HasRequiredConfiguration())
+        {
+            logger.LogDebug(
+                "{ConnectorName} is enabled but missing required configuration; skipping sync",
+                registration.ConnectorName);
+            config.Enabled = false;
+        }
+
         return config;
     }
 

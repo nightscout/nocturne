@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Services.Audit;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -27,6 +29,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
     private readonly ICarbRatioScheduleRepository _carbRatioScheduleRepo;
     private readonly ISensitivityScheduleRepository _sensitivityScheduleRepo;
     private readonly ITargetRangeScheduleRepository _targetRangeScheduleRepo;
+    private readonly IAuditContext _auditContext;
     private readonly ILogger<ProfileDecomposer> _logger;
 
     /// <param name="dbContext">EF Core context used to persist <see cref="DecompositionBatchEntity"/> records.</param>
@@ -43,6 +46,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         ICarbRatioScheduleRepository carbRatioScheduleRepo,
         ISensitivityScheduleRepository sensitivityScheduleRepo,
         ITargetRangeScheduleRepository targetRangeScheduleRepo,
+        IAuditContext auditContext,
         ILogger<ProfileDecomposer> logger)
     {
         _dbContext = dbContext;
@@ -51,6 +55,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         _carbRatioScheduleRepo = carbRatioScheduleRepo;
         _sensitivityScheduleRepo = sensitivityScheduleRepo;
         _targetRangeScheduleRepo = targetRangeScheduleRepo;
+        _auditContext = auditContext;
         _logger = logger;
     }
 
@@ -139,34 +144,37 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
             }
         }
 
-        if (therapySettingsList.Count > 0)
+        using (SystemAuditScope.Push(_auditContext))
         {
-            var created = await _therapySettingsRepo.BulkCreateAsync(therapySettingsList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (therapySettingsList.Count > 0)
+            {
+                var created = await _therapySettingsRepo.BulkCreateAsync(therapySettingsList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (basalScheduleList.Count > 0)
-        {
-            var created = await _basalScheduleRepo.BulkCreateAsync(basalScheduleList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (basalScheduleList.Count > 0)
+            {
+                var created = await _basalScheduleRepo.BulkCreateAsync(basalScheduleList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (carbRatioScheduleList.Count > 0)
-        {
-            var created = await _carbRatioScheduleRepo.BulkCreateAsync(carbRatioScheduleList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (carbRatioScheduleList.Count > 0)
+            {
+                var created = await _carbRatioScheduleRepo.BulkCreateAsync(carbRatioScheduleList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (sensitivityScheduleList.Count > 0)
-        {
-            var created = await _sensitivityScheduleRepo.BulkCreateAsync(sensitivityScheduleList, ct);
-            result.CreatedRecords.AddRange(created);
-        }
+            if (sensitivityScheduleList.Count > 0)
+            {
+                var created = await _sensitivityScheduleRepo.BulkCreateAsync(sensitivityScheduleList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
 
-        if (targetRangeScheduleList.Count > 0)
-        {
-            var created = await _targetRangeScheduleRepo.BulkCreateAsync(targetRangeScheduleList, ct);
-            result.CreatedRecords.AddRange(created);
+            if (targetRangeScheduleList.Count > 0)
+            {
+                var created = await _targetRangeScheduleRepo.BulkCreateAsync(targetRangeScheduleList, ct);
+                result.CreatedRecords.AddRange(created);
+            }
         }
 
         _logger.LogDebug(

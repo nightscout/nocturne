@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Models.Responses;
+using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -23,15 +24,18 @@ public class AuditController : ControllerBase
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantAuditConfigCache _configCache;
+    private readonly IConfiguration _configuration;
 
     public AuditController(
         IDbContextFactory<NocturneDbContext> contextFactory,
         ITenantAccessor tenantAccessor,
-        ITenantAuditConfigCache configCache)
+        ITenantAuditConfigCache configCache,
+        IConfiguration configuration)
     {
         _contextFactory = contextFactory;
         _tenantAccessor = tenantAccessor;
         _configCache = configCache;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -205,6 +209,7 @@ public class AuditController : ControllerBase
     [HttpPut("config")]
     [RemoteCommand(Invalidates = ["GetAuditConfig"])]
     [ProducesResponseType(typeof(AuditConfigDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> UpdateAuditConfig(
         [FromBody] AuditConfigDto request,
@@ -216,6 +221,39 @@ public class AuditController : ControllerBase
         var tenantId = _tenantAccessor.TenantId;
 
         await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        // Pin the tenant on the pooled context so the global query filter and the RLS
+        // session variable both scope to this tenant — pooling does not reset TenantId.
+        db.TenantId = tenantId;
+
+        // Mutation audit must outlive any soft-deleted entity it describes, otherwise a
+        // user-delete's audit row ages out before the entity is hard-deleted and the dedup
+        // discriminator (which reads that row) lets a connector resync silently recreate the
+        // deleted record. Compare against the effective soft-delete window the cleanup
+        // service actually applies — including the instance default for tenants with no
+        // retention row (there is no "kept indefinitely" state) — so the floor holds even
+        // when the audit config is the only retention setting present. A null (infinite)
+        // audit retention always covers it. The symmetric check (rejecting a soft-delete
+        // bump above audit retention) belongs on the TenantDataRetentionConfig update
+        // endpoint when it exists.
+        var softDeleteRow = await db.TenantDataRetentionConfig
+            .Where(c => c.TenantId == tenantId)
+            .Select(c => new { c.SoftDeleteRetentionDays })
+            .FirstOrDefaultAsync(ct);
+
+        var effectiveSoftDeleteDays = SoftDeleteRetentionPolicy.ResolveDays(
+            softDeleteRow?.SoftDeleteRetentionDays, _configuration);
+
+        if (request.MutationAuditRetentionDays is int ma && ma < effectiveSoftDeleteDays)
+        {
+            return BadRequest(new
+            {
+                error = $"Mutation audit retention ({ma} days) must be >= the effective "
+                      + $"soft-delete retention ({effectiveSoftDeleteDays} days). Audit rows "
+                      + "must outlive the soft-deleted entities they describe, otherwise "
+                      + "user-delete attribution is lost and connector resyncs can silently "
+                      + "undo user deletes.",
+            });
+        }
 
         var entity = await db.TenantAuditConfig
             .FirstOrDefaultAsync(c => c.TenantId == tenantId, ct);

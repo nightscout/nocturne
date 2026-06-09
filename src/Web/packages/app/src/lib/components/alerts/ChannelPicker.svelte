@@ -103,7 +103,7 @@
       if (!have.has(ct)) {
         result.push({
           channelType: ct,
-          status: ChannelStatus.Healthy,
+          status: ChannelStatus.Available,
           requiresLink: false,
         });
       }
@@ -192,7 +192,8 @@
               </div>
               <Switch
                 checked={enabled}
-                onCheckedChange={(checked) => toggleChannel(ct, !!checked)}
+                onCheckedChange={(checked: boolean) =>
+                  toggleChannel(ct, !!checked)}
               />
             </div>
 
@@ -221,7 +222,8 @@
                   type={meta.destinationInput === "url" ? "url" : "text"}
                   placeholder={meta.destinationPlaceholder ?? ""}
                   value={getDestination(ct)}
-                  oninput={(e) => updateDestination(ct, e.currentTarget.value)}
+                  oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                    updateDestination(ct, e.currentTarget.value)}
                 />
               </div>
             {/if}

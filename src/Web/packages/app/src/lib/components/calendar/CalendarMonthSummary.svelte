@@ -1,5 +1,6 @@
 <script lang="ts">
   import { formatGlucoseValue } from "$lib/utils/formatting";
+  import type { GlucoseUnits } from "$lib/utils/formatting";
 
   let {
     monthSummary,
@@ -13,7 +14,7 @@
       avgDailyCarbs: number;
       tdd: number;
     };
-    units: string;
+    units: GlucoseUnits;
     unitLabel: string;
   }>();
 </script>
