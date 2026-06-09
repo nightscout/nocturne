@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Glooko.Configurations;
+using Nocturne.Core.Models.Timezones;
 
 namespace Nocturne.Connectors.Glooko.Mappers;
 
@@ -8,6 +9,7 @@ public class GlookoTimeMapper
 {
     private readonly GlookoConnectorConfiguration _config;
     private readonly ILogger _logger;
+    private TimezoneTimeline? _timeline;
 
     public GlookoTimeMapper(GlookoConnectorConfiguration config, ILogger logger)
     {
@@ -15,17 +17,21 @@ public class GlookoTimeMapper
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    /// <summary>
+    ///     Supplies the tenant's timezone timeline for this sync. When set, fake-UTC timestamps are
+    ///     converted per the zone in effect at each instant (honouring DST and travel/relocation).
+    ///     When unset, the legacy single <see cref="GlookoConnectorConfiguration.TimezoneOffset"/> applies.
+    /// </summary>
+    public void UseTimeline(TimezoneTimeline timeline) => _timeline = timeline;
+
     public DateTime GetCorrectedGlookoTime(DateTime rawDate)
     {
-        var offsetHours = _config.TimezoneOffset;
-        var corrected = rawDate.AddHours(-offsetHours);
-        _logger.LogDebug(
-            "GetCorrectedGlookoTime: Raw={Raw}, ConfigOffset={ConfigOffset}, Result={Result}",
-            rawDate,
-            _config.TimezoneOffset,
-            corrected
-        );
-        return corrected;
+        // Glooko stores fake UTC (local wall-clock stamped as UTC). The timeline interprets that
+        // wall-clock in the zone in effect at the time; without one, fall back to the static offset.
+        if (_timeline is { } timeline)
+            return timeline.ToUtc(rawDate);
+
+        return DateTime.SpecifyKind(rawDate.AddHours(-_config.TimezoneOffset), DateTimeKind.Utc);
     }
 
     /// <summary>

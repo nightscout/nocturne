@@ -13,6 +13,7 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.CoachMarks;
+using Nocturne.API.Services.Timezones;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
 using Nocturne.API.Services.ConnectorPublishing;
@@ -40,6 +41,7 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.CoachMarks;
+using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Analytics;
@@ -525,6 +527,9 @@ public static class ServiceRegistrationExtensions
 
         // Coach marks
         services.AddScoped<ICoachMarkService, CoachMarkService>();
+
+        // Timezone timeline (fake-UTC connector conversion + travel/relocation)
+        services.AddScoped<ITimezoneTimelineService, TimezoneTimelineService>();
 
         // UI and display
         services.AddScoped<IUISettingsService, UISettingsService>();

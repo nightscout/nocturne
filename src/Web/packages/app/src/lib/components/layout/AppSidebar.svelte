@@ -28,6 +28,7 @@
     BellOff,
     HeartHandshake,
     Plug,
+    Globe,
     Calendar,
     CheckCircle,
     Terminal,
@@ -302,6 +303,7 @@
           icon: Timer,
         },
         { title: "Connectors & Apps", href: "/settings/connectors", icon: Plug },
+        { title: "Timezone History", href: "/settings/timezone", icon: Globe },
         { title: "Sharing & Privacy", href: "/settings/members", icon: Users },
         ...(canViewAudit
           ? [{ title: "Audit Log", href: "/settings/audit", icon: ScrollText }]

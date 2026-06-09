@@ -308,6 +308,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<MeterGlucoseEntity> MeterGlucose { get; set; }
 
     /// <summary>
+    /// Gets or sets the timezone timeline table — the tenant's ordered record of which IANA zone the
+    /// person was in over time, used to convert fake-UTC connector data (e.g. Glooko) to true UTC.
+    /// </summary>
+    public DbSet<TimezoneTimelineEntity> TimezoneTimeline { get; set; }
+
+    /// <summary>
     /// Gets or sets the Calibrations table for CGM sensor calibration records (v4 granular model)
     /// </summary>
     public DbSet<CalibrationEntity> Calibrations { get; set; }
@@ -1422,6 +1428,21 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_boluses_tenant_source_sync_id")
             .IsUnique()
             .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
+        // SensorGlucose gains a SyncIdentifier upsert key (mirrors boluses/carbs) so timezone
+        // re-correction can move a reading's timestamp in place instead of duplicating it.
+        modelBuilder.Entity<SensorGlucoseEntity>()
+            .HasIndex(e => new { e.TenantId, e.DataSource, e.SyncIdentifier })
+            .HasDatabaseName("ix_sensor_glucose_tenant_source_sync_id")
+            .IsUnique()
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
+        // TimezoneTimeline: one zone-change boundary per tenant per instant (the ordered list is
+        // inherently non-overlapping, so a duplicate effective_from is an authoring error).
+        modelBuilder.Entity<TimezoneTimelineEntity>()
+            .HasIndex(e => new { e.TenantId, e.EffectiveFrom })
+            .HasDatabaseName("ix_timezone_timeline_tenant_effective_from")
+            .IsUnique();
 
         // BasalInjections indexes
         modelBuilder

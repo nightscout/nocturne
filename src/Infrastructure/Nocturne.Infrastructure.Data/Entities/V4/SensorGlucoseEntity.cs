@@ -77,6 +77,15 @@ public class SensorGlucoseEntity : ITenantScoped, IAuditable, ISoftDeletable
     public string? LegacyId { get; set; }
 
     /// <summary>
+    /// Stable per-source identifier for synchronization. Unlike <see cref="LegacyId"/> (insert-only),
+    /// a record matched by (DataSource, SyncIdentifier) is updated in place on re-import — required so
+    /// timezone re-correction can move a reading's timestamp without duplicating it.
+    /// </summary>
+    [Column("sync_identifier")]
+    [MaxLength(256)]
+    public string? SyncIdentifier { get; set; }
+
+    /// <summary>
     /// System tracking: when record was inserted
     /// </summary>
     [AuditIgnored]

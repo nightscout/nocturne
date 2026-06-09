@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
@@ -322,6 +323,60 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
                 return [];
             }
 
+            // Intra-batch SyncIdentifier dedup: keep last occurrence per (DataSource, SyncIdentifier).
+            // Records without both keys keep a unique grouping key so they're not collapsed.
+            entities = entities
+                .GroupBy(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier)
+                    ? $"sync|{e.DataSource}|{e.SyncIdentifier}"
+                    : $"id|{e.Id}")
+                .Select(g => g.Last())
+                .ToList();
+
+            // DB-level SyncIdentifier upsert: rows matched by (DataSource, SyncIdentifier) are updated
+            // in place — so timezone re-correction moves a reading's timestamp instead of duplicating
+            // it. Everything else falls through to the LegacyId/insert path below. Mirrors BolusRepository.
+            var updatedEntities = new List<SensorGlucoseEntity>();
+            var syncKeyed = entities
+                .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
+                .ToList();
+
+            if (syncKeyed.Count > 0)
+            {
+                var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
+                var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
+
+                var existingRows = await ctx.SensorGlucose.IgnoreQueryFilters()
+                    .Where(e => e.TenantId == ctx.TenantId)
+                    .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
+                    .ToListAsync(ct);
+
+                var existingByKey = existingRows
+                    .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                var toInsert = new List<SensorGlucoseEntity>();
+                foreach (var entity in entities)
+                {
+                    var hasKey = !string.IsNullOrEmpty(entity.DataSource)
+                        && !string.IsNullOrEmpty(entity.SyncIdentifier);
+                    if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
+                    {
+                        var domain = SensorGlucoseMapper.ToDomainModel(entity);
+                        SensorGlucoseMapper.UpdateEntity(existing, domain);
+                        updatedEntities.Add(existing);
+                    }
+                    else
+                    {
+                        toInsert.Add(entity);
+                    }
+                }
+
+                if (updatedEntities.Count > 0)
+                    await ctx.SaveChangesAsync(ct);
+
+                entities = toInsert;
+            }
+
             // Batch-level dedup: keep first occurrence per LegacyId
             entities = entities
                 .GroupBy(e => e.LegacyId ?? e.Id.ToString())
@@ -355,7 +410,7 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
                     .ToList();
             }
 
-            if (entities.Count == 0)
+            if (entities.Count == 0 && updatedEntities.Count == 0)
             {
                 await tx.CommitAsync(ct);
                 return [];
@@ -371,10 +426,12 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
 
             await tx.CommitAsync(ct);
 
-            // Insert-time deduplication: link saved records to canonical groups
+            // Insert-time deduplication: link saved records to canonical groups. Include the in-place
+            // updates (re-corrected timestamps) so their canonical grouping is re-driven on the new mills.
+            var saved = entities.Concat(updatedEntities).ToList();
             try
             {
-                var dedupInputs = entities.Select(e => new DeduplicationInput(
+                var dedupInputs = saved.Select(e => new DeduplicationInput(
                     RecordId: e.Id,
                     Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                     DataSource: e.DataSource ?? "unknown",
@@ -385,10 +442,10 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", entities.Count);
+                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", saved.Count);
             }
 
-            return entities.Select(SensorGlucoseMapper.ToDomainModel);
+            return saved.Select(SensorGlucoseMapper.ToDomainModel);
         });
     }
 

@@ -11,6 +11,7 @@
     ShieldCheck,
     Timer,
     Plug,
+    Globe,
     Users,
     ScrollText,
     HeartHandshake,
@@ -82,6 +83,12 @@
         description: "Connect data sources and authorized devices.",
         href: "/settings/connectors",
         icon: Plug,
+      },
+      {
+        title: "Timezone History",
+        description: "Where you've lived and travelled, for correct timestamps.",
+        href: "/settings/timezone",
+        icon: Globe,
       },
       {
         title: "Sharing & Privacy",
