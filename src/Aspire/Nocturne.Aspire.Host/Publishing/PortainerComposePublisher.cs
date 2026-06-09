@@ -1,6 +1,7 @@
 #pragma warning disable ASPIREPIPELINES001
 #pragma warning disable ASPIREPIPELINES004
 
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -209,16 +210,10 @@ public static class PortainerComposePublisherExtensions
         var services = (YamlMappingNode)root["services"];
 
         // Locate the caddy service — return unchanged if not present (Caddy disabled).
-        YamlMappingNode? caddyService = null;
-        foreach (var entry in services)
-        {
-            if (((YamlScalarNode)entry.Key).Value?.Contains(
-                    "caddy", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                caddyService = (YamlMappingNode)entry.Value;
-                break;
-            }
-        }
+        var caddyEntry = services.FirstOrDefault(entry =>
+            entry.Key is YamlScalarNode key
+            && key.Value?.Contains("caddy", StringComparison.OrdinalIgnoreCase) == true);
+        YamlMappingNode? caddyService = caddyEntry.Value as YamlMappingNode;
 
         if (caddyService is null)
             return composeYaml;
