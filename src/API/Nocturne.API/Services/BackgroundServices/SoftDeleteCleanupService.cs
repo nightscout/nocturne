@@ -15,10 +15,6 @@ public class SoftDeleteCleanupService(
     private static readonly TimeSpan InitialDelay = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
     private const int BatchSize = 10_000;
-    private const int MinRetentionDays = 7;
-
-    private int DefaultRetentionDays =>
-        configuration.GetValue("DataRetention:SoftDeleteRetentionDays", 30);
 
     /// <summary>
     /// All v4 tables with a deleted_at column.
@@ -78,8 +74,8 @@ public class SoftDeleteCleanupService(
         {
             try
             {
-                var retentionDays = configMap.GetValueOrDefault(tenantId) ?? DefaultRetentionDays;
-                retentionDays = Math.Max(retentionDays, MinRetentionDays); // Enforce minimum
+                var retentionDays = SoftDeleteRetentionPolicy.ResolveDays(
+                    configMap.GetValueOrDefault(tenantId), configuration);
                 var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
 
                 var totalDeleted = 0;

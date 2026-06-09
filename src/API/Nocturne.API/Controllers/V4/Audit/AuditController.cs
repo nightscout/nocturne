@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Models.Responses;
+using Nocturne.API.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -23,15 +24,18 @@ public class AuditController : ControllerBase
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ITenantAuditConfigCache _configCache;
+    private readonly IConfiguration _configuration;
 
     public AuditController(
         IDbContextFactory<NocturneDbContext> contextFactory,
         ITenantAccessor tenantAccessor,
-        ITenantAuditConfigCache configCache)
+        ITenantAuditConfigCache configCache,
+        IConfiguration configuration)
     {
         _contextFactory = contextFactory;
         _tenantAccessor = tenantAccessor;
         _configCache = configCache;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -221,43 +225,34 @@ public class AuditController : ControllerBase
         // session variable both scope to this tenant — pooling does not reset TenantId.
         db.TenantId = tenantId;
 
-        // Mutation audit must outlive any soft-deleted entity it describes, otherwise
-        // user-delete attribution ages out before the entity itself and connector
-        // resyncs can silently undo user deletes. SoftDelete = null means "kept
-        // indefinitely", so a finite audit retention can never cover it.
-        // The symmetric check (rejecting a soft-delete bump above audit retention)
-        // belongs on the TenantDataRetentionConfig update endpoint when it exists.
+        // Mutation audit must outlive any soft-deleted entity it describes, otherwise a
+        // user-delete's audit row ages out before the entity is hard-deleted and the dedup
+        // discriminator (which reads that row) lets a connector resync silently recreate the
+        // deleted record. Compare against the effective soft-delete window the cleanup
+        // service actually applies — including the instance default for tenants with no
+        // retention row (there is no "kept indefinitely" state) — so the floor holds even
+        // when the audit config is the only retention setting present. A null (infinite)
+        // audit retention always covers it. The symmetric check (rejecting a soft-delete
+        // bump above audit retention) belongs on the TenantDataRetentionConfig update
+        // endpoint when it exists.
         var softDeleteRow = await db.TenantDataRetentionConfig
             .Where(c => c.TenantId == tenantId)
             .Select(c => new { c.SoftDeleteRetentionDays })
             .FirstOrDefaultAsync(ct);
 
-        if (softDeleteRow is not null)
-        {
-            var softDeleteDays = softDeleteRow.SoftDeleteRetentionDays;
+        var effectiveSoftDeleteDays = SoftDeleteRetentionPolicy.ResolveDays(
+            softDeleteRow?.SoftDeleteRetentionDays, _configuration);
 
-            if (softDeleteDays is null && request.MutationAuditRetentionDays is not null)
+        if (request.MutationAuditRetentionDays is int ma && ma < effectiveSoftDeleteDays)
+        {
+            return BadRequest(new
             {
-                return BadRequest(new
-                {
-                    error = $"Mutation audit retention ({request.MutationAuditRetentionDays} days) "
-                          + "must be null (no expiry) when soft-delete retention is null "
-                          + "(entities kept indefinitely). Finite audit retention with infinite "
-                          + "soft-delete retention loses user-delete attribution.",
-                });
-            }
-            if (softDeleteDays is int sd
-                && request.MutationAuditRetentionDays is int ma
-                && ma < sd)
-            {
-                return BadRequest(new
-                {
-                    error = $"Mutation audit retention ({ma} days) must be >= soft-delete "
-                          + $"retention ({sd} days). Audit rows must outlive the soft-deleted "
-                          + "entities they describe, otherwise user-delete attribution is lost "
-                          + "and connector resyncs can silently undo user deletes.",
-                });
-            }
+                error = $"Mutation audit retention ({ma} days) must be >= the effective "
+                      + $"soft-delete retention ({effectiveSoftDeleteDays} days). Audit rows "
+                      + "must outlive the soft-deleted entities they describe, otherwise "
+                      + "user-delete attribution is lost and connector resyncs can silently "
+                      + "undo user deletes.",
+            });
         }
 
         var entity = await db.TenantAuditConfig
