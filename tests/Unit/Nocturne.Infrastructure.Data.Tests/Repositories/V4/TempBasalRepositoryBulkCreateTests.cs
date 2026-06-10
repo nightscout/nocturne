@@ -50,25 +50,13 @@ public class TempBasalRepositoryBulkCreateTests : IDisposable
             LegacyId = legacyId,
         };
 
-    private void SoftDelete(Guid id)
+    // deletedByUser mirrors the flag the audit interceptor / bulk-delete helpers set at
+    // delete time: a user-initiated delete blocks resync re-creation, a system sweep does not.
+    private void SoftDelete(Guid id, bool deletedByUser = false)
     {
         var entity = _context.TempBasals.IgnoreQueryFilters().Single(e => e.Id == id);
         entity.DeletedAt = DateTime.UtcNow;
-        _context.SaveChanges();
-    }
-
-    private void SeedDeleteAudit(Guid entityId, string? authType)
-    {
-        _context.MutationAuditLog.Add(new MutationAuditLogEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = TenantA,
-            EntityType = "TempBasal",
-            EntityId = entityId,
-            Action = "delete",
-            AuthType = authType,
-            CreatedAt = DateTime.UtcNow,
-        });
+        _context.Entry(entity).Property("DeletedByUser").CurrentValue = deletedByUser;
         _context.SaveChanges();
     }
 
@@ -87,8 +75,7 @@ public class TempBasalRepositoryBulkCreateTests : IDisposable
     public async Task BulkCreateAsync_SystemSoftDeleted_ReImports()
     {
         var existing = await _repository.CreateAsync(CreateRecord("legacy-1"));
-        SoftDelete(existing.Id);
-        SeedDeleteAudit(existing.Id, authType: null);
+        SoftDelete(existing.Id, deletedByUser: false);
 
         var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-1")])).ToList();
 
@@ -101,8 +88,7 @@ public class TempBasalRepositoryBulkCreateTests : IDisposable
     public async Task BulkCreateAsync_UserSoftDeleted_DoesNotReImport()
     {
         var existing = await _repository.CreateAsync(CreateRecord("legacy-1"));
-        SoftDelete(existing.Id);
-        SeedDeleteAudit(existing.Id, authType: "OAuthAccessToken");
+        SoftDelete(existing.Id, deletedByUser: true);
 
         var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-1")])).ToList();
 

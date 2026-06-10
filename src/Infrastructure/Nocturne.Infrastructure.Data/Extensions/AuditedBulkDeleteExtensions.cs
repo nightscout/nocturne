@@ -173,9 +173,14 @@ public static class AuditedBulkDeleteExtensions
             context.Set<MutationAuditLogEntity>().AddRange(auditEntries);
             await context.SaveChangesAsync(ct);
 
-            // Execute bulk soft delete
+            // Execute bulk soft delete, carrying the dedup attribution flag in the same
+            // update: a user-initiated delete blocks resync re-creation, a system sweep
+            // (no auth context) leaves the row re-creatable.
+            var isUserDelete = auditContext?.AuthType != null;
             var deletedCount = await query.ExecuteUpdateAsync(
-                s => s.SetProperty(e => e.DeletedAt, now), ct);
+                s => s
+                    .SetProperty(e => e.DeletedAt, now)
+                    .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete), ct);
 
             await transaction.CommitAsync(ct);
             return deletedCount;

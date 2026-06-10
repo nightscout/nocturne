@@ -67,6 +67,18 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
             if (action == "update" && changesJson is null)
                 continue;
 
+            // Maintain the dedup flag carried by soft-deletable rows: a user-initiated
+            // soft-delete blocks connector resync from re-creating the row; a system
+            // sweep or a restore does not. Only meaningful for soft-delete transitions
+            // (Modified state) — a hard delete (Deleted state) removes the row entirely.
+            if (entry.State == EntityState.Modified && entry.Entity is ISoftDeletable)
+            {
+                if (action == "delete")
+                    entry.Property("DeletedByUser").CurrentValue = auditContext?.AuthType != null;
+                else if (action == "restore")
+                    entry.Property("DeletedByUser").CurrentValue = false;
+            }
+
             var audit = new MutationAuditLogEntity
             {
                 Id = Guid.CreateVersion7(),

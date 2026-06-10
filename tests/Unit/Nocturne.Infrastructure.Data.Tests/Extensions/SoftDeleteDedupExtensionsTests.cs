@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -21,7 +20,10 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
 
     public void Dispose() { _ctx.Dispose(); GC.SuppressFinalize(this); }
 
-    private TempBasalEntity SeedTempBasal(string legacyId, bool softDeleted)
+    // Blocking is decided from the deleted_by_user flag carried on the row (the audit
+    // interceptor / bulk-delete helpers set it at delete time). deletedByUser only
+    // applies to soft-deleted rows.
+    private TempBasalEntity SeedTempBasal(string legacyId, bool softDeleted, bool deletedByUser = false)
     {
         var entity = new TempBasalEntity
         {
@@ -33,23 +35,9 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
             DeletedAt = softDeleted ? DateTime.UtcNow.AddHours(-1) : null,
         };
         _ctx.TempBasals.Add(entity);
+        _ctx.Entry(entity).Property("DeletedByUser").CurrentValue = deletedByUser;
         _ctx.SaveChanges();
         return entity;
-    }
-
-    private void SeedDeleteAudit(Guid entityId, string? authType, DateTime? createdAt = null)
-    {
-        _ctx.MutationAuditLog.Add(new MutationAuditLogEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = TenantA,
-            EntityType = "TempBasal",
-            EntityId = entityId,
-            Action = "delete",
-            AuthType = authType,
-            CreatedAt = createdAt ?? DateTime.UtcNow,
-        });
-        _ctx.SaveChanges();
     }
 
     [Fact]
@@ -61,56 +49,17 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
     }
 
     [Fact]
-    public async Task SoftDeleted_NoAuditRow_DoesNotBlock()
+    public async Task SoftDeleted_SystemDelete_DoesNotBlock()
     {
-        SeedTempBasal("legacy-1", softDeleted: true);
+        SeedTempBasal("legacy-1", softDeleted: true, deletedByUser: false);
         var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-1" });
         blocked.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task SoftDeleted_SystemDelete_NullAuthType_DoesNotBlock()
+    public async Task SoftDeleted_UserDelete_Blocks()
     {
-        var entity = SeedTempBasal("legacy-1", softDeleted: true);
-        SeedDeleteAudit(entity.Id, authType: null);
-        var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-1" });
-        blocked.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task SoftDeleted_UserDelete_Bearer_Blocks()
-    {
-        var entity = SeedTempBasal("legacy-1", softDeleted: true);
-        SeedDeleteAudit(entity.Id, authType: "OAuthAccessToken");
-        var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-1" });
-        blocked.Should().Contain("legacy-1");
-    }
-
-    [Fact]
-    public async Task SoftDeleted_GuestDelete_Blocks()
-    {
-        var entity = SeedTempBasal("legacy-1", softDeleted: true);
-        SeedDeleteAudit(entity.Id, authType: "Guest");
-        var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-1" });
-        blocked.Should().Contain("legacy-1");
-    }
-
-    [Fact]
-    public async Task SoftDeleted_UserThenSystemLatestWins_DoesNotBlock()
-    {
-        var entity = SeedTempBasal("legacy-1", softDeleted: true);
-        SeedDeleteAudit(entity.Id, authType: "Bearer", createdAt: DateTime.UtcNow.AddDays(-2));
-        SeedDeleteAudit(entity.Id, authType: null,     createdAt: DateTime.UtcNow.AddDays(-1));
-        var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-1" });
-        blocked.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task SoftDeleted_SystemThenUserLatestWins_Blocks()
-    {
-        var entity = SeedTempBasal("legacy-1", softDeleted: true);
-        SeedDeleteAudit(entity.Id, authType: null,     createdAt: DateTime.UtcNow.AddDays(-2));
-        SeedDeleteAudit(entity.Id, authType: "Bearer", createdAt: DateTime.UtcNow.AddDays(-1));
+        SeedTempBasal("legacy-1", softDeleted: true, deletedByUser: true);
         var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-1" });
         blocked.Should().Contain("legacy-1");
     }
@@ -123,13 +72,18 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
     }
 
     [Fact]
+    public async Task UnknownLegacyId_DoesNotBlock()
+    {
+        var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-unknown" });
+        blocked.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task MixedBatch_OnlyBlocksBlockingOnes()
     {
         SeedTempBasal("legacy-active", softDeleted: false);
-        var sysSoft = SeedTempBasal("legacy-system", softDeleted: true);
-        SeedDeleteAudit(sysSoft.Id, authType: null);
-        var userSoft = SeedTempBasal("legacy-user", softDeleted: true);
-        SeedDeleteAudit(userSoft.Id, authType: "Bearer");
+        SeedTempBasal("legacy-system", softDeleted: true, deletedByUser: false);
+        SeedTempBasal("legacy-user", softDeleted: true, deletedByUser: true);
 
         var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(
             new HashSet<string> { "legacy-active", "legacy-system", "legacy-user", "legacy-unknown" });
@@ -137,7 +91,7 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
         blocked.Should().BeEquivalentTo(new[] { "legacy-active", "legacy-user" });
     }
 
-    private DeviceStatusExtrasEntity SeedDeviceStatusExtras(Guid correlationId, bool softDeleted)
+    private DeviceStatusExtrasEntity SeedDeviceStatusExtras(Guid correlationId, bool softDeleted, bool deletedByUser = false)
     {
         var entity = new DeviceStatusExtrasEntity
         {
@@ -149,23 +103,9 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
             DeletedAt = softDeleted ? DateTime.UtcNow.AddHours(-1) : null,
         };
         _ctx.DeviceStatusExtras.Add(entity);
+        _ctx.Entry(entity).Property("DeletedByUser").CurrentValue = deletedByUser;
         _ctx.SaveChanges();
         return entity;
-    }
-
-    private void SeedDeviceStatusExtrasDeleteAudit(Guid entityId, string? authType, DateTime? createdAt = null)
-    {
-        _ctx.MutationAuditLog.Add(new MutationAuditLogEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = TenantA,
-            EntityType = "DeviceStatusExtras",
-            EntityId = entityId,
-            Action = "delete",
-            AuthType = authType,
-            CreatedAt = createdAt ?? DateTime.UtcNow,
-        });
-        _ctx.SaveChanges();
     }
 
     [Fact]
@@ -183,8 +123,7 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
     public async Task CorrelationId_SystemSoftDeleted_DoesNotBlock()
     {
         var corrId = Guid.NewGuid();
-        var entity = SeedDeviceStatusExtras(corrId, softDeleted: true);
-        SeedDeviceStatusExtrasDeleteAudit(entity.Id, authType: null);
+        SeedDeviceStatusExtras(corrId, softDeleted: true, deletedByUser: false);
 
         var blocked = await _ctx.GetBlockingCorrelationIdsAsync(new HashSet<Guid> { corrId });
 
@@ -195,8 +134,7 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
     public async Task CorrelationId_UserSoftDeleted_Blocks()
     {
         var corrId = Guid.NewGuid();
-        var entity = SeedDeviceStatusExtras(corrId, softDeleted: true);
-        SeedDeviceStatusExtrasDeleteAudit(entity.Id, authType: "Bearer");
+        SeedDeviceStatusExtras(corrId, softDeleted: true, deletedByUser: true);
 
         var blocked = await _ctx.GetBlockingCorrelationIdsAsync(new HashSet<Guid> { corrId });
 
