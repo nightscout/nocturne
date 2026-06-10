@@ -24,6 +24,8 @@ public sealed class ScalarExtensionsDocumentTransformer : IOpenApiDocumentTransf
     private static readonly Dictionary<string, string[]> NightscoutTagGroups = new()
     {
         ["Nightscout Legacy API"] = ["V1", "V2", "V3"],
+        ["Data Model"] =
+            ["ns-model-entries", "ns-model-treatments", "ns-model-devicestatus", "ns-model-profile"],
     };
 
     public Task TransformAsync(

@@ -6,18 +6,27 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace Nocturne.API.Configuration;
 
 /// <summary>
-/// Builds the OpenAPI info.description from the diagram manifest, inlining
-/// each diagram's mermaid source as a fenced code block. A lazy-loading
-/// renderer registered via Scalar's <c>AddHeadContent</c> upgrades the
-/// blocks into rendered diagrams when they scroll into view.
+/// Builds the OpenAPI info.description (the Scalar "Introduction" page). For the
+/// Nocturne document this inlines the whole architecture manifest, each diagram's
+/// mermaid source rendered as a fenced code block. The Nightscout document instead
+/// gets a short intro that points readers at the per-collection Data Model pages, so
+/// its introduction is not a single giant architecture dump. A lazy-loading renderer
+/// registered via Scalar's <c>AddHeadContent</c> upgrades the blocks into rendered
+/// diagrams when they scroll into view.
 /// </summary>
 public sealed class DiagramDescriptionDocumentTransformer : IOpenApiDocumentTransformer
 {
-    private readonly string _description;
+    private const string NightscoutIntro = """
+        The legacy Nightscout REST API (v1–v3), preserved for **1:1 compatibility** with the original JavaScript implementation.
+
+        Every legacy write decomposes into Nocturne's granular v4 domain models, and every read projects back from v4 into the legacy shape — there are no standalone legacy tables. See the **Data Model** section for how each legacy collection (entries, treatments, devicestatus, profiles) maps to v4.
+        """;
+
+    private readonly string _nocturneDescription;
 
     public DiagramDescriptionDocumentTransformer(IWebHostEnvironment env)
     {
-        _description = BuildDescription(env);
+        _nocturneDescription = BuildDescription(env);
     }
 
     public Task TransformAsync(
@@ -25,7 +34,9 @@ public sealed class DiagramDescriptionDocumentTransformer : IOpenApiDocumentTran
         OpenApiDocumentTransformerContext context,
         CancellationToken cancellationToken)
     {
-        document.Info.Description = _description;
+        document.Info.Description = context.DocumentName == "nightscout"
+            ? NightscoutIntro
+            : _nocturneDescription;
         return Task.CompletedTask;
     }
 

@@ -27,13 +27,25 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
         ["V1"] = "Nightscout V1",
         ["V2"] = "Nightscout V2",
         ["V3"] = "Nightscout V3",
+        ["ns-model-entries"] = "Entries",
+        ["ns-model-treatments"] = "Treatments",
+        ["ns-model-devicestatus"] = "Device Status",
+        ["ns-model-profile"] = "Profile",
     };
 
     /// <summary>
-    /// Conceptual guide tags that have no operations of their own but still render as
-    /// a standalone sidebar page from their description. Added to the Nocturne document only.
+    /// Conceptual guide tags that have no operations of their own but still render as a
+    /// standalone sidebar page from their description (and any diagrams mapped to them),
+    /// keyed by the OpenAPI document they belong to. The Nocturne document carries the
+    /// <c>Syncing</c> guide; the Nightscout document carries the legacy-to-v4 model-mapping
+    /// pages, one per legacy collection.
     /// </summary>
-    private static readonly string[] StandaloneDocTags = ["Syncing"];
+    private static readonly Dictionary<string, string[]> StandaloneDocTagsByDocument = new()
+    {
+        ["nocturne"] = ["Syncing"],
+        ["nightscout"] =
+            ["ns-model-entries", "ns-model-treatments", "ns-model-devicestatus", "ns-model-profile"],
+    };
 
     private static readonly Dictionary<string, string> Descriptions = new()
     {
@@ -313,6 +325,40 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
 
             > **Note:** V3 uses `identifier` (a string field) as the primary key for records, not the MongoDB `_id`. When migrating from V1, ensure your client uses the correct identifier field.
             """,
+
+        // ── Nightscout document → V4 model mapping (Data Model section) ──────
+
+        ["ns-model-entries"] = """
+            How legacy **entries** map to Nocturne's v4 glucose model.
+
+            A Nightscout entry is a single polymorphic document discriminated by `type` (`sgv`, `mbg`, `cal`). Nocturne does not store entries as one table — on write each entry is routed by type into a dedicated v4 glucose table, and reads project those tables back into the legacy entry shape.
+
+            | Legacy entry `type` | Nocturne v4 model |
+            | --- | --- |
+            | `sgv` (sensor glucose) | **SensorGlucose** |
+            | `mbg` (meter blood glucose) | **MeterGlucose** / **BGCheck** |
+            | `cal` (calibration) | **Calibration** |
+
+            Splitting by source preserves each reading's true units, fidelity, provenance, and device linkage rather than flattening everything into one numeric blob.
+            """,
+
+        ["ns-model-treatments"] = """
+            How legacy **treatments** map to Nocturne's v4 treatment model.
+
+            A Nightscout treatment is a single polymorphic blob whose `eventType` determines which fields are meaningful. On write, Nocturne routes each treatment by `eventType` into focused v4 domain models (boluses, carb intakes, temp basals, BG checks, notes, site/sensor changes, …); sibling rows that originated from one treatment stay linked by a shared `CorrelationId`. Reads recombine those rows back into the legacy treatment shape.
+            """,
+
+        ["ns-model-devicestatus"] = """
+            How legacy **devicestatus** maps to Nocturne's v4 device model.
+
+            A Nightscout devicestatus document bundles several independent status objects (`openaps`/`loop`, `pump`, `uploader`) into one blob. Nocturne decomposes it into separate v4 snapshots — **ApsSnapshot**, **PumpSnapshot**, and **UploaderSnapshot** — sharing a `CorrelationId` so the original document can be reassembled on read. Keeping them separate lets each evolve and be queried on its own.
+            """,
+
+        ["ns-model-profile"] = """
+            How legacy **profiles** map to Nocturne's v4 therapy model.
+
+            A Nightscout profile is a monolithic document holding therapy settings plus four time-of-day schedules. Nocturne decomposes it into granular v4 models — **Therapy Settings** and separate **Basal**, **Carb Ratio**, **Sensitivity**, and **Target Range** schedules — so each can be versioned and validated independently. Reads project them back into the single legacy profile shape.
+            """,
     };
 
     public Task TransformAsync(
@@ -338,10 +384,10 @@ public sealed class TagDescriptionDocumentTransformer : IOpenApiDocumentTransfor
         }
 
         // Standalone conceptual guide pages have no operations but still render as
-        // their own sidebar entry. Only surface them in the Nocturne document.
-        if (context.DocumentName == "nocturne")
+        // their own sidebar entry. Surface only the ones belonging to this document.
+        if (StandaloneDocTagsByDocument.TryGetValue(context.DocumentName, out var standaloneTags))
         {
-            foreach (var docTag in StandaloneDocTags)
+            foreach (var docTag in standaloneTags)
                 usedTags.Add(docTag);
         }
 

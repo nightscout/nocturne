@@ -101,10 +101,12 @@ diagrams:
   - source: treatment-decomposition.mmd
     title: V1 Treatment Decomposition
     description: How the polymorphic v1 treatment blob is decomposed into focused v4 domain models based on eventType routing.
+    tags: [ns-model-treatments]
 
   - source: profile-decomposition.mmd
     title: V1 Profile Decomposition
     description: How the monolithic Nightscout v1 profile is decomposed into granular v4 domain models, and why each separation exists.
+    tags: [ns-model-profile]
 
   - source: device-insulin-relationships.mmd
     title: Device & Insulin Relationships
@@ -119,7 +121,7 @@ diagrams:
   - source: devicestatus-decomposition.mmd
     title: V1 DeviceStatus Decomposition
     description: How the legacy DeviceStatus blob (with nested openaps/loop/pump/uploader status objects) is decomposed into ApsSnapshot, PumpSnapshot, and UploaderSnapshot rows sharing a CorrelationId, and why each is separate.
-    tags: [Devices]
+    tags: [Devices, ns-model-devicestatus]
 
   - source: meal-event-view.mmd
     title: Meal Event View
@@ -129,7 +131,7 @@ diagrams:
   - source: glucose-source-taxonomy.mmd
     title: Glucose Source Taxonomy
     description: Why SensorGlucose, MeterGlucose, BGCheck, and Calibration are four separate tables. Different source-of-truth units, fidelity, provenance, retention, and device linkage.
-    tags: [Glucose]
+    tags: [Glucose, ns-model-entries]
 
   - source: er-diagram.mmd
     title: Full Entity Model
