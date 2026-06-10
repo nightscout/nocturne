@@ -4,11 +4,13 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -24,6 +26,8 @@ public class DataSourceService : IDataSourceService
     private readonly ISensorGlucoseRepository _sensorGlucose;
     private readonly IMeterGlucoseRepository _meterGlucose;
     private readonly ICalibrationRepository _calibrations;
+    private readonly IAuditContext _auditContext;
+    private readonly IConnectorConfigurationService _connectorConfiguration;
     private readonly ILogger<DataSourceService> _logger;
 
     public DataSourceService(
@@ -31,6 +35,8 @@ public class DataSourceService : IDataSourceService
         ISensorGlucoseRepository sensorGlucose,
         IMeterGlucoseRepository meterGlucose,
         ICalibrationRepository calibrations,
+        IAuditContext auditContext,
+        IConnectorConfigurationService connectorConfiguration,
         ILogger<DataSourceService> logger
     )
     {
@@ -38,6 +44,8 @@ public class DataSourceService : IDataSourceService
         _sensorGlucose = sensorGlucose;
         _meterGlucose = meterGlucose;
         _calibrations = calibrations;
+        _auditContext = auditContext;
+        _connectorConfiguration = connectorConfiguration;
         _logger = logger;
     }
 
@@ -856,51 +864,12 @@ public class DataSourceService : IDataSourceService
                 deviceId
             );
 
-            // Delete from V4 glucose tables
-            var sensorGlucoseDeleted = await _sensorGlucose.DeleteBySourceAsync(deviceId, cancellationToken);
-            var meterGlucoseDeleted = await _meterGlucose.DeleteBySourceAsync(deviceId, cancellationToken);
-            var calibrationsDeleted = await _calibrations.DeleteBySourceAsync(deviceId, cancellationToken);
+            // Disable the connector before purging so a scheduled or in-flight sync cannot
+            // re-import the data we are about to delete.
+            await _connectorConfiguration.SetActiveAsync(
+                connectorId, isActive: false, _auditContext.SubjectName, cancellationToken);
 
-            var bolusesDeleted = await _context
-                .Boluses.Where(b => b.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-            var carbIntakesDeleted = await _context
-                .CarbIntakes.Where(c => c.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-            var bgChecksDeleted = await _context
-                .BGChecks.Where(b => b.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-            var notesDeleted = await _context
-                .Notes.Where(n => n.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-            var deviceEventsDeleted = await _context
-                .DeviceEvents.Where(de => de.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-            var bolusCalcsDeleted = await _context
-                .BolusCalculations.Where(bc => bc.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-
-            var deviceStatusDeleted = await _context
-                .ApsSnapshots.Where(ds => ds.Device == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-
-            var stateSpansDeleted = await _context
-                .StateSpans.Where(s => s.Source == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-
-            // Build per-type deletion counts
-            var deletedCounts = new Dictionary<string, long>();
-            if (sensorGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = sensorGlucoseDeleted;
-            if (meterGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.ManualBG)] = meterGlucoseDeleted;
-            if (calibrationsDeleted > 0) deletedCounts[nameof(SyncDataType.Calibrations)] = calibrationsDeleted;
-            if (bolusesDeleted > 0) deletedCounts[nameof(SyncDataType.Boluses)] = bolusesDeleted;
-            if (carbIntakesDeleted > 0) deletedCounts[nameof(SyncDataType.CarbIntake)] = carbIntakesDeleted;
-            if (bgChecksDeleted > 0) deletedCounts[nameof(SyncDataType.BGChecks)] = bgChecksDeleted;
-            if (bolusCalcsDeleted > 0) deletedCounts[nameof(SyncDataType.BolusCalculations)] = bolusCalcsDeleted;
-            if (notesDeleted > 0) deletedCounts[nameof(SyncDataType.Notes)] = notesDeleted;
-            if (deviceEventsDeleted > 0) deletedCounts[nameof(SyncDataType.DeviceEvents)] = deviceEventsDeleted;
-            if (deviceStatusDeleted > 0) deletedCounts[nameof(SyncDataType.DeviceStatus)] = deviceStatusDeleted;
-            if (stateSpansDeleted > 0) deletedCounts[nameof(SyncDataType.StateSpans)] = stateSpansDeleted;
+            var deletedCounts = await DeleteAllSourceDataAsync(deviceId, cancellationToken);
 
             _logger.LogInformation(
                 "Deleted data for connector {ConnectorId} (device {DeviceId}): {DeletedCounts}",
@@ -926,6 +895,71 @@ public class DataSourceService : IDataSourceService
                 Error = "Failed to delete connector data",
             };
         }
+    }
+
+    /// <summary>
+    /// Deletes every data type written by <paramref name="deviceId"/>, routing each entity through
+    /// the strongest audited path it supports so the deletes are attributed to the current request
+    /// and the soft-delete dedup keeps them from re-importing — the same way glucose already behaves.
+    /// Returns the per-type deleted counts (non-zero entries only).
+    /// </summary>
+    /// <remarks>
+    /// Capability matrix (entity interfaces decide the path):
+    /// <list type="bullet">
+    /// <item>Glucose and the auditable+soft-deletable treatments (Bolus, CarbIntake, BolusCalculation,
+    ///   DeviceEvent) take the audited soft-delete path. The audit row's non-null AuthType is what makes
+    ///   the soft-delete dedup block re-import (<see cref="SoftDeleteDedupExtensions"/>).</item>
+    /// <item>StateSpan is auditable but not soft-deletable, so it takes the audited hard-delete path.</item>
+    /// <item>BGChecks, Notes and device status are soft-deletable but not auditable, so they soft-delete
+    ///   without an audit row; with the connector disabled they do not re-import.</item>
+    /// </list>
+    /// </remarks>
+    private async Task<Dictionary<string, long>> DeleteAllSourceDataAsync(
+        string deviceId,
+        CancellationToken cancellationToken
+    )
+    {
+        // Glucose: audited soft-delete, user-attributed (via the V4 repositories).
+        var sensorGlucoseDeleted = await _sensorGlucose.DeleteBySourceAsync(deviceId, cancellationToken);
+        var meterGlucoseDeleted = await _meterGlucose.DeleteBySourceAsync(deviceId, cancellationToken);
+        var calibrationsDeleted = await _calibrations.DeleteBySourceAsync(deviceId, cancellationToken);
+
+        // Auditable + soft-deletable treatments: audited soft-delete, user-attributed.
+        var bolusesDeleted = await _context.AuditedSoftDeleteAsync(
+            _context.Boluses.Where(b => b.DataSource == deviceId), _auditContext, cancellationToken);
+        var carbIntakesDeleted = await _context.AuditedSoftDeleteAsync(
+            _context.CarbIntakes.Where(c => c.DataSource == deviceId), _auditContext, cancellationToken);
+        var bolusCalcsDeleted = await _context.AuditedSoftDeleteAsync(
+            _context.BolusCalculations.Where(bc => bc.DataSource == deviceId), _auditContext, cancellationToken);
+        var deviceEventsDeleted = await _context.AuditedSoftDeleteAsync(
+            _context.DeviceEvents.Where(de => de.DataSource == deviceId), _auditContext, cancellationToken);
+
+        // StateSpan is auditable but not soft-deletable: audited hard delete.
+        var stateSpansDeleted = await _context.AuditedExecuteDeleteAsync(
+            _context.StateSpans.Where(s => s.Source == deviceId), _auditContext, cancellationToken);
+
+        // Soft-deletable but not auditable: soft-delete without an audit row.
+        var bgChecksDeleted = await _context.SoftDeleteAsync(
+            _context.BGChecks.Where(b => b.DataSource == deviceId), cancellationToken);
+        var notesDeleted = await _context.SoftDeleteAsync(
+            _context.Notes.Where(n => n.DataSource == deviceId), cancellationToken);
+        var deviceStatusDeleted = await _context.SoftDeleteAsync(
+            _context.ApsSnapshots.Where(ds => ds.Device == deviceId), cancellationToken);
+
+        var deletedCounts = new Dictionary<string, long>();
+        if (sensorGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = sensorGlucoseDeleted;
+        if (meterGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.ManualBG)] = meterGlucoseDeleted;
+        if (calibrationsDeleted > 0) deletedCounts[nameof(SyncDataType.Calibrations)] = calibrationsDeleted;
+        if (bolusesDeleted > 0) deletedCounts[nameof(SyncDataType.Boluses)] = bolusesDeleted;
+        if (carbIntakesDeleted > 0) deletedCounts[nameof(SyncDataType.CarbIntake)] = carbIntakesDeleted;
+        if (bgChecksDeleted > 0) deletedCounts[nameof(SyncDataType.BGChecks)] = bgChecksDeleted;
+        if (bolusCalcsDeleted > 0) deletedCounts[nameof(SyncDataType.BolusCalculations)] = bolusCalcsDeleted;
+        if (notesDeleted > 0) deletedCounts[nameof(SyncDataType.Notes)] = notesDeleted;
+        if (deviceEventsDeleted > 0) deletedCounts[nameof(SyncDataType.DeviceEvents)] = deviceEventsDeleted;
+        if (deviceStatusDeleted > 0) deletedCounts[nameof(SyncDataType.DeviceStatus)] = deviceStatusDeleted;
+        if (stateSpansDeleted > 0) deletedCounts[nameof(SyncDataType.StateSpans)] = stateSpansDeleted;
+
+        return deletedCounts;
     }
 
     private static string GenerateId(string deviceId)
@@ -986,53 +1020,9 @@ public class DataSourceService : IDataSourceService
             // The deviceId is the raw Device field value from sensor_glucose (e.g. "dexcom-connector",
             // "xDrip-DexcomG6 Samsung Galaxy S21"). For connectors this also matches DataSource.
             // For uploaders, Device is set by the client app and DataSource may differ.
-            // We match on both Device and DataSource to cover both cases.
             var deviceId = source.DeviceId;
 
-            // Delete V4 glucose tables by DataSource
-            var sensorGlucoseDeleted = await _sensorGlucose.DeleteBySourceAsync(deviceId, cancellationToken);
-            var meterGlucoseDeleted = await _meterGlucose.DeleteBySourceAsync(deviceId, cancellationToken);
-            var calibrationsDeleted = await _calibrations.DeleteBySourceAsync(deviceId, cancellationToken);
-            var bolusesDeleted = await _context
-                .Boluses.Where(b => b.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-            var carbIntakesDeleted = await _context
-                .CarbIntakes.Where(c => c.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-            var bgChecksDeleted = await _context
-                .BGChecks.Where(b => b.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-            var notesDeleted = await _context
-                .Notes.Where(n => n.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-            var deviceEventsDeleted = await _context
-                .DeviceEvents.Where(de => de.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-            var bolusCalcsDeleted = await _context
-                .BolusCalculations.Where(bc => bc.DataSource == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-
-            // Delete device status by device
-            var deviceStatusDeleted = await _context
-                .ApsSnapshots.Where(ds => ds.Device == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-
-            var stateSpansDeleted = await _context
-                .StateSpans.Where(s => s.Source == deviceId)
-                .ExecuteDeleteAsync(cancellationToken);
-
-            var deletedCounts = new Dictionary<string, long>();
-            if (sensorGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.Glucose)] = sensorGlucoseDeleted;
-            if (meterGlucoseDeleted > 0) deletedCounts[nameof(SyncDataType.ManualBG)] = meterGlucoseDeleted;
-            if (calibrationsDeleted > 0) deletedCounts[nameof(SyncDataType.Calibrations)] = calibrationsDeleted;
-            if (bolusesDeleted > 0) deletedCounts[nameof(SyncDataType.Boluses)] = bolusesDeleted;
-            if (carbIntakesDeleted > 0) deletedCounts[nameof(SyncDataType.CarbIntake)] = carbIntakesDeleted;
-            if (bgChecksDeleted > 0) deletedCounts[nameof(SyncDataType.BGChecks)] = bgChecksDeleted;
-            if (notesDeleted > 0) deletedCounts[nameof(SyncDataType.Notes)] = notesDeleted;
-            if (deviceEventsDeleted > 0) deletedCounts[nameof(SyncDataType.DeviceEvents)] = deviceEventsDeleted;
-            if (bolusCalcsDeleted > 0) deletedCounts[nameof(SyncDataType.BolusCalculations)] = bolusCalcsDeleted;
-            if (deviceStatusDeleted > 0) deletedCounts[nameof(SyncDataType.DeviceStatus)] = deviceStatusDeleted;
-            if (stateSpansDeleted > 0) deletedCounts[nameof(SyncDataType.StateSpans)] = stateSpansDeleted;
+            var deletedCounts = await DeleteAllSourceDataAsync(deviceId, cancellationToken);
 
             _logger.LogInformation(
                 "Deleted data for {DeviceId}: {DeletedCounts}",
