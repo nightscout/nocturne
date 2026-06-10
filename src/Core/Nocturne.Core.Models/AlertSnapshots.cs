@@ -41,7 +41,7 @@ public record CreateAlertInstanceRequest(Guid TenantId, Guid ExcursionId,
 /// <summary>
 /// Request to update an existing alert instance (snooze, status change).
 /// </summary>
-public record UpdateAlertInstanceRequest(Guid Id, string? Status = null,
+public record UpdateAlertInstanceRequest(Guid TenantId, Guid Id, string? Status = null,
     DateTime? SnoozedUntil = null, int? SnoozeCount = null);
 
 /// <summary>

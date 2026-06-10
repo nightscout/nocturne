@@ -40,11 +40,15 @@
         <aside
             class="fixed lg:sticky top-0 left-0 z-50 lg:z-0 h-screen lg:h-auto w-64 shrink-0
                    bg-background lg:bg-transparent border-r lg:border-0 border-border/40
+                   overflow-y-auto lg:overflow-visible
                    transform transition-transform duration-200 ease-in-out
                    {sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
-                   pt-16 lg:pt-0 px-4 lg:px-0"
+                   pt-16 lg:pt-0 px-4 lg:px-0 pb-8 lg:pb-0"
         >
-            <div class="lg:sticky lg:top-24">
+            <!-- Cap the sticky sidebar to the viewport and let it scroll on its own,
+                 so a nav taller than the screen no longer requires scrolling the
+                 article to the bottom before its lower entries become reachable. -->
+            <div class="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
                 <DocsSidebar />
             </div>
         </aside>

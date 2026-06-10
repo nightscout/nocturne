@@ -54,11 +54,14 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                         if (hasInsulin)
                         {
+                            var bolusLegacyId = GenerateLegacyId("bolus", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}");
                             boluses.Add(new Bolus
                             {
                                 Id = Guid.CreateVersion7(),
                                 Timestamp = correctedDate,
-                                LegacyId = GenerateLegacyId("bolus", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}"),
+                                LegacyId = bolusLegacyId,
+                                // Stable (raw-timestamp-derived) key so re-correction upserts in place.
+                                SyncIdentifier = bolusLegacyId,
                                 Device = _connectorSource,
                                 DataSource = _connectorSource,
                                 Insulin = bolus.InsulinDelivered,
@@ -72,11 +75,13 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                         if (hasCarbs)
                         {
+                            var carbLegacyId = GenerateLegacyId("carbs", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}");
                             carbs.Add(new CarbIntake
                             {
                                 Id = Guid.CreateVersion7(),
                                 Timestamp = correctedDate,
-                                LegacyId = GenerateLegacyId("carbs", bolusDate, $"insulin:{bolus.InsulinDelivered}_carbs:{bolus.CarbsInput}"),
+                                LegacyId = carbLegacyId,
+                                SyncIdentifier = carbLegacyId,
                                 Device = _connectorSource,
                                 DataSource = _connectorSource,
                                 Carbs = bolus.CarbsInput,
@@ -340,11 +345,15 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 if (hasInsulin)
                 {
+                    var v3BolusLegacyId = GenerateLegacyId("v3_bolus", rawTimestamp, $"carbs:{carbsInput}_insulin:{insulin}");
                     boluses.Add(new Bolus
                     {
                         Id = Guid.CreateVersion7(),
                         Timestamp = correctedTimestamp,
-                        LegacyId = GenerateLegacyId("v3_bolus", rawTimestamp, $"carbs:{carbsInput}_insulin:{insulin}"),
+                        LegacyId = v3BolusLegacyId,
+                        // rawTimestamp is the raw fake-UTC (stable); key the upsert on it so re-correction
+                        // moves the row instead of duplicating it.
+                        SyncIdentifier = v3BolusLegacyId,
                         Device = _connectorSource,
                         DataSource = _connectorSource,
                         Insulin = insulin,
@@ -358,11 +367,13 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
 
                 if (hasCarbs)
                 {
+                    var v3CarbLegacyId = GenerateLegacyId("v3_carbs", rawTimestamp, $"carbs:{carbsInput}_insulin:{insulin}");
                     carbs.Add(new CarbIntake
                     {
                         Id = Guid.CreateVersion7(),
                         Timestamp = correctedTimestamp,
-                        LegacyId = GenerateLegacyId("v3_carbs", rawTimestamp, $"carbs:{carbsInput}_insulin:{insulin}"),
+                        LegacyId = v3CarbLegacyId,
+                        SyncIdentifier = v3CarbLegacyId,
                         Device = _connectorSource,
                         DataSource = _connectorSource,
                         Carbs = carbsInput,

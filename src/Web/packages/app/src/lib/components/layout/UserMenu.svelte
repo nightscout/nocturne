@@ -51,7 +51,7 @@
 {#if user}
   <DropdownMenu.Root bind:open={isOpen}>
     <DropdownMenu.Trigger>
-      {#snippet child({ props })}
+      {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
           variant="ghost"
           class="w-full justify-start gap-2 px-2 {collapsed

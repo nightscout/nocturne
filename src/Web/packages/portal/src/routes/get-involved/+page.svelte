@@ -14,6 +14,7 @@
     Tag,
     HeartHandshake,
   } from "@lucide/svelte";
+  import { onMount } from "svelte";
 
   const ACCENT = "oklch(0.6 0.118 184.704)";
 
@@ -146,55 +147,71 @@
   type Issue = {
     num: number;
     title: string;
+    url: string;
     labels: string[];
     comments: number;
-    updated: string;
+    updatedAt: string;
   };
 
-  const ISSUES: Issue[] = [
-    {
-      num: 482,
-      title: "Translate the onboarding flow into Spanish",
-      labels: ["get-involved", "translation"],
-      comments: 4,
-      updated: "2h",
-    },
-    {
-      num: 471,
-      title: "Document the Glooko connector setup end-to-end",
-      labels: ["get-involved", "documentation", "good first issue"],
-      comments: 2,
-      updated: "6h",
-    },
-    {
-      num: 465,
-      title: "Verify Nocturne with Dexcom G7 (EU firmware)",
-      labels: ["get-involved", "testing"],
-      comments: 9,
-      updated: "1d",
-    },
-    {
-      num: 460,
-      title: 'Write a "your first 24 hours" guide for new self-hosters',
-      labels: ["get-involved", "documentation"],
-      comments: 1,
-      updated: "2d",
-    },
-    {
-      num: 455,
-      title: "Record a screencast: setting up glucose alarms",
-      labels: ["get-involved", "tutorial"],
-      comments: 3,
-      updated: "3d",
-    },
-    {
-      num: 449,
-      title: "Triage stale issues in the connectors backlog",
-      labels: ["get-involved", "triage"],
-      comments: 6,
-      updated: "4d",
-    },
-  ];
+  type GhLabel = { name: string };
+  type GhIssue = {
+    number: number;
+    title: string;
+    html_url: string;
+    labels: (GhLabel | string)[];
+    comments: number;
+    updated_at: string;
+    pull_request?: unknown;
+  };
+
+  type FeedStatus = "loading" | "ready" | "error";
+
+  // GitHub's REST API is public (CORS-enabled, ~60 req/hr per visitor IP),
+  // so the feed is fetched live in the browser rather than baked in at build
+  // time — keeping these tasks genuinely grabbable and up to date.
+  const ISSUES_API =
+    "https://api.github.com/repos/nightscout/nocturne/issues?labels=get-involved&state=open&sort=updated&direction=desc&per_page=8";
+
+  let issues = $state.raw<Issue[]>([]);
+  let status = $state<FeedStatus>("loading");
+
+  onMount(async () => {
+    try {
+      const res = await fetch(ISSUES_API, {
+        headers: { Accept: "application/vnd.github+json" },
+      });
+      if (!res.ok) throw new Error(`GitHub API responded ${res.status}`);
+      const data: GhIssue[] = await res.json();
+      issues = data
+        .filter((item) => !item.pull_request)
+        .map((item) => ({
+          num: item.number,
+          title: item.title,
+          url: item.html_url,
+          labels: (item.labels ?? []).map((l) =>
+            typeof l === "string" ? l : l.name,
+          ),
+          comments: item.comments ?? 0,
+          updatedAt: item.updated_at,
+        }));
+      status = "ready";
+    } catch {
+      status = "error";
+    }
+  });
+
+  function relativeTime(iso: string): string {
+    const mins = (Date.now() - new Date(iso).getTime()) / 60000;
+    const hours = mins / 60;
+    const days = hours / 24;
+    const weeks = days / 7;
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${Math.floor(mins)}m`;
+    if (hours < 24) return `${Math.floor(hours)}h`;
+    if (days < 7) return `${Math.floor(days)}d`;
+    if (weeks < 5) return `${Math.floor(weeks)}w`;
+    return `${Math.floor(days / 30)}mo`;
+  }
 
   function resolveHref(href: string): string {
     return (LINKS as Record<string, string>)[href] || href;
@@ -364,43 +381,78 @@
         </span>
       </div>
 
-      {#each ISSUES as issue}
-        <a
-          href={LINKS.githubLabel}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="gi-issue-row flex items-center gap-3.5 px-[18px] py-[13px] border-b border-border transition-[background] duration-150 cursor-pointer no-underline text-inherit hover:bg-[color-mix(in_oklch,var(--card),transparent_20%)] last:border-b-0"
-        >
-          <div class="gi-issue-dot shrink-0 w-3.5 h-3.5 rounded-full relative mt-[3px]" style="border: 2px solid {ACCENT}">
-          </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-[15px] font-semibold m-0 flex items-baseline gap-2 flex-wrap">
-              {issue.title}
-              <span class="font-mono text-[13px] font-medium text-muted-foreground">#{issue.num}</span>
-            </p>
-            <div class="flex items-center gap-2 flex-wrap mt-1.5">
-              {#each issue.labels as label}
-                {@const colors = LABEL_COLORS[label] || {
-                  fg: "var(--muted-foreground)",
-                  bg: "var(--muted)",
-                }}
-                <span
-                  class="text-[11px] font-semibold tracking-[0.01em] whitespace-nowrap py-[3px] px-[9px] rounded-full"
-                  style="color: {colors.fg}; background: {colors.bg}; border: 1px solid color-mix(in oklch, {colors.fg}, transparent 70%)"
-                >
-                  {label}
-                </span>
-              {/each}
+      {#if status === "loading"}
+        {#each Array.from({ length: 5 }) as _, i (i)}
+          <div class="flex items-center gap-3.5 px-[18px] py-[13px] border-b border-border last:border-b-0">
+            <div class="shrink-0 w-3.5 h-3.5 rounded-full bg-muted animate-pulse"></div>
+            <div class="flex-1 min-w-0 space-y-2">
+              <div class="h-3.5 w-2/3 rounded bg-muted animate-pulse"></div>
+              <div class="h-2.5 w-28 rounded bg-muted animate-pulse"></div>
             </div>
           </div>
-          <div class="flex items-center gap-4 shrink-0 text-muted-foreground text-[13px]">
-            <span class="inline-flex items-center gap-1.5">
-              <MessageSquare class="w-3.5 h-3.5" /> {issue.comments}
-            </span>
-            <span>{issue.updated}</span>
-          </div>
-        </a>
-      {/each}
+        {/each}
+      {:else if status === "error"}
+        <div class="px-[22px] py-10 text-center text-sm text-muted-foreground">
+          Couldn't load live tasks just now.
+          <a
+            href={LINKS.githubLabel}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="font-semibold underline"
+            style="color: {ACCENT}">View them on GitHub</a
+          >.
+        </div>
+      {:else if issues.length === 0}
+        <div class="px-[22px] py-10 text-center text-sm text-muted-foreground">
+          No open tasks tagged <code>get-involved</code> right now — check back soon,
+          or
+          <a
+            href={LINKS.discord}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="font-semibold underline"
+            style="color: {ACCENT}">ask in the Discord</a
+          >.
+        </div>
+      {:else}
+        {#each issues as issue (issue.num)}
+          <a
+            href={issue.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="gi-issue-row flex items-center gap-3.5 px-[18px] py-[13px] border-b border-border transition-[background] duration-150 cursor-pointer no-underline text-inherit hover:bg-[color-mix(in_oklch,var(--card),transparent_20%)] last:border-b-0"
+          >
+            <div class="gi-issue-dot shrink-0 w-3.5 h-3.5 rounded-full relative mt-[3px]" style="border: 2px solid {ACCENT}">
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-[15px] font-semibold m-0 flex items-baseline gap-2 flex-wrap">
+                {issue.title}
+                <span class="font-mono text-[13px] font-medium text-muted-foreground">#{issue.num}</span>
+              </p>
+              <div class="flex items-center gap-2 flex-wrap mt-1.5">
+                {#each issue.labels as label (label)}
+                  {@const colors = LABEL_COLORS[label] || {
+                    fg: "var(--muted-foreground)",
+                    bg: "var(--muted)",
+                  }}
+                  <span
+                    class="text-[11px] font-semibold tracking-[0.01em] whitespace-nowrap py-[3px] px-[9px] rounded-full"
+                    style="color: {colors.fg}; background: {colors.bg}; border: 1px solid color-mix(in oklch, {colors.fg}, transparent 70%)"
+                  >
+                    {label}
+                  </span>
+                {/each}
+              </div>
+            </div>
+            <div class="flex items-center gap-4 shrink-0 text-muted-foreground text-[13px]">
+              <span class="inline-flex items-center gap-1.5">
+                <MessageSquare class="w-3.5 h-3.5" /> {issue.comments}
+              </span>
+              <span>{relativeTime(issue.updatedAt)}</span>
+            </div>
+          </a>
+        {/each}
+      {/if}
 
       <div class="flex items-center justify-between gap-3 px-[22px] py-4">
         <span class="text-muted-foreground text-[13px]">Updated continuously — these are real, grabbable tasks.</span>

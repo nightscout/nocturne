@@ -35,7 +35,7 @@
 
   async function fetchAlerts() {
     try {
-      const result = await getActiveAlerts();
+      const result = await getActiveAlerts().run();
       if (Array.isArray(result)) {
         alerts = result;
       }
@@ -60,8 +60,10 @@
     dismissedIds = new Set([...dismissedIds, id]);
   }
 
-  onMount(async () => {
-    await fetchAlerts();
+  onMount(() => {
+    // Defer the first fetch out of render so the query's `.run()` is valid;
+    // setInterval ticks already run outside render.
+    queueMicrotask(fetchAlerts);
     pollInterval = setInterval(fetchAlerts, 30000);
   });
 

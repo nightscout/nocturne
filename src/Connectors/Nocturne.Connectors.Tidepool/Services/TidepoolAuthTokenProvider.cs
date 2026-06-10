@@ -48,9 +48,9 @@ public class TidepoolAuthTokenProvider(
                     attempt + 1,
                     maxRetries);
 
-                var (token, userId) = await LoginAsync(config, cancellationToken);
+                var (token, userId, shouldRetry) = await LoginAsync(config, cancellationToken);
                 if (string.IsNullOrEmpty(token))
-                    return (null, true);
+                    return (null, shouldRetry);
 
                 authUserId = userId;
                 return (token, false);
@@ -78,7 +78,7 @@ public class TidepoolAuthTokenProvider(
         return (sessionToken, expiresAt, metadata.Count > 0 ? metadata : null);
     }
 
-    private async Task<(string? Token, string? UserId)> LoginAsync(TidepoolConnectorConfiguration config, CancellationToken cancellationToken)
+    private async Task<(string? Token, string? UserId, bool ShouldRetry)> LoginAsync(TidepoolConnectorConfiguration config, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post,
             _serverResolver.BuildUrl(config, "/auth/login"));
@@ -92,8 +92,11 @@ public class TidepoolAuthTokenProvider(
 
         if (!response.IsSuccessStatusCode)
         {
-            await HandleErrorResponseAsync(response, "Tidepool authentication", cancellationToken);
-            return (null, null);
+            // Honour the retryable verdict: a 401/400 (bad/missing credentials) is non-retryable, so
+            // don't burn three attempts with multi-minute backoff — that blocks every other tenant of
+            // this connector. Transient errors (5xx, 429) still return true and retry.
+            var shouldRetry = await HandleErrorResponseAsync(response, "Tidepool authentication", cancellationToken);
+            return (null, null, shouldRetry);
         }
 
         // Session token is in the response header
@@ -101,14 +104,14 @@ public class TidepoolAuthTokenProvider(
         {
             _logger.LogError("Tidepool authentication response missing {Header} header",
                 TidepoolConstants.Headers.SessionToken);
-            return (null, null);
+            return (null, null, true);
         }
 
         var token = tokenValues.FirstOrDefault();
         if (string.IsNullOrEmpty(token))
         {
             _logger.LogError("Tidepool authentication returned empty session token");
-            return (null, null);
+            return (null, null, true);
         }
 
         // Extract user ID from response body
@@ -126,6 +129,6 @@ public class TidepoolAuthTokenProvider(
             _logger.LogWarning("Tidepool authentication response did not contain a user ID");
         }
 
-        return (token, userId);
+        return (token, userId, false);
     }
 }

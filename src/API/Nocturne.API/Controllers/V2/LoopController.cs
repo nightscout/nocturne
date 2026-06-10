@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V2;
 
@@ -46,6 +48,7 @@ public class LoopController : ControllerBase
     /// <response code="500">Internal server error</response>
     [HttpPost("loop/send")]
     [Authorize]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [ProducesResponseType(typeof(LoopNotificationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(LoopNotificationResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(

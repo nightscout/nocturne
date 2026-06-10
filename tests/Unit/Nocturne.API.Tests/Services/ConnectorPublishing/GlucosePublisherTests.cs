@@ -5,8 +5,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -22,6 +24,7 @@ public class GlucosePublisherTests
     private readonly Mock<IEntryService> _mockEntryService;
     private readonly Mock<ISensorGlucoseRepository> _mockSensorGlucoseRepository;
     private readonly Mock<IPatientDeviceRepository> _mockPatientDeviceRepository;
+    private readonly Mock<IDataEventSink<SensorGlucose>> _mockSensorGlucoseEvents;
     private readonly GlucosePublisher _publisher;
 
     public GlucosePublisherTests()
@@ -29,6 +32,7 @@ public class GlucosePublisherTests
         _mockEntryService = new Mock<IEntryService>();
         _mockSensorGlucoseRepository = new Mock<ISensorGlucoseRepository>();
         _mockPatientDeviceRepository = new Mock<IPatientDeviceRepository>();
+        _mockSensorGlucoseEvents = new Mock<IDataEventSink<SensorGlucose>>();
 
         _publisher = new GlucosePublisher(
             _mockEntryService.Object,
@@ -37,6 +41,8 @@ public class GlucosePublisherTests
             Mock.Of<IDbContextFactory<NocturneDbContext>>(),
             Mock.Of<ITenantAccessor>(),
             Mock.Of<IAlertOrchestrator>(),
+            Mock.Of<IAuditContext>(),
+            _mockSensorGlucoseEvents.Object,
             NullLogger<GlucosePublisher>.Instance
         );
     }
@@ -68,6 +74,38 @@ public class GlucosePublisherTests
         var result = await _publisher.PublishEntriesAsync(new List<Entry>(), "test-source");
 
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PublishSensorGlucoseAsync_BroadcastsRealtimeEvent_ForPublishedReadings()
+    {
+        _mockPatientDeviceRepository
+            .Setup(r => r.GetCurrentAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Empty<PatientDevice>());
+
+        var records = new List<SensorGlucose>
+        {
+            new() { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-5), DataSource = DataSources.DexcomConnector },
+            new() { Mgdl = 130, Timestamp = DateTime.UtcNow, DataSource = DataSources.DexcomConnector },
+        };
+
+        // BulkCreateAsync dedupes by LegacyId and returns only the rows actually inserted — here a
+        // subset (the second reading); the first overlaps an already-stored reading from a prior poll.
+        var inserted = new List<SensorGlucose> { records[1] };
+        _mockSensorGlucoseRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(inserted);
+
+        var result = await _publisher.PublishSensorGlucoseAsync(records, DataSources.DexcomConnector);
+
+        result.Should().BeTrue();
+        // The broadcast must be the deduped insert result, not the raw input list, so already-stored
+        // readings from overlapping connector poll windows are not re-broadcast.
+        _mockSensorGlucoseEvents.Verify(
+            e => e.OnCreatedAsync(
+                It.Is<IReadOnlyList<SensorGlucose>>(l => l.Count == 1 && l[0].Mgdl == 130),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

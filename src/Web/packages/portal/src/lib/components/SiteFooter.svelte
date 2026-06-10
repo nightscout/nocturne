@@ -85,6 +85,14 @@
                             Configuration
                         </a>
                     </li>
+                    <li>
+                        <a
+                            href="/scalar"
+                            class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                            API Documentation
+                        </a>
+                    </li>
                 </ul>
             </div>
 

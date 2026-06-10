@@ -35,7 +35,7 @@ public class EntryDecomposerTests : IDisposable
             .ReturnsAsync((GlucoseProcessing?)null);
         var glucoseResolver = new GlucoseProcessingResolver(mockConfigProvider.Object);
 
-        _decomposer = new EntryDecomposer(_context, sgRepo, mgRepo, calRepo, glucoseResolver, NullLogger<EntryDecomposer>.Instance);
+        _decomposer = new EntryDecomposer(_context, sgRepo, mgRepo, calRepo, glucoseResolver, Mock.Of<IAuditContext>(), NullLogger<EntryDecomposer>.Instance);
     }
 
     public void Dispose()

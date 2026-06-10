@@ -9,7 +9,9 @@ namespace Nocturne.API.Middleware;
 /// Middleware that returns 503 for freshly provisioned tenants (no passkey
 /// credentials) or tenants in recovery mode (orphaned subjects with no
 /// passkey and no OIDC binding). Allows passkey setup, admin, and metadata
-/// endpoints through so setup/recovery flows can complete.
+/// endpoints through so setup/recovery flows can complete. Trusted instance-key
+/// service requests also bypass the gate (see <see cref="IInstanceKeyValidator"/>)
+/// so automation can configure a tenant before a human owner registers a passkey.
 ///
 /// Runs after TenantResolutionMiddleware. When no tenant is resolved
 /// (e.g. tenantless cross-tenant paths, or zero-tenant setup), the
@@ -56,11 +58,13 @@ public class TenantSetupMiddleware
     /// <param name="context">The current HTTP context.</param>
     /// <param name="tenantAccessor">Accessor for the resolved tenant identity.</param>
     /// <param name="db">Database context for querying passkey credentials and orphaned subjects.</param>
+    /// <param name="instanceKeyValidator">Validator used to let trusted instance-key callers bypass the setup gate.</param>
     /// <returns>A task that completes when the middleware has finished processing.</returns>
     public async Task InvokeAsync(
         HttpContext context,
         ITenantAccessor tenantAccessor,
-        NocturneDbContext db)
+        NocturneDbContext db,
+        IInstanceKeyValidator instanceKeyValidator)
     {
         // Only check when a tenant has been resolved
         if (!tenantAccessor.IsResolved)
@@ -81,6 +85,21 @@ public class TenantSetupMiddleware
         // OIDC bootstrap login, admin provisioning, metadata).
         var endpoint = context.GetEndpoint();
         if (endpoint?.Metadata.GetMetadata<AllowDuringSetupAttribute>() is not null)
+        {
+            await _next(context);
+            return;
+        }
+
+        // A valid instance-key service request (trusted in-cluster automation — a
+        // provisioner or a headless setup agent) bypasses the setup/recovery gate.
+        // The instance key is the highest-trust service credential and already grants
+        // platform-admin once setup completes; letting it through here lets automation
+        // stand up a tenant (connectors, settings, seed data) before a human owner has
+        // registered a passkey. Untrusted tenant traffic still gets 503 until then.
+        // A bare key without the X-Instance-Service marker does NOT qualify (see
+        // IInstanceKeyValidator), so a key accidentally forwarded onto a browser
+        // request cannot slip past the gate.
+        if (instanceKeyValidator.Classify(context) == InstanceKeyRequestKind.Valid)
         {
             await _next(context);
             return;

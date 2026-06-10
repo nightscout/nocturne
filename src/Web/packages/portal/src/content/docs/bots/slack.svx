@@ -1,0 +1,84 @@
+---
+title: Slack Bot
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Slack Bot
+
+Connect a Slack app so people can run `/bg` and receive alerts in Slack. This page covers the
+Slack-specific steps; for account linking, alert delivery, and the Admin UI /
+environment-variable workflow that all platforms share, see [Chat Bots](/docs/bots).
+
+## 1. Create a Slack app
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) and click **Create New App**.
+2. Choose **From scratch**, name it (e.g. *Nocturne*), and pick the workspace to develop in.
+
+## 2. Add bot scopes and install
+
+1. Open **OAuth & Permissions**.
+2. Under **Bot Token Scopes**, add the scopes the bot needs to post and respond, such as
+   `chat:write`, `commands`, and `im:history`.
+3. Click **Install to Workspace** and approve.
+4. Copy the **Bot User OAuth Token** (it starts with `xoxb-`).
+
+## 3. Collect the credentials
+
+| Field | Where to find it |
+|-------|------------------|
+| **Bot Token** | **OAuth & Permissions** — the Bot User OAuth Token (`xoxb-…`) |
+| **Signing Secret** | **Basic Information > App Credentials** |
+
+## 4. Configure Nocturne
+
+Enter both values using either method (see [Chat Bots](/docs/bots) for the full workflow).
+
+### Option A: Admin UI
+
+At **Settings > Admin > Integrations**, fill in the **Slack** card:
+
+| Field | Value |
+|-------|-------|
+| **Bot Token** | The `xoxb-…` token from step 3 |
+| **Signing Secret** | The signing secret from step 3 |
+
+Turn **Enabled** on, click **Save**, and restart the Nocturne web service.
+
+### Option B: Environment variables
+
+```bash
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_SIGNING_SECRET=...
+```
+
+Then restart Nocturne.
+
+## 5. Point Slack at the webhook
+
+Slack sends events, slash commands, and interactive actions to a single Request URL. Set it
+to:
+
+```
+https://your-instance.com/api/v4/webhooks/slack
+```
+
+in each of these places that applies:
+
+- **Slash Commands** — create a `/bg` command (and any others you want) with this Request URL.
+- **Interactivity & Shortcuts** — turn on Interactivity and set the Request URL (needed for
+  the **Acknowledge** / **Resolve** buttons on alerts).
+- **Event Subscriptions** — if you enable events, set the Request URL here too.
+
+<Callout type="info" title="Verify the URL after configuring credentials">
+  Slack verifies the Request URL by sending a signed challenge that Nocturne validates with
+  your <strong>Signing Secret</strong>. Configure the credentials in step 4 and restart
+  <em>before</em> saving the URL, so verification passes.
+</Callout>
+
+## 6. Test it
+
+1. From the workspace, run `/connect` (or your configured connect command) and complete the link.
+2. Run `/bg` and confirm the latest reading comes back.

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
@@ -15,6 +16,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 [Tags("Platform")]
 [Route("api/v4/[controller]")]
 [Produces("application/json")]
+[AllowAnonymous]
 public class StatusController : ControllerBase
 {
     private readonly IStatusService _statusService;

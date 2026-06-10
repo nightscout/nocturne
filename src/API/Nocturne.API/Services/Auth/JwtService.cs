@@ -133,7 +133,8 @@ public class JwtService : IJwtService
         string? clientId = null,
         bool limitTo24Hours = false,
         Guid? tenantId = null,
-        TimeSpan? lifetime = null
+        TimeSpan? lifetime = null,
+        bool platformAccess = false
     )
     {
         var now = DateTimeOffset.UtcNow;
@@ -181,6 +182,13 @@ public class JwtService : IJwtService
         if (tenantId.HasValue)
         {
             claims.Add(new Claim("tenant_id", tenantId.Value.ToString()));
+        }
+
+        // Mark platform-admin tenant-access grants. Only tokens carrying this marker
+        // (and a matching tenant pin) confer out-of-tenant superuser access.
+        if (platformAccess)
+        {
+            claims.Add(new Claim("platform_access", "true", ClaimValueTypes.Boolean));
         }
 
         // Add OAuth scopes as space-delimited string (RFC 6749 Section 3.3)
@@ -272,6 +280,9 @@ public class JwtService : IJwtService
             var tenantIdClaim = principal.FindFirst("tenant_id")?.Value;
             Guid? tenantId = Guid.TryParse(tenantIdClaim, out var tid) ? tid : null;
 
+            // Parse platform-access marker (platform-admin tenant-access grants)
+            var platformAccess = principal.FindFirst("platform_access")?.Value == "true";
+
             var claims = new JwtClaims
             {
                 SubjectId = subjectId,
@@ -282,6 +293,7 @@ public class JwtService : IJwtService
                 Scopes = scopeList,
                 ClientId = principal.FindFirst("client_id")?.Value,
                 TenantId = tenantId,
+                PlatformAccess = platformAccess,
                 LimitTo24Hours = limitTo24Hours,
                 JwtId = jwtToken.Id,
                 IssuedAt = new DateTimeOffset(jwtToken.IssuedAt, TimeSpan.Zero),

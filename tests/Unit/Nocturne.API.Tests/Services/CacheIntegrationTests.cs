@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Nocturne.API.Tests.Infrastructure;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Services.Platform;
@@ -247,6 +248,7 @@ public class CacheIntegrationTests
             mockDbContextFactory.Object,
             httpContextAccessor,
             _mockTenantAccessor.Object,
+            TestPublicAccessCache.Create(),
             _mockStatusLogger.Object
         );
 
@@ -327,6 +329,7 @@ public class CacheIntegrationTests
             mockDbContextFactory.Object,
             httpContextAccessor,
             _mockTenantAccessor.Object,
+            TestPublicAccessCache.Create(),
             _mockStatusLogger.Object
         );
 

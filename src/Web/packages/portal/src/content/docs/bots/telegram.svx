@@ -1,0 +1,80 @@
+---
+title: Telegram Bot
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Telegram Bot
+
+Connect a Telegram bot so people can run `/bg` and receive alerts in Telegram. This page
+covers the Telegram-specific steps; for account linking, alert delivery, and the Admin UI /
+environment-variable workflow that all platforms share, see [Chat Bots](/docs/bots).
+
+## 1. Create a bot with BotFather
+
+1. In Telegram, open a chat with [@BotFather](https://t.me/BotFather).
+2. Send `/newbot` and follow the prompts to choose a name and username.
+3. BotFather replies with a **bot token** (looks like `123456:ABC-DEF...`). Copy it.
+
+<Callout type="warning" title="Keep the token secret">
+  Anyone with the bot token can control the bot. If it leaks, send <code>/revoke</code> to
+  BotFather to issue a new one.
+</Callout>
+
+## 2. Configure Nocturne
+
+Enter the token using either method (see [Chat Bots](/docs/bots) for the full workflow).
+
+### Option A: Admin UI
+
+At **Settings > Admin > Integrations**, fill in the **Telegram** card:
+
+| Field | Value |
+|-------|-------|
+| **Bot Token** | The token from BotFather |
+
+Turn **Enabled** on, click **Save**, and restart the Nocturne web service.
+
+### Option B: Environment variables
+
+```bash
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+# Optional: a secret token Telegram echoes back on each webhook call so
+# Nocturne can confirm the request really came from Telegram.
+TELEGRAM_WEBHOOK_SECRET_TOKEN=...
+```
+
+Then restart Nocturne.
+
+## 3. Register the webhook
+
+Telegram pushes updates to a webhook URL you register through its Bot API. Point it at your
+instance:
+
+```bash
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+  -d "url=https://your-instance.com/api/v4/webhooks/telegram"
+```
+
+If you set `TELEGRAM_WEBHOOK_SECRET_TOKEN`, pass the same value here so Telegram includes it
+on every call:
+
+```bash
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+  -d "url=https://your-instance.com/api/v4/webhooks/telegram" \
+  -d "secret_token=<YOUR_SECRET_TOKEN>"
+```
+
+<Callout type="tip" title="Check the webhook">
+  Confirm it registered with
+  <code>https://api.telegram.org/bot&lt;YOUR_BOT_TOKEN&gt;/getWebhookInfo</code>. The
+  <code>url</code> should match your instance and <code>last_error_message</code> should be
+  empty.
+</Callout>
+
+## 4. Test it
+
+1. Open a chat with your bot in Telegram and send `/connect`, then complete the link.
+2. Send `/bg` and confirm the latest reading comes back.

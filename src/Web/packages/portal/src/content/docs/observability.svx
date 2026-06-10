@@ -1,0 +1,137 @@
+---
+title: Observability (OpenTelemetry)
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Observability
+
+Nocturne is instrumented with [OpenTelemetry](https://opentelemetry.io). When you
+point it at an OTLP endpoint, the API and web containers export telemetry to a
+collector or observability backend of your choice. With no endpoint set,
+telemetry is collected in-process and discarded with negligible overhead, so
+there is nothing to disable on a default install.
+
+## What Nocturne emits
+
+| Container | Signals | Source |
+|-----------|---------|--------|
+| **API** | Metrics, traces, and logs | ASP.NET Core, HTTP client, and .NET runtime instrumentation via Aspire ServiceDefaults |
+| **Web** | Server-side traces and logs, plus client-error spans | Node auto-instrumentation (server-side HTTP) and a browser error handler that reports unhandled errors |
+
+Telemetry is **push-based over OTLP**. Nocturne does **not** expose a Prometheus
+`/metrics` scrape endpoint -- see **Using Prometheus and Grafana** below if that
+is your stack.
+
+<Callout type="info" title="You provide the backend">
+  Nocturne does not bundle a collector or a metrics store. You point it at an
+  OTLP endpoint you already run (an OpenTelemetry Collector, or a SaaS backend
+  such as Grafana Cloud, Honeycomb, Dash0, etc.).
+</Callout>
+
+## The single switch
+
+Both containers enable their exporters only when `OTEL_EXPORTER_OTLP_ENDPOINT`
+is set. Setting it on a container turns telemetry on; leaving it unset keeps it
+off. The standard OpenTelemetry SDK environment variables apply:
+
+| Variable | Description |
+|----------|-------------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Collector URL. Turns the exporter on. e.g. `http://otel-collector:4317` |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` (default, port 4317) or `http/protobuf` (port 4318) |
+| `OTEL_SERVICE_NAME` | Service name shown in your backend (e.g. `nocturne-api`, `nocturne-web`) |
+| `OTEL_RESOURCE_ATTRIBUTES` | Extra resource attributes, e.g. `deployment.environment=production` |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Auth headers for SaaS collectors, e.g. `x-api-key=...` |
+
+## Docker Compose
+
+Both the `nocturne-api` and `nocturne-web` services already reference
+`OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_PROTOCOL` from your `.env`.
+Telemetry is off because the endpoint ships empty -- there is no need to edit
+the Compose file. To turn it on, set the endpoint in `.env`:
+
+```bash
+# .env
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc   # grpc (4317) or http/protobuf (4318)
+```
+
+`OTEL_EXPORTER_OTLP_PROTOCOL` defaults to `grpc` so the API and web containers
+agree; change it to `http/protobuf` if your collector expects HTTP (port 4318).
+Run the collector as another service on the same Compose network (or point the
+endpoint at an external host), then recreate the containers:
+
+```
+docker compose up -d
+```
+
+<Callout type="tip" title="Only instrument what you need">
+  Both services read the same two variables. If you only want backend telemetry,
+  override <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> to empty for
+  <code>nocturne-web</code> in the Compose file. Otherwise the single
+  <code>.env</code> endpoint enables both.
+</Callout>
+
+## Kubernetes (Helm)
+
+The Helm chart wires both containers from one `observability.otlp` block. A
+single `enabled: true` lights up the API and the web app:
+
+```yaml
+observability:
+  otlp:
+    enabled: true
+    endpoint: http://otel-collector.observability.svc.cluster.local:4317
+    protocol: grpc
+    resourceAttributes:
+      deployment.environment: production
+    # For collectors that require auth, reference a Secret holding the headers:
+    headersSecretRef:
+      name: nocturne-otel-headers
+      key: headers
+```
+
+For a SaaS collector, create the headers Secret first:
+
+```
+kubectl create secret generic nocturne-otel-headers \
+  --from-literal=headers='x-api-key=...'
+```
+
+The chart automatically sets `service.name` (`<release>-nocturne-api` and
+`<release>-nocturne-web`), `service.version` (image tag), and
+`k8s.namespace.name` / `k8s.pod.name` via the downward API. See the
+[chart README](https://github.com/nightscout/nocturne/tree/main/deploy/helm/nocturne)
+for the full values reference.
+
+## Using Prometheus and Grafana
+
+Because Nocturne pushes OTLP and has no scrape endpoint, a Prometheus-only setup
+needs a bridge. Run an [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/)
+with an `otlp` receiver and a `prometheus` (scrape target) or
+`prometheusremotewrite` exporter, then point Nocturne at the collector exactly
+as above. The collector converts the pushed metrics into something Prometheus
+can scrape or receive.
+
+## Privacy: telemetry can contain identifiers
+
+<Callout type="danger" title="Review telemetry before sending it off-site">
+  Request URLs and client-error reports can include tenant subdomains and
+  identifiers, and traces may carry request metadata. Telemetry only leaves your
+  instance once you set <code>OTEL_EXPORTER_OTLP_ENDPOINT</code>. If you send it
+  to a third-party backend, treat it as sensitive: prefer a collector you
+  control, and use the collector's processors (e.g. attribute/redaction
+  processors) to scrub or drop anything you do not want to retain.
+</Callout>
+
+## Verifying it works
+
+1. Set the endpoint and restart (Compose) or upgrade the release (Helm).
+2. Generate some traffic by opening your instance and signing in.
+3. In your backend, look for services named `nocturne-api` and `nocturne-web`
+   (or your overridden `OTEL_SERVICE_NAME`) and confirm traces and metrics are
+   arriving.
+4. If nothing shows up, check the collector is reachable from the containers and
+   that the protocol/port match (`grpc` -> 4317, `http/protobuf` -> 4318).

@@ -90,6 +90,60 @@ public class CobCalculatorTests
         );
     }
 
+    #region TherapySnapshot overload (async-free chart hot path)
+
+    // Snapshot whose in-memory lookups equal the mocked resolvers (sens 50, carb ratio 18,
+    // carb absorption 30, DIA 3, basal 1.0). With no device snapshots present, the snapshot
+    // overload must reproduce the async path's COB exactly.
+    private static TherapySnapshot MatchingSnapshot() => new(
+        dia: DefaultDIA,
+        peakMinutes: 75,
+        carbsPerHour: DefaultCarbAbsorptionRate,
+        timezone: null,
+        ccpPercentage: null,
+        ccpTimeshiftMs: 0,
+        sensitivityEntries: new[] { new ScheduleEntry { TimeAsSeconds = 0, Value = DefaultSensitivity } },
+        carbRatioEntries: new[] { new ScheduleEntry { TimeAsSeconds = 0, Value = DefaultCarbRatio } },
+        basalEntries: new[] { new ScheduleEntry { TimeAsSeconds = 0, Value = DefaultBasalRate } });
+
+    [Fact]
+    public void FromCarbIntakes_SnapshotOverload_MatchesAsyncPath_WhenNoDeviceSnapshots()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var carbs = new List<CarbIntake>
+        {
+            new() { Carbs = 50, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 45 * 60 * 1000).UtcDateTime },
+            new() { Carbs = 20, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 100 * 60 * 1000).UtcDateTime },
+        };
+        var boluses = new List<Bolus>
+        {
+            new() { Insulin = 3.0, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 60 * 60 * 1000).UtcDateTime },
+            new() { Insulin = 1.5, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 20 * 60 * 1000).UtcDateTime },
+        };
+        var tempBasals = new List<TempBasal>
+        {
+            new()
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 50 * 60 * 1000).UtcDateTime,
+                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 20 * 60 * 1000).UtcDateTime,
+                Rate = 1.8,
+                ScheduledRate = null,
+                Origin = TempBasalOrigin.Algorithm,
+            },
+        };
+
+        var viaAsync = _calculator.FromCarbIntakes(carbs, boluses, tempBasals, now);
+        var viaSnapshot = _calculator.FromCarbIntakes(carbs, boluses, tempBasals, MatchingSnapshot(), now);
+
+        Assert.Equal(viaAsync.Cob, viaSnapshot.Cob, 6);
+        Assert.Equal(viaAsync.DecayedBy, viaSnapshot.DecayedBy);
+        Assert.Equal(viaAsync.IsDecaying, viaSnapshot.IsDecaying);
+        Assert.Equal(viaAsync.RawCarbImpact.GetValueOrDefault(), viaSnapshot.RawCarbImpact.GetValueOrDefault(), 6);
+        Assert.True(viaSnapshot.Cob > 0, "sanity: the scenario should produce non-zero COB");
+    }
+
+    #endregion
+
     #region CalculateTotalAsync Tests
 
     [Fact]

@@ -94,8 +94,9 @@
             </div>
         </a>
 
-        <div
-            class="p-6 rounded-xl border border-border/60 bg-card/50 transition-colors"
+        <a
+            href="/scalar"
+            class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
         >
             <div class="flex items-start gap-4">
                 <div
@@ -105,23 +106,20 @@
                 </div>
                 <div class="flex-1">
                     <h2
-                        class="text-lg font-semibold mb-1 flex items-center gap-2"
+                        class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
                     >
                         API Reference
                     </h2>
-                    <p class="text-sm text-muted-foreground mb-3">
+                    <p class="text-sm text-muted-foreground">
                         Interactive API documentation powered by Scalar. Explore
                         endpoints, test requests, and integrate with Nocturne.
                     </p>
-                    <p
-                        class="text-xs text-muted-foreground font-mono bg-muted/50 px-2 py-1 rounded inline-block"
-                    >
-                        Available at <span class="text-primary">/scalar</span> on
-                        your Nocturne API
-                    </p>
                 </div>
+                <ArrowRight
+                    class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors"
+                />
             </div>
-        </div>
+        </a>
     </div>
 
     <div class="mt-12 p-6 rounded-xl border border-amber-500/30 bg-amber-500/5">

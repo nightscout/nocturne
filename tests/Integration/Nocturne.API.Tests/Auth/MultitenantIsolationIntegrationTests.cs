@@ -10,10 +10,14 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration.Auth;
 
 /// <summary>
-/// Integration tests verifying that tenant data isolation is enforced end-to-end.
-/// Each test seeds data in one tenant and confirms it is invisible from another,
-/// covering entries, treatments, profiles, auth grants, OAuth clients, and tenant
-/// resolution edge cases (unknown subdomain, inactive tenant, apex domain).
+/// Integration tests verifying that tenant data isolation and cross-tenant
+/// authorization are enforced end-to-end. Each test seeds data in one tenant and
+/// confirms it is invisible from another, covering entries, treatments, profiles,
+/// auth grants, OAuth clients, and tenant resolution edge cases (unknown subdomain,
+/// inactive tenant, apex domain). The "subject membership authorization gate"
+/// section additionally verifies that a valid access token issued for one tenant
+/// cannot read or write against another tenant, and that a tenant member without
+/// the platform_admin role cannot reach the platform-admin API.
 /// </summary>
 [Trait("Category", "Integration")]
 public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
@@ -420,5 +424,163 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
             reactivateCmd.Parameters.AddWithValue("id", _tenantBId);
             await reactivateCmd.ExecuteNonQueryAsync();
         }
+    }
+
+    // ── Subject membership authorization gate ───────────────────────────────
+    // The tests above pair each tenant's api-secret admin client with its own
+    // subdomain. That proves query-filter/RLS data isolation, but the api-secret
+    // authenticates as an admin API key on the resolved tenant, which bypasses the
+    // membership check. The tests below send ONLY a subject's Bearer access token,
+    // so AuthenticationMiddleware.IsMemberAsync is the gate under test: a valid
+    // token for one tenant must not authenticate against another tenant.
+
+    [Fact]
+    public async Task SubjectA_Token_CannotRead_OnTenantB()
+    {
+        // Subject A holds a valid access token but is not a member of tenant B.
+        using var client = AuthTestHelpers.CreateTenantBearerClient(
+            Fixture, _slugB, _baseDomain, _accessTokenA);
+
+        var response = await client.GetAsync("/api/v1/entries/current");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
+            "a valid access token for tenant A must not authenticate against tenant B");
+    }
+
+    [Fact]
+    public async Task SubjectB_Token_CannotRead_OnTenantA()
+    {
+        // Symmetric check from the other direction.
+        using var client = AuthTestHelpers.CreateTenantBearerClient(
+            Fixture, _slugA, _baseDomain, _accessTokenB);
+
+        var response = await client.GetAsync("/api/v1/entries/current");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
+            "a valid access token for tenant B must not authenticate against tenant A");
+    }
+
+    [Fact]
+    public async Task SubjectA_Token_CanAccess_OwnTenant()
+    {
+        // Positive control: the same token, used against its OWN tenant, both
+        // authenticates and is authorized to write. This proves the 401s in the
+        // cross-tenant tests come from the membership gate, not an invalid token.
+        using var client = AuthTestHelpers.CreateTenantBearerClient(
+            Fixture, _slugA, _baseDomain, _accessTokenA);
+
+        var now = DateTimeOffset.UtcNow;
+        var entryPayload = new[]
+        {
+            new
+            {
+                type = "sgv",
+                sgv = 120,
+                date = now.ToUnixTimeMilliseconds(),
+                dateString = now.UtcDateTime.ToString("o")
+            }
+        };
+        var response = await client.PostAsJsonAsync("/api/v1/entries", entryPayload);
+
+        response.StatusCode.Should().BeOneOf(
+            new[] { HttpStatusCode.OK, HttpStatusCode.Created },
+            "a subject must be able to write to a tenant it belongs to using its own access token");
+    }
+
+    [Fact]
+    public async Task SubjectA_Token_CannotWrite_ToTenantB()
+    {
+        // Attempt to write into tenant B using tenant A's token.
+        using var attacker = AuthTestHelpers.CreateTenantBearerClient(
+            Fixture, _slugB, _baseDomain, _accessTokenA);
+
+        var now = DateTimeOffset.UtcNow;
+        var entryPayload = new[]
+        {
+            new
+            {
+                type = "sgv",
+                sgv = 321,
+                date = now.ToUnixTimeMilliseconds(),
+                dateString = now.UtcDateTime.ToString("o")
+            }
+        };
+        var writeResponse = await attacker.PostAsJsonAsync("/api/v1/entries", entryPayload);
+
+        // Assert - the write is rejected at the auth layer...
+        writeResponse.StatusCode.Should().BeOneOf(
+            new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden },
+            "a subject must not be able to write into a tenant it does not belong to");
+
+        // ...and nothing landed in tenant B.
+        using var clientB = AuthTestHelpers.CreateAuthenticatedTenantClient(
+            Fixture, _slugB, _baseDomain, _accessTokenB);
+        var getResponse = await clientB.GetAsync("/api/v1/entries?count=100");
+        getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var content = await getResponse.Content.ReadAsStringAsync();
+        var entries = JsonSerializer.Deserialize<JsonElement>(content);
+        var leaked = entries.EnumerateArray().Any(e =>
+            e.TryGetProperty("sgv", out var sgv) && sgv.GetInt32() == 321);
+        leaked.Should().BeFalse("a cross-tenant write must not create data in the target tenant");
+    }
+
+    [Fact]
+    public async Task TenantMember_WithoutPlatformAdmin_CannotUse_PlatformAdminApi()
+    {
+        // Subject A is a member (and admin) of tenant A, but is not a platform
+        // admin. The platform-admin tenant API requires the platform_admin role,
+        // so an ordinary tenant member must be forbidden even on their own tenant.
+        using var client = AuthTestHelpers.CreateTenantBearerClient(
+            Fixture, _slugA, _baseDomain, _accessTokenA);
+
+        var response = await client.GetAsync("/api/v4/admin/tenants");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "a tenant member without the platform_admin role must not access the platform-admin API");
+    }
+
+    [Fact]
+    public async Task RevokedMember_Token_IsDenied_OnOwnTenant()
+    {
+        // Sanity: subject A is a member of tenant A and can write before revocation.
+        var now = DateTimeOffset.UtcNow;
+        using (var before = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _accessTokenA))
+        {
+            var ok = await before.PostAsJsonAsync("/api/v1/entries", new[]
+            {
+                new { type = "sgv", sgv = 111, date = now.ToUnixTimeMilliseconds(), dateString = now.UtcDateTime.ToString("o") }
+            });
+            ok.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+        }
+
+        // Revoke subject A's membership in tenant A. No app path soft-revokes today, so simulate it
+        // directly, the same way other tests toggle tenants.is_active.
+        var connStr = await GetPostgresConnectionStringAsync();
+        await using (var conn = new NpgsqlConnection(connStr))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE tenant_members SET revoked_at = now() WHERE subject_id = @s AND tenant_id = @t;";
+            cmd.Parameters.AddWithValue("s", _subjectAId);
+            cmd.Parameters.AddWithValue("t", _tenantAId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // The same previously-valid token is now rejected for both read and write — the membership
+        // gate (via the RevokedAt query filter) no longer sees subject A as a member of tenant A.
+        using var client = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _accessTokenA);
+
+        var read = await client.GetAsync("/api/v1/entries/current");
+        read.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
+            "a revoked member must not authenticate, even with a previously-valid access token");
+
+        var write = await client.PostAsJsonAsync("/api/v1/entries", new[]
+        {
+            new { type = "sgv", sgv = 112, date = now.ToUnixTimeMilliseconds(), dateString = now.UtcDateTime.ToString("o") }
+        });
+        write.StatusCode.Should().BeOneOf(
+            new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden },
+            "a revoked member must not be able to write");
     }
 }

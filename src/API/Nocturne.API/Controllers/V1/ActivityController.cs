@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -119,6 +121,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpPost]
     [Authorize]
+    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
     [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -183,6 +186,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpPut("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.TreatmentsReadWrite)]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -224,6 +228,7 @@ public class ActivityController : ControllerBase
     /// </summary>
     [HttpDelete("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]

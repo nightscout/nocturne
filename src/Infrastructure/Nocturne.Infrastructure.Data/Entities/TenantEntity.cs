@@ -60,6 +60,23 @@ public class TenantEntity
     public bool IsDemo { get; set; }
 
     /// <summary>
+    /// Unguessable token for the tenant's public read-only dashboard, served at
+    /// {token}.share.{baseDomain}. Null when public sharing is disabled. Rotating replaces the
+    /// value and evicts the resolution cache, so the previous link stops resolving.
+    /// </summary>
+    [Column("share_token")]
+    [MaxLength(32)]
+    public string? ShareToken { get; set; }
+
+    /// <summary>When <see cref="ShareToken"/> was last minted or rotated.</summary>
+    [Column("share_token_set_at")]
+    public DateTime? ShareTokenSetAt { get; set; }
+
+    /// <summary>When the public share link was last accessed. Drives the owner's rotate signal.</summary>
+    [Column("share_last_accessed_at")]
+    public DateTime? ShareLastAccessedAt { get; set; }
+
+    /// <summary>
     /// When the tenant record was created
     /// </summary>
     [Column("sys_created_at")]

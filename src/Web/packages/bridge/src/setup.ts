@@ -7,6 +7,11 @@ import SignalRClient from './lib/signalr-client.js';
 import MessageTranslator from './lib/message-translator.js';
 import logger from './lib/logger.js';
 
+/** Derive the API base URL from a SignalR hub URL (".../hubs/data" -> "..."). */
+function apiBaseFromHubUrl(hubUrl: string): string {
+  return hubUrl.replace(/\/hubs\/\w+$/, '');
+}
+
 interface TenantInfo {
   slug: string;
   isActive: boolean;
@@ -21,7 +26,12 @@ async function discoverTenants(
   logger.info(`Discovering tenants from ${url}`);
 
   const response = await fetch(url, {
-    headers: { 'X-Instance-Key': instanceKeyHash },
+    // X-Instance-Service marks this as a genuine service call so the API's
+    // InstanceKeyHandler honors the instance key (a bare key is ignored).
+    headers: {
+      'X-Instance-Key': instanceKeyHash,
+      'X-Instance-Service': 'nocturne-bridge',
+    },
   });
 
   if (!response.ok) {
@@ -69,6 +79,16 @@ export async function setupBridge(
 
   const config = buildConfig(userConfig);
 
+  // BASE_DOMAIN is how the bridge resolves which tenant a connection belongs to
+  // and authorizes it against the API's read policy. Without it the bridge can't
+  // scope or authorize Socket.IO traffic, so it refuses to start rather than
+  // broadcast tenant data unauthenticated. Callers catch this and keep the web
+  // app running with real-time updates disabled.
+  if (!config.baseDomain) {
+    throw new Error('BASE_DOMAIN is required to run the WebSocket bridge');
+  }
+  const baseDomain = config.baseDomain;
+
   logger.info(`SignalR DataHub URL: ${config.signalr.hubUrl}`);
   if (config.signalr.alarmHubUrl) {
     logger.info(`SignalR AlarmHub URL: ${config.signalr.alarmHubUrl}`);
@@ -77,61 +97,41 @@ export async function setupBridge(
     logger.info(`SignalR ConfigHub URL: ${config.signalr.configHubUrl}`);
   }
 
-  // Start the Socket.IO server eagerly — it doesn't need tenant info to
-  // accept browser connections.  Tenant room assignment uses the Host
-  // header, not the pre-discovered slug list (the list is only needed for
-  // the apex-domain single-tenant fallback).
+  // The Socket.IO handshake is authorized by verifying a signed ticket the web
+  // app's /realtime/ticket endpoint mints after it has checked the API read
+  // policy. Both sides share INSTANCE_KEY as the HMAC secret.
+  if (!config.instanceKey) {
+    logger.warn(
+      'INSTANCE_KEY is not set — every Socket.IO handshake ticket will fail verification, so realtime will be disabled until it is configured.',
+    );
+  }
+
+  // Start the Socket.IO server eagerly — it doesn't need tenant info to accept
+  // browser connections. Tenant room assignment uses the Host header; the slug
+  // list is only needed for the apex-domain single-tenant case and is filled in
+  // once tenant discovery completes.
   const socketIOServer = new SocketIOServer(
     httpServer,
     config.socketio,
-    config.baseDomain,
+    baseDomain,
+    [],
+    config.instanceKey,
   );
 
   await socketIOServer.start();
   logger.info('Socket.IO server started');
 
-  if (!config.baseDomain) {
-    // Single-tenant mode (backward compatible): one SignalR connection, no tenant scoping
-    const messageTranslator = new MessageTranslator(socketIOServer);
-    const signalRClient = new SignalRClient(messageTranslator, {
-      hubUrl: config.signalr.hubUrl,
-      alarmHubUrl: config.signalr.alarmHubUrl,
-      configHubUrl: config.signalr.configHubUrl,
-      reconnectAttempts: config.signalr.reconnectAttempts,
-      reconnectDelay: config.signalr.reconnectDelay,
-      maxReconnectDelay: config.signalr.maxReconnectDelay,
-      instanceKey: config.instanceKey,
-    });
+  // Discover tenants and connect their SignalR clients in the background so a
+  // slow or temporarily-unavailable API doesn't prevent the Socket.IO server
+  // from accepting browser connections.
+  logger.info(`Bridge tenant discovery starting (baseDomain: ${baseDomain})`);
 
-    await signalRClient.connect();
-    logger.info('SignalR client connected');
-    logger.info('WebSocket Bridge setup completed successfully');
-
-    return {
-      io: socketIOServer.getIO()!,
-      disconnect: async () => {
-        await signalRClient.disconnect();
-        await socketIOServer.stop();
-      },
-      isConnected: () => signalRClient.isConnected(),
-      getStats: () => ({
-        ...socketIOServer.getStats(),
-        signalrConnected: signalRClient.isConnected(),
-      }),
-    };
-  }
-
-  // Multi-tenant mode: discover tenants and connect SignalR clients in the
-  // background so a slow or temporarily-unavailable API doesn't prevent the
-  // Socket.IO server from accepting browser connections.
-  logger.info(`Multi-tenant mode enabled (baseDomain: ${config.baseDomain})`);
-
-  const instanceKeyHash = createHash('sha1')
+  const instanceKeyHash = createHash('sha256')
     .update(config.instanceKey)
     .digest('hex')
     .toLowerCase();
 
-  const apiBaseUrl = config.signalr.hubUrl.replace(/\/hubs\/\w+$/, '');
+  const apiBaseUrl = apiBaseFromHubUrl(config.signalr.hubUrl);
   const clients: SignalRClient[] = [];
   let cancelled = false;
 
@@ -146,7 +146,7 @@ export async function setupBridge(
 
         for (const slug of tenantSlugs) {
           if (cancelled) return;
-          const client = createTenantClient(socketIOServer, config, slug, config.baseDomain!);
+          const client = createTenantClient(socketIOServer, config, slug, baseDomain);
           clients.push(client);
           await client.connect();
           logger.info(`SignalR client connected for tenant: ${slug}`);

@@ -6,6 +6,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -18,16 +19,16 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alert-invites")]
 public class AlertInvitesController : ControllerBase
 {
-    private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
+    private readonly ITenantDbContextFactory _contextFactory;
     private readonly ILogger<AlertInvitesController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertInvitesController"/>.
     /// </summary>
-    /// <param name="contextFactory">Factory for creating <see cref="NocturneDbContext"/> instances.</param>
+    /// <param name="contextFactory">Tenant-scoped factory for creating <see cref="NocturneDbContext"/> instances.</param>
     /// <param name="logger">Logger instance.</param>
     public AlertInvitesController(
-        IDbContextFactory<NocturneDbContext> contextFactory,
+        ITenantDbContextFactory contextFactory,
         ILogger<AlertInvitesController> logger)
     {
         _contextFactory = contextFactory;
@@ -45,7 +46,7 @@ public class AlertInvitesController : ControllerBase
     public async Task<ActionResult<AlertInviteResponse>> CreateInvite(
         [FromBody] CreateAlertInviteRequest request, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         // Verify the rule channel exists within this tenant
         var stepExists = await db.AlertRuleChannels
@@ -103,7 +104,7 @@ public class AlertInvitesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status410Gone)]
     public async Task<ActionResult<AlertInviteResponse>> ValidateInvite(string token, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var invite = await db.AlertInvites
             .AsNoTracking()
@@ -141,7 +142,7 @@ public class AlertInvitesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status410Gone)]
     public async Task<ActionResult> RedeemInvite(string token, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var invite = await db.AlertInvites
             .FirstOrDefaultAsync(i => i.Token == token, ct);
@@ -177,7 +178,7 @@ public class AlertInvitesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult> RevokeInvite(Guid id, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var invite = await db.AlertInvites
             .FirstOrDefaultAsync(i => i.Id == id, ct);

@@ -45,9 +45,15 @@ public static class EnvVarMetadataExtensions
     public static IResourceBuilder<ParameterResource> WithPublishMetadata(
         this IResourceBuilder<ParameterResource> builder,
         string label,
-        string? description = null)
+        string? description = null,
+        string? defaultValue = null)
         => builder.WithAnnotation(
-            new EnvVarMetadataAnnotation { Label = label, Description = description },
+            new EnvVarMetadataAnnotation
+            {
+                Label = label,
+                Description = description,
+                Default = defaultValue,
+            },
             ResourceAnnotationMutationBehavior.Replace);
 
     /// <summary>

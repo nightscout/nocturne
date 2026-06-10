@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
 
@@ -130,6 +131,7 @@ public class ProfileController : ControllerBase
     /// <returns>Created profiles with assigned IDs as an array</returns>
     [HttpPost]
     [Authorize]
+    [RequireScope(OAuthScopes.TherapyReadWrite)]
     [NightscoutEndpoint("/api/v1/profile")]
     [ProducesResponseType(typeof(Profile[]), 200)]
     [ProducesResponseType(400)]

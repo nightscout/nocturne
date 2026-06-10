@@ -20,6 +20,7 @@
     ActiveExcursionResponse,
     TenantAlertSettingsResponse,
   } from "$api-clients";
+  import { AlertRuleSeverity } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
   import {
@@ -58,7 +59,7 @@
     // backend exposes it.
     if (s?.dndManualActive || s?.dndScheduleEnabled) return "dnd";
     if (active.length === 0) return "ok";
-    if (active.some((a) => a.severity === "critical")) return "bad";
+    if (active.some((a) => a.severity === AlertRuleSeverity.Critical)) return "bad";
     return "warn";
   }
 
@@ -103,7 +104,6 @@
         dndScheduleEnabled: false,
         dndScheduleStart: current.dndScheduleStart,
         dndScheduleEnd: current.dndScheduleEnd,
-        timezone: current.timezone ?? "UTC",
       });
       await dndQuery.refresh();
     } finally {

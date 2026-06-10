@@ -13,10 +13,10 @@
   let { onstate }: Props = $props();
 
   let formEl = $state<HTMLFormElement | null>(null);
-  const state = new ClinicalState(() => formEl);
+  const clinical = new ClinicalState(() => formEl);
 
   $effect(() => {
-    onstate?.(state);
+    onstate?.(clinical);
   });
 </script>
 
@@ -24,29 +24,29 @@
   id="clinical-form"
   class="@container"
   bind:this={formEl}
-  {...state.guard.enhance()}
+  {...clinical.guard.enhance()}
 >
   <!-- Hidden fields for read-only record data -->
-  {#if state.record?.id}
-    <input type="hidden" name="id" value={state.record.id} />
+  {#if clinical.record?.id}
+    <input type="hidden" name="id" value={clinical.record.id} />
   {/if}
-  {#if state.record?.avatarUrl}
-    <input type="hidden" name="avatarUrl" value={state.record.avatarUrl} />
+  {#if clinical.record?.avatarUrl}
+    <input type="hidden" name="avatarUrl" value={clinical.record.avatarUrl} />
   {/if}
-  {#if state.record?.createdAt}
-    <input type="hidden" name="createdAt" value={state.record.createdAt instanceof Date ? state.record.createdAt.toISOString() : state.record.createdAt} />
+  {#if clinical.record?.createdAt}
+    <input type="hidden" name="createdAt" value={clinical.record.createdAt instanceof Date ? clinical.record.createdAt.toISOString() : clinical.record.createdAt} />
   {/if}
-  {#if state.record?.modifiedAt}
-    <input type="hidden" name="modifiedAt" value={state.record.modifiedAt instanceof Date ? state.record.modifiedAt.toISOString() : state.record.modifiedAt} />
+  {#if clinical.record?.modifiedAt}
+    <input type="hidden" name="modifiedAt" value={clinical.record.modifiedAt instanceof Date ? clinical.record.modifiedAt.toISOString() : clinical.record.modifiedAt} />
   {/if}
 
   <div class="grid gap-4 @sm:grid-cols-2">
     <div class="space-y-2">
       <Label for="diabetes-type">Diabetes Type</Label>
-      <Select.Root type="single" name="diabetesType" bind:value={state.diabetesType}>
-        <Select.Trigger id="diabetes-type" aria-invalid={state.guard.issuesFor("diabetesType").length > 0}>
-          {state.diabetesType
-            ? (diabetesTypeLabels[state.diabetesType as DiabetesType] ?? state.diabetesType)
+      <Select.Root type="single" name="diabetesType" bind:value={clinical.diabetesType}>
+        <Select.Trigger id="diabetes-type" aria-invalid={clinical.guard.issuesFor("diabetesType").length > 0}>
+          {clinical.diabetesType
+            ? (diabetesTypeLabels[clinical.diabetesType as DiabetesType] ?? clinical.diabetesType)
             : "Select type"}
         </Select.Trigger>
         <Select.Content>
@@ -55,18 +55,18 @@
           {/each}
         </Select.Content>
       </Select.Root>
-      {#each state.guard.issuesFor("diabetesType") as issue}
+      {#each clinical.guard.issuesFor("diabetesType") as issue}
         <p class="text-sm text-destructive">{issue.message}</p>
       {/each}
     </div>
 
-    {#if state.diabetesType === DiabetesType.Other}
+    {#if clinical.diabetesType === DiabetesType.Other}
       <div class="space-y-2">
         <Label for="diabetes-type-other">Specify Type</Label>
         <Input
           id="diabetes-type-other"
           name="diabetesTypeOther"
-          bind:value={state.diabetesTypeOther}
+          bind:value={clinical.diabetesTypeOther}
           placeholder="e.g. Type 3c"
         />
       </div>
@@ -78,7 +78,7 @@
         id="diagnosis-date"
         name="diagnosisDate"
         type="date"
-        bind:value={state.diagnosisDate}
+        bind:value={clinical.diagnosisDate}
       />
     </div>
 
@@ -88,7 +88,7 @@
         id="date-of-birth"
         name="dateOfBirth"
         type="date"
-        bind:value={state.dateOfBirth}
+        bind:value={clinical.dateOfBirth}
       />
     </div>
 
@@ -97,7 +97,7 @@
       <Input
         id="preferred-name"
         name="preferredName"
-        bind:value={state.preferredName}
+        bind:value={clinical.preferredName}
         placeholder="How you'd like to be addressed"
       />
     </div>
@@ -107,7 +107,7 @@
       <Input
         id="pronouns"
         name="pronouns"
-        bind:value={state.pronouns}
+        bind:value={clinical.pronouns}
         placeholder="e.g. she/her, he/him, they/them"
       />
     </div>
@@ -117,10 +117,10 @@
       <Input
         id="timezone"
         name="timezone"
-        bind:value={state.timezone}
+        bind:value={clinical.timezone}
         placeholder="e.g. Australia/Sydney"
       />
-      {#if state.timezoneAutoDetected}
+      {#if clinical.timezoneAutoDetected}
         <p class="text-xs text-muted-foreground">
           Auto-detected from your browser. Save to confirm — alerts with time-of-day rules use this to interpret window hours in your local time.
         </p>

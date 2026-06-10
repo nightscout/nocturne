@@ -36,6 +36,9 @@ public interface IJwtService
     /// <param name="tenantId">Tenant this token is pinned to. When present, the token is
     /// only valid on the tenant subdomain that issued it.</param>
     /// <param name="lifetime">Optional custom lifetime (defaults to configuration)</param>
+    /// <param name="platformAccess">When true, marks this token as a platform-admin tenant-access
+    /// grant. Combined with <paramref name="tenantId"/>, this is what authorizes out-of-tenant
+    /// superuser access — a marker that no ordinary tenant-pinned token carries.</param>
     /// <returns>JWT access token string</returns>
     string GenerateAccessToken(
         SubjectInfo subject,
@@ -45,7 +48,8 @@ public interface IJwtService
         string? clientId = null,
         bool limitTo24Hours = false,
         Guid? tenantId = null,
-        TimeSpan? lifetime = null
+        TimeSpan? lifetime = null,
+        bool platformAccess = false
     );
 
     /// <summary>
@@ -192,6 +196,13 @@ public class JwtClaims
     /// the matching tenant subdomain.
     /// </summary>
     public Guid? TenantId { get; set; }
+
+    /// <summary>
+    /// Whether this token is a platform-admin tenant-access grant. Only such tokens
+    /// (combined with a matching <see cref="TenantId"/> pin) confer out-of-tenant
+    /// superuser access; no ordinary tenant-pinned token carries this marker.
+    /// </summary>
+    public bool PlatformAccess { get; set; }
 
     /// <summary>
     /// When true, data requests using this token should only return data from the

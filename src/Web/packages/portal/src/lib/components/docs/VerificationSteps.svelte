@@ -21,9 +21,12 @@
         <p class="text-muted-foreground mb-2">
             <strong class="text-foreground">Test the API is responding:</strong>
         </p>
-        <CodeBlock code="curl http://localhost:8080/api/v1/status.json" />
+        <CodeBlock code="curl https://your-domain/api/v1/status.json" />
         <p class="text-xs text-muted-foreground mt-1">
-            The YARP gateway listens on port 8080. You should receive a JSON response with server status.
+            Replace <code class="bg-muted/50 px-1 py-0.5 rounded">your-domain</code> with your
+            <code class="bg-muted/50 px-1 py-0.5 rounded">BASE_DOMAIN</code>. The bundled Caddy proxy
+            serves HTTPS on ports 80 and 443; you should receive a JSON response with server status.
+            (With a bring-your-own reverse proxy, query the gateway on host port 8080 instead.)
         </p>
     </div>
 </div>

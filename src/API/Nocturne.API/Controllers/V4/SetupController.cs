@@ -142,7 +142,7 @@ public partial class SetupController : ControllerBase
             tenant.Id.ToString());
 
         var exists = await context.TenantMembers.AsNoTracking()
-            .AnyAsync(m => m.TenantId == tenant.Id && m.Username == normalized && m.RevokedAt == null, ct);
+            .AnyAsync(m => m.TenantId == tenant.Id && m.Username == normalized, ct);
 
         if (exists)
             return Ok(new SlugValidationResult(false, "This username is already taken"));

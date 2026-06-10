@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using Nocturne.API.Controllers.V4.Audit;
 using Nocturne.API.Models.Responses;
@@ -58,10 +59,14 @@ public class AuditControllerTests : IDisposable
             .Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new NocturneDbContext(_dbOptions) { TenantId = TenantId });
 
+        // No config keys set → SoftDeleteRetentionPolicy falls back to its 30-day default.
+        var configuration = new ConfigurationBuilder().Build();
+
         var controller = new AuditController(
             factoryMock.Object,
             _tenantAccessor.Object,
-            _configCache.Object);
+            _configCache.Object,
+            configuration);
 
         var httpContext = new DefaultHttpContext();
         if (scopes != null)
@@ -410,5 +415,166 @@ public class AuditControllerTests : IDisposable
         }, CancellationToken.None);
 
         _configCache.Verify(c => c.Invalidate(TenantId), Times.Once);
+    }
+
+    // ── Retention-ordering validation ───────────────────────────────
+    // Mutation audit retention must cover the effective soft-delete window; otherwise
+    // audit rows age out while the soft-deleted entities they describe still live,
+    // losing user-delete attribution. The effective window is the tenant's configured
+    // value, or the instance default (30d here, floored at 7d) when unset or when no
+    // retention row exists — matching SoftDeleteCleanupService. A null (infinite) audit
+    // retention always covers it. The symmetric direction (rejecting a soft-delete
+    // retention bump that exceeds audit retention) will land when the
+    // TenantDataRetentionConfig update endpoint exists.
+
+    private async Task SeedSoftDeleteRetentionAsync(int? days)
+    {
+        await using var db = new NocturneDbContext(_dbOptions) { TenantId = TenantId };
+        db.TenantDataRetentionConfig.Add(new TenantDataRetentionConfigEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            SoftDeleteRetentionDays = days,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task UpdateConfig_AuditShorterThanSoftDelete_Returns400()
+    {
+        await SeedSoftDeleteRetentionAsync(30);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 10,
+        }, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        bad.Value.Should().NotBeNull();
+        var payload = bad.Value!.ToString();
+        payload.Should().Contain("10");
+        payload.Should().Contain("30");
+    }
+
+    [Fact]
+    public async Task UpdateConfig_AuditEqualToSoftDelete_Returns200()
+    {
+        await SeedSoftDeleteRetentionAsync(30);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 30,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateConfig_AuditLongerThanSoftDelete_Returns200()
+    {
+        await SeedSoftDeleteRetentionAsync(30);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 90,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateConfig_AuditNullWithFiniteSoftDelete_Returns200()
+    {
+        await SeedSoftDeleteRetentionAsync(30);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = null,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateConfig_FiniteAuditBelowDefault_NullSoftDelete_Returns400()
+    {
+        // Null soft-delete retention is not "infinite" — the cleanup service falls back to
+        // the instance default (30d), so audit retention must still cover that window.
+        await SeedSoftDeleteRetentionAsync(null);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 10,
+        }, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        bad.Value.Should().NotBeNull();
+        var payload = bad.Value!.ToString();
+        payload.Should().Contain("10");
+        payload.Should().Contain("30");
+    }
+
+    [Fact]
+    public async Task UpdateConfig_NullAuditWithNullSoftDelete_Returns200()
+    {
+        await SeedSoftDeleteRetentionAsync(null);
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = null,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateConfig_FiniteAuditBelowDefault_NoRetentionRow_Returns400()
+    {
+        // No TenantDataRetentionConfig row at all: the cleanup service still purges
+        // soft-deleted rows at the instance default (30d), so the validator must reject a
+        // shorter audit retention rather than skip the check. Otherwise a user-delete's
+        // audit row ages out at 10d while the entity lives to 30d, and a connector resync
+        // silently recreates it.
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 10,
+        }, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        bad.Value.Should().NotBeNull();
+        var payload = bad.Value!.ToString();
+        payload.Should().Contain("10");
+        payload.Should().Contain("30");
+    }
+
+    [Fact]
+    public async Task UpdateConfig_FiniteAuditAtDefault_NoRetentionRow_Returns200()
+    {
+        var controller = CreateController(Scopes(TenantPermissions.AuditManage));
+
+        var result = await controller.UpdateAuditConfig(new AuditConfigDto
+        {
+            ReadAuditEnabled = true,
+            MutationAuditRetentionDays = 30,
+        }, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
     }
 }

@@ -139,18 +139,10 @@
   }
 
   // Tracker definitions
-  let trackerDefinitions = $state<TrackerDefinitionDto[]>([]);
-  $effect(() => {
-    if (browser) {
-      getDefinitions({})
-        .then((defs) => {
-          trackerDefinitions = defs;
-        })
-        .catch(() => {
-          trackerDefinitions = [];
-        });
-    }
-  });
+  const definitionsQuery = getDefinitions({});
+  const trackerDefinitions = $derived<TrackerDefinitionDto[]>(
+    definitionsQuery.current ?? [],
+  );
 
   // Get tracker definition by ID
   function getTrackerDefinition(definitionId: string | undefined) {
@@ -439,7 +431,7 @@
       })}
       <div class="absolute inset-0 z-0">
         <GlucoseChartShell engine={bgChartEngine} heightClass="h-full">
-          {#snippet tracks(_ctx)}
+          {#snippet tracks()}
             {#if backgroundChart.chartConfig?.showBasal ?? false}
               <BasalTrack />
             {/if}
@@ -458,7 +450,7 @@
               <TrackerMarkers />
             {/if}
           {/snippet}
-          {#snippet overlays(_ctx)}
+          {#snippet overlays()}
             <ChartTooltip />
           {/snippet}
         </GlucoseChartShell>
@@ -485,9 +477,9 @@
     class="relative z-10 flex flex-col items-center p-2"
     style="gap: {3 * scale}px;"
   >
-    {#each config?.rows ?? [] as row}
+    {#each config?.rows ?? [] as row, rowIndex (rowIndex)}
       <div class="flex items-center" style="gap: {2 * scale}px;">
-        {#each row.elements ?? [] as element}
+        {#each row.elements ?? [] as element, elementIndex (elementIndex)}
           {#if !(element.type === "chart" && element.chartConfig?.asBackground)}
             {#if element.type === "chart"}
               {#if showCharts}
@@ -500,7 +492,7 @@
                   style="width: {(element.width || 400) * scale}px; height: {(element.height || 200) * scale}px;"
                 >
                   <GlucoseChartShell engine={inlineEngine} heightClass="h-full">
-                    {#snippet tracks(_ctx)}
+                    {#snippet tracks()}
                       {#if element.chartConfig?.showBasal ?? false}
                         <BasalTrack />
                       {/if}
@@ -519,7 +511,7 @@
                         <TrackerMarkers />
                       {/if}
                     {/snippet}
-                    {#snippet overlays(_ctx)}
+                    {#snippet overlays()}
                       <ChartTooltip />
                     {/snippet}
                   </GlucoseChartShell>

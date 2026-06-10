@@ -120,7 +120,7 @@
               <Input
                 placeholder="Prefix to match..."
                 value={rule.match}
-                oninput={(e) => {
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                   localRules[index].match = e.currentTarget.value;
                 }}
               />

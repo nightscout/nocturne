@@ -4,9 +4,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
+using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Tests.Shared.Mocks;
@@ -103,15 +105,15 @@ public class IobCobComputeStageTests
         };
 
         _mockIobCalculator
-            .Setup(s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<long?>()))
+            .Setup(s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
             .Returns(new IobResult { Iob = 2.0 });
 
         _mockIobCalculator
-            .Setup(s => s.FromTempBasals(It.IsAny<List<TempBasal>>(), It.IsAny<long?>()))
+            .Setup(s => s.FromTempBasals(It.IsAny<List<TempBasal>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
             .Returns(new IobResult { BasalIob = 0.5 });
 
         _mockCobCalculator
-            .Setup(s => s.FromCarbIntakes(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long?>()))
+            .Setup(s => s.FromCarbIntakes(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()))
             .Returns(new CobResult { Cob = 20.0 });
 
         var context = new ChartDataContext
@@ -166,11 +168,11 @@ public class IobCobComputeStageTests
 
         // Assert — IOB/COB calculators should never be called with no data
         _mockIobCalculator.Verify(
-            s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<long?>()),
+            s => s.FromBoluses(It.IsAny<List<Bolus>>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()),
             Times.Never
         );
         _mockCobCalculator.Verify(
-            s => s.FromCarbIntakes(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<long?>()),
+            s => s.FromCarbIntakes(It.IsAny<List<CarbIntake>>(), It.IsAny<List<Bolus>?>(), It.IsAny<List<TempBasal>?>(), It.IsAny<TherapySnapshot>(), It.IsAny<long>()),
             Times.Never
         );
 
@@ -187,5 +189,108 @@ public class IobCobComputeStageTests
         result.CobSeries.Should().ContainSingle();
         result.IobSeries[0].Value.Should().Be(0);
         result.CobSeries[0].Value.Should().Be(0);
+    }
+
+    /// <summary>
+    /// Scaling regression for the dashboard-chart hang. With the <em>real</em> IOB and COB
+    /// calculators wired into the stage and a wide window full of treatments shaped like erik's
+    /// tenant (temp basals with null ScheduledRate and null InsulinContext, plus boluses and
+    /// carbs), evaluating every tick must issue <b>zero</b> profile-resolver or device-snapshot
+    /// DB calls — every lookup is served from the per-tick in-memory TherapySnapshot.
+    /// Before the fix this path made an unbounded number of sync-over-async DB calls
+    /// (O(ticks × treatments)), which pinned a thread for minutes.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_WideWindowWithNullProfileFields_IssuesNoPerTickDbCalls()
+    {
+        // 24h window at 5-min resolution → ~288 ticks; treatments every ~15 min with the
+        // "connector-populated" shape: null ScheduledRate / null InsulinContext.
+        var startTime = TestMills;
+        var endTime = TestMills + 24L * 60 * 60 * 1000;
+        const int intervalMinutes = 5;
+
+        var tempBasals = new List<TempBasal>();
+        var boluses = new List<Bolus>();
+        var carbs = new List<CarbIntake>();
+        for (long t = startTime - 8L * 60 * 60 * 1000; t < endTime; t += 15 * 60 * 1000)
+        {
+            tempBasals.Add(new TempBasal
+            {
+                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime,
+                EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(t + 15 * 60 * 1000).UtcDateTime,
+                Rate = 1.5,
+                ScheduledRate = null,
+                Origin = TempBasalOrigin.Algorithm,
+            });
+            boluses.Add(new Bolus
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime,
+                Insulin = 0.8,
+                InsulinContext = null,
+            });
+        }
+        for (long t = startTime; t < endTime; t += 3L * 60 * 60 * 1000)
+        {
+            carbs.Add(new CarbIntake
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime,
+                Carbs = 40,
+            });
+        }
+
+        // Counting resolvers — every one of these must stay at zero invocations.
+        var therapySettings = new Mock<ITherapySettingsResolver>(MockBehavior.Strict);
+        var sensitivity = new Mock<ISensitivityResolver>(MockBehavior.Strict);
+        var basalRate = new Mock<IBasalRateResolver>(MockBehavior.Strict);
+        var carbRatio = new Mock<ICarbRatioResolver>(MockBehavior.Strict);
+        var apsRepo = new Mock<IApsSnapshotRepository>(MockBehavior.Strict);
+        var pumpRepo = new Mock<IPumpSnapshotRepository>(MockBehavior.Strict);
+
+        var realIob = new IobCalculator(
+            therapySettings.Object, sensitivity.Object, basalRate.Object, apsRepo.Object, pumpRepo.Object);
+        var realCob = new CobCalculator(
+            NullLogger<CobCalculator>.Instance, realIob, sensitivity.Object, carbRatio.Object,
+            therapySettings.Object, apsRepo.Object);
+
+        // A snapshot with real schedules so the calculators produce non-trivial output.
+        var snapshot = new TherapySnapshot(
+            dia: 3.0, peakMinutes: 75, carbsPerHour: 30.0, timezone: null, ccpPercentage: null, ccpTimeshiftMs: 0,
+            sensitivityEntries: new[] { new ScheduleEntry { TimeAsSeconds = 0, Value = 50.0 } },
+            carbRatioEntries: new[] { new ScheduleEntry { TimeAsSeconds = 0, Value = 10.0 } },
+            basalEntries: new[] { new ScheduleEntry { TimeAsSeconds = 0, Value = 0.8 } });
+        var timelineResolver = new Mock<ITherapyTimelineResolver>();
+        timelineResolver
+            .Setup(r => r.BuildAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((long from, long to, string? _, CancellationToken _) =>
+                new TherapyTimeline(new[] { new TherapySegment(from, to, snapshot) }));
+        var basalSeriesBuilder = new Mock<IBasalSeriesBuilder>();
+        basalSeriesBuilder
+            .Setup(b => b.BuildAsync(It.IsAny<List<TempBasal>>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<TherapyTimeline>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<BasalPoint>());
+
+        var stage = new IobCobComputeStage(
+            realIob, realCob, basalSeriesBuilder.Object, timelineResolver.Object,
+            _cache, MockTenantAccessor.Create().Object, NullLogger<IobCobComputeStage>.Instance);
+
+        var context = new ChartDataContext
+        {
+            StartTime = startTime,
+            EndTime = endTime,
+            IntervalMinutes = intervalMinutes,
+            BufferStartTime = startTime - 8L * 60 * 60 * 1000,
+            DefaultBasalRate = 1.0,
+            BolusList = boluses,
+            CarbIntakeList = carbs,
+            TempBasalList = tempBasals,
+        };
+
+        // MockBehavior.Strict means any unconfigured async resolver / repo call throws — so the
+        // run completing at all proves the tick loop never touched them. The result is non-trivial.
+        var result = await stage.ExecuteAsync(context, CancellationToken.None);
+
+        result.IobSeries.Should().NotBeEmpty();
+        result.CobSeries.Should().NotBeEmpty();
+        result.IobSeries.Should().Contain(p => p.Value > 0, "boluses + temp basals should yield IOB");
+        result.CobSeries.Should().Contain(p => p.Value > 0, "carbs should yield COB");
     }
 }

@@ -1,4 +1,6 @@
+using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -28,6 +30,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     private readonly IPatientInsulinRepository _patientInsulinRepository;
     private readonly IBasalRateResolver _basalRateResolver;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
+    private readonly IAuditContext _auditContext;
     private readonly ILogger<TreatmentPublisher> _logger;
 
     public TreatmentPublisher(
@@ -42,6 +45,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         IPatientInsulinRepository patientInsulinRepository,
         IBasalRateResolver basalRateResolver,
         ITherapySettingsResolver therapySettingsResolver,
+        IAuditContext auditContext,
         ILogger<TreatmentPublisher> logger)
     {
         _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
@@ -55,6 +59,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         _patientInsulinRepository = patientInsulinRepository ?? throw new ArgumentNullException(nameof(patientInsulinRepository));
         _basalRateResolver = basalRateResolver ?? throw new ArgumentNullException(nameof(basalRateResolver));
         _therapySettingsResolver = therapySettingsResolver ?? throw new ArgumentNullException(nameof(therapySettingsResolver));
+        _auditContext = auditContext;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -87,7 +92,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             if (recordList.Count == 0) return true;
 
             await ResolvePatientInsulinsForBolusesAsync(recordList, cancellationToken);
-            await _bolusRepository.BulkCreateAsync(recordList, cancellationToken);
+            using (SystemAuditScope.Push(_auditContext))
+                await _bolusRepository.BulkCreateAsync(recordList, cancellationToken);
             _logger.LogDebug("Published {Count} Bolus records for {Source}", recordList.Count, source);
             return true;
         }
@@ -109,7 +115,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             var recordList = records.ToList();
             if (recordList.Count == 0) return true;
 
-            await _carbIntakeRepository.BulkCreateAsync(recordList, cancellationToken);
+            using (SystemAuditScope.Push(_auditContext))
+                await _carbIntakeRepository.BulkCreateAsync(recordList, cancellationToken);
             _logger.LogDebug("Published {Count} CarbIntake records for {Source}", recordList.Count, source);
             return true;
         }
@@ -131,7 +138,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             var recordList = records.ToList();
             if (recordList.Count == 0) return true;
 
-            await _bgCheckRepository.BulkCreateAsync(recordList, cancellationToken);
+            using (SystemAuditScope.Push(_auditContext))
+                await _bgCheckRepository.BulkCreateAsync(recordList, cancellationToken);
             _logger.LogDebug("Published {Count} BGCheck records for {Source}", recordList.Count, source);
             return true;
         }
@@ -153,7 +161,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             var recordList = records.ToList();
             if (recordList.Count == 0) return true;
 
-            await _bolusCalculationRepository.BulkCreateAsync(recordList, cancellationToken);
+            using (SystemAuditScope.Push(_auditContext))
+                await _bolusCalculationRepository.BulkCreateAsync(recordList, cancellationToken);
             _logger.LogDebug("Published {Count} BolusCalculation records for {Source}", recordList.Count, source);
             return true;
         }
@@ -178,18 +187,26 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             var minTimestamp = recordList.Min(r => r.StartTimestamp);
             var maxTimestamp = recordList.Max(r => r.StartTimestamp);
 
-            await _tempBasalRepository.DeleteBySourceAndDateRangeAsync(
-                source, minTimestamp, maxTimestamp, cancellationToken);
+            // Connector resync: the delete-then-reinsert is a system sweep, so its audit rows
+            // must carry AuthType IS NULL. The delete the dedup discriminator reads — not just the
+            // insert — has to be inside the scope; otherwise a resync invoked under an actor
+            // context (e.g. a manual sync) would write a user-attributed delete row and
+            // permanently block re-importing those temp basals.
+            using (SystemAuditScope.Push(_auditContext))
+            {
+                await _tempBasalRepository.DeleteBySourceAndDateRangeAsync(
+                    source, minTimestamp, maxTimestamp, cancellationToken);
 
-            var reclassifiedCount = await ReclassifyScheduledAlgorithmicBasalsAsync(
-                recordList, cancellationToken);
-            if (reclassifiedCount > 0)
-                _logger.LogInformation(
-                    "Reclassified {Count}/{Total} TempBasal records from Scheduled to Algorithm "
-                    + "(rate differs from programmed basal schedule) for {Source}",
-                    reclassifiedCount, recordList.Count, source);
+                var reclassifiedCount = await ReclassifyScheduledAlgorithmicBasalsAsync(
+                    recordList, cancellationToken);
+                if (reclassifiedCount > 0)
+                    _logger.LogInformation(
+                        "Reclassified {Count}/{Total} TempBasal records from Scheduled to Algorithm "
+                        + "(rate differs from programmed basal schedule) for {Source}",
+                        reclassifiedCount, recordList.Count, source);
 
-            await _tempBasalRepository.BulkCreateAsync(recordList, cancellationToken);
+                await _tempBasalRepository.BulkCreateAsync(recordList, cancellationToken);
+            }
             _logger.LogDebug("Published {Count} TempBasal records for {Source}", recordList.Count, source);
             return true;
         }
@@ -261,7 +278,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             if (recordList.Count == 0) return true;
 
             await ResolvePatientInsulinsForBasalInjectionsAsync(recordList, cancellationToken);
-            await _basalInjectionRepository.BulkCreateAsync(recordList, cancellationToken);
+            using (SystemAuditScope.Push(_auditContext))
+                await _basalInjectionRepository.BulkCreateAsync(recordList, cancellationToken);
 
             _logger.LogDebug("Published {Count} BasalInjection records for {Source}", recordList.Count, source);
             return true;
@@ -440,7 +458,9 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             IsPrimary = !hasPrimary,
         };
 
-        var created = await _patientInsulinRepository.CreateAsync(newInsulin, ct);
+        PatientInsulin created;
+        using (SystemAuditScope.Push(_auditContext))
+            created = await _patientInsulinRepository.CreateAsync(newInsulin, ct);
         cache.Add(created);
 
         _logger.LogInformation(

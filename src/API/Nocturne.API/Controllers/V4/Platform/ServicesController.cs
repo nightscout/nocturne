@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Models;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Services;
 
 namespace Nocturne.API.Controllers.V4.Platform;
@@ -25,6 +29,8 @@ public class ServicesController : ControllerBase
     private readonly IConnectorSyncService _connectorSyncService;
     private readonly ILogger<ServicesController> _logger;
     private readonly IConfiguration _configuration;
+    private readonly ITenantAccessor _tenantAccessor;
+    private readonly BaseDomainOptions _baseDomain;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ServicesController"/>.
@@ -34,12 +40,16 @@ public class ServicesController : ControllerBase
     /// <param name="connectorSyncService">Service for triggering on-demand connector syncs.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="configuration">Application configuration for base URL resolution.</param>
+    /// <param name="tenantAccessor">Resolved tenant context, used to build the tenant's subdomain base URL.</param>
+    /// <param name="baseDomain">Platform base-domain options used to construct the tenant subdomain.</param>
     public ServicesController(
         IDataSourceService dataSourceService,
         IConnectorHealthService connectorHealthService,
         IConnectorSyncService connectorSyncService,
         ILogger<ServicesController> logger,
-        IConfiguration configuration
+        IConfiguration configuration,
+        ITenantAccessor tenantAccessor,
+        IOptions<BaseDomainOptions> baseDomain
     )
     {
         _dataSourceService = dataSourceService;
@@ -47,6 +57,8 @@ public class ServicesController : ControllerBase
         _connectorSyncService = connectorSyncService;
         _logger = logger;
         _configuration = configuration;
+        _tenantAccessor = tenantAccessor;
+        _baseDomain = baseDomain.Value;
     }
 
     /// <summary>
@@ -271,6 +283,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result of the delete operation</returns>
     [HttpDelete("data-sources/demo")]
+    [RequireAdmin]
     [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "GetStatus"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(500)]
@@ -304,6 +317,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result of the delete operation</returns>
     [HttpDelete("data-sources/{id}")]
+    [RequireAdmin]
     [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "GetStatus"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(404)]
@@ -376,6 +390,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result of the delete operation</returns>
     [HttpDelete("connectors/{id}/data")]
+    [RequireAdmin]
     [RemoteCommand(Invalidates = ["GetServicesOverview", "GetActiveDataSources", "GetStatus", "GetConnectorDataSummary"])]
     [ProducesResponseType(typeof(DataSourceDeleteResult), 200)]
     [ProducesResponseType(404)]
@@ -417,6 +432,7 @@ public class ServicesController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Sync result with success status and details</returns>
     [HttpPost("connectors/{id}/sync")]
+    [RequireAdmin]
     [RemoteCommand]
     [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
     [ProducesResponseType(400)]
@@ -432,6 +448,64 @@ public class ServicesController : ControllerBase
             return Problem(detail: "Connector ID is required", statusCode: 400, title: "Bad Request");
 
         var result = await _connectorSyncService.TriggerSyncAsync(id, request, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Reset a connector's sync cursor for the current tenant and re-pull historical data.
+    /// </summary>
+    /// <remarks>
+    /// Nocturne does not persist a sync cursor — each data type resumes from the latest record
+    /// already stored. This endpoint forces a fresh ingest of history by running an explicit-range
+    /// sync (an upper bound of "now" bypasses the per-type catch-up cursors), so the effect is a
+    /// cursor reset. Re-ingested records are deduplicated on their idempotency keys (see the
+    /// "Syncing" guide), so it is safe to run after fixing a connector bug to push corrected data
+    /// to a tenant.
+    ///
+    /// <para><b>Latency:</b> this runs synchronously. A full-history re-pull with no lower bound
+    /// re-ingests every data type over the connector's entire history (glucose can be tens of
+    /// thousands of records), which is a multi-minute request and may approach or exceed
+    /// reverse-proxy / browser timeouts. Scope it with <c>from</c> and/or <c>dataTypes</c> when
+    /// possible. The cross-tenant equivalent
+    /// (<c>POST /api/v4/admin/connectors/{tenantId}/reset-cursors</c>) runs as a background job to
+    /// avoid this.</para>
+    /// </remarks>
+    /// <param name="id">Connector ID (e.g., "nightscout", "dexcom").</param>
+    /// <param name="request">Optional lower bound and data-type filter. Omit <c>from</c> to re-pull all available history; omit <c>dataTypes</c> to reset every supported type.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Sync result with success status and details.</returns>
+    [HttpPost("connectors/{id}/reset-cursor")]
+    [RequireAdmin]
+    [RemoteCommand]
+    [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
+    [ProducesResponseType(400)]
+    public async Task<
+        ActionResult<Nocturne.Connectors.Core.Models.SyncResult>
+    > ResetConnectorCursor(
+        string id,
+        [FromBody] ResetCursorRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            return Problem(detail: "Connector ID is required", statusCode: 400, title: "Bad Request");
+
+        // Setting To forces "explicit range" mode in the connectors, bypassing the per-type
+        // catch-up cursors so history is genuinely re-pulled rather than resumed from the latest
+        // stored record. A null From means no lower bound — re-pull everything available.
+        var syncRequest = new Nocturne.Connectors.Core.Models.SyncRequest
+        {
+            From = request.From,
+            To = DateTime.UtcNow,
+            DataTypes = request.DataTypes ?? [],
+        };
+
+        _logger.LogInformation(
+            "Cursor reset requested for connector {ConnectorId} (from {From})",
+            id,
+            request.From?.ToString("o") ?? "beginning");
+
+        var result = await _connectorSyncService.TriggerSyncAsync(id, syncRequest, cancellationToken);
         return Ok(result);
     }
 
@@ -535,18 +609,46 @@ public class ServicesController : ControllerBase
 
     private string GetBaseUrl()
     {
-        // Try to get configured base URL first
+        // Prefer the tenant's own subdomain ({slug}.{base-domain}). This is the URL
+        // external uploaders (xDrip+, Loop, AAPS) must target, and it differs per
+        // tenant — unlike the configured BaseUrl (apex) or the internal request host
+        // seen when the web app calls this endpoint server-side.
+        var slug = _tenantAccessor.Context?.Slug;
+        var baseDomain = _baseDomain.BaseDomain;
+        if (!string.IsNullOrEmpty(slug) && !string.IsNullOrEmpty(baseDomain))
+        {
+            return $"https://{slug}.{baseDomain.TrimEnd('/')}";
+        }
+
+        // Self-host / single-instance fallback: configured base URL, then request host.
         var configuredUrl = _configuration["BaseUrl"];
         if (!string.IsNullOrEmpty(configuredUrl))
         {
             return configuredUrl.TrimEnd('/');
         }
 
-        // Fall back to request URL
         var request = HttpContext.Request;
         return $"{request.Scheme}://{request.Host}";
     }
 
+}
+
+/// <summary>
+/// Request body for resetting a connector's sync cursor and re-pulling history.
+/// </summary>
+public class ResetCursorRequest
+{
+    /// <summary>
+    /// Optional lower bound for the re-pull. When null, no lower bound is applied and all
+    /// available history is re-ingested.
+    /// </summary>
+    public DateTime? From { get; init; }
+
+    /// <summary>
+    /// Optional set of data types to reset. When null or empty, every data type the connector
+    /// supports is re-pulled.
+    /// </summary>
+    public List<Nocturne.Connectors.Core.Models.SyncDataType>? DataTypes { get; init; }
 }
 
 /// <summary>

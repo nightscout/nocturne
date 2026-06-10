@@ -1,6 +1,5 @@
 <script lang="ts" module>
   import type { Snippet } from "svelte";
-  import type { HTMLAttributes } from "svelte/elements";
 
   export interface ConnectorData {
     type: string;
@@ -22,13 +21,14 @@
     onValueChange,
     children,
     ...restProps
-  }: {
-    ref?: HTMLDivElement | null;
+  }: Omit<
+    ToggleGroupPrimitive.RootProps,
+    "type" | "value" | "onValueChange" | "children"
+  > & {
     value?: string[];
-    class?: string;
     onValueChange?: (value: string[]) => void;
     children?: Snippet;
-  } & Omit<HTMLAttributes<HTMLDivElement>, "class"> = $props();
+  } = $props();
 
   function handleValueChange(newValue: string[]) {
     value = newValue;
@@ -38,7 +38,7 @@
 
 <ToggleGroupPrimitive.Root
   bind:ref
-  {value}
+  value={value as never}
   onValueChange={handleValueChange}
   type="multiple"
   data-slot="connector-toggle-group"

@@ -352,6 +352,81 @@ public class MutationAuditInterceptorTests : IDisposable
     }
 
     [Fact]
+    public async Task SoftDelete_UserAttributed_SetsDeletedByUserTrue()
+    {
+        using var context = CreateContext();
+        var entity = new TestAuditableEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            Name = "UserDeleteMe",
+            DeletedAt = null
+        };
+        context.TestAuditables.Add(entity);
+        await context.SaveChangesAsync();
+
+        using var context2 = CreateContext();
+        var auditContext = new Mock<IAuditContext>();
+        auditContext.Setup(x => x.AuthType).Returns("Bearer");
+        context2.AuditContext = auditContext.Object;
+
+        var tracked = await context2.TestAuditables.FindAsync(entity.Id);
+        tracked!.DeletedAt = DateTime.UtcNow;
+
+        await InvokeSavingChanges(context2);
+
+        ((bool)context2.Entry(tracked).Property("DeletedByUser").CurrentValue!).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SoftDelete_SystemNoAuth_LeavesDeletedByUserFalse()
+    {
+        using var context = CreateContext();
+        var entity = new TestAuditableEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            Name = "SystemDeleteMe",
+            DeletedAt = null
+        };
+        context.TestAuditables.Add(entity);
+        await context.SaveChangesAsync();
+
+        // No AuditContext and null HttpContext -> AuthType null -> system-attributed delete.
+        using var context2 = CreateContext();
+        var tracked = await context2.TestAuditables.FindAsync(entity.Id);
+        tracked!.DeletedAt = DateTime.UtcNow;
+
+        await InvokeSavingChanges(context2);
+
+        ((bool)context2.Entry(tracked).Property("DeletedByUser").CurrentValue!).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Restore_ResetsDeletedByUserToFalse()
+    {
+        using var context = CreateContext();
+        var entity = new TestAuditableEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            Name = "RestoreMe",
+            DeletedAt = DateTime.UtcNow
+        };
+        context.TestAuditables.Add(entity);
+        context.Entry(entity).Property("DeletedByUser").CurrentValue = true;
+        await context.SaveChangesAsync();
+
+        using var context2 = CreateContext();
+        var tracked = await context2.TestAuditables.IgnoreQueryFilters().FirstAsync(e => e.Id == entity.Id);
+        tracked.DeletedAt = null;
+
+        await InvokeSavingChanges(context2);
+
+        ((bool)context2.Entry(tracked).Property("DeletedByUser").CurrentValue!).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task AuditIgnored_PropertiesOmittedFromUpdateDiffs()
     {
         using var context = CreateContext();

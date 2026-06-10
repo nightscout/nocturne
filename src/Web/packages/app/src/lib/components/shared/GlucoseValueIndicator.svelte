@@ -125,7 +125,7 @@
     {#if statusText}
       <Tooltip.Root>
         <Tooltip.Trigger>
-          {#snippet child({ props })}
+          {#snippet child({ props }: { props: Record<string, unknown> })}
             {#if onSyncClick}
               <!-- Grid overlay approach: both states occupy same cell, only one visible -->
               <button

@@ -1,8 +1,9 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
+import { SETUP_TENANT_COOKIE } from "$lib/server/request-host";
 
 export const load: PageServerLoad = async ({ locals, cookies }) => {
-  const setupTenantSlug = cookies.get("nocturne-setup-tenant") ?? null;
+  const setupTenantSlug = cookies.get(SETUP_TENANT_COOKIE) ?? null;
 
   if (locals.isAuthenticated) {
     return { setupRequired: false, tenantExists: true, setupTenantSlug };

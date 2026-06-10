@@ -81,8 +81,8 @@ export function createBot(options: BotOptions): Chat {
 
   const whatsapp = platforms.whatsapp;
   if (whatsapp) {
+    logger.info("Enabling WhatsApp adapter");
     if (typeof whatsapp === "object") {
-      logger.info("Enabling WhatsApp adapter");
       adapters.whatsapp = createWhatsAppAdapter({
         accessToken: whatsapp.accessToken!,
         appSecret: whatsapp.appSecret!,
@@ -92,9 +92,14 @@ export function createBot(options: BotOptions): Chat {
         logger,
       });
     } else {
-      logger.warn(
-        "WhatsApp requires explicit credentials configured via the admin UI — skipping env var fallback",
-      );
+      adapters.whatsapp = createWhatsAppAdapter({
+        accessToken: process.env.WHATSAPP_ACCESS_TOKEN!,
+        appSecret: process.env.WHATSAPP_APP_SECRET!,
+        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID!,
+        verifyToken: process.env.WHATSAPP_VERIFY_TOKEN!,
+        userName: "nocturne",
+        logger,
+      });
     }
   }
 

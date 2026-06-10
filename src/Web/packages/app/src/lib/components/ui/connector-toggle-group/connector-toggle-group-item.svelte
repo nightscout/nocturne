@@ -5,7 +5,6 @@
   import * as Item from "../item/index.js";
   import { Badge } from "../badge/index.js";
   import { Button } from "../button/index.js";
-  import type { Snippet } from "svelte";
 
   interface ConnectorField {
     name: string;
@@ -110,7 +109,7 @@
         variant="secondary"
         size="sm"
         class="w-full gap-2"
-        onclick={(e) => {
+        onclick={(e: MouseEvent) => {
           e.stopPropagation();
           onConfigure?.();
         }}

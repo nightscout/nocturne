@@ -229,6 +229,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 token = newToken;
                 return true;
             },
+            maxRetries: config.MaxRetryAttempts,
             operationName: "FetchEversensePatientList"
         );
 

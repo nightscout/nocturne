@@ -58,6 +58,7 @@ jobs:
         env:
           VITE_DEMO_ENABLED: 'true'
           VITE_DEMO_WEB_URL: 'https://demo.nocturne.run'
+          VITE_SCALAR_API_URL: 'https://nocturne.run'
         run: pnpm run build
 
       - name: Upload artifact

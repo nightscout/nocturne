@@ -103,7 +103,10 @@
     for (const m of data?.months ?? []) {
       for (const d of m.days ?? []) {
         if (d.date && d.entries && d.entries.length > 0) {
-          out[d.date] = d.entries;
+          out[d.date] = d.entries.map((e) => ({
+            mills: e.mills ?? 0,
+            mgdl: e.mgdl ?? 0,
+          }));
         }
       }
     }

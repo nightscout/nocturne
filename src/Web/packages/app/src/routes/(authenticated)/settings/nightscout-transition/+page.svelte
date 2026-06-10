@@ -22,31 +22,20 @@
 		BarChart3,
 	} from 'lucide-svelte';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import {
 		getTransitionStatus,
 		type NightscoutTransitionStatus,
 	} from './transition.remote';
 
-	let loading = $state(true);
-	let error = $state<string | null>(null);
-	let status = $state<NightscoutTransitionStatus | null>(null);
-
-	async function loadData() {
-		loading = true;
-		error = null;
-		try {
-			status = await getTransitionStatus();
-		} catch (err) {
-			console.error('Failed to load transition status:', err);
-			error = 'Failed to load Nightscout transition status';
-		} finally {
-			loading = false;
-		}
-	}
-
-	$effect(() => {
-		loadData();
-	});
+	const statusQuery = getTransitionStatus();
+	const status = $derived<NightscoutTransitionStatus | null>(
+		statusQuery.current ?? null,
+	);
+	const loading = $derived(statusQuery.loading);
+	const error = $derived(
+		statusQuery.error ? 'Failed to load Nightscout transition status' : null,
+	);
 
 	function formatTimestamp(ts: string | null): string {
 		if (!ts) return 'Never';
@@ -158,7 +147,7 @@
 			<CardContent class="space-y-4">
 				{#if Object.keys(status.migration.recordCounts).length > 0}
 					<div class="grid grid-cols-2 gap-3 @sm:grid-cols-3">
-						{#each Object.entries(status.migration.recordCounts) as [dataType, count]}
+						{#each Object.entries(status.migration.recordCounts) as [dataType, count] (dataType)}
 							<div class="rounded-lg border p-3">
 								<p class="text-sm text-muted-foreground capitalize">{dataType}</p>
 								<p class="text-xl font-semibold tabular-nums">{count.toLocaleString()}</p>
@@ -321,7 +310,7 @@
 					<div class="space-y-2">
 						<p class="text-sm font-medium">Blockers</p>
 						<ul class="space-y-1.5">
-							{#each status.recommendation.blockers as blocker}
+							{#each status.recommendation.blockers as blocker (blocker)}
 								<li class="flex items-start gap-2 text-sm text-muted-foreground">
 									<AlertCircle class="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
 									{blocker}
@@ -334,7 +323,7 @@
 				{#if status.recommendation.status === 'safe'}
 					<Separator />
 					<div>
-						<Button variant="outline" onclick={() => goto('/settings/connectors')}>
+						<Button variant="outline" onclick={() => goto(resolve('/settings/connectors'))}>
 							Go to Connector Settings
 							<ArrowRightLeft class="h-4 w-4 ml-2" />
 						</Button>

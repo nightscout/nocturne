@@ -73,6 +73,13 @@ public class SensorGlucose : IV4Record
     public string? LegacyId { get; set; }
 
     /// <summary>
+    /// Stable per-source identifier. Records matched on (DataSource, SyncIdentifier) are updated in
+    /// place on re-import (unlike the insert-only <see cref="LegacyId"/>), so a re-corrected timestamp
+    /// moves the existing row instead of duplicating it.
+    /// </summary>
+    public string? SyncIdentifier { get; set; }
+
+    /// <summary>
     /// When this record was created
     /// </summary>
     public DateTime CreatedAt { get; set; }

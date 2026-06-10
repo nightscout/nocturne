@@ -9,6 +9,7 @@
   import { TrackerCategory } from "$api";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
   import { formatGlucoseValue } from "$lib/utils/formatting";
+  import type { GlucoseUnits } from "$lib/utils/formatting";
 
   let {
     day,
@@ -35,7 +36,7 @@
     trackerEvents: Map<string, any[]>;
     definitions: TrackerDefinitionDto[];
     openPopoverId: string | null;
-    units: string;
+    units: GlucoseUnits;
     unitLabel: string;
     handleDayClick: (day: any) => void;
     getDefinition: (instance: TrackerInstanceDto, defs: TrackerDefinitionDto[]) => TrackerDefinitionDto | undefined;
@@ -101,7 +102,7 @@
             onOpenChange={(open) => (openPopoverId = open ? popoverId : null)}
           >
             <Popover.Trigger>
-              {#snippet child({ props })}
+              {#snippet child({ props }: { props: Record<string, unknown> })}
                 <button
                   {...props}
                   class={cn(
@@ -133,7 +134,7 @@
     <!-- Show chart based on view mode -->
     <Tooltip.Root>
       <Tooltip.Trigger>
-        {#snippet child({ props })}
+        {#snippet child({ props }: { props: Record<string, unknown> })}
           {#if viewMode === "tir"}
             <div
               {...props}
@@ -222,7 +223,7 @@
             onOpenChange={(open) => (openPopoverId = open ? popoverId : null)}
           >
             <Popover.Trigger>
-              {#snippet child({ props })}
+              {#snippet child({ props }: { props: Record<string, unknown> })}
                 <button
                   {...props}
                   class={cn(
@@ -270,7 +271,7 @@
             onOpenChange={(open) => (openPopoverId = open ? popoverId : null)}
           >
             <Popover.Trigger>
-              {#snippet child({ props })}
+              {#snippet child({ props }: { props: Record<string, unknown> })}
                 <button
                   {...props}
                   class={cn(

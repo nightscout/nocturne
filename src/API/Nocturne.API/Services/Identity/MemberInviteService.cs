@@ -143,8 +143,7 @@ public class MemberInviteService : IMemberInviteService
         // Check if already an active member of this tenant
         var existingMember = await _dbContext.TenantMembers
             .Where(m => m.TenantId == entity.TenantId
-                        && m.SubjectId == acceptingSubjectId
-                        && m.RevokedAt == null)
+                        && m.SubjectId == acceptingSubjectId)
             .FirstOrDefaultAsync();
 
         if (existingMember != null)

@@ -44,6 +44,20 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     private static readonly TimeSpan NudgeDebounceWindow = TimeSpan.FromSeconds(10);
 
     /// <summary>
+    /// Maximum number of tenants this connector syncs concurrently. Tenants sync in parallel so one
+    /// tenant's slow or failing sync never blocks another's; this only caps resource use (DB
+    /// connections, outbound requests). Overridable for tests.
+    /// </summary>
+    protected virtual int MaxConcurrentTenantSyncs => 8;
+
+    /// <summary>
+    /// Maximum wall-clock time a single tenant's sync may run before it is cancelled. Bounds how long
+    /// one stuck or failing tenant — e.g. a hung network call or an auth-retry storm against bad
+    /// credentials — can hold a concurrency slot. Overridable for tests.
+    /// </summary>
+    protected virtual TimeSpan PerTenantSyncTimeout => TimeSpan.FromMinutes(3);
+
+    /// <summary>
     /// Initialises a new <see cref="ConnectorBackgroundService{TConfig}"/>.
     /// </summary>
     /// <param name="serviceProvider">Root DI service provider; a new scope is created per tenant sync.</param>
@@ -225,19 +239,45 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
             .Select(t => new { t.Id, t.Slug, t.DisplayName })
             .ToListAsync(stoppingToken);
 
-        foreach (var tenant in tenants)
-        {
-            try
+        // Sync tenants concurrently so each tenant is independent: one tenant's slow or failing sync
+        // must never delay or block another's. Each tenant already runs in its own DI scope (own
+        // DbContext, own tenant context), so concurrent execution is isolated. MaxConcurrentTenantSyncs
+        // only caps resource use (DB connections, outbound requests), and PerTenantSyncTimeout bounds
+        // how long any single tenant can hold a slot.
+        await Parallel.ForEachAsync(
+            tenants,
+            new ParallelOptions
             {
-                await SyncForTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+                MaxDegreeOfParallelism = MaxConcurrentTenantSyncs,
+                CancellationToken = stoppingToken
+            },
+            async (tenant, ct) =>
             {
-                Logger.LogError(ex,
-                    "Error syncing {ConnectorName} for tenant {TenantSlug}",
-                    ConnectorName, tenant.Slug);
-            }
-        }
+                using var tenantCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                tenantCts.CancelAfter(PerTenantSyncTimeout);
+
+                try
+                {
+                    await SyncForTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, tenantCts.Token);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw; // The service itself is shutting down — propagate to stop the loop.
+                }
+                catch (OperationCanceledException)
+                {
+                    // Per-tenant timeout fired. Abandon this tenant so it frees its slot for others.
+                    Logger.LogWarning(
+                        "{ConnectorName} sync for tenant {TenantSlug} exceeded {Timeout} and was cancelled",
+                        ConnectorName, tenant.Slug, PerTenantSyncTimeout);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex,
+                        "Error syncing {ConnectorName} for tenant {TenantSlug}",
+                        ConnectorName, tenant.Slug);
+                }
+            });
     }
 
     private async Task SyncForTenantAsync(Guid tenantId, string tenantSlug, string displayName, CancellationToken stoppingToken)
@@ -251,6 +291,15 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
         // Populate audit context so mutations are attributed to this connector
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         dbContext.AuditContext = SystemAuditContext.ForService($"connector:{ConnectorName}");
+
+        // Pin the RLS tenant on the scoped DbContext. NocturneDbContext is pooled and the
+        // CarrierResettingDbContextFactory leases it with TenantId reset to Guid.Empty; the scoped
+        // registration re-pins from ITenantAccessor, and background syncs set it explicitly here
+        // because the flow depends on it — the TenantConnectionInterceptor reads
+        // NocturneDbContext.TenantId to configure RLS on connection open, and without a real tenant
+        // the tenant-scoped reads (connector config + secrets) silently return nothing, so every
+        // connector authenticates with empty credentials and no data syncs.
+        dbContext.TenantId = tenantId;
 
         // Load per-tenant config via the loader
         var loader = scope.ServiceProvider.GetRequiredService<IConnectorConfigurationLoader<TConfig>>();

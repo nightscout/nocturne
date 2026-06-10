@@ -104,7 +104,7 @@
         <!-- Food Name Filter -->
         <Popover.Root bind:open={foodFilterOpen}>
           <Popover.Trigger>
-            {#snippet child({ props = {} as Record<string, any> })}
+            {#snippet child({ props }: { props: Record<string, unknown> })}
               <Button variant="outline" size="sm" class="gap-2" {...props}>
                 Foods
                 {#if selectedFoods.length > 0}

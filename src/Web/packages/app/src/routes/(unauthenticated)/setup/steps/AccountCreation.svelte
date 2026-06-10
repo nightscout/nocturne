@@ -53,15 +53,10 @@
   const normalizedUsername = $derived(username.trim().toLowerCase());
   const debouncedUsername = new Debounced(() => normalizedUsername, 400);
 
-  const usernameValidation = $derived.by(() => {
-    const value = debouncedUsername.current;
-    if (!value || value.length < 3) return null;
-    return validateSetupUsername({ username: value });
-  });
-
   $effect(() => {
     const value = normalizedUsername;
 
+    // Reset on every keystroke
     usernameError = null;
     usernameValid = false;
 
@@ -71,15 +66,16 @@
       return;
     }
 
+    // Still waiting for debounce to settle
     if (debouncedUsername.current !== value) {
       validatingUsername = true;
       return;
     }
 
-    const result = usernameValidation;
-    if (!result) return;
+    const result = validateSetupUsername({ username: value });
 
-    if (result.loading) {
+    // loading=true: fetch in progress; !current: result not yet populated
+    if (result.loading || !result.current) {
       validatingUsername = true;
       return;
     }
@@ -91,11 +87,10 @@
       return;
     }
 
-    const data = result.current;
-    if (data?.isValid) {
+    if (result.current.isValid) {
       usernameValid = true;
     } else {
-      usernameError = data?.message ?? "Invalid username";
+      usernameError = result.current.message ?? "Invalid username";
     }
   });
 

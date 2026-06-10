@@ -9,6 +9,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
 
@@ -34,7 +35,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [Route("api/v4/alert-rules")]
 public class AlertRulesController : ControllerBase
 {
-    private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
+    private readonly ITenantDbContextFactory _contextFactory;
     private readonly IAlertReferenceService _referenceService;
     private readonly IAlertDeliveryService _deliveryService;
     private readonly ILogger<AlertRulesController> _logger;
@@ -43,7 +44,7 @@ public class AlertRulesController : ControllerBase
     /// Initializes a new instance of <see cref="AlertRulesController"/>.
     /// </summary>
     public AlertRulesController(
-        IDbContextFactory<NocturneDbContext> contextFactory,
+        ITenantDbContextFactory contextFactory,
         IAlertReferenceService referenceService,
         IAlertDeliveryService deliveryService,
         ILogger<AlertRulesController> logger)
@@ -62,7 +63,7 @@ public class AlertRulesController : ControllerBase
     [ProducesResponseType(typeof(List<AlertRuleResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<AlertRuleResponse>>> GetRules(CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var rules = await db.AlertRules
             .AsNoTracking()
@@ -82,7 +83,7 @@ public class AlertRulesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AlertRuleResponse>> GetRule(Guid id, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var rule = await db.AlertRules
             .AsNoTracking()
@@ -110,7 +111,7 @@ public class AlertRulesController : ControllerBase
 
         // No cycle detection on create: the new id is server-generated, so the proposed tree
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var tenantId = db.TenantId;
 
@@ -173,7 +174,7 @@ public class AlertRulesController : ControllerBase
         if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
             return badRequest;
 
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var rule = await db.AlertRules
             .Include(r => r.Channels)
@@ -247,7 +248,7 @@ public class AlertRulesController : ControllerBase
     [ProducesResponseType(typeof(ReferencingRulesResponse), StatusCodes.Status409Conflict)]
     public async Task<ActionResult> DeleteRule(Guid id, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var rule = await db.AlertRules.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (rule is null)
@@ -277,7 +278,7 @@ public class AlertRulesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AlertRuleResponse>> ToggleRule(Guid id, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var rule = await db.AlertRules
             .Include(r => r.Channels)
@@ -304,7 +305,7 @@ public class AlertRulesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> TestFire(Guid id, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
 
         var rule = await db.AlertRules
             .AsNoTracking()
@@ -334,7 +335,7 @@ public class AlertRulesController : ControllerBase
     public async Task<IActionResult> TestFireDryRun(
         [FromBody] TestFireDryRunRequest request, CancellationToken ct)
     {
-        await using var db = await _contextFactory.CreateDbContextAsync(ct);
+        await using var db = await _contextFactory.CreateAsync(ct);
         var tenantId = db.TenantId;
 
         // Synthesise channel snapshots with provisional ids — none of them point to a

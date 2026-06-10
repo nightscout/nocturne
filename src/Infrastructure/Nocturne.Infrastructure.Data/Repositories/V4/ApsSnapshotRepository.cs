@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -316,22 +318,10 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
 
             if (legacyIds.Count > 0)
             {
-                var existingRecords = await ctx.ApsSnapshots.IgnoreQueryFilters().AsNoTracking()
-                    .Where(e => e.TenantId == ctx.TenantId)
-                    .Where(e => legacyIds.Contains(e.LegacyId!))
-                    .Select(e => new { e.LegacyId, IsSoftDeleted = e.DeletedAt != null })
-                    .ToListAsync(ct);
-
-                var existingSet = existingRecords.Select(r => r.LegacyId).ToHashSet();
-                var softDeletedCount = existingRecords.Count(r => r.IsSoftDeleted);
-
-                if (softDeletedCount > 0)
-                    _logger.LogInformation(
-                        "Skipped {Count} previously-deleted {Type} records during import",
-                        softDeletedCount, "ApsSnapshot");
+                var blockedLegacyIds = await ctx.GetBlockingLegacyIdsAsync<ApsSnapshotEntity>(legacyIds, ct);
 
                 entities = entities
-                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
                     .ToList();
             }
 

@@ -6,7 +6,8 @@ import { z } from "zod";
 import { DiabetesPopulationSchema } from "$lib/api/generated/schemas";
 import { getRequestEvent, query } from "$app/server";
 import { error } from "@sveltejs/kit";
-import { DiabetesPopulation, type BasalPoint } from "$lib/api";
+import { DiabetesPopulation } from "$lib/api";
+import { fetchAllGlucose } from "./glucose-pagination";
 
 /**
  * Input schema for date range queries. Uses nullish() to accept both null and
@@ -53,37 +54,6 @@ function calculateDateRange(input?: DateRangeInput): {
   endDate.setHours(23, 59, 59, 999);
 
   return { startDate, endDate };
-}
-
-/** Paginate through all sensor glucose readings for a date range */
-async function fetchAllGlucose(
-  apiClient: ReturnType<typeof getRequestEvent>["locals"]["apiClient"],
-  startDate: Date,
-  endDate: Date
-) {
-  const pageSize = 1000;
-  type GlucoseItem = NonNullable<Awaited<ReturnType<typeof apiClient.sensorGlucose.getAll>>["data"]>[number];
-  let all: GlucoseItem[] = [];
-  let offset = 0;
-  let hasMore = true;
-
-  while (hasMore) {
-    const batch = await apiClient.sensorGlucose.getAll(startDate, endDate, pageSize, offset);
-    all = all.concat(batch.data ?? []);
-
-    if ((batch.data?.length ?? 0) < pageSize) {
-      hasMore = false;
-    } else {
-      offset += pageSize;
-    }
-
-    if (offset >= 200000) {
-      console.warn("Glucose fetch reached safety limit of 200,000 records");
-      hasMore = false;
-    }
-  }
-
-  return all;
 }
 
 /** Get sensor glucose readings for a date range */
@@ -207,8 +177,9 @@ export const getAnalysis = query(
 );
 
 /**
- * Combined query to get all reports data in one call This is the main entry
- * point for reports pages
+ * Reports data for pages that render raw readings (overview, executive summary, AGP,
+ * week-to-week): sensor glucose for the range plus server-computed extended analytics
+ * and averaged stats.
  */
 export const getReportsData = query(
   DateRangeSchema.optional(),
@@ -217,95 +188,71 @@ export const getReportsData = query(
     const { apiClient } = locals;
     const { startDate, endDate } = calculateDateRange(input);
 
-    const pageSize = 1000;
-
-    // Fetch all sensor glucose readings
-    const entries = await fetchAllGlucose(apiClient, startDate, endDate);
-
-    // Paginate boluses
-    let allBoluses: Awaited<ReturnType<typeof apiClient.bolus.getAll>>["data"] =
-      [];
-    let offset = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-      const batch = await apiClient.bolus.getAll(
-        startDate,
-        endDate,
-        pageSize,
-        offset
-      );
-      allBoluses = allBoluses!.concat(batch.data ?? []);
-
-      if ((batch.data?.length ?? 0) < pageSize) {
-        hasMore = false;
-      } else {
-        offset += pageSize;
-      }
-
-      if (offset >= 50000) {
-        console.warn("Bolus fetch reached safety limit of 50,000 records");
-        hasMore = false;
-      }
-    }
-
-    // Paginate carb intakes
-    let allCarbIntakes: Awaited<
-      ReturnType<typeof apiClient.nutrition.getCarbIntakes>
-    >["data"] = [];
-    offset = 0;
-    hasMore = true;
-
-    while (hasMore) {
-      const batch = await apiClient.nutrition.getCarbIntakes(
-        startDate,
-        endDate,
-        pageSize,
-        offset
-      );
-      allCarbIntakes = allCarbIntakes!.concat(batch.data ?? []);
-
-      if ((batch.data?.length ?? 0) < pageSize) {
-        hasMore = false;
-      } else {
-        offset += pageSize;
-      }
-
-      if (offset >= 50000) {
-        console.warn("CarbIntake fetch reached safety limit of 50,000 records");
-        hasMore = false;
-      }
-    }
-
-    const boluses = allBoluses!;
-    const carbIntakes = allCarbIntakes!;
-    const population = DiabetesPopulation.Type1Adult; // TODO: Get from user settings
-
-    // Get summary, analysis, averaged stats, and basal series in parallel
-    const [summary, analysis, averagedStats, basalSeries] = await Promise.all([
-      apiClient.statistics.getMultiPeriodStatistics(),
-      apiClient.statistics.analyzeGlucoseDataExtended({
-        entries,
-        boluses,
-        carbIntakes,
-        population,
-      }),
-      apiClient.statistics.calculateAveragedStats(entries),
-      apiClient.chartData.getBasalSeries(startDate.getTime(), endDate.getTime()),
+    const [entries, { analysis, averagedStats }] = await Promise.all([
+      fetchAllGlucose(apiClient, startDate, endDate),
+      apiClient.statistics.getRangeAnalytics(startDate, endDate),
     ]);
 
     return {
       entries,
-      boluses,
-      carbIntakes,
-      summary,
       analysis,
       averagedStats,
-      basalSeries: basalSeries ?? [],
       dateRange: {
         from: startDate.toISOString(),
         to: endDate.toISOString(),
         lastUpdated: new Date().toISOString(),
+      },
+    };
+  }
+);
+
+/**
+ * Server-side extended analytics and averaged stats for a date range. Used by report
+ * pages that render only computed metrics (comparison, glucose distribution).
+ */
+export const getReportsAnalysis = query(
+  DateRangeSchema.optional(),
+  async (input) => {
+    const { locals } = getRequestEvent();
+    const { apiClient } = locals;
+    const { startDate, endDate } = calculateDateRange(input);
+
+    const { analysis, averagedStats } =
+      await apiClient.statistics.getRangeAnalytics(startDate, endDate);
+
+    return {
+      analysis,
+      averagedStats,
+      dateRange: {
+        from: startDate.toISOString(),
+        to: endDate.toISOString(),
+      },
+    };
+  }
+);
+
+/**
+ * Boluses and basal series for a date range, for the basal-analysis and
+ * insulin-delivery reports.
+ */
+export const getBasalReportData = query(
+  DateRangeSchema.optional(),
+  async (input) => {
+    const { locals } = getRequestEvent();
+    const { apiClient } = locals;
+    const { startDate, endDate } = calculateDateRange(input);
+
+    const [bolusResult, basalSeries] = await Promise.all([
+      apiClient.bolus.getAll(startDate, endDate, 10000),
+      apiClient.chartData.getBasalSeries(startDate.getTime(), endDate.getTime()),
+    ]);
+
+    return {
+      boluses: bolusResult.data ?? [],
+      basalSeries: basalSeries ?? [],
+      dateRange: {
+        from: startDate.toISOString(),
+        to: endDate.toISOString(),
       },
     };
   }

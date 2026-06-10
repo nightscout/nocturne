@@ -188,8 +188,10 @@ public class AuthenticationMiddleware
         var resolvedAuth = context.Items["AuthContext"] as AuthContext;
         if (resolvedAuth is { IsAuthenticated: true, SubjectId: not null, TenantId: not null })
         {
-            // Skip membership check for ApiSecret and InstanceKey auth (grants admin on the resolved tenant)
-            if (resolvedAuth.AuthType is not (AuthType.ApiKey or AuthType.InstanceKey))
+            // Skip membership check for ApiSecret and InstanceKey auth (grants admin on the resolved
+            // tenant), and for PlatformAccess grants (PlatformAccessCookieHandler already proved the
+            // grant is platform-access-marked and pinned to this tenant).
+            if (resolvedAuth.AuthType is not (AuthType.ApiKey or AuthType.InstanceKey or AuthType.PlatformAccess))
             {
                 var tenantMemberService = context.RequestServices.GetRequiredService<ITenantMemberService>();
                 var isMember = await tenantMemberService.IsMemberAsync(
@@ -206,10 +208,13 @@ public class AuthenticationMiddleware
             }
         }
 
-        // For unauthenticated requests with a resolved tenant, try to resolve
-        // the Public system subject's permissions for public/read-only access
+        // Public read access is granted only when the request arrived via a valid share token
+        // ({token}.share.{baseDomain}); TenantResolutionMiddleware sets ShareAccess. The bare
+        // {slug}.{baseDomain} host is login-only — an unauthenticated request there gets nothing,
+        // even when the tenant's Public subject carries a read role.
         resolvedAuth = context.Items["AuthContext"] as AuthContext;
         if (resolvedAuth is { IsAuthenticated: false }
+            && context.Items["ShareAccess"] is true
             && context.Items["TenantContext"] is TenantContext publicTenantCtx)
         {
             var publicAccess = await _publicAccessCacheService.GetPublicAccessAsync(publicTenantCtx.TenantId);
@@ -232,6 +237,12 @@ public class AuthenticationMiddleware
                 var publicScopes = ScopeTranslator.FromPermissions(publicAccess.EffectivePermissions);
                 context.Items["GrantedScopes"] = publicScopes;
 
+                // Carry the share's visible categories to the DbContext factory for
+                // per-category RLS. Resolved here (post-auth); a share whose CSV is never
+                // set is denied all categorized data by the policy (fail-closed).
+                context.RequestServices.GetService<ICategoryReadContext>()
+                    ?.SetVisibleCategories(ShareDataCategories.ComputeVisibleCategoriesCsv(publicScopes));
+
                 context.Items["AuthenticationContext"] = MapToLegacyContext(publicAuthContext);
 
                 _logger.LogDebug(
@@ -250,6 +261,14 @@ public class AuthenticationMiddleware
     /// <returns>An <see cref="AuthContext"/> representing the authentication result.</returns>
     private async Task<AuthContext> AuthenticateRequestAsync(HttpContext context)
     {
+        // Public share host ({token}.share.{baseDomain}): never honor credentials. The share host
+        // serves only the anonymous read-only view, so a logged-in owner's session cookie must not
+        // authenticate the request — the host can never resolve to more than public read access.
+        if (context.Items["ShareAccess"] is true)
+        {
+            return AuthContext.Unauthenticated();
+        }
+
         foreach (var handler in _handlers)
         {
             try

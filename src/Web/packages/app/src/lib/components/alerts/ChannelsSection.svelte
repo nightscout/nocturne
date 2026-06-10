@@ -1,11 +1,9 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import * as Popover from "$lib/components/ui/popover";
   import { Plus, Bell, X } from "lucide-svelte";
-  import { ChannelType } from "$api-clients";
   import { getLinkedPlatforms } from "$api/generated/linkedPlatforms.generated.remote";
   import type { ChannelDef } from "./types";
   import {
@@ -20,16 +18,10 @@
 
   let { channels = $bindable() }: Props = $props();
 
-  let linkedPlatforms = $state<string[]>([]);
-
-  onMount(async () => {
-    try {
-      const r = await getLinkedPlatforms();
-      linkedPlatforms = r?.platforms ?? [];
-    } catch {
-      linkedPlatforms = [];
-    }
-  });
+  const linkedPlatformsQuery = getLinkedPlatforms();
+  const linkedPlatforms = $derived<string[]>(
+    linkedPlatformsQuery.current?.platforms ?? [],
+  );
 
   function isLinked(opt: ChannelMetaEntry): boolean {
     return !opt.platform || linkedPlatforms.includes(opt.platform);
@@ -108,7 +100,7 @@
               class="h-8 text-sm"
               placeholder={opt.destinationPlaceholder}
               value={ch.destination}
-              oninput={(e) => {
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                 channels[i].destination = e.currentTarget.value;
               }}
             />
@@ -122,7 +114,7 @@
             class="h-8 text-sm"
             placeholder="Family channel, work phone…"
             value={ch.destinationLabel ?? ""}
-            oninput={(e) => {
+            oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
               channels[i].destinationLabel = e.currentTarget.value;
             }}
           />
@@ -133,7 +125,7 @@
 
   <Popover.Root>
     <Popover.Trigger>
-      {#snippet child({ props })}
+      {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
           {...props}
           type="button"

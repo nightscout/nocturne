@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -33,7 +34,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         var apsRepo = new ApsSnapshotRepository(ctxFactory, NullLogger<ApsSnapshotRepository>.Instance);
         var pumpRepo = new PumpSnapshotRepository(ctxFactory, NullLogger<PumpSnapshotRepository>.Instance);
         var uploaderRepo = new UploaderSnapshotRepository(ctxFactory, NullLogger<UploaderSnapshotRepository>.Instance);
-        _extrasRepo = new DeviceStatusExtrasRepository(ctxFactory, NullLogger<DeviceStatusExtrasRepository>.Instance);
+        _extrasRepo = new DeviceStatusExtrasRepository(ctxFactory);
         _stateSpanServiceMock = new Mock<IStateSpanService>();
         _deviceServiceMock = new Mock<IDeviceService>();
 
@@ -43,6 +44,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             _extrasRepo,
             _stateSpanServiceMock.Object,
             _deviceServiceMock.Object,
+            Mock.Of<IAuditContext>(),
             NullLogger<DeviceStatusDecomposer>.Instance);
     }
 

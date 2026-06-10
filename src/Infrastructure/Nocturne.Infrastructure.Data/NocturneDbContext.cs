@@ -38,6 +38,22 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public IAuditContext? AuditContext { get; set; }
 
     /// <summary>
+    /// True when this context serves an anonymous public share request. Set per-lease
+    /// wherever <see cref="TenantId"/> is set (known pre-auth at tenant resolution). The
+    /// <see cref="Interceptors.TenantConnectionInterceptor"/> carries it to the
+    /// <c>app.is_share</c> GUC, which gates the per-category public-share RLS policies.
+    /// </summary>
+    public bool IsShareContext { get; set; }
+
+    /// <summary>
+    /// Comma-separated governing read scopes a public share may see, or <c>null</c> for
+    /// non-shares. Set only on the factory-created context (post-auth, once the share's
+    /// categories are resolved); carried to the <c>app.visible_categories</c> GUC. A share
+    /// context with no CSV denies all categorized data (fail-closed).
+    /// </summary>
+    public string? VisibleCategories { get; set; }
+
+    /// <summary>
     /// Gets or sets the Foods table for food database
     /// </summary>
     public DbSet<FoodEntity> Foods { get; set; }
@@ -292,6 +308,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<MeterGlucoseEntity> MeterGlucose { get; set; }
 
     /// <summary>
+    /// Gets or sets the timezone timeline table — the tenant's ordered record of which IANA zone the
+    /// person was in over time, used to convert fake-UTC connector data (e.g. Glooko) to true UTC.
+    /// </summary>
+    public DbSet<TimezoneTimelineEntity> TimezoneTimeline { get; set; }
+
+    /// <summary>
     /// Gets or sets the Calibrations table for CGM sensor calibration records (v4 granular model)
     /// </summary>
     public DbSet<CalibrationEntity> Calibrations { get; set; }
@@ -540,6 +562,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         // Configure per-tenant global query filters
         ConfigureTenantFilters(modelBuilder);
+
+        // Tenant membership is "active" only while not revoked. Enforcing this once here
+        // keeps every membership query (auth gates, setup detection, admin listings) from
+        // having to repeat `RevokedAt == null`. The matching partial unique index
+        // (ix_tenant_members_tenant_subject, filtered on revoked_at IS NULL) lets a revoked
+        // membership coexist with a fresh active one, so re-adds remain valid.
+        modelBuilder.Entity<TenantMemberEntity>().HasQueryFilter(tm => tm.RevokedAt == null);
 
         // Configure cascade deletes from tenant to all tenant-scoped entities
         ConfigureTenantCascadeDeletes(modelBuilder);
@@ -1400,6 +1429,21 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .IsUnique()
             .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
+        // SensorGlucose gains a SyncIdentifier upsert key (mirrors boluses/carbs) so timezone
+        // re-correction can move a reading's timestamp in place instead of duplicating it.
+        modelBuilder.Entity<SensorGlucoseEntity>()
+            .HasIndex(e => new { e.TenantId, e.DataSource, e.SyncIdentifier })
+            .HasDatabaseName("ix_sensor_glucose_tenant_source_sync_id")
+            .IsUnique()
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
+        // TimezoneTimeline: one zone-change boundary per tenant per instant (the ordered list is
+        // inherently non-overlapping, so a duplicate effective_from is an authoring error).
+        modelBuilder.Entity<TimezoneTimelineEntity>()
+            .HasIndex(e => new { e.TenantId, e.EffectiveFrom })
+            .HasDatabaseName("ix_timezone_timeline_tenant_effective_from")
+            .IsUnique();
+
         // BasalInjections indexes
         modelBuilder
             .Entity<BasalInjectionEntity>()
@@ -1609,10 +1653,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_temp_basals_tenant_start_timestamp")
             .IsDescending(false, true);
 
-        // Devices unique index (scoped to live records)
+        // Devices unique index (scoped to live records, per tenant).
+        // TenantId must be part of the key: devices are tenant-owned (FindByCategoryTypeAndSerialAsync
+        // is RLS-scoped to the current tenant) and the type/serial often carry shared, non-unique
+        // values — e.g. a pump's manufacturer/model ("Insulet"/"Omnipod 5") or the generic Loop
+        // uploader identity ("iPhone"/"unknown"). Without TenantId the constraint is global, so the
+        // first tenant to register such a device permanently blocks every other tenant's insert,
+        // surfacing as a 500 on devicestatus ingestion (and a network error in Loop).
         modelBuilder
             .Entity<DeviceEntity>()
-            .HasIndex(e => new { e.Category, e.Type, e.Serial })
+            .HasIndex(e => new { e.TenantId, e.Category, e.Type, e.Serial })
             .HasDatabaseName("ix_devices_category_type_serial")
             .IsUnique()
             .HasFilter("deleted_at IS NULL");
@@ -1773,6 +1823,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<TenantEntity>()
             .HasIndex(t => t.Slug)
             .HasDatabaseName("ix_tenants_slug")
+            .IsUnique();
+
+        // Unique share token for public dashboard resolution. Postgres allows multiple
+        // NULLs in a unique index, so tenants without sharing enabled don't collide.
+        modelBuilder.Entity<TenantEntity>()
+            .HasIndex(t => t.ShareToken)
+            .HasDatabaseName("ix_tenants_share_token")
             .IsUnique();
 
         modelBuilder.Entity<TenantMemberEntity>()
@@ -3364,6 +3421,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 var nullValue = Expression.Constant(null, typeof(DateTime?));
                 var isNotDeleted = Expression.Equal(deletedAtProperty, nullValue);
                 body = Expression.AndAlso(body, isNotDeleted);
+
+                // Records whether the latest soft-delete was user-initiated. The soft-delete
+                // dedup discriminator (SoftDeleteDedupExtensions) blocks connector resync from
+                // re-creating a user-deleted row, while a system-sweep delete stays re-creatable.
+                // A shadow property so it lands on every soft-deletable table without a per-entity edit.
+                modelBuilder.Entity(entityType.ClrType)
+                    .Property<bool>("DeletedByUser")
+                    .HasColumnName("deleted_by_user")
+                    .HasDefaultValue(false);
             }
 
             modelBuilder.Entity(entityType.ClrType).HasQueryFilter(Expression.Lambda(body, parameter));

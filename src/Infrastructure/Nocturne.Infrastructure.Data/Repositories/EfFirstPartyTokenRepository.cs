@@ -79,6 +79,30 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
     }
 
     /// <inheritdoc />
+    public async Task<bool> TryMarkRotatedAsync(
+        Guid tokenId,
+        Guid replacedByTokenId,
+        CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+
+        // Single atomic UPDATE ... WHERE id = @id AND revoked_at IS NULL. The database admits
+        // exactly one concurrent caller while the row is still active, so parallel refresh
+        // requests cannot each mint a successor and fork the token chain.
+        var affected = await _context.RefreshTokens
+            .Where(t => t.Id == tokenId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(t => t.RevokedAt, now)
+                    .SetProperty(t => t.RevokedReason, "Rotated")
+                    .SetProperty(t => t.ReplacedByTokenId, (Guid?)replacedByTokenId)
+                    .SetProperty(t => t.UpdatedAt, now),
+                ct);
+
+        return affected == 1;
+    }
+
+    /// <inheritdoc />
     public async Task<int> RevokeAllForSubjectAsync(
         Guid subjectId,
         string reason,

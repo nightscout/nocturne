@@ -50,6 +50,7 @@ try
 
     var composePath = Path.Combine(tempDir, "docker-compose.yaml");
     var portainerComposePath = Path.Combine(tempDir, "docker-compose.portainer.yaml");
+    var byoProxyComposePath = Path.Combine(tempDir, "docker-compose.byo-proxy.yaml");
     var envMetadataPath = Path.Combine(tempDir, "env-metadata.json");
 
     if (!File.Exists(composePath))
@@ -70,21 +71,31 @@ try
         return 1;
     }
 
-    var envMetadata = JsonSerializer.Deserialize<EnvVarMeta[]>(
-        File.ReadAllText(envMetadataPath),
-        new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+    // Parse via JsonNode rather than reflection-based Deserialize: file-based
+    // apps run with reflection serialization disabled, which would throw.
+    var envMetadata = JsonNode.Parse(File.ReadAllText(envMetadataPath))!
+        .AsArray()
+        .Select(n => new EnvVarMeta(
+            (string)n!["name"]!,
+            (string)n["label"]!,
+            (string?)n["description"],
+            (string?)n["default"]))
+        .ToArray();
 
-    var initScriptSource = Path.Combine(repoRoot, "docs", "postgres", "container-init", "00-init.sh");
     var groups = ParseAspireEnv(Path.Combine(tempDir, ".env"), envMetadata);
     var envExample = GenerateEnvExample(groups, envMetadata);
 
-    // deploy/docker-compose/ — raw aspire output, bind-mount approach.
+    // deploy/docker-compose/ — self-contained aspire output. The init script and
+    // the Caddyfile are inlined into the compose as configs (see
+    // PortainerComposePublisher), so no separate init/ or caddy/ directories are
+    // shipped; the bundle is just compose + .env.
     var deployDockerComposeDir = Path.Combine(repoRoot, "deploy", "docker-compose");
     Directory.CreateDirectory(deployDockerComposeDir);
     File.Copy(composePath, Path.Combine(deployDockerComposeDir, "docker-compose.yaml"), overwrite: true);
-    var deployInitDir = Path.Combine(deployDockerComposeDir, "init");
-    Directory.CreateDirectory(deployInitDir);
-    File.Copy(initScriptSource, Path.Combine(deployInitDir, "00-init.sh"), overwrite: true);
+    // Bring-your-own-proxy override (generated alongside the compose by the
+    // byo-proxy publish step; absent when Caddy is disabled).
+    if (File.Exists(byoProxyComposePath))
+        File.Copy(byoProxyComposePath, Path.Combine(deployDockerComposeDir, "docker-compose.byo-proxy.yaml"), overwrite: true);
     File.WriteAllText(Path.Combine(deployDockerComposeDir, ".env.example"), envExample);
     Console.WriteLine("[publish-release] Updated deploy/docker-compose/");
 

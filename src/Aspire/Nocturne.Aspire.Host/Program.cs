@@ -31,6 +31,15 @@ class Program
             "Aspire:OptionalServices:Watchtower:Enabled",
             false
         );
+        // Bundled Caddy reverse proxy: terminates TLS with automatic Let's
+        // Encrypt certificates (apex via HTTP-01, tenant subdomains on-demand),
+        // requiring no DNS credentials. On by default in published deployments.
+        // Disable to front Nocturne with your own reverse proxy — the gateway
+        // then exposes plain HTTP for the external proxy to terminate TLS.
+        var enableCaddy = builder.Configuration.GetValue(
+            "Aspire:OptionalServices:Caddy:Enabled",
+            true
+        );
 
         var compose = builder.AddDockerComposeEnvironment("compose");
         if (!includeDashboard)
@@ -71,9 +80,11 @@ class Program
             // (or env var Parameters__postgres-username) automatically.
             var postgresUsername = builder.AddParameter(
                 ServiceNames.Parameters.PostgresUsername,
-                "nocturne",
+                ServiceNames.Defaults.PostgresUsername,
                 secret: false
-            ).WithPublishMetadata("PostgreSQL bootstrap username");
+            ).WithPublishMetadata(
+                "PostgreSQL bootstrap username",
+                defaultValue: ServiceNames.Defaults.PostgresUsername);
             var postgresPassword = builder.AddParameter(
                 ServiceNames.Parameters.PostgresPassword,
                 secret: true
@@ -248,20 +259,51 @@ class Program
             secret: false
         );
 
+        // OpenTelemetry export. Optional and off by default: the OTLP exporters
+        // (API .NET SDK and web Node SDK) only start when the endpoint is set, so
+        // an empty default means telemetry is collected in-process and dropped
+        // with negligible overhead. Wired into the API and web containers in
+        // publish mode only — in run mode Aspire injects its own dashboard
+        // endpoint, which we must not override. Protocol defaults to grpc so the
+        // .NET and Node SDKs agree (their out-of-the-box defaults differ).
+        var otelExporterEndpoint = builder.AddParameter("otel-exporter-otlp-endpoint", "", secret: false)
+            .WithPublishMetadata(
+                "OpenTelemetry OTLP endpoint",
+                "Collector URL to export metrics/traces/logs to, e.g. http://otel-collector:4317. Leave empty to disable telemetry.");
+        var otelExporterProtocol = builder.AddParameter("otel-exporter-otlp-protocol", "grpc", secret: false)
+            .WithPublishMetadata(
+                "OpenTelemetry OTLP protocol",
+                "grpc (port 4317) or http/protobuf (port 4318). Only used when the endpoint is set.",
+                defaultValue: "grpc");
+
         // ------------------------------------------------------------------
         // Nocturne API
         // ------------------------------------------------------------------
         var api = builder
+            // Run mode: no port → Aspire assigns a dynamic one. Publish mode:
+            // pin the in-container listen port so the generated compose bakes a
+            // concrete http://nocturne-api:8080 (mirrors the web service's fixed
+            // internal port) instead of an empty NOCTURNE_API_PORT placeholder.
+            // This port is never host-published — YARP is the only entry point.
             .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
-            .WithHttpEndpoint(name: "http")
+            .WithHttpEndpoint(
+                name: "http",
+                targetPort: builder.ExecutionContext.IsPublishMode ? 8080 : null)
             .PublishAsDockerComposeService((_, _) => { })
             .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
             .WithRemoteImageTag("latest")
             .WithPublishImageMetadata(
                 imageLabel: "API image",
-                imageDefault: "ghcr.io/nightscout/nocturne/nocturne-api:latest",
-                portLabel: "API port")
+                imageDefault: "ghcr.io/nightscout/nocturne/nocturne-api:latest")
             .WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
+
+        // Operator-supplied OTLP export (publish mode only — run mode uses
+        // Aspire's auto-injected dashboard endpoint). Empty endpoint = disabled.
+        if (builder.ExecutionContext.IsPublishMode)
+        {
+            api.WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", otelExporterEndpoint)
+                .WithEnvironment("OTEL_EXPORTER_OTLP_PROTOCOL", otelExporterProtocol);
+        }
 
         if (
             managedDatabase != null
@@ -356,7 +398,10 @@ class Program
                 .WithEnvironment("WHATSAPP_APP_SECRET", whatsappAppSecret)
                 .WithEnvironment("WHATSAPP_PHONE_NUMBER_ID", whatsappPhoneNumberId);
             // PUBLIC_DEFAULT_LANGUAGE comes from the web app's own .env.
-            // OTEL_EXPORTER_OTLP_ENDPOINT is injected by Aspire automatically.
+            // OTEL_EXPORTER_OTLP_ENDPOINT: in run mode Aspire injects the
+            // dashboard endpoint automatically; in publish mode the operator-
+            // supplied otel-exporter-otlp-endpoint param is wired on the
+            // publish-mode (dockerWeb) branch below.
         }
 
         IResourceBuilder<IResourceWithEndpoints> web;
@@ -414,6 +459,12 @@ class Program
                 ReferenceExpression.Create($"https://{baseDomain}")
             );
 
+            // Operator-supplied OTLP export, mirroring the API. The web's Node
+            // SDK (instrumentation.server.ts) starts only when the endpoint is
+            // set. Run-mode (viteWeb) keeps Aspire's auto-injected endpoint.
+            dockerWeb.WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", otelExporterEndpoint)
+                .WithEnvironment("OTEL_EXPORTER_OTLP_PROTOCOL", otelExporterProtocol);
+
             if (postgresServer != null && postgresWebPassword != null)
             {
                 dockerWeb.WithNocturneWebDatabase(postgresServer, dbName, postgresWebPassword);
@@ -439,7 +490,16 @@ class Program
         var isWorktree = persistence == PersistenceMode.Ephemeral;
 
 #pragma warning disable ASPIRECERTIFICATES001
-        var gateway = builder.AddYarp("gateway").WithExternalHttpEndpoints();
+        var gateway = builder.AddYarp("gateway");
+
+        // The gateway is the externally-published edge only in run mode (dev TLS)
+        // or when no bundled Caddy is present. With Caddy enabled in publish mode
+        // it stays internal — Caddy is the sole host-published service and reaches
+        // the gateway over the compose network as http://gateway:5000.
+        if (builder.ExecutionContext.IsRunMode || !enableCaddy)
+        {
+            gateway.WithExternalHttpEndpoints();
+        }
 
         var customDomain = builder.Configuration["LocalDev:Domain"];
 
@@ -461,13 +521,16 @@ class Program
                 gateway.WithHttpsEndpoint(port: !string.IsNullOrEmpty(customDomain) ? 443 : 1612);
             }
         }
-        else
+        else if (!enableCaddy)
         {
-            // Publish mode: HTTP on port 8080. Most deployments sit behind a
-            // reverse proxy (Caddy, nginx, Traefik) that owns port 80/443 for
-            // TLS termination. Default to 8080 to avoid conflicts.
+            // Publish mode with a bring-your-own reverse proxy: expose plain
+            // HTTP on 8080 for an external proxy (nginx/Traefik/Caddy) to
+            // terminate TLS in front of the gateway.
             gateway.WithHostPort(8080);
         }
+        // else: the bundled Caddy service (added below) is the TLS-terminating
+        // edge and the only host-published service. The gateway stays internal
+        // and is reached over the compose network as http://gateway:5000.
 #pragma warning restore ASPIRECERTIFICATES001
 
         // WebSocket activity timeout: YARP's default is too short for long-lived
@@ -506,6 +569,13 @@ class Program
                 yarp.AddRoute("/api/v4/dev-only/{**catch-all}", api.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
 
+                // Platform-admin tenant-access grant → API (sets the .basedomain grant cookie on a
+                // browser navigation; must come before /api/ → web catch-all)
+                yarp.AddRoute("/api/auth/platform-access/{**catch-all}", api.GetEndpoint("http"))
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+                yarp.AddRoute("/api/auth/platform-access", api.GetEndpoint("http"))
+                    .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
+
                 // Bot webhooks, remote functions → web
                 yarp.AddRoute("/api/{**catch-all}", webEndpoints.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
@@ -530,6 +600,46 @@ class Program
                 yarp.AddRoute(webEndpoints.GetEndpoint("http"))
                     .WithTransformXForwarded("X-Forwarded-", xForwardedAction);
             });
+
+        // ------------------------------------------------------------------
+        // Caddy — bundled TLS-terminating edge (publish mode, opt-out).
+        // Fronts the YARP gateway and obtains/renews Let's Encrypt certificates
+        // automatically: the apex via HTTP-01, tenant subdomains on-demand
+        // (gated by the API's /api/v4/platform/tls-authorize endpoint). No DNS
+        // credentials required. Disable via Aspire:OptionalServices:Caddy or the
+        // docker-compose.byo-proxy.yaml override to use your own reverse proxy.
+        // ------------------------------------------------------------------
+        if (builder.ExecutionContext.IsPublishMode && enableCaddy)
+        {
+            var caddyfilePath = Path.Join(builder.AppHostDirectory, "caddy", "Caddyfile");
+
+            builder
+                .AddContainer("caddy", "caddy", "2")
+                .WithBindMount(caddyfilePath, "/etc/caddy/Caddyfile", isReadOnly: true)
+                // Persist issued certificates and the ACME account across
+                // restarts so we re-use certs instead of re-issuing (and risking
+                // Let's Encrypt rate limits).
+                .WithVolume("caddy-data", "/data")
+                .WithVolume("caddy-config", "/config")
+                .WithEnvironment("BASE_DOMAIN", baseDomain)
+                .WaitFor(gateway)
+                .PublishAsDockerComposeService((_, service) =>
+                {
+                    // Caddy is the only host-published service: 80 (HTTP-01
+                    // challenge + HTTP→HTTPS redirect) and 443 (HTTPS + HTTP/3).
+                    service.Ports.Add("80:80");
+                    service.Ports.Add("443:443");
+                    service.Ports.Add("443:443/udp");
+
+                    // Ship ./caddy/Caddyfile next to docker-compose.yaml rather
+                    // than baking the dev-machine absolute path into a generated
+                    // bind-mount env var (mirrors the postgres ./init rewrite).
+                    var caddyfileMount = service.Volumes.FirstOrDefault(v =>
+                        v.Target == "/etc/caddy/Caddyfile");
+                    if (caddyfileMount != null)
+                        caddyfileMount.Source = "./caddy/Caddyfile";
+                });
+        }
 
         // When a custom domain is configured, show the custom domain URL in the
         // Aspire dashboard instead of the raw localhost endpoint.
@@ -623,8 +733,16 @@ class Program
                 .PublishAsDockerComposeService((_, _) => { });
         }
 
-        builder.AddMermaidDiagramPublisher();
-        builder.AddPortainerComposePublisher();
+        // These steps depend on the "publish-compose" pipeline step, which only
+        // exists in publish mode: AddDockerComposeEnvironment does not add the
+        // environment resource (the step's provider) to the model in run mode, so
+        // registering them in run mode fails pipeline validation during startup.
+        if (builder.ExecutionContext.IsPublishMode)
+        {
+            builder.AddMermaidDiagramPublisher();
+            builder.AddPortainerComposePublisher();
+            builder.AddByoProxyComposePublisher();
+        }
 
         var app = builder.Build();
         await app.RunAsync();

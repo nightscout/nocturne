@@ -45,27 +45,27 @@ export function summarizeCondition(
 			const p = node.threshold;
 			if (!p) return "";
 			const op = p.direction === "below" ? "<" : ">";
-			return `BG ${op} ${bg(p.value)} ${bgLabel()}`;
+			return `BG ${op} ${bg(p.value ?? 0)} ${bgLabel()}`;
 		}
 		case "rate_of_change": {
 			const p = node.rate_of_change;
 			if (!p) return "";
-			return `BG ${p.direction} ≥ ${bg(p.rate)} ${bgLabel()}/min`;
+			return `BG ${p.direction} ≥ ${bg(p.rate ?? 0)} ${bgLabel()}/min`;
 		}
 		case "staleness": {
 			const p = node.staleness;
 			if (!p) return "";
-			return `Sensor stale ${opSymbol(p.operator)} ${formatMinutes(p.value)}`;
+			return `Sensor stale ${opSymbol(p.operator as ComparisonOperator)} ${formatMinutes(p.value ?? 0)}`;
 		}
 		case "predicted": {
 			const p = node.predicted;
 			if (!p) return "";
-			return `Predicted BG ${opSymbol(p.operator)} ${bg(p.value)} ${bgLabel()} in ${formatMinutes(p.within_minutes)}`;
+			return `Predicted BG ${opSymbol(p.operator as ComparisonOperator)} ${bg(p.value ?? 0)} ${bgLabel()} in ${formatMinutes(p.within_minutes ?? 0)}`;
 		}
 		case "trend": {
 			const p = node.trend;
 			if (!p) return "";
-			return `Trend: ${trendLabel(p.bucket)}`;
+			return `Trend: ${trendLabel(p.bucket as TrendBucket)}`;
 		}
 		case "time_of_day": {
 			const p = node.time_of_day;
@@ -75,44 +75,45 @@ export function summarizeCondition(
 		case "iob": {
 			const p = node.iob;
 			if (!p) return "";
-			return `IOB ${opSymbol(p.operator)} ${p.value} U`;
+			return `IOB ${opSymbol(p.operator as ComparisonOperator)} ${p.value} U`;
 		}
 		case "cob": {
 			const p = node.cob;
 			if (!p) return "";
-			return `COB ${opSymbol(p.operator)} ${p.value} g`;
+			return `COB ${opSymbol(p.operator as ComparisonOperator)} ${p.value} g`;
 		}
 		case "reservoir": {
 			const p = node.reservoir;
 			if (!p) return "";
-			return `Reservoir ${opSymbol(p.operator)} ${p.value} U`;
+			return `Reservoir ${opSymbol(p.operator as ComparisonOperator)} ${p.value} U`;
 		}
 		case "site_age": {
 			const p = node.site_age;
 			if (!p) return "";
-			return `Site age ${opSymbol(p.operator)} ${formatHours(p.value)}`;
+			return `Site age ${opSymbol(p.operator as ComparisonOperator)} ${formatHours(p.value ?? 0)}`;
 		}
 		case "sensor_age": {
 			const p = node.sensor_age;
 			if (!p) return "";
-			return `Sensor age ${opSymbol(p.operator)} ${formatDays(p.value)}`;
+			return `Sensor age ${opSymbol(p.operator as ComparisonOperator)} ${formatDays(p.value ?? 0)}`;
 		}
 		case "alert_state": {
 			const p = node.alert_state;
 			if (!p) return "";
-			const label = ctx.resolveAlertName?.(p.alert_id) ?? shortId(p.alert_id);
+			const alertId = p.alert_id ?? "";
+			const label = ctx.resolveAlertName?.(alertId) ?? shortId(alertId);
 			const sustained = p.for_minutes ? ` for ${formatMinutes(p.for_minutes)}` : "";
 			return `${label} ${p.state}${sustained}`;
 		}
 		case "loop_stale": {
 			const p = node.loop_stale;
 			if (!p) return "";
-			return `Loop stale ${p.operator} ${formatMinutes(p.minutes)}`;
+			return `Loop stale ${p.operator} ${formatMinutes(p.minutes ?? 0)}`;
 		}
 		case "loop_enaction_stale": {
 			const p = node.loop_enaction_stale;
 			if (!p) return "";
-			return `Loop enaction stale ${p.operator} ${formatMinutes(p.minutes)}`;
+			return `Loop enaction stale ${p.operator} ${formatMinutes(p.minutes ?? 0)}`;
 		}
 		case "pump_suspended": {
 			const p = node.pump_suspended;
@@ -123,19 +124,19 @@ export function summarizeCondition(
 		case "pump_battery": {
 			const p = node.pump_battery;
 			if (!p) return "";
-			return `Pump battery ${opSymbol(p.operator)} ${p.value}%`;
+			return `Pump battery ${opSymbol(p.operator as ComparisonOperator)} ${p.value}%`;
 		}
 		case "temp_basal": {
 			const p = node.temp_basal;
 			if (!p) return "";
 			const unit = p.metric === "rate" ? "U/h" : "% of scheduled";
 			const label = p.metric === "rate" ? "Temp basal rate" : "Temp basal";
-			return `${label} ${opSymbol(p.operator)} ${p.value} ${unit}`;
+			return `${label} ${opSymbol(p.operator as ComparisonOperator)} ${p.value} ${unit}`;
 		}
 		case "uploader_battery": {
 			const p = node.uploader_battery;
 			if (!p) return "";
-			return `Uploader battery ${opSymbol(p.operator)} ${p.value}%`;
+			return `Uploader battery ${opSymbol(p.operator as ComparisonOperator)} ${p.value}%`;
 		}
 		case "override_active": {
 			const p = node.override_active;
@@ -146,7 +147,7 @@ export function summarizeCondition(
 		case "sensitivity_ratio": {
 			const p = node.sensitivity_ratio;
 			if (!p) return "";
-			return `Sensitivity ${opSymbol(p.operator)} ${p.value}`;
+			return `Sensitivity ${opSymbol(p.operator as ComparisonOperator)} ${p.value}`;
 		}
 		case "do_not_disturb": {
 			const p = node.do_not_disturb;
@@ -157,7 +158,7 @@ export function summarizeCondition(
 		case "signal_loss": {
 			const p = node.signal_loss;
 			if (!p) return "";
-			return `No data for ≥ ${formatMinutes(p.timeout_minutes)}`;
+			return `No data for ≥ ${formatMinutes(p.timeout_minutes ?? 0)}`;
 		}
 		case "glucose_bucket": {
 			const p = node.glucose_bucket;
@@ -167,12 +168,12 @@ export function summarizeCondition(
 		case "time_since_last_carb": {
 			const p = node.time_since_last_carb;
 			if (!p) return "";
-			return `Time since last carb ${opSymbol(p.operator)} ${formatMinutes(p.minutes)}`;
+			return `Time since last carb ${opSymbol(p.operator as unknown as ComparisonOperator)} ${formatMinutes(p.minutes ?? 0)}`;
 		}
 		case "time_since_last_bolus": {
 			const p = node.time_since_last_bolus;
 			if (!p) return "";
-			return `Time since last bolus ${opSymbol(p.operator)} ${formatMinutes(p.minutes)}`;
+			return `Time since last bolus ${opSymbol(p.operator as unknown as ComparisonOperator)} ${formatMinutes(p.minutes ?? 0)}`;
 		}
 		case "day_of_week": {
 			const p = node.day_of_week;
@@ -182,13 +183,13 @@ export function summarizeCondition(
 		case "pump_state": {
 			const p = node.pump_state;
 			if (!p) return "";
-			const verb = p.is_active ? `Pump ${pumpModeLabel(p.mode)}` : `Pump not ${pumpModeLabel(p.mode)}`;
+			const verb = p.is_active ? `Pump ${pumpModeLabel(p.mode ?? "")}` : `Pump not ${pumpModeLabel(p.mode ?? "")}`;
 			return p.for_minutes ? `${verb} for ${formatMinutes(p.for_minutes)}` : verb;
 		}
 		case "state_span_active": {
 			const p = node.state_span_active;
 			if (!p) return "";
-			const subject = stateSpanLabel(p.category, p.state);
+			const subject = stateSpanLabel(p.category ?? "", p.state);
 			const verb = p.is_active ? `${subject} active` : `${subject} not active`;
 			return p.for_minutes ? `${verb} for ${formatMinutes(p.for_minutes)}` : verb;
 		}

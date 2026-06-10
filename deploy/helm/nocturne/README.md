@@ -182,7 +182,7 @@ When `digest` is set, `tag` is ignored and the rendered image reference is `<reg
 
 Nocturne's API uses Aspire ServiceDefaults' OpenTelemetry plumbing and exports metrics, traces, and logs over **OTLP push** when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. There is no Prometheus `/metrics` endpoint, so direct scrape is not supported.
 
-The web container has no OpenTelemetry SDK and is intentionally not instrumented.
+The web container has its own Node OpenTelemetry SDK (server-side HTTP auto-instrumentation plus client-error spans), gated on the same variable. A single `observability.otlp.enabled` switch wires up both the API and web containers.
 
 ### Three scenarios
 
@@ -218,7 +218,7 @@ observability:
 ### Resource attributes
 
 The chart automatically sets:
-- `service.name` → `<release>-nocturne-api` (override via `observability.otlp.serviceName`)
+- `service.name` → `<release>-nocturne-api` for the API (override via `observability.otlp.serviceName`) and `<release>-nocturne-web` for the web app
 - `service.version` → image tag
 - `k8s.namespace.name`, `k8s.pod.name` → via downward API
 

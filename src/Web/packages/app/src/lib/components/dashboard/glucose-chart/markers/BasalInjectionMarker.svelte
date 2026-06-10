@@ -42,7 +42,7 @@
     fill="var(--background)"
     class="stroke-indigo-500 dark:stroke-indigo-400"
     stroke-width="1"
-    opacity="0.9"
+    opacity={0.9}
   />
   <!-- Syringe icon via foreignObject -->
   <foreignObject x="-22" y="-7" width="14" height="14">

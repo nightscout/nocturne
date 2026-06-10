@@ -27,17 +27,29 @@ public class MyLifeAuthTokenProvider(
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         MyLifeConnectorConfiguration config, CancellationToken cancellationToken)
     {
+        // Each step below fails by returning a null token (the base class records the connector as
+        // unhealthy). Log which step failed so the cause is diagnosable — without this every failure
+        // surfaces only as the generic "MyLife authentication failed" downstream. Messages are
+        // intentionally free of credentials/PII.
         var location = await _soapClient.GetUserLocationAsync(
             config.Username,
             cancellationToken
         );
-        if (location == null) return (null, DateTime.MinValue, null);
+        if (location == null)
+        {
+            _logger.LogWarning("MyLife auth failed at user-location lookup (GetUser20 returned no result)");
+            return (null, DateTime.MinValue, null);
+        }
 
         var serviceUrl = config.ServiceUrl;
         if (string.IsNullOrWhiteSpace(serviceUrl))
             serviceUrl = location.Country20?.ServiceUrl ?? location.Country20?.RestServiceUrl ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(serviceUrl)) return (null, DateTime.MinValue, null);
+        if (string.IsNullOrWhiteSpace(serviceUrl))
+        {
+            _logger.LogWarning("MyLife auth failed: no service URL resolved from user location");
+            return (null, DateTime.MinValue, null);
+        }
 
         var login = await _soapClient.LoginAsync(
             serviceUrl,
@@ -47,19 +59,41 @@ public class MyLifeAuthTokenProvider(
             config.Password,
             cancellationToken
         );
-        if (login == null) return (null, DateTime.MinValue, null);
+        if (login == null)
+        {
+            _logger.LogWarning(
+                "MyLife auth failed at login: no response (appVersion {AppVersion}, appPlatform {AppPlatform})",
+                config.AppVersion, config.AppPlatform);
+            return (null, DateTime.MinValue, null);
+        }
 
-        if (string.IsNullOrWhiteSpace(login.AuthToken)) return (null, DateTime.MinValue, null);
+        if (string.IsNullOrWhiteSpace(login.AuthToken))
+        {
+            _logger.LogWarning(
+                "MyLife auth failed: login returned no auth token (check credentials; appVersion {AppVersion})",
+                config.AppVersion);
+            return (null, DateTime.MinValue, null);
+        }
 
         var patients = await _soapClient.SyncPatientListAsync(
             serviceUrl,
             login.AuthToken,
             cancellationToken
         );
-        if (patients.Count == 0) return (null, DateTime.MinValue, null);
+        if (patients.Count == 0)
+        {
+            _logger.LogWarning("MyLife auth failed: patient list was empty");
+            return (null, DateTime.MinValue, null);
+        }
 
         var patient = ResolvePatient(patients, config.PatientId);
-        if (patient == null) return (null, DateTime.MinValue, null);
+        if (patient == null)
+        {
+            _logger.LogWarning(
+                "MyLife auth failed: configured patient not found among {Count} patient(s)",
+                patients.Count);
+            return (null, DateTime.MinValue, null);
+        }
 
         var restServiceUrl = location.Country20?.RestServiceUrl ?? string.Empty;
 

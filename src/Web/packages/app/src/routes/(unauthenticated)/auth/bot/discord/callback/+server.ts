@@ -6,6 +6,7 @@ import {
 	getHashedInstanceKey,
 } from "$lib/server/api-client-factory";
 import { verifyOAuthLinkState } from "$lib/server/bot/oauth-state";
+import { getDiscordOAuthConfig } from "$lib/server/bot/platform-credentials";
 
 /**
  * Apex-hosted Discord OAuth2 callback.
@@ -37,13 +38,12 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 		throw error(400, "Invalid or expired state.");
 	}
 
-	const clientId = process.env.DISCORD_APPLICATION_ID;
-	const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+	const { applicationId: clientId, clientSecret } = await getDiscordOAuthConfig(fetch);
 	const baseDomain = process.env.BASE_DOMAIN;
 	if (!clientId || !clientSecret || !baseDomain) {
 		throw error(
 			500,
-			"Discord OAuth2 not configured. Set DISCORD_APPLICATION_ID, DISCORD_CLIENT_SECRET, and BASE_DOMAIN.",
+			"Discord OAuth2 not configured. Set Discord credentials in Settings > Admin > Integrations (or DISCORD_APPLICATION_ID / DISCORD_CLIENT_SECRET) and set BASE_DOMAIN.",
 		);
 	}
 

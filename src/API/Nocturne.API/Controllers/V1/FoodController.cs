@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Repositories;
 
@@ -243,6 +244,7 @@ public class FoodController : ControllerBase
     /// <returns>Created food records with assigned IDs</returns>
     [HttpPost]
     [Authorize]
+    [RequireScope(OAuthScopes.FoodReadWrite)]
     [NightscoutEndpoint("/api/v1/food")]
     [ProducesResponseType(typeof(Food[]), 201)]
     [ProducesResponseType(400)]
@@ -359,6 +361,7 @@ public class FoodController : ControllerBase
     /// <returns>Updated food record</returns>
     [HttpPut("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.FoodReadWrite)]
     [NightscoutEndpoint("/api/v1/food/:id")]
     [ProducesResponseType(typeof(Food), 200)]
     [ProducesResponseType(404)]
@@ -445,6 +448,7 @@ public class FoodController : ControllerBase
     /// <returns>Updated food record</returns>
     [HttpPut]
     [Authorize]
+    [RequireScope(OAuthScopes.FoodReadWrite)]
     [NightscoutEndpoint("/api/v1/food")]
     [ProducesResponseType(typeof(Food), 200)]
     [ProducesResponseType(404)]
@@ -477,6 +481,7 @@ public class FoodController : ControllerBase
     /// <returns>No content if successful</returns>
     [HttpDelete("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v1/food/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(404)]
@@ -528,6 +533,7 @@ public class FoodController : ControllerBase
     /// <returns>Empty object for parity with Nightscout</returns>
     [HttpDelete]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v1/food")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]

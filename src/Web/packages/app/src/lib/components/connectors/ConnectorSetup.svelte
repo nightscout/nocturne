@@ -6,7 +6,6 @@
     ConnectorStatusInfo,
     ConnectorDataSummary,
     ConnectorCapabilities,
-    ServicesOverview,
     SyncResult,
   } from "$lib/api/generated/nocturne-api-client";
   import {
@@ -107,7 +106,7 @@
   const statusQuery = getAllConnectorStatus();
 
   // --- Derived data from queries ---
-  const servicesOverview = $derived(servicesOverviewQuery.current);
+  const servicesOverview = $derived(servicesOverviewQuery.current ?? null);
 
   const connectorInfo = $derived(
     activeId && servicesOverview
@@ -377,7 +376,7 @@
             </div>
             <Switch
               checked={isActive}
-              onCheckedChange={(checked) => handleToggleActive(checked)}
+              onCheckedChange={(checked: boolean) => handleToggleActive(checked)}
               disabled={isSaving}
             />
           </CardContent>

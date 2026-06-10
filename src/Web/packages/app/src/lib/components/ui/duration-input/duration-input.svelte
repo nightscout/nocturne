@@ -191,7 +191,7 @@
     />
     <Tooltip.Root>
       <Tooltip.Trigger>
-        {#snippet child({ props })}
+        {#snippet child({ props }: { props: Record<string, unknown> })}
           <Button
             {...props}
             variant="ghost"

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
@@ -197,6 +198,7 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <response code="500">Internal server error.</response>
     [HttpPost]
     [Authorize]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries")]
     [ProducesResponseType(typeof(Entry), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -294,6 +296,7 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <returns>Created entries</returns>
     [HttpPost("bulk")]
     [Authorize]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/bulk")]
     [ProducesResponseType(typeof(Entry[]), 201)]
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
@@ -370,6 +373,7 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <returns>Updated entry</returns>
     [HttpPut("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [NightscoutEndpoint("/api/v3/entries/:id")]
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
@@ -440,6 +444,7 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <returns>No content on success</returns>
     [HttpDelete("{id}")]
     [Authorize]
+    [RequireScope(OAuthScopes.FullAccess)]
     [NightscoutEndpoint("/api/v3/entries/:id")]
     [ProducesResponseType(204)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]

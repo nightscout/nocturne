@@ -1,6 +1,6 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, Shield, Bell, ChevronRight, ChevronDown } from "@lucide/svelte";
+    import { Rocket, Download, Settings, Shield, Share2, Bell, Bot, Code2, KeyRound, Activity, ChevronRight, ChevronDown } from "@lucide/svelte";
 
     const navSections = [
         {
@@ -18,14 +18,24 @@
                 { href: "/docs/installation", label: "Overview" },
                 { href: "/docs/installation/docker-compose", label: "Docker Compose" },
                 { href: "/docs/installation/portainer", label: "Portainer" },
+                { href: "/docs/installation/byo-postgres", label: "Bring Your Own PostgreSQL" },
             ],
         },
         {
             title: "Authentication",
             icon: Shield,
             items: [
+                { href: "/docs/authentication", label: "Overview" },
                 { href: "/docs/authentication/google", label: "Sign in with Google" },
                 { href: "/docs/authentication/github", label: "Sign in with GitHub" },
+                { href: "/docs/authentication/oidc", label: "Generic OIDC" },
+            ],
+        },
+        {
+            title: "Sharing & Privacy",
+            icon: Share2,
+            items: [
+                { href: "/docs/sharing", label: "Sharing your data" },
             ],
         },
         {
@@ -36,10 +46,43 @@
             ],
         },
         {
+            title: "Chat Bots",
+            icon: Bot,
+            items: [
+                { href: "/docs/bots", label: "Overview" },
+                { href: "/docs/bots/discord", label: "Discord" },
+                { href: "/docs/bots/slack", label: "Slack" },
+                { href: "/docs/bots/telegram", label: "Telegram" },
+                { href: "/docs/bots/whatsapp", label: "WhatsApp" },
+            ],
+        },
+        {
             title: "Configuration",
             icon: Settings,
             items: [
                 { href: "/docs/configuration", label: "Configuration Guide" },
+            ],
+        },
+        {
+            title: "Observability",
+            icon: Activity,
+            items: [
+                { href: "/docs/observability", label: "OpenTelemetry" },
+            ],
+        },
+        {
+            title: "Connecting Apps",
+            icon: KeyRound,
+            items: [
+                { href: "/docs/connecting-apps", label: "App authorization (PKCE)" },
+                { href: "/docs/connecting-apps/device-flow", label: "Mobile & device flow" },
+            ],
+        },
+        {
+            title: "API Reference",
+            icon: Code2,
+            items: [
+                { href: "/scalar", label: "Interactive API Docs" },
             ],
         },
     ];

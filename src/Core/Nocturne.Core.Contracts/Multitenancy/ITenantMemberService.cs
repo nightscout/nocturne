@@ -32,4 +32,13 @@ public interface ITenantMemberService
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The member count.</returns>
     Task<int> GetMemberCountAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the names of the roles assigned to the specified subject within the given tenant.
+    /// </summary>
+    /// <param name="subjectId">The subject (user) identifier.</param>
+    /// <param name="tenantId">The tenant identifier.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The subject's tenant role names, or an empty list if they have none or are not a member.</returns>
+    Task<List<string>> GetMemberRoleNamesAsync(Guid subjectId, Guid tenantId, CancellationToken ct = default);
 }

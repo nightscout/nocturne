@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -21,7 +20,7 @@ public class DeviceStatusExtrasRepositoryBulkCreateTests : IDisposable
         var dbName = $"device_status_extras_bulk_tests_{Guid.NewGuid()}";
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
-        _repository = new DeviceStatusExtrasRepository(new TestTenantDbContextFactory(_context), NullLogger<DeviceStatusExtrasRepository>.Instance);
+        _repository = new DeviceStatusExtrasRepository(new TestTenantDbContextFactory(_context));
     }
 
     public void Dispose()

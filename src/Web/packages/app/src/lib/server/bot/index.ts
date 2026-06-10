@@ -2,6 +2,7 @@ import { createBot, registerAllCommands, AlertDeliveryHandler, type BotOptions, 
 import type { BotApiClient, AlertDispatchEvent } from "@nocturne/bot";
 import { env } from "$env/dynamic/private";
 import { createServerApiClient, getApiBaseUrl, getHashedInstanceKey } from "$lib/server/api-client-factory";
+import { fetchDecryptedPlatformCredentials } from "./platform-credentials";
 import type { PlatformCredentials as ApiPlatformCredentials } from "$api";
 
 type Bot = ReturnType<typeof createBot>;
@@ -21,20 +22,9 @@ export function getBot(): Promise<Bot> {
 }
 
 async function fetchDbCredentials(): Promise<Map<string, ApiPlatformCredentials> | null> {
-	const apiBaseUrl = getApiBaseUrl();
-	if (!apiBaseUrl) return null;
-	try {
-		const client = createServerApiClient(apiBaseUrl, fetch, {
-			hashedInstanceKey: getHashedInstanceKey(),
-			extraHeaders: { "X-Forwarded-Proto": "https" },
-		});
-		const all = await client.platformSettings.getAllDecrypted();
-		if (!all) return null;
-		return new Map(all.map((c) => [c.category!, c]));
-	} catch (err) {
-		console.warn("[bot] Failed to fetch platform settings from API, falling back to env vars:", err);
-		return null;
-	}
+	const all = await fetchDecryptedPlatformCredentials(fetch);
+	if (!all) return null;
+	return new Map(all.map((c) => [c.category!, c]));
 }
 
 type PlatformConfigBuilder = {
@@ -75,7 +65,13 @@ const platformBuilders: Record<string, PlatformConfigBuilder> = {
 			phoneNumberId: fields["phoneNumberId"],
 			verifyToken: fields["verifyToken"],
 		}),
-		fromEnv: () => false, // WhatsApp has no env var fallback
+		fromEnv: () =>
+			!!(
+				env.WHATSAPP_ACCESS_TOKEN &&
+				env.WHATSAPP_APP_SECRET &&
+				env.WHATSAPP_PHONE_NUMBER_ID &&
+				env.WHATSAPP_VERIFY_TOKEN
+			),
 	},
 	resend: {
 		fromDb: (fields) => ({

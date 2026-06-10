@@ -31,6 +31,7 @@ import {
   CompressionLowClient,
   ConfigurationClient,
   ConnectedAppsClient,
+  ConnectorAdminClient,
   ConnectorFoodEntriesClient,
   ConnectorStatusClient,
   CorrelationClient,
@@ -70,6 +71,7 @@ import {
   PasskeyClient,
   PatientRecordClient,
   PlatformClient,
+  PlatformAccessClient,
   PlatformSettingsClient,
   PredictionClient,
   ProcessingClient,
@@ -80,6 +82,7 @@ import {
   SensorGlucoseClient,
   ServicesClient,
   SetupClient,
+  ShareLinkClient,
   StateSpansClient,
   StatisticsClient,
   StatusClient,
@@ -91,6 +94,8 @@ import {
   SystemEventsClient,
   TenantClient,
   TenantAlertSettingsClient,
+  TimezoneTimelineClient,
+  TlsAuthorizationClient,
   TotpClient,
   TrackerAlertsClient,
   TrackersClient,
@@ -134,6 +139,7 @@ export class ApiClient {
   public readonly compressionLow: CompressionLowClient;
   public readonly configuration: ConfigurationClient;
   public readonly connectedApps: ConnectedAppsClient;
+  public readonly connectorAdmin: ConnectorAdminClient;
   public readonly connectorFoodEntries: ConnectorFoodEntriesClient;
   public readonly connectorStatus: ConnectorStatusClient;
   public readonly correlation: CorrelationClient;
@@ -173,6 +179,7 @@ export class ApiClient {
   public readonly passkey: PasskeyClient;
   public readonly patientRecord: PatientRecordClient;
   public readonly platform: PlatformClient;
+  public readonly platformAccess: PlatformAccessClient;
   public readonly platformSettings: PlatformSettingsClient;
   public readonly predictions: PredictionClient;
   public readonly processing: ProcessingClient;
@@ -183,6 +190,7 @@ export class ApiClient {
   public readonly sensorGlucose: SensorGlucoseClient;
   public readonly services: ServicesClient;
   public readonly setup: SetupClient;
+  public readonly shareLink: ShareLinkClient;
   public readonly stateSpans: StateSpansClient;
   public readonly statistics: StatisticsClient;
   public readonly status: StatusClient;
@@ -194,6 +202,8 @@ export class ApiClient {
   public readonly systemEvents: SystemEventsClient;
   public readonly tenant: TenantClient;
   public readonly tenantAlertSettings: TenantAlertSettingsClient;
+  public readonly timezoneTimeline: TimezoneTimelineClient;
+  public readonly tlsAuthorization: TlsAuthorizationClient;
   public readonly totp: TotpClient;
   public readonly trackerAlerts: TrackerAlertsClient;
   public readonly trackers: TrackersClient;
@@ -237,6 +247,7 @@ export class ApiClient {
     this.compressionLow = new CompressionLowClient(apiBaseUrl, http);
     this.configuration = new ConfigurationClient(apiBaseUrl, http);
     this.connectedApps = new ConnectedAppsClient(apiBaseUrl, http);
+    this.connectorAdmin = new ConnectorAdminClient(apiBaseUrl, http);
     this.connectorFoodEntries = new ConnectorFoodEntriesClient(apiBaseUrl, http);
     this.connectorStatus = new ConnectorStatusClient(apiBaseUrl, http);
     this.correlation = new CorrelationClient(apiBaseUrl, http);
@@ -276,6 +287,7 @@ export class ApiClient {
     this.passkey = new PasskeyClient(apiBaseUrl, http);
     this.patientRecord = new PatientRecordClient(apiBaseUrl, http);
     this.platform = new PlatformClient(apiBaseUrl, http);
+    this.platformAccess = new PlatformAccessClient(apiBaseUrl, http);
     this.platformSettings = new PlatformSettingsClient(apiBaseUrl, http);
     this.predictions = new PredictionClient(apiBaseUrl, http);
     this.processing = new ProcessingClient(apiBaseUrl, http);
@@ -286,6 +298,7 @@ export class ApiClient {
     this.sensorGlucose = new SensorGlucoseClient(apiBaseUrl, http);
     this.services = new ServicesClient(apiBaseUrl, http);
     this.setup = new SetupClient(apiBaseUrl, http);
+    this.shareLink = new ShareLinkClient(apiBaseUrl, http);
     this.stateSpans = new StateSpansClient(apiBaseUrl, http);
     this.statistics = new StatisticsClient(apiBaseUrl, http);
     this.status = new StatusClient(apiBaseUrl, http);
@@ -297,6 +310,8 @@ export class ApiClient {
     this.systemEvents = new SystemEventsClient(apiBaseUrl, http);
     this.tenant = new TenantClient(apiBaseUrl, http);
     this.tenantAlertSettings = new TenantAlertSettingsClient(apiBaseUrl, http);
+    this.timezoneTimeline = new TimezoneTimelineClient(apiBaseUrl, http);
+    this.tlsAuthorization = new TlsAuthorizationClient(apiBaseUrl, http);
     this.totp = new TotpClient(apiBaseUrl, http);
     this.trackerAlerts = new TrackerAlertsClient(apiBaseUrl, http);
     this.trackers = new TrackersClient(apiBaseUrl, http);

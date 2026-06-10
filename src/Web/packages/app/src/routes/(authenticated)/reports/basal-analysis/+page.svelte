@@ -22,7 +22,7 @@
   } from "lucide-svelte";
   import BasalRatePercentileChart from "$lib/components/reports/BasalRatePercentileChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
-  import { getReportsData } from "$api/reports.remote";
+  import { getBasalReportData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
@@ -33,7 +33,7 @@
   // Use contextResource - it syncs to layout's ResourceGuard automatically
   // dateParams provides .date.from, .date.to, .date.dayCount derived from URL params
   const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
+    () => getBasalReportData(reportsParams.dateRangeInput),
     { errorTitle: "Error Loading Basal Analysis", dateParams: reportsParams }
   );
 

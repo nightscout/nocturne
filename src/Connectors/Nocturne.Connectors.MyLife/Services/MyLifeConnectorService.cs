@@ -122,16 +122,25 @@ public class MyLifeConnectorService(
 
         try
         {
-            // Validate session
+            // Establish the MyLife session up front. AcquireTokenAsync (reached via the token
+            // provider) performs the SOAP login and populates the session cache as a side effect;
+            // the token is cached so subsequent cycles reuse it. Without this call the session cache
+            // is never populated and every sync fails with "session not established".
+            var token = await tokenProvider.GetValidTokenAsync(config, cancellationToken);
+
             var session = sessionCache.Get(tenantAccessor.TenantId);
-            if (session == null
+            if (string.IsNullOrEmpty(token)
+                || session == null
                 || string.IsNullOrWhiteSpace(session.ServiceUrl)
                 || string.IsNullOrWhiteSpace(session.AuthToken)
                 || string.IsNullOrWhiteSpace(session.PatientId))
             {
                 result.Success = false;
-                result.Errors.Add("MyLife session not established");
+                result.Errors.Add("MyLife authentication failed; see connector logs for the failing step");
                 result.EndTime = DateTimeOffset.UtcNow;
+                _logger.LogWarning(
+                    "[{ConnectorSource}] Sync failed: MyLife authentication unsuccessful",
+                    ConnectorSource);
                 return result;
             }
 
@@ -149,9 +158,10 @@ public class MyLifeConnectorService(
             var needRecords = treatmentSubTypes.Any(t => activeTypes.Contains(t));
             var needStateSpans = activeTypes.Contains(SyncDataType.StateSpans);
 
-            // Calculate since timestamps
-            var glucoseSince = await CalculateSinceTimestampAsync(config, request.From);
-            var treatmentSince = await CalculateTreatmentSinceTimestampAsync(config, request.From);
+            // Calculate since timestamps. MyLife streams the source month by month, so it needs a
+            // concrete lower bound; fall back to the default initial window when no cursor exists.
+            var glucoseSince = await CalculateSinceTimestampAsync(config, request.From) ?? DefaultInitialSyncFloor();
+            var treatmentSince = await CalculateTreatmentSinceTimestampAsync(config, request.From) ?? DefaultInitialSyncFloor();
             var overallSince = glucoseSince < treatmentSince ? glucoseSince : treatmentSince;
             var until = request.To ?? DateTime.UtcNow;
 

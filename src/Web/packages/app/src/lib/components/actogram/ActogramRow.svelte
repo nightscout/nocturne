@@ -113,7 +113,7 @@
           const svgRect = e.currentTarget.closest('svg')?.getBoundingClientRect();
           if (!svgRect) return;
           const localX = e.clientX - svgRect.left;
-          const time = context.xScale.invert(localX);
+          const time = rowContext.xScale.invert(localX);
           const hoursFromStart = (time.getTime() - day.getTime()) / MS_PER_HOUR;
           const nearestBg = findNearestPoint(bgData, hoursFromStart);
           const nearestData = findNearestPoint(data, hoursFromStart);

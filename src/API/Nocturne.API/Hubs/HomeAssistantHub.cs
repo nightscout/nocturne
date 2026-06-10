@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Alerts;
@@ -15,6 +16,9 @@ namespace Nocturne.API.Hubs;
 /// when the channel is configured to allow it.
 /// Mounted at /hubs/home-assistant.
 /// </summary>
+// Connections authenticate in-band after negotiate and are reachable only via the internal
+// realtime bridge, so the HTTP fallback authorization policy must not gate the handshake.
+[AllowAnonymous]
 public class HomeAssistantHub : TenantAwareHub
 {
     /// <summary>

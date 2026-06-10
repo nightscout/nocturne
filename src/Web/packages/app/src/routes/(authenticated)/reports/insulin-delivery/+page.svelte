@@ -25,7 +25,7 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
-  import { getReportsData } from "$api/reports.remote";
+  import { getBasalReportData } from "$api/reports.remote";
   import { getMultiPeriodStatistics, getDailyBasalBolusRatios } from "$api/generated/statistics.generated.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -36,7 +36,7 @@
 
   // Create primary resource with automatic layout registration
   const reportsResource = contextResource(
-    () => getReportsData(reportsParams.dateRangeInput),
+    () => getBasalReportData(reportsParams.dateRangeInput),
     { errorTitle: "Error Loading Insulin Delivery Data" }
   );
 
@@ -62,7 +62,16 @@
           return d;
         })();
     startDate.setHours(0, 0, 0, 0);
-    return { startDate, endDate };
+    // Send ISO strings, not Date objects. A Date can't be serialised as a
+    // remote-query argument ("Unknown date type"), so passing Dates left this
+    // query erroring — empty on first load, hard error when the filter dates
+    // change. The server schema is z.coerce.date(), which parses the ISO
+    // strings back to dates; the cast satisfies the generated Date arg type.
+    // Same pattern as ReplayPanel's replay() call.
+    return {
+      startDate: startDate.toISOString() as unknown as Date,
+      endDate: endDate.toISOString() as unknown as Date,
+    };
   });
   const dailyRatiosResource = $derived(getDailyBasalBolusRatios(dailyRatiosDates));
 

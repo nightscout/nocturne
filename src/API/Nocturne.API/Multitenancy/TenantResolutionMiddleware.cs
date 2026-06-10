@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 
@@ -52,6 +53,18 @@ public class TenantResolutionMiddleware
         "/api/metadata",
         "/api/v4/chat-identity/directory/resolve",
         "/api/v4/chat-identity/directory/pending-links",
+        // OIDC login can be initiated from the apex (no subdomain) — e.g. the
+        // platform-access grant bounces an unauthenticated operator here. OIDC is
+        // centralized at the apex (the registered redirect_uri is the apex callback),
+        // so login must not be tenant-gated. On a subdomain the tenant still resolves
+        // normally; this only allows the apex (tenantless) case through.
+        "/api/auth/oidc/login",
+        // The OIDC callback is the registered redirect_uri (apex). For apex-initiated
+        // logins the state carries no TenantSlug, so OidcCallbackRedirectMiddleware
+        // can't bounce it to a subdomain and it must process here. The session it
+        // issues is subject-scoped (no tenant needed). Subdomain-originated callbacks
+        // are already redirected to their subdomain before reaching this point.
+        "/api/auth/oidc/callback",
     ];
 
     /// <summary>
@@ -62,6 +75,9 @@ public class TenantResolutionMiddleware
     /// </summary>
     private static readonly string[] TenantlessAllowedPrefixes =
     [
+        // Platform-admin tenant-access grant: minted at the apex (operator is not on
+        // any tenant subdomain yet); the target tenant is resolved from the query string.
+        "/api/auth/platform-access",
         "/api/auth/passkey/setup/",
         "/api/v4/admin/demo/",
         "/api/v4/admin/platform-settings",
@@ -77,11 +93,64 @@ public class TenantResolutionMiddleware
         // Check X-Forwarded-Host first (set by reverse proxies), then fall back to Host
         var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(':')[0]
                    ?? context.Request.Host.Host;
-        var slug = ExtractSubdomain(host);
+        var slug = SubdomainParser.Extract(host, _config.BaseDomain);
+
+        // Public share link: {token}.share.{baseDomain}. Resolve the tenant by its share token
+        // and mark the request read-only-public. An unknown token returns the same 404 as an
+        // unknown slug, so the share host can't be used as a tenant-existence oracle.
+        if (slug != null && TryExtractShareToken(slug, out var shareToken))
+        {
+            var shareCache = context.RequestServices.GetRequiredService<ShareTokenCacheService>();
+            var shareTenant = await shareCache.ResolveByTokenAsync(shareToken);
+
+            if (shareTenant == null)
+            {
+                _logger.LogDebug("Share token did not resolve to a tenant");
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            if (!shareTenant.IsActive)
+            {
+                _logger.LogWarning("Share token resolved to inactive tenant '{Slug}'", shareTenant.Slug);
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+
+            tenantAccessor.SetTenant(shareTenant);
+            context.Items["TenantContext"] = shareTenant;
+            context.Items["ShareAccess"] = true;
+            // Mark the share before pinning the scoped context so the carrier is in place
+            // for both the scoped-direct and the factory DbContext paths.
+            context.RequestServices.GetRequiredService<ICategoryReadContext>().MarkShare();
+            PinTenantOnScopedDbContext(context, shareTenant.TenantId);
+            await _next(context);
+            return;
+        }
+
         var path = context.Request.Path.Value ?? "";
         var isTenantlessAllowedPath =
             TenantlessAllowedPaths.Any(p => path.Equals(p, StringComparison.OrdinalIgnoreCase)) ||
             TenantlessAllowedPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+
+        // On the apex (no subdomain), GET /api/v4/status is tenant-scoped yet listed as
+        // tenantless-allowed (so a fresh apex doesn't 404). On a single-tenant install,
+        // resolve the sole tenant so status reflects it instead of reporting
+        // "setup_required" — which would bounce a fully configured single-tenant install
+        // to /setup. Falls through to the normal tenantless passthrough when zero or
+        // multiple tenants exist, so multi-tenant apex behavior is unchanged.
+        if (slug == null && path.Equals("/api/v4/status", StringComparison.OrdinalIgnoreCase))
+        {
+            var soleStatusTenant = await GetSoleTenantAsync(context.RequestServices);
+            if (soleStatusTenant != null)
+            {
+                tenantAccessor.SetTenant(soleStatusTenant);
+                context.Items["TenantContext"] = soleStatusTenant;
+                PinTenantOnScopedDbContext(context, soleStatusTenant.TenantId);
+                await _next(context);
+                return;
+            }
+        }
 
         // Tenantless-allowed paths on the apex (no slug) operate across tenants.
         if (slug == null && isTenantlessAllowedPath)
@@ -121,6 +190,7 @@ public class TenantResolutionMiddleware
             // Single tenant: auto-resolve from the apex domain.
             tenantAccessor.SetTenant(soleTenant);
             context.Items["TenantContext"] = soleTenant;
+            PinTenantOnScopedDbContext(context, soleTenant.TenantId);
             await _next(context);
             return;
         }
@@ -150,21 +220,54 @@ public class TenantResolutionMiddleware
 
         tenantAccessor.SetTenant(tenantContext);
         context.Items["TenantContext"] = tenantContext;
+        PinTenantOnScopedDbContext(context, tenantContext.TenantId);
 
         await _next(context);
     }
 
-    private string? ExtractSubdomain(string hostname)
+    /// <summary>
+    /// Pins the resolved tenant onto the request-scoped <see cref="NocturneDbContext"/>.
+    /// The scoped context is pool-leased (<c>AddPooledDbContextFactory</c>) and its
+    /// <c>TenantId</c> is a custom property that pooling does not reset, so without this a
+    /// request can inherit a previous lessee's tenant. The <c>TenantConnectionInterceptor</c>
+    /// reads <c>TenantId</c> to scope Row-Level Security on connection open, so any
+    /// directly-injected context (e.g. connector-configuration reads) would otherwise run under
+    /// a stale tenant — most visibly on unauthenticated flows (setup/onboarding) that have no
+    /// auth handler to set it.
+    /// </summary>
+    private static void PinTenantOnScopedDbContext(HttpContext context, Guid tenantId)
     {
-        // Strip port from BaseDomain for hostname comparison
-        // (Host.Host already excludes port, but BaseDomain may include it for frontend URL construction)
-        var baseDomainHost = _config.BaseDomain.Split(':')[0];
+        var db = context.RequestServices.GetService<NocturneDbContext>();
+        if (db is null)
+            return;
+        db.TenantId = tenantId;
+        // Set the share carrier unconditionally so a pooled context never inherits a prior
+        // lessee's share state. The scoped-direct context carries only the marker (known
+        // pre-auth) and leaves the CSV null, so a share reading PHI on this path is denied.
+        db.IsShareContext = context.RequestServices.GetService<ICategoryReadContext>()?.IsShare == true;
+        db.VisibleCategories = null;
+    }
 
-        if (!hostname.EndsWith($".{baseDomainHost}", StringComparison.OrdinalIgnoreCase))
-            return null;
+    private const string ShareSubdomainLabel = "share";
 
-        var subdomain = hostname[..^(baseDomainHost.Length + 1)];
-        return string.IsNullOrEmpty(subdomain) ? null : subdomain;
+    /// <summary>
+    /// Detects the public-share host form <c>{token}.share</c> (the subdomain left of the base
+    /// domain) and extracts the token. Returns false for ordinary tenant slugs, empty tokens,
+    /// or nested forms — slugs and tokens never contain dots. The token is lower-cased because
+    /// hostnames are case-insensitive and generated tokens are always lowercase.
+    /// </summary>
+    private static bool TryExtractShareToken(string subdomain, out string token)
+    {
+        const string suffix = "." + ShareSubdomainLabel;
+        if (subdomain.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            token = subdomain[..^suffix.Length].ToLowerInvariant();
+            if (token.Length > 0 && !token.Contains('.'))
+                return true;
+        }
+
+        token = string.Empty;
+        return false;
     }
 
     /// <summary>

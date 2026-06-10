@@ -37,7 +37,7 @@ public class Program
         var demoHost = builder.Configuration["DemoService:DemoHost"] ?? "demo.localhost";
         var instanceKey = builder.Configuration["DemoService:InstanceKey"] ?? "";
         var instanceKeyHash = !string.IsNullOrEmpty(instanceKey)
-            ? Nocturne.Connectors.Core.Utilities.HashUtils.Sha1Hex(instanceKey)
+            ? Nocturne.Connectors.Core.Utilities.HashUtils.Sha256Hex(instanceKey)
             : "";
 
         builder.Services.AddHttpClient("DemoAdmin", client =>
@@ -45,7 +45,11 @@ public class Program
             client.BaseAddress = new Uri(apiUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromMinutes(5); // Backfill can be slow
             if (!string.IsNullOrEmpty(instanceKeyHash))
+            {
                 client.DefaultRequestHeaders.Add("X-Instance-Key", instanceKeyHash);
+                // Declare this as a genuine service call so the API honors the key.
+                client.DefaultRequestHeaders.Add("X-Instance-Service", "nocturne-demo");
+            }
         });
 
         builder.Services.AddHttpClient("DemoTenant", client =>
@@ -54,7 +58,11 @@ public class Program
             client.DefaultRequestHeaders.Host = demoHost;
             client.Timeout = TimeSpan.FromMinutes(5);
             if (!string.IsNullOrEmpty(instanceKeyHash))
+            {
                 client.DefaultRequestHeaders.Add("X-Instance-Key", instanceKeyHash);
+                // Declare this as a genuine service call so the API honors the key.
+                client.DefaultRequestHeaders.Add("X-Instance-Service", "nocturne-demo");
+            }
         });
 
         // Register the API client

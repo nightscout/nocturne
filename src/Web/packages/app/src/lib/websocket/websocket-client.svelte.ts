@@ -32,6 +32,20 @@ export class WebSocketClient {
   private reconnectAttempts = $state(0);
   private lastMessageTime = $state<number>(0);
 
+  /** True when the last ticket fetch was a definitive denial (the user isn't
+   *  permitted realtime for this tenant) rather than a transient failure. Lets
+   *  connect_error stay quiet and stop retrying for unauthorized users. */
+  private lastTicketDenied = false;
+  /** Set when disconnect() is called so a scheduled retry doesn't resurrect a
+   *  deliberately-closed socket. */
+  private intentionallyClosed = false;
+  private authRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Consecutive auth-retry count, for exponential backoff. Reset on connect. */
+  private authRetryCount = 0;
+  /** Whether the current error episode has already notified handlers, so a
+   *  retry storm doesn't fire a toast every few seconds. Reset on connect. */
+  private hasNotifiedConnectError = false;
+
   /** Check if the client has a valid URL configured */
   hasValidUrl(): boolean {
     return Boolean(this.config.url);
@@ -65,6 +79,8 @@ export class WebSocketClient {
 
     this.connectionStatus = "connecting";
     this.lastError = null;
+    this.intentionallyClosed = false;
+    this.clearAuthRetry();
 
     try {
       this.socket = io(this.config.url, {
@@ -75,6 +91,11 @@ export class WebSocketClient {
         reconnectionDelay: this.config.reconnectDelay,
         reconnectionDelayMax: this.config.maxReconnectDelay,
         randomizationFactor: 0.5,
+        // Fetched fresh on every (re)connect so a short-lived ticket never goes
+        // stale across reconnections.
+        auth: (cb: (data: Record<string, unknown>) => void) => {
+          this.fetchTicket().then((token) => cb({ token: token ?? "" }));
+        },
       });
 
       this.setupEventListeners();
@@ -87,8 +108,65 @@ export class WebSocketClient {
     }
   }
 
+  /** Fetch a realtime handshake ticket from the BFF. Returns the token, or null
+   *  when no ticket was minted. Sets `lastTicketDenied` only for a definitive
+   *  denial (`retry` not set by the endpoint); transient failures (timeout,
+   *  network, 5xx) leave it false so the connect_error path keeps retrying.
+   *  Bounded by a timeout so the Socket.IO `auth` callback always resolves. */
+  private async fetchTicket(): Promise<string | null> {
+    try {
+      const res = await fetch(`${this.config.url}/realtime/ticket`, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) {
+        this.lastTicketDenied = false; // redirect / 5xx — treat as transient
+        return null;
+      }
+      const body = (await res.json().catch(() => null)) as
+        | { token?: string | null; retry?: boolean }
+        | null;
+      const token = body?.token ?? null;
+      // 200 + null token = no ticket; a definitive denial unless the endpoint
+      // flagged it transient.
+      this.lastTicketDenied = token == null && body?.retry !== true;
+      return token;
+    } catch {
+      this.lastTicketDenied = false; // network error / timeout — transient
+      return null;
+    }
+  }
+
+  /** A handshake ticket rejection is a server-side middleware error, which
+   *  Socket.IO does NOT auto-reconnect from. Schedule a manual retry, backing
+   *  off, so a transient ticket failure doesn't strand realtime until a page
+   *  reload nor hammer the endpoint while it's down. */
+  private scheduleAuthRetry(): void {
+    if (this.authRetryTimer || this.intentionallyClosed) return;
+    const base = this.config.reconnectDelay || 5000;
+    const max = this.config.maxReconnectDelay || 30000;
+    const delay = Math.min(base * 2 ** this.authRetryCount, max);
+    this.authRetryCount++;
+    this.authRetryTimer = setTimeout(() => {
+      this.authRetryTimer = null;
+      if (this.intentionallyClosed) return;
+      this.socket?.connect();
+    }, delay);
+  }
+
+  private clearAuthRetry(): void {
+    if (this.authRetryTimer) {
+      clearTimeout(this.authRetryTimer);
+      this.authRetryTimer = null;
+    }
+    this.authRetryCount = 0;
+  }
+
   /** Disconnect from WebSocket */
   disconnect(): void {
+    this.intentionallyClosed = true;
+    this.clearAuthRetry();
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
@@ -105,6 +183,9 @@ export class WebSocketClient {
       this.connectionStatus = "connected";
       this.reconnectAttempts = 0;
       this.lastError = null;
+      this.lastTicketDenied = false;
+      this.hasNotifiedConnectError = false;
+      this.clearAuthRetry();
       this.eventHandlers.connect?.({
         clientId: this.socket?.id || "",
         serverTime: new Date().toISOString(),
@@ -118,8 +199,26 @@ export class WebSocketClient {
     });
 
     this.socket.on("connect_error", (error: Error) => {
+      // A denied ticket means the API read policy rejected this connection — the
+      // user isn't permitted realtime for this tenant. That's not a failure to
+      // surface: go quiet and stop retrying rather than flashing a connection
+      // error every few seconds.
+      if (this.lastTicketDenied) {
+        this.connectionStatus = "disconnected";
+        this.lastError = null;
+        this.clearAuthRetry();
+        return;
+      }
       this.handleError("connection", "Connection error", error);
-      this.eventHandlers.connect_error?.(error);
+      // Socket.IO won't auto-reconnect from a handshake (middleware) rejection,
+      // so drive a backing-off retry ourselves for transient failures.
+      this.scheduleAuthRetry();
+      // Notify once per error episode (reset on connect) so a retry storm
+      // doesn't fire a toast every few seconds.
+      if (!this.hasNotifiedConnectError) {
+        this.hasNotifiedConnectError = true;
+        this.eventHandlers.connect_error?.(error);
+      }
     });
 
     this.socket.on("reconnect", (attemptNumber: number) => {

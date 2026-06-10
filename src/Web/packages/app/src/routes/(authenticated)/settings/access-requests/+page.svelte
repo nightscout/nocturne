@@ -231,7 +231,8 @@
             <!-- Direct permissions (collapsible) -->
             <Collapsible.Root
               open={showPermissions[subjectId] ?? false}
-              onOpenChange={(open) => (showPermissions[subjectId] = open)}
+              onOpenChange={(open: boolean) =>
+                (showPermissions[subjectId] = open)}
             >
               <Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
                 {#if showPermissions[subjectId]}
@@ -260,7 +261,7 @@
               <Checkbox
                 id="ar-24h-{subjectId}"
                 checked={limitTo24Hours[subjectId] ?? false}
-                onCheckedChange={(checked) => {
+                onCheckedChange={(checked: boolean) => {
                   limitTo24Hours[subjectId] = checked === true;
                 }}
               />
@@ -296,7 +297,7 @@
 
               <AlertDialog.Root>
                 <AlertDialog.Trigger>
-                  {#snippet child({ props })}
+                  {#snippet child({ props }: { props: Record<string, unknown> })}
                     <Button
                       {...props}
                       variant="outline"

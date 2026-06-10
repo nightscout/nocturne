@@ -48,7 +48,7 @@
         <Label>BG-colored background</Label>
         <Checkbox
           checked={settings.bgColor ?? false}
-          onCheckedChange={(v) => updateSetting("bgColor", !!v)}
+          onCheckedChange={(v: boolean) => updateSetting("bgColor", !!v)}
           disabled={hasBackgroundImage}
         />
       </div>
@@ -58,7 +58,7 @@
           type="url"
           placeholder="https://..."
           value={settings.backgroundImage ?? ""}
-          oninput={(e) =>
+          oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
             updateSetting(
               "backgroundImage",
               e.currentTarget.value || undefined
@@ -72,7 +72,7 @@
             <Slider
               type="single"
               value={settings.backgroundOpacity ?? 100}
-              onValueChange={(v) => updateSetting("backgroundOpacity", v)}
+              onValueChange={(v: number) => updateSetting("backgroundOpacity", v)}
               min={10}
               max={100}
               step={5}
@@ -88,7 +88,7 @@
         <Slider
           type="single"
           value={settings.staleMinutes ?? 13}
-          onValueChange={(v) => updateSetting("staleMinutes", v)}
+          onValueChange={(v: number) => updateSetting("staleMinutes", v)}
           min={0}
           max={60}
           step={1}
@@ -98,14 +98,14 @@
         <Label>Always show time</Label>
         <Checkbox
           checked={settings.alwaysShowTime ?? false}
-          onCheckedChange={(v) => updateSetting("alwaysShowTime", !!v)}
+          onCheckedChange={(v: boolean) => updateSetting("alwaysShowTime", !!v)}
         />
       </div>
       <div class="flex items-center justify-between">
         <Label>Screensaver mode (bouncing)</Label>
         <Checkbox
           checked={settings.screensaverMode ?? false}
-          onCheckedChange={(v) => updateSetting("screensaverMode", !!v)}
+          onCheckedChange={(v: boolean) => updateSetting("screensaverMode", !!v)}
         />
       </div>
       <Separator />
