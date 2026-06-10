@@ -58,7 +58,15 @@ public static class DatabaseInitializationExtensions
                 cancellationToken);
 
             var optionsBuilder = new DbContextOptionsBuilder<NocturneDbContext>();
-            optionsBuilder.UseNpgsql(dataSource);
+            // A migration can include long-running DDL — e.g. building an index on a
+            // multi-million-row table — that exceeds Npgsql's default 30s command timeout.
+            // A timed-out migration command surfaces as a transient failure and crashes
+            // startup; under `restart: unless-stopped` the next boot re-runs the migration
+            // from scratch, so the build is killed and restarted forever — an unbreakable
+            // crash loop. Give migration DDL ample time to complete.
+            optionsBuilder.UseNpgsql(
+                dataSource,
+                npgsql => npgsql.CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds));
             optionsBuilder.AddInterceptors(interceptor);
 
             using var context = new NocturneDbContext(optionsBuilder.Options);
