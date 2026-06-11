@@ -132,6 +132,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAlexaService, AlexaService>();
 
         services.AddScoped<IStatisticsService, StatisticsService>();
+        services.AddScoped<ISensorIntegrityService, SensorIntegrityService>();
 
         // Analytics
         services.Configure<AnalyticsConfiguration>(

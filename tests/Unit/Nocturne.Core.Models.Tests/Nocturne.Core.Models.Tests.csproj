@@ -21,6 +21,11 @@
         <PackageReference Include="FluentAssertions" />
     </ItemGroup>
     <ItemGroup>
+        <None Include="Analytics\SensorIntegrity\sensor_integrity_golden.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="..\..\..\src\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj" />
     </ItemGroup>
 </Project>
