@@ -21,4 +21,5 @@ public enum ConnectSource
     NocturneRemote,
     Twiist,
     CareLink,
+    Tandem,
 }

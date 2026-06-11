@@ -125,6 +125,13 @@ public static class ServiceNames
     public const string CareLinkConnector = "carelink-connector";
 
     /// <summary>
+    /// Aspire resource name for the Tandem Source (t:connect) connector service,
+    /// which imports t:slim X2 / Mobi pump data.
+    /// </summary>
+    /// <seealso cref="DataSources.TConnectSyncConnector"/>
+    public const string TConnectSyncConnector = "tconnectsync-connector";
+
+    /// <summary>
     /// Aspire parameter names resolved by the AppHost via <c>AddParameter</c> and
     /// by services reading <c>Parameters:&lt;name&gt;</c> from configuration.
     /// </summary>

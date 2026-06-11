@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Description>Tandem Source (t:connect) connector service — imports t:slim X2 / Mobi pump data</Description>
+        <Company>Nocturne</Company>
+        <Product>Nocturne Connectors</Product>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
+        <ProjectReference Include="..\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj"/>
+        <ProjectReference Include="..\..\Infrastructure\Nocturne.Infrastructure.Data\Nocturne.Infrastructure.Data.csproj"/>
+    </ItemGroup>
+    <ItemGroup>
+        <EmbeddedResource Include="Resources\tandem-events.json"/>
+        <EmbeddedResource Include="Resources\tandem-custom-events.json"/>
+    </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Nocturne.Connectors.Tandem.Tests"/>
+    </ItemGroup>
+</Project>
