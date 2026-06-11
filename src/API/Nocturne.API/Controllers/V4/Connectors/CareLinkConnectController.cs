@@ -178,10 +178,12 @@ public partial class CareLinkConnectController : ControllerBase
         if (auth is not { IsAuthenticated: true, SubjectId: not null } || tenantId is null)
             return Unauthorized();
 
+        var subjectId = auth.SubjectId ?? throw new InvalidOperationException("Authenticated subject id is required.");
+
         var token = _jwtService.GenerateAccessToken(
             new SubjectInfo
             {
-                Id = auth.SubjectId.Value,
+                Id = subjectId,
                 Name = auth.SubjectName ?? string.Empty,
                 Email = auth.Email,
             },
@@ -198,7 +200,7 @@ public partial class CareLinkConnectController : ControllerBase
 
         _logger.LogInformation(
             "CareLink desktop link code minted for tenant {Tenant} by subject {Subject}",
-            tenantId, auth.SubjectId);
+            tenantId, subjectId);
 
         return Ok(new CareLinkDesktopTokenResponse
         {
