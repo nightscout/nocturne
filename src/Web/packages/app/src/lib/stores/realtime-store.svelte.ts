@@ -1092,3 +1092,33 @@ export function getRealtimeStore(): RealtimeStore {
 export function tryGetRealtimeStore(): RealtimeStore | null {
   return getContext<RealtimeStore>(REALTIME_STORE_KEY) ?? null;
 }
+
+/**
+ * The minimal live-glucose surface a clock face renders. Satisfied by the full
+ * {@link RealtimeStore} (authenticated views) and by the lightweight polling
+ * `PublicClockStore` (anonymous public clock links), so `ClockFaceRenderer`
+ * works with either without knowing which one it has.
+ */
+export interface ClockGlucoseSource {
+  readonly currentBG: number;
+  readonly bgDelta: number;
+  readonly direction: string;
+  readonly lastUpdated: number;
+  readonly demoMode: boolean;
+}
+
+const CLOCK_GLUCOSE_SOURCE_KEY = Symbol("clock-glucose-source");
+
+/** Provide a {@link ClockGlucoseSource} to descendants (e.g. the public clock route). */
+export function setClockGlucoseSource(source: ClockGlucoseSource): void {
+  setContext(CLOCK_GLUCOSE_SOURCE_KEY, source);
+}
+
+/**
+ * Get the clock's glucose source. Prefers an explicitly-provided
+ * {@link ClockGlucoseSource} (public clock); falls back to the realtime store
+ * so authenticated clock previews keep working unchanged.
+ */
+export function getClockGlucoseSource(): ClockGlucoseSource {
+  return getContext<ClockGlucoseSource>(CLOCK_GLUCOSE_SOURCE_KEY) ?? getRealtimeStore();
+}

@@ -8,13 +8,14 @@ title: Sharing your data
 
 # Sharing your data
 
-Nocturne gives you three ways to let someone else see your data, each built for
+Nocturne gives you a few ways to let someone else see your data, each built for
 a different situation — a one-off clinic visit, an always-on screen at daycare,
-or a person who needs their own ongoing login. This page explains what each one
-does and when to reach for it.
+a person who needs their own ongoing login, or a glucose clock you can leave on
+any screen. This page explains what each one does and when to reach for it.
 
-You'll find all of these in your account under **Settings > Sharing & Privacy**.
-Nothing is shared until you turn it on, and you can revoke any of it at any time.
+Most of these live in your account under **Settings > Sharing & Privacy** (the
+clock is set up separately, in the **Clock** section). Nothing is shared until
+you turn it on, and you can revoke any of it at any time.
 
 ## At a glance
 
@@ -23,6 +24,7 @@ Nothing is shared until you turn it on, and you can revoke any of it at any time
 | Temporary guest link | A one-off look — a clinic visit | No | After 48 hours, one use |
 | Public access link | An always-on screen — a daycare | No | Never (until you turn it off) |
 | Member account | An ongoing helper — a teacher or nurse | Yes | Never (until you remove them) |
+| Clock | An at-a-glance glucose screen — a bedside clock | No | Never (until you delete it) |
 
 ## Temporary guest link
 
@@ -78,6 +80,66 @@ see when it was last viewed.
   to once it's out. Share the minimum categories the setting actually needs, keep
   the 24-hour window on, and regenerate the link if you ever think it has spread
   too far.
+</Callout>
+
+## Clock
+
+A **clock** turns your current glucose into a full-screen display — the number, a
+trend arrow, and how much it's changed — that refreshes on its own. It's made for
+a screen you read across the room: a bedside clock, a tablet on the kitchen
+counter, a monitor on a desk. You build one in the **Clock** section, arrange what
+it shows, then use **Copy link** to get its address.
+
+That link is **public**: anyone you give it to can open it with no login, on any
+device, and it keeps showing your latest reading. The important difference from the
+public access link is how little it shows — a clock only ever displays your
+**current glucose and trend**, never your history, treatments, statistics, or
+anything about your account.
+
+The link's address ends in a long random code, like
+`/clock/0c8f3a1e-9b7d-7e42-a1c5-2f6b9d4e8a30`. That code is the key: there's no
+list of clocks to browse and nothing to guess your way to, so the link works for
+whoever holds it — and it works whether or not you've turned on the public access
+link above.
+
+<details class="my-4 rounded-lg border border-border/60 p-4">
+  <summary class="cursor-pointer font-semibold">Why is a random link safe to share like this?</summary>
+  <div class="mt-3 space-y-2 text-sm">
+    <p>
+      The code in a clock link is a <strong>UUID</strong> (a universally unique
+      identifier) — a value with 122 random bits. Two things make it hard to abuse:
+    </p>
+    <ul class="list-disc space-y-1 pl-5">
+      <li>
+        <strong>There's no directory.</strong> Clocks aren't listed anywhere and the
+        codes aren't sequential, so you can't browse them or step from one to the
+        next. A link only opens a clock if you already have its exact code.
+      </li>
+      <li>
+        <strong>The range of codes is astronomically large.</strong> There are
+        roughly 5 &times; 10<sup>36</sup> of them — a 5 followed by 36 digits.
+        Guessing a valid one at random is, for any practical purpose, impossible.
+      </li>
+    </ul>
+    <p>
+      To picture that scale,
+      <a href="https://everyuuid.com" target="_blank" rel="noopener noreferrer" class="underline">everyuuid.com</a>
+      lets you scroll through every possible UUID — you would never reach the end.
+    </p>
+  </div>
+</details>
+
+A clock link has no expiry and no password — it works until you delete the clock.
+To turn one off, delete it in the **Clock** section and its link stops working
+right away. Deleting and recreating a clock gives it a brand-new code, so the old
+link can't be reused.
+
+<Callout type="tip" title="When to use it: a glucose clock by the bed">
+  You want your current number visible on a small screen on the nightstand, without
+  unlocking a phone or signing in each time. Build a clock with the value and trend,
+  open its link on that device, and leave it on. Anyone in the room can read it at a
+  glance, and it never shows anything beyond the current reading. If you'd rather it
+  not be reachable any more, delete the clock and the link goes dead.
 </Callout>
 
 ## Member accounts & roles
@@ -146,10 +208,14 @@ an invite; the only difference is who started the conversation.
 - **Someone who should come to you** (you'd rather approve people than collect
   details and hand out links) → turn on **membership requests** and approve each
   one with the right role.
+- **A screen that shows just your current glucose** (a bedside clock, a tablet on
+  the counter) → a **clock**, opened by its own unguessable link.
 
 ## Turning access back off
 
-All three are reversible from **Settings > Sharing & Privacy**: revoke a guest
-link, turn off (or regenerate) the public link, or change a member's role or
-remove them entirely. Guest links also expire on their own. When in doubt, share
-the least you can for the shortest time you can — you can always grant more later.
+The sharing options are all reversible from **Settings > Sharing & Privacy**:
+revoke a guest link, turn off (or regenerate) the public link, or change a
+member's role or remove them entirely. Guest links also expire on their own. A
+**clock** is turned off separately — delete it in the **Clock** section and its
+link stops working. When in doubt, share the least you can for the shortest time
+you can — you can always grant more later.

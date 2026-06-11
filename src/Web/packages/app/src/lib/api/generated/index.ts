@@ -20,18 +20,18 @@ export { getSuggestion, deleteSuggestion, acceptSuggestion, dismissSuggestion, t
 export * from './deduplications.generated.remote';
 export { testConnection, startMigration, startFromConnector, cancelMigration, getHistory, getPendingConfig, getSources } from './migrations.generated.remote';
 export { getConfigManaged, enable, disable, testExisting, testUnsaved } from './oidcProviderAdmins.generated.remote';
-// './clockFaces.generated.remote' - all exports collide, import directly
+export { getGlucose } from './clockFaces.generated.remote';
 export * from './glucoseProcessingSettings.generated.remote';
 export * from './profiles.generated.remote';
 export * from './userPreferences.generated.remote';
-export { approve, deny } from './accessRequests.generated.remote';
-export * from './connectorAdmins.generated.remote';
-// './platformSettings.generated.remote' - all exports collide, import directly
-export { addMember, removeMember, listInvites, provision, getMemberCredentials, attachOidcIdentity, removePasskeyCredential, removeOidcIdentity } from './tenants.generated.remote';
 export * from './services.generated.remote';
 // './status.generated.remote' - all exports collide, import directly
 export * from './supports.generated.remote';
 export * from './systems.generated.remote';
+export { approve, deny } from './accessRequests.generated.remote';
+export * from './connectorAdmins.generated.remote';
+// './platformSettings.generated.remote' - all exports collide, import directly
+export { addMember, removeMember, listInvites, provision, getMemberCredentials, attachOidcIdentity, removePasskeyCredential, removeOidcIdentity } from './tenants.generated.remote';
 export * from './alertCustomSounds.generated.remote';
 export { validateInvite, redeemInvite } from './alertInvites.generated.remote';
 export * from './alertReplays.generated.remote';

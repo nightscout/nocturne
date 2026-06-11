@@ -5993,6 +5993,55 @@
         ]
       }
     },
+    "/api/v4/clockfaces/{id}/glucose": {
+      "get": {
+        "tags": [
+          "Clock Faces"
+        ],
+        "summary": "Get the latest glucose readings a public clock face displays (public, no authentication required).",
+        "description": "The clock UUID is the capability: a caller must hold a valid clock id for the host-resolved\ntenant to get any data, and tenant-isolation RLS scopes the read to that tenant. This endpoint\nonly ever reads sensor glucose — never treatments, device status, or any other category — so a\nclock link grants exactly what the clock shows and nothing more. It is deliberately independent\nof the tenant's global anonymous-read setting.",
+        "operationId": "ClockFaces_GetGlucose",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Clock face UUID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The two most recent sensor glucose readings (newest first), or 404 if the clock does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClockGlucoseDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
     "/api/v4/clockfaces": {
       "get": {
         "tags": [
@@ -8036,1258 +8085,6 @@
         "x-remote-type": "command"
       }
     },
-    "/api/v4/admin/access-requests": {
-      "get": {
-        "tags": [
-          "Access Request"
-        ],
-        "operationId": "AccessRequest_GetPendingRequests",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AccessRequestDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "query"
-      }
-    },
-    "/api/v4/admin/access-requests/{subjectId}/approve": {
-      "post": {
-        "tags": [
-          "Access Request"
-        ],
-        "operationId": "AccessRequest_Approve",
-        "parameters": [
-          {
-            "name": "subjectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ApproveAccessRequestRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 2
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command"
-      }
-    },
-    "/api/v4/admin/access-requests/{subjectId}/deny": {
-      "post": {
-        "tags": [
-          "Access Request"
-        ],
-        "operationId": "AccessRequest_Deny",
-        "parameters": [
-          {
-            "name": "subjectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command"
-      }
-    },
-    "/api/v4/admin/connectors/{tenantId}": {
-      "get": {
-        "tags": [
-          "Connector Admin"
-        ],
-        "summary": "List the connectors a target tenant has configured, with their last-sync and health state.",
-        "description": "Lets an admin inspect the data gap (last successful sync, health, last error) before deciding\nto reset cursors.",
-        "operationId": "ConnectorAdmin_GetTenantConnectors",
-        "parameters": [
-          {
-            "name": "tenantId",
-            "in": "path",
-            "required": true,
-            "description": "The target tenant.",
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TenantConnectorsDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "query"
-      }
-    },
-    "/api/v4/admin/connectors/{tenantId}/reset-cursors": {
-      "post": {
-        "tags": [
-          "Connector Admin"
-        ],
-        "summary": "Enqueue a background reset of the sync cursor for every connector configured on a target\ntenant, forcing a re-pull of history. Use after fixing a connector bug to push corrected data\nto an affected tenant.",
-        "description": "A full re-pull can take minutes per connector — far longer than gateway/proxy/browser request\ntimeouts — so the work runs on a background job that outlives the request. This returns\n202 Accepted with a job id immediately; poll GetResetJobStatus for\nper-connector progress, and CancelResetJob to stop it.",
-        "operationId": "ConnectorAdmin_ResetTenantCursors",
-        "parameters": [
-          {
-            "name": "tenantId",
-            "in": "path",
-            "required": true,
-            "description": "The target tenant whose connectors should be re-pulled.",
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "requestBody": {
-          "x-name": "request",
-          "description": "Optional lower bound and data-type filter, mirroring the per-tenant reset endpoint.",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AdminResetCursorsRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 2
-        },
-        "responses": {
-          "202": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConnectorResetJobInfo"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command"
-      }
-    },
-    "/api/v4/admin/connectors/jobs/{jobId}": {
-      "get": {
-        "tags": [
-          "Connector Admin"
-        ],
-        "summary": "Get the progress of a connector cursor reset job, including per-connector outcomes as they land.",
-        "operationId": "ConnectorAdmin_GetResetJobStatus",
-        "parameters": [
-          {
-            "name": "jobId",
-            "in": "path",
-            "required": true,
-            "description": "The job id returned by ResetTenantCursors.",
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConnectorResetJobStatus"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "query"
-      }
-    },
-    "/api/v4/admin/connectors/jobs/{jobId}/cancel": {
-      "post": {
-        "tags": [
-          "Connector Admin"
-        ],
-        "summary": "Request cancellation of a running connector cursor reset job. Connectors already re-pulled\nkeep their committed data; the fan-out simply stops before the next connector.",
-        "operationId": "ConnectorAdmin_CancelResetJob",
-        "parameters": [
-          {
-            "name": "jobId",
-            "in": "path",
-            "required": true,
-            "description": "The job id to cancel.",
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetResetJobStatus"
-        ]
-      }
-    },
-    "/api/auth/platform-access": {
-      "get": {
-        "tags": [
-          "Platform Access"
-        ],
-        "summary": "Mint a platform-access grant for the given tenant slug and redirect the operator into the\ntenant. Bounces through OIDC login if there is no session yet; 403s if the session is not a\nplatform admin.",
-        "operationId": "PlatformAccess_Access",
-        "parameters": [
-          {
-            "name": "tenant",
-            "in": "query",
-            "description": "Target tenant slug.",
-            "schema": {
-              "type": "string",
-              "nullable": true
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v4/admin/platform-settings": {
-      "get": {
-        "tags": [
-          "Platform Settings"
-        ],
-        "summary": "Returns all platform setting categories with enabled status and configured field names.\nSecrets are never returned — only which fields have been set.",
-        "operationId": "PlatformSettings_GetAll",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PlatformSettingsSummary"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "query"
-      }
-    },
-    "/api/v4/admin/platform-settings/{category}": {
-      "get": {
-        "tags": [
-          "Platform Settings"
-        ],
-        "summary": "Returns a single platform setting category.",
-        "operationId": "PlatformSettings_Get",
-        "parameters": [
-          {
-            "name": "category",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlatformSettingsSummary"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "query"
-      },
-      "put": {
-        "tags": [
-          "Platform Settings"
-        ],
-        "summary": "Upserts platform settings for a category. Blank fields preserve existing values.\nReturns restartRequired: true — the SvelteKit frontend must be restarted for changes to take effect.",
-        "operationId": "PlatformSettings_Upsert",
-        "parameters": [
-          {
-            "name": "category",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpsertPlatformSettingsRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 2
-        },
-        "responses": {
-          "200": {
-            "description": ""
-          },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetAll",
-          "Get"
-        ]
-      },
-      "delete": {
-        "tags": [
-          "Platform Settings"
-        ],
-        "summary": "Deletes platform settings for a category, removing all stored credentials.",
-        "operationId": "PlatformSettings_Delete",
-        "parameters": [
-          {
-            "name": "category",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetAll",
-          "Get"
-        ]
-      }
-    },
-    "/api/v4/admin/platform-settings/decrypted": {
-      "get": {
-        "tags": [
-          "Platform Settings"
-        ],
-        "summary": "Returns decrypted credentials for all configured platforms.\nRestricted to instance-key authentication only (server-to-server).",
-        "operationId": "PlatformSettings_GetAllDecrypted",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PlatformCredentials"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v4/admin/tenants": {
-      "get": {
-        "tags": [
-          "Tenant"
-        ],
-        "operationId": "Tenant_GetAll",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TenantDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "query"
-      },
-      "post": {
-        "tags": [
-          "Tenant"
-        ],
-        "operationId": "Tenant_Create",
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateTenantRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 1
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TenantCreatedDto"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetAll"
-        ]
-      }
-    },
-    "/api/v4/admin/tenants/{id}": {
-      "get": {
-        "tags": [
-          "Tenant"
-        ],
-        "operationId": "Tenant_GetById",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TenantDetailDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "query"
-      },
-      "put": {
-        "tags": [
-          "Tenant"
-        ],
-        "operationId": "Tenant_Update",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateTenantRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 2
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TenantDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetAll",
-          "GetById"
-        ]
-      },
-      "delete": {
-        "tags": [
-          "Tenant"
-        ],
-        "operationId": "Tenant_Delete",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetAll"
-        ]
-      }
-    },
-    "/api/v4/admin/tenants/{id}/members": {
-      "post": {
-        "tags": [
-          "Tenant"
-        ],
-        "operationId": "Tenant_AddMember",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddMemberRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 2
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetById"
-        ]
-      }
-    },
-    "/api/v4/admin/tenants/{id}/members/{subjectId}": {
-      "delete": {
-        "tags": [
-          "Tenant"
-        ],
-        "operationId": "Tenant_RemoveMember",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          },
-          {
-            "name": "subjectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 2
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetById"
-        ]
-      }
-    },
-    "/api/v4/admin/tenants/{id}/invites": {
-      "post": {
-        "tags": [
-          "Tenant"
-        ],
-        "operationId": "Tenant_CreateInvite",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateMemberInviteRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 2
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemberInviteResult"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetById"
-        ]
-      },
-      "get": {
-        "tags": [
-          "Tenant"
-        ],
-        "operationId": "Tenant_ListInvites",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/MemberInviteInfo"
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "query"
-      }
-    },
-    "/api/v4/admin/tenants/{id}/invites/{inviteId}": {
-      "delete": {
-        "tags": [
-          "Tenant"
-        ],
-        "operationId": "Tenant_RevokeInvite",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          },
-          {
-            "name": "inviteId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 2
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetById",
-          "ListInvites"
-        ]
-      }
-    },
-    "/api/v4/admin/tenants/provision": {
-      "post": {
-        "tags": [
-          "Tenant"
-        ],
-        "operationId": "Tenant_Provision",
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProvisionRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 1
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProvisionResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetAll"
-        ]
-      }
-    },
-    "/api/v4/admin/tenants/{id}/members/{subjectId}/credentials": {
-      "get": {
-        "tags": [
-          "Tenant"
-        ],
-        "summary": "Lists passkey credentials and OIDC identities for a member subject.",
-        "operationId": "Tenant_GetMemberCredentials",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          },
-          {
-            "name": "subjectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 2
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SubjectCredentialsDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "query"
-      }
-    },
-    "/api/v4/admin/tenants/{id}/members/{subjectId}/credentials/oidc": {
-      "post": {
-        "tags": [
-          "Tenant"
-        ],
-        "summary": "Attaches an OIDC identity to a member subject.",
-        "operationId": "Tenant_AttachOidcIdentity",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          },
-          {
-            "name": "subjectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 2
-          }
-        ],
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AdminAttachOidcRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 3
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetMemberCredentials"
-        ]
-      }
-    },
-    "/api/v4/admin/tenants/{id}/members/{subjectId}/credentials/passkey/{credentialId}": {
-      "delete": {
-        "tags": [
-          "Tenant"
-        ],
-        "summary": "Removes a passkey credential from a member subject.",
-        "operationId": "Tenant_RemovePasskeyCredential",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          },
-          {
-            "name": "subjectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 2
-          },
-          {
-            "name": "credentialId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 3
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetMemberCredentials"
-        ]
-      }
-    },
-    "/api/v4/admin/tenants/{id}/members/{subjectId}/credentials/oidc/{identityId}": {
-      "delete": {
-        "tags": [
-          "Tenant"
-        ],
-        "summary": "Removes an OIDC identity from a member subject.",
-        "operationId": "Tenant_RemoveOidcIdentity",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 1
-          },
-          {
-            "name": "subjectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 2
-          },
-          {
-            "name": "identityId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "guid"
-            },
-            "x-position": 3
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command",
-        "x-remote-invalidates": [
-          "GetMemberCredentials"
-        ]
-      }
-    },
     "/api/v4/compatibility/config": {
       "get": {
         "tags": [
@@ -10825,6 +9622,1258 @@
             }
           }
         }
+      }
+    },
+    "/api/v4/admin/access-requests": {
+      "get": {
+        "tags": [
+          "Access Request"
+        ],
+        "operationId": "AccessRequest_GetPendingRequests",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccessRequestDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
+    "/api/v4/admin/access-requests/{subjectId}/approve": {
+      "post": {
+        "tags": [
+          "Access Request"
+        ],
+        "operationId": "AccessRequest_Approve",
+        "parameters": [
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveAccessRequestRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
+    "/api/v4/admin/access-requests/{subjectId}/deny": {
+      "post": {
+        "tags": [
+          "Access Request"
+        ],
+        "operationId": "AccessRequest_Deny",
+        "parameters": [
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
+    "/api/v4/admin/connectors/{tenantId}": {
+      "get": {
+        "tags": [
+          "Connector Admin"
+        ],
+        "summary": "List the connectors a target tenant has configured, with their last-sync and health state.",
+        "description": "Lets an admin inspect the data gap (last successful sync, health, last error) before deciding\nto reset cursors.",
+        "operationId": "ConnectorAdmin_GetTenantConnectors",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "description": "The target tenant.",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantConnectorsDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
+    "/api/v4/admin/connectors/{tenantId}/reset-cursors": {
+      "post": {
+        "tags": [
+          "Connector Admin"
+        ],
+        "summary": "Enqueue a background reset of the sync cursor for every connector configured on a target\ntenant, forcing a re-pull of history. Use after fixing a connector bug to push corrected data\nto an affected tenant.",
+        "description": "A full re-pull can take minutes per connector — far longer than gateway/proxy/browser request\ntimeouts — so the work runs on a background job that outlives the request. This returns\n202 Accepted with a job id immediately; poll GetResetJobStatus for\nper-connector progress, and CancelResetJob to stop it.",
+        "operationId": "ConnectorAdmin_ResetTenantCursors",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "description": "The target tenant whose connectors should be re-pulled.",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "description": "Optional lower bound and data-type filter, mirroring the per-tenant reset endpoint.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminResetCursorsRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorResetJobInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
+    "/api/v4/admin/connectors/jobs/{jobId}": {
+      "get": {
+        "tags": [
+          "Connector Admin"
+        ],
+        "summary": "Get the progress of a connector cursor reset job, including per-connector outcomes as they land.",
+        "operationId": "ConnectorAdmin_GetResetJobStatus",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "description": "The job id returned by ResetTenantCursors.",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorResetJobStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
+    "/api/v4/admin/connectors/jobs/{jobId}/cancel": {
+      "post": {
+        "tags": [
+          "Connector Admin"
+        ],
+        "summary": "Request cancellation of a running connector cursor reset job. Connectors already re-pulled\nkeep their committed data; the fan-out simply stops before the next connector.",
+        "operationId": "ConnectorAdmin_CancelResetJob",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "description": "The job id to cancel.",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetResetJobStatus"
+        ]
+      }
+    },
+    "/api/auth/platform-access": {
+      "get": {
+        "tags": [
+          "Platform Access"
+        ],
+        "summary": "Mint a platform-access grant for the given tenant slug and redirect the operator into the\ntenant. Bounces through OIDC login if there is no session yet; 403s if the session is not a\nplatform admin.",
+        "operationId": "PlatformAccess_Access",
+        "parameters": [
+          {
+            "name": "tenant",
+            "in": "query",
+            "description": "Target tenant slug.",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/admin/platform-settings": {
+      "get": {
+        "tags": [
+          "Platform Settings"
+        ],
+        "summary": "Returns all platform setting categories with enabled status and configured field names.\nSecrets are never returned — only which fields have been set.",
+        "operationId": "PlatformSettings_GetAll",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformSettingsSummary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
+    "/api/v4/admin/platform-settings/{category}": {
+      "get": {
+        "tags": [
+          "Platform Settings"
+        ],
+        "summary": "Returns a single platform setting category.",
+        "operationId": "PlatformSettings_Get",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettingsSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "Platform Settings"
+        ],
+        "summary": "Upserts platform settings for a category. Blank fields preserve existing values.\nReturns restartRequired: true — the SvelteKit frontend must be restarted for changes to take effect.",
+        "operationId": "PlatformSettings_Upsert",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertPlatformSettingsRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAll",
+          "Get"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Platform Settings"
+        ],
+        "summary": "Deletes platform settings for a category, removing all stored credentials.",
+        "operationId": "PlatformSettings_Delete",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAll",
+          "Get"
+        ]
+      }
+    },
+    "/api/v4/admin/platform-settings/decrypted": {
+      "get": {
+        "tags": [
+          "Platform Settings"
+        ],
+        "summary": "Returns decrypted credentials for all configured platforms.\nRestricted to instance-key authentication only (server-to-server).",
+        "operationId": "PlatformSettings_GetAllDecrypted",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformCredentials"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/admin/tenants": {
+      "get": {
+        "tags": [
+          "Tenant"
+        ],
+        "operationId": "Tenant_GetAll",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "post": {
+        "tags": [
+          "Tenant"
+        ],
+        "operationId": "Tenant_Create",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCreatedDto"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAll"
+        ]
+      }
+    },
+    "/api/v4/admin/tenants/{id}": {
+      "get": {
+        "tags": [
+          "Tenant"
+        ],
+        "operationId": "Tenant_GetById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantDetailDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      },
+      "put": {
+        "tags": [
+          "Tenant"
+        ],
+        "operationId": "Tenant_Update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAll",
+          "GetById"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Tenant"
+        ],
+        "operationId": "Tenant_Delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAll"
+        ]
+      }
+    },
+    "/api/v4/admin/tenants/{id}/members": {
+      "post": {
+        "tags": [
+          "Tenant"
+        ],
+        "operationId": "Tenant_AddMember",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMemberRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetById"
+        ]
+      }
+    },
+    "/api/v4/admin/tenants/{id}/members/{subjectId}": {
+      "delete": {
+        "tags": [
+          "Tenant"
+        ],
+        "operationId": "Tenant_RemoveMember",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetById"
+        ]
+      }
+    },
+    "/api/v4/admin/tenants/{id}/invites": {
+      "post": {
+        "tags": [
+          "Tenant"
+        ],
+        "operationId": "Tenant_CreateInvite",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMemberInviteRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberInviteResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetById"
+        ]
+      },
+      "get": {
+        "tags": [
+          "Tenant"
+        ],
+        "operationId": "Tenant_ListInvites",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberInviteInfo"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
+    "/api/v4/admin/tenants/{id}/invites/{inviteId}": {
+      "delete": {
+        "tags": [
+          "Tenant"
+        ],
+        "operationId": "Tenant_RevokeInvite",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "inviteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetById",
+          "ListInvites"
+        ]
+      }
+    },
+    "/api/v4/admin/tenants/provision": {
+      "post": {
+        "tags": [
+          "Tenant"
+        ],
+        "operationId": "Tenant_Provision",
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProvisionRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvisionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetAll"
+        ]
+      }
+    },
+    "/api/v4/admin/tenants/{id}/members/{subjectId}/credentials": {
+      "get": {
+        "tags": [
+          "Tenant"
+        ],
+        "summary": "Lists passkey credentials and OIDC identities for a member subject.",
+        "operationId": "Tenant_GetMemberCredentials",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectCredentialsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
+    "/api/v4/admin/tenants/{id}/members/{subjectId}/credentials/oidc": {
+      "post": {
+        "tags": [
+          "Tenant"
+        ],
+        "summary": "Attaches an OIDC identity to a member subject.",
+        "operationId": "Tenant_AttachOidcIdentity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminAttachOidcRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 3
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetMemberCredentials"
+        ]
+      }
+    },
+    "/api/v4/admin/tenants/{id}/members/{subjectId}/credentials/passkey/{credentialId}": {
+      "delete": {
+        "tags": [
+          "Tenant"
+        ],
+        "summary": "Removes a passkey credential from a member subject.",
+        "operationId": "Tenant_RemovePasskeyCredential",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          },
+          {
+            "name": "credentialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 3
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetMemberCredentials"
+        ]
+      }
+    },
+    "/api/v4/admin/tenants/{id}/members/{subjectId}/credentials/oidc/{identityId}": {
+      "delete": {
+        "tags": [
+          "Tenant"
+        ],
+        "summary": "Removes an OIDC identity from a member subject.",
+        "operationId": "Tenant_RemoveOidcIdentity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "subjectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 2
+          },
+          {
+            "name": "identityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 3
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetMemberCredentials"
+        ]
       }
     },
     "/api/v4/alert-sounds": {
@@ -32144,6 +32193,33 @@
           }
         }
       },
+      "ClockGlucoseDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mgdl": {
+            "type": "number",
+            "format": "double"
+          },
+          "direction": {
+            "type": "string",
+            "nullable": true
+          },
+          "delta": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "dataSource": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "ClockFaceListItem": {
         "type": "object",
         "additionalProperties": false,
@@ -34383,931 +34459,6 @@
           }
         }
       },
-      "AccessRequestDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "subjectId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "ApproveAccessRequestRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "roleIds": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "guid"
-            }
-          },
-          "directPermissions": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "TenantConnectorsDto": {
-        "type": "object",
-        "description": "A tenant and the connectors it has configured.",
-        "additionalProperties": false,
-        "properties": {
-          "tenantId": {
-            "type": "string",
-            "description": "The tenant id.",
-            "format": "guid"
-          },
-          "tenantSlug": {
-            "type": "string",
-            "description": "The tenant slug, for display."
-          },
-          "connectors": {
-            "type": "array",
-            "description": "One entry per configured connector.",
-            "items": {
-              "$ref": "#/components/schemas/TenantConnectorSummary"
-            }
-          }
-        }
-      },
-      "TenantConnectorSummary": {
-        "type": "object",
-        "description": "Sync/health summary for a single configured connector.",
-        "additionalProperties": false,
-        "properties": {
-          "connectorName": {
-            "type": "string",
-            "description": "The connector name (e.g. nightscout)."
-          },
-          "isHealthy": {
-            "type": "boolean",
-            "description": "Whether the connector last reported healthy."
-          },
-          "lastSuccessfulSync": {
-            "type": "string",
-            "description": "When the connector last completed a successful sync.",
-            "format": "date-time",
-            "nullable": true
-          },
-          "lastSyncAttempt": {
-            "type": "string",
-            "description": "When the connector last attempted a sync.",
-            "format": "date-time",
-            "nullable": true
-          },
-          "lastErrorMessage": {
-            "type": "string",
-            "description": "The most recent error message, if any.",
-            "nullable": true
-          }
-        }
-      },
-      "ConnectorResetJobInfo": {
-        "type": "object",
-        "description": "Summary returned when a reset job is created (202 Accepted).",
-        "additionalProperties": false,
-        "properties": {
-          "jobId": {
-            "type": "string",
-            "description": "The job id, used to poll status.",
-            "format": "guid"
-          },
-          "tenantId": {
-            "type": "string",
-            "description": "The target tenant being reset.",
-            "format": "guid"
-          },
-          "tenantSlug": {
-            "type": "string",
-            "description": "The target tenant's slug, for display."
-          },
-          "createdAt": {
-            "type": "string",
-            "description": "When the job was created.",
-            "format": "date-time"
-          },
-          "state": {
-            "description": "The job's current state.",
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ConnectorResetJobState"
-              }
-            ]
-          },
-          "totalConnectors": {
-            "type": "integer",
-            "description": "How many connectors the job will reset.",
-            "format": "int32"
-          }
-        }
-      },
-      "ConnectorResetJobState": {
-        "type": "string",
-        "description": "Lifecycle state of a connector cursor reset job.",
-        "x-enumNames": [
-          "Pending",
-          "Running",
-          "Completed",
-          "Failed",
-          "Cancelled"
-        ],
-        "enum": [
-          "Pending",
-          "Running",
-          "Completed",
-          "Failed",
-          "Cancelled"
-        ]
-      },
-      "AdminResetCursorsRequest": {
-        "type": "object",
-        "description": "Request body for a cross-tenant cursor reset. Mirrors the per-tenant\nResetCursorRequest shape.",
-        "additionalProperties": false,
-        "properties": {
-          "from": {
-            "type": "string",
-            "description": "Optional lower bound for the re-pull. When null, all available history is re-ingested.",
-            "format": "date-time",
-            "nullable": true
-          },
-          "dataTypes": {
-            "type": "array",
-            "description": "Optional set of data types to reset. When null or empty, every supported data type is reset.",
-            "nullable": true,
-            "items": {
-              "$ref": "#/components/schemas/SyncDataType"
-            }
-          }
-        }
-      },
-      "SyncDataType": {
-        "type": "string",
-        "description": "",
-        "x-enumNames": [
-          "Glucose",
-          "ManualBG",
-          "Calibrations",
-          "Boluses",
-          "BasalInjections",
-          "CarbIntake",
-          "BGChecks",
-          "BolusCalculations",
-          "Notes",
-          "DeviceEvents",
-          "StateSpans",
-          "TempBasals",
-          "Profiles",
-          "DeviceStatus",
-          "Activity",
-          "Food"
-        ],
-        "enum": [
-          "Glucose",
-          "ManualBG",
-          "Calibrations",
-          "Boluses",
-          "BasalInjections",
-          "CarbIntake",
-          "BGChecks",
-          "BolusCalculations",
-          "Notes",
-          "DeviceEvents",
-          "StateSpans",
-          "TempBasals",
-          "Profiles",
-          "DeviceStatus",
-          "Activity",
-          "Food"
-        ]
-      },
-      "ConnectorResetJobStatus": {
-        "type": "object",
-        "description": "A pollable snapshot of a reset job's progress.",
-        "additionalProperties": false,
-        "properties": {
-          "jobId": {
-            "type": "string",
-            "description": "The job id.",
-            "format": "guid"
-          },
-          "tenantId": {
-            "type": "string",
-            "description": "The target tenant being reset.",
-            "format": "guid"
-          },
-          "tenantSlug": {
-            "type": "string",
-            "description": "The target tenant's slug, for display."
-          },
-          "state": {
-            "description": "The job's current lifecycle state.",
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ConnectorResetJobState"
-              }
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "description": "When the job was created.",
-            "format": "date-time"
-          },
-          "startedAt": {
-            "type": "string",
-            "description": "When the background work started, or null if not yet started.",
-            "format": "date-time",
-            "nullable": true
-          },
-          "completedAt": {
-            "type": "string",
-            "description": "When the job reached a terminal state, or null if still running.",
-            "format": "date-time",
-            "nullable": true
-          },
-          "errorMessage": {
-            "type": "string",
-            "description": "An error message when the whole job failed (not a single connector).",
-            "nullable": true
-          },
-          "totalConnectors": {
-            "type": "integer",
-            "description": "Total connectors the job will reset.",
-            "format": "int32"
-          },
-          "completedConnectors": {
-            "type": "integer",
-            "description": "How many connectors have finished (succeeded or failed).",
-            "format": "int32"
-          },
-          "connectors": {
-            "type": "array",
-            "description": "Per-connector progress, in configured order.",
-            "items": {
-              "$ref": "#/components/schemas/ConnectorResetConnectorProgress"
-            }
-          }
-        }
-      },
-      "ConnectorResetConnectorProgress": {
-        "type": "object",
-        "description": "Progress for a single connector within a reset job.",
-        "additionalProperties": false,
-        "properties": {
-          "connectorName": {
-            "type": "string",
-            "description": "The connector name (e.g. nightscout)."
-          },
-          "state": {
-            "description": "The connector's current state in this job.",
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ConnectorResetConnectorState"
-              }
-            ]
-          },
-          "message": {
-            "type": "string",
-            "description": "A human-readable message for the outcome, once the connector has completed.",
-            "nullable": true
-          },
-          "result": {
-            "description": "The full sync result, once the connector has completed.",
-            "nullable": true,
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/SyncResult"
-              }
-            ]
-          }
-        }
-      },
-      "ConnectorResetConnectorState": {
-        "type": "string",
-        "description": "State of a single connector within a reset job.",
-        "x-enumNames": [
-          "Pending",
-          "Running",
-          "Succeeded",
-          "Failed"
-        ],
-        "enum": [
-          "Pending",
-          "Running",
-          "Succeeded",
-          "Failed"
-        ]
-      },
-      "SyncResult": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "message": {
-            "type": "string"
-          },
-          "startTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "endTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "itemsSynced": {
-            "type": "object",
-            "x-dictionaryKey": {
-              "$ref": "#/components/schemas/SyncDataType"
-            },
-            "additionalProperties": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          "lastEntryTimes": {
-            "type": "object",
-            "x-dictionaryKey": {
-              "$ref": "#/components/schemas/SyncDataType"
-            },
-            "additionalProperties": {
-              "type": "string",
-              "format": "date-time",
-              "nullable": true
-            }
-          },
-          "errors": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "PlatformSettingsSummary": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "category": {
-            "type": "string"
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "configuredFields": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "fields": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FieldDefinition"
-            }
-          }
-        }
-      },
-      "FieldDefinition": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "required": {
-            "type": "boolean"
-          }
-        }
-      },
-      "UpsertPlatformSettingsRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "fields": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "PlatformCredentials": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "category": {
-            "type": "string"
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "fields": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "TenantDetailDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "sysCreatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "members": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TenantMemberDto"
-            }
-          }
-        }
-      },
-      "TenantMemberDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "subjectId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "name": {
-            "type": "string",
-            "nullable": true
-          },
-          "isSystemSubject": {
-            "type": "boolean"
-          },
-          "roles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TenantMemberRoleDto"
-            }
-          },
-          "directPermissions": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            }
-          },
-          "label": {
-            "type": "string",
-            "nullable": true
-          },
-          "limitTo24Hours": {
-            "type": "boolean"
-          },
-          "lastUsedAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "sysCreatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "isPlatformAdmin": {
-            "type": "boolean"
-          }
-        }
-      },
-      "TenantMemberRoleDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "roleId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          }
-        }
-      },
-      "CreateTenantRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "slug": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          }
-        }
-      },
-      "UpdateTenantRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "displayName": {
-            "type": "string"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "allowAccessRequests": {
-            "type": "boolean",
-            "nullable": true
-          }
-        }
-      },
-      "AddMemberRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "subjectId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "roleIds": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "guid"
-            }
-          },
-          "directPermissions": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "MemberInviteResult": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "token": {
-            "type": "string"
-          },
-          "inviteUrl": {
-            "type": "string"
-          },
-          "expiresAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "CreateMemberInviteRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "roleIds": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "guid"
-            }
-          },
-          "directPermissions": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            }
-          },
-          "label": {
-            "type": "string",
-            "nullable": true
-          },
-          "expiresInDays": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "maxUses": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "limitTo24Hours": {
-            "type": "boolean"
-          }
-        }
-      },
-      "MemberInviteInfo": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "tenantId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "tenantName": {
-            "type": "string"
-          },
-          "createdByName": {
-            "type": "string"
-          },
-          "roleIds": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "guid"
-            }
-          },
-          "directPermissions": {
-            "type": "array",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            }
-          },
-          "label": {
-            "type": "string",
-            "nullable": true
-          },
-          "limitTo24Hours": {
-            "type": "boolean"
-          },
-          "expiresAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "maxUses": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "useCount": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "isValid": {
-            "type": "boolean"
-          },
-          "isExpired": {
-            "type": "boolean"
-          },
-          "isRevoked": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "usedBy": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/InviteUsageInfo"
-            }
-          }
-        }
-      },
-      "InviteUsageInfo": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "subjectId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "name": {
-            "type": "string",
-            "nullable": true
-          },
-          "joinedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "ProvisionResult": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "tenantId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "subjectId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "slug": {
-            "type": "string"
-          }
-        }
-      },
-      "ProvisionRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "slug": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "ownerUsername": {
-            "type": "string"
-          },
-          "ownerEmail": {
-            "type": "string"
-          },
-          "credential": {
-            "nullable": true,
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ProvisionCredentialData"
-              }
-            ]
-          },
-          "oidcIdentity": {
-            "nullable": true,
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ProvisionOidcIdentityData"
-              }
-            ]
-          }
-        }
-      },
-      "ProvisionCredentialData": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "credentialId": {
-            "type": "string"
-          },
-          "publicKey": {
-            "type": "string"
-          },
-          "signCount": {
-            "type": "integer"
-          },
-          "transports": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "aaGuid": {
-            "type": "string",
-            "format": "guid",
-            "nullable": true
-          },
-          "subjectId": {
-            "type": "string",
-            "format": "guid",
-            "nullable": true
-          }
-        }
-      },
-      "ProvisionOidcIdentityData": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "provider": {
-            "type": "string"
-          },
-          "oidcSubjectId": {
-            "type": "string"
-          },
-          "issuer": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string"
-          },
-          "subjectId": {
-            "type": "string",
-            "format": "guid",
-            "nullable": true
-          }
-        }
-      },
-      "SubjectCredentialsDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "passkeys": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PasskeyCredentialDto"
-            }
-          },
-          "oidcIdentities": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OidcIdentityDto"
-            }
-          }
-        }
-      },
-      "PasskeyCredentialDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "displayName": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "OidcIdentityDto": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "guid"
-          },
-          "provider": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      },
-      "AdminAttachOidcRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "providerId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "oidcSubjectId": {
-            "type": "string"
-          },
-          "issuer": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      },
       "ProxyConfigurationDto": {
         "type": "object",
         "description": "Proxy configuration DTO",
@@ -35983,6 +35134,93 @@
           }
         }
       },
+      "SyncResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "itemsSynced": {
+            "type": "object",
+            "x-dictionaryKey": {
+              "$ref": "#/components/schemas/SyncDataType"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "lastEntryTimes": {
+            "type": "object",
+            "x-dictionaryKey": {
+              "$ref": "#/components/schemas/SyncDataType"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "format": "date-time",
+              "nullable": true
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SyncDataType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Glucose",
+          "ManualBG",
+          "Calibrations",
+          "Boluses",
+          "BasalInjections",
+          "CarbIntake",
+          "BGChecks",
+          "BolusCalculations",
+          "Notes",
+          "DeviceEvents",
+          "StateSpans",
+          "TempBasals",
+          "Profiles",
+          "DeviceStatus",
+          "Activity",
+          "Food"
+        ],
+        "enum": [
+          "Glucose",
+          "ManualBG",
+          "Calibrations",
+          "Boluses",
+          "BasalInjections",
+          "CarbIntake",
+          "BGChecks",
+          "BolusCalculations",
+          "Notes",
+          "DeviceEvents",
+          "StateSpans",
+          "TempBasals",
+          "Profiles",
+          "DeviceStatus",
+          "Activity",
+          "Food"
+        ]
+      },
       "SyncRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -36469,6 +35707,844 @@
           "originalId": {
             "type": "string",
             "description": "Gets or sets the original MongoDB ObjectId, preserved for migration compatibility.",
+            "nullable": true
+          }
+        }
+      },
+      "AccessRequestDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "subjectId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ApproveAccessRequestRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "roleIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "guid"
+            }
+          },
+          "directPermissions": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TenantConnectorsDto": {
+        "type": "object",
+        "description": "A tenant and the connectors it has configured.",
+        "additionalProperties": false,
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "description": "The tenant id.",
+            "format": "guid"
+          },
+          "tenantSlug": {
+            "type": "string",
+            "description": "The tenant slug, for display."
+          },
+          "connectors": {
+            "type": "array",
+            "description": "One entry per configured connector.",
+            "items": {
+              "$ref": "#/components/schemas/TenantConnectorSummary"
+            }
+          }
+        }
+      },
+      "TenantConnectorSummary": {
+        "type": "object",
+        "description": "Sync/health summary for a single configured connector.",
+        "additionalProperties": false,
+        "properties": {
+          "connectorName": {
+            "type": "string",
+            "description": "The connector name (e.g. nightscout)."
+          },
+          "isHealthy": {
+            "type": "boolean",
+            "description": "Whether the connector last reported healthy."
+          },
+          "lastSuccessfulSync": {
+            "type": "string",
+            "description": "When the connector last completed a successful sync.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastSyncAttempt": {
+            "type": "string",
+            "description": "When the connector last attempted a sync.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastErrorMessage": {
+            "type": "string",
+            "description": "The most recent error message, if any.",
+            "nullable": true
+          }
+        }
+      },
+      "ConnectorResetJobInfo": {
+        "type": "object",
+        "description": "Summary returned when a reset job is created (202 Accepted).",
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job id, used to poll status.",
+            "format": "guid"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "The target tenant being reset.",
+            "format": "guid"
+          },
+          "tenantSlug": {
+            "type": "string",
+            "description": "The target tenant's slug, for display."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When the job was created.",
+            "format": "date-time"
+          },
+          "state": {
+            "description": "The job's current state.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConnectorResetJobState"
+              }
+            ]
+          },
+          "totalConnectors": {
+            "type": "integer",
+            "description": "How many connectors the job will reset.",
+            "format": "int32"
+          }
+        }
+      },
+      "ConnectorResetJobState": {
+        "type": "string",
+        "description": "Lifecycle state of a connector cursor reset job.",
+        "x-enumNames": [
+          "Pending",
+          "Running",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ],
+        "enum": [
+          "Pending",
+          "Running",
+          "Completed",
+          "Failed",
+          "Cancelled"
+        ]
+      },
+      "AdminResetCursorsRequest": {
+        "type": "object",
+        "description": "Request body for a cross-tenant cursor reset. Mirrors the per-tenant\nResetCursorRequest shape.",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Optional lower bound for the re-pull. When null, all available history is re-ingested.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dataTypes": {
+            "type": "array",
+            "description": "Optional set of data types to reset. When null or empty, every supported data type is reset.",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/SyncDataType"
+            }
+          }
+        }
+      },
+      "ConnectorResetJobStatus": {
+        "type": "object",
+        "description": "A pollable snapshot of a reset job's progress.",
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "The job id.",
+            "format": "guid"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "The target tenant being reset.",
+            "format": "guid"
+          },
+          "tenantSlug": {
+            "type": "string",
+            "description": "The target tenant's slug, for display."
+          },
+          "state": {
+            "description": "The job's current lifecycle state.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConnectorResetJobState"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "When the job was created.",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "description": "When the background work started, or null if not yet started.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "completedAt": {
+            "type": "string",
+            "description": "When the job reached a terminal state, or null if still running.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "An error message when the whole job failed (not a single connector).",
+            "nullable": true
+          },
+          "totalConnectors": {
+            "type": "integer",
+            "description": "Total connectors the job will reset.",
+            "format": "int32"
+          },
+          "completedConnectors": {
+            "type": "integer",
+            "description": "How many connectors have finished (succeeded or failed).",
+            "format": "int32"
+          },
+          "connectors": {
+            "type": "array",
+            "description": "Per-connector progress, in configured order.",
+            "items": {
+              "$ref": "#/components/schemas/ConnectorResetConnectorProgress"
+            }
+          }
+        }
+      },
+      "ConnectorResetConnectorProgress": {
+        "type": "object",
+        "description": "Progress for a single connector within a reset job.",
+        "additionalProperties": false,
+        "properties": {
+          "connectorName": {
+            "type": "string",
+            "description": "The connector name (e.g. nightscout)."
+          },
+          "state": {
+            "description": "The connector's current state in this job.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConnectorResetConnectorState"
+              }
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "A human-readable message for the outcome, once the connector has completed.",
+            "nullable": true
+          },
+          "result": {
+            "description": "The full sync result, once the connector has completed.",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SyncResult"
+              }
+            ]
+          }
+        }
+      },
+      "ConnectorResetConnectorState": {
+        "type": "string",
+        "description": "State of a single connector within a reset job.",
+        "x-enumNames": [
+          "Pending",
+          "Running",
+          "Succeeded",
+          "Failed"
+        ],
+        "enum": [
+          "Pending",
+          "Running",
+          "Succeeded",
+          "Failed"
+        ]
+      },
+      "PlatformSettingsSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "configuredFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldDefinition"
+            }
+          }
+        }
+      },
+      "FieldDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpsertPlatformSettingsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PlatformCredentials": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TenantDetailDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "sysCreatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantMemberDto"
+            }
+          }
+        }
+      },
+      "TenantMemberDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "subjectId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "isSystemSubject": {
+            "type": "boolean"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantMemberRoleDto"
+            }
+          },
+          "directPermissions": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "limitTo24Hours": {
+            "type": "boolean"
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "sysCreatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isPlatformAdmin": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TenantMemberRoleDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "roleId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateTenantRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateTenantRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "allowAccessRequests": {
+            "type": "boolean",
+            "nullable": true
+          }
+        }
+      },
+      "AddMemberRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "subjectId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "roleIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "guid"
+            }
+          },
+          "directPermissions": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MemberInviteResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "token": {
+            "type": "string"
+          },
+          "inviteUrl": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateMemberInviteRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "roleIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "guid"
+            }
+          },
+          "directPermissions": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresInDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxUses": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "limitTo24Hours": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MemberInviteInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "tenantName": {
+            "type": "string"
+          },
+          "createdByName": {
+            "type": "string"
+          },
+          "roleIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "guid"
+            }
+          },
+          "directPermissions": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "limitTo24Hours": {
+            "type": "boolean"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "maxUses": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "useCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isValid": {
+            "type": "boolean"
+          },
+          "isExpired": {
+            "type": "boolean"
+          },
+          "isRevoked": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "usedBy": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InviteUsageInfo"
+            }
+          }
+        }
+      },
+      "InviteUsageInfo": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "subjectId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "joinedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProvisionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "subjectId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "ProvisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "ownerUsername": {
+            "type": "string"
+          },
+          "ownerEmail": {
+            "type": "string"
+          },
+          "credential": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProvisionCredentialData"
+              }
+            ]
+          },
+          "oidcIdentity": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProvisionOidcIdentityData"
+              }
+            ]
+          }
+        }
+      },
+      "ProvisionCredentialData": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "credentialId": {
+            "type": "string"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "signCount": {
+            "type": "integer"
+          },
+          "transports": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "aaGuid": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
+          "subjectId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          }
+        }
+      },
+      "ProvisionOidcIdentityData": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "oidcSubjectId": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "subjectId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          }
+        }
+      },
+      "SubjectCredentialsDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "passkeys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PasskeyCredentialDto"
+            }
+          },
+          "oidcIdentities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OidcIdentityDto"
+            }
+          }
+        }
+      },
+      "PasskeyCredentialDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OidcIdentityDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "AdminAttachOidcRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "format": "guid"
+          },
+          "oidcSubjectId": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
             "nullable": true
           }
         }

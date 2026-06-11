@@ -394,3 +394,26 @@ public class ClockFacePublicDto
     /// </summary>
     public ClockFaceConfig Config { get; set; } = new();
 }
+
+/// <summary>
+/// Minimal glucose reading served to an anonymous public clock viewer. Carries only the
+/// fields a clock face renders (value, trend, delta, time) — never raw sensor signal,
+/// device, or any non-glucose data.
+/// </summary>
+public class ClockGlucoseDto
+{
+    /// <summary>Reading time as Unix milliseconds.</summary>
+    public long Mills { get; set; }
+
+    /// <summary>Glucose value in mg/dL.</summary>
+    public double Mgdl { get; set; }
+
+    /// <summary>Trend arrow direction name (e.g. "Flat", "FortyFiveUp"), or null.</summary>
+    public string? Direction { get; set; }
+
+    /// <summary>Glucose delta in mg/dL over the last reading interval, or null.</summary>
+    public double? Delta { get; set; }
+
+    /// <summary>Origin data source identifier (used to surface demo data), or null.</summary>
+    public string? DataSource { get; set; }
+}
