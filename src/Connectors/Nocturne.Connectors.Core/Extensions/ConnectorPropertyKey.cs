@@ -84,4 +84,9 @@ public enum ConnectorPropertyKey
     RefreshToken,
     CountryCode,
     LanguageCode,
+
+    // Tandem-specific
+    PumpSerialNumber,
+    FetchAllEventTypes,
+    IgnoreZeroUnitBasal,
 }

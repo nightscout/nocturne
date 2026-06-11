@@ -60,6 +60,11 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
                 delivered += bolex.Num("InsulinDelivered") ?? 0;
             var requested = completed.Num("InsulinRequested") ?? delivered;
 
+            // Record every contributing event's sequence number for provenance, as process_bolus.py does.
+            var seqNums = string.Join(",", new[] { completed, msg1, msg2, msg3 }
+                .Where(e => e != null)
+                .Select(e => e!.SeqNum.ToString()));
+
             var options = msg2?.EnumName("Options");
             var duration = msg2?.Num("Duration") ?? 0;
             var standardPercent = msg2?.Num("StandardPercent") ?? 100;
@@ -83,7 +88,7 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
                 Automatic = isAutomatic,
                 Kind = isAutomatic ? BolusKind.Algorithm : BolusKind.Manual,
                 Duration = duration > 0 ? duration : null,
-                PumpRecordId = completed.SeqNum.ToString(),
+                PumpRecordId = seqNums,
                 CreatedAt = now,
                 ModifiedAt = now,
                 AdditionalProperties = BuildNotes(options, msg2),

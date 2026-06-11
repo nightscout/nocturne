@@ -92,7 +92,23 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             var device = ChooseDevice(metadata, config.PumpSerialNumber);
             if (device == null)
             {
-                _logger.LogWarning("[{Source}] No Tandem pumps found on the account", ConnectorSource);
+                if (metadata.Count > 0 && IsRealSerial(config.PumpSerialNumber))
+                {
+                    // A configured serial that matches no pump is a misconfiguration, not an empty
+                    // account — surface it (with the valid serials) so a typo is diagnosable.
+                    var serials = string.Join(", ", metadata.Select(m => m.SerialNumber));
+                    _logger.LogError(
+                        "[{Source}] Configured pump serial {Serial} not found on account; available: {Serials}",
+                        ConnectorSource, config.PumpSerialNumber, serials);
+                    result.Success = false;
+                    result.Errors.Add(
+                        $"Pump serial '{config.PumpSerialNumber}' not found on account (available: {serials})");
+                }
+                else
+                {
+                    _logger.LogWarning("[{Source}] No Tandem pumps found on the account", ConnectorSource);
+                }
+
                 result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
@@ -165,6 +181,11 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         var userMode = new TandemUserModeMapper(_logger, time);
         var deviceStatus = new TandemDeviceStatusMapper(_logger, time);
 
+        // Fetch and decode every window first, then map over the full event set. Bolus
+        // reassembly (request messages + completion) and sleep/exercise start/stop pairing can
+        // straddle a window boundary, so — like tconnectsync, which processes the whole requested
+        // range in one pass — the connector must not map each window in isolation.
+        var allEvents = new List<TandemPumpEvent>();
         foreach (var (windowStart, windowEnd) in Chunk(start, end))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -172,23 +193,25 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             var raw = await FetchWindowAsync(
                 region, pumperId, device.TconnectDeviceId, windowStart, windowEnd, eventIdsFilter,
                 config, cancellationToken);
-            if (raw == null)
-                continue;
-
-            var events = TandemEventDecoder.Decode(raw, _logger);
-            var groups = events
-                .Select(e => (Event: e, Class: TandemEventClasses.ForEvent(e)))
-                .Where(x => x.Class != null)
-                .GroupBy(x => x.Class!.Value, x => x.Event)
-                .ToDictionary(g => g.Key, g => g.ToList());
-
-            await PublishWindowAsync(
-                groups, enabled, windowEnd, cgm, bolus, basal, deviceEvents, systemEvents,
-                userMode, deviceStatus, result, config, cancellationToken);
+            if (raw != null)
+                allEvents.AddRange(TandemEventDecoder.Decode(raw, _logger));
         }
+
+        if (allEvents.Count == 0)
+            return;
+
+        var groups = allEvents
+            .Select(e => (Event: e, Class: TandemEventClasses.ForEvent(e)))
+            .Where(x => x.Class != null)
+            .GroupBy(x => x.Class!.Value, x => x.Event)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        await PublishEventsAsync(
+            groups, enabled, end, cgm, bolus, basal, deviceEvents, systemEvents,
+            userMode, deviceStatus, result, config, cancellationToken);
     }
 
-    private async Task PublishWindowAsync(
+    private async Task PublishEventsAsync(
         IReadOnlyDictionary<TandemEventClass, List<TandemPumpEvent>> groups,
         HashSet<SyncDataType> enabled, DateTime windowEnd,
         TandemCgmMapper cgm, TandemBolusMapper bolus, TandemBasalMapper basal,
@@ -222,11 +245,10 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
             var sysEvents = Concat(groups, TandemEventClass.Alarm, TandemEventClass.CgmAlert);
             if (sysEvents.Count > 0)
-            {
-                var mapped = systemEvents.Map(sysEvents);
-                if (mapped.Count > 0)
-                    await PublishSystemEventDataAsync(mapped, config, cancellationToken);
-            }
+                // System events (alarms / CGM alerts) are gated and accounted under DeviceEvents —
+                // there is no dedicated SyncDataType for them — so a publish failure flips Success.
+                await PublishAsync(SyncDataType.DeviceEvents, systemEvents.Map(sysEvents),
+                    PublishSystemEventDataAsync, result, config, cancellationToken);
         }
 
         if (enabled.Contains(SyncDataType.StateSpans) && groups.TryGetValue(TandemEventClass.UserMode, out var userModeEvents))
@@ -307,7 +329,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         if (metadata.Count == 0)
             return null;
 
-        if (!string.IsNullOrWhiteSpace(serialNumber) && serialNumber != "11111111")
+        if (IsRealSerial(serialNumber))
             return metadata.FirstOrDefault(m =>
                 string.Equals(m.SerialNumber, serialNumber, StringComparison.OrdinalIgnoreCase));
 
@@ -315,6 +337,13 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             .OrderByDescending(m => m.MaxDateWithEvents ?? DateTimeOffset.MinValue)
             .First();
     }
+
+    /// <summary>
+    /// Whether a configured serial actually selects a pump. Empty/whitespace means "no preference",
+    /// and "11111111" is tconnectsync's sentinel for the same.
+    /// </summary>
+    private static bool IsRealSerial(string? serial) =>
+        !string.IsNullOrWhiteSpace(serial) && serial != "11111111";
 
     private static List<TandemPumpEvent> Concat(
         IReadOnlyDictionary<TandemEventClass, List<TandemPumpEvent>> groups, params TandemEventClass[] classes)

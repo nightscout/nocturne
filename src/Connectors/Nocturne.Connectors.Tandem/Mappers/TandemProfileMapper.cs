@@ -46,6 +46,9 @@ public sealed class TandemProfileMapper(ILogger logger)
 
     private static ProfileData BuildProfileData(TandemPumpProfile profile, TandemPumpCgmSettings? cgm)
     {
+        // tconnectsync drops all-zero placeholder segments globally (PumpProfile.__post_init__)
+        // before building the profile store, so basal, carb-ratio and ISF all use the same
+        // skip-filtered set.
         var segments = profile.TDependentSegs
             .Where(s => !s.Skip)
             .OrderBy(s => s.StartTime)

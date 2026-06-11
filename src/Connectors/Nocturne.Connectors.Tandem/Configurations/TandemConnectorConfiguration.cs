@@ -59,21 +59,21 @@ public class TandemConnectorConfiguration : BaseConnectorConfiguration
     /// Optional pump serial number to follow when more than one pump is on the account.
     /// When empty, the connector selects the pump with the most recent events.
     /// </summary>
-    [ConnectorProperty(ConnectorPropertyKey.UserId)]
+    [ConnectorProperty(ConnectorPropertyKey.PumpSerialNumber)]
     public string? PumpSerialNumber { get; set; }
 
     /// <summary>
     /// When true, fetch every event type from the pump history log rather than the default
     /// backend filter. Required to import device status (battery / IOB daily-basal events).
     /// </summary>
-    [ConnectorProperty(ConnectorPropertyKey.UseV3Api, DefaultValue = "false")]
+    [ConnectorProperty(ConnectorPropertyKey.FetchAllEventTypes, DefaultValue = "false")]
     public bool FetchAllEventTypes { get; set; }
 
     /// <summary>
     /// When true, basal entries that resolve to a near-zero rate (&lt; 0.01 U/hr) are skipped,
     /// mirroring <c>tconnectsync</c>'s <c>IGNORE_ZERO_UNIT_BASAL</c>.
     /// </summary>
-    [ConnectorProperty(ConnectorPropertyKey.EnableTempBasalConsolidation, DefaultValue = "false")]
+    [ConnectorProperty(ConnectorPropertyKey.IgnoreZeroUnitBasal, DefaultValue = "false")]
     public bool IgnoreZeroUnitBasal { get; set; }
 
     protected override void ValidateSourceSpecificConfiguration()
