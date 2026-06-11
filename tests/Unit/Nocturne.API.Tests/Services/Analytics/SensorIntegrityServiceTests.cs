@@ -104,7 +104,28 @@ public class SensorIntegrityServiceTests
         report.PerSource.Should().NotBeNull();
         report.PerSource!.Select(p => p.Source)
             .Should().BeEquivalentTo(["dexcom-connector", "libre-connector"]);
+        // The two sources occupy disjoint days, so per-source totals sum to the combined totals.
         report.PerSource.Sum(p => p.Summary.Clusters).Should().Be(report.Summary.Clusters);
+        report.PerSource.Sum(p => p.Summary.Events).Should().Be(report.Summary.Events);
+        report.PerSource.Sum(p => p.Summary.NocturnalEvents).Should().Be(report.Summary.NocturnalEvents);
+        report.PerSource.Should().OnlyContain(p => p.Summary.Events == 1);
+    }
+
+    [Fact]
+    public async Task Classifies_nocturnal_via_utc_when_offset_is_missing()
+    {
+        // No per-reading offset → the nocturnal test falls back to the UTC hour. Anchor the series
+        // so the nadir lands in the early-morning UTC window (< 07:00), i.e. nocturnal.
+        var night = new DateTime(2026, 1, 1, 3, 0, 0, DateTimeKind.Utc);
+        var readings = OscillationThenDescent(night, source: "dexcom-connector", utcOffsetMinutes: null);
+        var service = BuildService(readings, []);
+
+        var report = await service.AnalyzeAsync(night.AddHours(-1), night.AddHours(8), hypoOptions: LowConf);
+
+        var ev = report.HypoEvents.Should().ContainSingle().Subject;
+        ev.Event.NadirTime.Hour.Should().BeLessThan(7);
+        ev.IsNocturnal.Should().BeTrue();
+        report.Summary.NocturnalEvents.Should().Be(1);
     }
 
     [Fact]

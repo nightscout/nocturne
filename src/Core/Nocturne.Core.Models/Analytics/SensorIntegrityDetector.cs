@@ -70,9 +70,33 @@ public static class SensorIntegrityDetector
         ArgumentNullException.ThrowIfNull(timestamps);
         ArgumentNullException.ThrowIfNull(glucose);
 
+        var clusters = DetectClusters(timestamps, glucose, config);
+        return FindHypoEvents(clusters, timestamps, glucose, options, insulin);
+    }
+
+    /// <summary>
+    /// Find hypo events for clusters that have already been detected, avoiding a second detection
+    /// pass when the caller already holds the cluster list (e.g. to render it alongside).
+    /// </summary>
+    /// <param name="clusters">Clusters previously returned by <see cref="DetectClusters"/> over the
+    /// same series and configuration.</param>
+    /// <param name="timestamps">UTC reading timestamps (same series the clusters were detected from).</param>
+    /// <param name="glucose">Glucose values in mg/dL.</param>
+    /// <param name="options">Hypo-event search options.</param>
+    /// <param name="insulin">Optional insulin doses for correlation.</param>
+    public static IReadOnlyList<HypoEvent> FindHypoEvents(
+        IReadOnlyList<GlucoseCluster> clusters,
+        IReadOnlyList<DateTime> timestamps,
+        IReadOnlyList<double> glucose,
+        HypoEventOptions? options = null,
+        IReadOnlyList<InsulinDose>? insulin = null)
+    {
+        ArgumentNullException.ThrowIfNull(clusters);
+        ArgumentNullException.ThrowIfNull(timestamps);
+        ArgumentNullException.ThrowIfNull(glucose);
+
         var opts = options ?? new HypoEventOptions();
         var (t, g) = CleanAndSort(timestamps, glucose);
-        var clusters = DetectClusters(timestamps, glucose, config);
 
         // Insulin sorted by time, NaN units dropped — mirrors the reference's dropna + sort.
         var doses = (insulin ?? [])

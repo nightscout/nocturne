@@ -6,8 +6,8 @@
   import * as Table from "$lib/components/ui/table";
   import Moon from "lucide-svelte/icons/moon";
   import type { SensorIntegrityHypoEvent } from "$lib/api";
-  import { bg, bgLabel } from "$lib/utils/formatting";
-  import { confidenceLabel, confidenceChipClass, formatDateTime } from "./format";
+  import { bg, bgLabel, formatDateTimeCompact } from "$lib/utils/formatting";
+  import { confidenceLabel, confidenceChipClass } from "./format";
 
   interface Props {
     events: SensorIntegrityHypoEvent[];
@@ -15,12 +15,11 @@
 
   let { events }: Props = $props();
 
-  const sorted = $derived(
-    [...events].sort(
-      (a, b) =>
-        (a.event?.cluster?.start?.getTime() ?? 0) - (b.event?.cluster?.start?.getTime() ?? 0)
-    )
-  );
+  // DTO date fields are ISO strings at runtime despite their Date type; wrap before use.
+  const startMs = (e: SensorIntegrityHypoEvent) =>
+    e.event?.cluster?.start ? new Date(e.event.cluster.start).getTime() : 0;
+
+  const sorted = $derived([...events].sort((a, b) => startMs(a) - startMs(b)));
 
   function insulinTotal(e: SensorIntegrityHypoEvent): number {
     return (e.event?.insulinDuringCluster ?? []).reduce((sum, d) => sum + (d.units ?? 0), 0);
@@ -44,11 +43,11 @@
       </Table.Row>
     </Table.Header>
     <Table.Body>
-      {#each sorted as e (e.event?.cluster?.start?.getTime() ?? Math.random())}
+      {#each sorted as e, i (i)}
         {@const cluster = e.event?.cluster}
         {@const units = insulinTotal(e)}
         <Table.Row>
-          <Table.Cell class="font-medium">{formatDateTime(cluster?.start)}</Table.Cell>
+          <Table.Cell class="font-medium">{formatDateTimeCompact(cluster?.start)}</Table.Cell>
           <Table.Cell>
             <span
               class="rounded-full px-2 py-0.5 text-xs font-medium {confidenceChipClass(

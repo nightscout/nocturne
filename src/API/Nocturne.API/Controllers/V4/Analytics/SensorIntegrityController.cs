@@ -57,24 +57,29 @@ public class SensorIntegrityController : ControllerBase
         [FromQuery] double windowHours = 3.0,
         CancellationToken cancellationToken = default)
     {
-        try
+        // Both bounds are required: an omitted DateTime binds to default(DateTime), which would
+        // otherwise scan the tenant's entire history.
+        if (startDate == default || endDate == default)
         {
-            var hypoOptions = new HypoEventOptions
-            {
-                MinConfidence = minConfidence,
-                RequireInsulin = requireInsulin,
-                HypoThresholdMgdl = hypoThresholdMgdl,
-                WindowHours = windowHours,
-            };
-
-            var report = await _sensorIntegrityService.AnalyzeAsync(
-                startDate, endDate, source, bySource, hypoOptions, config: null, cancellationToken);
-
-            return Ok(report);
+            return BadRequest(new { error = "startDate and endDate are required." });
         }
-        catch (Exception ex)
+
+        if (endDate <= startDate)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = "endDate must be after startDate." });
         }
+
+        var hypoOptions = new HypoEventOptions
+        {
+            MinConfidence = minConfidence,
+            RequireInsulin = requireInsulin,
+            HypoThresholdMgdl = hypoThresholdMgdl,
+            WindowHours = windowHours,
+        };
+
+        var report = await _sensorIntegrityService.AnalyzeAsync(
+            startDate, endDate, source, bySource, hypoOptions, config: null, cancellationToken);
+
+        return Ok(report);
     }
 }

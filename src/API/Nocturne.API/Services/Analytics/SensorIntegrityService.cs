@@ -44,8 +44,8 @@ public class SensorIntegrityService : ISensorIntegrityService
         DetectorConfig? config = null,
         CancellationToken ct = default)
     {
-        var fromUtc = DateTime.SpecifyKind(from, DateTimeKind.Utc);
-        var toUtc = DateTime.SpecifyKind(to, DateTimeKind.Utc);
+        var fromUtc = AsUtc(from);
+        var toUtc = AsUtc(to);
 
         var glucoseTask = _sensorGlucoseRepository.GetAsync(
             fromUtc, toUtc, device: null, source: source, limit: int.MaxValue, descending: false, ct: ct);
@@ -91,9 +91,11 @@ public class SensorIntegrityService : ISensorIntegrityService
         var timestamps = readings.Select(r => r.Timestamp).ToList();
         var glucose = readings.Select(r => r.Mgdl).ToList();
 
+        // Detect once and reuse the cluster list for hypo-event correlation (the parameterless
+        // FindHypoEvents would otherwise re-run detection over the same series).
         var clusters = SensorIntegrityDetector.DetectClusters(timestamps, glucose, config);
         var rawEvents = SensorIntegrityDetector.FindHypoEvents(
-            timestamps, glucose, hypoOptions, config, insulin);
+            clusters, timestamps, glucose, hypoOptions, insulin);
 
         // Offset lookup for nocturnal classification: the nadir timestamp is one of the readings.
         var offsetByTimestamp = new Dictionary<DateTime, int?>();
@@ -141,13 +143,24 @@ public class SensorIntegrityService : ISensorIntegrityService
         IReadOnlyList<GlucoseCluster> clusters,
         IReadOnlyList<SensorIntegrityHypoEvent> events) => new()
         {
-            Days = readings.Select(r => r.Timestamp.Date).Distinct().Count(),
+            // Count distinct local days, consistent with the local-time framing used elsewhere
+            // (nocturnal classification). Readings without an offset fall back to UTC.
+            Days = readings.Select(r => r.Timestamp.AddMinutes(r.UtcOffset ?? 0).Date).Distinct().Count(),
             Clusters = clusters.Count,
             MediumClusters = clusters.Count(c => c.Confidence == ClusterConfidence.Medium),
             HighClusters = clusters.Count(c => c.Confidence == ClusterConfidence.High),
             Events = events.Count,
             NocturnalEvents = events.Count(e => e.IsNocturnal),
         };
+
+    // Treat the bound as a UTC instant: relabel an unspecified kind (the common bound-from-query
+    // case), but genuinely convert a local kind rather than reinterpreting its wall-clock.
+    private static DateTime AsUtc(DateTime dt) => dt.Kind switch
+    {
+        DateTimeKind.Utc => dt,
+        DateTimeKind.Local => dt.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+    };
 
     private static bool IsNocturnal(DateTime nadirUtc, int? utcOffsetMinutes)
     {

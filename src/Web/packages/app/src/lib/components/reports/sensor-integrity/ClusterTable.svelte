@@ -2,14 +2,8 @@
   /** Sortable list of flagged windows with an explainable, factual "why flagged" description. */
   import * as Table from "$lib/components/ui/table";
   import type { GlucoseCluster } from "$lib/api";
-  import { bgRange } from "$lib/utils/formatting";
-  import {
-    confidenceLabel,
-    confidenceChipClass,
-    describeCluster,
-    formatDateTime,
-    formatDuration,
-  } from "./format";
+  import { bgRange, formatDateTimeCompact } from "$lib/utils/formatting";
+  import { confidenceLabel, confidenceChipClass, describeCluster, formatDuration } from "./format";
 
   interface Props {
     clusters: GlucoseCluster[];
@@ -18,9 +12,10 @@
 
   let { clusters, onSelect }: Props = $props();
 
-  const sorted = $derived(
-    [...clusters].sort((a, b) => (a.start?.getTime() ?? 0) - (b.start?.getTime() ?? 0))
-  );
+  // DTO date fields are ISO strings at runtime despite their Date type; wrap before use.
+  const startMs = (c: GlucoseCluster) => (c.start ? new Date(c.start).getTime() : 0);
+
+  const sorted = $derived([...clusters].sort((a, b) => startMs(a) - startMs(b)));
 </script>
 
 {#if sorted.length === 0}
@@ -39,12 +34,12 @@
       </Table.Row>
     </Table.Header>
     <Table.Body>
-      {#each sorted as cluster (cluster.start?.getTime() ?? Math.random())}
+      {#each sorted as cluster, i (i)}
         <Table.Row
           class={onSelect ? "cursor-pointer" : ""}
           onclick={() => onSelect?.(cluster)}
         >
-          <Table.Cell class="font-medium">{formatDateTime(cluster.start)}</Table.Cell>
+          <Table.Cell class="font-medium">{formatDateTimeCompact(cluster.start)}</Table.Cell>
           <Table.Cell class="text-right tabular-nums">
             {formatDuration(cluster.durationMinutes)}
           </Table.Cell>

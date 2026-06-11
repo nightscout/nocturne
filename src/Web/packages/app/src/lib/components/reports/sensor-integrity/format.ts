@@ -48,21 +48,6 @@ export function describeCluster(cluster: GlucoseCluster): string {
   return parts.join(", ");
 }
 
-export function formatTimeOfDay(d: Date | undefined): string {
-  if (!d) return "—";
-  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-}
-
-export function formatDateTime(d: Date | undefined): string {
-  if (!d) return "—";
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export function formatDuration(minutes: number | undefined): string {
   if (minutes == null) return "—";
   const m = Math.round(minutes);

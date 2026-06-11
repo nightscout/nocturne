@@ -8,6 +8,10 @@ import type { SensorGlucose, GlucoseCluster, SensorIntegrityHypoEvent } from "$l
 const DAY_MS = 86_400_000;
 const MIN_MS = 60_000;
 
+// The generated client types DTO date fields as `Date`, but they are ISO strings at
+// runtime (the client deserializes with no reviver). Re-wrap before reading epoch ms.
+const epochMs = (d: Date): number => new Date(d).getTime();
+
 export interface DayPoint {
   /** Minutes from local midnight (0–1440). */
   x: number;
@@ -89,12 +93,13 @@ export function buildDayBuckets(
 
   for (const c of clusters) {
     if (!c.start || !c.end) continue;
-    const startLocal = c.start.getTime() + offsetMs;
-    const endLocal = c.end.getTime() + offsetMs;
+    const startLocal = epochMs(c.start) + offsetMs;
+    const endLocal = epochMs(c.end) + offsetMs;
     const firstDay = Math.floor(startLocal / DAY_MS);
     const lastDay = Math.floor(endLocal / DAY_MS);
 
-    // A cluster spanning midnight is clipped into each day it touches.
+    // A cluster spanning midnight is clipped into each day it touches, but counted
+    // once (on its start day) so per-day counts sum to the report total.
     for (let dayKey = firstDay; dayKey <= lastDay; dayKey++) {
       const dayStart = dayKey * DAY_MS;
       const xStart = Math.max(0, (startLocal - dayStart) / MIN_MS);
@@ -102,7 +107,7 @@ export function buildDayBuckets(
       if (xEnd <= xStart) continue;
       const b = ensure(dayKey);
       b.bands.push({ xStart, xEnd, cluster: c });
-      b.clusterCount++;
+      if (dayKey === firstDay) b.clusterCount++;
     }
   }
 
@@ -110,7 +115,7 @@ export function buildDayBuckets(
     const t = h.event?.nadirTime;
     const y = h.event?.nadirMgdl;
     if (!t || y == null) continue;
-    const localMs = t.getTime() + offsetMs;
+    const localMs = epochMs(t) + offsetMs;
     const dayKey = Math.floor(localMs / DAY_MS);
     ensure(dayKey).hypos.push({
       x: (localMs - dayKey * DAY_MS) / MIN_MS,
