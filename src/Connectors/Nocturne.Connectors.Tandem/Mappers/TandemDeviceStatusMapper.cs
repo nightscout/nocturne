@@ -60,6 +60,6 @@ public sealed class TandemDeviceStatusMapper(ILogger logger, TandemTimeResolver 
     {
         var msb = ev.Raw("batteryChargePercentMSBRaw") ?? 0;
         var lsb = ev.Raw("batteryChargePercentLSBRaw") ?? 0;
-        return (256 * (msb - 14) + lsb) / (3.0 * 256);
+        return (256.0 * (msb - 14) + lsb) / (3.0 * 256);
     }
 }

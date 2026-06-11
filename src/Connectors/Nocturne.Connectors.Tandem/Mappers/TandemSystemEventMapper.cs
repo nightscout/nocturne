@@ -19,28 +19,26 @@ public sealed class TandemSystemEventMapper(ILogger logger, TandemTimeResolver t
 
     public List<SystemEvent> Map(IEnumerable<TandemPumpEvent> events)
     {
-        var records = new List<SystemEvent>();
-
-        foreach (var ev in events)
-        {
-            SystemEvent? record = ev.Name switch
-            {
-                "LID_ALARM_ACTIVATED" => MapAlarm(ev),
-                "LID_MALFUNCTION_ACTIVATED" => Build(ev, SystemEventType.Hazard, SystemEventCategory.Pump,
-                    ev.Raw("MalfID"), "Malfunction"),
-                "LID_CGM_ALERT_ACTIVATED" => MapCgmAlert(ev, "CGM Alert"),
-                "LID_CGM_ALERT_ACTIVATED_DEX" => MapDexCgmAlert(ev),
-                "LID_CGM_ALERT_ACTIVATED_FSL2" => MapCgmAlert(ev, "Libre CGM Alert"),
-                _ => null,
-            };
-
-            if (record != null)
-                records.Add(record);
-        }
+        var records = events
+            .Select(MapEvent)
+            .Where(record => record != null)
+            .Select(record => record!)
+            .ToList();
 
         _logger.LogDebug("Mapped {Count} Tandem system events", records.Count);
         return records;
     }
+
+    private SystemEvent? MapEvent(TandemPumpEvent ev) => ev.Name switch
+    {
+        "LID_ALARM_ACTIVATED" => MapAlarm(ev),
+        "LID_MALFUNCTION_ACTIVATED" => Build(ev, SystemEventType.Hazard, SystemEventCategory.Pump,
+            ev.Raw("MalfID"), "Malfunction"),
+        "LID_CGM_ALERT_ACTIVATED" => MapCgmAlert(ev, "CGM Alert"),
+        "LID_CGM_ALERT_ACTIVATED_DEX" => MapDexCgmAlert(ev),
+        "LID_CGM_ALERT_ACTIVATED_FSL2" => MapCgmAlert(ev, "Libre CGM Alert"),
+        _ => null,
+    };
 
     private SystemEvent? MapAlarm(TandemPumpEvent ev)
     {

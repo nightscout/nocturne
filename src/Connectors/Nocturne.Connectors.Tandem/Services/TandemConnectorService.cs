@@ -346,14 +346,12 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         !string.IsNullOrWhiteSpace(serial) && serial != "11111111";
 
     private static List<TandemPumpEvent> Concat(
-        IReadOnlyDictionary<TandemEventClass, List<TandemPumpEvent>> groups, params TandemEventClass[] classes)
-    {
-        var combined = new List<TandemPumpEvent>();
-        foreach (var clazz in classes)
-            if (groups.TryGetValue(clazz, out var list))
-                combined.AddRange(list);
-        return combined;
-    }
+        IReadOnlyDictionary<TandemEventClass, List<TandemPumpEvent>> groups, params TandemEventClass[] classes) =>
+        classes
+            .Select(groups.GetValueOrDefault)
+            .Where(list => list != null)
+            .SelectMany(list => list!)
+            .ToList();
 
     private static IEnumerable<(DateTime Start, DateTime End)> Chunk(DateTime start, DateTime end)
     {

@@ -44,11 +44,9 @@ public static class TandemEventCatalog
         if (!doc.RootElement.TryGetProperty("events", out var events))
             yield break;
 
-        foreach (var entry in events.EnumerateObject())
+        foreach (var entry in events.EnumerateObject().Where(e => int.TryParse(e.Name, out _)))
         {
-            if (!int.TryParse(entry.Name, out var id))
-                continue;
-
+            var id = int.Parse(entry.Name);
             var name = entry.Value.GetProperty("name").GetString() ?? $"LID_{id}";
             var fields = new List<TandemFieldDefinition>();
 
@@ -66,11 +64,13 @@ public static class TandemEventCatalog
         var offset = element.GetProperty("offset").GetInt32();
         var unit = element.TryGetProperty("uom", out var uom) ? uom.GetString() : null;
 
-        var transforms = new List<TandemFieldTransform>();
-        if (element.TryGetProperty("transform", out var transformArray))
-            foreach (var tx in transformArray.EnumerateArray())
-                if (ParseTransform(tx) is { } parsed)
-                    transforms.Add(parsed);
+        List<TandemFieldTransform> transforms = element.TryGetProperty("transform", out var transformArray)
+            ? transformArray.EnumerateArray()
+                .Select(ParseTransform)
+                .Where(parsed => parsed != null)
+                .Select(parsed => parsed!)
+                .ToList()
+            : [];
 
         return new TandemFieldDefinition
         {
@@ -115,15 +115,13 @@ public static class TandemEventCatalog
 
     private static IReadOnlyDictionary<int, string> ParseMap(JsonElement arg)
     {
-        var map = new Dictionary<int, string>();
         if (arg.ValueKind != JsonValueKind.Object)
-            return map;
+            return new Dictionary<int, string>();
 
-        foreach (var member in arg.EnumerateObject())
-            if (int.TryParse(member.Name, out var key) && member.Value.GetString() is { } value)
-                map[key] = value;
-
-        return map;
+        return arg.EnumerateObject()
+            .Select(member => (Parsed: int.TryParse(member.Name, out var key), Key: key, Value: member.Value.GetString()))
+            .Where(x => x is { Parsed: true, Value: not null })
+            .ToDictionary(x => x.Key, x => x.Value!);
     }
 
     private static TandemFieldType ParseType(string? type) => type switch
