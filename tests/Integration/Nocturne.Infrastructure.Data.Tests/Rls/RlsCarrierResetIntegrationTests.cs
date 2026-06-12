@@ -5,12 +5,12 @@ using Npgsql;
 namespace Nocturne.Infrastructure.Data.Tests.Rls;
 
 /// <summary>
-/// End-to-end proof that the carrier-reset chokepoint prevents the share-RLS background lockout:
-/// a pooled <see cref="NocturneDbContext"/> that last served a public share is reused by a normal
-/// read, and because <c>CarrierResettingDbContextFactory</c> resets <c>IsShareContext</c> on the
-/// lease, the <c>TenantConnectionInterceptor</c> writes <c>app.is_share='false'</c> and the reused
-/// connection is NOT denied a non-categorized (share-hidden) tenant-scoped table. Runs against the
-/// real pooled factory, interceptor and PostgreSQL RLS policy, not the C# carrier in isolation.
+/// End-to-end proof that a public-share read does not lock out a subsequent normal read: a
+/// <see cref="NocturneDbContext"/> that last served a public share is followed by a normal read,
+/// and because each acquisition starts from carrier defaults (<c>IsShareContext=false</c>), the
+/// <c>TenantConnectionInterceptor</c> writes <c>app.is_share='false'</c> for the normal read and a
+/// non-categorized (share-hidden) tenant-scoped table is NOT denied. Runs against the real factory,
+/// interceptor and PostgreSQL RLS policy, not the C# carrier in isolation.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("RLS completeness")]
@@ -25,12 +25,12 @@ public class RlsCarrierResetIntegrationTests
     public RlsCarrierResetIntegrationTests(RlsCompletenessFixture fx) => _fx = fx;
 
     [Fact]
-    public async Task ReusedPooledContext_AfterAShare_DoesNotLockOutANormalRead()
+    public async Task NormalReadAfterAShare_IsNotLockedOut()
     {
         var tenant = Guid.NewGuid();
         await SeedAsync(tenant);
 
-        // The real production registration: pooled factory + carrier-reset decorator + interceptor.
+        // The real production registration: factory + carrier-reset decorator + interceptor.
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddHttpContextAccessor();
@@ -38,13 +38,9 @@ public class RlsCarrierResetIntegrationTests
         await using var provider = services.BuildServiceProvider();
         var factory = provider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
 
-        // Lease 1 — a public share granted a category that does not unlock the hidden table. Its
-        // own scope returns the context to the pool (still carrying IsShareContext=true) before
-        // lease 2 acquires, even if the share assertion throws.
-        NocturneDbContext pooledContext;
+        // Acquisition 1 — a public share granted a category that does not unlock the hidden table.
         await using (var shareContext = await factory.CreateDbContextAsync())
         {
-            pooledContext = shareContext;
             shareContext.TenantId = tenant;
             shareContext.IsShareContext = true;
             shareContext.VisibleCategories = "stepcount.read";
@@ -53,19 +49,16 @@ public class RlsCarrierResetIntegrationTests
                 "a public share must not see a hidden (non-categorized) table");
         }
 
-        // Lease 2 — a normal read that reuses the same pooled object. The decorator must have
-        // cleared the share marker; without it the stale is_share='true' would deny the owner
-        // their own data.
+        // Acquisition 2 — a normal read. The context starts from carrier defaults, so the prior
+        // share's marker cannot leak in; without that the stale is_share='true' would deny the
+        // owner their own data.
         await using var ownerContext = await factory.CreateDbContextAsync();
-        ownerContext.Should().BeSameAs(pooledContext,
-            "this single-threaded acquire-after-dispose must reuse the same pooled object, so the "
-            + "test exercises carrier reset on a reused context rather than a fresh one");
         ownerContext.IsShareContext.Should().BeFalse(
-            "the chokepoint must clear a prior share's marker before the pooled context is reused");
+            "a freshly acquired context must not carry a prior share's marker");
         ownerContext.TenantId = tenant;
         await ownerContext.Database.OpenConnectionAsync();
         (await CountAsync(ownerContext, HiddenTable, tenant)).Should().Be(1,
-            "a reused pooled context must not carry a stale share lockout into a normal read");
+            "a normal read after a share must not carry a stale share lockout");
     }
 
     // Counts via the EF-managed connection so the count runs on the same session the
