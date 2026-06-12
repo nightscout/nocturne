@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware.Handlers;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -107,6 +108,10 @@ public class DirectGrantController : ControllerBase
             Scopes = normalizedScopes,
             Label = request.Label,
             TokenHash = tokenHash,
+            // Also store the SHA-1 of the token so uploaders that use the legacy Nightscout
+            // api-secret protocol (Loop, AAPS, Trio, iAPS) — which pre-hash the value with SHA-1
+            // before sending — authenticate with this same token via ApiKeyHandler's legacy path.
+            LegacySecretHash = HashUtils.Sha1Hex(plaintextToken),
             CreatedAt = DateTime.UtcNow,
         };
 
@@ -169,7 +174,7 @@ public class DirectGrantController : ControllerBase
                 Scopes = g.Scopes,
                 CreatedAt = g.CreatedAt,
                 LastUsedAt = g.LastUsedAt,
-                IsLegacy = g.LegacySecretHash != null,
+                IsLegacy = g.IsMigrated,
             })
             .ToListAsync();
 

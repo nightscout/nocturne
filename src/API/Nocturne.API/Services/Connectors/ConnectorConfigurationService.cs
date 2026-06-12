@@ -292,6 +292,7 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
             Label = "Nightscout (migrated)",
             TokenHash = null,
             LegacySecretHash = sha1Hash,
+            IsMigrated = true,
             CreatedAt = DateTime.UtcNow,
         };
 

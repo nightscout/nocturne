@@ -106,8 +106,10 @@ public class ApiKeyHandler : IAuthHandler
         var userAgent = context.Request.Headers.UserAgent.FirstOrDefault();
         _ = UpdateLastUsedAsync(grant.Id, tenantCtx.TenantId, ipAddress, userAgent);
 
-        // 7. If this is a legacy grant's first use, nudge rotation
-        if (grant.LegacySecretHash != null && grant.LastUsedAt == null)
+        // 7. If this is a migrated full-access secret's first use, nudge rotation to scoped keys.
+        //    Minted noc_ tokens also carry a LegacySecretHash (for pre-hashing clients), so the
+        //    nudge keys off IsMigrated rather than the hash's presence.
+        if (grant.IsMigrated && grant.LastUsedAt == null)
         {
             var scopeFactory = context.RequestServices?.GetService<IServiceScopeFactory>();
             if (scopeFactory != null)

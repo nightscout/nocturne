@@ -141,13 +141,27 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable
     public string? TokenHash { get; set; }
 
     /// <summary>
-    /// SHA-1 hex hash of a legacy Nightscout API secret.
-    /// Only populated for migration-seeded grants to enable zero-friction backward compatibility.
+    /// SHA-1 hex hash of the grant's credential, in the form a Nightscout client sends it.
+    /// The legacy Nightscout <c>api-secret</c> protocol pre-hashes the secret with SHA-1 before
+    /// transmitting it, so uploaders that use that protocol (Loop, AAPS, Trio, iAPS, xDrip) send
+    /// <c>SHA-1(secret)</c> and we must match against this column.
+    /// Populated both for migration-seeded grants (the hash of the original Nightscout secret) and
+    /// for minted <c>noc_</c> tokens (the hash of the plaintext token), so a single credential
+    /// authenticates whether the client sends it verbatim (matched via <see cref="TokenHash"/>) or
+    /// pre-hashed (matched here).
     /// </summary>
     [Column("legacy_secret_hash")]
     [MaxLength(128)]
     [AuditRedacted]
     public string? LegacySecretHash { get; set; }
+
+    /// <summary>
+    /// True when this grant was seeded from a pre-existing, full-access Nightscout master API secret
+    /// (via migration or the Nightscout connector) rather than minted as a scoped <c>noc_</c> token.
+    /// Drives the rotation nudge and the "Legacy" badge in the UI; not part of authentication.
+    /// </summary>
+    [Column("is_migrated")]
+    public bool IsMigrated { get; set; }
 
     /// <summary>
     /// Whether this grant has been revoked
