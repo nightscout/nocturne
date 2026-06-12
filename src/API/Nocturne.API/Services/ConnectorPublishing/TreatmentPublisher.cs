@@ -6,8 +6,8 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -19,7 +19,7 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 /// <seealso cref="ITreatmentPublisher"/>
 internal sealed class TreatmentPublisher : ITreatmentPublisher
 {
-    private readonly NocturneDbContext _dbContext;
+    private readonly ITenantDbContextFactory _contextFactory;
     private readonly ITreatmentService _treatmentService;
     private readonly IBolusRepository _bolusRepository;
     private readonly ICarbIntakeRepository _carbIntakeRepository;
@@ -34,7 +34,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     private readonly ILogger<TreatmentPublisher> _logger;
 
     public TreatmentPublisher(
-        NocturneDbContext dbContext,
+        ITenantDbContextFactory contextFactory,
         ITreatmentService treatmentService,
         IBolusRepository bolusRepository,
         ICarbIntakeRepository carbIntakeRepository,
@@ -48,7 +48,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         IAuditContext auditContext,
         ILogger<TreatmentPublisher> logger)
     {
-        _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+        _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
         _treatmentService = treatmentService ?? throw new ArgumentNullException(nameof(treatmentService));
         _bolusRepository = bolusRepository ?? throw new ArgumentNullException(nameof(bolusRepository));
         _carbIntakeRepository = carbIntakeRepository ?? throw new ArgumentNullException(nameof(carbIntakeRepository));
@@ -302,19 +302,20 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             var batchList = batches.ToList();
             if (batchList.Count == 0) return true;
 
+            await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
             foreach (var batch in batchList)
             {
-                _dbContext.DecompositionBatches.Add(new DecompositionBatchEntity
+                ctx.DecompositionBatches.Add(new DecompositionBatchEntity
                 {
                     Id = batch.Id,
-                    TenantId = _dbContext.TenantId,
+                    TenantId = ctx.TenantId,
                     Source = batch.Source,
                     SourceRecordId = batch.SourceRecordId,
                     CreatedAt = batch.CreatedAt,
                 });
             }
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await ctx.SaveChangesAsync(cancellationToken);
             _logger.LogDebug("Published {Count} DecompositionBatch records for {Source}", batchList.Count, source);
             return true;
         }

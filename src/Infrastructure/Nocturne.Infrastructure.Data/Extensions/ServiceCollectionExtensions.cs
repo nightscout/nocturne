@@ -65,8 +65,10 @@ public static class ServiceCollectionExtensions
         var dataSource = dataSourceBuilder.Build();
         services.AddSingleton(dataSource);
 
-        // Use AddPooledDbContextFactory for multitenant context pooling
-        services.AddPooledDbContextFactory<NocturneDbContext>(
+        // Non-pooled: each acquisition is a fresh context, discarded after use. A faulted context
+        // is never returned to a pool and reused, so a fault cannot poison later callers. Database
+        // connections are pooled by the NpgsqlDataSource singleton.
+        services.AddDbContextFactory<NocturneDbContext>(
             (sp, options) =>
             {
                 options.UseNpgsql(
@@ -97,18 +99,17 @@ public static class ServiceCollectionExtensions
                 options.AddInterceptors(
                     sp.GetRequiredService<TenantConnectionInterceptor>(),
                     sp.GetRequiredService<MutationAuditInterceptor>());
-            },
-            poolSize: 128
+            }
         );
 
-        // Reset the four pooled-context carriers to fail-closed defaults on every lease
-        // (pooling does not reset custom properties), so the raw IDbContextFactory callers
-        // cannot inherit a prior lessee's tenant or share state. See CarrierResettingDbContextFactory.
+        // Normalize the four context carriers to fail-closed defaults on every acquisition, so raw
+        // IDbContextFactory callers start from a known-safe tenant/share state. See
+        // CarrierResettingDbContextFactory.
         DecorateWithCarrierReset(services);
 
         // Register scoped NocturneDbContext that sets TenantId from ITenantAccessor.
         // All existing constructor injections of NocturneDbContext continue to work.
-        // The context is returned to the pool when the scope ends.
+        // The context is disposed when the scope ends.
         services.AddScoped(sp =>
         {
             var factory = sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
@@ -150,15 +151,15 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    // Replaces the registered pooled IDbContextFactory<NocturneDbContext> with a decorator that
-    // resets the carrier properties on every lease. Applied immediately after
-    // AddPooledDbContextFactory so the descriptor it wraps is the pooling factory.
+    // Replaces the registered IDbContextFactory<NocturneDbContext> with a decorator that
+    // normalizes the carrier properties on every acquisition. Applied immediately after
+    // AddDbContextFactory so the descriptor it wraps is the registered factory.
     private static void DecorateWithCarrierReset(IServiceCollection services)
     {
         var descriptor = services.LastOrDefault(
             d => d.ServiceType == typeof(IDbContextFactory<NocturneDbContext>))
             ?? throw new InvalidOperationException(
-                "AddPooledDbContextFactory<NocturneDbContext> must be registered before decorating it.");
+                "AddDbContextFactory<NocturneDbContext> must be registered before decorating it.");
 
         services.Remove(descriptor);
         services.Add(new ServiceDescriptor(
@@ -235,8 +236,10 @@ public static class ServiceCollectionExtensions
         var dataSource = dataSourceBuilder.Build();
         services.AddSingleton(dataSource);
 
-        // Use AddPooledDbContextFactory for multitenant context pooling
-        services.AddPooledDbContextFactory<NocturneDbContext>(
+        // Non-pooled: each acquisition is a fresh context, discarded after use. A faulted context
+        // is never returned to a pool and reused, so a fault cannot poison later callers. Database
+        // connections are pooled by the NpgsqlDataSource singleton.
+        services.AddDbContextFactory<NocturneDbContext>(
             (sp, options) =>
             {
                 options.UseNpgsql(
@@ -267,13 +270,12 @@ public static class ServiceCollectionExtensions
                 options.AddInterceptors(
                     sp.GetRequiredService<TenantConnectionInterceptor>(),
                     sp.GetRequiredService<MutationAuditInterceptor>());
-            },
-            poolSize: 128
+            }
         );
 
-        // Reset the four pooled-context carriers to fail-closed defaults on every lease
-        // (pooling does not reset custom properties), so the raw IDbContextFactory callers
-        // cannot inherit a prior lessee's tenant or share state. See CarrierResettingDbContextFactory.
+        // Normalize the four context carriers to fail-closed defaults on every acquisition, so raw
+        // IDbContextFactory callers start from a known-safe tenant/share state. See
+        // CarrierResettingDbContextFactory.
         DecorateWithCarrierReset(services);
 
         // Register scoped DbContext, repositories, and shared services.
@@ -291,7 +293,7 @@ public static class ServiceCollectionExtensions
     {
         // Register scoped NocturneDbContext that sets TenantId from ITenantAccessor.
         // All existing constructor injections of NocturneDbContext continue to work.
-        // The context is returned to the pool when the scope ends.
+        // The context is disposed when the scope ends.
         services.AddScoped(sp =>
         {
             var factory = sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>();

@@ -507,9 +507,9 @@ public class ConnectorBackgroundServiceTests
     [Fact]
     public async Task SyncForTenant_PinsScopedDbContextToSyncedTenant_ForRlsIsolation()
     {
-        // Regression test for the connector-wide outage: NocturneDbContext is leased from a pool
-        // (AddPooledDbContextFactory) and its TenantId is NOT reset between leases. The background
-        // sync must set dbContext.TenantId to the tenant being synced — otherwise the
+        // Regression test for the connector-wide outage: a NocturneDbContext's TenantId defaults
+        // to Guid.Empty. The background sync must set dbContext.TenantId to the tenant being
+        // synced — otherwise the
         // TenantConnectionInterceptor applies a stale/empty RLS tenant, tenant-scoped reads
         // (connector config + secrets) silently return nothing, and every connector authenticates
         // with empty credentials. Before the fix the scoped context stayed at Guid.Empty here.

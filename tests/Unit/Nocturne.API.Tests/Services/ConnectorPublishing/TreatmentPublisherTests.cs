@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
@@ -29,7 +30,16 @@ public class TreatmentPublisherTests
     private readonly Mock<IPatientInsulinRepository> _mockPatientInsulinRepository;
     private readonly Mock<IBasalRateResolver> _mockBasalRateResolver;
     private readonly Mock<ITherapySettingsResolver> _mockTherapySettingsResolver;
+    private Mock<ITenantDbContextFactory> _mockContextFactory = null!;
     private readonly TreatmentPublisher _publisher;
+
+    private static readonly Guid TestTenantId = Guid.NewGuid();
+
+    private static NocturneDbContext NewDbContext() =>
+        new(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options)
+        { TenantId = TestTenantId };
 
     public TreatmentPublisherTests()
     {
@@ -57,13 +67,13 @@ public class TreatmentPublisherTests
 
     private TreatmentPublisher CreatePublisher(IAuditContext auditContext)
     {
-        var dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-        var dbContext = new NocturneDbContext(dbOptions);
+        _mockContextFactory = new Mock<ITenantDbContextFactory>();
+        _mockContextFactory
+            .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+            .Returns(() => new ValueTask<NocturneDbContext>(NewDbContext()));
 
         return new TreatmentPublisher(
-            dbContext,
+            _mockContextFactory.Object,
             _mockTreatmentService.Object,
             _mockBolusRepository.Object,
             _mockCarbIntakeRepository.Object,
@@ -106,6 +116,31 @@ public class TreatmentPublisherTests
         var result = await _publisher.PublishTreatmentsAsync(new List<Treatment>(), "test-source");
 
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PublishDecompositionBatchesAsync_ConcurrentCalls_AcquireIndependentContexts()
+    {
+        var calls = Enumerable.Range(0, 16).Select(i =>
+            _publisher.PublishDecompositionBatchesAsync(
+                new[]
+                {
+                    new DecompositionBatch
+                    {
+                        Id = Guid.NewGuid(),
+                        Source = "test-source",
+                        SourceRecordId = $"record-{i}",
+                        CreatedAt = DateTime.UtcNow,
+                    },
+                },
+                "test-source"));
+
+        var results = await Task.WhenAll(calls);
+
+        results.Should().OnlyContain(r => r);
+        _mockContextFactory.Verify(
+            f => f.CreateAsync(It.IsAny<CancellationToken>()),
+            Times.Exactly(16));
     }
 
     [Fact]
