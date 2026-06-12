@@ -332,10 +332,10 @@ public class TreatmentPublisherTests
     }
 
     [Fact]
-    public async Task PublishTempBasalsAsync_RunsSweepDeleteUnderSystemAttribution()
+    public async Task PublishTempBasalsAsync_RunsReconcileDeleteUnderSystemAttribution()
     {
-        // The delete-then-reinsert sweep must write delete audit rows with AuthType IS NULL so the
-        // dedup discriminator treats them as system-initiated and lets future resyncs through. The
+        // The reconcile delete must write delete audit rows with AuthType IS NULL so the dedup
+        // discriminator treats them as system-initiated and lets future resyncs through. The
         // delete — not just the insert — is what the discriminator reads, so it has to run inside
         // the SystemAuditScope; trace fields must survive so the rows stay tied to the request.
         var auditContext = new AuditContext
@@ -350,8 +350,9 @@ public class TreatmentPublisherTests
         string? authTypeDuringDelete = "unset";
         string? correlationDuringDelete = null;
         _mockTempBasalRepository
-            .Setup(r => r.DeleteBySourceAndDateRangeAsync(
-                It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.SoftDeleteAbsentBySourceAndDateRangeAsync(
+                It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<CancellationToken>()))
             .Callback(() =>
             {
                 authTypeDuringDelete = auditContext.AuthType;
@@ -374,13 +375,46 @@ public class TreatmentPublisherTests
         var result = await publisher.PublishTempBasalsAsync(records, "glooko-connector");
 
         result.Should().BeTrue();
-        authTypeDuringDelete.Should().BeNull("the sweep delete must be system-attributed");
+        authTypeDuringDelete.Should().BeNull("the reconcile delete must be system-attributed");
         correlationDuringDelete.Should().Be("trace-1", "trace fields must survive the scope");
         auditContext.AuthType.Should().Be("bearer", "actor fields must be restored after the scope");
         _mockTempBasalRepository.Verify(
-            r => r.DeleteBySourceAndDateRangeAsync(
-                "glooko-connector", It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            r => r.SoftDeleteAbsentBySourceAndDateRangeAsync(
+                "glooko-connector", It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishTempBasalsAsync_ReconcilesByIncomingLegacyIds_SoAResyncDoesNotChurn()
+    {
+        // The reconcile must pass the batch's legacy ids as the keep-set so still-reported rows are
+        // left active (and thus skipped by BulkCreateAsync's legacy-id dedup) instead of being
+        // deleted and re-created. This is what stops the per-cycle tombstone accumulation.
+        IReadOnlySet<string>? keepLegacyIds = null;
+        _mockTempBasalRepository
+            .Setup(r => r.SoftDeleteAbsentBySourceAndDateRangeAsync(
+                It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<CancellationToken>()))
+            .Callback((string _, DateTime _, DateTime _, IReadOnlySet<string> keep, CancellationToken _) =>
+                keepLegacyIds = keep)
+            .ReturnsAsync(0);
+
+        var ts = new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc);
+        var records = new List<TempBasal>
+        {
+            new() { Id = Guid.NewGuid(), LegacyId = "glooko_tempbasal_1", StartTimestamp = ts, Rate = 0.5, Origin = TempBasalOrigin.Algorithm, DataSource = "glooko-connector" },
+            new() { Id = Guid.NewGuid(), LegacyId = "glooko_tempbasal_2", StartTimestamp = ts.AddMinutes(5), Rate = 0.6, Origin = TempBasalOrigin.Algorithm, DataSource = "glooko-connector" },
+            new() { Id = Guid.NewGuid(), LegacyId = null, StartTimestamp = ts.AddMinutes(10), Rate = 0.7, Origin = TempBasalOrigin.Algorithm, DataSource = "glooko-connector" },
+        };
+
+        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector");
+
+        result.Should().BeTrue();
+        keepLegacyIds.Should().BeEquivalentTo(new[] { "glooko_tempbasal_1", "glooko_tempbasal_2" },
+            "only non-null incoming legacy ids form the keep-set");
+        _mockTempBasalRepository.Verify(
+            r => r.BulkCreateAsync(records, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

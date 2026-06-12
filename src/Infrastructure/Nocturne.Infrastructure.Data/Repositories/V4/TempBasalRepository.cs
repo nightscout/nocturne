@@ -323,24 +323,23 @@ public class TempBasalRepository : ITempBasalRepository
         });
     }
 
-    /// <summary>
-    /// Deletes temporary basal records by data source and date range.
-    /// </summary>
-    /// <param name="source">The data source filter.</param>
-    /// <param name="from">The start timestamp filter.</param>
-    /// <param name="to">The end timestamp filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteBySourceAndDateRangeAsync(
+    /// <inheritdoc />
+    public async Task<int> SoftDeleteAbsentBySourceAndDateRangeAsync(
         string source,
         DateTime from,
         DateTime to,
+        IReadOnlySet<string> keepLegacyIds,
         CancellationToken ct = default
     )
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
+        // The global query filter already restricts to active (DeletedAt == null) rows for this
+        // tenant. Soft-delete only the window's rows whose legacy id the source no longer reports;
+        // a row with no legacy id can't be matched against the incoming set, so treat it as absent.
         return await ctx.AuditedSoftDeleteAsync(
-            ctx.TempBasals.Where(e => e.DataSource == source && e.StartTimestamp >= from && e.StartTimestamp <= to),
+            ctx.TempBasals.Where(e => e.DataSource == source
+                && e.StartTimestamp >= from && e.StartTimestamp <= to
+                && (e.LegacyId == null || !keepLegacyIds.Contains(e.LegacyId))),
             _auditContext, ct);
     }
 

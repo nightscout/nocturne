@@ -186,16 +186,23 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
 
             var minTimestamp = recordList.Min(r => r.StartTimestamp);
             var maxTimestamp = recordList.Max(r => r.StartTimestamp);
+            var incomingLegacyIds = recordList
+                .Select(r => r.LegacyId)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Select(id => id!)
+                .ToHashSet();
 
-            // Connector resync: the delete-then-reinsert is a system sweep, so its audit rows
-            // must carry AuthType IS NULL. The delete the dedup discriminator reads — not just the
-            // insert — has to be inside the scope; otherwise a resync invoked under an actor
-            // context (e.g. a manual sync) would write a user-attributed delete row and
-            // permanently block re-importing those temp basals.
+            // Connector resync reconciles the window idempotently rather than deleting it wholesale
+            // and re-inserting: soft-delete only the rows this source no longer reports, leaving
+            // still-reported rows active so BulkCreateAsync (which skips already-active legacy ids)
+            // makes an unchanged resync a no-op. The reconcile delete runs under SystemAuditScope so
+            // its audit rows carry AuthType IS NULL — the dedup discriminator reads the delete, so a
+            // resync invoked under an actor context (e.g. a manual sync) must not write a
+            // user-attributed delete that would permanently block a later re-import of those temps.
             using (SystemAuditScope.Push(_auditContext))
             {
-                await _tempBasalRepository.DeleteBySourceAndDateRangeAsync(
-                    source, minTimestamp, maxTimestamp, cancellationToken);
+                await _tempBasalRepository.SoftDeleteAbsentBySourceAndDateRangeAsync(
+                    source, minTimestamp, maxTimestamp, incomingLegacyIds, cancellationToken);
 
                 var reclassifiedCount = await ReclassifyScheduledAlgorithmicBasalsAsync(
                     recordList, cancellationToken);
