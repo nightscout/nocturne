@@ -10,8 +10,8 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// <summary>
 /// Integration tests for session cookie authentication via the SessionCookieHandler.
 /// Validates that the handler authenticates from the .Nocturne.AccessToken cookie,
-/// clears cookies on invalid/expired tokens, and falls through to the next handler
-/// when no cookies are present.
+/// rejects invalid/expired tokens (without clearing the domain-wide session cookies),
+/// and falls through to the next handler when no cookies are present.
 /// </summary>
 [Trait("Category", "Integration")]
 public class SessionCookieIntegrationTests : AspireIntegrationTestBase
@@ -69,7 +69,7 @@ public class SessionCookieIntegrationTests : AspireIntegrationTestBase
     }
 
     [Fact]
-    public async Task SessionCookie_InvalidAccessToken_NoRefresh_ClearsAndSkips()
+    public async Task SessionCookie_InvalidAccessToken_NoRefresh_Rejects()
     {
         // Arrange - set an invalid JWT as the access token cookie
         var handler = new HttpClientHandler();

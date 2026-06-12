@@ -27,6 +27,7 @@ public class RefreshTokenService : IRefreshTokenService
 {
     private readonly IFirstPartyTokenRepository _repository;
     private readonly IJwtService _jwtService;
+    private readonly IRotationSuccessorCache _successorCache;
     private readonly JwtOptions _options;
     private readonly ILogger<RefreshTokenService> _logger;
 
@@ -35,16 +36,19 @@ public class RefreshTokenService : IRefreshTokenService
     /// </summary>
     /// <param name="repository">Repository for refresh token persistence.</param>
     /// <param name="jwtService">Service for generating crypto-random tokens and computing token hashes.</param>
+    /// <param name="successorCache">Grace-period store replaying a rotation's successor to concurrent requests.</param>
     /// <param name="options">JWT configuration options including refresh token lifetime settings.</param>
     /// <param name="logger">The logger instance.</param>
     public RefreshTokenService(
         IFirstPartyTokenRepository repository,
         IJwtService jwtService,
+        IRotationSuccessorCache successorCache,
         IOptions<JwtOptions> options,
         ILogger<RefreshTokenService> logger)
     {
         _repository = repository;
         _jwtService = jwtService;
+        _successorCache = successorCache;
         _options = options.Value;
         _logger = logger;
     }
@@ -171,7 +175,17 @@ public class RefreshTokenService : IRefreshTokenService
         {
             // A concurrent request rotated this token between our read and our claim. Treat
             // it as a benign race: don't create a second successor (no fork) and don't revoke
-            // the family — the request that won carries the new cookie back to the client.
+            // the family. If the winner has already published its successor, hand that back so
+            // this request authenticates with the same pair the client is converging on.
+            var racedSuccessor = await _successorCache.GetAsync(tokenHash);
+            if (racedSuccessor != null)
+            {
+                _logger.LogDebug(
+                    "Lost refresh-token rotation race for subject {SubjectId} — replaying the winner's successor.",
+                    oldRecord.SubjectId);
+                return racedSuccessor;
+            }
+
             _logger.LogDebug(
                 "Lost refresh-token rotation race for subject {SubjectId} — a concurrent request rotated first.",
                 oldRecord.SubjectId);
@@ -179,6 +193,10 @@ public class RefreshTokenService : IRefreshTokenService
         }
 
         await _repository.CreateAsync(newRecord);
+
+        // Publish the successor for the grace window so concurrent requests still carrying
+        // the old cookie receive this same token instead of failing authentication.
+        await _successorCache.StoreAsync(tokenHash, newRefreshToken, RotationGracePeriod);
 
         _logger.LogDebug(
             "Rotated refresh token for subject {SubjectId}. Old: {OldTokenId}, New: {NewTokenId}",
@@ -190,7 +208,9 @@ public class RefreshTokenService : IRefreshTokenService
     /// <summary>
     /// Handles presentation of an already-revoked refresh token. Reuse of a rotated token
     /// within <see cref="RotationGracePeriod"/> is a concurrent-request race (the client had
-    /// not yet received the rotated cookie); beyond it, reuse signals the token leaked and the
+    /// not yet received the rotated cookie) — when the successor is still cached, it is
+    /// replayed so the request authenticates like the one that won the rotation. Beyond the
+    /// grace period, reuse signals the token leaked and the
     /// token family is revoked. Tokens revoked for any other reason are simply rejected.
     /// </summary>
     private async Task<string?> HandleReuseOfRevokedTokenAsync(RefreshTokenRecord oldRecord)
@@ -205,6 +225,16 @@ public class RefreshTokenService : IRefreshTokenService
         var timeSinceRevocation = DateTime.UtcNow - oldRecord.RevokedAt!.Value;
         if (timeSinceRevocation < RotationGracePeriod)
         {
+            var successor = await _successorCache.GetAsync(oldRecord.TokenHash);
+            if (successor != null)
+            {
+                _logger.LogDebug(
+                    "Refresh token reuse within grace period ({Elapsed:F1}s) for subject {SubjectId} — " +
+                    "concurrent request, replaying the rotation's successor.",
+                    timeSinceRevocation.TotalSeconds, oldRecord.SubjectId);
+                return successor;
+            }
+
             _logger.LogDebug(
                 "Refresh token reuse within grace period ({Elapsed:F1}s) for subject {SubjectId} — " +
                 "concurrent request, skipping family revocation.",

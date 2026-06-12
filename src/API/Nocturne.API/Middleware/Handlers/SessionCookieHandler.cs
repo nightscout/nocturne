@@ -79,12 +79,16 @@ public class SessionCookieHandler : IAuthHandler
 
             // Credentials were recognised (cookie present) but invalid — stop the chain.
             // Returning Failure (not Skip) prevents dev-mode auto-auth from kicking in
-            // with the stale request cookies after we've already cleared the response cookies.
+            // with the stale request cookies.
+            // Deliberately do NOT clear cookies here: the session cookies are domain-wide,
+            // so a deletion issued for a stale token (e.g. a restored tab still carrying
+            // yesterday's expired cookie) would wipe a newer session the browser obtained
+            // concurrently. The bad cookie simply keeps failing until the next login
+            // overwrites it.
             _logger.LogDebug(
-                "Access token validation failed ({Error}) and refresh failed, clearing session cookies",
+                "Access token validation failed ({Error}) and refresh failed",
                 validationResult.ErrorCode
             );
-            ClearSessionCookies(context);
             return AuthResult.Failure("Session expired or revoked");
         }
 
@@ -98,13 +102,11 @@ public class SessionCookieHandler : IAuthHandler
                 return refreshResult;
             }
 
-            // Had refresh token but it failed - clear cookies.
-            // Return Failure so the chain stops here rather than falling through to
-            // dev-mode auto-auth (which would re-authenticate using the stale request cookies).
-            _logger.LogDebug(
-                "No access token and refresh token validation failed, clearing session cookies"
-            );
-            ClearSessionCookies(context);
+            // Had refresh token but it failed. Return Failure so the chain stops here
+            // rather than falling through to dev-mode auto-auth (which would
+            // re-authenticate using the stale request cookies). No cookie clearing —
+            // see above.
+            _logger.LogDebug("No access token and refresh token validation failed");
             return AuthResult.Failure("Session expired or revoked");
         }
         // No cookies at all - just skip to next handler without clearing anything
@@ -138,7 +140,6 @@ public class SessionCookieHandler : IAuthHandler
 
             if (newTokens == null)
             {
-                ClearSessionCookies(context);
                 return null;
             }
 
@@ -242,22 +243,6 @@ public class SessionCookieHandler : IAuthHandler
                 Expires = DateTimeOffset.UtcNow.Add(_options.Session.RefreshTokenLifetime),
             }
         );
-    }
-
-    /// <summary>
-    /// Clear session cookies
-    /// </summary>
-    private void ClearSessionCookies(HttpContext context)
-    {
-        var cookieOptions = new CookieOptions
-        {
-            Path = _options.Cookie.Path,
-            Domain = _options.Cookie.Domain,
-        };
-
-        context.Response.Cookies.Delete(_options.Cookie.AccessTokenName, cookieOptions);
-        context.Response.Cookies.Delete(_options.Cookie.RefreshTokenName, cookieOptions);
-        context.Response.Cookies.Delete("IsAuthenticated", cookieOptions);
     }
 
     /// <summary>
