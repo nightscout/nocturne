@@ -16,4 +16,5 @@ public class AuditContext : IAuditContext
     public Guid? TokenId { get; set; }
     public string? CorrelationId { get; set; }
     public string? Endpoint { get; set; }
+    public bool IsSystem { get; set; }
 }

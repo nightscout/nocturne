@@ -19,6 +19,7 @@ public sealed class SystemAuditScope : IDisposable
     private readonly string? _authType;
     private readonly Guid? _tokenId;
     private readonly string? _ipAddress;
+    private readonly bool _isSystem;
 
     private SystemAuditScope(AuditContext target)
     {
@@ -28,12 +29,14 @@ public sealed class SystemAuditScope : IDisposable
         _authType = target.AuthType;
         _tokenId = target.TokenId;
         _ipAddress = target.IpAddress;
+        _isSystem = target.IsSystem;
 
         target.SubjectId = null;
         target.SubjectName = null;
         target.AuthType = null;
         target.TokenId = null;
         target.IpAddress = null;
+        target.IsSystem = true;
     }
 
     /// <summary>
@@ -54,6 +57,7 @@ public sealed class SystemAuditScope : IDisposable
         _target.AuthType = _authType;
         _target.TokenId = _tokenId;
         _target.IpAddress = _ipAddress;
+        _target.IsSystem = _isSystem;
     }
 
     private sealed class NoOpScope : IDisposable

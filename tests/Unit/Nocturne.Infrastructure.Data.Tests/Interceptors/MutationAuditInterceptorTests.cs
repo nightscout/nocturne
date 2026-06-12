@@ -593,8 +593,11 @@ public class MutationAuditInterceptorTests : IDisposable
     }
 
     [Fact]
-    public async Task Create_WithDbContextAuditContext_PopulatesActorFields()
+    public async Task Create_UnderSystemAuditContext_ProducesNoAuditRecord()
     {
+        // System/connector/background mutations carry IsSystem=true and are NOT audited —
+        // their provenance lives on the records themselves. Regression guard for the
+        // mutation_audit_log firehose (~1.8M actorless rows/day) that filled prod disk.
         using var context = CreateContext();
         context.AuditContext = SystemAuditContext.ForService("service:demo-generator");
 
@@ -610,13 +613,34 @@ public class MutationAuditInterceptorTests : IDisposable
 
         await InvokeSavingChanges(context);
 
-        var log = context.ChangeTracker.Entries<MutationAuditLogEntity>()
-            .Select(e => e.Entity).Single();
-        log.AuthType.Should().Be("system");
-        log.Endpoint.Should().Be("service:demo-generator");
-        log.CorrelationId.Should().NotBeNullOrEmpty();
-        log.SubjectId.Should().BeNull();
-        log.IpAddress.Should().BeNull();
+        context.ChangeTracker.Entries<MutationAuditLogEntity>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SoftDelete_UnderSystemAuditContext_MaintainsDeletedByUser_ButProducesNoAuditRecord()
+    {
+        // The dedup/soft-delete maintenance must still run for system mutations even though
+        // no audit row is written, so connector resync semantics are unchanged.
+        using var context = CreateContext();
+        var entity = new TestAuditableEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            Name = "SystemDeleteMe",
+            DeletedAt = null
+        };
+        context.TestAuditables.Add(entity);
+        await context.SaveChangesAsync();
+
+        using var context2 = CreateContext();
+        context2.AuditContext = SystemAuditContext.ForService("connector:dexcom");
+        var tracked = await context2.TestAuditables.FindAsync(entity.Id);
+        tracked!.DeletedAt = DateTime.UtcNow;
+
+        await InvokeSavingChanges(context2);
+
+        context2.Entry(tracked).Property("DeletedByUser").CurrentValue.Should().NotBeNull();
+        context2.ChangeTracker.Entries<MutationAuditLogEntity>().Should().BeEmpty();
     }
 
     /// <summary>

@@ -24,6 +24,7 @@ public class SystemAuditScopeTests
             ambient.AuthType.Should().BeNull();
             ambient.TokenId.Should().BeNull();
             ambient.IpAddress.Should().BeNull();
+            ambient.IsSystem.Should().BeTrue();
             ambient.CorrelationId.Should().Be("trace-123");
             ambient.Endpoint.Should().Be("POST /api/sync");
         }
@@ -44,6 +45,7 @@ public class SystemAuditScopeTests
 
         ambient.SubjectId.Should().Be(originalSubject);
         ambient.AuthType.Should().Be("Bearer");
+        ambient.IsSystem.Should().BeFalse();
     }
 
     [Fact]
