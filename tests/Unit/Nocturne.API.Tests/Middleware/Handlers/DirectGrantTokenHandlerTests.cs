@@ -136,6 +136,87 @@ public class DirectGrantTokenHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task AuthenticateAsync_TokenQueryParam_ReturnsSuccess()
+    {
+        // Nightscout uploaders (xDrip4iOS etc.) send the token as ?token=noc_...
+        var token = "noc_querytoken12345";
+        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+
+        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        {
+            ctx.OAuthGrants.Add(new OAuthGrantEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = _subjectId,
+                GrantType = OAuthGrantTypes.Direct,
+                TokenHash = tokenHash,
+                Scopes = ["glucose.readwrite"],
+                CreatedAt = DateTime.UtcNow,
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        var context = CreateHttpContext();
+        context.Request.QueryString = new QueryString($"?token={token}");
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.AuthContext);
+        Assert.Equal(AuthType.DirectGrant, result.AuthContext!.AuthType);
+        Assert.Equal(_subjectId, result.AuthContext.SubjectId);
+        Assert.Contains("glucose.readwrite", result.AuthContext.Scopes);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_TokenQueryParamWithoutPrefix_ReturnsSuccess()
+    {
+        // xDrip4iOS drops the human-facing "noc_" marker and sends only the secret suffix.
+        // The bare suffix must still resolve to the grant stored under the full noc_ token.
+        var token = "noc_baretoken1234567";
+        var bareSuffix = token["noc_".Length..];
+        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+
+        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        {
+            ctx.OAuthGrants.Add(new OAuthGrantEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = _subjectId,
+                GrantType = OAuthGrantTypes.Direct,
+                TokenHash = tokenHash,
+                Scopes = ["glucose.readwrite"],
+                CreatedAt = DateTime.UtcNow,
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        var context = CreateHttpContext();
+        context.Request.QueryString = new QueryString($"?token={bareSuffix}");
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(AuthType.DirectGrant, result.AuthContext!.AuthType);
+        Assert.Equal(_subjectId, result.AuthContext.SubjectId);
+        Assert.Contains("glucose.readwrite", result.AuthContext.Scopes);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_LegacyTokenQueryParam_ReturnsSkip()
+    {
+        // A legacy name-hash access token in ?token= matches no direct grant, so this handler
+        // must Skip (not Fail) and let it fall through to AccessTokenHandler.
+        var context = CreateHttpContext();
+        context.Request.QueryString = new QueryString("?token=rhys-a1b2c3d4e5f6g7h8");
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.ShouldSkip);
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
     public async Task AuthenticateAsync_InvalidOpaqueToken_ReturnsSkip()
     {
         var context = CreateHttpContext();
