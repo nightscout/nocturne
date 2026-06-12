@@ -417,8 +417,13 @@ public class DeduplicationService : IDeduplicationService
         var minMills = records.Min(r => r.Mills) - MatchingWindowMillis;
         var maxMills = records.Max(r => r.Mills) + MatchingWindowMillis;
 
-        // 2. One query: all linked_records in the window for this type
+        // 2. One query: all linked_records in the window for this type.
+        //    Read-only: matched against, never mutated — the new links are constructed fresh
+        //    below and AddRange'd. AsNoTracking avoids change-tracker snapshots, which for a
+        //    wide-window historical backfill batch (thousands of records spanning months) would
+        //    otherwise materialize tens of thousands of tracked entities and exhaust memory.
         var allPotentialMatches = await _context.LinkedRecords
+            .AsNoTracking()
             .Where(lr => lr.RecordType == recordTypeStr)
             .Where(lr => lr.SourceTimestamp >= minMills && lr.SourceTimestamp <= maxMills)
             .ToListAsync(ct);
@@ -572,7 +577,10 @@ public class DeduplicationService : IDeduplicationService
         if (candidateCanonicalIds == null)
         {
             // Full reconcile: load every primary of this type, ordered by source timestamp.
+            // Read-only (union-find input); the rows actually re-pointed below are loaded
+            // separately and tracked. AsNoTracking keeps this O(all primaries) read off the heap.
             primaries = await _context.LinkedRecords
+                .AsNoTracking()
                 .Where(lr => lr.RecordType == recordTypeStr && lr.IsPrimary)
                 .OrderBy(lr => lr.SourceTimestamp)
                 .ToListAsync(ct);
@@ -584,6 +592,7 @@ public class DeduplicationService : IDeduplicationService
             // neighbour query to [minCandidateTs - window, maxCandidateTs + window]. This keeps
             // the candidate path O(candidates + window-slice) rather than O(all primaries).
             var candidatePrimaries = await _context.LinkedRecords
+                .AsNoTracking()
                 .Where(lr => lr.RecordType == recordTypeStr && lr.IsPrimary
                              && candidateCanonicalIds.Contains(lr.CanonicalId))
                 .ToListAsync(ct);
@@ -595,6 +604,7 @@ public class DeduplicationService : IDeduplicationService
             var maxTs = candidatePrimaries.Max(p => p.SourceTimestamp) + MatchingWindowMillis;
 
             primaries = await _context.LinkedRecords
+                .AsNoTracking()
                 .Where(lr => lr.RecordType == recordTypeStr && lr.IsPrimary
                              && lr.SourceTimestamp >= minTs && lr.SourceTimestamp <= maxTs)
                 .OrderBy(lr => lr.SourceTimestamp)
@@ -860,56 +870,56 @@ public class DeduplicationService : IDeduplicationService
         {
             case RecordType.SensorGlucose:
             {
-                var records = await _context.SensorGlucose.IgnoreQueryFilters()
+                var records = await _context.SensorGlucose.AsNoTracking().IgnoreQueryFilters()
                     .Where(e => e.TenantId == _context.TenantId && ids.Contains(e.Id)).ToListAsync(ct);
                 return records.ToDictionary(e => e.Id,
                     e => new RecordInfo(BuildCriteria(e), e.DeletedAt != null));
             }
             case RecordType.Bolus:
             {
-                var records = await _context.Boluses.IgnoreQueryFilters()
+                var records = await _context.Boluses.AsNoTracking().IgnoreQueryFilters()
                     .Where(b => b.TenantId == _context.TenantId && ids.Contains(b.Id)).ToListAsync(ct);
                 return records.ToDictionary(b => b.Id,
                     b => new RecordInfo(BuildCriteria(b), b.DeletedAt != null));
             }
             case RecordType.CarbIntake:
             {
-                var records = await _context.CarbIntakes.IgnoreQueryFilters()
+                var records = await _context.CarbIntakes.AsNoTracking().IgnoreQueryFilters()
                     .Where(c => c.TenantId == _context.TenantId && ids.Contains(c.Id)).ToListAsync(ct);
                 return records.ToDictionary(c => c.Id,
                     c => new RecordInfo(BuildCriteria(c), c.DeletedAt != null));
             }
             case RecordType.BGCheck:
             {
-                var records = await _context.BGChecks.IgnoreQueryFilters()
+                var records = await _context.BGChecks.AsNoTracking().IgnoreQueryFilters()
                     .Where(bg => bg.TenantId == _context.TenantId && ids.Contains(bg.Id)).ToListAsync(ct);
                 return records.ToDictionary(bg => bg.Id,
                     bg => new RecordInfo(BuildCriteria(bg), bg.DeletedAt != null));
             }
             case RecordType.DeviceEvent:
             {
-                var records = await _context.DeviceEvents.IgnoreQueryFilters()
+                var records = await _context.DeviceEvents.AsNoTracking().IgnoreQueryFilters()
                     .Where(d => d.TenantId == _context.TenantId && ids.Contains(d.Id)).ToListAsync(ct);
                 return records.ToDictionary(d => d.Id,
                     d => new RecordInfo(BuildCriteria(d), d.DeletedAt != null));
             }
             case RecordType.Note:
             {
-                var records = await _context.Notes.IgnoreQueryFilters()
+                var records = await _context.Notes.AsNoTracking().IgnoreQueryFilters()
                     .Where(n => n.TenantId == _context.TenantId && ids.Contains(n.Id)).ToListAsync(ct);
                 return records.ToDictionary(n => n.Id,
                     n => new RecordInfo(BuildNoteCriteria(), n.DeletedAt != null));
             }
             case RecordType.BolusCalculation:
             {
-                var records = await _context.BolusCalculations.IgnoreQueryFilters()
+                var records = await _context.BolusCalculations.AsNoTracking().IgnoreQueryFilters()
                     .Where(bc => bc.TenantId == _context.TenantId && ids.Contains(bc.Id)).ToListAsync(ct);
                 return records.ToDictionary(bc => bc.Id,
                     bc => new RecordInfo(BuildCriteria(bc), bc.DeletedAt != null));
             }
             case RecordType.TempBasal:
             {
-                var records = await _context.TempBasals.IgnoreQueryFilters()
+                var records = await _context.TempBasals.AsNoTracking().IgnoreQueryFilters()
                     .Where(t => t.TenantId == _context.TenantId && ids.Contains(t.Id)).ToListAsync(ct);
                 return records.ToDictionary(t => t.Id,
                     t => new RecordInfo(BuildCriteria(t), t.DeletedAt != null));
@@ -917,7 +927,7 @@ public class DeduplicationService : IDeduplicationService
             case RecordType.StateSpan:
             {
                 // StateSpanEntity has no DeletedAt column, so IsDeleted is always false.
-                var records = await _context.StateSpans.IgnoreQueryFilters()
+                var records = await _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
                     .Where(s => s.TenantId == _context.TenantId && ids.Contains(s.Id)).ToListAsync(ct);
                 return records.ToDictionary(s => s.Id,
                     s => new RecordInfo(BuildCriteria(s), false));
@@ -946,6 +956,7 @@ public class DeduplicationService : IDeduplicationService
             case RecordType.TempBasal:
             {
                 var records = (await _context.TempBasals
+                    .AsNoTracking()
                     .Where(t => ids.Contains(t.Id))
                     .ToListAsync(ct))
                     .ToDictionary(t => t.Id);
@@ -956,6 +967,7 @@ public class DeduplicationService : IDeduplicationService
             case RecordType.SensorGlucose:
             {
                 var records = (await _context.SensorGlucose
+                    .AsNoTracking()
                     .Where(s => ids.Contains(s.Id))
                     .ToListAsync(ct))
                     .ToDictionary(s => s.Id);
@@ -966,6 +978,7 @@ public class DeduplicationService : IDeduplicationService
             case RecordType.Bolus:
             {
                 var records = (await _context.Boluses
+                    .AsNoTracking()
                     .Where(b => ids.Contains(b.Id))
                     .ToListAsync(ct))
                     .ToDictionary(b => b.Id);
@@ -976,6 +989,7 @@ public class DeduplicationService : IDeduplicationService
             case RecordType.CarbIntake:
             {
                 var records = (await _context.CarbIntakes
+                    .AsNoTracking()
                     .Where(c => ids.Contains(c.Id))
                     .ToListAsync(ct))
                     .ToDictionary(c => c.Id);
@@ -986,6 +1000,7 @@ public class DeduplicationService : IDeduplicationService
             case RecordType.BGCheck:
             {
                 var records = (await _context.BGChecks
+                    .AsNoTracking()
                     .Where(bg => ids.Contains(bg.Id))
                     .ToListAsync(ct))
                     .ToDictionary(bg => bg.Id);
@@ -996,6 +1011,7 @@ public class DeduplicationService : IDeduplicationService
             case RecordType.DeviceEvent:
             {
                 var records = (await _context.DeviceEvents
+                    .AsNoTracking()
                     .Where(d => ids.Contains(d.Id))
                     .ToListAsync(ct))
                     .ToDictionary(d => d.Id);
@@ -1008,6 +1024,7 @@ public class DeduplicationService : IDeduplicationService
             case RecordType.BolusCalculation:
             {
                 var records = (await _context.BolusCalculations
+                    .AsNoTracking()
                     .Where(bc => ids.Contains(bc.Id))
                     .ToListAsync(ct))
                     .ToDictionary(bc => bc.Id);
@@ -1018,6 +1035,7 @@ public class DeduplicationService : IDeduplicationService
             case RecordType.StateSpan:
             {
                 var records = (await _context.StateSpans
+                    .AsNoTracking()
                     .Where(s => ids.Contains(s.Id))
                     .ToListAsync(ct))
                     .ToDictionary(s => s.Id);
