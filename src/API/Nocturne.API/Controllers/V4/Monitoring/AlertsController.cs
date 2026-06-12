@@ -189,6 +189,43 @@ public class AlertsController : ControllerBase
     }
 
     /// <summary>
+    /// Acknowledge a single alert excursion, halting escalation delivery for its
+    /// active instances. Acknowledging an excursion that is already acknowledged
+    /// or already closed is a no-op. Returns 404 when the excursion does not
+    /// exist for the current tenant.
+    /// </summary>
+    /// <seealso cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/>
+    [HttpPost("excursions/{excursionId:guid}/acknowledge")]
+    [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> AcknowledgeExcursion(
+        Guid excursionId, [FromBody] AcknowledgeRequest request, CancellationToken ct)
+    {
+        var tenantId = _tenantAccessor.TenantId;
+
+        // The acknowledgement service silently no-ops on an unknown excursion, so
+        // resolve existence here (tenant-scoped context — another tenant's
+        // excursion is invisible and yields 404).
+        await using var db = await _contextFactory.CreateAsync(ct);
+        var exists = await db.AlertExcursions
+            .AsNoTracking()
+            .AnyAsync(e => e.Id == excursionId, ct);
+
+        if (!exists)
+            return NotFound();
+
+        await _acknowledgementService.AcknowledgeExcursionAsync(
+            tenantId,
+            excursionId,
+            request.AcknowledgedBy ?? "unknown",
+            broadcast: true,
+            ct);
+
+        return NoContent();
+    }
+
+    /// <summary>
     /// Snooze an alert instance for the specified duration.
     /// </summary>
     [HttpPost("instances/{instanceId:guid}/snooze")]
