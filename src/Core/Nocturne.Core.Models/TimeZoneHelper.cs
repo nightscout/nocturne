@@ -49,9 +49,9 @@ public static class TimeZoneHelper
             && TryFindSystemTimeZone(ianaId, out timeZone))
             return true;
 
-        // Last resort: case-insensitive match against the system zone table. IANA IDs are
-        // technically case-sensitive — and Linux's zoneinfo lookup is too — but connector data
-        // frequently carries mis-cased IDs. Resolving them preserves the intended offset.
+        // Case-insensitive match against the system zone table. IANA IDs are technically
+        // case-sensitive — and Linux's zoneinfo lookup is too — but connector data frequently
+        // carries mis-cased IDs. Resolving them preserves the intended offset.
         foreach (var zone in TimeZoneInfo.GetSystemTimeZones())
         {
             if (string.Equals(zone.Id, timezoneId, StringComparison.OrdinalIgnoreCase))
@@ -61,8 +61,34 @@ public static class TimeZoneHelper
             }
         }
 
+        // Last resort: canonicalize the casing of the fixed-offset Etc/GMT±N family and retry the
+        // direct lookup. These zones are loadable by exact ID but are excluded from
+        // GetSystemTimeZones() enumeration on some runtimes (so the scan above can't catch a
+        // mis-cased one) — which is exactly the prod data: ~240 rows carry "ETC/GMT-2" etc.
+        if (TryNormalizeEtcId(timezoneId, out var canonicalId)
+            && TryFindSystemTimeZone(canonicalId, out timeZone))
+            return true;
+
         timeZone = TimeZoneInfo.Utc;
         return false;
+    }
+
+    /// <summary>
+    /// Canonicalizes the casing of an <c>Etc/*</c> timezone ID (e.g. <c>ETC/GMT-2</c> → <c>Etc/GMT-2</c>).
+    /// Etc zone names after the prefix are all-uppercase tokens (<c>GMT</c>, <c>GMT-2</c>, <c>UTC</c>,
+    /// <c>UCT</c>, <c>GMT0</c>), so uppercasing the remainder yields the canonical IANA form for the
+    /// offset family. Returns <see langword="false"/> for non-Etc IDs; a wrongly-cased result simply
+    /// fails the subsequent lookup and degrades to UTC, so this never mis-resolves.
+    /// </summary>
+    private static bool TryNormalizeEtcId(string id, out string normalized)
+    {
+        normalized = id;
+        var slash = id.IndexOf('/');
+        if (slash <= 0 || !id.AsSpan(0, slash).Equals("Etc", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        normalized = string.Concat("Etc/", id.AsSpan(slash + 1).ToString().ToUpperInvariant());
+        return true;
     }
 
     /// <summary>
