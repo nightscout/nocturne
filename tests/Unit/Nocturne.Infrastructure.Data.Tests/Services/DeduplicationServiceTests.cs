@@ -467,6 +467,72 @@ public class DeduplicationServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeduplicateBatchAsync_ChunksLargeBatch_AndMergesAcrossChunkBoundary()
+    {
+        // A connector backfill can hand the dedup pass thousands of records spanning a wide
+        // time window. DeduplicateBatchAsync sorts by event time and slices into DedupChunkSize
+        // (500) chunks so each matching-window query stays narrow. This guards two things:
+        // (1) the whole batch is processed across chunks, and (2) a duplicate pair that lands on
+        // opposite sides of a chunk boundary still merges — the later chunk's window query
+        // re-reads the earlier chunk's freshly-written link.
+        await using var context = new NocturneDbContext(_contextOptions);
+        context.TenantId = TestTenantId;
+        var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new Mock<ILogger<DeduplicationService>>();
+        var service = new DeduplicationService(context, scopeFactory, logger.Object);
+
+        var baseTime = new DateTime(2025, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+
+        // 500 distinct records, 1 minute apart (well outside the 30s window), distinct rates.
+        // After sorting these occupy the first chunk (indices 0..499); the last of them is the
+        // partner for the boundary-straddling duplicate below.
+        var entities = new List<TempBasalEntity>();
+        for (var i = 0; i < 500; i++)
+        {
+            entities.Add(CreateTestTempBasalEntity(
+                startTimestamp: baseTime.AddMinutes(i),
+                rate: 1.0 + i, // 1.0 spacing >> 0.05 tolerance, so no accidental matches
+                origin: "Scheduled",
+                dataSource: "glooko-connector"));
+        }
+
+        // Duplicate of the 500th record (same rate, 5s later) from another connector. Sorted by
+        // time it lands at index 500 — the first record of the second chunk — so the matching
+        // partner sits in the previous chunk.
+        var partner = entities[499];
+        var boundaryDuplicate = CreateTestTempBasalEntity(
+            startTimestamp: partner.StartTimestamp.AddSeconds(5),
+            rate: partner.Rate,
+            origin: "Scheduled",
+            dataSource: "mylife-connector");
+        entities.Add(boundaryDuplicate);
+
+        context.TempBasals.AddRange(entities);
+        await context.SaveChangesAsync();
+
+        // Feed inputs with the boundary duplicate out of time order to prove the sort, not the
+        // input order, is what places records into chunks.
+        var inputs = entities.Select(ToDeduplicationInput).ToList();
+
+        // Act
+        var result = await service.DeduplicateBatchAsync(RecordType.TempBasal, inputs);
+
+        // Assert
+        result.Processed.Should().Be(501);
+        result.RecordsLinked.Should().Be(501, "every record links even when the batch spans multiple chunks");
+
+        var linkedRecords = await context.LinkedRecords.ToListAsync();
+        linkedRecords.Should().HaveCount(501);
+        linkedRecords.Select(lr => lr.CanonicalId).Distinct().Should().HaveCount(500,
+            "the cross-chunk duplicate pair collapses into a single canonical group");
+
+        var partnerCanonical = linkedRecords.Single(lr => lr.RecordId == partner.Id).CanonicalId;
+        var duplicateCanonical = linkedRecords.Single(lr => lr.RecordId == boundaryDuplicate.Id).CanonicalId;
+        duplicateCanonical.Should().Be(partnerCanonical,
+            "a duplicate straddling a chunk boundary must still share its partner's canonical ID");
+    }
+
+    [Fact]
     public async Task DeduplicateBatchAsync_SkipsAlreadyLinkedRecords()
     {
         // Arrange

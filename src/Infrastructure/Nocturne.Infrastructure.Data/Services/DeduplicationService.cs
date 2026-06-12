@@ -25,6 +25,15 @@ public class DeduplicationService : IDeduplicationService
     private static readonly long MatchingWindowMillis = (long)MatchingWindow.TotalMilliseconds;
 
     /// <summary>
+    /// Maximum number of records processed per <see cref="DeduplicateBatchAsync"/> matching-window
+    /// query. A connector backfill can hand the dedup pass thousands of records spanning months;
+    /// sorting by event time and slicing into chunks of this size keeps each window query's time
+    /// span narrow so it stays an index range scan over a few hundred rows rather than loading
+    /// millions of <c>linked_records</c> for a high-volume tenant.
+    /// </summary>
+    private const int DedupChunkSize = 500;
+
+    /// <summary>
     /// How far before the watermark each reconcile chunk re-reads. Covers links whose
     /// SysCreatedAt straddles a previous batch boundary; re-processing them is idempotent
     /// because <see cref="MergeDuplicateGroupsAsync"/> is a no-op once a region is merged.
@@ -407,6 +416,47 @@ public class DeduplicationService : IDeduplicationService
         RecordType recordType,
         IReadOnlyList<DeduplicationInput> records,
         CancellationToken ct = default)
+    {
+        if (records.Count == 0)
+            return new DeduplicationBatchResult(0, 0, 0, 0);
+
+        // Small batches go straight through; only large backfill batches pay the sort.
+        if (records.Count <= DedupChunkSize)
+            return await DeduplicateChunkAsync(recordType, records, ct);
+
+        // Sort by event time and process in chunks so each chunk's matching-window query
+        // spans only a narrow range. Chunks run in time order and each is persisted before
+        // the next, so a record at a chunk boundary still matches its neighbour in the
+        // adjacent chunk through the freshly-written rows the next window query re-reads
+        // (the +/-MatchingWindow expansion covers the seam); ReconcileNewLinksAsync collapses
+        // any residual cross-chunk pair idempotently.
+        var ordered = records.OrderBy(r => r.Mills).ToList();
+        var processed = 0;
+        var groupsCreated = 0;
+        var recordsLinked = 0;
+        var duplicateGroups = 0;
+
+        foreach (var chunk in ordered.Chunk(DedupChunkSize))
+        {
+            var result = await DeduplicateChunkAsync(recordType, chunk, ct);
+            processed += result.Processed;
+            groupsCreated += result.GroupsCreated;
+            recordsLinked += result.RecordsLinked;
+            duplicateGroups += result.DuplicateGroups;
+        }
+
+        return new DeduplicationBatchResult(processed, groupsCreated, recordsLinked, duplicateGroups);
+    }
+
+    /// <summary>
+    /// Links a single bounded chunk of records to canonical groups in one matching-window query.
+    /// Callers must keep <paramref name="records"/> within <see cref="DedupChunkSize"/> and time
+    /// contiguous; <see cref="DeduplicateBatchAsync"/> is the entry point that enforces both.
+    /// </summary>
+    private async Task<DeduplicationBatchResult> DeduplicateChunkAsync(
+        RecordType recordType,
+        IReadOnlyList<DeduplicationInput> records,
+        CancellationToken ct)
     {
         if (records.Count == 0)
             return new DeduplicationBatchResult(0, 0, 0, 0);
