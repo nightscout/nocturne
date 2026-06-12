@@ -330,17 +330,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         var atUtc = DateTime.SpecifyKind(at, DateTimeKind.Utc);
         var atLocal = atUtc;
         if (!string.IsNullOrEmpty(tenantTimeZoneId))
-        {
-            try
-            {
-                var tz = TimeZoneInfo.FindSystemTimeZoneById(tenantTimeZoneId);
-                atLocal = TimeZoneInfo.ConvertTimeFromUtc(atUtc, tz);
-            }
-            catch
-            {
-                atLocal = atUtc;
-            }
-        }
+            atLocal = TimeZoneInfo.ConvertTimeFromUtc(atUtc, TimeZoneHelper.GetTimeZoneInfoFromId(tenantTimeZoneId));
 
         var sortedEntries = schedule.Entries.OrderBy(e => e.TimeAsSeconds ?? 0).ToList();
         var localTime = TimeOnly.FromDateTime(atLocal);

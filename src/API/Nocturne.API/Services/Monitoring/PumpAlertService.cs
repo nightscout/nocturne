@@ -476,7 +476,7 @@ public class PumpAlertService : IPumpAlertService
             if (string.IsNullOrEmpty(timezone))
                 return true;
 
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
+            var tz = TimeZoneHelper.GetTimeZoneInfoFromId(timezone);
             var localTime = TimeZoneInfo.ConvertTimeFromUtc(
                 DateTimeOffset.FromUnixTimeMilliseconds(currentTime).UtcDateTime,
                 tz

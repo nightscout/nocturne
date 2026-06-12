@@ -187,20 +187,5 @@ internal sealed class TherapyTimelineResolver : ITherapyTimelineResolver
     }
 
     private static TimeZoneInfo? ResolveTimezone(string? id)
-    {
-        if (string.IsNullOrEmpty(id))
-            return null;
-        try
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById(id);
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            return null;
-        }
-        catch (InvalidTimeZoneException)
-        {
-            return null;
-        }
-    }
+        => TimeZoneHelper.TryGetTimeZoneInfoFromId(id, out var tz) ? tz : null;
 }

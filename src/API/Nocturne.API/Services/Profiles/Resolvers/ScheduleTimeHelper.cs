@@ -1,4 +1,5 @@
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -26,21 +27,7 @@ internal static class ScheduleTimeHelper
         var dto = DateTimeOffset.FromUnixTimeMilliseconds(timeMills);
 
         if (!string.IsNullOrEmpty(timezone))
-        {
-            try
-            {
-                var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
-                dto = TimeZoneInfo.ConvertTime(dto, tz);
-            }
-            catch (TimeZoneNotFoundException)
-            {
-                // Fall through to UTC
-            }
-            catch (InvalidTimeZoneException)
-            {
-                // Fall through to UTC
-            }
-        }
+            dto = TimeZoneInfo.ConvertTime(dto, TimeZoneHelper.GetTimeZoneInfoFromId(timezone));
 
         return (int)dto.TimeOfDay.TotalSeconds;
     }
