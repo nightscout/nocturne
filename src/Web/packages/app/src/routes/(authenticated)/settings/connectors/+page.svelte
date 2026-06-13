@@ -38,6 +38,7 @@
     ChevronRight,
     Loader2,
     KeyRound,
+    Smartphone,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
@@ -46,6 +47,7 @@
   import ApiTokens from "$lib/components/settings/ApiTokens.svelte";
   import DeduplicationDialog from "$lib/components/connectors/DeduplicationDialog.svelte";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
+  import PreludeQuickConnect from "$lib/components/PreludeQuickConnect.svelte";
   import UploaderSetupDialog from "$lib/components/connectors/UploaderSetupDialog.svelte";
   import ConnectorDetailsDialog from "$lib/components/connectors/ConnectorDetailsDialog.svelte";
   import ManualSyncDialog, { type BatchSyncResult } from "$lib/components/connectors/ManualSyncDialog.svelte";
@@ -445,6 +447,24 @@
             {/each}
           </div>
         {/if}
+      </CardContent>
+    </Card>
+
+    <!-- Connect Prelude (Android follower — OAuth device-grant QR pairing) -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <Smartphone class="h-5 w-5" />
+          Connect Prelude
+        </CardTitle>
+        <CardDescription>
+          Pair the Prelude Android app by scanning a QR and approving a short code
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <PreludeQuickConnect
+          instanceUrl={typeof window !== "undefined" ? window.location.origin : ""}
+        />
       </CardContent>
     </Card>
 

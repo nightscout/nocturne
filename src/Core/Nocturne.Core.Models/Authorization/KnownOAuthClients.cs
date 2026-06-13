@@ -123,6 +123,20 @@ public static class KnownOAuthClients
         },
         new()
         {
+            SoftwareId = "dev.nocturne.prelude",
+            DisplayName = "Prelude",
+            Homepage = "https://github.com/nightscout/prelude",
+            LogoUri = "/logos/prelude.svg",
+            RedirectUris = ["dev.nocturne.prelude://oauth/callback"],
+            TypicalScopes =
+            [
+                OAuthScopes.GlucoseRead,
+                OAuthScopes.TreatmentsRead,
+                OAuthScopes.DevicesRead,
+            ],
+        },
+        new()
+        {
             SoftwareId = "com.nocturne.widget.windows",
             DisplayName = "Nocturne Windows Widget",
             Homepage = "https://github.com/nightscout/nocturne",
