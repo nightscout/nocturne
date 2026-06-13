@@ -33,7 +33,8 @@ public class ChatBotProviderTests
 
     private static ChatBotProvider CreateProvider(
         MockHttpMessageHandler handler,
-        string? webUrl = "https://web.example.com")
+        string? webUrl = "https://web.example.com",
+        string? baseUrl = null)
     {
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
 
@@ -44,6 +45,7 @@ public class ChatBotProviderTests
 
         var configMock = new Mock<IConfiguration>();
         configMock.Setup(c => c["WEB_URL"]).Returns(webUrl);
+        configMock.Setup(c => c["BaseUrl"]).Returns(baseUrl);
 
         var logger = NullLoggerFactory.Instance.CreateLogger<ChatBotProvider>();
 
@@ -91,11 +93,28 @@ public class ChatBotProviderTests
     }
 
     [Fact]
-    public async Task SendAsync_LogsWarning_WhenWebUrlNotConfigured()
+    public async Task SendAsync_FallsBackToBaseUrl_WhenWebUrlNotConfigured()
+    {
+        // Arrange -- no WEB_URL (the nocturne-cloud deployment shape), only the
+        // public base URL, which routes /api/v4/bot/dispatch to web via the gateway.
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler, webUrl: "", baseUrl: "https://nocturne.run");
+
+        // Act
+        await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        // Assert
+        handler.CapturedRequest.Should().NotBeNull();
+        handler.CapturedRequest!.RequestUri!.ToString()
+            .Should().Be("https://nocturne.run/api/v4/bot/dispatch");
+    }
+
+    [Fact]
+    public async Task SendAsync_LogsWarning_WhenNeitherUrlConfigured()
     {
         // Arrange
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
-        var provider = CreateProvider(handler, webUrl: "");
+        var provider = CreateProvider(handler, webUrl: "", baseUrl: "");
 
         // Act -- should return early without throwing
         await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);

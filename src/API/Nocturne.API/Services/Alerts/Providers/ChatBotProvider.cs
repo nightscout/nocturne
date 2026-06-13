@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 
@@ -9,8 +10,11 @@ namespace Nocturne.API.Services.Alerts.Providers;
 /// to the Nocturne bot service over HTTP.
 /// </summary>
 /// <remarks>
-/// The bot endpoint is derived from the <c>WEB_URL</c> configuration value.
-/// Delivery is skipped with a warning when that value is not set.
+/// The bot endpoint is derived from <c>WEB_URL</c> when set (the internal web
+/// endpoint wired by the AppHost), otherwise from the deployment's public base
+/// URL (<see cref="ServiceNames.ConfigKeys.BaseUrl"/>) — which reaches the same
+/// SvelteKit dispatch route through the gateway. Delivery is skipped with a
+/// warning when neither is configured.
 /// </remarks>
 internal sealed class ChatBotProvider(
     IHttpClientFactory httpClientFactory,
@@ -45,7 +49,12 @@ internal sealed class ChatBotProvider(
         var webUrl = configuration["WEB_URL"];
         if (string.IsNullOrEmpty(webUrl))
         {
-            logger.LogWarning("WEB_URL not configured, cannot dispatch to chat bot");
+            webUrl = configuration[ServiceNames.ConfigKeys.BaseUrl];
+        }
+
+        if (string.IsNullOrEmpty(webUrl))
+        {
+            logger.LogWarning("Neither WEB_URL nor BaseUrl configured, cannot dispatch to chat bot");
             return;
         }
 
