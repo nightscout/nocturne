@@ -556,6 +556,68 @@ public class TreatmentDecomposerTests : IDisposable
     }
 
     [Fact]
+    public async Task DecomposeAsync_NoIdButSyncIdentifier_AdoptsSyncIdentifierAsLegacyId()
+    {
+        // iOS uploaders (xDrip4iOS, Trio, Loop) omit _id and send only a syncIdentifier.
+        var treatment = new Treatment
+        {
+            Id = null,
+            SyncIdentifier = "xdrip-bg-sync-1",
+            EventType = "BG Check",
+            Mills = 1700000000000,
+            Glucose = 250,
+            GlucoseType = "Finger",
+            Units = "mg/dl"
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        result.CreatedRecords.Should().HaveCount(1);
+        var bgCheck = result.CreatedRecords[0].Should().BeOfType<V4Models.BGCheck>().Subject;
+        bgCheck.LegacyId.Should().Be("xdrip-bg-sync-1");
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_ReuploadedTreatmentWithSameSyncIdentifier_UpdatesInsteadOfDuplicating()
+    {
+        // Reproduces haribo's duplicate finger-BG flood: an iOS uploader re-sends the same
+        // treatment every sync with no _id but a stable syncIdentifier. Each upload arrives
+        // as a freshly deserialized object (Id null), so dedup must key on the syncIdentifier.
+        var firstUpload = new Treatment
+        {
+            Id = null,
+            SyncIdentifier = "xdrip-bg-sync-dup",
+            EventType = "BG Check",
+            Mills = 1700000000000,
+            Glucose = 250,
+            GlucoseType = "Finger",
+            Units = "mg/dl"
+        };
+        var secondUpload = new Treatment
+        {
+            Id = null,
+            SyncIdentifier = "xdrip-bg-sync-dup",
+            EventType = "BG Check",
+            Mills = 1700000000000,
+            Glucose = 250,
+            GlucoseType = "Finger",
+            Units = "mg/dl"
+        };
+
+        var firstResult = await _decomposer.DecomposeAsync(firstUpload);
+        firstResult.CreatedRecords.Should().HaveCount(1);
+        firstResult.UpdatedRecords.Should().BeEmpty();
+
+        var secondResult = await _decomposer.DecomposeAsync(secondUpload);
+
+        // No duplicate row — the re-upload updates the existing BGCheck.
+        secondResult.CreatedRecords.Should().BeEmpty();
+        secondResult.UpdatedRecords.Should().HaveCount(1);
+        secondResult.UpdatedRecords[0].Should().BeOfType<V4Models.BGCheck>()
+            .Subject.LegacyId.Should().Be("xdrip-bg-sync-dup");
+    }
+
+    [Fact]
     public async Task DecomposeAsync_MealBolusTwice_UpdatesBothBolusAndCarbIntake()
     {
         // Arrange

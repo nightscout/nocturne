@@ -117,9 +117,28 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         _logger = logger;
     }
 
+    /// <summary>
+    /// Establishes the dedup identity for a treatment. iOS uploaders (xDrip4iOS, Trio, Loop —
+    /// all LoopKit/NightscoutKit based) omit Nightscout's <c>_id</c> and instead send a stable
+    /// <c>syncIdentifier</c> for idempotency. Decomposition keys create-or-update on
+    /// <see cref="Treatment.Id"/> (persisted as <c>LegacyId</c>), so without this a re-uploaded
+    /// treatment has no <c>Id</c> to match against and is inserted again every sync, producing
+    /// duplicate rows. Adopting the <c>syncIdentifier</c> as the <c>Id</c> when none is present
+    /// makes re-uploads update in place and echoes a stable identifier back to the client.
+    /// </summary>
+    private static void NormalizeIdentity(Treatment treatment)
+    {
+        if (string.IsNullOrEmpty(treatment.Id) && !string.IsNullOrEmpty(treatment.SyncIdentifier))
+        {
+            treatment.Id = treatment.SyncIdentifier;
+        }
+    }
+
     /// <inheritdoc />
     public async Task<V4Models.DecompositionResult> DecomposeAsync(Treatment treatment, CancellationToken ct = default)
     {
+        NormalizeIdentity(treatment);
+
         var batch = new DecompositionBatchEntity
         {
             TenantId = _dbContext.TenantId,
@@ -1165,6 +1184,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
 
         foreach (var treatment in treatments)
         {
+            NormalizeIdentity(treatment);
+
             var eventType = treatment.EventType?.Trim();
             var hasInsulin = treatment.Insulin is > 0;
             var hasCarbs = treatment.Carbs is > 0;
