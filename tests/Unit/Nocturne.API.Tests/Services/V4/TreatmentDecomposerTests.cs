@@ -618,6 +618,87 @@ public class TreatmentDecomposerTests : IDisposable
     }
 
     [Fact]
+    public async Task DecomposeAsync_IdentifierlessTreatmentReuploaded_UpdatesInsteadOfDuplicating()
+    {
+        // Reproduces haribo's xDrip4iOS BG check: no _id, no syncIdentifier, only eventTime.
+        // Each sync re-sends the same logical event; without a synthetic id it duplicated.
+        Treatment MakeUpload() => new()
+        {
+            Id = null,
+            SyncIdentifier = null,
+            EventType = "BG Check",
+            EventTime = "2026-06-13T10:45:28.937Z",
+            Glucose = 250,
+            GlucoseType = "Finger",
+            Units = "mg/dl",
+            EnteredBy = "xDrip4iOS"
+        };
+
+        var firstResult = await _decomposer.DecomposeAsync(MakeUpload());
+        firstResult.CreatedRecords.Should().HaveCount(1);
+        firstResult.UpdatedRecords.Should().BeEmpty();
+
+        var bgCheck = firstResult.CreatedRecords[0].Should().BeOfType<V4Models.BGCheck>().Subject;
+        bgCheck.LegacyId.Should().StartWith("syn-");
+        // eventTime is honored, not the ingestion time.
+        bgCheck.Mills.Should().Be(DateTimeOffset.Parse("2026-06-13T10:45:28.937Z").ToUnixTimeMilliseconds());
+
+        // Re-upload (fresh deserialized object, same fields) must update, not duplicate.
+        var secondResult = await _decomposer.DecomposeAsync(MakeUpload());
+        secondResult.CreatedRecords.Should().BeEmpty();
+        secondResult.UpdatedRecords.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_IdentifierlessTreatmentWithNoTime_StillCreatesWithoutSyntheticId()
+    {
+        // Safety guard for the synthetic-id precondition: with no _id, no syncIdentifier, and no
+        // resolvable time, we must NOT hash mills=0 into a bogus shared id — leave it unidentified
+        // and still create the record (no crash).
+        var treatment = new Treatment
+        {
+            Id = null,
+            SyncIdentifier = null,
+            EventType = "Note",
+            Notes = "no timestamp"
+            // no Mills / Created_at / EventTime / Timestamp / Date
+        };
+
+        var result = await _decomposer.DecomposeAsync(treatment);
+
+        result.CreatedRecords.Should().HaveCount(1);
+        result.CreatedRecords[0].Should().BeOfType<V4Models.Note>()
+            .Subject.LegacyId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_TwoDistinctIdentifierlessBoluses_BothPersist()
+    {
+        // Safety guard: dedup must NOT merge genuinely distinct doses. Two boluses a few seconds
+        // apart with no id are real and must both survive (IOB correctness).
+        var first = new Treatment
+        {
+            Id = null, EventType = "Correction Bolus",
+            EventTime = "2026-06-13T10:45:00.000Z", Insulin = 1.0, EnteredBy = "xDrip4iOS"
+        };
+        var second = new Treatment
+        {
+            Id = null, EventType = "Correction Bolus",
+            EventTime = "2026-06-13T10:45:05.000Z", Insulin = 1.0, EnteredBy = "xDrip4iOS"
+        };
+
+        var r1 = await _decomposer.DecomposeAsync(first);
+        var r2 = await _decomposer.DecomposeAsync(second);
+
+        r1.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
+        r2.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
+        r2.UpdatedRecords.Should().BeEmpty();
+
+        r1.CreatedRecords.OfType<V4Models.Bolus>().Single().LegacyId
+            .Should().NotBe(r2.CreatedRecords.OfType<V4Models.Bolus>().Single().LegacyId);
+    }
+
+    [Fact]
     public async Task DecomposeAsync_MealBolusTwice_UpdatesBothBolusAndCarbIntake()
     {
         // Arrange
@@ -715,9 +796,10 @@ public class TreatmentDecomposerTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_NullId_StillCreatesRecord()
+    public async Task DecomposeAsync_NullId_StillCreatesRecordWithSyntheticId()
     {
-        // Arrange - treatment with no ID should still decompose (just can't deduplicate)
+        // A treatment with no _id/syncIdentifier still decomposes, and now receives a
+        // deterministic synthetic LegacyId so re-uploads can dedup against it.
         var treatment = new Treatment
         {
             Id = null,
@@ -732,7 +814,7 @@ public class TreatmentDecomposerTests : IDisposable
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
         var note = result.CreatedRecords[0].Should().BeOfType<V4Models.Note>().Subject;
-        note.LegacyId.Should().BeNull();
+        note.LegacyId.Should().StartWith("syn-");
         note.Text.Should().Be("Test note");
     }
 
@@ -1531,10 +1613,11 @@ public class TreatmentDecomposerTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_NullIdTreatment_AlwaysCreatesNeverUpdates()
+    public async Task DecomposeAsync_IdenticalNullIdTreatments_DedupViaSyntheticId()
     {
-        // Arrange - two identical treatments with null IDs
-        var treatment = new Treatment
+        // Two byte-identical null-id treatments at the same time are genuine duplicates
+        // (e.g. an identifier-less re-upload) and now collapse via the synthetic LegacyId.
+        Treatment Make() => new()
         {
             Id = null,
             EventType = "Correction Bolus",
@@ -1542,14 +1625,13 @@ public class TreatmentDecomposerTests : IDisposable
             Insulin = 2.0
         };
 
-        var first = await _decomposer.DecomposeAsync(treatment);
-        var second = await _decomposer.DecomposeAsync(treatment);
+        var first = await _decomposer.DecomposeAsync(Make());
+        var second = await _decomposer.DecomposeAsync(Make());
 
-        // Assert
         first.CreatedRecords.Should().HaveCount(1);
-        second.CreatedRecords.Should().HaveCount(1);
         first.UpdatedRecords.Should().BeEmpty();
-        second.UpdatedRecords.Should().BeEmpty();
+        second.CreatedRecords.Should().BeEmpty();
+        second.UpdatedRecords.Should().HaveCount(1);
     }
 
     #endregion

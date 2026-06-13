@@ -118,20 +118,69 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     }
 
     /// <summary>
-    /// Establishes the dedup identity for a treatment. iOS uploaders (xDrip4iOS, Trio, Loop —
-    /// all LoopKit/NightscoutKit based) omit Nightscout's <c>_id</c> and instead send a stable
-    /// <c>syncIdentifier</c> for idempotency. Decomposition keys create-or-update on
-    /// <see cref="Treatment.Id"/> (persisted as <c>LegacyId</c>), so without this a re-uploaded
-    /// treatment has no <c>Id</c> to match against and is inserted again every sync, producing
-    /// duplicate rows. Adopting the <c>syncIdentifier</c> as the <c>Id</c> when none is present
-    /// makes re-uploads update in place and echoes a stable identifier back to the client.
+    /// Establishes the dedup identity for a treatment. Decomposition keys create-or-update on
+    /// <see cref="Treatment.Id"/> (persisted as <c>LegacyId</c>), so a treatment with no <c>Id</c>
+    /// has nothing to match against and is inserted again on every re-upload, producing duplicate
+    /// rows. Identity is resolved in precedence order:
+    /// <list type="number">
+    ///   <item><description>an explicit Nightscout <c>_id</c> (unchanged);</description></item>
+    ///   <item><description>the <c>syncIdentifier</c> sent by LoopKit/NightscoutKit uploaders
+    ///   (xDrip4iOS, Trio, Loop) that omit <c>_id</c>;</description></item>
+    ///   <item><description>a deterministic synthetic id derived from the event's defining fields
+    ///   for fully identifier-less treatments (e.g. xDrip4iOS BG checks).</description></item>
+    /// </list>
+    /// The synthetic id keys on the exact event time, so re-uploads of one logical event collapse
+    /// while genuinely distinct events (e.g. two boluses seconds apart) keep separate ids and are
+    /// never merged. Requires a resolved <see cref="Treatment.Mills"/> (see the Treatment timestamp
+    /// fallback); without one the treatment is left unidentified rather than risk a wrong key.
     /// </summary>
     private static void NormalizeIdentity(Treatment treatment)
     {
-        if (string.IsNullOrEmpty(treatment.Id) && !string.IsNullOrEmpty(treatment.SyncIdentifier))
+        if (!string.IsNullOrEmpty(treatment.Id))
+            return;
+
+        if (!string.IsNullOrEmpty(treatment.SyncIdentifier))
         {
             treatment.Id = treatment.SyncIdentifier;
+            return;
         }
+
+        if (treatment.Mills > 0 && !string.IsNullOrEmpty(treatment.EventType))
+        {
+            treatment.Id = ComputeSyntheticId(treatment);
+        }
+    }
+
+    /// <summary>
+    /// Computes a deterministic identifier for an identifier-less treatment by hashing its
+    /// defining fields. Every field that distinguishes one real event from another is included
+    /// (event type, exact time, source, and all dose/value fields), so only byte-identical
+    /// re-uploads of the same event collapse — distinct events never share an id.
+    /// </summary>
+    internal static string ComputeSyntheticId(Treatment t)
+    {
+        var canonical = string.Join(
+            "|",
+            t.EventType,
+            t.Mills.ToString(CultureInfo.InvariantCulture),
+            t.EnteredBy,
+            Fmt(t.Insulin),
+            Fmt(t.Carbs),
+            Fmt(t.Glucose),
+            t.GlucoseType,
+            Fmt(t.Duration),
+            Fmt(t.Absolute),
+            Fmt(t.Rate),
+            Fmt(t.Percent),
+            t.Notes);
+
+        var hash = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(canonical));
+        // "syn-" marker + 60 hex chars fits the 64-char legacy_id column.
+        return "syn-" + Convert.ToHexStringLower(hash)[..60];
+
+        static string Fmt(double? value) =>
+            value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     }
 
     /// <inheritdoc />
