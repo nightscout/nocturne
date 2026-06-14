@@ -19,6 +19,7 @@
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
+    minutesAgo,
   } from "$lib/utils/formatting";
   import { Clock } from "lucide-svelte";
 
@@ -86,11 +87,18 @@
     rawCurrentBG === 0 && realtimeStore.entries.length === 0
   );
 
-  // Time since last reading
-  const timeSince = $derived(realtimeStore.timeSinceReading);
+  function formatTimeSinceLastReading(): string {
+    return minutesAgo(lastUpdated, currentTime.getTime());
+  }
 
   // Status text - show "Connection Error" when disconnected
-  const statusText = $derived(isDisconnected ? "Connection Error" : timeSince);
+  const statusText = $derived.by(() =>
+    isDisconnected ? "Connection Error" : formatTimeSinceLastReading()
+  );
+
+  const statusTooltip = $derived.by(
+    () => `Last reading: ${formatTimeSinceLastReading()}`
+  );
 
   // Format current time in local timezone
   const formattedLocalTime = $derived(
@@ -212,7 +220,7 @@
           {isStale}
           {isDisconnected}
           {statusText}
-          statusTooltip="Last reading: {timeSince}"
+          {statusTooltip}
           size="lg"
         />
         <div class="text-center">
