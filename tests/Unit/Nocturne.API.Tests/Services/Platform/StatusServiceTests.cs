@@ -243,6 +243,58 @@ public class StatusServiceTests
         }
     }
 
+    [Fact]
+    public async Task GetSystemStatusAsync_WithBuildDate_ShouldIncludeBuild()
+    {
+        // Arrange
+        var previousBuildDate = Environment.GetEnvironmentVariable("BUILD_DATE");
+        Environment.SetEnvironmentVariable("BUILD_DATE", "2026-06-14T09:32:10Z");
+
+        _mockCacheService
+            .Setup(x => x.GetAsync<StatusResponse>("status:system:00000000-0000-0000-0000-000000000001", default))
+            .ReturnsAsync((StatusResponse?)null);
+
+        try
+        {
+            // Act
+            var result = await _statusService.GetSystemStatusAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Build.Should().Be("2026-06-14T09:32:10Z");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("BUILD_DATE", previousBuildDate);
+        }
+    }
+
+    [Fact]
+    public async Task GetSystemStatusAsync_WithoutBuildDate_ShouldLeaveBuildNull()
+    {
+        // Arrange
+        var previousBuildDate = Environment.GetEnvironmentVariable("BUILD_DATE");
+        Environment.SetEnvironmentVariable("BUILD_DATE", null);
+
+        _mockCacheService
+            .Setup(x => x.GetAsync<StatusResponse>("status:system:00000000-0000-0000-0000-000000000001", default))
+            .ReturnsAsync((StatusResponse?)null);
+
+        try
+        {
+            // Act
+            var result = await _statusService.GetSystemStatusAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Build.Should().BeNull();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("BUILD_DATE", previousBuildDate);
+        }
+    }
+
     #endregion
 
     #region GetV3SystemStatusAsync Tests

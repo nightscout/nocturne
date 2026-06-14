@@ -201,6 +201,7 @@ public class StatusService : IStatusService
             CareportalEnabled = _configuration.GetValue<bool>("Features:CareportalEnabled", true),
             BoluscalcEnabled = _configuration.GetValue<bool>("Features:BoluscalcEnabled", false),
             Head = GetGitCommitHash(),
+            Build = GetBuildDate(),
             Settings = settings,
             ExtendedSettings = GetExtendedSettings(),
             Authorized = null, // Nightscout returns null for unauthenticated requests
@@ -241,6 +242,16 @@ public class StatusService : IStatusService
         var assembly = Assembly.GetExecutingAssembly();
         var version = assembly.GetName().Version;
         return version?.ToString() ?? "1.0.0";
+    }
+
+    /// <summary>
+    /// Get the build timestamp stamped into the image at build time, or null if unstamped
+    /// (e.g. local dev runs from source). Surfaced as the <c>build</c> status field.
+    /// </summary>
+    private static string? GetBuildDate()
+    {
+        var buildDate = Environment.GetEnvironmentVariable("BUILD_DATE");
+        return string.IsNullOrWhiteSpace(buildDate) ? null : buildDate;
     }
 
     /// <summary>

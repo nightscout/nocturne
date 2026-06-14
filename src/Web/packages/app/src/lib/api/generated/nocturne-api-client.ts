@@ -31517,6 +31517,7 @@ export interface StatusResponse {
     authorized?: any | undefined;
     runtimeState?: string | undefined;
     head?: string | undefined;
+    build?: string | undefined;
     isDemo?: boolean | undefined;
     nextResetAt?: Date | undefined;
     anonymousReadAccess?: boolean;
