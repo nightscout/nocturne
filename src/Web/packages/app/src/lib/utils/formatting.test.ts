@@ -35,6 +35,7 @@ const {
 	formatDateDetailed,
 	formatDateForInput,
 	formatDateTimeCompact,
+	minutesAgo,
 	formatInsulinDisplay,
 	formatCarbDisplay,
 	formatPercentageDisplay,
@@ -133,6 +134,26 @@ describe("Glucose conversion", () => {
 });
 
 describe("Date formatting", () => {
+	describe("minutesAgo", () => {
+		it("formats elapsed minutes with Intl relative time formatting", () => {
+			const expected = new Intl.RelativeTimeFormat("en", {
+				numeric: "always",
+				style: "short",
+			}).format(-5, "minute");
+
+			expect(minutesAgo(1_000, 301_000)).toBe(expected);
+		});
+
+		it("does not return negative elapsed minutes", () => {
+			const expected = new Intl.RelativeTimeFormat("en", {
+				numeric: "always",
+				style: "short",
+			}).format(-0, "minute");
+
+			expect(minutesAgo(301_000, 1_000)).toBe(expected);
+		});
+	});
+
 	describe("formatDateTime", () => {
 		it("returns — for undefined", () => {
 			expect(formatDateTime(undefined)).toBe("—");

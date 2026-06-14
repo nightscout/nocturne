@@ -222,6 +222,15 @@ export function time(date: Date | number, compact?: boolean): string {
   return d.toLocaleTimeString(locale(), options);
 }
 
+/** Format elapsed time as minutes ago using the user's language preference. */
+export function minutesAgo(from: number, to: number = Date.now()): string {
+  const minutes = Math.max(0, Math.floor((to - from) / 60000));
+  return new Intl.RelativeTimeFormat(locale(), {
+    numeric: "always",
+    style: "short",
+  }).format(-minutes, "minute");
+}
+
 // =============================================================================
 // Date Formatting
 // =============================================================================
