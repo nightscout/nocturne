@@ -11,7 +11,10 @@
     ShieldAlert,
     Globe,
     Lock,
+    ScrollText,
+    ChevronRight,
   } from "lucide-svelte";
+  import { resolve } from "$app/paths";
   import { getCurrentTenantId } from "../current-tenant.remote";
   import { getMembers } from "$lib/api/generated/memberInvites.generated.remote";
   import {
@@ -61,6 +64,11 @@
   );
   const canManageRoles = $derived(
     hasStar || effectivePermissions.includes("roles.manage"),
+  );
+  const canViewAudit = $derived(
+    hasStar ||
+      effectivePermissions.includes("audit.read") ||
+      effectivePermissions.includes("audit.manage"),
   );
   // GuestLinksSection self-gates on this; mirror it so the access-denied card isn't shown to a
   // guest-link-only user who can still use the guest-links section.
@@ -387,7 +395,29 @@
     <RolesSection />
   {/if}
 
-  {#if !canInvite && !canManageMembers && !canManageSharing && !canManageRoles && !canCreateGuestLinks}
+  <!-- Audit Log (lives under Sharing & Privacy — access and change history is a privacy concern) -->
+  {#if canViewAudit}
+    <a href={resolve("/settings/audit")} class="group block">
+      <Card.Root class="transition-colors hover:border-primary/40 hover:bg-muted/40">
+        <Card.Content class="flex items-center gap-4 p-4">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <ScrollText class="h-5 w-5 text-primary" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="font-medium">Audit Log</p>
+            <p class="text-sm text-muted-foreground">
+              Review changes and access history.
+            </p>
+          </div>
+          <ChevronRight
+            class="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+          />
+        </Card.Content>
+      </Card.Root>
+    </a>
+  {/if}
+
+  {#if !canInvite && !canManageMembers && !canManageSharing && !canManageRoles && !canCreateGuestLinks && !canViewAudit}
     <Card.Root>
       <Card.Content class="flex flex-col items-center justify-center py-12 text-center">
         <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">

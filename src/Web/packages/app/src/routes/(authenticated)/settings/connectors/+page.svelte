@@ -38,7 +38,6 @@
     ChevronRight,
     Loader2,
     KeyRound,
-    Smartphone,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
@@ -47,7 +46,6 @@
   import ApiTokens from "$lib/components/settings/ApiTokens.svelte";
   import DeduplicationDialog from "$lib/components/connectors/DeduplicationDialog.svelte";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
-  import PreludeQuickConnect from "$lib/components/PreludeQuickConnect.svelte";
   import UploaderSetupDialog from "$lib/components/connectors/UploaderSetupDialog.svelte";
   import ConnectorDetailsDialog from "$lib/components/connectors/ConnectorDetailsDialog.svelte";
   import ManualSyncDialog, { type BatchSyncResult } from "$lib/components/connectors/ManualSyncDialog.svelte";
@@ -57,10 +55,13 @@
   import DataSourceManageDialog from "$lib/components/connectors/DataSourceManageDialog.svelte";
   import { getApiClient } from "$lib/api";
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import { toast } from "svelte-sonner";
   import { getUploaderName } from "$lib/utils/uploader-labels";
   import { coachmark } from "@nocturne/coach";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+
+  const isPlatformAdmin = $derived((page.data as { isPlatformAdmin?: boolean }).isPlatformAdmin ?? false);
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
   const servicesOverviewQuery = getServicesOverview();
@@ -450,24 +451,6 @@
       </CardContent>
     </Card>
 
-    <!-- Connect Prelude (Android follower — OAuth device-grant QR pairing) -->
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <Smartphone class="h-5 w-5" />
-          Connect Prelude
-        </CardTitle>
-        <CardDescription>
-          Pair the Prelude Android app by scanning a QR and approving a short code
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <PreludeQuickConnect
-          instanceUrl={typeof window !== "undefined" ? window.location.origin : ""}
-        />
-      </CardContent>
-    </Card>
-
     <!-- Uploader Apps -->
     <UploaderAppsCard
       uploaderApps={servicesOverview.uploaderApps ?? []}
@@ -597,6 +580,28 @@
             </Button>
           </div>
         </div>
+
+        {#if isPlatformAdmin}
+          <a
+            href={resolve("/settings/admin/connector-cursors")}
+            class="group flex items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40"
+          >
+            <div
+              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
+            >
+              <RefreshCw class="h-5 w-5 text-primary" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <h4 class="font-medium">Reset Connector Cursors</h4>
+              <p class="text-sm text-muted-foreground mt-1">
+                Re-sync a connector from a chosen point.
+              </p>
+            </div>
+            <ChevronRight
+              class="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+            />
+          </a>
+        {/if}
       </CardContent>
     </Card>
 

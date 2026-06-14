@@ -28,7 +28,6 @@
     BellOff,
     HeartHandshake,
     Plug,
-    Globe,
     Calendar,
     CheckCircle,
     Terminal,
@@ -42,12 +41,10 @@
     HeartPulse,
     ListChecks,
     Shield,
-    ScrollText,
     Eye,
     Users,
     PlayCircle,
     History as HistoryIcon,
-    RefreshCw,
   } from "lucide-svelte";
   import { getSidebarReportItems } from "$lib/navigation/report-navigation";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
@@ -55,8 +52,6 @@
   interface Props {
     /** Current authenticated user (passed from layout data) */
     user?: AuthUser | null;
-    /** Effective permissions for the current user */
-    effectivePermissions?: string[];
     /** Whether the current user is a platform administrator */
     isPlatformAdmin?: boolean;
     /** Whether this session is a platform-admin access grant on a non-member tenant */
@@ -65,13 +60,8 @@
     isGuestSession?: boolean;
   }
 
-  const { user = null, effectivePermissions = [], isPlatformAdmin = false, isPlatformAccessGrant = false, isGuestSession = false }: Props = $props();
+  const { user = null, isPlatformAdmin = false, isPlatformAccessGrant = false, isGuestSession = false }: Props = $props();
 
-  const canViewAudit = $derived(
-    effectivePermissions.includes("audit.read") ||
-      effectivePermissions.includes("audit.manage") ||
-      effectivePermissions.includes("*"),
-  );
   const sidebar = Sidebar.useSidebar();
 
   // Defer localStorage check to after hydration so SSR and client initial render
@@ -303,11 +293,7 @@
           icon: Timer,
         },
         { title: "Connectors & Apps", href: "/settings/connectors", icon: Plug },
-        { title: "Timezone History", href: "/settings/timezone", icon: Globe },
         { title: "Sharing & Privacy", href: "/settings/members", icon: Users },
-        ...(canViewAudit
-          ? [{ title: "Audit Log", href: "/settings/audit", icon: ScrollText }]
-          : []),
         {
           title: "Support & Community",
           href: "/settings/support",
@@ -316,7 +302,6 @@
         ...(isPlatformAdmin
           ? [
               { title: "Tenant Management", href: "/settings/admin/tenants", icon: Building2 },
-              { title: "Reset Connector Cursors", href: "/settings/admin/connector-cursors", icon: RefreshCw },
             ]
           : []),
       ],
