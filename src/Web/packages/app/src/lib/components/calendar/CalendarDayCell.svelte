@@ -10,6 +10,7 @@
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
   import { formatGlucoseValue } from "$lib/utils/formatting";
   import type { GlucoseUnits } from "$lib/utils/formatting";
+  import { formatCalendarDate, getCalendarDayNumber } from "$lib/components/calendar/calendar-date";
 
   let {
     day,
@@ -85,7 +86,7 @@
     <span
       class="absolute top-1 left-2 text-xs text-muted-foreground font-medium z-10"
     >
-      {new Date(day.date).getDate()}
+      {getCalendarDayNumber(day.date)}
     </span>
 
     <!-- Tracker icons in top-right corner -->
@@ -151,6 +152,7 @@
             <div {...props} class="absolute inset-0">
               <DayGlucoseProfile
                 entries={day.entries}
+                dayStartMills={day.timestamp}
                 onclick={() => handleDayClick(day)}
               />
             </div>
@@ -163,7 +165,7 @@
       >
         <div class="space-y-1.5">
           <div class="font-medium text-sm">
-            {new Date(day.date).toLocaleDateString(undefined, {
+            {formatCalendarDate(day.date, undefined, {
               weekday: "long",
               month: "short",
               day: "numeric",
@@ -255,7 +257,7 @@
   {:else if day && "date" in day}
     <!-- Day exists in data but has no readings -->
     <span class="absolute top-1 left-2 text-xs text-muted-foreground">
-      {new Date(day.date).getDate()}
+      {getCalendarDayNumber(day.date)}
     </span>
     <!-- Tracker icons for days with no readings -->
     {#if dayTrackerEvents.length > 0}

@@ -938,9 +938,15 @@ public class StatisticsController : ControllerBase
     {
         try
         {
-            // Normalise to UTC day boundaries.
-            var startDt = DateTime.SpecifyKind(startDate.Date, DateTimeKind.Utc);
-            var endDt = DateTime.SpecifyKind(endDate.Date, DateTimeKind.Utc).AddDays(1).AddTicks(-1);
+            var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
+            var tz = !string.IsNullOrEmpty(tzId)
+                ? TimeZoneHelper.GetTimeZoneInfoFromId(tzId)
+                : TimeZoneInfo.Utc;
+
+            var startLocalDate = DateTime.SpecifyKind(startDate.Date, DateTimeKind.Unspecified);
+            var endLocalDate = DateTime.SpecifyKind(endDate.Date, DateTimeKind.Unspecified);
+            var startDt = TimeZoneInfo.ConvertTimeToUtc(startLocalDate, tz);
+            var endDt = TimeZoneInfo.ConvertTimeToUtc(endLocalDate.AddDays(1).AddTicks(-1), tz);
 
             var glucoseTask   = _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, 100_000, descending: false, ct: cancellationToken);
             var bolusTask     = _bolusRepository.GetAsync(startDt, endDt, null, null, 10_000, descending: false, kind: BolusKind.Manual, ct: cancellationToken);
@@ -958,11 +964,6 @@ public class StatisticsController : ControllerBase
 
             // Daily basal totals come from the existing service path so the calendar's "totalBasal"
             // matches what /daily-basal-bolus-ratios would return for the same window.
-            var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-            var tz = !string.IsNullOrEmpty(tzId)
-                ? TimeZoneHelper.GetTimeZoneInfoFromId(tzId)
-                : TimeZoneInfo.Utc;
-
             var dailyBasalBolus = _statisticsService.CalculateDailyBasalBolusRatios(
                 manualBoluses, algorithmBoluses, tempBasals, tz);
             var dailyBasalMap = new Dictionary<string, double>(StringComparer.Ordinal);
@@ -979,7 +980,7 @@ public class StatisticsController : ControllerBase
                 "July", "August", "September", "October", "November", "December"
             ];
 
-            for (var day = startDt.Date; day <= endDt.Date; day = day.AddDays(1))
+            for (var day = startLocalDate.Date; day <= endLocalDate.Date; day = day.AddDays(1))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -995,8 +996,10 @@ public class StatisticsController : ControllerBase
                     monthsMap[monthKey] = monthBucket;
                 }
 
-                var dayStartUtc = DateTime.SpecifyKind(day, DateTimeKind.Utc);
-                var dayEndUtc = dayStartUtc.AddDays(1).AddTicks(-1);
+                var dayStartLocal = DateTime.SpecifyKind(day, DateTimeKind.Unspecified);
+                var dayEndLocal = dayStartLocal.AddDays(1).AddTicks(-1);
+                var dayStartUtc = TimeZoneInfo.ConvertTimeToUtc(dayStartLocal, tz);
+                var dayEndUtc = TimeZoneInfo.ConvertTimeToUtc(dayEndLocal, tz);
                 var dayStartMs = new DateTimeOffset(dayStartUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
                 var dayEndMs = new DateTimeOffset(dayEndUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
