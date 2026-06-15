@@ -14,6 +14,7 @@ public class SensitivityResolverTests : IDisposable
 {
     private readonly Mock<ISensitivityScheduleRepository> _repo = new();
     private readonly Mock<ITherapySettingsRepository> _therapyRepo = new();
+    private readonly Mock<IPatientRecordRepository> _patientRecordRepo = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
@@ -29,6 +30,7 @@ public class SensitivityResolverTests : IDisposable
         _sut = new SensitivityResolver(
             _repo.Object,
             _therapyRepo.Object,
+            _patientRecordRepo.Object,
             _activeProfileResolver.Object,
             _tenantAccessor.Object,
             _cache,
@@ -110,5 +112,41 @@ public class SensitivityResolverTests : IDisposable
 
         result.Should().Be(100.0);
         _activeProfileResolver.Verify(r => r.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // NoonMills (2024-01-15 12:00 UTC) maps to 07:00 in America/New_York (EST), selecting the
+    // pre-12:00 schedule value (40.0); UTC keeps it at noon (60.0). So the chosen timezone source
+    // is observable in the result.
+
+    [Fact]
+    public async Task UsesCanonicalPatientTimezone_OverLegacyTherapySettingsTimezone()
+    {
+        var schedule = MakeSchedule((0, 40.0), (12 * 3600, 60.0));
+        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
+            .ReturnsAsync(schedule);
+        _therapyRepo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
+            .ReturnsAsync(new TherapySettings { Timezone = "UTC" });
+        _patientRecordRepo.Setup(r => r.GetAsync(default))
+            .ReturnsAsync(new PatientRecord { Timezone = "America/New_York" });
+
+        var result = await _sut.GetSensitivityAsync(NoonMills);
+
+        result.Should().Be(40.0);
+    }
+
+    [Fact]
+    public async Task FallsBackToTherapySettingsTimezone_WhenPatientRecordHasNone()
+    {
+        var schedule = MakeSchedule((0, 40.0), (12 * 3600, 60.0));
+        _repo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
+            .ReturnsAsync(schedule);
+        _therapyRepo.Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), default))
+            .ReturnsAsync(new TherapySettings { Timezone = "America/New_York" });
+        _patientRecordRepo.Setup(r => r.GetAsync(default))
+            .ReturnsAsync(new PatientRecord { Timezone = null });
+
+        var result = await _sut.GetSensitivityAsync(NoonMills);
+
+        result.Should().Be(40.0);
     }
 }

@@ -14,6 +14,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
 {
     private readonly ISensitivityScheduleRepository _repo;
     private readonly ITherapySettingsRepository _therapyRepo;
+    private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IMemoryCache _cache;
@@ -25,6 +26,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
     public SensitivityResolver(
         ISensitivityScheduleRepository repo,
         ITherapySettingsRepository therapyRepo,
+        IPatientRecordRepository patientRecordRepo,
         IActiveProfileResolver activeProfileResolver,
         ITenantAccessor tenantAccessor,
         IMemoryCache cache,
@@ -32,6 +34,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
     {
         _repo = repo;
         _therapyRepo = therapyRepo;
+        _patientRecordRepo = patientRecordRepo;
         _activeProfileResolver = activeProfileResolver;
         _tenantAccessor = tenantAccessor;
         _cache = cache;
@@ -54,7 +57,7 @@ internal sealed class SensitivityResolver : ISensitivityResolver
         var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
 
         var secondsFromMidnight = await ScheduleTimeHelper.GetSecondsFromMidnightAsync(
-            shiftedMills, profileName, timestamp, _therapyRepo, ct);
+            shiftedMills, profileName, timestamp, _therapyRepo, _patientRecordRepo, ct);
 
         var value = ScheduleResolution.FindValueAtTime(schedule.Entries, secondsFromMidnight)
             ?? DefaultSensitivity;

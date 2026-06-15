@@ -4,25 +4,37 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
 /// <summary>
-/// Converts Unix milliseconds to local seconds-from-midnight using the profile's timezone
-/// from <see cref="ITherapySettingsRepository"/>. Shared across all schedule resolvers
-/// to avoid circular dependencies with <see cref="Core.Contracts.Profiles.Resolvers.ITherapySettingsResolver"/>.
+/// Converts Unix milliseconds to local seconds-from-midnight using the patient's timezone.
+/// Shared across all schedule resolvers; takes repositories directly (not
+/// <see cref="Core.Contracts.Profiles.Resolvers.ITherapySettingsResolver"/>) to avoid a
+/// circular dependency with that resolver. Timezone precedence matches
+/// <c>TherapySettingsResolver.GetTimezoneAsync</c>: canonical
+/// <see cref="Core.Models.V4.PatientRecord.Timezone"/> first, then the legacy per-profile
+/// <c>TherapySettings.Timezone</c>.
 /// </summary>
 internal static class ScheduleTimeHelper
 {
     /// <summary>
-    /// Converts Unix milliseconds to seconds-from-midnight in the profile's local timezone.
-    /// Falls back to UTC when no timezone is configured.
+    /// Converts Unix milliseconds to seconds-from-midnight in the patient's local timezone.
+    /// Prefers <see cref="IPatientRecordRepository"/>, falls back to the per-profile
+    /// <see cref="ITherapySettingsRepository"/> timezone, then UTC when neither is configured.
     /// </summary>
     public static async Task<int> GetSecondsFromMidnightAsync(
         long timeMills,
         string profileName,
         DateTime timestamp,
         ITherapySettingsRepository therapyRepo,
+        IPatientRecordRepository patientRecordRepo,
         CancellationToken ct)
     {
-        var therapy = await therapyRepo.GetActiveAtAsync(profileName, timestamp, ct);
-        var timezone = therapy?.Timezone;
+        var patient = await patientRecordRepo.GetAsync(ct);
+        var timezone = patient?.Timezone;
+
+        if (string.IsNullOrEmpty(timezone))
+        {
+            var therapy = await therapyRepo.GetActiveAtAsync(profileName, timestamp, ct);
+            timezone = therapy?.Timezone;
+        }
 
         var dto = DateTimeOffset.FromUnixTimeMilliseconds(timeMills);
 

@@ -14,6 +14,7 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
 {
     private readonly ITargetRangeScheduleRepository _repo;
     private readonly ITherapySettingsRepository _therapyRepo;
+    private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IMemoryCache _cache;
@@ -26,6 +27,7 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
     public TargetRangeResolver(
         ITargetRangeScheduleRepository repo,
         ITherapySettingsRepository therapyRepo,
+        IPatientRecordRepository patientRecordRepo,
         IActiveProfileResolver activeProfileResolver,
         ITenantAccessor tenantAccessor,
         IMemoryCache cache,
@@ -33,6 +35,7 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
     {
         _repo = repo;
         _therapyRepo = therapyRepo;
+        _patientRecordRepo = patientRecordRepo;
         _activeProfileResolver = activeProfileResolver;
         _tenantAccessor = tenantAccessor;
         _cache = cache;
@@ -68,7 +71,7 @@ internal sealed class TargetRangeResolver : ITargetRangeResolver
         var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
 
         var secondsFromMidnight = await ScheduleTimeHelper.GetSecondsFromMidnightAsync(
-            shiftedMills, profileName, timestamp, _therapyRepo, ct);
+            shiftedMills, profileName, timestamp, _therapyRepo, _patientRecordRepo, ct);
 
         var range = ScheduleResolution.FindRangeAtTime(schedule.Entries, secondsFromMidnight);
         return range ?? (DefaultLow, DefaultHigh);
