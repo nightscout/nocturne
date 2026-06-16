@@ -26,6 +26,8 @@ public static class StepCountMapper
             Device = stepCount.Device,
             EnteredBy = stepCount.EnteredBy,
             UtcOffset = stepCount.UtcOffset,
+            DataSource = stepCount.DataSource,
+            SyncIdentifier = stepCount.SyncIdentifier,
         };
     }
 
@@ -43,6 +45,8 @@ public static class StepCountMapper
             Device = entity.Device,
             EnteredBy = entity.EnteredBy,
             UtcOffset = entity.UtcOffset,
+            DataSource = entity.DataSource,
+            SyncIdentifier = entity.SyncIdentifier,
         };
     }
 
@@ -57,6 +61,8 @@ public static class StepCountMapper
         entity.Device = stepCount.Device;
         entity.EnteredBy = stepCount.EnteredBy;
         entity.UtcOffset = stepCount.UtcOffset;
+        entity.DataSource = stepCount.DataSource;
+        entity.SyncIdentifier = stepCount.SyncIdentifier;
         entity.SysUpdatedAt = DateTime.UtcNow;
     }
 

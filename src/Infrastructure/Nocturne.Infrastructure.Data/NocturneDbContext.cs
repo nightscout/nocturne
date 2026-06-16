@@ -718,6 +718,22 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(s => s.SysCreatedAt)
             .HasDatabaseName("ix_step_counts_sys_created_at");
 
+        // Non-filtered tenant+time index — covers the tenant FK (the filtered
+        // unique index below cannot) and serves tenant-scoped range reads.
+        modelBuilder
+            .Entity<StepCountEntity>()
+            .HasIndex(s => new { s.TenantId, s.Timestamp })
+            .HasDatabaseName("ix_step_counts_tenant_timestamp");
+
+        // StepCount gains a SyncIdentifier upsert key (mirrors boluses) so repeated
+        // uploads of the same bucket update in place instead of duplicating.
+        modelBuilder
+            .Entity<StepCountEntity>()
+            .HasIndex(s => new { s.TenantId, s.DataSource, s.SyncIdentifier })
+            .HasDatabaseName("ix_step_counts_tenant_source_sync_id")
+            .IsUnique()
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
         // HeartRate indexes - optimized for time-range graph queries
         modelBuilder
             .Entity<HeartRateEntity>()
@@ -730,6 +746,19 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(h => h.SysCreatedAt)
             .HasDatabaseName("ix_heart_rates_sys_created_at");
 
+        modelBuilder
+            .Entity<HeartRateEntity>()
+            .HasIndex(h => new { h.TenantId, h.Timestamp })
+            .HasDatabaseName("ix_heart_rates_tenant_timestamp");
+
+        // HeartRate gains a SyncIdentifier upsert key (mirrors boluses).
+        modelBuilder
+            .Entity<HeartRateEntity>()
+            .HasIndex(h => new { h.TenantId, h.DataSource, h.SyncIdentifier })
+            .HasDatabaseName("ix_heart_rates_tenant_source_sync_id")
+            .IsUnique()
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
         // BodyWeight indexes - optimized for time-range graph queries
         modelBuilder
             .Entity<BodyWeightEntity>()
@@ -741,6 +770,19 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<BodyWeightEntity>()
             .HasIndex(b => b.SysCreatedAt)
             .HasDatabaseName("ix_body_weights_sys_created_at");
+
+        modelBuilder
+            .Entity<BodyWeightEntity>()
+            .HasIndex(b => new { b.TenantId, b.Mills })
+            .HasDatabaseName("ix_body_weights_tenant_mills");
+
+        // BodyWeight gains a SyncIdentifier upsert key (mirrors boluses).
+        modelBuilder
+            .Entity<BodyWeightEntity>()
+            .HasIndex(b => new { b.TenantId, b.DataSource, b.SyncIdentifier })
+            .HasDatabaseName("ix_body_weights_tenant_source_sync_id")
+            .IsUnique()
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
         // Discrepancy analysis indexes - optimized for dashboard queries
         modelBuilder

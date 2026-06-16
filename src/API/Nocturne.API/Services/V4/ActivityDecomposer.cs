@@ -220,6 +220,12 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Deliberately HARD-deletes (unlike the soft-delete in
+    /// <c>SimpleEntityService.DeleteOneAsync</c>): this is the v1 activity
+    /// re-migration path, where the legacy row is being replaced wholesale, so a
+    /// soft-delete tombstone would only block re-creation by the same legacy id.
+    /// </remarks>
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
         var deleted = 0;

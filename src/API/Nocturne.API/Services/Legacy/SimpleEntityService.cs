@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Legacy;
@@ -183,10 +184,78 @@ public abstract class SimpleEntityService<TDomain, TEntity>
 
             var processed = DocumentProcessingService.ProcessDocuments(itemList).ToList();
             var entities = processed.Select(ToEntity).ToList();
-            await EntitySet.AddRangeAsync(entities, cancellationToken);
+
+            // Intra-batch dedup on the sync key (keep the last occurrence) so a
+            // batch that repeats a (DataSource, SyncIdentifier) doesn't try to
+            // insert two rows that collide on the partial unique index.
+            entities = entities
+                .Select((entity, index) => (entity, index))
+                .GroupBy(item => item.entity is ISyncDedupable dedup
+                        && !string.IsNullOrEmpty(dedup.DataSource)
+                        && !string.IsNullOrEmpty(dedup.SyncIdentifier)
+                    ? $"sync|{dedup.DataSource}|{dedup.SyncIdentifier}"
+                    : $"idx|{item.index}")
+                .Select(group => group.Last().entity)
+                .ToList();
+
+            // Sync-identifier upsert: an entity whose (DataSource, SyncIdentifier)
+            // matches an existing non-deleted row (the global query filter scopes
+            // the lookup to this tenant) updates it in place; the rest are inserted.
+            // This makes repeated uploads of the same measurement idempotent.
+            //
+            // The existing rows for the whole batch are pre-loaded in ONE query
+            // keyed on the sync identifiers present (the
+            // (tenant_id, data_source, sync_identifier) index keeps it cheap) —
+            // one round trip instead of one per record, which matters for the
+            // historical backfill on a first permission grant.
+            var syncIdentifiers = entities
+                .Select(e => (e as ISyncDedupable)?.SyncIdentifier)
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Distinct()
+                .ToList();
+
+            var existingByKey = new Dictionary<string, TEntity>(StringComparer.Ordinal);
+            if (syncIdentifiers.Count > 0)
+            {
+                var candidates = await EntitySet
+                    .Where(e => syncIdentifiers.Contains(
+                        EF.Property<string>(e, nameof(ISyncDedupable.SyncIdentifier))))
+                    .ToListAsync(cancellationToken);
+                foreach (var candidate in candidates)
+                {
+                    if (candidate is ISyncDedupable d
+                        && !string.IsNullOrEmpty(d.DataSource)
+                        && !string.IsNullOrEmpty(d.SyncIdentifier))
+                    {
+                        existingByKey[$"{d.DataSource}|{d.SyncIdentifier}"] = candidate;
+                    }
+                }
+            }
+
+            var resultEntities = new List<TEntity>(entities.Count);
+            var toInsert = new List<TEntity>();
+            foreach (var entity in entities)
+            {
+                if (entity is ISyncDedupable dedup
+                    && !string.IsNullOrEmpty(dedup.DataSource)
+                    && !string.IsNullOrEmpty(dedup.SyncIdentifier)
+                    && existingByKey.TryGetValue($"{dedup.DataSource}|{dedup.SyncIdentifier}", out var existing))
+                {
+                    UpdateEntity(existing, ToDomainModel(entity));
+                    resultEntities.Add(existing);
+                }
+                else
+                {
+                    toInsert.Add(entity);
+                    resultEntities.Add(entity);
+                }
+            }
+
+            if (toInsert.Count > 0)
+                await EntitySet.AddRangeAsync(toInsert, cancellationToken);
             await DbContext.SaveChangesAsync(cancellationToken);
 
-            var result = entities.Select(ToDomainModel).ToList();
+            var result = resultEntities.Select(ToDomainModel).ToList();
 
             await SignalRBroadcastService.BroadcastStorageCreateAsync(
                 CollectionName,
@@ -290,7 +359,10 @@ public abstract class SimpleEntityService<TDomain, TEntity>
                 return false;
             }
 
-            EntitySet.Remove(entity);
+            if (entity is ISoftDeletable softDeletable)
+                softDeletable.DeletedAt = DateTime.UtcNow;
+            else
+                EntitySet.Remove(entity);
             await DbContext.SaveChangesAsync(cancellationToken);
 
             await SignalRBroadcastService.BroadcastStorageDeleteAsync(

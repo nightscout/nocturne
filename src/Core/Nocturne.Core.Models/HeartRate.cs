@@ -81,4 +81,12 @@ public class HeartRate : ProcessableDocumentBase
     [JsonPropertyName("data_source")]
     [NocturneOnly]
     public string? DataSource { get; set; }
+
+    /// <summary>
+    /// Stable per-source identifier for synchronization. When paired with <see cref="DataSource"/>,
+    /// re-uploading the same measurement updates the existing record in place rather than duplicating it.
+    /// </summary>
+    [JsonPropertyName("syncIdentifier")]
+    [NocturneOnly]
+    public string? SyncIdentifier { get; set; }
 }
