@@ -71,7 +71,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             if (package?.Status == null)
             {
                 _logger.LogWarning("[{Source}] Twiist returned empty package for PWD {PwdId}",
-                    ConnectorSource, config.PwdId);
+                    ConnectorSource, config.PatientId);
                 result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
@@ -216,7 +216,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var result = await ExecuteWithRetryAsync(
-            async () => await FetchPackageCoreAsync(accessToken, config.PwdId, cancellationToken),
+            async () => await FetchPackageCoreAsync(accessToken, config.PatientId, cancellationToken),
             _retryDelayStrategy,
             async () =>
             {

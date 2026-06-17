@@ -41,8 +41,12 @@ public class TwiistConnectorConfiguration : BaseConnectorConfiguration
     public string Password { get; init; } = string.Empty;
 
     /// <summary>
-    /// The PWD (person with diabetes) UUID to follow. Found via the overviews endpoint.
+    /// The PWD (person with diabetes) UUID v4 to follow, used as the path segment in
+    /// /pwd/{id}/package. Found via the follower overviews endpoint (the pwdId field).
+    /// Named to match its <see cref="ConnectorPropertyKey.PatientId"/> config key: the binder
+    /// resolves JSON keys from the camel-cased property name, so the name must match the key
+    /// or the persisted value never binds.
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.PatientId, Required = true)]
-    public string PwdId { get; init; } = string.Empty;
+    public string PatientId { get; init; } = string.Empty;
 }

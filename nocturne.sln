@@ -160,6 +160,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.Dexcom.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Aspire.ServiceDefaults.Tests", "tests\Unit\Nocturne.Aspire.ServiceDefaults.Tests\Nocturne.Aspire.ServiceDefaults.Tests.csproj", "{64AD1A7B-51A0-4800-9E66-12AE59089F4D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.Twiist.Tests", "tests\Unit\Nocturne.Connectors.Twiist.Tests\Nocturne.Connectors.Twiist.Tests.csproj", "{1D50A73A-914F-487E-BC7C-7A58619A51D4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -806,6 +808,18 @@ Global
 		{64AD1A7B-51A0-4800-9E66-12AE59089F4D}.Release|x64.Build.0 = Release|Any CPU
 		{64AD1A7B-51A0-4800-9E66-12AE59089F4D}.Release|x86.ActiveCfg = Release|Any CPU
 		{64AD1A7B-51A0-4800-9E66-12AE59089F4D}.Release|x86.Build.0 = Release|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Debug|x64.Build.0 = Debug|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Debug|x86.Build.0 = Debug|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Release|x64.ActiveCfg = Release|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Release|x64.Build.0 = Release|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Release|x86.ActiveCfg = Release|Any CPU
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -875,5 +889,6 @@ Global
 		{7F711727-8E92-41B0-98BB-5E9B6CA91FD5} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 		{0563E4E3-D81A-454D-8C27-B53867751EC5} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 		{64AD1A7B-51A0-4800-9E66-12AE59089F4D} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
+		{1D50A73A-914F-487E-BC7C-7A58619A51D4} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 	EndGlobalSection
 EndGlobal
