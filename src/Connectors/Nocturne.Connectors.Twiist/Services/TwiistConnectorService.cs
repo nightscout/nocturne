@@ -67,11 +67,24 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
 
         try
         {
-            var package = await FetchPackageAsync(config, cancellationToken);
+            var (pwdId, resolveError) = await ResolvePatientIdAsync(config, cancellationToken);
+            if (pwdId == null)
+            {
+                result.Success = false;
+                result.Errors.Add(resolveError!);
+                result.EndTime = DateTimeOffset.UtcNow;
+                return result;
+            }
+
+            var package = await FetchPackageAsync(pwdId, config, cancellationToken);
             if (package?.Status == null)
             {
                 _logger.LogWarning("[{Source}] Twiist returned empty package for PWD {PwdId}",
-                    ConnectorSource, config.PatientId);
+                    ConnectorSource, pwdId);
+                result.Success = false;
+                result.Errors.Add(
+                    "Connected to Twiist, but no data was returned for the followed patient. " +
+                    "If this persists, confirm the Twiist app is set up and sharing data.");
                 result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
@@ -202,8 +215,99 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         }
     }
 
-    private async Task<TwiistPackage?> FetchPackageAsync(
+    /// <summary>
+    /// Resolves the PWD id to follow. Uses the configured id when present (advanced override),
+    /// otherwise auto-discovers it from the follower overviews endpoint. Returns an instructive
+    /// error message (for the connector health state) when no single patient can be determined.
+    /// </summary>
+    private async Task<(string? PwdId, string? Error)> ResolvePatientIdAsync(
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(config.PatientId))
+            return (config.PatientId, null);
+
+        var overviews = await FetchOverviewsAsync(config, cancellationToken);
+
+        if (overviews == null)
+            return (null, "Could not reach Twiist. Check the Twiist account email and password, then sync again.");
+
+        if (overviews.Count == 0)
+            return (null,
+                "Connected to Twiist, but this account is not following anyone. In the Twiist app, " +
+                "share data with this account (or sign in with the account the data is shared with), then sync again.");
+
+        var withId = overviews.Where(o => !string.IsNullOrWhiteSpace(o.PwdId)).ToList();
+
+        if (withId.Count == 1)
+        {
+            _logger.LogInformation("[{Source}] Auto-discovered Twiist patient from overviews", ConnectorSource);
+            return (withId[0].PwdId, null);
+        }
+
+        if (withId.Count == 0)
+            return (null,
+                "Connected to Twiist, but no shared patient id was returned. Confirm data sharing is active in the Twiist app, then sync again.");
+
+        // More than one followed patient: we can't pick automatically.
+        var names = string.Join(", ", withId.Select(o => o.PwdNickname ?? o.PwdId));
+        return (null,
+            $"This Twiist account follows multiple people ({names}). Following more than one person isn't supported yet.");
+    }
+
+    private async Task<List<TwiistOverview>?> FetchOverviewsAsync(
+        TwiistConnectorConfiguration config, CancellationToken cancellationToken)
+    {
+        var accessToken = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            _logger.LogWarning("[{Source}] Failed to get valid token for overviews fetch", ConnectorSource);
+            TrackFailedRequest("Failed to get valid token");
+            return null;
+        }
+
+        await _rateLimitingStrategy.ApplyDelayAsync(0);
+
+        return await ExecuteWithRetryAsync(
+            async () => await FetchOverviewsCoreAsync(accessToken, cancellationToken),
+            _retryDelayStrategy,
+            async () =>
+            {
+                _tokenProvider.InvalidateToken();
+                var newToken = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
+                if (string.IsNullOrEmpty(newToken)) return false;
+                accessToken = newToken;
+                return true;
+            },
+            maxRetries: config.MaxRetryAttempts,
+            operationName: "FetchTwiistOverviews");
+    }
+
+    private async Task<List<TwiistOverview>?> FetchOverviewsCoreAsync(
+        string accessToken, CancellationToken cancellationToken)
+    {
+        var url = $"{TwiistConstants.FollowerServiceBaseUrl}{TwiistConstants.OverviewsPath}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("*/*"));
+        request.Headers.Add("User-Agent", TwiistConstants.UserAgent);
+
+        var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException(
+                $"HTTP {(int)response.StatusCode} {response.StatusCode}: {errorContent}",
+                null,
+                response.StatusCode);
+        }
+
+        return await DeserializeResponseAsync<List<TwiistOverview>>(response) ?? [];
+    }
+
+    private async Task<TwiistPackage?> FetchPackageAsync(
+        string pwdId, TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var accessToken = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
         if (string.IsNullOrEmpty(accessToken))
@@ -216,7 +320,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         await _rateLimitingStrategy.ApplyDelayAsync(0);
 
         var result = await ExecuteWithRetryAsync(
-            async () => await FetchPackageCoreAsync(accessToken, config.PatientId, cancellationToken),
+            async () => await FetchPackageCoreAsync(accessToken, pwdId, cancellationToken),
             _retryDelayStrategy,
             async () =>
             {

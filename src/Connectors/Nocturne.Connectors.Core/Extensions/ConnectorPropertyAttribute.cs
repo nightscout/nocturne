@@ -56,6 +56,13 @@ public class ConnectorPropertyAttribute : Attribute
     public bool Secret { get; set; }
 
     /// <summary>
+    ///     Whether this property is hidden from the configuration UI. Hidden properties are still
+    ///     bound from config and usable as an advanced override, but are not rendered as a form
+    ///     field — used for values the connector derives automatically (e.g. an auto-discovered id).
+    /// </summary>
+    public bool Hidden { get; set; }
+
+    /// <summary>
     ///     Default value if not specified in configuration.
     /// </summary>
     public string? DefaultValue { get; set; }

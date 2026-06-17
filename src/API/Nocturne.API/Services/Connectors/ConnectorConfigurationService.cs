@@ -621,6 +621,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                     ["x-secret"] = true
                 };
 
+                if (connectorPropAttr.Hidden)
+                {
+                    secretSchema["x-hidden"] = true;
+                }
+
                 if (!string.IsNullOrEmpty(envPrefix))
                 {
                     secretSchema["x-envVar"] = connectorPropAttr.GetFullEnvVarName(envPrefix);
@@ -809,6 +814,11 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
         if (!string.IsNullOrEmpty(connectorAttr.Format))
         {
             schema["format"] = connectorAttr.Format;
+        }
+
+        if (connectorAttr.Hidden)
+        {
+            schema["x-hidden"] = true;
         }
 
         return schema;
