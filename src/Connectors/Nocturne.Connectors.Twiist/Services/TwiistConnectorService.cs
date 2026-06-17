@@ -21,6 +21,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
     private readonly TwiistGlucoseMapper _glucoseMapper;
     private readonly TwiistInsulinMapper _insulinMapper;
     private readonly TwiistMealMapper _mealMapper;
+    private readonly TwiistTempBasalMapper _tempBasalMapper;
     private readonly IRateLimitingStrategy _rateLimitingStrategy;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly TwiistAuthTokenProvider _tokenProvider;
@@ -41,13 +42,14 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         _glucoseMapper = new TwiistGlucoseMapper(logger);
         _insulinMapper = new TwiistInsulinMapper(logger);
         _mealMapper = new TwiistMealMapper(logger);
+        _tempBasalMapper = new TwiistTempBasalMapper(logger);
     }
 
     protected override string ConnectorSource => DataSources.TwiistConnector;
     public override string ServiceName => "Twiist Insight";
 
     public override List<SyncDataType> SupportedDataTypes =>
-        [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake];
+        [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals];
 
     public override Task<bool> AuthenticateAsync()
     {
@@ -105,6 +107,12 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             if (enabledTypes.Contains(SyncDataType.CarbIntake))
             {
                 await SyncCarbIntakeAsync(package.Status, result, config, cancellationToken);
+            }
+
+            // Temp basals from the insulin-delivery blob (closed-loop enacted rates)
+            if (enabledTypes.Contains(SyncDataType.TempBasals))
+            {
+                await SyncTempBasalsAsync(package.Status, result, config, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -212,6 +220,30 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         {
             _logger.LogInformation("[{Source}] Synced {Count} meal records from Twiist",
                 ConnectorSource, carbs.Count);
+        }
+    }
+
+    private async Task SyncTempBasalsAsync(
+        TwiistStatus status, SyncResult result,
+        TwiistConnectorConfiguration config, CancellationToken cancellationToken)
+    {
+        var scheduledRate = _tempBasalMapper.ParseScheduledRate(status.Details?.BasalRateUnitsPerHour);
+        var tempBasals = _tempBasalMapper.MapTempBasals(status.InsulinDelivery?.Data, scheduledRate).ToList();
+        if (tempBasals.Count == 0) return;
+
+        var success = await PublishTempBasalDataAsync(tempBasals, config, cancellationToken);
+        result.ItemsSynced[SyncDataType.TempBasals] = tempBasals.Count;
+        result.LastEntryTimes[SyncDataType.TempBasals] = tempBasals.Max(t => t.StartTimestamp);
+
+        if (!success)
+        {
+            result.Success = false;
+            result.Errors.Add("TempBasal publish failed");
+        }
+        else
+        {
+            _logger.LogInformation("[{Source}] Synced {Count} temp basal records from Twiist",
+                ConnectorSource, tempBasals.Count);
         }
     }
 
