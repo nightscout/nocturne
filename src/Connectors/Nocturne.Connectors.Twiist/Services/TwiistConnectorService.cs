@@ -228,7 +228,9 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {
         var scheduledRate = _tempBasalMapper.ParseScheduledRate(status.Details?.BasalRateUnitsPerHour);
-        var tempBasals = _tempBasalMapper.MapTempBasals(status.InsulinDelivery?.Data, scheduledRate).ToList();
+        var tempBasals = _tempBasalMapper.MapTempBasals(status.InsulinDelivery?.Data, scheduledRate)
+            .Concat(_tempBasalMapper.MapSuspensions(status.InsulinHistory))
+            .ToList();
         if (tempBasals.Count == 0) return;
 
         var success = await PublishTempBasalDataAsync(tempBasals, config, cancellationToken);
