@@ -1,7 +1,7 @@
 /**
  * Remote function to fetch the multitenancy transition status.
- * Used by the tenants page and tenant admin settings to show
- * a notice when BaseDomain is configured (multitenancy enabled).
+ * Used by the tenant admin settings to show a notice when BaseDomain
+ * is configured (multitenancy enabled).
  */
 import { getRequestEvent, query } from "$app/server";
 

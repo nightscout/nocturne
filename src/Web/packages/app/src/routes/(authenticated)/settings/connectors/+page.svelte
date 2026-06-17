@@ -55,10 +55,13 @@
   import DataSourceManageDialog from "$lib/components/connectors/DataSourceManageDialog.svelte";
   import { getApiClient } from "$lib/api";
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import { toast } from "svelte-sonner";
   import { getUploaderName } from "$lib/utils/uploader-labels";
   import { coachmark } from "@nocturne/coach";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+
+  const isPlatformAdmin = $derived((page.data as { isPlatformAdmin?: boolean }).isPlatformAdmin ?? false);
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
   const servicesOverviewQuery = getServicesOverview();
@@ -577,6 +580,28 @@
             </Button>
           </div>
         </div>
+
+        {#if isPlatformAdmin}
+          <a
+            href={resolve("/settings/admin/connector-cursors")}
+            class="group flex items-center gap-4 rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-muted/40"
+          >
+            <div
+              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
+            >
+              <RefreshCw class="h-5 w-5 text-primary" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <h4 class="font-medium">Reset Connector Cursors</h4>
+              <p class="text-sm text-muted-foreground mt-1">
+                Re-sync a connector from a chosen point.
+              </p>
+            </div>
+            <ChevronRight
+              class="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+            />
+          </a>
+        {/if}
       </CardContent>
     </Card>
 

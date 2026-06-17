@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.StepCount
 /// </summary>
 [Table("step_counts")]
-public class StepCountEntity : ITenantScoped
+public class StepCountEntity : ITenantScoped, ISoftDeletable, ISyncDedupable
 {
     /// <summary>
     /// Identifier of the tenant this step count record belongs to
@@ -71,6 +71,21 @@ public class StepCountEntity : ITenantScoped
     public int? UtcOffset { get; set; }
 
     /// <summary>
+    /// Origin data source identifier; first half of the sync-dedup key.
+    /// </summary>
+    [Column("data_source")]
+    [MaxLength(256)]
+    public string? DataSource { get; set; }
+
+    /// <summary>
+    /// Stable per-source identifier; second half of the sync-dedup key. A create
+    /// matching an existing (DataSource, SyncIdentifier) row updates it in place.
+    /// </summary>
+    [Column("sync_identifier")]
+    [MaxLength(256)]
+    public string? SyncIdentifier { get; set; }
+
+    /// <summary>
     /// System tracking: when record was inserted
     /// </summary>
     [Column("sys_created_at")]
@@ -81,4 +96,10 @@ public class StepCountEntity : ITenantScoped
     /// </summary>
     [Column("sys_updated_at")]
     public DateTime SysUpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Soft-delete timestamp. When non-null the record is hidden by the global query filter.
+    /// </summary>
+    [Column("deleted_at")]
+    public DateTime? DeletedAt { get; set; }
 }

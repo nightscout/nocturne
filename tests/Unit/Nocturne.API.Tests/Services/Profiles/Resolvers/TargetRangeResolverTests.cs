@@ -14,6 +14,7 @@ public class TargetRangeResolverTests : IDisposable
 {
     private readonly Mock<ITargetRangeScheduleRepository> _repo = new();
     private readonly Mock<ITherapySettingsRepository> _therapyRepo = new();
+    private readonly Mock<IPatientRecordRepository> _patientRecordRepo = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
     private readonly Mock<ITenantAccessor> _tenantAccessor = new();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
@@ -29,6 +30,7 @@ public class TargetRangeResolverTests : IDisposable
         _sut = new TargetRangeResolver(
             _repo.Object,
             _therapyRepo.Object,
+            _patientRecordRepo.Object,
             _activeProfileResolver.Object,
             _tenantAccessor.Object,
             _cache,

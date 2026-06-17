@@ -80,8 +80,8 @@ export class FoodState {
     this.loading = true;
     try {
       const [foods, favs] = await Promise.all([
-        getFoods(undefined),
-        getFavorites(undefined),
+        getFoods(undefined).run(),
+        getFavorites(undefined).run(),
       ]);
       this.foods = foods ?? [];
       this.favorites = new Set(
@@ -113,7 +113,7 @@ export class FoodState {
       }
     } catch {
       toast.error('Failed to update favorite');
-      const favs = await getFavorites(undefined);
+      const favs = await getFavorites(undefined).run();
       this.favorites = new Set(
         (favs ?? []).map((f: Food) => f._id).filter(Boolean) as string[]
       );
@@ -150,7 +150,7 @@ export class FoodState {
 
   async getAttributionCount(foodId: string): Promise<number> {
     try {
-      const result = await getFoodAttributionCount(foodId);
+      const result = await getFoodAttributionCount(foodId).run();
       return result?.count ?? 0;
     } catch {
       return 0;

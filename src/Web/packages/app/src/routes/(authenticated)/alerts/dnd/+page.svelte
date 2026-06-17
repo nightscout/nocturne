@@ -19,6 +19,7 @@
     CardDescription,
   } from "$lib/components/ui/card";
   import { ArrowLeft, BellOff, Save, Loader2 } from "lucide-svelte";
+  import { EditorActionBar } from "$lib/components/layout";
 
   const dndQuery = getDnd();
 
@@ -92,9 +93,9 @@
   <title>Do Not Disturb · Alerts · Nocturne</title>
 </svelte:head>
 
-<div class="@container container mx-auto max-w-3xl p-3 @md:p-6 space-y-6">
-  <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
-    <div class="flex items-center gap-2">
+<div class="@container container mx-auto max-w-3xl p-3 @md:p-6 space-y-6 max-md:pb-24">
+  <EditorActionBar>
+    {#snippet leading()}
       <Button
         type="button"
         variant="ghost"
@@ -112,16 +113,18 @@
           Suppress non-critical alerts. Critical-severity rules and rules opted in via "Allow through DND" still fire.
         </p>
       </div>
-    </div>
-    <Button class="shrink-0" onclick={save} disabled={saving || !seeded}>
-      {#if saving}
-        <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-      {:else}
-        <Save class="h-4 w-4 mr-2" />
-      {/if}
-      Save
-    </Button>
-  </div>
+    {/snippet}
+    {#snippet actions()}
+      <Button class="shrink-0" onclick={save} disabled={saving || !seeded}>
+        {#if saving}
+          <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+        {:else}
+          <Save class="h-4 w-4 mr-2" />
+        {/if}
+        Save
+      </Button>
+    {/snippet}
+  </EditorActionBar>
 
   {#if error}
     <div class="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>

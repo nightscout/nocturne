@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
+  import { Button } from "$lib/components/ui/button";
   import { Fingerprint } from "lucide-svelte";
   import { getAuthState } from "../auth.remote";
   import { getAuthStatus } from "$lib/api/generated";
@@ -63,12 +64,9 @@
     <Card.Footer class="flex flex-col space-y-2">
       {#if allowAccessRequests}
         <div class="text-center">
-          <button
-            class="text-sm text-muted-foreground hover:text-foreground underline"
-            onclick={() => (showRequestDialog = true)}
-          >
+          <Button variant="link" onclick={() => (showRequestDialog = true)}>
             Request membership
-          </button>
+          </Button>
         </div>
       {/if}
       <div class="text-center text-xs text-muted-foreground">

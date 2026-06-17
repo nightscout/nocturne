@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Profiles.Resolvers;
 
@@ -14,6 +15,7 @@ internal sealed class BasalRateResolver : IBasalRateResolver
 {
     private readonly IBasalScheduleRepository _repo;
     private readonly ITherapySettingsRepository _therapyRepo;
+    private readonly IPatientRecordRepository _patientRecordRepo;
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IMemoryCache _cache;
@@ -25,6 +27,7 @@ internal sealed class BasalRateResolver : IBasalRateResolver
     public BasalRateResolver(
         IBasalScheduleRepository repo,
         ITherapySettingsRepository therapyRepo,
+        IPatientRecordRepository patientRecordRepo,
         IActiveProfileResolver activeProfileResolver,
         ITenantAccessor tenantAccessor,
         IMemoryCache cache,
@@ -32,6 +35,7 @@ internal sealed class BasalRateResolver : IBasalRateResolver
     {
         _repo = repo;
         _therapyRepo = therapyRepo;
+        _patientRecordRepo = patientRecordRepo;
         _activeProfileResolver = activeProfileResolver;
         _tenantAccessor = tenantAccessor;
         _cache = cache;
@@ -54,7 +58,7 @@ internal sealed class BasalRateResolver : IBasalRateResolver
         var shiftedMills = timeMills + (adjustment?.TimeshiftMs ?? 0);
 
         var secondsFromMidnight = await ScheduleTimeHelper.GetSecondsFromMidnightAsync(
-            shiftedMills, profileName, timestamp, _therapyRepo, ct);
+            shiftedMills, profileName, timestamp, _therapyRepo, _patientRecordRepo, ct);
 
         var value = ScheduleResolution.FindValueAtTime(schedule.Entries, secondsFromMidnight)
             ?? DefaultBasalRate;
@@ -87,20 +91,18 @@ internal sealed class BasalRateResolver : IBasalRateResolver
             schedules[name] = await GetCachedScheduleAsync(name, rangeStart, ct);
 
             var therapy = await _therapyRepo.GetActiveAtAsync(name, rangeStart, ct);
-            TimeZoneInfo? tz = null;
-            if (!string.IsNullOrEmpty(therapy?.Timezone))
+            // null when unset/unresolvable so the closure skips conversion (treats the stamp as UTC).
+            // TimeZoneHelper resolves IANA/Windows IDs and mis-cased IANA IDs (e.g. "ETC/GMT-2").
+            if (TimeZoneHelper.TryGetTimeZoneInfoFromId(therapy?.Timezone, out var tz))
             {
-                try { tz = TimeZoneInfo.FindSystemTimeZoneById(therapy.Timezone); }
-                catch (TimeZoneNotFoundException ex)
-                {
-                    _logger.LogWarning(ex, "Timezone '{Timezone}' for profile '{Profile}' not found on this system", therapy.Timezone, name);
-                }
-                catch (InvalidTimeZoneException ex)
-                {
-                    _logger.LogWarning(ex, "Timezone '{Timezone}' for profile '{Profile}' is invalid", therapy.Timezone, name);
-                }
+                timezones[name] = tz;
             }
-            timezones[name] = tz;
+            else
+            {
+                if (!string.IsNullOrEmpty(therapy?.Timezone))
+                    _logger.LogWarning("Timezone '{Timezone}' for profile '{Profile}' could not be resolved", therapy.Timezone, name);
+                timezones[name] = null;
+            }
         }
 
         // Closure over pre-fetched data — no DB access inside.

@@ -247,7 +247,7 @@
     // already-running or already-completed job if one exists (e.g. the user navigated back),
     // so re-entering this step never kicks off a duplicate migration.
     try {
-      const history = await migrationRemote.getHistory();
+      const history = await migrationRemote.getHistory().run();
       const existing = history?.find(
         (j) =>
           j.state === MigrationJobState.Running ||

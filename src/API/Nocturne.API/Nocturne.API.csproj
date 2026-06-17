@@ -18,6 +18,12 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Nocturne.API.Tests" />
   </ItemGroup>
+  <!-- Build provenance baked into the published container image. CI passes the source
+       commit and build timestamp; the status endpoint surfaces them in the About panel. -->
+  <ItemGroup>
+    <ContainerEnvironmentVariable Include="GIT_COMMIT" Value="$(ContainerGitCommit)" Condition="'$(ContainerGitCommit)' != ''" />
+    <ContainerEnvironmentVariable Include="BUILD_DATE" Value="$(ContainerBuildDate)" Condition="'$(ContainerBuildDate)' != ''" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Alexa.NET" />
     <PackageReference Include="Microsoft.Bcl.Memory" />

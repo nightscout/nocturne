@@ -293,22 +293,24 @@
       {/if}
 
       <div class="flex justify-center gap-3 text-xs">
-        <button
-          type="button"
-          class="text-muted-foreground hover:text-foreground underline"
+        <Button
+          variant="link"
+          size="sm"
+          class="h-auto p-0 text-xs"
           onclick={() => switchMode("totp")}
           disabled={isLoading}
         >
           Use authenticator app
-        </button>
-        <button
-          type="button"
-          class="text-muted-foreground hover:text-foreground underline"
+        </Button>
+        <Button
+          variant="link"
+          size="sm"
+          class="h-auto p-0 text-xs"
           onclick={() => switchMode("recovery")}
           disabled={isLoading}
         >
           Use a recovery code
-        </button>
+        </Button>
       </div>
 
     {:else if mode === "username"}
@@ -347,31 +349,34 @@
       </div>
 
       <div class="flex justify-between text-xs">
-        <button
-          type="button"
-          class="text-muted-foreground hover:text-foreground underline"
+        <Button
+          variant="link"
+          size="sm"
+          class="h-auto p-0 text-xs"
           onclick={() => switchMode("default")}
           disabled={isLoading}
         >
           Back
-        </button>
+        </Button>
         <div class="flex gap-3">
-          <button
-            type="button"
-            class="text-muted-foreground hover:text-foreground underline"
+          <Button
+            variant="link"
+            size="sm"
+            class="h-auto p-0 text-xs"
             onclick={() => switchMode("totp")}
             disabled={isLoading}
           >
             Use authenticator app
-          </button>
-          <button
-            type="button"
-            class="text-muted-foreground hover:text-foreground underline"
+          </Button>
+          <Button
+            variant="link"
+            size="sm"
+            class="h-auto p-0 text-xs"
             onclick={() => switchMode("recovery")}
             disabled={isLoading}
           >
             Use a recovery code
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -425,14 +430,15 @@
       </div>
 
       <div class="text-center">
-        <button
-          type="button"
-          class="text-xs text-muted-foreground hover:text-foreground underline"
+        <Button
+          variant="link"
+          size="sm"
+          class="h-auto p-0 text-xs"
           onclick={() => switchMode("default")}
           disabled={isLoading}
         >
           Back to sign in
-        </button>
+        </Button>
       </div>
 
     {:else if mode === "totp"}
@@ -494,14 +500,15 @@
       </div>
 
       <div class="text-center">
-        <button
-          type="button"
-          class="text-xs text-muted-foreground hover:text-foreground underline"
+        <Button
+          variant="link"
+          size="sm"
+          class="h-auto p-0 text-xs"
           onclick={() => switchMode("default")}
           disabled={isLoading}
         >
           Back to sign in
-        </button>
+        </Button>
       </div>
     {/if}
   </div>

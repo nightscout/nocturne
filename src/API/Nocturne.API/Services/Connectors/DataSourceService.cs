@@ -555,6 +555,13 @@ public class DataSourceService : IDataSourceService
                 Icon = "glucotracker",
                 Url = "https://glucotracker.app",
             },
+            new()
+            {
+                Id = "prelude",
+                Platform = UploaderPlatform.Android,
+                Category = UploaderCategory.Uploader,
+                Icon = "prelude",
+            },
         };
     }
 

@@ -79,6 +79,14 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
                     entry.Property("DeletedByUser").CurrentValue = false;
             }
 
+            // System/connector/background mutations have no human actor. They are high-volume
+            // automated data ingestion (CGM readings, temp basals, etc.) whose provenance is
+            // already captured on the records themselves (data_source), so they are not recorded
+            // here — auditing them grew this table to 36GB / ~1.8M rows-per-day in production.
+            // The soft-delete/dedup maintenance above still runs for these mutations.
+            if (auditContext?.IsSystem == true)
+                continue;
+
             var audit = new MutationAuditLogEntity
             {
                 Id = Guid.CreateVersion7(),

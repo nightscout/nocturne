@@ -1,6 +1,6 @@
 <script lang="ts">
   import { browser } from "$app/environment";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { getClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import {
     formatGlucoseValue,
@@ -44,6 +44,12 @@
     class?: string;
     /** Enable bouncing screensaver mode. Only honour from fullscreen views. */
     screensaver?: boolean;
+    /**
+     * Fetch tracker definitions for tracker elements. Disable on the anonymous
+     * public clock view, where the trackers endpoint requires auth (and would
+     * otherwise redirect the viewer to sign in).
+     */
+    loadTrackerDefinitions?: boolean;
   }
 
   let {
@@ -52,15 +58,17 @@
     showCharts = true,
     class: className = "",
     screensaver = false,
+    loadTrackerDefinitions = true,
   }: Props = $props();
 
-  const realtimeStore = getRealtimeStore();
+  // Live glucose source: the realtime store in authenticated previews, or the
+  // polling PublicClockStore on an anonymous public clock link.
+  const glucose = getClockGlucoseSource();
 
-  // Get current glucose values from realtime store
-  const currentBG = $derived(realtimeStore.currentBG);
-  const bgDelta = $derived(realtimeStore.bgDelta);
-  const direction = $derived(realtimeStore.direction);
-  const lastUpdated = $derived(realtimeStore.lastUpdated);
+  const currentBG = $derived(glucose.currentBG);
+  const bgDelta = $derived(glucose.bgDelta);
+  const direction = $derived(glucose.direction);
+  const lastUpdated = $derived(glucose.lastUpdated);
 
   // Format for display based on user's unit preference
   const units = $derived(glucoseUnits.current);
@@ -138,10 +146,10 @@
     return dir === "DoubleUp" || dir === "DoubleDown";
   }
 
-  // Tracker definitions
-  const definitionsQuery = getDefinitions({});
+  // Tracker definitions (skipped on the anonymous public clock — see loadTrackerDefinitions)
+  const definitionsQuery = loadTrackerDefinitions ? getDefinitions({}) : null;
   const trackerDefinitions = $derived<TrackerDefinitionDto[]>(
-    definitionsQuery.current ?? [],
+    definitionsQuery?.current ?? [],
   );
 
   // Get tracker definition by ID

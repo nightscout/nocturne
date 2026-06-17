@@ -463,17 +463,7 @@ internal sealed class AlertReplayService(
             return (now.AddHours(-24), now);
         }
 
-        TimeZoneInfo tz;
-        try
-        {
-            tz = string.IsNullOrWhiteSpace(timezone)
-                ? TimeZoneInfo.Utc
-                : TimeZoneInfo.FindSystemTimeZoneById(timezone);
-        }
-        catch (TimeZoneNotFoundException)
-        {
-            tz = TimeZoneInfo.Utc;
-        }
+        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(timezone);
 
         var localStart = localDate.Value.ToDateTime(TimeOnly.MinValue);
         var localEnd = localStart.AddDays(1);

@@ -57,7 +57,7 @@
       if (!deduplicationJobId) return;
 
       try {
-        const status = await getDeduplicationJobStatus(deduplicationJobId);
+        const status = await getDeduplicationJobStatus(deduplicationJobId).run();
         if (status) {
           deduplicationStatus = status;
 

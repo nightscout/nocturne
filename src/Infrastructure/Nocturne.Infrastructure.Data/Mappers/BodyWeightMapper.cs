@@ -28,6 +28,8 @@ public static class BodyWeightMapper
             EnteredBy = bodyWeight.EnteredBy,
             CreatedAt = bodyWeight.CreatedAt,
             UtcOffset = bodyWeight.UtcOffset,
+            DataSource = bodyWeight.DataSource,
+            SyncIdentifier = bodyWeight.SyncIdentifier,
         };
     }
 
@@ -47,6 +49,8 @@ public static class BodyWeightMapper
             EnteredBy = entity.EnteredBy,
             CreatedAt = entity.CreatedAt,
             UtcOffset = entity.UtcOffset,
+            DataSource = entity.DataSource,
+            SyncIdentifier = entity.SyncIdentifier,
         };
     }
 
@@ -63,6 +67,8 @@ public static class BodyWeightMapper
         entity.EnteredBy = bodyWeight.EnteredBy;
         entity.CreatedAt = bodyWeight.CreatedAt;
         entity.UtcOffset = bodyWeight.UtcOffset;
+        entity.DataSource = bodyWeight.DataSource;
+        entity.SyncIdentifier = bodyWeight.SyncIdentifier;
         entity.SysUpdatedAt = DateTime.UtcNow;
     }
 

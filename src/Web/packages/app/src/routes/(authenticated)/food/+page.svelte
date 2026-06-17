@@ -17,7 +17,8 @@
   const state = new FoodState();
   setFoodState(state);
 
-  onMount(() => state.load());
+  // `.run()` rejects during the render flush, so defer the bootstrap to a microtask.
+  onMount(() => queueMicrotask(() => state.load()));
 
   const giLevels: GiLevel[] = ['low', 'medium', 'high'];
 

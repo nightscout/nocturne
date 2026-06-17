@@ -93,10 +93,45 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
 
         try
         {
-            var patient = await FetchSelectedPatientAsync(config, cancellationToken);
+            var patients = await FetchPatientListAsync(config, cancellationToken);
+
+            if (patients == null)
+            {
+                // Token acquisition or the API call failed (already tracked). Surface as unhealthy
+                // so the failure is visible rather than looking like a successful empty sync.
+                result.Success = false;
+                result.Errors.Add(
+                    "Could not reach Eversense. Check the Eversense account email and password, then sync again.");
+                result.EndTime = DateTimeOffset.UtcNow;
+                return result;
+            }
+
+            if (patients.Count == 0)
+            {
+                result.Success = false;
+                result.Errors.Add(
+                    "Connected to Eversense, but this account is not following anyone in Eversense NOW. " +
+                    "In the Eversense NOW app, have the sensor wearer invite this account as a follower and " +
+                    "accept the invite, then sync again.");
+                result.EndTime = DateTimeOffset.UtcNow;
+                return result;
+            }
+
+            _logger.LogInformation(
+                "[{ConnectorSource}] Retrieved {Count} patient(s) from Eversense",
+                ConnectorSource,
+                patients.Count);
+
+            var patient = SelectPatient(patients, config.PatientUsername);
 
             if (patient == null)
             {
+                // Multiple followed patients and none matched the configured username.
+                result.Success = false;
+                result.Errors.Add(
+                    "This Eversense account follows multiple people (" +
+                    string.Join(", ", patients.Select(p => p.UserName)) +
+                    "). Set the patient username to the one you want to sync, then sync again.");
                 result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
@@ -149,39 +184,6 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
 
         result.EndTime = DateTimeOffset.UtcNow;
         return result;
-    }
-
-    /// <summary>
-    ///     Fetches the patient list from the Eversense data API and selects the configured patient.
-    /// </summary>
-    private async Task<EversensePatientDatum?> FetchSelectedPatientAsync(
-        EversenseConnectorConfiguration config,
-        CancellationToken cancellationToken)
-    {
-        var patients = await FetchPatientListAsync(config, cancellationToken);
-        if (patients == null || patients.Count == 0)
-        {
-            _logger.LogWarning("[{ConnectorSource}] No patients returned from Eversense API", ConnectorSource);
-            return null;
-        }
-
-        _logger.LogInformation(
-            "[{ConnectorSource}] Retrieved {Count} patient(s) from Eversense",
-            ConnectorSource,
-            patients.Count);
-
-        var selected = SelectPatient(patients, config.PatientUsername);
-
-        if (selected == null && patients.Count > 1)
-        {
-            _logger.LogWarning(
-                "[{ConnectorSource}] Multiple patients found but no PatientUsername configured or no match. " +
-                "Available patients: {Patients}",
-                ConnectorSource,
-                string.Join(", ", patients.Select(p => p.UserName)));
-        }
-
-        return selected;
     }
 
     /// <summary>

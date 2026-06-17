@@ -207,7 +207,7 @@
 <CoachMarkProvider adapter={coachMarkAdapter} {sequences} onBeforeNavigate={beforeNavigate}>
   <CoachParamHandler />
   <Sidebar.Provider>
-    <AppSidebar user={data.user} effectivePermissions={data.effectivePermissions} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} />
+    <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} />
     <Sidebar.Inset>
       <MobileHeader />
       {#if data.isDemo}

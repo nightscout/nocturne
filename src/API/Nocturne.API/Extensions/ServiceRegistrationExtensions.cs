@@ -132,6 +132,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAlexaService, AlexaService>();
 
         services.AddScoped<IStatisticsService, StatisticsService>();
+        services.AddScoped<ISensorIntegrityService, SensorIntegrityService>();
 
         // Analytics
         services.Configure<AnalyticsConfiguration>(
@@ -175,6 +176,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAuthAuditService, AuthAuditService>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddSingleton<IRotationSuccessorCache, RotationSuccessorCache>();
         services.AddScoped<IFirstPartyTokenRepository, EfFirstPartyTokenRepository>();
         services.AddScoped<ISubjectService, SubjectService>();
         services.AddScoped<ISessionService, SessionService>();
@@ -472,6 +474,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITargetRangeResolver, TargetRangeResolver>();
         services.AddScoped<ITherapySettingsResolver, TherapySettingsResolver>();
         services.AddScoped<ITherapyTimelineResolver, TherapyTimelineResolver>();
+        services.AddScoped<Services.Glucose.IProfileSnapshotService, Services.Glucose.ProfileSnapshotService>();
         services.AddScoped<ITempBasalResolver, TempBasalResolver>();
         services.AddScoped<IProfileProjectionService, ProfileProjectionService>();
         services.AddScoped<IDataEventSink<Profile>>(sp =>

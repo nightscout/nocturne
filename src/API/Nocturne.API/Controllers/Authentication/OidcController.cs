@@ -472,7 +472,8 @@ public class OidcController : ControllerBase
     /// <returns>A new <see cref="OidcTokenResponse"/> with rotated tokens.</returns>
     /// <remarks>
     /// The refresh token is read from the cookie or the <c>Refresh</c> Authorization header (for API clients).
-    /// On failure, all session cookies are cleared to force re-authentication.
+    /// On failure, returns 401 without touching cookies — session cookies are domain-wide, so a
+    /// deletion issued for a stale token would wipe a newer session the browser obtained concurrently.
     /// Logs <see cref="AuthAuditEventType.TokenRefreshed"/> on success.
     /// </remarks>
     /// <response code="200">Tokens refreshed successfully.</response>
@@ -501,8 +502,8 @@ public class OidcController : ControllerBase
 
         if (result == null)
         {
-            // Clear cookies if refresh failed
-            ClearSessionCookies();
+            // No cookie clearing on failure: a stale token (e.g. from a restored tab) must
+            // not wipe the domain-wide session cookies of a newer concurrent session.
             return Unauthorized(
                 new
                 {

@@ -14,6 +14,7 @@
   import Apple from "lucide-svelte/icons/apple";
   import TabletSmartphone from "lucide-svelte/icons/tablet-smartphone";
   import XdripQuickConnect from "$lib/components/XdripQuickConnect.svelte";
+  import PreludeQuickConnect from "$lib/components/PreludeQuickConnect.svelte";
   import type {
     UploaderApp,
     UploaderSetupResponse,
@@ -43,7 +44,9 @@
   );
   let copiedField = $state<string | null>(null);
 
-  const hasOAuthFlow = $derived(selectedUploader?.id === "xdrip");
+  const hasOAuthFlow = $derived(
+    selectedUploader?.id === "xdrip" || selectedUploader?.id === "prelude",
+  );
 
   function handleRequestApiKey() {
     if (!selectedUploader) return;
@@ -92,6 +95,10 @@
         {#if selectedUploader?.id === "xdrip" && typeof window !== "undefined"}
           <div class="border-b pb-4 mb-4">
             <XdripQuickConnect instanceUrl={window.location.origin} />
+          </div>
+        {:else if selectedUploader?.id === "prelude" && typeof window !== "undefined"}
+          <div class="border-b pb-4 mb-4">
+            <PreludeQuickConnect instanceUrl={window.location.origin} />
           </div>
         {/if}
 

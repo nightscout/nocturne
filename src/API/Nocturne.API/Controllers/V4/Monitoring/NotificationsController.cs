@@ -143,6 +143,56 @@ public class NotificationsController : ControllerBase
         return NoContent();
     }
 
+    /// <inheritdoc cref="IInAppNotificationService.MarkAllAsReadAsync"/>
+    [HttpPost("read-all")]
+    [RemoteCommand(Invalidates = ["GetNotifications"])]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult> MarkAllAsRead()
+    {
+        var userId = HttpContext.GetSubjectIdString();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        await _notificationService.MarkAllAsReadAsync(userId, HttpContext.RequestAborted);
+
+        return NoContent();
+    }
+
+    /// <inheritdoc cref="IInAppNotificationService.MarkAsReadAsync"/>
+    [HttpPost("{id:guid}/read")]
+    [RemoteCommand(Invalidates = ["GetNotifications"])]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> MarkAsRead(Guid id)
+    {
+        var userId = HttpContext.GetSubjectIdString();
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized();
+        }
+
+        var success = await _notificationService.MarkAsReadAsync(
+            id,
+            userId,
+            HttpContext.RequestAborted
+        );
+
+        if (!success)
+        {
+            return NotFound();
+        }
+
+        return NoContent();
+    }
+
     /// <inheritdoc cref="IInAppNotificationService.ArchiveNotificationAsync"/>
     [HttpDelete("{id:guid}")]
     [RemoteCommand(Invalidates = ["GetNotifications"])]

@@ -84,9 +84,9 @@
     error = null;
     try {
       const [configResult, sourcesResult, historyResult] = await Promise.all([
-        migrationRemote.getPendingConfig(),
-        migrationRemote.getSources(),
-        migrationRemote.getHistory(),
+        migrationRemote.getPendingConfig().run(),
+        migrationRemote.getSources().run(),
+        migrationRemote.getHistory().run(),
       ]);
 
       pendingConfig = configResult;
@@ -125,9 +125,9 @@
     }
   }
 
-  // Initial load
+  // Initial load. `.run()` rejects during the render/effect flush, so defer it.
   $effect(() => {
-    loadData();
+    queueMicrotask(loadData);
   });
 
   // Derived: mode as integer for form submission
@@ -138,7 +138,7 @@
     pollingActive = true;
     try {
       while (pollingActive) {
-        const status = await migrationRemote.getStatus(jobId);
+        const status = await migrationRemote.getStatus(jobId).run();
         activeMigration = status;
 
         // Check if completed

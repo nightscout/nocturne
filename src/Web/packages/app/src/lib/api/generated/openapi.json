@@ -5993,6 +5993,55 @@
         ]
       }
     },
+    "/api/v4/clockfaces/{id}/glucose": {
+      "get": {
+        "tags": [
+          "Clock Faces"
+        ],
+        "summary": "Get the latest glucose readings a public clock face displays (public, no authentication required).",
+        "description": "The clock UUID is the capability: a caller must hold a valid clock id for the host-resolved\ntenant to get any data, and tenant-isolation RLS scopes the read to that tenant. This endpoint\nonly ever reads sensor glucose — never treatments, device status, or any other category — so a\nclock link grants exactly what the clock shows and nothing more. It is deliberately independent\nof the tenant's global anonymous-read setting.",
+        "operationId": "ClockFaces_GetGlucose",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Clock face UUID",
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The two most recent sensor glucose readings (newest first), or 404 if the clock does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClockGlucoseDto"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
     "/api/v4/clockfaces": {
       "get": {
         "tags": [
@@ -11710,6 +11759,58 @@
         ]
       }
     },
+    "/api/v4/alerts/excursions/{excursionId}/acknowledge": {
+      "post": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Acknowledge a single alert excursion, halting escalation delivery for its\nactive instances. Acknowledging an excursion that is already acknowledged\nor already closed is a no-op. Returns 404 when the excursion does not\nexist for the current tenant.",
+        "operationId": "Alerts_AcknowledgeExcursion",
+        "parameters": [
+          {
+            "name": "excursionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcknowledgeRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetActiveAlerts"
+        ]
+      }
+    },
     "/api/v4/alerts/instances/{instanceId}/snooze": {
       "post": {
         "tags": [
@@ -12016,6 +12117,82 @@
               "type": "string"
             },
             "x-position": 2
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetNotifications"
+        ]
+      }
+    },
+    "/api/v4/notifications/read-all": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "operationId": "Notifications_MarkAllAsRead",
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetNotifications"
+        ]
+      }
+    },
+    "/api/v4/notifications/{id}/read": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "operationId": "Notifications_MarkAsRead",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
           }
         ],
         "responses": {
@@ -21127,6 +21304,52 @@
         "x-client-property": "predictions"
       }
     },
+    "/api/v4/predictions/profile-snapshot": {
+      "get": {
+        "tags": [
+          "Prediction"
+        ],
+        "summary": "Get the pre-resolved therapy profile for the next 24 hours, flattened into contiguous\nabsolute-time segments, for an offline on-device oref prediction run.",
+        "description": "Unlike GetPredictions, this action is intentionally available regardless of\nPredictions:Source: the client runs oref on-device and needs its therapy profile\nprecisely when server-side prediction is off (the offline case). It depends only on the\nunconditionally-registered profile resolvers, not on IPredictionService, so it\ncarries no _predictionService/_source guard.\n            \nClients must additionally apply the fixed oref constants max_iob=10, max_basal=4,\nmax_daily_basal=2 (which PredictionService.GetProfileAsync hardcodes) to match a\nserver-side oref run; they are not part of this payload.",
+        "operationId": "Prediction_GetProfileSnapshot",
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "query",
+            "description": "Optional profile name. The device omits it (resolves the active profile).",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileSnapshotResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "query",
+        "x-client-property": "predictions"
+      }
+    },
     "/api/v4/Retrospective/at": {
       "get": {
         "tags": [
@@ -21283,6 +21506,116 @@
           },
           "500": {
             "description": ""
+          }
+        },
+        "x-remote-type": "query"
+      }
+    },
+    "/api/v4/sensor-integrity": {
+      "get": {
+        "tags": [
+          "Sensor Integrity"
+        ],
+        "summary": "Analyze a UTC window for sensor-integrity clusters and cluster-linked hypo events.",
+        "operationId": "SensorIntegrity_Analyze",
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Inclusive UTC start of the window.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 1
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "Exclusive UTC end of the window.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "x-position": 2
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "description": "Optional data source filter; omitted analyzes the combined stream.",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "x-position": 3
+          },
+          {
+            "name": "bySource",
+            "in": "query",
+            "description": "When true, also return a per-data-source breakdown.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "x-position": 4
+          },
+          {
+            "name": "minConfidence",
+            "in": "query",
+            "description": "Minimum cluster confidence for a hypo event to be reported.",
+            "schema": {
+              "default": "Medium",
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ClusterConfidence"
+                }
+              ]
+            },
+            "x-position": 5
+          },
+          {
+            "name": "requireInsulin",
+            "in": "query",
+            "description": "When true, only report hypo events with insulin dosed during the cluster.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "x-position": 6
+          },
+          {
+            "name": "hypoThresholdMgdl",
+            "in": "query",
+            "description": "Glucose level (mg/dL) below which a reading counts as hypo.",
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "default": 70.0
+            },
+            "x-position": 7
+          },
+          {
+            "name": "windowHours",
+            "in": "query",
+            "description": "Hours after a cluster to search for a hypo nadir.",
+            "schema": {
+              "type": "number",
+              "format": "double",
+              "default": 3.0
+            },
+            "x-position": 8
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The sensor-integrity report for the window.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SensorIntegrityReport"
+                }
+              }
+            }
           }
         },
         "x-remote-type": "query"
@@ -24731,7 +25064,7 @@
           "Oidc"
         ],
         "summary": "Refresh the session tokens.\nUses the refresh token to get a new access token.",
-        "description": "The refresh token is read from the cookie or the Refresh Authorization header (for API clients).\nOn failure, all session cookies are cleared to force re-authentication.\nLogs TokenRefreshed on success.",
+        "description": "The refresh token is read from the cookie or the Refresh Authorization header (for API clients).\nOn failure, returns 401 without touching cookies — session cookies are domain-wide, so a\ndeletion issued for a stale token would wipe a newer session the browser obtained concurrently.\nLogs TokenRefreshed on success.",
         "operationId": "Oidc_Refresh",
         "responses": {
           "200": {
@@ -32034,6 +32367,33 @@
           }
         }
       },
+      "ClockGlucoseDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mills": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mgdl": {
+            "type": "number",
+            "format": "double"
+          },
+          "direction": {
+            "type": "string",
+            "nullable": true
+          },
+          "delta": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "dataSource": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
       "ClockFaceListItem": {
         "type": "object",
         "additionalProperties": false,
@@ -36054,6 +36414,10 @@
             "type": "string",
             "nullable": true
           },
+          "build": {
+            "type": "string",
+            "nullable": true
+          },
           "isDemo": {
             "type": "boolean",
             "nullable": true
@@ -37192,6 +37556,11 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "readAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           },
           "icon": {
             "type": "string",
@@ -39056,6 +39425,10 @@
               "data_source": {
                 "type": "string",
                 "nullable": true
+              },
+              "syncIdentifier": {
+                "type": "string",
+                "nullable": true
               }
             }
           }
@@ -39110,6 +39483,10 @@
               "data_source": {
                 "type": "string",
                 "nullable": true
+              },
+              "syncIdentifier": {
+                "type": "string",
+                "nullable": true
               }
             }
           }
@@ -39153,7 +39530,12 @@
           },
           "dataSource": {
             "type": "string",
-            "description": "Upstream data source identifier.",
+            "description": "Upstream data source identifier; paired with SyncIdentifier for dedup.",
+            "nullable": true
+          },
+          "syncIdentifier": {
+            "type": "string",
+            "description": "Stable per-source identifier. When paired with DataSource, re-uploading the\nsame measurement updates the existing record in place rather than creating a duplicate.",
             "nullable": true
           }
         }
@@ -39458,6 +39840,10 @@
               "data_source": {
                 "type": "string",
                 "nullable": true
+              },
+              "syncIdentifier": {
+                "type": "string",
+                "nullable": true
               }
             }
           }
@@ -39501,7 +39887,12 @@
           },
           "dataSource": {
             "type": "string",
-            "description": "Upstream data source identifier.",
+            "description": "Upstream data source identifier; paired with SyncIdentifier for dedup.",
+            "nullable": true
+          },
+          "syncIdentifier": {
+            "type": "string",
+            "description": "Stable per-source identifier. When paired with DataSource, re-uploading the\nsame measurement updates the existing record in place rather than creating a duplicate.",
             "nullable": true
           }
         }
@@ -43506,6 +43897,81 @@
           }
         }
       },
+      "ProfileSnapshotResponse": {
+        "type": "object",
+        "description": "Pre-resolved therapy profile flattened into contiguous absolute-time segments covering\n[now, now+24h) for on-device oref prediction. Property names are pinned to snake_case\nwith JsonPropertyNameAttribute so the wire contract is independent of any ambient\nserializer naming policy, and every field is emitted (including zeros) so the client's strict\ndecoder never sees a missing key.",
+        "additionalProperties": false,
+        "properties": {
+          "fetched_at_mills": {
+            "type": "integer",
+            "description": "When the snapshot was resolved (Unix ms); equals the window start.",
+            "format": "int64"
+          },
+          "segments": {
+            "type": "array",
+            "description": "Ascending, contiguous, gap/overlap-free segments covering [now, now+24h).",
+            "items": {
+              "$ref": "#/components/schemas/ProfileSnapshotSegment"
+            }
+          }
+        }
+      },
+      "ProfileSnapshotSegment": {
+        "type": "object",
+        "description": "One flat segment of the resolved profile: all scalars are constant over [start, end).",
+        "additionalProperties": false,
+        "properties": {
+          "start_mills": {
+            "type": "integer",
+            "description": "Segment start (Unix ms, inclusive).",
+            "format": "int64"
+          },
+          "end_mills": {
+            "type": "integer",
+            "description": "Segment end (Unix ms, exclusive).",
+            "format": "int64"
+          },
+          "dia": {
+            "type": "number",
+            "description": "Duration of insulin action (hours).",
+            "format": "double"
+          },
+          "basal": {
+            "type": "number",
+            "description": "Scheduled basal rate (U/hr).",
+            "format": "double"
+          },
+          "sens": {
+            "type": "number",
+            "description": "Insulin sensitivity (mg/dL per U).",
+            "format": "double"
+          },
+          "carb_ratio": {
+            "type": "number",
+            "description": "Carb ratio (g/U).",
+            "format": "double"
+          },
+          "min_bg": {
+            "type": "number",
+            "description": "Low BG target (mg/dL).",
+            "format": "double"
+          },
+          "max_bg": {
+            "type": "number",
+            "description": "High BG target (mg/dL).",
+            "format": "double"
+          },
+          "peak": {
+            "type": "integer",
+            "description": "Insulin activity peak (minutes).",
+            "format": "int32"
+          },
+          "curve": {
+            "type": "string",
+            "description": "Insulin activity curve model name (e.g. \"rapid-acting\")."
+          }
+        }
+      },
       "RetrospectiveDataResponse": {
         "type": "object",
         "description": "Response for single point retrospective data",
@@ -43840,6 +44306,231 @@
           },
           "isTemp": {
             "type": "boolean"
+          }
+        }
+      },
+      "SensorIntegrityReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "clusters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlucoseCluster"
+            }
+          },
+          "hypoEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SensorIntegrityHypoEvent"
+            }
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SensorIntegritySummary"
+          },
+          "perSource": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/SensorIntegritySourceMetrics"
+            }
+          }
+        }
+      },
+      "GlucoseCluster": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "minMgdl": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxMgdl": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationMinutes": {
+            "type": "number",
+            "format": "double"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/ClusterConfidence"
+          },
+          "diagnostics": {
+            "$ref": "#/components/schemas/ClusterDiagnostics"
+          }
+        }
+      },
+      "ClusterConfidence": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Low",
+          "Medium",
+          "High"
+        ],
+        "enum": [
+          "Low",
+          "Medium",
+          "High"
+        ]
+      },
+      "ClusterDiagnostics": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "samplingIntervalMinutes": {
+            "type": "number",
+            "format": "double"
+          },
+          "windowPoints": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "peakReversals": {
+            "type": "number",
+            "format": "double"
+          },
+          "peakIncoherenceRatio": {
+            "type": "number",
+            "format": "double"
+          },
+          "amplitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxStep": {
+            "type": "number",
+            "format": "double"
+          },
+          "spikePromoted": {
+            "type": "boolean"
+          },
+          "chainSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "chainPromoted": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SensorIntegrityHypoEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/HypoEvent"
+          },
+          "isNocturnal": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HypoEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cluster": {
+            "$ref": "#/components/schemas/GlucoseCluster"
+          },
+          "nadirMgdl": {
+            "type": "number",
+            "format": "double"
+          },
+          "nadirTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeToNadirHours": {
+            "type": "number",
+            "format": "double"
+          },
+          "readingsBelowThreshold": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "insulinDuringCluster": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InsulinDose"
+            }
+          }
+        }
+      },
+      "InsulinDose": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "units": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "SensorIntegritySummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "clusters": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "mediumClusters": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "highClusters": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "events": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nocturnalEvents": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "SensorIntegritySourceMetrics": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SensorIntegritySummary"
           }
         }
       },

@@ -131,16 +131,7 @@ public record TenantAlertSettingsSnapshot(
         // Scheduled path
         if (DndScheduleEnabled && DndScheduleStart is { } start && DndScheduleEnd is { } end)
         {
-            TimeZoneInfo tz;
-            if (string.IsNullOrEmpty(timezoneId))
-            {
-                tz = TimeZoneInfo.Utc;
-            }
-            else
-            {
-                try { tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneId); }
-                catch { tz = TimeZoneInfo.Utc; }
-            }
+            var tz = TimeZoneHelper.GetTimeZoneInfoFromId(timezoneId);
 
             var localNow = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
             var nowTime = TimeOnly.FromDateTime(localNow);

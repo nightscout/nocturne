@@ -37,7 +37,13 @@ public class UpsertHeartRateRequest
     public string? App { get; set; }
 
     /// <summary>
-    /// Upstream data source identifier.
+    /// Upstream data source identifier; paired with <see cref="SyncIdentifier"/> for dedup.
     /// </summary>
     public string? DataSource { get; set; }
+
+    /// <summary>
+    /// Stable per-source identifier. When paired with <see cref="DataSource"/>, re-uploading the
+    /// same measurement updates the existing record in place rather than creating a duplicate.
+    /// </summary>
+    public string? SyncIdentifier { get; set; }
 }

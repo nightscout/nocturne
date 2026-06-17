@@ -122,6 +122,13 @@ public class InAppNotificationEntity : ITenantScoped
     public string? MetadataJson { get; set; }
 
     /// <summary>
+    /// When the notification was marked read by the user. Null while unread.
+    /// Read is independent of archival: a read notification stays listed until resolved.
+    /// </summary>
+    [Column("read_at")]
+    public DateTime? ReadAt { get; set; }
+
+    /// <summary>
     /// Whether this notification has been archived (completed, dismissed, or auto-resolved)
     /// </summary>
     [Column("is_archived")]

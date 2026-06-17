@@ -227,12 +227,11 @@ public class TenantResolutionMiddleware
 
     /// <summary>
     /// Pins the resolved tenant onto the request-scoped <see cref="NocturneDbContext"/>.
-    /// The scoped context is pool-leased (<c>AddPooledDbContextFactory</c>) and its
-    /// <c>TenantId</c> is a custom property that pooling does not reset, so without this a
-    /// request can inherit a previous lessee's tenant. The <c>TenantConnectionInterceptor</c>
+    /// The scoped context's <c>TenantId</c> defaults to <c>Guid.Empty</c>, so without this a
+    /// directly-injected context has no tenant set. The <c>TenantConnectionInterceptor</c>
     /// reads <c>TenantId</c> to scope Row-Level Security on connection open, so any
     /// directly-injected context (e.g. connector-configuration reads) would otherwise run under
-    /// a stale tenant — most visibly on unauthenticated flows (setup/onboarding) that have no
+    /// an empty tenant — most visibly on unauthenticated flows (setup/onboarding) that have no
     /// auth handler to set it.
     /// </summary>
     private static void PinTenantOnScopedDbContext(HttpContext context, Guid tenantId)
@@ -241,8 +240,8 @@ public class TenantResolutionMiddleware
         if (db is null)
             return;
         db.TenantId = tenantId;
-        // Set the share carrier unconditionally so a pooled context never inherits a prior
-        // lessee's share state. The scoped-direct context carries only the marker (known
+        // Set the share carrier unconditionally so a directly-injected context never carries
+        // unintended share state. The scoped-direct context carries only the marker (known
         // pre-auth) and leaves the CSV null, so a share reading PHI on this path is denied.
         db.IsShareContext = context.RequestServices.GetService<ICategoryReadContext>()?.IsShare == true;
         db.VisibleCategories = null;

@@ -131,6 +131,7 @@ public class HeartRateController : ControllerBase
                 Device = request.Device,
                 EnteredBy = request.App,
                 DataSource = request.DataSource,
+                SyncIdentifier = request.SyncIdentifier,
             }).ToList();
 
             var result = await _heartRateService.CreateHeartRatesAsync(heartRateList, cancellationToken);
@@ -168,6 +169,7 @@ public class HeartRateController : ControllerBase
                 Device = request.Device,
                 EnteredBy = request.App,
                 DataSource = request.DataSource,
+                SyncIdentifier = request.SyncIdentifier,
             };
 
             var updated = await _heartRateService.UpdateHeartRateAsync(id, heartRate, cancellationToken);

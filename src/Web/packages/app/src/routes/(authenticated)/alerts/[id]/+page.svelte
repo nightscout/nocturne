@@ -41,6 +41,7 @@
     CalendarDays,
   } from "lucide-svelte";
 
+  import { EditorActionBar } from "$lib/components/layout";
   import RuleBuilder from "$lib/components/alerts/RuleBuilder.svelte";
   import AutoResolveSection from "$lib/components/alerts/AutoResolveSection.svelte";
   import ChannelsSection from "$lib/components/alerts/ChannelsSection.svelte";
@@ -262,10 +263,10 @@
   <title>{isNew ? "New alert" : state.name || "Alert"} · Nocturne</title>
 </svelte:head>
 
-<div class="@container container mx-auto p-3 @md:p-6 max-w-7xl">
+<div class="@container container mx-auto p-3 @md:p-6 max-w-7xl max-md:pb-24">
   <!-- Header -->
-  <div class="mb-6 flex items-center justify-between gap-4">
-    <div class="flex items-center gap-2 min-w-0">
+  <EditorActionBar>
+    {#snippet leading()}
       <Button
         type="button"
         variant="ghost"
@@ -283,8 +284,8 @@
           {isNew ? "Define a new alert rule" : "Edit alert rule"}
         </p>
       </div>
-    </div>
-    <div class="flex items-center gap-2 shrink-0">
+    {/snippet}
+    {#snippet actions()}
       {#if !isNew}
         <Button
           type="button"
@@ -309,8 +310,8 @@
         {/if}
         {isNew ? "Create" : "Save"}
       </Button>
-    </div>
-  </div>
+    {/snippet}
+  </EditorActionBar>
 
   {#if error}
     <div
@@ -584,9 +585,10 @@
                   <div
                     class="flex items-center gap-1 rounded-md border bg-background pr-1 hover:bg-muted"
                   >
-                    <button
-                      type="button"
-                      class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs"
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs h-auto"
                       onclick={() => openReplay(h.startedAt)}
                       title="Replay this day in the simulator"
                     >
@@ -602,7 +604,7 @@
                           ack
                         </span>
                       {/if}
-                    </button>
+                    </Button>
                     {#if dayInReviewHref(h.startedAt)}
                       <Button
                         variant="ghost"

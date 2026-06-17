@@ -74,13 +74,13 @@
   <!-- Identity + condition summary chip -->
   <div class="min-w-0 flex-1">
     <div class="flex items-center gap-2">
-      <button
-        type="button"
-        class="text-sm font-semibold truncate hover:underline"
+      <Button
+        variant="link"
+        class="h-auto p-0 text-sm font-semibold truncate"
         onclick={onEdit}
       >
         {rule.name ?? "(unnamed)"}
-      </button>
+      </Button>
       {#if !rule.isEnabled}
         <Badge variant="secondary" class="text-[10px]">Disabled</Badge>
       {/if}

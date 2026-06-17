@@ -120,6 +120,7 @@ public static class TestDatabaseSeeder
                 SubjectId = TestSubjectId,
                 GrantType = OAuthGrantTypes.Direct,
                 LegacySecretHash = apiSecretHash,
+                IsMigrated = true,
                 Scopes = [OAuthScopes.FullAccess],
                 Label = "Legacy API Secret",
                 CreatedAt = DateTime.UtcNow,

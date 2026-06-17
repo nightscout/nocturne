@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Platform;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
@@ -17,18 +18,22 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 public class ClockFacesController : ControllerBase
 {
     private readonly IClockFaceService _clockFaceService;
+    private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly ILogger<ClockFacesController> _logger;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ClockFacesController"/>.
     /// </summary>
     /// <param name="clockFaceService">Service for clock face storage and retrieval.</param>
+    /// <param name="sensorGlucoseRepository">Repository for the glucose readings a public clock displays.</param>
     /// <param name="logger">Logger instance.</param>
     public ClockFacesController(
         IClockFaceService clockFaceService,
+        ISensorGlucoseRepository sensorGlucoseRepository,
         ILogger<ClockFacesController> logger)
     {
         _clockFaceService = clockFaceService;
+        _sensorGlucoseRepository = sensorGlucoseRepository;
         _logger = logger;
     }
 
@@ -56,6 +61,49 @@ public class ClockFacesController : ControllerBase
             Id = clockFace.Id,
             Config = clockFace.Config
         });
+    }
+
+    /// <summary>
+    /// Get the latest glucose readings a public clock face displays (public, no authentication required).
+    /// </summary>
+    /// <remarks>
+    /// The clock UUID is the capability: a caller must hold a valid clock id for the host-resolved
+    /// tenant to get any data, and tenant-isolation RLS scopes the read to that tenant. This endpoint
+    /// only ever reads sensor glucose — never treatments, device status, or any other category — so a
+    /// clock link grants exactly what the clock shows and nothing more. It is deliberately independent
+    /// of the tenant's global anonymous-read setting.
+    /// </remarks>
+    /// <param name="id">Clock face UUID</param>
+    /// <returns>The two most recent sensor glucose readings (newest first), or 404 if the clock does not exist.</returns>
+    [HttpGet("{id:guid}/glucose")]
+    [RemoteQuery]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ClockGlucoseDto[]), 200)]
+    [ProducesResponseType(404)]
+    public async Task<ActionResult<ClockGlucoseDto[]>> GetGlucose(Guid id)
+    {
+        var clockFace = await _clockFaceService.GetByIdAsync(id, HttpContext.RequestAborted);
+
+        if (clockFace == null)
+        {
+            return NotFound();
+        }
+
+        // Latest two readings: the newest drives the value/trend; the previous is a delta fallback.
+        var readings = await _sensorGlucoseRepository.GetAsync(
+            from: null, to: null, device: null, source: null,
+            limit: 2, offset: 0, descending: true, ct: HttpContext.RequestAborted);
+
+        var dtos = readings.Select(r => new ClockGlucoseDto
+        {
+            Mills = r.Mills,
+            Mgdl = r.Mgdl,
+            Direction = r.Direction?.ToString(),
+            Delta = r.Delta,
+            DataSource = r.DataSource,
+        }).ToArray();
+
+        return Ok(dtos);
     }
 
     /// <summary>

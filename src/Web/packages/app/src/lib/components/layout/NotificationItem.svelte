@@ -6,6 +6,7 @@
     NotificationUrgency,
   } from "$lib/api/generated/nocturne-api-client";
   import { resolveNotificationIcon } from "$lib/utils/notification-icons";
+  import { resolveNotificationLabel } from "$lib/utils/notification-labels";
 
   interface Props {
     notification: InAppNotificationDto;
@@ -55,6 +56,7 @@
   ): "default" | "secondary" | "outline" | "ghost" | "destructive" {
     switch (variant) {
       case "primary":
+      case "default":
         return "default";
       case "secondary":
         return "secondary";
@@ -69,16 +71,29 @@
 
   const Icon = $derived(resolveNotificationIcon(notification.icon, notification.category));
   const urgencyClasses = $derived(getUrgencyClasses(notification.urgency));
+  const isRead = $derived(notification.readAt != null);
 </script>
 
-<div class={cn("flex items-start gap-3 border-b p-3", urgencyClasses)}>
-  <div class="shrink-0 mt-0.5">
+<div
+  class={cn(
+    "flex items-start gap-3 border-b p-3",
+    urgencyClasses,
+    isRead && "opacity-60"
+  )}
+>
+  <div class="shrink-0 mt-0.5 relative">
     <Icon class="h-4 w-4" />
+    {#if !isRead}
+      <span
+        class="absolute -left-1.5 top-0.5 h-2 w-2 rounded-full bg-primary"
+        aria-label="Unread"
+      ></span>
+    {/if}
   </div>
   <div class="flex-1 min-w-0">
     <div class="flex items-center justify-between gap-2">
-      <span class="text-sm font-medium truncate">
-        {notification.title ?? "Notification"}
+      <span class={cn("text-sm truncate", isRead ? "font-normal" : "font-semibold")}>
+        {resolveNotificationLabel(notification.title) || "Notification"}
       </span>
       <span class="text-xs opacity-75 whitespace-nowrap">
         {formatRelativeTime(notification.createdAt)}
@@ -86,7 +101,7 @@
     </div>
     {#if notification.subtitle}
       <p class="text-xs mt-0.5 opacity-75">
-        {notification.subtitle}
+        {resolveNotificationLabel(notification.subtitle)}
       </p>
     {/if}
     {#if notification.actions && notification.actions.length > 0}
@@ -95,10 +110,9 @@
           <Button
             variant={getButtonVariant(action.variant)}
             size="sm"
-            class="h-6 text-xs px-2"
             onclick={() => onAction?.(action.actionId!)}
           >
-            {action.label}
+            {resolveNotificationLabel(action.label)}
           </Button>
         {/each}
       </div>

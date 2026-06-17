@@ -44,6 +44,22 @@ public interface IInAppNotificationRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Marks a single notification read. Returns the entity, or null if not found.
+    /// A notification that is already read is returned unchanged.
+    /// </summary>
+    Task<InAppNotificationEntity?> MarkAsReadAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Marks all of a user's active, currently-unread notifications read.
+    /// Returns the notifications that were updated (empty if none were unread).
+    /// </summary>
+    Task<List<InAppNotificationEntity>> MarkAllAsReadAsync(
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets the count of active (non-archived) notifications for a user from a specific source
     /// </summary>
     Task<int> GetActiveCountBySourceAsync(

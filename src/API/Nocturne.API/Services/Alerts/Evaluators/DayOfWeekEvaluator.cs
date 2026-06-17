@@ -36,22 +36,7 @@ public sealed class DayOfWeekEvaluator : IConditionEvaluator
         if (condition is null || condition.Days is null || condition.Days.Count == 0)
             return Task.FromResult(false);
 
-        TimeZoneInfo tz;
-        if (string.IsNullOrEmpty(context.TenantTimeZoneId))
-        {
-            tz = TimeZoneInfo.Utc;
-        }
-        else
-        {
-            try
-            {
-                tz = TimeZoneInfo.FindSystemTimeZoneById(context.TenantTimeZoneId);
-            }
-            catch
-            {
-                tz = TimeZoneInfo.Utc;
-            }
-        }
+        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(context.TenantTimeZoneId);
 
         var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
         var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc), tz);

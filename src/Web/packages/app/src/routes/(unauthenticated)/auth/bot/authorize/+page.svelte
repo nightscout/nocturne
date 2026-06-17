@@ -2,6 +2,7 @@
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import { Loader2 } from "lucide-svelte";
+	import { Button } from "$lib/components/ui/button";
 	import { getBotAuthorizeContext, buildTenantRedirectUrl } from "../bot.remote";
 	import { getPending, claimLink } from "$lib/api/generated/chatIdentities.generated.remote";
 
@@ -111,16 +112,12 @@
 					class="px-3 py-2 border rounded-md bg-background"
 				/>
 			</label>
-			<button
-				type="submit"
-				disabled={isSubmittingSlug}
-				class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
-			>
+			<Button type="submit" disabled={isSubmittingSlug}>
 				{#if isSubmittingSlug}
 					<Loader2 class="inline h-4 w-4 animate-spin mr-1" />
 				{/if}
 				Continue
-			</button>
+			</Button>
 		</form>
 	</div>
 {:else if mode === "confirm"}
@@ -144,17 +141,12 @@
 			{#if claimError}
 				<p class="text-destructive">{claimError}</p>
 			{/if}
-			<button
-				type="button"
-				onclick={handleClaim}
-				disabled={isClaiming}
-				class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
-			>
+			<Button onclick={handleClaim} disabled={isClaiming}>
 				{#if isClaiming}
 					<Loader2 class="inline h-4 w-4 animate-spin mr-1" />
 				{/if}
 				Connect
-			</button>
+			</Button>
 		{/if}
 	</div>
 {/if}

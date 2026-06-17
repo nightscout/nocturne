@@ -47,6 +47,11 @@ public class InAppNotificationDto
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
+    /// When the notification was marked read by the user, or null while unread.
+    /// </summary>
+    public DateTime? ReadAt { get; set; }
+
+    /// <summary>
     /// Lucide icon name for the notification (e.g., "alert-triangle", "bell")
     /// </summary>
     public string? Icon { get; set; }

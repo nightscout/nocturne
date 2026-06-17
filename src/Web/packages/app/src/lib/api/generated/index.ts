@@ -20,7 +20,7 @@ export { getSuggestion, deleteSuggestion, acceptSuggestion, dismissSuggestion, t
 export * from './deduplications.generated.remote';
 export { testConnection, startMigration, startFromConnector, cancelMigration, getHistory, getPendingConfig, getSources } from './migrations.generated.remote';
 export { getConfigManaged, enable, disable, testExisting, testUnsaved } from './oidcProviderAdmins.generated.remote';
-// './clockFaces.generated.remote' - all exports collide, import directly
+export { getGlucose } from './clockFaces.generated.remote';
 export * from './glucoseProcessingSettings.generated.remote';
 export * from './profiles.generated.remote';
 export * from './userPreferences.generated.remote';
@@ -71,8 +71,9 @@ export * from './actograms.generated.remote';
 export * from './chartDatas.generated.remote';
 export * from './currentTherapyStates.generated.remote';
 export * from './dataOverviews.generated.remote';
-export { getPredictions } from './predictions.generated.remote';
+export { getPredictions, getProfileSnapshot } from './predictions.generated.remote';
 export * from './retrospectives.generated.remote';
+export * from './sensorIntegrities.generated.remote';
 export * from './stateSpans.generated.remote';
 export * from './statistics.generated.remote';
 export { upload } from './avatars.generated.remote';

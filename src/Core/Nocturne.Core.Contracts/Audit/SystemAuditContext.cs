@@ -14,6 +14,7 @@ public sealed class SystemAuditContext : IAuditContext
     public Guid? TokenId => null;
     public string? CorrelationId { get; init; }
     public string? Endpoint { get; init; }
+    public bool IsSystem => true;
 
     /// <summary>
     /// Creates a system audit context for a background service endpoint.

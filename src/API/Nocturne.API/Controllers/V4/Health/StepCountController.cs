@@ -131,6 +131,7 @@ public class StepCountController : ControllerBase
                 Device = request.Device,
                 EnteredBy = request.App,
                 DataSource = request.DataSource,
+                SyncIdentifier = request.SyncIdentifier,
             }).ToList();
 
             var result = await _stepCountService.CreateStepCountsAsync(stepCountList, cancellationToken);
@@ -168,6 +169,7 @@ public class StepCountController : ControllerBase
                 Device = request.Device,
                 EnteredBy = request.App,
                 DataSource = request.DataSource,
+                SyncIdentifier = request.SyncIdentifier,
             };
 
             var updated = await _stepCountService.UpdateStepCountAsync(id, stepCount, cancellationToken);

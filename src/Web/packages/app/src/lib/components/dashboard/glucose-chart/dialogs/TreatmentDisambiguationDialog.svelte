@@ -2,6 +2,7 @@
   import type { EntryRecord } from "$lib/constants/entry-categories";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
   import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
   import * as Dialog from "$lib/components/ui/dialog";
 
   interface Props {
@@ -73,13 +74,9 @@
       {/each}
     </div>
     <Dialog.Footer>
-      <button
-        type="button"
-        class="px-4 py-2 text-sm rounded-md border border-input bg-background hover:bg-accent transition-colors"
-        onclick={onClose}
-      >
+      <Button variant="outline" onclick={onClose}>
         Cancel
-      </button>
+      </Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

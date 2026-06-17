@@ -14,6 +14,7 @@ public class KnownOAuthClientsTests
     [InlineData("github.nightscout.nightscout", "Nightscout")]
     [InlineData("io.sugarmate", "Sugarmate")]
     [InlineData("com.nickenilsson.nightwatch", "Nightwatch")]
+    [InlineData("dev.nocturne.prelude", "Prelude")]
     public void MatchBySoftwareId_ReturnsEntry_ForKnownSoftwareId(string softwareId, string expectedDisplayName)
     {
         var entry = KnownOAuthClients.MatchBySoftwareId(softwareId);

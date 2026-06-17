@@ -57,34 +57,17 @@ public class TimeOfDayEvaluator : IConditionEvaluator
         TimeZoneInfo tz;
         if (!string.IsNullOrEmpty(condition.Timezone))
         {
-            // Explicit per-rule timezone wins; an unparseable id is treated as a malformed
+            // Explicit per-rule timezone wins; an unresolvable id is treated as a malformed
             // rule (false) rather than silently falling back, to match the existing contract.
-            try
-            {
-                tz = TimeZoneInfo.FindSystemTimeZoneById(condition.Timezone);
-            }
-            catch
-            {
+            if (!TimeZoneHelper.TryGetTimeZoneInfoFromId(condition.Timezone, out tz))
                 return Task.FromResult(false);
-            }
-        }
-        else if (!string.IsNullOrEmpty(context.TenantTimeZoneId))
-        {
-            // Tenant fallback: an unparseable tenant id swallows to UTC (matches
-            // DayOfWeekEvaluator) — the tenant tz arrives from configuration the rule author
-            // didn't choose, so we shouldn't refuse to evaluate over it.
-            try
-            {
-                tz = TimeZoneInfo.FindSystemTimeZoneById(context.TenantTimeZoneId);
-            }
-            catch
-            {
-                tz = TimeZoneInfo.Utc;
-            }
         }
         else
         {
-            tz = TimeZoneInfo.Utc;
+            // Tenant fallback: an unresolvable (or absent) tenant id swallows to UTC (matches
+            // DayOfWeekEvaluator) — the tenant tz arrives from configuration the rule author
+            // didn't choose, so we shouldn't refuse to evaluate over it.
+            tz = TimeZoneHelper.GetTimeZoneInfoFromId(context.TenantTimeZoneId);
         }
 
         var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;

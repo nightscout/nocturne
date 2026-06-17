@@ -35,6 +35,7 @@
   import { getServicesOverview } from "$api/generated/services.generated.remote";
   import { getStatus } from "$api/generated/status.generated.remote";
   import { getSupportConfig } from "$lib/api/support.remote";
+  import { formatDateTime } from "$lib/utils/date-formatting";
   import IssueCreatorDialog from "$lib/components/support/IssueCreatorDialog.svelte";
   import { getCoachMarkContext } from "@nocturne/coach";
   import { toast } from "svelte-sonner";
@@ -453,10 +454,24 @@
         {/if}
       {/await}
       {#await statusQuery then status}
-        {#if status?.head && status.head !== "unknown"}
+        {#if status?.head && status.head !== "unknown" && status.head !== "nocturne-dev"}
           <div class="flex items-center justify-between py-2 border-b">
             <span class="text-muted-foreground">Commit</span>
-            <span class="font-mono text-sm">{status.head.slice(0, 7)}</span>
+            <a
+              href={`https://github.com/nightscout/nocturne/commit/${status.head}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-mono text-sm inline-flex items-center gap-1 hover:text-primary hover:underline"
+            >
+              {status.head.slice(0, 7)}
+              <ExternalLink class="h-3 w-3" />
+            </a>
+          </div>
+        {/if}
+        {#if status?.build}
+          <div class="flex items-center justify-between py-2 border-b">
+            <span class="text-muted-foreground">Built</span>
+            <span class="font-mono text-sm">{formatDateTime(status.build)}</span>
           </div>
         {/if}
       {/await}

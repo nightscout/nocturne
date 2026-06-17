@@ -139,6 +139,56 @@ public class ApiKeyHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task AuthenticateAsync_MintedTokenSentPreHashed_AuthenticatesAndDoesNotNudge()
+    {
+        // A minted noc_ token carries both a SHA-256 TokenHash (verbatim clients) and a SHA-1
+        // LegacySecretHash (clients that pre-hash, e.g. Loop/AAPS/Trio). When such a client sends
+        // SHA-1(token) in the api-secret header, it must authenticate via the legacy lookup path —
+        // and must NOT trigger the migrated-secret rotation nudge.
+        var token = "noc_minteduploaderkey";
+        var tokenHash = DirectGrantTokenHandler.ComputeSha256Hex(token);
+        var sha1Hash = HashUtils.Sha1Hex(token);
+
+        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        {
+            ctx.OAuthGrants.Add(new OAuthGrantEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = _subjectId,
+                TenantId = _testTenantId,
+                GrantType = OAuthGrantTypes.Direct,
+                TokenHash = tokenHash,
+                LegacySecretHash = sha1Hash,
+                IsMigrated = false,
+                Scopes = ["health.readwrite"],
+                CreatedAt = DateTime.UtcNow,
+                LastUsedAt = null,
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        var mockNotificationService = new Mock<IInAppNotificationService>();
+        var context = CreateHttpContextWithServices(mockNotificationService.Object);
+        context.Request.Headers["api-secret"] = sha1Hash;
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
+        Assert.Contains("health.readwrite", result.AuthContext.Scopes);
+
+        await Task.Delay(200);
+
+        mockNotificationService.Verify(s => s.CreateNotificationAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<string?>(), It.IsAny<List<NotificationActionDto>?>(),
+            It.IsAny<ResolutionConditions?>(), It.IsAny<Dictionary<string, object>?>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task AuthenticateAsync_RevokedGrant_ReturnsFailure()
     {
         var token = "noc_revokedkey123";
@@ -298,6 +348,7 @@ public class ApiKeyHandlerTests : IDisposable
                 TenantId = _testTenantId,
                 GrantType = OAuthGrantTypes.Direct,
                 LegacySecretHash = sha1Hash,
+                IsMigrated = true,
                 Scopes = ["*"],
                 CreatedAt = DateTime.UtcNow,
                 LastUsedAt = null,
@@ -357,6 +408,7 @@ public class ApiKeyHandlerTests : IDisposable
                 TenantId = _testTenantId,
                 GrantType = OAuthGrantTypes.Direct,
                 LegacySecretHash = sha1Hash,
+                IsMigrated = true,
                 Scopes = ["*"],
                 CreatedAt = DateTime.UtcNow,
                 LastUsedAt = DateTime.UtcNow.AddDays(-1),

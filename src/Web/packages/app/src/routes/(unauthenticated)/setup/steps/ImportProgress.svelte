@@ -88,7 +88,7 @@
       // If no jobId provided, find an active migration job
       if (!resolvedJobId) {
         try {
-          const history = await migrationRemote.getHistory();
+          const history = await migrationRemote.getHistory().run();
           const activeJob = history?.find(
             (j) =>
               j.state === MigrationJobState.Running ||
@@ -135,7 +135,7 @@
       // startedAt is set after the first successful poll of a live (non-complete) migration
       while (active) {
         try {
-          const status = await migrationRemote.getStatus(resolvedJobId);
+          const status = await migrationRemote.getStatus(resolvedJobId).run();
           if (!active) break;
           consecutiveFailures = 0; // a successful poll clears the transient-failure streak
 
@@ -201,7 +201,10 @@
       }
     }
 
-    poll();
+    // `.run()` rejects during the render/effect flush, so defer out of it.
+    queueMicrotask(() => {
+      if (active) poll();
+    });
     return () => {
       active = false;
     };

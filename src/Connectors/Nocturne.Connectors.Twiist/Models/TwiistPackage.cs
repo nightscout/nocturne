@@ -105,6 +105,13 @@ public class TwiistDetails
 
     [JsonPropertyName("scheduledBasalRate")]
     public decimal? ScheduledBasalRate { get; set; }
+
+    /// <summary>
+    /// Current scheduled basal rate in U/hr. The follower API returns this as a stringified
+    /// number under "basalRate_UnitsPerHour"; insulin-delivery blob records are deltas from it.
+    /// </summary>
+    [JsonPropertyName("basalRate_UnitsPerHour")]
+    public string? BasalRateUnitsPerHour { get; set; }
 }
 
 public class TwiistLoopAlgorithm

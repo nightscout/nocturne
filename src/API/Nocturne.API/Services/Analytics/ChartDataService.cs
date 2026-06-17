@@ -392,17 +392,7 @@ public class ChartDataService : IChartDataService
     {
         var time = DateTimeOffset.FromUnixTimeMilliseconds(mills);
         if (!string.IsNullOrEmpty(timezone))
-        {
-            try
-            {
-                var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
-                time = TimeZoneInfo.ConvertTime(time, tz);
-            }
-            catch
-            {
-                // Fall back to UTC if timezone conversion fails
-            }
-        }
+            time = TimeZoneInfo.ConvertTime(time, TimeZoneHelper.GetTimeZoneInfoFromId(timezone));
         return time.Hour switch
         {
             >= 5 and < 11 => "Breakfast",

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { DiabetesPopulationSchema } from "$lib/api/generated/schemas";
 import { getRequestEvent, query } from "$app/server";
 import { error } from "@sveltejs/kit";
-import { DiabetesPopulation } from "$lib/api";
+import { DiabetesPopulation, ClusterConfidence } from "$lib/api";
 import { fetchAllGlucose } from "./glucose-pagination";
 
 /**
@@ -253,6 +253,44 @@ export const getBasalReportData = query(
       dateRange: {
         from: startDate.toISOString(),
         to: endDate.toISOString(),
+      },
+    };
+  }
+);
+
+/**
+ * Sensor data-quality / integrity report for a date range: the raw glucose trace plus the
+ * server-computed sensor-integrity analysis (noise clusters + cluster-linked hypo events).
+ * The frontend renders this verbatim — all detection and scoring happens backend-side.
+ */
+export const getDataQualityReport = query(
+  DateRangeSchema.optional(),
+  async (input) => {
+    const { locals } = getRequestEvent();
+    const { apiClient } = locals;
+    const { startDate, endDate } = calculateDateRange(input);
+
+    const [entries, integrity] = await Promise.all([
+      fetchAllGlucose(apiClient, startDate, endDate),
+      apiClient.sensorIntegrity.analyze(
+        startDate,
+        endDate,
+        undefined,
+        false,
+        ClusterConfidence.Medium,
+        false,
+        70,
+        3
+      ),
+    ]);
+
+    return {
+      entries,
+      integrity,
+      dateRange: {
+        from: startDate.toISOString(),
+        to: endDate.toISOString(),
+        lastUpdated: new Date().toISOString(),
       },
     };
   }

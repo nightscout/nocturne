@@ -80,6 +80,30 @@ public interface IInAppNotificationService
     );
 
     /// <summary>
+    /// Mark a single notification read for the given user
+    /// </summary>
+    /// <param name="notificationId">The notification ID to mark read</param>
+    /// <param name="userId">The user the notification must belong to</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True if the notification was found and belongs to the user, false otherwise</returns>
+    Task<bool> MarkAsReadAsync(
+        Guid notificationId,
+        string userId,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Mark all of a user's active, unread notifications read
+    /// </summary>
+    /// <param name="userId">The user whose notifications to mark read</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The number of notifications that were marked read</returns>
+    Task<int> MarkAllAsReadAsync(
+        string userId,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Archive a notification by its source
     /// </summary>
     /// <param name="userId">The user ID</param>

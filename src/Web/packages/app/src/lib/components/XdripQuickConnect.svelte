@@ -134,7 +134,7 @@
     deviceLookupError = null;
 
     try {
-      const info = await getDeviceInfo({ userCode: code });
+      const info = await getDeviceInfo({ userCode: code }).run();
       if (!info) {
         deviceLookupError = "Invalid or expired device code.";
         return;

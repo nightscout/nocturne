@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import {
     Card,
     CardContent,
@@ -59,8 +60,8 @@
     oidcError = null;
     try {
       const [managed, providers] = await Promise.all([
-        oidcRemote.getConfigManaged(),
-        oidcRemote.getAll(),
+        oidcRemote.getConfigManaged().run(),
+        oidcRemote.getAll().run(),
       ]);
       oidcConfigManaged = managed?.isConfigManaged ?? false;
       oidcProviders = providers ?? [];
@@ -134,8 +135,8 @@
     error = null;
     try {
       const [rols, platformSettingsList] = await Promise.all([
-        rolesRemote.getRoles(),
-        platformSettingsRemote.getAll(),
+        rolesRemote.getRoles().run(),
+        platformSettingsRemote.getAll().run(),
       ]);
       await loadOidcData();
       roles = rols || [];
@@ -148,9 +149,13 @@
     }
   }
 
-  // Initial load
-  $effect(() => {
-    loadData();
+  // Initial load. `.run()` rejects when called during the render/effect flush,
+  // so defer the bootstrap to a microtask — onMount's synchronous body still
+  // counts as render.
+  onMount(() => {
+    queueMicrotask(() => {
+      loadData();
+    });
   });
 
   // ============================================================================
@@ -159,13 +164,13 @@
 
   async function handlePlatformSettingsSave(category: string, enabled: boolean, fields: Record<string, string>) {
     await platformSettingsRemote.upsert({ category, request: { enabled, fields } });
-    const updated = await platformSettingsRemote.getAll();
+    const updated = await platformSettingsRemote.getAll().run();
     if (updated) platformSettings = updated;
   }
 
   async function handlePlatformSettingsDelete(category: string) {
     await platformSettingsRemote.remove(category);
-    const updated = await platformSettingsRemote.getAll();
+    const updated = await platformSettingsRemote.getAll().run();
     if (updated) platformSettings = updated;
   }
 </script>

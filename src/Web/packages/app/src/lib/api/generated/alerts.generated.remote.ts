@@ -78,6 +78,33 @@ export const acknowledge = command(AcknowledgeRequestSchema, async (request) => 
   }
 });
 
+/** Acknowledge a single alert excursion, halting escalation delivery for its
+active instances. Acknowledging an excursion that is already acknowledged
+or already closed is a no-op. Returns 404 when the excursion does not
+exist for the current tenant. */
+export const acknowledgeExcursion = command(z.object({ excursionId: z.string(), request: AcknowledgeRequestSchema }), async ({ excursionId, request }) => {
+  const apiClient = getRequestEvent().locals.apiClient;
+  try {
+    await apiClient.alerts.acknowledgeExcursion(excursionId, request as AcknowledgeRequest);
+    await Promise.all([
+      getActiveAlerts(undefined).refresh()
+    ]);
+    return { success: true };
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { throw error(401, 'Unauthorized'); }
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
+    console.error('Error in alerts.acknowledgeExcursion:', err);
+    const e = err as any;
+    const body = e?.body ?? e?.response;
+    const errors = body?.errors ?? e?.errors;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
+    throw error(500, message ?? 'Failed to acknowledge excursion');
+  }
+});
+
 /** Snooze an alert instance for the specified duration. */
 export const snoozeInstance = command(z.object({ instanceId: z.string(), request: SnoozeRequestSchema }), async ({ instanceId, request }) => {
   const apiClient = getRequestEvent().locals.apiClient;

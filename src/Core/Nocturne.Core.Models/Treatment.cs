@@ -156,29 +156,55 @@ public class Treatment : ProcessableDocumentBase
     [JsonPropertyName("mills")]
     public override long Mills
     {
-        get
-        {
-            if (_mills == 0 && !string.IsNullOrEmpty(_created_at))
-            {
-                if (
-                    DateTime.TryParse(
-                        _created_at,
-                        null,
-                        System.Globalization.DateTimeStyles.RoundtripKind,
-                        out var parsedDate
-                    )
-                )
-                {
-                    return (
-                        (DateTimeOffset)DateTime.SpecifyKind(parsedDate, DateTimeKind.Utc)
-                    ).ToUnixTimeMilliseconds();
-                }
-            }
-            return _mills;
-        }
+        get => ResolveMills();
         set => _mills = value;
     }
     private long _mills;
+
+    /// <summary>
+    /// Resolves the event time in Unix milliseconds from the available timestamp fields, in
+    /// precedence order: explicit <c>mills</c>, then <c>created_at</c>, then <c>eventTime</c>,
+    /// then <c>timestamp</c>, then <c>date</c>. Some clients (e.g. xDrip4iOS) send only
+    /// <c>eventTime</c> on certain treatments; without this fallback those records get stamped
+    /// with the ingestion time, which is both wrong and defeats identity/dedup.
+    /// </summary>
+    private long ResolveMills()
+    {
+        if (_mills > 0)
+            return _mills;
+
+        if (TryParseIsoMills(_created_at, out var mills))
+            return mills;
+        if (TryParseIsoMills(EventTime, out mills))
+            return mills;
+        if (TryParseIsoMills(Timestamp, out mills))
+            return mills;
+
+        if (Date is > 0)
+            return Date.Value;
+
+        return 0;
+    }
+
+    private static bool TryParseIsoMills(string? iso, out long mills)
+    {
+        mills = 0;
+        if (
+            !string.IsNullOrEmpty(iso)
+            && DateTime.TryParse(
+                iso,
+                null,
+                System.Globalization.DateTimeStyles.RoundtripKind,
+                out var parsed
+            )
+        )
+        {
+            mills = ((DateTimeOffset)DateTime.SpecifyKind(parsed, DateTimeKind.Utc))
+                .ToUnixTimeMilliseconds();
+            return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// Gets or sets the created at timestamp as ISO string
@@ -188,11 +214,15 @@ public class Treatment : ProcessableDocumentBase
     {
         get
         {
-            if (string.IsNullOrEmpty(_created_at) && _mills > 0)
+            if (string.IsNullOrEmpty(_created_at))
             {
-                return DateTimeOffset
-                    .FromUnixTimeMilliseconds(_mills)
-                    .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                var mills = ResolveMills();
+                if (mills > 0)
+                {
+                    return DateTimeOffset
+                        .FromUnixTimeMilliseconds(mills)
+                        .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                }
             }
             return _created_at;
         }

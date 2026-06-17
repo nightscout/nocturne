@@ -41,7 +41,9 @@
   }: Props = $props();
 </script>
 
-<header class="flex items-center justify-between border-b px-4 py-3">
+<header
+  class="sticky top-0 z-30 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur"
+>
   <Button variant="ghost" href="/clock" class="gap-2">
     <ArrowLeft class="size-4" />
     Back

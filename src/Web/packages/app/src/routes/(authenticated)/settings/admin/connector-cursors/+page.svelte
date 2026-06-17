@@ -80,7 +80,7 @@
     tenantsLoading = true;
     tenantsError = null;
     try {
-      tenants = (await tenantRemote.getAll()) ?? [];
+      tenants = (await tenantRemote.getAll().run()) ?? [];
     } catch (err) {
       console.error("Failed to load tenants:", err);
       tenantsError = "Failed to load tenants.";
@@ -89,8 +89,9 @@
     }
   }
 
+  // `.run()` rejects during the render/effect flush, so defer the bootstrap out of it.
   $effect(() => {
-    loadTenants();
+    queueMicrotask(loadTenants);
   });
 
   async function onTenantChange(value: string | undefined) {

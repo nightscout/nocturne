@@ -673,6 +673,24 @@ export class RealtimeStore {
     }
   }
 
+  /** Optimistically mark every loaded notification read so the badge and styling
+   *  update instantly; the server's notificationUpdated broadcast reconciles other
+   *  clients (and this one). */
+  markAllNotificationsRead(): void {
+    const readAt = new Date();
+    this.inAppNotifications = this.inAppNotifications.map((n) =>
+      n.readAt ? n : { ...n, readAt }
+    );
+  }
+
+  /** Optimistically mark a single notification read by id. */
+  markNotificationRead(id: string): void {
+    const readAt = new Date();
+    this.inAppNotifications = this.inAppNotifications.map((n) =>
+      n.id === id && !n.readAt ? { ...n, readAt } : n
+    );
+  }
+
   /** Handle new in-app notification from SignalR */
   private handleNotificationCreated(notification: InAppNotificationDto): void {
     // Add if not already present
@@ -1091,4 +1109,34 @@ export function getRealtimeStore(): RealtimeStore {
 /** Gets the realtime store from context, returning null if not available */
 export function tryGetRealtimeStore(): RealtimeStore | null {
   return getContext<RealtimeStore>(REALTIME_STORE_KEY) ?? null;
+}
+
+/**
+ * The minimal live-glucose surface a clock face renders. Satisfied by the full
+ * {@link RealtimeStore} (authenticated views) and by the lightweight polling
+ * `PublicClockStore` (anonymous public clock links), so `ClockFaceRenderer`
+ * works with either without knowing which one it has.
+ */
+export interface ClockGlucoseSource {
+  readonly currentBG: number;
+  readonly bgDelta: number;
+  readonly direction: string;
+  readonly lastUpdated: number;
+  readonly demoMode: boolean;
+}
+
+const CLOCK_GLUCOSE_SOURCE_KEY = Symbol("clock-glucose-source");
+
+/** Provide a {@link ClockGlucoseSource} to descendants (e.g. the public clock route). */
+export function setClockGlucoseSource(source: ClockGlucoseSource): void {
+  setContext(CLOCK_GLUCOSE_SOURCE_KEY, source);
+}
+
+/**
+ * Get the clock's glucose source. Prefers an explicitly-provided
+ * {@link ClockGlucoseSource} (public clock); falls back to the realtime store
+ * so authenticated clock previews keep working unchanged.
+ */
+export function getClockGlucoseSource(): ClockGlucoseSource {
+  return getContext<ClockGlucoseSource>(CLOCK_GLUCOSE_SOURCE_KEY) ?? getRealtimeStore();
 }

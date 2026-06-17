@@ -40,7 +40,9 @@
 
   const visibleItems = $derived(
     items.filter(
-      (item) => !item.permission || authStore.hasPermission(item.permission)
+      (item) =>
+        (!item.permission || authStore.hasPermission(item.permission)) &&
+        (!item.role || authStore.hasRole(item.role))
     )
   );
 

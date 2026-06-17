@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Prelude">
+  <rect width="48" height="48" rx="11" fill="#0B1220"/>
+  <path d="M8 28c4 0 5-12 9-12s5 18 9 18 4-14 8-14h6"
+        fill="none" stroke="#4ADE80" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

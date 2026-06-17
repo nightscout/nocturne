@@ -46,6 +46,10 @@ const UPLOADER_LABELS: Record<string, UploaderLabel> = {
 		name: 'Nightscout Uploader',
 		description: 'Android uploader for Nightscout-compatible sites',
 	},
+	prelude: {
+		name: 'Prelude',
+		description: 'CGM follower app for Android',
+	},
 };
 
 /** Get the display name for an uploader app, falling back to its ID */

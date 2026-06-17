@@ -11,12 +11,9 @@
     ShieldCheck,
     Timer,
     Plug,
-    Globe,
     Users,
-    ScrollText,
     HeartHandshake,
     Building2,
-    RefreshCw,
     Shield,
     ChevronRight,
   } from "lucide-svelte";
@@ -25,12 +22,6 @@
   const { data }: { data: PageData } = $props();
 
   const isPlatformAdmin = $derived(data.isPlatformAdmin ?? false);
-  const effectivePermissions = $derived<string[]>(data.effectivePermissions ?? []);
-  const canViewAudit = $derived(
-    effectivePermissions.includes("audit.read") ||
-      effectivePermissions.includes("audit.manage") ||
-      effectivePermissions.includes("*"),
-  );
 
   type SettingsLink = {
     title: string;
@@ -40,79 +31,62 @@
   };
 
   // Mirrors the Settings group in the sidebar so both stay in sync.
-  const sections = $derived.by(() => {
-    const items: SettingsLink[] = [
-      {
-        title: "Account",
-        description: "Profile, passkeys, authenticator apps, and recovery codes.",
-        href: "/settings/account",
-        icon: User,
-      },
-      {
-        title: "Patient Record",
-        description: "Details for the person being monitored.",
-        href: "/settings/patient",
-        icon: HeartPulse,
-      },
-      {
-        title: "Appearance",
-        description: "Theme, units, and display preferences.",
-        href: "/settings/appearance",
-        icon: Palette,
-      },
-      {
-        title: "Therapy",
-        description: "Targets, basal rates, ratios, and treatment profiles.",
-        href: "/settings/profile",
-        icon: Syringe,
-      },
-      {
-        title: "Data Quality",
-        description: "Data validation and cleanup settings.",
-        href: "/settings/data-quality",
-        icon: ShieldCheck,
-      },
-      {
-        title: "Notifications & Trackers",
-        description: "Alerts, reminders, and tracked events.",
-        href: "/settings/trackers",
-        icon: Timer,
-      },
-      {
-        title: "Connectors & Apps",
-        description: "Connect data sources and authorized devices.",
-        href: "/settings/connectors",
-        icon: Plug,
-      },
-      {
-        title: "Timezone History",
-        description: "Where you've lived and travelled, for correct timestamps.",
-        href: "/settings/timezone",
-        icon: Globe,
-      },
-      {
-        title: "Sharing & Privacy",
-        description: "Members, invitations, and public sharing.",
-        href: "/settings/members",
-        icon: Users,
-      },
-    ];
-    if (canViewAudit) {
-      items.push({
-        title: "Audit Log",
-        description: "Review changes and access history.",
-        href: "/settings/audit",
-        icon: ScrollText,
-      });
-    }
-    items.push({
+  const sections: SettingsLink[] = [
+    {
+      title: "Account",
+      description: "Profile, passkeys, authenticator apps, and recovery codes.",
+      href: "/settings/account",
+      icon: User,
+    },
+    {
+      title: "Patient Record",
+      description: "Details for the person being monitored.",
+      href: "/settings/patient",
+      icon: HeartPulse,
+    },
+    {
+      title: "Appearance",
+      description: "Theme, units, and display preferences.",
+      href: "/settings/appearance",
+      icon: Palette,
+    },
+    {
+      title: "Therapy",
+      description: "Targets, basal rates, ratios, and treatment profiles.",
+      href: "/settings/profile",
+      icon: Syringe,
+    },
+    {
+      title: "Data Quality",
+      description: "Data validation and cleanup settings.",
+      href: "/settings/data-quality",
+      icon: ShieldCheck,
+    },
+    {
+      title: "Notifications & Trackers",
+      description: "Alerts, reminders, and tracked events.",
+      href: "/settings/trackers",
+      icon: Timer,
+    },
+    {
+      title: "Connectors & Apps",
+      description: "Connect data sources and authorized devices.",
+      href: "/settings/connectors",
+      icon: Plug,
+    },
+    {
+      title: "Sharing & Privacy",
+      description: "Members, invitations, and public sharing.",
+      href: "/settings/members",
+      icon: Users,
+    },
+    {
       title: "Support & Community",
       description: "Get help and connect with the community.",
       href: "/settings/support",
       icon: HeartHandshake,
-    });
-    return items;
-  });
+    },
+  ];
 
   const adminSections: SettingsLink[] = [
     {
@@ -126,12 +100,6 @@
       description: "Tenant details and platform administrators.",
       href: "/settings/admin/tenants",
       icon: Building2,
-    },
-    {
-      title: "Reset Connector Cursors",
-      description: "Re-sync a connector from a chosen point.",
-      href: "/settings/admin/connector-cursors",
-      icon: RefreshCw,
     },
   ];
 

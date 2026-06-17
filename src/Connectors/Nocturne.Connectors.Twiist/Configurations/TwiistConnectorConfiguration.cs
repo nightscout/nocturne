@@ -19,7 +19,7 @@ namespace Nocturne.Connectors.Twiist.Configurations;
     "Twiist Insight",
     SupportsHistoricalSync = false,
     SupportsManualSync = true,
-    SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake]
+    SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals]
 )]
 public class TwiistConnectorConfiguration : BaseConnectorConfiguration
 {
@@ -41,8 +41,14 @@ public class TwiistConnectorConfiguration : BaseConnectorConfiguration
     public string Password { get; init; } = string.Empty;
 
     /// <summary>
-    /// The PWD (person with diabetes) UUID to follow. Found via the overviews endpoint.
+    /// The PWD (person with diabetes) UUID v4 to follow, used as the path segment in
+    /// /pwd/{id}/package. Auto-discovered from the follower overviews endpoint when left blank
+    /// (the common single-follow case), so it is hidden from the UI and optional. A value can
+    /// still be set as an advanced override when an account follows more than one person.
+    /// Named to match its <see cref="ConnectorPropertyKey.PatientId"/> config key: the binder
+    /// resolves JSON keys from the camel-cased property name, so the name must match the key
+    /// or the persisted value never binds.
     /// </summary>
-    [ConnectorProperty(ConnectorPropertyKey.PatientId, Required = true)]
-    public string PwdId { get; init; } = string.Empty;
+    [ConnectorProperty(ConnectorPropertyKey.PatientId, Hidden = true)]
+    public string PatientId { get; init; } = string.Empty;
 }

@@ -4,7 +4,13 @@
   import { Bell, ChevronRight } from "lucide-svelte";
   import { cn } from "$lib/utils";
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { executeAction } from "$api/generated/notifications.generated.remote";
+  import { goto } from "$app/navigation";
+  import {
+    executeAction,
+    markAsRead,
+    markAllAsRead,
+  } from "$api/generated/notifications.generated.remote";
+  import { CheckCheck } from "lucide-svelte";
   import {
     NotificationUrgency,
     type InAppNotificationDto,
@@ -44,26 +50,19 @@
     });
   });
 
-  // Count by urgency level for badge
-  const urgentCount = $derived(
-    (realtimeStore?.inAppNotifications ?? []).filter(
-      (n) => n.urgency === NotificationUrgency.Urgent
-    ).length
+  // Total active notifications drive the list / empty state; unread ones drive the
+  // bell badge so the count clears when everything is marked read.
+  const totalCount = $derived((realtimeStore?.inAppNotifications ?? []).length);
+  const unread = $derived(
+    (realtimeStore?.inAppNotifications ?? []).filter((n) => !n.readAt)
   );
-  const hazardCount = $derived(
-    (realtimeStore?.inAppNotifications ?? []).filter(
-      (n) => n.urgency === NotificationUrgency.Hazard
-    ).length
-  );
+  const unreadCount = $derived(unread.length);
 
-  // Badge count is total notifications
-  const badgeCount = $derived((realtimeStore?.inAppNotifications ?? []).length);
-
-  // Badge color based on highest urgency
+  // Badge color reflects the highest urgency among unread notifications
   const badgeVariant = $derived<"destructive" | "warning" | "secondary">(
-    urgentCount > 0
+    unread.some((n) => n.urgency === NotificationUrgency.Urgent)
       ? "destructive"
-      : hazardCount > 0
+      : unread.some((n) => n.urgency === NotificationUrgency.Hazard)
         ? "warning"
         : "secondary"
   );
@@ -85,6 +84,23 @@
       return;
     }
 
+    // Compression-low review navigates to the review page rather than executing a
+    // server action (which would just archive it). Mark it read on the way so the
+    // badge clears; the notification auto-archives once its suggestions are resolved.
+    if (
+      notification.type === "glucose.compression_low_review" &&
+      actionId === "review"
+    ) {
+      if (notification.id) {
+        realtimeStore?.markNotificationRead(notification.id);
+        markAsRead(notification.id).catch((err) =>
+          console.error("Failed to mark notification read:", err)
+        );
+      }
+      goto("/reports/data-quality/compression-lows");
+      return;
+    }
+
     try {
       await executeAction({
         id: notification.id!,
@@ -92,6 +108,15 @@
       });
     } catch (err) {
       console.error("Failed to execute notification action:", err);
+    }
+  }
+
+  async function handleMarkAllRead() {
+    realtimeStore?.markAllNotificationsRead();
+    try {
+      await markAllAsRead();
+    } catch (err) {
+      console.error("Failed to mark all notifications read:", err);
     }
   }
 
@@ -112,7 +137,7 @@
           aria-label="Notifications"
         >
           <Bell class="h-4 w-4" />
-          {#if badgeCount > 0}
+          {#if unreadCount > 0}
             <span
               class={cn(
                 "absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium",
@@ -121,7 +146,7 @@
                 badgeVariant === "secondary" && "bg-yellow-500 text-black"
               )}
             >
-              {badgeCount}
+              {unreadCount}
             </span>
           {/if}
         </Button>
@@ -130,21 +155,34 @@
     <Popover.Content align="end" class="w-80 p-0">
       <div class="flex items-center justify-between border-b px-4 py-3">
         <h4 class="text-sm font-semibold">Notifications</h4>
-        {#if sortedNotifications.length > 0}
-          <a
-            href="/settings/trackers"
-            class="text-xs text-muted-foreground hover:underline"
-          >
-            Manage
-          </a>
-        {/if}
+        <div class="flex items-center gap-3">
+          {#if unreadCount > 0}
+            <Button
+              variant="ghost"
+              size="sm"
+              onclick={handleMarkAllRead}
+              class="h-auto gap-1 px-2 py-1 text-xs text-muted-foreground"
+            >
+              <CheckCheck class="h-3.5 w-3.5" />
+              Mark all read
+            </Button>
+          {/if}
+          {#if sortedNotifications.length > 0}
+            <a
+              href="/settings/trackers"
+              class="text-xs text-muted-foreground hover:underline"
+            >
+              Manage
+            </a>
+          {/if}
+        </div>
       </div>
 
       <div class="border-b">
         <DndPanel onNavigate={() => (isOpen = false)} />
       </div>
 
-      {#if badgeCount === 0}
+      {#if totalCount === 0}
         <div class="flex flex-col items-center justify-center py-8 text-center">
           <Bell class="h-8 w-8 text-muted-foreground/50 mb-2" />
           <p class="text-sm text-muted-foreground">No active notifications</p>

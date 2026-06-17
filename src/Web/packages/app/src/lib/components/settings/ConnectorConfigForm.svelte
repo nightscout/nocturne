@@ -125,6 +125,9 @@
       // Skip secret fields - they're handled separately
       if (secretFieldSet.has(propName)) continue;
 
+      // Skip hidden fields - connector derives these automatically
+      if (propSchema["x-hidden"] === true) continue;
+
       // Skip 'enabled' field - it's controlled by the "Enable Connector" toggle
       if (propName.toLowerCase() === "enabled") continue;
 
@@ -166,7 +169,7 @@
         name,
         schema: schema.properties[name],
       }))
-      .filter((s) => s.schema);
+      .filter((s) => s.schema && s.schema["x-hidden"] !== true);
   });
 
   // Get non-secret fields in the Credentials category
@@ -174,8 +177,10 @@
     const secretFieldSet = new Set(schema.secrets ?? []);
     return Object.entries(schema.properties)
       .filter(
-        ([name]) =>
-          getPropertyMeta(name).category === "Credentials" && !secretFieldSet.has(name)
+        ([name, propSchema]) =>
+          getPropertyMeta(name).category === "Credentials" &&
+          !secretFieldSet.has(name) &&
+          propSchema["x-hidden"] !== true
       )
       .map(([name, schema]) => ({ name, schema }));
   });

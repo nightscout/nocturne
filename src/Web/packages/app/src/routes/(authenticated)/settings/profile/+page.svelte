@@ -235,14 +235,15 @@
                           Active
                         </Badge>
                       {:else}
-                        <button
-                          type="button"
-                          class="text-xs text-muted-foreground hover:text-primary transition-colors"
-                          onclick={(e) => { e.preventDefault(); handleSetActive(profileName); }}
+                        <Button
+                          variant="link"
+                          size="sm"
+                          class="h-auto p-0 text-xs text-muted-foreground"
+                          onclick={(e: MouseEvent) => { e.preventDefault(); handleSetActive(profileName); }}
                           disabled={switchingProfile !== null}
                         >
                           {switchingProfile === profileName ? "Switching..." : "Set as active"}
-                        </button>
+                        </Button>
                       {/if}
                       {#if isExternal}
                         <Badge variant="outline" class="text-xs gap-1">

@@ -6426,6 +6426,54 @@ export class ClockFacesClient {
     }
 
     /**
+     * Get the latest glucose readings a public clock face displays (public, no authentication required).
+     * @param id Clock face UUID
+     * @return The two most recent sensor glucose readings (newest first), or 404 if the clock does not exist.
+     */
+    getGlucose(id: string, signal?: AbortSignal): Promise<ClockGlucoseDto[]> {
+        let url_ = this.baseUrl + "/api/v4/clockfaces/{id}/glucose";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetGlucose(_response);
+        });
+    }
+
+    protected processGetGlucose(response: Response): Promise<ClockGlucoseDto[]> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClockGlucoseDto[];
+            return result200;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClockGlucoseDto[]>(null as any);
+    }
+
+    /**
      * List all clock faces for the current user
      * @return List of clock faces
      */
@@ -12733,6 +12781,56 @@ export class AlertsClient {
     }
 
     /**
+     * Acknowledge a single alert excursion, halting escalation delivery for its
+    active instances. Acknowledging an excursion that is already acknowledged
+    or already closed is a no-op. Returns 404 when the excursion does not
+    exist for the current tenant.
+     */
+    acknowledgeExcursion(excursionId: string, request: AcknowledgeRequest, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/alerts/excursions/{excursionId}/acknowledge";
+        if (excursionId === undefined || excursionId === null)
+            throw new globalThis.Error("The parameter 'excursionId' must be defined.");
+        url_ = url_.replace("{excursionId}", encodeURIComponent("" + excursionId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "POST",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processAcknowledgeExcursion(_response);
+        });
+    }
+
+    protected processAcknowledgeExcursion(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
      * Snooze an alert instance for the specified duration.
      */
     snoozeInstance(instanceId: string, request: SnoozeRequest, signal?: AbortSignal): Promise<void> {
@@ -13043,6 +13141,89 @@ export class NotificationsClient {
     }
 
     protected processExecuteAction(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 401) {
+            return response.text().then((_responseText) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result401);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    markAllAsRead(signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/notifications/read-all";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processMarkAllAsRead(_response);
+        });
+    }
+
+    protected processMarkAllAsRead(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 401) {
+            return response.text().then((_responseText) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result401);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    markAsRead(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/notifications/{id}/read";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "POST",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processMarkAsRead(_response);
+        });
+    }
+
+    protected processMarkAsRead(response: Response): Promise<void> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
         if (status === 204) {
@@ -22898,6 +23079,53 @@ export class PredictionClient {
         }
         return Promise.resolve<PredictionStatusResponse>(null as any);
     }
+
+    /**
+     * Get the pre-resolved therapy profile for the next 24 hours, flattened into contiguous
+    absolute-time segments, for an offline on-device oref prediction run.
+     * @param profileId (optional) Optional profile name. The device omits it (resolves the active profile).
+     */
+    getProfileSnapshot(profileId?: string | null | undefined, signal?: AbortSignal): Promise<ProfileSnapshotResponse> {
+        let url_ = this.baseUrl + "/api/v4/predictions/profile-snapshot?";
+        if (profileId !== undefined && profileId !== null)
+            url_ += "profileId=" + encodeURIComponent("" + profileId) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processGetProfileSnapshot(_response);
+        });
+    }
+
+    protected processGetProfileSnapshot(response: Response): Promise<ProfileSnapshotResponse> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProfileSnapshotResponse;
+            return result200;
+            });
+        } else if (status === 500) {
+            return response.text().then((_responseText) => {
+            let result500: any = null;
+            result500 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PredictionErrorResponse;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result500);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ProfileSnapshotResponse>(null as any);
+    }
 }
 
 export class RetrospectiveClient {
@@ -23080,6 +23308,93 @@ export class RetrospectiveClient {
             });
         }
         return Promise.resolve<BasalTimelineResponse>(null as any);
+    }
+}
+
+export class SensorIntegrityClient {
+    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        this.http = http ? http : window as any;
+        this.baseUrl = baseUrl ?? "";
+    }
+
+    /**
+     * Analyze a UTC window for sensor-integrity clusters and cluster-linked hypo events.
+     * @param startDate (optional) Inclusive UTC start of the window.
+     * @param endDate (optional) Exclusive UTC end of the window.
+     * @param source (optional) Optional data source filter; omitted analyzes the combined stream.
+     * @param bySource (optional) When true, also return a per-data-source breakdown.
+     * @param minConfidence (optional) Minimum cluster confidence for a hypo event to be reported.
+     * @param requireInsulin (optional) When true, only report hypo events with insulin dosed during the cluster.
+     * @param hypoThresholdMgdl (optional) Glucose level (mg/dL) below which a reading counts as hypo.
+     * @param windowHours (optional) Hours after a cluster to search for a hypo nadir.
+     * @return The sensor-integrity report for the window.
+     */
+    analyze(startDate?: Date | undefined, endDate?: Date | undefined, source?: string | null | undefined, bySource?: boolean | undefined, minConfidence?: ClusterConfidence | undefined, requireInsulin?: boolean | undefined, hypoThresholdMgdl?: number | undefined, windowHours?: number | undefined, signal?: AbortSignal): Promise<SensorIntegrityReport> {
+        let url_ = this.baseUrl + "/api/v4/sensor-integrity?";
+        if (startDate === null)
+            throw new globalThis.Error("The parameter 'startDate' cannot be null.");
+        else if (startDate !== undefined)
+            url_ += "startDate=" + encodeURIComponent(startDate ? "" + startDate.toISOString() : "") + "&";
+        if (endDate === null)
+            throw new globalThis.Error("The parameter 'endDate' cannot be null.");
+        else if (endDate !== undefined)
+            url_ += "endDate=" + encodeURIComponent(endDate ? "" + endDate.toISOString() : "") + "&";
+        if (source !== undefined && source !== null)
+            url_ += "source=" + encodeURIComponent("" + source) + "&";
+        if (bySource === null)
+            throw new globalThis.Error("The parameter 'bySource' cannot be null.");
+        else if (bySource !== undefined)
+            url_ += "bySource=" + encodeURIComponent("" + bySource) + "&";
+        if (minConfidence === null)
+            throw new globalThis.Error("The parameter 'minConfidence' cannot be null.");
+        else if (minConfidence !== undefined)
+            url_ += "minConfidence=" + encodeURIComponent("" + minConfidence) + "&";
+        if (requireInsulin === null)
+            throw new globalThis.Error("The parameter 'requireInsulin' cannot be null.");
+        else if (requireInsulin !== undefined)
+            url_ += "requireInsulin=" + encodeURIComponent("" + requireInsulin) + "&";
+        if (hypoThresholdMgdl === null)
+            throw new globalThis.Error("The parameter 'hypoThresholdMgdl' cannot be null.");
+        else if (hypoThresholdMgdl !== undefined)
+            url_ += "hypoThresholdMgdl=" + encodeURIComponent("" + hypoThresholdMgdl) + "&";
+        if (windowHours === null)
+            throw new globalThis.Error("The parameter 'windowHours' cannot be null.");
+        else if (windowHours !== undefined)
+            url_ += "windowHours=" + encodeURIComponent("" + windowHours) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "GET",
+            signal,
+            headers: {
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processAnalyze(_response);
+        });
+    }
+
+    protected processAnalyze(response: Response): Promise<SensorIntegrityReport> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SensorIntegrityReport;
+            return result200;
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<SensorIntegrityReport>(null as any);
     }
 }
 
@@ -29934,6 +30249,14 @@ export interface ClockSettings {
     screensaverMode?: boolean;
 }
 
+export interface ClockGlucoseDto {
+    mills?: number;
+    mgdl?: number;
+    direction?: string | undefined;
+    delta?: number | undefined;
+    dataSource?: string | undefined;
+}
+
 export interface ClockFaceListItem {
     id?: string;
     name?: string;
@@ -31241,6 +31564,7 @@ export interface StatusResponse {
     authorized?: any | undefined;
     runtimeState?: string | undefined;
     head?: string | undefined;
+    build?: string | undefined;
     isDemo?: boolean | undefined;
     nextResetAt?: Date | undefined;
     anonymousReadAccess?: boolean;
@@ -31638,6 +31962,7 @@ export interface InAppNotificationDto {
     title?: string;
     subtitle?: string | undefined;
     createdAt?: Date;
+    readAt?: Date | undefined;
     icon?: string | undefined;
     source?: string | undefined;
     sourceId?: string | undefined;
@@ -32242,6 +32567,7 @@ export interface BodyWeight extends ProcessableDocumentBase {
     device?: string | undefined;
     enteredBy?: string | undefined;
     data_source?: string | undefined;
+    syncIdentifier?: string | undefined;
 }
 
 export function isBodyWeight(object: any): object is BodyWeight {
@@ -32259,6 +32585,7 @@ export interface HeartRate extends ProcessableDocumentBase {
     device?: string | undefined;
     enteredBy?: string | undefined;
     data_source?: string | undefined;
+    syncIdentifier?: string | undefined;
 }
 
 export function isHeartRate(object: any): object is HeartRate {
@@ -32279,8 +32606,11 @@ export interface UpsertHeartRateRequest {
     device?: string | undefined;
     /** Name of the application that submitted this record. */
     app?: string | undefined;
-    /** Upstream data source identifier. */
+    /** Upstream data source identifier; paired with SyncIdentifier for dedup. */
     dataSource?: string | undefined;
+    /** Stable per-source identifier. When paired with DataSource, re-uploading the
+same measurement updates the existing record in place rather than creating a duplicate. */
+    syncIdentifier?: string | undefined;
 }
 
 export interface PatientRecord {
@@ -32373,6 +32703,7 @@ export interface StepCount extends ProcessableDocumentBase {
     device?: string | undefined;
     enteredBy?: string | undefined;
     data_source?: string | undefined;
+    syncIdentifier?: string | undefined;
 }
 
 export function isStepCount(object: any): object is StepCount {
@@ -32393,8 +32724,11 @@ export interface UpsertStepCountRequest {
     device?: string | undefined;
     /** Name of the application that submitted this record. */
     app?: string | undefined;
-    /** Upstream data source identifier. */
+    /** Upstream data source identifier; paired with SyncIdentifier for dedup. */
     dataSource?: string | undefined;
+    /** Stable per-source identifier. When paired with DataSource, re-uploading the
+same measurement updates the existing record in place rather than creating a duplicate. */
+    syncIdentifier?: string | undefined;
 }
 
 export interface BGCheck {
@@ -33640,6 +33974,38 @@ export interface PredictionStatusResponse {
     source?: string;
 }
 
+/** Pre-resolved therapy profile flattened into contiguous absolute-time segments covering [now, now+24h) for on-device oref prediction. Property names are pinned to snake_case with JsonPropertyNameAttribute so the wire contract is independent of any ambient serializer naming policy, and every field is emitted (including zeros) so the client's strict decoder never sees a missing key. */
+export interface ProfileSnapshotResponse {
+    /** When the snapshot was resolved (Unix ms); equals the window start. */
+    fetched_at_mills?: number;
+    /** Ascending, contiguous, gap/overlap-free segments covering [now, now+24h). */
+    segments?: ProfileSnapshotSegment[];
+}
+
+/** One flat segment of the resolved profile: all scalars are constant over [start, end). */
+export interface ProfileSnapshotSegment {
+    /** Segment start (Unix ms, inclusive). */
+    start_mills?: number;
+    /** Segment end (Unix ms, exclusive). */
+    end_mills?: number;
+    /** Duration of insulin action (hours). */
+    dia?: number;
+    /** Scheduled basal rate (U/hr). */
+    basal?: number;
+    /** Insulin sensitivity (mg/dL per U). */
+    sens?: number;
+    /** Carb ratio (g/U). */
+    carb_ratio?: number;
+    /** Low BG target (mg/dL). */
+    min_bg?: number;
+    /** High BG target (mg/dL). */
+    max_bg?: number;
+    /** Insulin activity peak (minutes). */
+    peak?: number;
+    /** Insulin activity curve model name (e.g. "rapid-acting"). */
+    curve?: string;
+}
+
 /** Response for single point retrospective data */
 export interface RetrospectiveDataResponse {
     time?: number;
@@ -33737,6 +34103,77 @@ export interface BasalDataPoint {
     timeLabel?: string | undefined;
     rate?: number;
     isTemp?: boolean;
+}
+
+export interface SensorIntegrityReport {
+    from?: Date;
+    to?: Date;
+    source?: string | undefined;
+    clusters?: GlucoseCluster[];
+    hypoEvents?: SensorIntegrityHypoEvent[];
+    summary?: SensorIntegritySummary;
+    perSource?: SensorIntegritySourceMetrics[] | undefined;
+}
+
+export interface GlucoseCluster {
+    start?: Date;
+    end?: Date;
+    minMgdl?: number;
+    maxMgdl?: number;
+    durationMinutes?: number;
+    confidence?: ClusterConfidence;
+    diagnostics?: ClusterDiagnostics;
+}
+
+export enum ClusterConfidence {
+    Low = "Low",
+    Medium = "Medium",
+    High = "High",
+}
+
+export interface ClusterDiagnostics {
+    samplingIntervalMinutes?: number;
+    windowPoints?: number;
+    peakReversals?: number;
+    peakIncoherenceRatio?: number;
+    amplitude?: number;
+    maxStep?: number;
+    spikePromoted?: boolean;
+    chainSize?: number;
+    chainPromoted?: boolean;
+}
+
+export interface SensorIntegrityHypoEvent {
+    event?: HypoEvent;
+    isNocturnal?: boolean;
+}
+
+export interface HypoEvent {
+    cluster?: GlucoseCluster;
+    nadirMgdl?: number;
+    nadirTime?: Date;
+    timeToNadirHours?: number;
+    readingsBelowThreshold?: number;
+    insulinDuringCluster?: InsulinDose[];
+}
+
+export interface InsulinDose {
+    time?: Date;
+    units?: number;
+}
+
+export interface SensorIntegritySummary {
+    days?: number;
+    clusters?: number;
+    mediumClusters?: number;
+    highClusters?: number;
+    events?: number;
+    nocturnalEvents?: number;
+}
+
+export interface SensorIntegritySourceMetrics {
+    source?: string;
+    summary?: SensorIntegritySummary;
 }
 
 export interface PaginatedResponseOfStateSpan {

@@ -13,4 +13,12 @@ public interface IAuditContext
     Guid? TokenId { get; }
     string? CorrelationId { get; }
     string? Endpoint { get; }
+
+    /// <summary>
+    /// True for system/connector/background mutations (no human actor). These are high-volume
+    /// automated data ingestion whose provenance is already captured on the records themselves
+    /// (e.g. <c>data_source</c>), so they are NOT written to the mutation audit log. Defaults to
+    /// false (user-attributed actions), so every existing implementer stays auditable.
+    /// </summary>
+    bool IsSystem => false;
 }

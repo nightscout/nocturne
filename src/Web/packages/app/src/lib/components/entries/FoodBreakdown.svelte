@@ -40,14 +40,16 @@
       breakdown = null;
       return;
     }
-    void loadBreakdown(carbIntakeId);
+    // `.run()` rejects during the render/effect flush, so defer out of it.
+    const id = carbIntakeId;
+    queueMicrotask(() => loadBreakdown(id));
   });
 
   async function loadBreakdown(id: string) {
     isLoading = true;
     loadError = null;
     try {
-      breakdown = await getCarbIntakeFoodBreakdown(id);
+      breakdown = await getCarbIntakeFoodBreakdown(id).run();
     } catch (err) {
       console.error("Failed to load food breakdown:", err);
       loadError = "Unable to load food breakdown.";

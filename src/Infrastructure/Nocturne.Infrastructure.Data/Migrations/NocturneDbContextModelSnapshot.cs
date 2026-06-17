@@ -662,6 +662,21 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("DataSource")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("data_source");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("DeletedByUser")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("deleted_by_user");
+
                     b.Property<string>("Device")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
@@ -684,6 +699,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasMaxLength(24)
                         .HasColumnType("character varying(24)")
                         .HasColumnName("original_id");
+
+                    b.Property<string>("SyncIdentifier")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("sync_identifier");
 
                     b.Property<DateTime>("SysCreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -714,7 +734,13 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SysCreatedAt")
                         .HasDatabaseName("ix_body_weights_sys_created_at");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId", "Mills")
+                        .HasDatabaseName("ix_body_weights_tenant_mills");
+
+                    b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
+                        .IsUnique()
+                        .HasDatabaseName("ix_body_weights_tenant_source_sync_id")
+                        .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
                     b.ToTable("body_weights");
                 });
@@ -1662,6 +1688,21 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("bpm");
 
+                    b.Property<string>("DataSource")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("data_source");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("DeletedByUser")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("deleted_by_user");
+
                     b.Property<string>("Device")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
@@ -1676,6 +1717,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasMaxLength(24)
                         .HasColumnType("character varying(24)")
                         .HasColumnName("original_id");
+
+                    b.Property<string>("SyncIdentifier")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("sync_identifier");
 
                     b.Property<DateTime>("SysCreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1704,11 +1750,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SysCreatedAt")
                         .HasDatabaseName("ix_heart_rates_sys_created_at");
 
-                    b.HasIndex("TenantId");
-
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_heart_rates_timestamp");
+
+                    b.HasIndex("TenantId", "Timestamp")
+                        .HasDatabaseName("ix_heart_rates_tenant_timestamp");
+
+                    b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
+                        .IsUnique()
+                        .HasDatabaseName("ix_heart_rates_tenant_source_sync_id")
+                        .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
                     b.ToTable("heart_rates");
                 });
@@ -1759,6 +1811,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<string>("MetadataJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("metadata_json");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
 
                     b.Property<string>("ResolutionConditionsJson")
                         .HasColumnType("jsonb")
@@ -2552,6 +2608,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(50)")
                         .HasDefaultValue("app")
                         .HasColumnName("grant_type");
+
+                    b.Property<bool>("IsMigrated")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_migrated");
 
                     b.Property<string>("Label")
                         .HasMaxLength(255)
@@ -3370,6 +3430,21 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("DataSource")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("data_source");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("DeletedByUser")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("deleted_by_user");
+
                     b.Property<string>("Device")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
@@ -3392,6 +3467,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<int>("Source")
                         .HasColumnType("integer")
                         .HasColumnName("source");
+
+                    b.Property<string>("SyncIdentifier")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("sync_identifier");
 
                     b.Property<DateTime>("SysCreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -3420,11 +3500,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SysCreatedAt")
                         .HasDatabaseName("ix_step_counts_sys_created_at");
 
-                    b.HasIndex("TenantId");
-
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_step_counts_timestamp");
+
+                    b.HasIndex("TenantId", "Timestamp")
+                        .HasDatabaseName("ix_step_counts_tenant_timestamp");
+
+                    b.HasIndex("TenantId", "DataSource", "SyncIdentifier")
+                        .IsUnique()
+                        .HasDatabaseName("ix_step_counts_tenant_source_sync_id")
+                        .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
 
                     b.ToTable("step_counts");
                 });

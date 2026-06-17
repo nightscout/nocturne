@@ -81,6 +81,7 @@ import {
   RetrospectiveClient,
   RoleClient,
   SensorGlucoseClient,
+  SensorIntegrityClient,
   ServicesClient,
   SetupClient,
   ShareLinkClient,
@@ -190,6 +191,7 @@ export class ApiClient {
   public readonly retrospective: RetrospectiveClient;
   public readonly role: RoleClient;
   public readonly sensorGlucose: SensorGlucoseClient;
+  public readonly sensorIntegrity: SensorIntegrityClient;
   public readonly services: ServicesClient;
   public readonly setup: SetupClient;
   public readonly shareLink: ShareLinkClient;
@@ -299,6 +301,7 @@ export class ApiClient {
     this.retrospective = new RetrospectiveClient(apiBaseUrl, http);
     this.role = new RoleClient(apiBaseUrl, http);
     this.sensorGlucose = new SensorGlucoseClient(apiBaseUrl, http);
+    this.sensorIntegrity = new SensorIntegrityClient(apiBaseUrl, http);
     this.services = new ServicesClient(apiBaseUrl, http);
     this.setup = new SetupClient(apiBaseUrl, http);
     this.shareLink = new ShareLinkClient(apiBaseUrl, http);

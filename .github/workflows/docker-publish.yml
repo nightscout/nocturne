@@ -136,7 +136,9 @@ jobs:
             -p:PublishProfile=DefaultContainer \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-api \
-            "-p:ContainerImageTags=${{ steps.version.outputs.dotnet_tags }}"
+            "-p:ContainerImageTags=${{ steps.version.outputs.dotnet_tags }}" \
+            "-p:ContainerGitCommit=${GITHUB_SHA}" \
+            "-p:ContainerBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
       - name: Build and push Nocturne.Services.Demo container
         if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)

@@ -12,6 +12,7 @@
   import { curveMonotoneX } from "d3";
   import type { BrushContextValue } from "layerchart";
   import RotateCcw from "lucide-svelte/icons/rotate-ccw";
+  import { Button } from "$lib/components/ui/button";
   import { time, formatDateTimeCompact } from "$lib/utils/formatting";
 
   interface GlucosePoint {
@@ -125,14 +126,10 @@
   >
     <span class="font-medium">Full Range Overview</span>
     {#if hasSelection}
-      <button
-        type="button"
-        class="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-primary/10 text-primary rounded hover:bg-primary/20 transition-colors"
-        onclick={resetSelection}
-      >
+      <Button variant="ghost" size="sm" class="flex items-center gap-1 text-[10px] text-primary" onclick={resetSelection}>
         <RotateCcw size={10} />
         Reset zoom
-      </button>
+      </Button>
     {/if}
   </div>
 

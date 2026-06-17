@@ -53,7 +53,7 @@ public class VersionService : IVersionService
             Version = version,
             Name = assemblyName,
             ServerTime = DateTime.UtcNow,
-            Head = Environment.GetEnvironmentVariable("GIT_HEAD") ?? "unknown",
+            Head = Environment.GetEnvironmentVariable("GIT_COMMIT") ?? "unknown",
             Build = Environment.GetEnvironmentVariable("BUILD_DATE") ?? DateTime.UtcNow.ToString("yyyy.MM.dd"),
             ApiCompatibility = "Nightscout v15.0",
         };

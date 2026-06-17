@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
@@ -29,7 +30,16 @@ public class TreatmentPublisherTests
     private readonly Mock<IPatientInsulinRepository> _mockPatientInsulinRepository;
     private readonly Mock<IBasalRateResolver> _mockBasalRateResolver;
     private readonly Mock<ITherapySettingsResolver> _mockTherapySettingsResolver;
+    private Mock<ITenantDbContextFactory> _mockContextFactory = null!;
     private readonly TreatmentPublisher _publisher;
+
+    private static readonly Guid TestTenantId = Guid.NewGuid();
+
+    private static NocturneDbContext NewDbContext() =>
+        new(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options)
+        { TenantId = TestTenantId };
 
     public TreatmentPublisherTests()
     {
@@ -57,13 +67,13 @@ public class TreatmentPublisherTests
 
     private TreatmentPublisher CreatePublisher(IAuditContext auditContext)
     {
-        var dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-        var dbContext = new NocturneDbContext(dbOptions);
+        _mockContextFactory = new Mock<ITenantDbContextFactory>();
+        _mockContextFactory
+            .Setup(f => f.CreateAsync(It.IsAny<CancellationToken>()))
+            .Returns(() => new ValueTask<NocturneDbContext>(NewDbContext()));
 
         return new TreatmentPublisher(
-            dbContext,
+            _mockContextFactory.Object,
             _mockTreatmentService.Object,
             _mockBolusRepository.Object,
             _mockCarbIntakeRepository.Object,
@@ -106,6 +116,31 @@ public class TreatmentPublisherTests
         var result = await _publisher.PublishTreatmentsAsync(new List<Treatment>(), "test-source");
 
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PublishDecompositionBatchesAsync_ConcurrentCalls_AcquireIndependentContexts()
+    {
+        var calls = Enumerable.Range(0, 16).Select(i =>
+            _publisher.PublishDecompositionBatchesAsync(
+                new[]
+                {
+                    new DecompositionBatch
+                    {
+                        Id = Guid.NewGuid(),
+                        Source = "test-source",
+                        SourceRecordId = $"record-{i}",
+                        CreatedAt = DateTime.UtcNow,
+                    },
+                },
+                "test-source"));
+
+        var results = await Task.WhenAll(calls);
+
+        results.Should().OnlyContain(r => r);
+        _mockContextFactory.Verify(
+            f => f.CreateAsync(It.IsAny<CancellationToken>()),
+            Times.Exactly(16));
     }
 
     [Fact]
@@ -297,10 +332,10 @@ public class TreatmentPublisherTests
     }
 
     [Fact]
-    public async Task PublishTempBasalsAsync_RunsSweepDeleteUnderSystemAttribution()
+    public async Task PublishTempBasalsAsync_RunsReconcileDeleteUnderSystemAttribution()
     {
-        // The delete-then-reinsert sweep must write delete audit rows with AuthType IS NULL so the
-        // dedup discriminator treats them as system-initiated and lets future resyncs through. The
+        // The reconcile delete must write delete audit rows with AuthType IS NULL so the dedup
+        // discriminator treats them as system-initiated and lets future resyncs through. The
         // delete — not just the insert — is what the discriminator reads, so it has to run inside
         // the SystemAuditScope; trace fields must survive so the rows stay tied to the request.
         var auditContext = new AuditContext
@@ -315,8 +350,9 @@ public class TreatmentPublisherTests
         string? authTypeDuringDelete = "unset";
         string? correlationDuringDelete = null;
         _mockTempBasalRepository
-            .Setup(r => r.DeleteBySourceAndDateRangeAsync(
-                It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.SoftDeleteAbsentBySourceAndDateRangeAsync(
+                It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<CancellationToken>()))
             .Callback(() =>
             {
                 authTypeDuringDelete = auditContext.AuthType;
@@ -339,13 +375,46 @@ public class TreatmentPublisherTests
         var result = await publisher.PublishTempBasalsAsync(records, "glooko-connector");
 
         result.Should().BeTrue();
-        authTypeDuringDelete.Should().BeNull("the sweep delete must be system-attributed");
+        authTypeDuringDelete.Should().BeNull("the reconcile delete must be system-attributed");
         correlationDuringDelete.Should().Be("trace-1", "trace fields must survive the scope");
         auditContext.AuthType.Should().Be("bearer", "actor fields must be restored after the scope");
         _mockTempBasalRepository.Verify(
-            r => r.DeleteBySourceAndDateRangeAsync(
-                "glooko-connector", It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
+            r => r.SoftDeleteAbsentBySourceAndDateRangeAsync(
+                "glooko-connector", It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishTempBasalsAsync_ReconcilesByIncomingLegacyIds_SoAResyncDoesNotChurn()
+    {
+        // The reconcile must pass the batch's legacy ids as the keep-set so still-reported rows are
+        // left active (and thus skipped by BulkCreateAsync's legacy-id dedup) instead of being
+        // deleted and re-created. This is what stops the per-cycle tombstone accumulation.
+        IReadOnlySet<string>? keepLegacyIds = null;
+        _mockTempBasalRepository
+            .Setup(r => r.SoftDeleteAbsentBySourceAndDateRangeAsync(
+                It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<IReadOnlySet<string>>(), It.IsAny<CancellationToken>()))
+            .Callback((string _, DateTime _, DateTime _, IReadOnlySet<string> keep, CancellationToken _) =>
+                keepLegacyIds = keep)
+            .ReturnsAsync(0);
+
+        var ts = new DateTime(2026, 5, 14, 12, 0, 0, DateTimeKind.Utc);
+        var records = new List<TempBasal>
+        {
+            new() { Id = Guid.NewGuid(), LegacyId = "glooko_tempbasal_1", StartTimestamp = ts, Rate = 0.5, Origin = TempBasalOrigin.Algorithm, DataSource = "glooko-connector" },
+            new() { Id = Guid.NewGuid(), LegacyId = "glooko_tempbasal_2", StartTimestamp = ts.AddMinutes(5), Rate = 0.6, Origin = TempBasalOrigin.Algorithm, DataSource = "glooko-connector" },
+            new() { Id = Guid.NewGuid(), LegacyId = null, StartTimestamp = ts.AddMinutes(10), Rate = 0.7, Origin = TempBasalOrigin.Algorithm, DataSource = "glooko-connector" },
+        };
+
+        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector");
+
+        result.Should().BeTrue();
+        keepLegacyIds.Should().BeEquivalentTo(new[] { "glooko_tempbasal_1", "glooko_tempbasal_2" },
+            "only non-null incoming legacy ids form the keep-set");
+        _mockTempBasalRepository.Verify(
+            r => r.BulkCreateAsync(records, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

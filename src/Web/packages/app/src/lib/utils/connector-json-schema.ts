@@ -14,6 +14,10 @@ export interface JsonSchemaProperty {
   "x-envVar"?: string;
   /** Category for UI grouping (x-category extension) */
   "x-category"?: string;
+  /** Whether this property is hidden from the UI (x-hidden extension) */
+  "x-hidden"?: boolean;
+  /** Whether this property holds a secret (x-secret extension) */
+  "x-secret"?: boolean;
 }
 
 export interface JsonSchema {

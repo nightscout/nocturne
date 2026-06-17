@@ -128,6 +128,61 @@ public class InAppNotificationRepository : IInAppNotificationRepository
     }
 
     /// <summary>
+    /// Mark a single notification read (no-op if already read)
+    /// </summary>
+    /// <param name="id">The notification ID to mark read</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The notification entity if found, null otherwise</returns>
+    public virtual async Task<InAppNotificationEntity?> MarkAsReadAsync(
+        Guid id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var entity = await _context
+            .InAppNotifications
+            .FirstOrDefaultAsync(n => n.Id == id, cancellationToken);
+
+        if (entity == null)
+            return null;
+
+        if (entity.ReadAt == null)
+        {
+            entity.ReadAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        return entity;
+    }
+
+    /// <summary>
+    /// Mark all of a user's active, unread notifications read
+    /// </summary>
+    /// <param name="userId">The user ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The notifications that were updated</returns>
+    public virtual async Task<List<InAppNotificationEntity>> MarkAllAsReadAsync(
+        string userId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var unread = await _context
+            .InAppNotifications
+            .Where(n => n.UserId == userId && !n.IsArchived && n.ReadAt == null)
+            .ToListAsync(cancellationToken);
+
+        if (unread.Count == 0)
+            return unread;
+
+        var now = DateTime.UtcNow;
+        foreach (var entity in unread)
+            entity.ReadAt = now;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return unread;
+    }
+
+    /// <summary>
     /// Get the count of active notifications for a user from a specific source
     /// </summary>
     /// <param name="userId">The user ID</param>
@@ -237,6 +292,7 @@ public class InAppNotificationRepository : IInAppNotificationRepository
             Title = entity.Title,
             Subtitle = entity.Subtitle,
             CreatedAt = entity.CreatedAt,
+            ReadAt = entity.ReadAt,
             SourceId = entity.SourceId,
             Metadata = metadata,
             Actions = actions

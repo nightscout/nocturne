@@ -2,7 +2,9 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { onMount } from "svelte";
+  import { setClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
+  import { PublicClockStore } from "$lib/stores/public-clock-store.svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import {
@@ -15,14 +17,22 @@
   import type { ClockFaceConfig } from "$lib/api";
   import { getById as getClockFaceById } from "$api/generated/clockFaces.generated.remote";
 
-  const realtimeStore = getRealtimeStore();
+  // The route param identifies the clock and is the capability for its glucose.
+  const id = page.params.id ?? "";
 
-  // Get ID from route params
-  const id = $derived(page.params.id ?? "");
+  // This is the anonymous public view: there is no realtime store in context here.
+  // Poll the capability-scoped, glucose-only endpoint and expose it to
+  // ClockFaceRenderer via the shared ClockGlucoseSource context.
+  const clockStore = new PublicClockStore(id);
+  setClockGlucoseSource(clockStore);
 
-  // Get current glucose values from realtime store
-  const lastUpdated = $derived(realtimeStore.lastUpdated);
-  const demoMode = $derived(realtimeStore.demoMode);
+  onMount(() => {
+    clockStore.start();
+    return () => clockStore.stop();
+  });
+
+  const lastUpdated = $derived(clockStore.lastUpdated);
+  const demoMode = $derived(clockStore.demoMode);
 
   // Clock face config (loaded from API)
   let clockConfig = $state<ClockFaceConfig | null>(null);
@@ -147,6 +157,8 @@
   <ClockFaceRenderer
     config={clockConfig}
     screensaver={clockConfig.settings?.screensaverMode ?? false}
+    showCharts={false}
+    loadTrackerDefinitions={false}
     class="fixed inset-0 h-screen w-screen transition-colors duration-500"
   />
 

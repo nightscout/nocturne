@@ -334,13 +334,15 @@
   // Load clock face from route param on mount
   $effect(() => {
     if (!browser || !clockFaceId) return;
-    loadClockFace(clockFaceId);
+    // `.run()` rejects during the render/effect flush, so defer out of it.
+    const id = clockFaceId;
+    queueMicrotask(() => loadClockFace(id));
   });
 
   async function loadClockFace(id: string) {
     loading = true;
     try {
-      const clockFace = await getClockFaceById(id);
+      const clockFace = await getClockFaceById(id).run();
       clockName = clockFace.name ?? "My Clock Face";
       if (clockFace.config) {
         config = initializeInternalConfig(clockFace.config);

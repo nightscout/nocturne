@@ -1,5 +1,6 @@
 <script lang="ts">
   import RotateCcw from "lucide-svelte/icons/rotate-ccw";
+  import { Button } from "$lib/components/ui/button";
 
   interface Props {
     isZoomed: boolean;
@@ -28,13 +29,9 @@
         </span>
       {/if}
     </div>
-    <button
-      type="button"
-      class="flex items-center gap-1 px-2 py-1 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded transition-colors"
-      onclick={onResetZoom}
-    >
+    <Button variant="ghost" size="sm" class="flex items-center gap-1 text-xs font-medium text-primary" onclick={onResetZoom}>
       <RotateCcw size={12} />
       Reset zoom
-    </button>
+    </Button>
   </div>
 {/if}

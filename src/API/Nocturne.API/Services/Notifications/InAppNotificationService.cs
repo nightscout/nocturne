@@ -184,6 +184,79 @@ public class InAppNotificationService : IInAppNotificationService
     }
 
     /// <inheritdoc />
+    public async Task<bool> MarkAsReadAsync(
+        Guid notificationId,
+        string userId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var notification = await _repository.GetByIdAsync(notificationId, cancellationToken);
+
+        if (notification == null || notification.UserId != userId)
+        {
+            return false;
+        }
+
+        // Already read — nothing to update or broadcast.
+        if (notification.ReadAt != null)
+        {
+            return true;
+        }
+
+        var updated = await _repository.MarkAsReadAsync(notificationId, cancellationToken);
+        if (updated == null)
+        {
+            return false;
+        }
+
+        await BroadcastUpdatedSafeAsync(updated);
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> MarkAllAsReadAsync(
+        string userId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var updated = await _repository.MarkAllAsReadAsync(userId, cancellationToken);
+
+        foreach (var entity in updated)
+        {
+            await BroadcastUpdatedSafeAsync(entity);
+        }
+
+        _logger.LogInformation(
+            "Marked {Count} notifications read for user {UserId}",
+            updated.Count,
+            userId
+        );
+
+        return updated.Count;
+    }
+
+    /// <summary>
+    /// Broadcast a notification-updated event, logging and swallowing any failure so a
+    /// broadcast hiccup never fails the mark-read operation.
+    /// </summary>
+    private async Task BroadcastUpdatedSafeAsync(InAppNotificationEntity entity)
+    {
+        var dto = InAppNotificationRepository.ToDto(entity);
+        try
+        {
+            await _broadcastService.BroadcastNotificationUpdatedAsync(entity.UserId, dto);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to broadcast notification updated event for {NotificationId}",
+                entity.Id
+            );
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<bool> ExecuteActionAsync(
         Guid notificationId,
         string actionId,

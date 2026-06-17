@@ -66,6 +66,8 @@ export interface CommandPaletteItem {
 	icon?: ComponentType;
 	shortcut?: string;
 	permission?: string;
+	/** Role required to see this item (e.g. "platform_admin"). */
+	role?: string;
 	href?: string;
 	linkedHref?: string;
 }
@@ -359,12 +361,12 @@ export const items: CommandPaletteItem[] = [
 	},
 	{
 		id: "page-tenants",
-		label: "Tenants",
-		group: "pages",
-		keywords: ["tenants", "organizations", "accounts"],
+		label: "Tenant Management",
+		group: "settings",
+		keywords: ["tenants", "organizations", "accounts", "platform admin"],
 		icon: Building,
-		href: "/tenants",
-		permission: "api:tenants:read",
+		href: "/settings/admin/tenants",
+		role: "platform_admin",
 	},
 
 	// ─── Settings ────────────────────────────────────────────────────────

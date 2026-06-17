@@ -109,6 +109,13 @@ public class StatusResponse
     public string? Head { get; set; }
 
     /// <summary>
+    /// Build timestamp (UTC, ISO 8601) of the running image, when the build stamped it.
+    /// </summary>
+    [JsonPropertyName("build")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Build { get; set; }
+
+    /// <summary>
     /// Whether this tenant is a demo instance.
     /// </summary>
     [JsonPropertyName("isDemo")]

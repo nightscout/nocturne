@@ -26,6 +26,8 @@ public static class HeartRateMapper
             Device = heartRate.Device,
             EnteredBy = heartRate.EnteredBy,
             UtcOffset = heartRate.UtcOffset,
+            DataSource = heartRate.DataSource,
+            SyncIdentifier = heartRate.SyncIdentifier,
         };
     }
 
@@ -43,6 +45,8 @@ public static class HeartRateMapper
             Device = entity.Device,
             EnteredBy = entity.EnteredBy,
             UtcOffset = entity.UtcOffset,
+            DataSource = entity.DataSource,
+            SyncIdentifier = entity.SyncIdentifier,
         };
     }
 
@@ -57,6 +61,8 @@ public static class HeartRateMapper
         entity.Device = heartRate.Device;
         entity.EnteredBy = heartRate.EnteredBy;
         entity.UtcOffset = heartRate.UtcOffset;
+        entity.DataSource = heartRate.DataSource;
+        entity.SyncIdentifier = heartRate.SyncIdentifier;
         entity.SysUpdatedAt = DateTime.UtcNow;
     }
 

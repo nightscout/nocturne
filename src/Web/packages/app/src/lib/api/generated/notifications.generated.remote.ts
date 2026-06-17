@@ -51,6 +51,52 @@ export const executeAction = command(z.object({ id: z.string(), actionId: z.stri
   }
 });
 
+export const markAllAsRead = command(async () => {
+  const apiClient = getRequestEvent().locals.apiClient;
+  try {
+    await apiClient.notifications.markAllAsRead();
+    await Promise.all([
+      getNotifications(undefined).refresh()
+    ]);
+    return { success: true };
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { throw error(401, 'Unauthorized'); }
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
+    console.error('Error in notifications.markAllAsRead:', err);
+    const e = err as any;
+    const body = e?.body ?? e?.response;
+    const errors = body?.errors ?? e?.errors;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
+    throw error(500, message ?? 'Failed to mark all as read');
+  }
+});
+
+export const markAsRead = command(z.string(), async (id) => {
+  const apiClient = getRequestEvent().locals.apiClient;
+  try {
+    await apiClient.notifications.markAsRead(id);
+    await Promise.all([
+      getNotifications(undefined).refresh()
+    ]);
+    return { success: true };
+  } catch (err) {
+    const status = (err as any)?.status;
+    if (status === 401) { throw error(401, 'Unauthorized'); }
+    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
+    console.error('Error in notifications.markAsRead:', err);
+    const e = err as any;
+    const body = e?.body ?? e?.response;
+    const errors = body?.errors ?? e?.errors;
+    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
+    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
+    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
+    throw error(500, message ?? 'Failed to mark as read');
+  }
+});
+
 export const dismissNotification = command(z.string(), async (id) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {

@@ -21,7 +21,7 @@
 
   async function load(): Promise<void> {
     try {
-      settings = await getDnd();
+      settings = await getDnd().run();
     } catch {
       settings = null;
     }
@@ -44,7 +44,8 @@
     }
   }
 
-  onMount(load);
+  // `.run()` rejects during the render flush, so defer the bootstrap to a microtask.
+  onMount(() => queueMicrotask(load));
 </script>
 
 <div

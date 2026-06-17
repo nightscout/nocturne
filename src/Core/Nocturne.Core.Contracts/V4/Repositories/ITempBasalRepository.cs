@@ -10,7 +10,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <remarks>
 /// <see cref="TempBasal"/> records are also used as the underlying store for the legacy V1/V3
 /// temp basal treatment projection. Unlike most V4 repositories, this interface does not extend
-/// <see cref="IV4Repository{T}"/> directly because it needs a source-and-date-range delete operation
+/// <see cref="IV4Repository{T}"/> directly because it needs a source-window reconcile operation
 /// used during connector re-sync.
 /// </remarks>
 /// <seealso cref="TempBasal"/>
@@ -87,21 +87,29 @@ public interface ITempBasalRepository
     );
 
     /// <summary>
-    /// Delete all <see cref="TempBasal"/> records for a given source within a date range.
+    /// Idempotently reconciles a source's temp basals within a date range: soft-deletes only the
+    /// rows this source no longer reports (their legacy id is absent from
+    /// <paramref name="keepLegacyIds"/>), leaving still-reported rows untouched.
     /// </summary>
     /// <remarks>
-    /// Used by connector re-sync operations to clear and replace a window of temp basal data
-    /// from a specific data source without affecting records from other sources.
+    /// Used by connector re-sync. Pair with <see cref="BulkCreateAsync"/> — which skips legacy ids
+    /// that are already active — so re-importing an unchanged window is a no-op rather than a
+    /// delete-the-whole-window-then-reinsert sweep. The old sweep re-created every record as a new
+    /// row each cycle (system-scope deletes don't block re-insertion), accumulating millions of
+    /// soft-deleted tombstones for high-volume connectors.
     /// </remarks>
     /// <param name="source">Data source identifier (e.g., connector name).</param>
-    /// <param name="from">Inclusive start of the range to delete.</param>
-    /// <param name="to">Exclusive end of the range to delete.</param>
+    /// <param name="from">Inclusive start of the reconcile range.</param>
+    /// <param name="to">Inclusive end of the reconcile range.</param>
+    /// <param name="keepLegacyIds">Legacy ids still reported by the source in this window; rows with
+    /// these ids are kept, all other active rows of this source in range are soft-deleted.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteBySourceAndDateRangeAsync(
+    /// <returns>Number of records soft-deleted.</returns>
+    Task<int> SoftDeleteAbsentBySourceAndDateRangeAsync(
         string source,
         DateTime from,
         DateTime to,
+        IReadOnlySet<string> keepLegacyIds,
         CancellationToken ct = default
     );
 

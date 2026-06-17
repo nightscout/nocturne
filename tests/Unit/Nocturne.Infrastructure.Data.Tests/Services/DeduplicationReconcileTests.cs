@@ -80,6 +80,23 @@ public class DeduplicationReconcileTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadRecordInfoAsync_DoesNotTrackLoadedEntities()
+    {
+        // Regression guard: the reconcile/match read paths must use AsNoTracking. On large
+        // historical backfill batches (thousands of records spanning months), change-tracker
+        // snapshots over the loaded entities exhausted the API's memory (OutOfMemoryException).
+        var id = Guid.CreateVersion7();
+        _context.CarbIntakes.Add(new CarbIntakeEntity { Id = id, TenantId = TestTenantId, Carbs = 42, Timestamp = DateTime.UtcNow });
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        await _service.LoadRecordInfoForTestAsync(RecordType.CarbIntake, new HashSet<Guid> { id });
+
+        _context.ChangeTracker.Entries<CarbIntakeEntity>().Should().BeEmpty(
+            "dedup reads are read-only and must not change-track loaded entities");
+    }
+
+    [Fact]
     public async Task LoadRecordInfoAsync_CarbIntake_ExcludesOtherTenants()
     {
         var mine = Guid.CreateVersion7();

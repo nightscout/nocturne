@@ -79,7 +79,9 @@
 		if (filteredSuggestions.length > 0 && !activeSuggestion) {
 			const first = filteredSuggestions[0];
 			if (first?.id) {
-				loadSuggestionDetail(first.id);
+				// `.run()` rejects during the render/effect flush, so defer out of it.
+				const id = first.id;
+				queueMicrotask(() => loadSuggestionDetail(id));
 			}
 		}
 	});
@@ -109,7 +111,7 @@
 		if (selectedSuggestions.size === 0) {
 			selectedSuggestions = new Set([id]);
 		}
-		suggestionDetail = await getCompressionLowSuggestion(id);
+		suggestionDetail = await getCompressionLowSuggestion(id).run();
 		if (suggestionDetail && suggestionDetail.suggestion?.startMills && suggestionDetail.suggestion?.endMills) {
 			brushDomain = [new Date(suggestionDetail.suggestion.startMills), new Date(suggestionDetail.suggestion.endMills)];
 		}
