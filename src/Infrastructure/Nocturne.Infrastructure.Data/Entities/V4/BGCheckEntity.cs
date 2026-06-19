@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BGCheck
 /// </summary>
 [Table("bg_checks")]
-public class BGCheckEntity : ITenantScoped, ISoftDeletable, IV4Entity
+public class BGCheckEntity : ITenantScoped, ISoftDeletable, IV4Entity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.

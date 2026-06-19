@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -3075,7 +3076,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     }
 
     /// <summary>
-    /// Update system tracking timestamps before saving
+    /// Update system tracking timestamps before saving, and enforce tenant ownership.
     /// </summary>
     private void UpdateTimestamps()
     {
@@ -3083,360 +3084,88 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         foreach (var entry in ChangeTracker.Entries())
         {
-            // Enforce tenant ID on all new ITenantScoped entities
-            if (entry.State == EntityState.Added && entry.Entity is ITenantScoped tenantScoped)
+            var isAdded = entry.State == EntityState.Added;
+
+            EnforceTenantOwnership(entry, isAdded);
+
+            // System tracking columns (sys_created_at / sys_updated_at) on tenant data.
+            if (isAdded && entry.Entity is ISystemCreated systemCreated)
             {
-                if (tenantScoped.TenantId == Guid.Empty && TenantId != Guid.Empty)
-                {
-                    tenantScoped.TenantId = TenantId;
-                }
-                else if (tenantScoped.TenantId == Guid.Empty)
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot save {entry.Entity.GetType().Name} without a TenantId. " +
-                        "Ensure tenant context is resolved before writing data.");
-                }
+                systemCreated.SysCreatedAt = utcNow;
+            }
+            if (entry.Entity is ISystemTimestamped systemTimestamped)
+            {
+                systemTimestamped.SysUpdatedAt = utcNow;
             }
 
-            // Prevent cross-tenant writes
-            if (entry.State == EntityState.Modified && entry.Entity is ITenantScoped modifiedTenant)
+            // Auth/identity tables use the created_at / updated_at convention instead.
+            if (isAdded && entry.Entity is IEntityCreated entityCreated)
             {
-                if (TenantId != Guid.Empty && modifiedTenant.TenantId != TenantId)
-                {
-                    throw new InvalidOperationException(
-                        $"Cannot modify {entry.Entity.GetType().Name} belonging to tenant " +
-                        $"{modifiedTenant.TenantId} from tenant context {TenantId}.");
-                }
+                entityCreated.CreatedAt = utcNow;
+            }
+            if (entry.Entity is IEntityTimestamped entityTimestamped)
+            {
+                entityTimestamped.UpdatedAt = utcNow;
             }
 
-            if (entry.Entity is FoodEntity foodEntity)
+            ApplyEntitySpecificTimestamps(entry.Entity, isAdded, utcNow);
+        }
+    }
+
+    /// <summary>
+    /// Enforces tenant ownership on a tracked entity: stamps the resolved tenant on new
+    /// rows and blocks cross-tenant modifications.
+    /// </summary>
+    private void EnforceTenantOwnership(EntityEntry entry, bool isAdded)
+    {
+        if (entry.Entity is not ITenantScoped tenantScoped)
+        {
+            return;
+        }
+
+        if (isAdded)
+        {
+            if (tenantScoped.TenantId == Guid.Empty && TenantId != Guid.Empty)
             {
-                if (entry.State == EntityState.Added)
-                {
-                    foodEntity.SysCreatedAt = utcNow;
-                }
-                foodEntity.SysUpdatedAt = utcNow;
+                tenantScoped.TenantId = TenantId;
             }
-            else if (entry.Entity is ConnectorFoodEntryEntity connectorFoodEntryEntity)
+            else if (tenantScoped.TenantId == Guid.Empty)
             {
-                if (entry.State == EntityState.Added)
-                {
-                    connectorFoodEntryEntity.SysCreatedAt = utcNow;
-                }
-                connectorFoodEntryEntity.SysUpdatedAt = utcNow;
+                throw new InvalidOperationException(
+                    $"Cannot save {entry.Entity.GetType().Name} without a TenantId. " +
+                    "Ensure tenant context is resolved before writing data.");
             }
-            else if (entry.Entity is TreatmentFoodEntity treatmentFoodEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    treatmentFoodEntity.SysCreatedAt = utcNow;
-                }
-                treatmentFoodEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is UserFoodFavoriteEntity userFoodFavoriteEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    userFoodFavoriteEntity.SysCreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is SettingsEntity settingsEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    settingsEntity.SysCreatedAt = utcNow;
-                }
-                settingsEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is StepCountEntity stepCountEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    stepCountEntity.SysCreatedAt = utcNow;
-                }
-                stepCountEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is HeartRateEntity heartRateEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    heartRateEntity.SysCreatedAt = utcNow;
-                }
-                heartRateEntity.SysUpdatedAt = utcNow;
-            }
-// Auth entities
-            else if (entry.Entity is RefreshTokenEntity refreshTokenEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    refreshTokenEntity.CreatedAt = utcNow;
-                }
-                refreshTokenEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is SubjectEntity subjectEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    subjectEntity.CreatedAt = utcNow;
-                }
-                subjectEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is RoleEntity roleEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    roleEntity.CreatedAt = utcNow;
-                }
-                roleEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is OidcProviderEntity oidcProviderEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    oidcProviderEntity.CreatedAt = utcNow;
-                }
-                oidcProviderEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is AuthAuditLogEntity authAuditLogEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    authAuditLogEntity.CreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is LinkedRecordEntity linkedRecordEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    linkedRecordEntity.SysCreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is ConnectorConfigurationEntity connectorConfigEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    connectorConfigEntity.SysCreatedAt = utcNow;
-                    connectorConfigEntity.LastModified = DateTimeOffset.UtcNow;
-                }
-                connectorConfigEntity.SysUpdatedAt = utcNow;
-            }
-            // OAuth entities
-            else if (entry.Entity is OAuthClientEntity oauthClientEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    oauthClientEntity.CreatedAt = utcNow;
-                }
-                oauthClientEntity.UpdatedAt = utcNow;
-            }
-            else if (entry.Entity is OAuthGrantEntity oauthGrantEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    oauthGrantEntity.CreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is OAuthRefreshTokenEntity oauthRefreshTokenEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    oauthRefreshTokenEntity.IssuedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is OAuthDeviceCodeEntity oauthDeviceCodeEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    oauthDeviceCodeEntity.CreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is OAuthAuthorizationCodeEntity oauthAuthCodeEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    oauthAuthCodeEntity.CreatedAt = utcNow;
-                }
-            }
-            else if (entry.Entity is ClockFaceEntity clockFaceEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    clockFaceEntity.CreatedAt = utcNow;
-                    clockFaceEntity.SysCreatedAt = utcNow;
-                }
-                clockFaceEntity.UpdatedAt = utcNow;
-                clockFaceEntity.SysUpdatedAt = utcNow;
-            }
-            // V4 Granular Model entities
-            else if (entry.Entity is SensorGlucoseEntity sensorGlucoseEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    sensorGlucoseEntity.SysCreatedAt = utcNow;
-                }
-                sensorGlucoseEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is MeterGlucoseEntity meterGlucoseEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    meterGlucoseEntity.SysCreatedAt = utcNow;
-                }
-                meterGlucoseEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is CalibrationEntity calibrationEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    calibrationEntity.SysCreatedAt = utcNow;
-                }
-                calibrationEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is BolusEntity bolusEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    bolusEntity.SysCreatedAt = utcNow;
-                }
-                bolusEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is BasalInjectionEntity basalInjectionEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    basalInjectionEntity.SysCreatedAt = utcNow;
-                }
-                basalInjectionEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is CarbIntakeEntity carbIntakeEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    carbIntakeEntity.SysCreatedAt = utcNow;
-                }
-                carbIntakeEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is BGCheckEntity bgCheckEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    bgCheckEntity.SysCreatedAt = utcNow;
-                }
-                bgCheckEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is NoteEntity noteEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    noteEntity.SysCreatedAt = utcNow;
-                }
-                noteEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is DeviceEventEntity deviceEventEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    deviceEventEntity.SysCreatedAt = utcNow;
-                }
-                deviceEventEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is BolusCalculationEntity bolusCalculationEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    bolusCalculationEntity.SysCreatedAt = utcNow;
-                }
-                bolusCalculationEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is ApsSnapshotEntity apsSnapshotEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    apsSnapshotEntity.SysCreatedAt = utcNow;
-                }
-                apsSnapshotEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is PumpSnapshotEntity pumpSnapshotEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    pumpSnapshotEntity.SysCreatedAt = utcNow;
-                }
-                pumpSnapshotEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is UploaderSnapshotEntity uploaderSnapshotEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    uploaderSnapshotEntity.SysCreatedAt = utcNow;
-                }
-                uploaderSnapshotEntity.SysUpdatedAt = utcNow;
-            }
-            // V4 Profile Decomposition entities
-            else if (entry.Entity is TherapySettingsEntity therapySettingsEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    therapySettingsEntity.SysCreatedAt = utcNow;
-                }
-                therapySettingsEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is BasalScheduleEntity basalScheduleEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    basalScheduleEntity.SysCreatedAt = utcNow;
-                }
-                basalScheduleEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is CarbRatioScheduleEntity carbRatioScheduleEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    carbRatioScheduleEntity.SysCreatedAt = utcNow;
-                }
-                carbRatioScheduleEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is SensitivityScheduleEntity sensitivityScheduleEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    sensitivityScheduleEntity.SysCreatedAt = utcNow;
-                }
-                sensitivityScheduleEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is TargetRangeScheduleEntity targetRangeScheduleEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    targetRangeScheduleEntity.SysCreatedAt = utcNow;
-                }
-                targetRangeScheduleEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is TenantEntity tenantEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    tenantEntity.SysCreatedAt = utcNow;
-                }
-                tenantEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is TenantMemberEntity tenantMemberEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    tenantMemberEntity.SysCreatedAt = utcNow;
-                }
-                tenantMemberEntity.SysUpdatedAt = utcNow;
-            }
-            else if (entry.Entity is PlatformSettingsEntity platformSettingsEntity)
-            {
-                if (entry.State == EntityState.Added)
-                {
-                    platformSettingsEntity.SysCreatedAt = utcNow;
-                }
-                platformSettingsEntity.SysUpdatedAt = utcNow;
-            }
+        }
+        else if (entry.State == EntityState.Modified
+            && TenantId != Guid.Empty
+            && tenantScoped.TenantId != TenantId)
+        {
+            throw new InvalidOperationException(
+                $"Cannot modify {entry.Entity.GetType().Name} belonging to tenant " +
+                $"{tenantScoped.TenantId} from tenant context {TenantId}.");
+        }
+    }
+
+    /// <summary>
+    /// Applies timestamps for the few entities whose columns do not follow either the
+    /// sys_* or created_at/updated_at conventions covered by the marker interfaces.
+    /// </summary>
+    private static void ApplyEntitySpecificTimestamps(object entity, bool isAdded, DateTime utcNow)
+    {
+        switch (entity)
+        {
+            // Nullable updated_at, set on every save alongside its ISystemTimestamped stamps.
+            case ClockFaceEntity clockFace:
+                clockFace.UpdatedAt = utcNow;
+                break;
+            // Mirror of sys_created_at on a DateTimeOffset column, set on insert only.
+            case ConnectorConfigurationEntity connectorConfig when isAdded:
+                connectorConfig.LastModified = utcNow;
+                break;
+            // Creation timestamp stored as issued_at, set on insert only.
+            case OAuthRefreshTokenEntity oauthRefreshToken when isAdded:
+                oauthRefreshToken.IssuedAt = utcNow;
+                break;
         }
     }
 

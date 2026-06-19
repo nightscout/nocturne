@@ -7,7 +7,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Join entity linking tenant members to roles (many-to-many).
 /// </summary>
 [Table("tenant_member_roles")]
-public class TenantMemberRoleEntity
+public class TenantMemberRoleEntity : ISystemCreated
 {
     /// <summary>
     /// Unique identifier for the member role link

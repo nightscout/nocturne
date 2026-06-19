@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// User-to-user shares (followers/caregivers) use the same table with grant_type = follower.
 /// </summary>
 [Table("oauth_grants")]
-public class OAuthGrantEntity : ITenantScoped, IAuditable
+public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
 {
     /// <summary>
     /// Primary key - UUID Version 7

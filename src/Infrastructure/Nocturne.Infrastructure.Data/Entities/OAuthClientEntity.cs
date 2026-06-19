@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// this table records clients that have been authorized at least once.
 /// </summary>
 [Table("oauth_clients")]
-public class OAuthClientEntity : ITenantScoped
+public class OAuthClientEntity : ITenantScoped, IEntityTimestamped
 {
     /// <summary>
     /// Primary key - UUID Version 7

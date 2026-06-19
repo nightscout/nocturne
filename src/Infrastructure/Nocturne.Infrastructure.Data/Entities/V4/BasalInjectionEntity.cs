@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BasalInjection.
 /// </summary>
 [Table("basal_injections")]
-public class BasalInjectionEntity : ITenantScoped, IAuditable, ISoftDeletable
+public class BasalInjectionEntity : ITenantScoped, IAuditable, ISoftDeletable, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.

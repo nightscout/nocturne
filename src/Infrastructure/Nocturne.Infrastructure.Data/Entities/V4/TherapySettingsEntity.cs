@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TherapySettings
 /// </summary>
 [Table("therapy_settings")]
-public class TherapySettingsEntity : ITenantScoped, ISoftDeletable, IV4Entity
+public class TherapySettingsEntity : ITenantScoped, ISoftDeletable, IV4Entity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
