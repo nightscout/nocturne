@@ -142,10 +142,23 @@ public class UpdateTimestampsTests
             await ctx.SaveChangesAsync();
         }
 
+        DateTimeOffset stampedOnInsert;
         await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
         {
             var config = await verify.ConnectorConfigurations.SingleAsync();
             config.LastModified.Should().BeOnOrAfter(before, "last_modified is stamped on insert");
+            stampedOnInsert = config.LastModified;
+
+            // last_modified is insert-only: a later save must not bump it.
+            await Task.Delay(5);
+            verify.Entry(config).State = EntityState.Modified;
+            await verify.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var config = await verify.ConnectorConfigurations.SingleAsync();
+            config.LastModified.Should().Be(stampedOnInsert, "last_modified is not re-stamped on update");
         }
     }
 
@@ -162,10 +175,23 @@ public class UpdateTimestampsTests
             await ctx.SaveChangesAsync();
         }
 
+        DateTime stampedOnInsert;
         await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
         {
             var token = await verify.OAuthRefreshTokens.SingleAsync();
             token.IssuedAt.Should().BeOnOrAfter(before, "issued_at is stamped on insert");
+            stampedOnInsert = token.IssuedAt;
+
+            // issued_at is insert-only: a later save must not bump it.
+            await Task.Delay(5);
+            verify.Entry(token).State = EntityState.Modified;
+            await verify.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var token = await verify.OAuthRefreshTokens.SingleAsync();
+            token.IssuedAt.Should().Be(stampedOnInsert, "issued_at is not re-stamped on update");
         }
     }
 
@@ -199,6 +225,30 @@ public class UpdateTimestampsTests
         var act = () => ctx.SaveChangesAsync();
         await act.Should().ThrowAsync<InvalidOperationException>(
             "saving a tenant-scoped entity without a resolvable tenant must fail closed");
+    }
+
+    [Fact]
+    public async Task TenantScoped_CrossTenantModify_Throws()
+    {
+        var options = NewStore();
+        var ownerTenant = Guid.NewGuid();
+        var otherTenant = Guid.NewGuid();
+        var id = Guid.CreateVersion7();
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = ownerTenant })
+        {
+            ctx.Foods.Add(new FoodEntity { Id = id });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var attacker = new NocturneDbContext(options) { TenantId = otherTenant };
+        // IgnoreQueryFilters reaches the other tenant's row; the modify guard must still reject it.
+        var food = await attacker.Foods.IgnoreQueryFilters().SingleAsync();
+        food.Name = "tampered";
+
+        var act = () => attacker.SaveChangesAsync();
+        await act.Should().ThrowAsync<InvalidOperationException>(
+            "modifying a row owned by another tenant must fail closed");
     }
 
     private static DbContextOptions<NocturneDbContext> NewStore() =>
