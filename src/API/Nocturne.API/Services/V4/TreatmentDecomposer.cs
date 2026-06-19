@@ -183,31 +183,46 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     }
 
-    /// <inheritdoc />
-    public async Task<V4Models.DecompositionResult> DecomposeAsync(Treatment treatment, CancellationToken ct = default)
+    /// <summary>
+    /// The set of v4 records a treatment decomposes into, plus the state-span sub-kind flags
+    /// and the parsed device-event type. Computed once by <see cref="ClassifyTreatment"/> and
+    /// consumed by both the single and batch decomposition paths.
+    /// </summary>
+    private readonly record struct TreatmentClassification(
+        bool ProduceBolus,
+        bool ProduceCarbIntake,
+        bool ProduceBGCheck,
+        bool ProduceNote,
+        bool ProduceBolusCalc,
+        bool ProduceDeviceEvent,
+        bool DelegateToStateSpan,
+        bool IsProfileSwitch,
+        bool IsOverride,
+        bool IsTemporaryTarget,
+        bool IsAnnouncement,
+        DeviceEventType ParsedDeviceEventType)
     {
-        NormalizeIdentity(treatment);
+        /// <summary>
+        /// True when no record type was selected and nothing is delegated to a state span —
+        /// i.e. the treatment carries no recognized event type and no insulin/carb data.
+        /// </summary>
+        public bool ProducesNothing =>
+            !ProduceBolus && !ProduceCarbIntake && !ProduceBGCheck
+            && !ProduceNote && !ProduceBolusCalc && !ProduceDeviceEvent && !DelegateToStateSpan;
+    }
 
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "treatment_decomposer",
-            SourceRecordId = treatment.Id,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
-        var result = new V4Models.DecompositionResult
-        {
-            CorrelationId = batch.Id
-        };
-
+    /// <summary>
+    /// Classifies which v4 records a legacy <see cref="Treatment"/> decomposes into, based on its
+    /// <see cref="Treatment.EventType"/> and the insulin/carb data present. This mapping is shared
+    /// by <see cref="DecomposeAsync"/> and <see cref="DecomposeBatchAsync"/> so it lives in exactly
+    /// one place.
+    /// </summary>
+    private TreatmentClassification ClassifyTreatment(Treatment treatment)
+    {
         var eventType = treatment.EventType?.Trim();
         var hasInsulin = treatment.Insulin is > 0;
         var hasCarbs = treatment.Carbs is > 0;
 
-        // Determine which records to produce based on EventType
         var produceBolus = false;
         var produceCarbIntake = false;
         var produceBGCheck = false;
@@ -323,18 +338,46 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             produceNote = true;
         }
 
-        // Handle StateSpan delegation
-        if (delegateToStateSpan)
+        return new TreatmentClassification(
+            produceBolus, produceCarbIntake, produceBGCheck, produceNote, produceBolusCalc,
+            produceDeviceEvent, delegateToStateSpan, isProfileSwitch, isOverride, isTemporaryTarget,
+            isAnnouncement, parsedDeviceEventType);
+    }
+
+    /// <inheritdoc />
+    public async Task<V4Models.DecompositionResult> DecomposeAsync(Treatment treatment, CancellationToken ct = default)
+    {
+        NormalizeIdentity(treatment);
+
+        var batch = new DecompositionBatchEntity
         {
-            if (isProfileSwitch)
+            TenantId = _dbContext.TenantId,
+            Source = "treatment_decomposer",
+            SourceRecordId = treatment.Id,
+            CreatedAt = DateTime.UtcNow,
+        };
+        _dbContext.DecompositionBatches.Add(batch);
+        await _dbContext.SaveChangesAsync(ct);
+
+        var result = new V4Models.DecompositionResult
+        {
+            CorrelationId = batch.Id
+        };
+
+        var c = ClassifyTreatment(treatment);
+
+        // Handle StateSpan delegation
+        if (c.DelegateToStateSpan)
+        {
+            if (c.IsProfileSwitch)
             {
                 await DecomposeProfileSwitchAsync(treatment, result, ct);
             }
-            else if (isOverride)
+            else if (c.IsOverride)
             {
                 await DecomposeOverrideAsync(treatment, result, ct);
             }
-            else if (isTemporaryTarget)
+            else if (c.IsTemporaryTarget)
             {
                 await DecomposeTemporaryTargetAsync(treatment, result, ct);
             }
@@ -345,38 +388,38 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         }
 
         // Produce v4 records
-        if (produceBolus)
+        if (c.ProduceBolus)
         {
             await DecomposeBolusAsync(treatment, result, ct);
         }
 
-        if (produceCarbIntake)
+        if (c.ProduceCarbIntake)
         {
             await DecomposeCarbIntakeAsync(treatment, result, ct);
         }
 
-        if (produceBGCheck)
+        if (c.ProduceBGCheck)
         {
             await DecomposeBGCheckAsync(treatment, result, ct);
         }
 
-        if (produceNote)
+        if (c.ProduceNote)
         {
-            await DecomposeNoteAsync(treatment, result, isAnnouncement, ct);
+            await DecomposeNoteAsync(treatment, result, c.IsAnnouncement, ct);
         }
 
-        if (produceBolusCalc)
+        if (c.ProduceBolusCalc)
         {
             await DecomposeBolusCalculationAsync(treatment, result, ct);
         }
 
-        if (produceDeviceEvent)
+        if (c.ProduceDeviceEvent)
         {
-            await DecomposeDeviceEventAsync(treatment, result, parsedDeviceEventType, ct);
+            await DecomposeDeviceEventAsync(treatment, result, c.ParsedDeviceEventType, ct);
 
-            if (parsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
+            if (c.ParsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
             {
-                await DecomposePumpSuspensionFromTreatmentAsync(treatment, parsedDeviceEventType, result, ct);
+                await DecomposePumpSuspensionFromTreatmentAsync(treatment, c.ParsedDeviceEventType, result, ct);
             }
         }
 
@@ -394,8 +437,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         }
 
         // If nothing was produced and there's no delegation, log a warning
-        if (!produceBolus && !produceCarbIntake && !produceBGCheck
-            && !produceNote && !produceBolusCalc && !produceDeviceEvent && !delegateToStateSpan)
+        if (c.ProducesNothing)
         {
             _logger.LogWarning(
                 "Unknown event type '{EventType}' for treatment {Id} with no insulin/carbs, skipping decomposition",
@@ -1235,124 +1277,13 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         {
             NormalizeIdentity(treatment);
 
-            var eventType = treatment.EventType?.Trim();
-            var hasInsulin = treatment.Insulin is > 0;
-            var hasCarbs = treatment.Carbs is > 0;
-
-            // Classification flags (same logic as DecomposeAsync)
-            var produceBolus = false;
-            var produceCarbIntake = false;
-            var produceBGCheck = false;
-            var produceNote = false;
-            var produceBolusCalc = false;
-            var produceDeviceEvent = false;
-            var delegateToStateSpan = false;
-            var isProfileSwitch = false;
-            var isOverride = false;
-            var isTemporaryTarget = false;
-            var isAnnouncement = false;
-            DeviceEventType parsedDeviceEventType = default;
-
-            if (IsTempBasal(eventType))
-            {
-                delegateToStateSpan = true;
-            }
-            else if (string.Equals(eventType, "Profile Switch", StringComparison.OrdinalIgnoreCase))
-            {
-                isProfileSwitch = true;
-                delegateToStateSpan = true;
-            }
-            else if (string.Equals(eventType, "Temporary Override", StringComparison.OrdinalIgnoreCase))
-            {
-                isOverride = true;
-                delegateToStateSpan = true;
-            }
-            else if (string.Equals(eventType, "Temporary Target", StringComparison.OrdinalIgnoreCase)
-                  || string.Equals(eventType, "Temporary Target Cancel", StringComparison.OrdinalIgnoreCase))
-            {
-                isTemporaryTarget = true;
-                delegateToStateSpan = true;
-            }
-            else if (eventType != null && TreatmentTypes.DeviceEventTypeMap.TryGetValue(eventType, out parsedDeviceEventType))
-            {
-                produceDeviceEvent = true;
-            }
-            else if (string.Equals(eventType, "Meal Bolus", StringComparison.OrdinalIgnoreCase)
-                  || string.Equals(eventType, "Snack Bolus", StringComparison.OrdinalIgnoreCase)
-                  || string.Equals(eventType, "Combo Bolus", StringComparison.OrdinalIgnoreCase))
-            {
-                produceBolus = true;
-                produceCarbIntake = true;
-            }
-            else if (string.Equals(eventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase)
-                  || string.Equals(eventType, "SMB", StringComparison.OrdinalIgnoreCase)
-                  || string.Equals(eventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase))
-            {
-                produceBolus = true;
-            }
-            else if (string.Equals(eventType, "Bolus", StringComparison.OrdinalIgnoreCase)
-                  || string.Equals(eventType, "External Insulin", StringComparison.OrdinalIgnoreCase))
-            {
-                produceBolus = true;
-            }
-            else if (string.Equals(eventType, "Carb Correction", StringComparison.OrdinalIgnoreCase))
-            {
-                produceCarbIntake = true;
-            }
-            else if (string.Equals(eventType, "BG Check", StringComparison.OrdinalIgnoreCase))
-            {
-                produceBGCheck = true;
-            }
-            else if (string.Equals(eventType, "Announcement", StringComparison.OrdinalIgnoreCase))
-            {
-                produceNote = true;
-                isAnnouncement = true;
-            }
-            else if (string.Equals(eventType, "Note", StringComparison.OrdinalIgnoreCase)
-                  || string.Equals(eventType, "Exercise", StringComparison.OrdinalIgnoreCase))
-            {
-                produceNote = true;
-            }
-            else if (string.Equals(eventType, "Bolus Wizard", StringComparison.OrdinalIgnoreCase))
-            {
-                produceBolusCalc = true;
-                if (hasInsulin)
-                    produceBolus = true;
-            }
-
-            // Override rule: both insulin and carbs → always produce both
-            if (hasInsulin && hasCarbs)
-            {
-                produceBolus = true;
-                produceCarbIntake = true;
-            }
-
-            // Fallback: for unrecognized event types, produce records based on what data is present
-            if (!produceBolus && !produceCarbIntake && !produceBGCheck
-                && !produceNote && !produceBolusCalc && !produceDeviceEvent && !delegateToStateSpan)
-            {
-                if (hasInsulin)
-                    produceBolus = true;
-                if (hasCarbs)
-                    produceCarbIntake = true;
-
-                if (produceBolus || produceCarbIntake)
-                {
-                    _logger.LogInformation(
-                        "Unrecognized event type '{EventType}' for treatment {Id}, producing records based on data (insulin={HasInsulin}, carbs={HasCarbs})",
-                        treatment.EventType, treatment.Id, hasInsulin, hasCarbs);
-                }
-            }
-
-            // Note for any treatment with non-empty Notes (unless already producing a Note)
-            if (!produceNote && !string.IsNullOrWhiteSpace(treatment.Notes))
-                produceNote = true;
+            var c = ClassifyTreatment(treatment);
 
             // Collect state span treatments for individual upsert
-            if (delegateToStateSpan)
+            if (c.DelegateToStateSpan)
             {
                 // TempBasal treatments can also be bulk-inserted
-                if (!isProfileSwitch && !isOverride && !isTemporaryTarget)
+                if (!c.IsProfileSwitch && !c.IsOverride && !c.IsTemporaryTarget)
                 {
                     var tempBasal = MapToTempBasal(treatment, batch.Id);
                     tempBasal.DeviceId = await _deviceService.ResolveAsync(
@@ -1362,11 +1293,11 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                 }
                 else
                 {
-                    stateSpanTreatments.Add((treatment, isProfileSwitch, isOverride, isTemporaryTarget));
+                    stateSpanTreatments.Add((treatment, c.IsProfileSwitch, c.IsOverride, c.IsTemporaryTarget));
                 }
             }
 
-            if (produceBolus)
+            if (c.ProduceBolus)
             {
                 var isAlgorithmBolus = (treatment.IsBasalInsulin == true && treatment.Insulin > 0)
                     || (string.Equals(treatment.EventType, "Correction Bolus", StringComparison.OrdinalIgnoreCase) && IsAapsUpload(treatment))
@@ -1387,39 +1318,38 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                 bolusList.Add(model);
             }
 
-            if (produceCarbIntake)
+            if (c.ProduceCarbIntake)
                 carbList.Add(MapToCarbIntake(treatment, batch.Id));
 
-            if (produceBGCheck)
+            if (c.ProduceBGCheck)
                 bgCheckList.Add(MapToBGCheck(treatment, batch.Id));
 
-            if (produceNote)
-                noteList.Add(MapToNote(treatment, batch.Id, isAnnouncement));
+            if (c.ProduceNote)
+                noteList.Add(MapToNote(treatment, batch.Id, c.IsAnnouncement));
 
-            if (produceBolusCalc)
+            if (c.ProduceBolusCalc)
                 bolusCalcList.Add(MapToBolusCalculation(treatment, batch.Id));
 
-            if (produceDeviceEvent)
+            if (c.ProduceDeviceEvent)
             {
-                var model = MapToDeviceEvent(treatment, batch.Id, parsedDeviceEventType);
+                var model = MapToDeviceEvent(treatment, batch.Id, c.ParsedDeviceEventType);
                 model.DeviceId = await _deviceService.ResolveAsync(
                     V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
                 model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
                 deviceEventList.Add(model);
 
-                if (parsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
+                if (c.ParsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
                 {
-                    pumpSuspendResumeTreatments.Add((treatment, parsedDeviceEventType));
+                    pumpSuspendResumeTreatments.Add((treatment, c.ParsedDeviceEventType));
                 }
             }
 
             // Track for post-insert linking
-            if (produceBolus && produceBolusCalc && treatment.Id != null)
+            if (c.ProduceBolus && c.ProduceBolusCalc && treatment.Id != null)
                 bolusCalcLinkTreatmentIds.Add(treatment.Id);
 
             // Log unrecognized treatments
-            if (!produceBolus && !produceCarbIntake && !produceBGCheck
-                && !produceNote && !produceBolusCalc && !produceDeviceEvent && !delegateToStateSpan)
+            if (c.ProducesNothing)
             {
                 _logger.LogWarning(
                     "Unknown event type '{EventType}' for treatment {Id} with no insulin/carbs, skipping decomposition",
