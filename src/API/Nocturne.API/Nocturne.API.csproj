@@ -97,11 +97,22 @@
     <DiagramSource Include="..\..\..\docs\diagrams\diagrams.yaml;..\..\..\docs\diagrams\*.mmd" />
     <Content Include="@(DiagramSource)" Link="wwwroot\diagrams\%(Filename)%(Extension)" CopyToOutputDirectory="Never" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
-  <!-- The diagram Content items only exist as virtual Links; the physical wwwroot\diagrams
-       directory is never created. dotnet watch's FileSystemWatcher throws on startup when it
-       tries to watch a directory that doesn't exist, so create it eagerly before build. -->
-  <Target Name="EnsureDiagramsDir" BeforeTargets="BeforeBuild">
+  <!-- API tag descriptions — folder-based markdown published to wwwroot/api-descriptions/
+       (preserving subfolders) so TagDescriptionDocumentTransformer can find them in Docker
+       where the source tree isn't available. -->
+  <ItemGroup>
+    <ApiDescriptionSource Include="..\..\..\docs\api-descriptions\**\*.md" />
+    <Content Include="@(ApiDescriptionSource)" Link="wwwroot\api-descriptions\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="Never" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <!-- dotnet watch (.NET 10) attaches a FileSystemWatcher to each linked Content item's
+       destination directory under wwwroot\. Those dirs don't exist in dev (the .md/.mmd files
+       are only copied at publish, for Docker), and FileSystemWatcher throws on a missing
+       directory — crashing the AppHost on `aspire start`. Create the destination dirs (derived
+       from the source items, so new doc subfolders are covered automatically) before the build
+       that precedes the watch loop; they stay empty in dev. -->
+  <Target Name="EnsureLinkedContentDirsExist" BeforeTargets="BeforeBuild">
     <MakeDir Directories="$(MSBuildProjectDirectory)\wwwroot\diagrams" />
+    <MakeDir Directories="@(ApiDescriptionSource->'$(MSBuildProjectDirectory)\wwwroot\api-descriptions\%(RecursiveDir)')" />
   </Target>
   <!-- NSwag TypeScript Client Generation -->
   <!-- Runs on `dotnet build` and on initial Aspire startup (first build before watch loop). -->
