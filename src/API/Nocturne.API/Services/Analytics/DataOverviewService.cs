@@ -489,272 +489,250 @@ public class DataOverviewService : IDataOverviewService
             .LinkedRecords.Where(lr => lr.RecordType == "carbintake" && !lr.IsPrimary)
             .Select(lr => lr.RecordId);
 
-        // Helper to determine the local month (1-12) for a UTC timestamp
-        int TimestampToMonth(DateTime utcTimestamp)
-        {
-            var utcDto = new DateTimeOffset(utcTimestamp, TimeSpan.Zero);
-            var local = TimeZoneInfo.ConvertTime(utcDto, tz);
-            return local.Month;
-        }
-
-        // --- Query all glucose readings for the entire year (2 queries total) ---
+        // --- Collect glucose readings by month (CGM + meter) ---
         // Each source is queried independently so one failure doesn't prevent the others.
         var allGlucoseByMonth = new Dictionary<int, List<double>>();
 
         // SensorGlucose (CGM)
-        try
-        {
-            var sensorValues = await context
-                .SensorGlucose.Where(e =>
-                    e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0
-                )
+        await AccumulateMonthlyReadingsAsync(
+            context.SensorGlucose
+                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Where(e => !npSensorGlucoseIds.Contains(e.Id))
-                .Select(e => new { e.Timestamp, e.Mgdl })
-                .ToListAsync(cancellationToken);
-
-            foreach (var v in sensorValues)
-            {
-                var m = TimestampToMonth(v.Timestamp);
-                if (!allGlucoseByMonth.TryGetValue(m, out var list))
-                {
-                    list = new List<double>();
-                    allGlucoseByMonth[m] = list;
-                }
-                list.Add(v.Mgdl);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to collect SensorGlucose for GRI year {Year}", year);
-        }
+                .Select(e => new { e.Timestamp, e.Mgdl }),
+            r => r.Timestamp, r => r.Mgdl, allGlucoseByMonth, tz,
+            "Failed to collect SensorGlucose for GRI year {Year}", year, cancellationToken);
 
         // MeterGlucose (finger sticks)
-        try
-        {
-            var meterValues = await context
-                .MeterGlucose.Where(e =>
-                    e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0
-                )
+        await AccumulateMonthlyReadingsAsync(
+            context.MeterGlucose
+                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Mgdl > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Select(e => new { e.Timestamp, e.Mgdl })
-                .ToListAsync(cancellationToken);
+                .Select(e => new { e.Timestamp, e.Mgdl }),
+            r => r.Timestamp, r => r.Mgdl, allGlucoseByMonth, tz,
+            "Failed to collect MeterGlucose for GRI year {Year}", year, cancellationToken);
 
-            foreach (var v in meterValues)
-            {
-                var m = TimestampToMonth(v.Timestamp);
-                if (!allGlucoseByMonth.TryGetValue(m, out var list))
-                {
-                    list = new List<double>();
-                    allGlucoseByMonth[m] = list;
-                }
-                list.Add(v.Mgdl);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to collect MeterGlucose for GRI year {Year}", year);
-        }
-
-        // --- Query all insulin data for the entire year (3 queries total) ---
-        // Manual boluses grouped by month
+        // --- Collect insulin totals by month (manual bolus, algorithm bolus, temp basal) ---
+        // Manual boluses
         var manualBolusByMonth = new Dictionary<int, double>();
-        try
-        {
-            var manualBoluses = await context
-                .Boluses.Where(e =>
-                    e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Insulin > 0
-                )
+        await AccumulateMonthlyTotalsAsync(
+            context.Boluses
+                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Insulin > 0)
                 .Where(e => e.BolusKind != "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Where(e => !nonPrimaryBolusIds.Contains(e.Id))
-                .Select(e => new { e.Timestamp, e.Insulin })
-                .ToListAsync(cancellationToken);
+                .Select(e => new { e.Timestamp, e.Insulin }),
+            r => r.Timestamp, r => r.Insulin, manualBolusByMonth, tz,
+            "Failed to collect manual bolus totals for GRI year {Year}", year, cancellationToken);
 
-            foreach (var b in manualBoluses)
-            {
-                var m = TimestampToMonth(b.Timestamp);
-                manualBolusByMonth.TryGetValue(m, out var existing);
-                manualBolusByMonth[m] = existing + b.Insulin;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to collect manual bolus totals for GRI year {Year}",
-                year
-            );
-        }
-
-        // Algorithm boluses (APS SMBs -> basal) grouped by month
+        // Algorithm boluses (APS SMBs -> basal)
         var algorithmBolusByMonth = new Dictionary<int, double>();
-        try
-        {
-            var algorithmBoluses = await context
-                .Boluses.Where(e =>
-                    e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Insulin > 0
-                )
+        await AccumulateMonthlyTotalsAsync(
+            context.Boluses
+                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Insulin > 0)
                 .Where(e => e.BolusKind == "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Where(e => !nonPrimaryBolusIds.Contains(e.Id))
-                .Select(e => new { e.Timestamp, e.Insulin })
-                .ToListAsync(cancellationToken);
+                .Select(e => new { e.Timestamp, e.Insulin }),
+            r => r.Timestamp, r => r.Insulin, algorithmBolusByMonth, tz,
+            "Failed to collect algorithm bolus totals for GRI year {Year}", year, cancellationToken);
 
-            foreach (var b in algorithmBoluses)
-            {
-                var m = TimestampToMonth(b.Timestamp);
-                algorithmBolusByMonth.TryGetValue(m, out var existing);
-                algorithmBolusByMonth[m] = existing + b.Insulin;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to collect algorithm bolus totals for GRI year {Year}",
-                year
-            );
-        }
-
-        // TempBasals (pump basal delivery) grouped by month
+        // TempBasals (pump basal delivery): insulin = rate * duration, defaulting to a 5-minute span.
         var tempBasalByMonth = new Dictionary<int, double>();
-        try
-        {
-            var tempBasalRecords = await context
-                .TempBasals.Where(e =>
-                    e.StartTimestamp >= startUtc && e.StartTimestamp < endUtc && e.Rate > 0
-                )
+        await AccumulateMonthlyTotalsAsync(
+            context.TempBasals
+                .Where(e => e.StartTimestamp >= startUtc && e.StartTimestamp < endUtc && e.Rate > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Where(e => !nonPrimaryTempBasalIds.Contains(e.Id))
-                .Select(e => new
-                {
-                    e.StartTimestamp,
-                    e.Rate,
-                    e.EndTimestamp,
-                })
-                .ToListAsync(cancellationToken);
+                .Select(e => new { e.StartTimestamp, e.Rate, e.EndTimestamp }),
+            r => r.StartTimestamp,
+            r => r.Rate * (r.EndTimestamp.HasValue
+                ? (r.EndTimestamp.Value - r.StartTimestamp).TotalHours
+                : 5.0 / 60.0),
+            tempBasalByMonth, tz,
+            "Failed to collect TempBasal totals for GRI year {Year}", year, cancellationToken);
 
-            const double defaultDurationMinutes = 5.0;
-
-            foreach (var r in tempBasalRecords)
-            {
-                var durationHours = r.EndTimestamp.HasValue
-                    ? (r.EndTimestamp.Value - r.StartTimestamp).TotalHours
-                    : defaultDurationMinutes / 60.0;
-                var insulin = r.Rate * durationHours;
-                if (insulin > 0)
-                {
-                    var m = TimestampToMonth(r.StartTimestamp);
-                    tempBasalByMonth.TryGetValue(m, out var existing);
-                    tempBasalByMonth[m] = existing + insulin;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to collect TempBasal totals for GRI year {Year}", year);
-        }
-
-        // --- Query all carb data for the entire year (1 query) ---
+        // --- Collect carb totals by month ---
         var carbsByMonth = new Dictionary<int, double>();
-        try
-        {
-            var carbRecords = await context
-                .CarbIntakes.Where(e =>
-                    e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Carbs > 0
-                )
+        await AccumulateMonthlyTotalsAsync(
+            context.CarbIntakes
+                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Carbs > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .Where(e => !nonPrimaryCarbIds.Contains(e.Id))
-                .Select(e => new { e.Timestamp, e.Carbs })
-                .ToListAsync(cancellationToken);
-
-            foreach (var c in carbRecords)
-            {
-                var m = TimestampToMonth(c.Timestamp);
-                carbsByMonth.TryGetValue(m, out var existing);
-                carbsByMonth[m] = existing + c.Carbs;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to collect carb totals for GRI year {Year}", year);
-        }
+                .Select(e => new { e.Timestamp, e.Carbs }),
+            r => r.Timestamp, r => r.Carbs, carbsByMonth, tz,
+            "Failed to collect carb totals for GRI year {Year}", year, cancellationToken);
 
         // --- Group by month and compute GRI, TDD, carbs per period ---
         for (var month = 1; month <= 12; month++)
         {
-            if (
-                !allGlucoseByMonth.TryGetValue(month, out var glucoseReadings)
-                || glucoseReadings.Count < minimumReadings
-            )
-                continue;
-
-            // Bucket readings into TIR zones
-            var totalCount = glucoseReadings.Count;
-            var veryLowCount = glucoseReadings.Count(v => v < 54);
-            var lowCount = glucoseReadings.Count(v => v >= 54 && v < 70);
-            var targetCount = glucoseReadings.Count(v => v >= 70 && v <= 180);
-            var highCount = glucoseReadings.Count(v => v > 180 && v <= 250);
-            var veryHighCount = glucoseReadings.Count(v => v > 250);
-
-            var percentages = new TimeInRangePercentages
-            {
-                VeryLow = (double)veryLowCount / totalCount * 100.0,
-                Low = (double)lowCount / totalCount * 100.0,
-                Target = (double)targetCount / totalCount * 100.0,
-                High = (double)highCount / totalCount * 100.0,
-                VeryHigh = (double)veryHighCount / totalCount * 100.0,
-            };
-
-            var timeInRange = new TimeInRangeMetrics { Percentages = percentages };
-
-            var gri = _statisticsService.CalculateGRI(timeInRange);
-            var averageGlucose = Math.Round(glucoseReadings.Average(), 1);
-
-            // Compute TDD for the month
-            var localMonthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Unspecified);
-            var localMonthEnd =
-                month == 12
-                    ? new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified)
-                    : new DateTime(year, month + 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
-            var daysInMonth = (localMonthEnd - localMonthStart).TotalDays;
-
-            double? totalDailyDose = null;
-            manualBolusByMonth.TryGetValue(month, out var totalBolusUnits);
-            algorithmBolusByMonth.TryGetValue(month, out var algorithmBasalUnits);
-            tempBasalByMonth.TryGetValue(month, out var tempBasalUnits);
-            var totalBasalUnits = algorithmBasalUnits + tempBasalUnits;
-
-            if (totalBolusUnits > 0 || totalBasalUnits > 0)
-            {
-                var totalInsulin = totalBolusUnits + totalBasalUnits;
-                totalDailyDose = Math.Round(totalInsulin / daysInMonth, 2);
-            }
-
-            // Average daily carbs for the month
-            double? averageDailyCarbs = null;
-            if (carbsByMonth.TryGetValue(month, out var carbSum) && carbSum > 0)
-                averageDailyCarbs = Math.Round(carbSum / daysInMonth, 1);
-
-            var periodStartStr = localMonthStart.ToString("yyyy-MM-dd");
-            var periodEndStr = localMonthEnd.AddDays(-1).ToString("yyyy-MM-dd");
-
-            periods.Add(
-                new GriTimelinePeriod
-                {
-                    PeriodStart = periodStartStr,
-                    PeriodEnd = periodEndStr,
-                    Gri = gri,
-                    AverageGlucoseMgdl = averageGlucose,
-                    TotalDailyDose = totalDailyDose,
-                    AverageDailyCarbs = averageDailyCarbs,
-                    ReadingCount = totalCount,
-                }
-            );
+            var period = BuildGriPeriod(
+                month, year, minimumReadings,
+                allGlucoseByMonth, manualBolusByMonth, algorithmBolusByMonth, tempBasalByMonth, carbsByMonth);
+            if (period != null)
+                periods.Add(period);
         }
 
         return new GriTimelineResponse { Year = year, Periods = periods.ToArray() };
+    }
+
+    /// <summary>
+    /// Local month (1-12) for a UTC timestamp, in the user's time zone.
+    /// </summary>
+    private static int TimestampToMonth(DateTime utcTimestamp, TimeZoneInfo tz)
+    {
+        var utcDto = new DateTimeOffset(utcTimestamp, TimeSpan.Zero);
+        var local = TimeZoneInfo.ConvertTime(utcDto, tz);
+        return local.Month;
+    }
+
+    /// <summary>
+    /// Materializes a timestamped/valued query and appends each reading to its month's bucket.
+    /// A query failure is logged and leaves the accumulator untouched (per-source isolation).
+    /// </summary>
+    private async Task AccumulateMonthlyReadingsAsync<T>(
+        IQueryable<T> query,
+        Func<T, DateTime> timestampSelector,
+        Func<T, double> valueSelector,
+        Dictionary<int, List<double>> readingsByMonth,
+        TimeZoneInfo tz,
+        string failureMessage,
+        int year,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var rows = await query.ToListAsync(cancellationToken);
+            foreach (var row in rows)
+            {
+                var month = TimestampToMonth(timestampSelector(row), tz);
+                if (!readingsByMonth.TryGetValue(month, out var list))
+                {
+                    list = new List<double>();
+                    readingsByMonth[month] = list;
+                }
+                list.Add(valueSelector(row));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, failureMessage, year);
+        }
+    }
+
+    /// <summary>
+    /// Materializes a timestamped/valued query and sums positive values into per-month totals.
+    /// Non-positive values are ignored. A query failure is logged and leaves the accumulator untouched.
+    /// </summary>
+    private async Task AccumulateMonthlyTotalsAsync<T>(
+        IQueryable<T> query,
+        Func<T, DateTime> timestampSelector,
+        Func<T, double> valueSelector,
+        Dictionary<int, double> totalsByMonth,
+        TimeZoneInfo tz,
+        string failureMessage,
+        int year,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var rows = await query.ToListAsync(cancellationToken);
+            foreach (var row in rows)
+            {
+                var value = valueSelector(row);
+                if (value <= 0)
+                    continue;
+                var month = TimestampToMonth(timestampSelector(row), tz);
+                totalsByMonth.TryGetValue(month, out var existing);
+                totalsByMonth[month] = existing + value;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, failureMessage, year);
+        }
+    }
+
+    /// <summary>
+    /// Builds one month's GRI timeline period, or null when the month has fewer than
+    /// <paramref name="minimumReadings"/> glucose readings.
+    /// </summary>
+    private GriTimelinePeriod? BuildGriPeriod(
+        int month,
+        int year,
+        int minimumReadings,
+        Dictionary<int, List<double>> allGlucoseByMonth,
+        Dictionary<int, double> manualBolusByMonth,
+        Dictionary<int, double> algorithmBolusByMonth,
+        Dictionary<int, double> tempBasalByMonth,
+        Dictionary<int, double> carbsByMonth)
+    {
+        if (
+            !allGlucoseByMonth.TryGetValue(month, out var glucoseReadings)
+            || glucoseReadings.Count < minimumReadings
+        )
+            return null;
+
+        // Bucket readings into TIR zones
+        var totalCount = glucoseReadings.Count;
+        var veryLowCount = glucoseReadings.Count(v => v < 54);
+        var lowCount = glucoseReadings.Count(v => v >= 54 && v < 70);
+        var targetCount = glucoseReadings.Count(v => v >= 70 && v <= 180);
+        var highCount = glucoseReadings.Count(v => v > 180 && v <= 250);
+        var veryHighCount = glucoseReadings.Count(v => v > 250);
+
+        var percentages = new TimeInRangePercentages
+        {
+            VeryLow = (double)veryLowCount / totalCount * 100.0,
+            Low = (double)lowCount / totalCount * 100.0,
+            Target = (double)targetCount / totalCount * 100.0,
+            High = (double)highCount / totalCount * 100.0,
+            VeryHigh = (double)veryHighCount / totalCount * 100.0,
+        };
+
+        var timeInRange = new TimeInRangeMetrics { Percentages = percentages };
+
+        var gri = _statisticsService.CalculateGRI(timeInRange);
+        var averageGlucose = Math.Round(glucoseReadings.Average(), 1);
+
+        // Compute TDD for the month
+        var localMonthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Unspecified);
+        var localMonthEnd =
+            month == 12
+                ? new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Unspecified)
+                : new DateTime(year, month + 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
+        var daysInMonth = (localMonthEnd - localMonthStart).TotalDays;
+
+        double? totalDailyDose = null;
+        manualBolusByMonth.TryGetValue(month, out var totalBolusUnits);
+        algorithmBolusByMonth.TryGetValue(month, out var algorithmBasalUnits);
+        tempBasalByMonth.TryGetValue(month, out var tempBasalUnits);
+        var totalBasalUnits = algorithmBasalUnits + tempBasalUnits;
+
+        if (totalBolusUnits > 0 || totalBasalUnits > 0)
+        {
+            var totalInsulin = totalBolusUnits + totalBasalUnits;
+            totalDailyDose = Math.Round(totalInsulin / daysInMonth, 2);
+        }
+
+        // Average daily carbs for the month
+        double? averageDailyCarbs = null;
+        if (carbsByMonth.TryGetValue(month, out var carbSum) && carbSum > 0)
+            averageDailyCarbs = Math.Round(carbSum / daysInMonth, 1);
+
+        var periodStartStr = localMonthStart.ToString("yyyy-MM-dd");
+        var periodEndStr = localMonthEnd.AddDays(-1).ToString("yyyy-MM-dd");
+
+        return new GriTimelinePeriod
+        {
+            PeriodStart = periodStartStr,
+            PeriodEnd = periodEndStr,
+            Gri = gri,
+            AverageGlucoseMgdl = averageGlucose,
+            TotalDailyDose = totalDailyDose,
+            AverageDailyCarbs = averageDailyCarbs,
+            ReadingCount = totalCount,
+        };
     }
 
     /// <summary>
