@@ -195,8 +195,14 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
       const probeHost = getEffectiveHost(event.request, event.cookies);
       const probeHeaders: Record<string, string> = { "X-Forwarded-Proto": getOriginalProto(event.request) };
       if (probeHost) probeHeaders["X-Forwarded-Host"] = probeHost;
+      // Deliberately NO instance key here: a valid instance-key request bypasses the
+      // API's setup/recovery gate (TenantSetupMiddleware), so a privileged probe always
+      // sees 200 and can never detect setup_required/recovery_mode — leaving the
+      // authenticated page load to run and 503 instead of redirecting to /setup. Probing
+      // as an unprivileged visitor makes this gate observe the same 503 a real user gets.
+      // The status endpoint is [AllowAnonymous] and still returns requireAuthentication
+      // once setup is complete, so the auth-enforcement check below is unaffected.
       const apiClient = createServerApiClient(apiBaseUrl, fetch, {
-        hashedInstanceKey: getHashedInstanceKey(),
         extraHeaders: probeHeaders,
       });
 
