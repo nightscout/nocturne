@@ -586,7 +586,7 @@ public class EntriesController : ControllerBase
             // Validate and prepare entries
             foreach (var entry in validEntries)
             {
-                NormalizeEntry(entry, treatUnspecifiedDateAsUtc: true);
+                NormalizeEntry(entry);
             }
 
             // Process entries for sanitization and timestamp conversion
@@ -771,13 +771,12 @@ public class EntriesController : ControllerBase
     }
 
     /// <summary>
-    /// Fills in derived entry fields before persistence: a generated id, mills from date, a date
-    /// string from mills, and a default "sgv" type. <paramref name="treatUnspecifiedDateAsUtc"/>
-    /// controls how a <see cref="DateTimeKind.Unspecified"/> date is converted to mills — the sync
-    /// endpoint treats it as UTC, the async endpoint uses the runtime default offset (preserving each
-    /// endpoint's original behavior).
+    /// Fills in derived entry fields before persistence: a generated id, a date string from mills,
+    /// and a default "sgv" type. Mills itself is not derived here — <see cref="Entry.Mills"/> is the
+    /// source of truth and already computes from the <c>date</c>/<c>dateString</c> fields as UTC, so
+    /// the controller must not re-derive it (re-deriving it inconsistently was a latent bug).
     /// </summary>
-    private static void NormalizeEntry(Entry entry, bool treatUnspecifiedDateAsUtc)
+    private static void NormalizeEntry(Entry entry)
     {
         // Generate ID if not provided
         if (string.IsNullOrEmpty(entry.Id))
@@ -785,18 +784,7 @@ public class EntriesController : ControllerBase
             entry.Id = Guid.CreateVersion7().ToString("N");
         }
 
-        // Set mills from date if not provided
-        if (entry.Mills == 0 && entry.Date.HasValue)
-        {
-            var dateValue = entry.Date.Value;
-            var dateOffset =
-                treatUnspecifiedDateAsUtc && dateValue.Kind == DateTimeKind.Unspecified
-                    ? new DateTimeOffset(dateValue, TimeSpan.Zero)
-                    : new DateTimeOffset(dateValue);
-            entry.Mills = dateOffset.ToUnixTimeMilliseconds();
-        }
-
-        // Set dateString if not provided
+        // Materialize dateString from mills if the client didn't send one
         if (string.IsNullOrEmpty(entry.DateString) && entry.Mills > 0)
         {
             entry.DateString = DateTimeOffset
@@ -1148,11 +1136,10 @@ public class EntriesController : ControllerBase
                 cancellationToken
             );
 
-            // Prepare entries for processing. The async endpoint historically converted
-            // Unspecified-kind dates using the runtime default offset (not UTC); preserved here.
+            // Prepare entries for processing
             foreach (var entry in validEntries)
             {
-                NormalizeEntry(entry, treatUnspecifiedDateAsUtc: false);
+                NormalizeEntry(entry);
             }
 
             // Process entries for sanitization and timestamp conversion
