@@ -10,9 +10,12 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Hard-coded very-low (54 mg/dL) and very-high (250 mg/dL) thresholds are not configurable
-/// per profile; low and high targets are read from the active profile at <see cref="ChartDataContext.EndTime"/>.
-/// When no profile is available the fallback thresholds are 70/180 mg/dL and 1.0 U/hr basal.
+/// The coloring thresholds (very-low 54, low 70, high 180, very-high 250 mg/dL) are a fixed clinical
+/// glycemic band, not the patient's personal target — so a narrow target (e.g. 95-95) does not
+/// collapse the "In Range" band onto a single value. The personal target is read from the active
+/// profile at <see cref="ChartDataContext.EndTime"/> and carried separately as
+/// <see cref="ChartThresholdsDto.TargetLow"/>/<see cref="ChartThresholdsDto.TargetHigh"/> for a
+/// distinct reference line. When no profile is available there is no target and basal defaults to 1.0 U/hr.
 /// </para>
 /// </remarks>
 /// <seealso cref="IChartDataStage"/>
@@ -25,6 +28,8 @@ internal sealed class ProfileLoadStage(
 ) : IChartDataStage
 {
     private const double DefaultVeryLow = 54;
+    private const double DefaultLow = 70;
+    private const double DefaultHigh = 180;
     private const double DefaultVeryHigh = 250;
 
     public async Task<ChartDataContext> ExecuteAsync(ChartDataContext context, CancellationToken cancellationToken)
@@ -42,9 +47,11 @@ internal sealed class ProfileLoadStage(
             thresholds = new ChartThresholdsDto
             {
                 VeryLow = DefaultVeryLow,
-                Low = await targetRangeResolver.GetLowBGTargetAsync(context.EndTime, ct: cancellationToken),
-                High = await targetRangeResolver.GetHighBGTargetAsync(context.EndTime, ct: cancellationToken),
+                Low = DefaultLow,
+                High = DefaultHigh,
                 VeryHigh = DefaultVeryHigh,
+                TargetLow = await targetRangeResolver.GetLowBGTargetAsync(context.EndTime, ct: cancellationToken),
+                TargetHigh = await targetRangeResolver.GetHighBGTargetAsync(context.EndTime, ct: cancellationToken),
             };
             defaultBasalRate = await basalRateResolver.GetBasalRateAsync(context.EndTime, ct: cancellationToken);
 
@@ -55,8 +62,8 @@ internal sealed class ProfileLoadStage(
             thresholds = new ChartThresholdsDto
             {
                 VeryLow = DefaultVeryLow,
-                Low = 70,
-                High = 180,
+                Low = DefaultLow,
+                High = DefaultHigh,
                 VeryHigh = DefaultVeryHigh,
             };
             defaultBasalRate = 1.0;

@@ -1,5 +1,6 @@
 <script lang="ts">
   import StatusPill from "./StatusPill.svelte";
+  import { bg } from "$lib/utils/formatting";
   import type {
     LoopPillData,
     PillInfoItem,
@@ -8,10 +9,9 @@
 
   interface LoopPillProps {
     data: LoopPillData | null;
-    units?: string;
   }
 
-  let { data, units = "mmol/L" }: LoopPillProps = $props();
+  let { data }: LoopPillProps = $props();
 
   /** Format relative time (e.g., "3m ago") */
   function formatTimeAgo(mills: number): string {
@@ -27,14 +27,6 @@
 
     const days = Math.floor(hours / 24);
     return `${days}d ago`;
-  }
-
-  /** Format BG value based on units */
-  function formatBG(mgdl: number): string {
-    if (units === "mmol/L" || units === "mmol") {
-      return (mgdl / 18.0182).toFixed(1);
-    }
-    return Math.round(mgdl).toString();
   }
 
   /** Build info items for the popover */
@@ -73,7 +65,7 @@
 
       // Add eventual BG
       if (data.eventualBG !== undefined) {
-        actionText += `, Eventual BG: ${formatBG(data.eventualBG)}`;
+        actionText += `, Eventual BG: ${bg(data.eventualBG)}`;
       }
 
       items.push({
@@ -128,7 +120,7 @@
     });
 
     if (data.eventualBG !== undefined) {
-      return `${time} ↝ ${formatBG(data.eventualBG)}`;
+      return `${time} ↝ ${bg(data.eventualBG)}`;
     }
 
     return time;

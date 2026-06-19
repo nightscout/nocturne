@@ -250,6 +250,8 @@ export interface ChartDataEngine {
     veryLow: number;
     veryHigh: number;
     glucoseYMax: number;
+    targetLow: number | null;
+    targetHigh: number | null;
   };
   readonly medianGlucose: number;
 
@@ -609,6 +611,10 @@ export function createChartDataEngine(
   const glucoseYMax = $derived(
     serverChartData?.thresholds?.glucoseYMax || 300
   );
+  // Personal target reference line; `??` (not `||`) so a legitimate 0 isn't
+  // dropped, and absent target (no profile) stays null rather than rendering.
+  const targetLow = $derived(serverChartData?.thresholds?.targetLow ?? null);
+  const targetHigh = $derived(serverChartData?.thresholds?.targetHigh ?? null);
 
   const medianGlucose = $derived.by(() => {
     if (glucoseData.length === 0) return 100;
@@ -943,6 +949,8 @@ export function createChartDataEngine(
         veryLow: veryLowThreshold,
         veryHigh: veryHighThreshold,
         glucoseYMax,
+        targetLow,
+        targetHigh,
       };
     },
     get medianGlucose() { return medianGlucose; },

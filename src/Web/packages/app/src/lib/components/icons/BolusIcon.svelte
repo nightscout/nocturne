@@ -44,7 +44,7 @@
   {:else}
     <!-- Hemisphere (dome shape - curves above baseline) -->
     <path
-      d="M {size / 2 - radius},{size / 2} A {radius},{radius} 0 0,0 {size / 2 +
+      d="M {size / 2 - radius},{size / 2} A {radius},{radius} 0 0,1 {size / 2 +
         radius},{size / 2} Z"
       fill={color}
     />
