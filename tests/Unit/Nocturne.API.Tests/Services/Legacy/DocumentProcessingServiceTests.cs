@@ -198,6 +198,26 @@ public class DocumentProcessingServiceTests
     }
 
     [Fact]
+    public void ProcessTimestamp_HonorsClientSuppliedUtcOffset_WithZSuffixedCreatedAt()
+    {
+        // A Z-suffixed created_at carries no real offset, so a separately-supplied utcOffset
+        // must still win (this routes through the mills+default-created_at branch).
+        var entry = new Entry
+        {
+            Sgv = 120,
+            Mills = 1686565800000,
+            CreatedAt = "2023-06-12T10:30:00.000Z",
+            UtcOffset = -300,
+        };
+
+        // Act
+        _service.ProcessTimestamp(entry);
+
+        // Assert
+        Assert.Equal(-300, entry.UtcOffset);
+    }
+
+    [Fact]
     public void SanitizeHtml_WithMaliciousContent_RemovesDangerousElements()
     {
         // Arrange
