@@ -737,10 +737,11 @@ public class EntriesController : ControllerBase
         }
     }
 
+    private static readonly JsonSerializerOptions EntryDeserializerOptions =
+        new() { PropertyNameCaseInsensitive = true };
+
     private static Entry? DeserializeEntry(JsonElement element) =>
-        JsonSerializer.Deserialize<Entry>(
-            element.GetRawText(),
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        JsonSerializer.Deserialize<Entry>(element.GetRawText(), EntryDeserializerOptions);
 
     /// <summary>
     /// True when an entry carries meaningful glucose data, a usable timestamp, or a non-sgv type.
