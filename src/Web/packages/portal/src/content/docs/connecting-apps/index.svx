@@ -17,6 +17,12 @@ Every client is a public client — there are no client secrets. PKCE replaces t
 which makes this flow safe for desktop apps and SPAs. For mobile apps or devices
 with limited input, see the [Device Authorization flow guide](/docs/connecting-apps/device-flow).
 
+<Callout type="tip" title="Prefer an SDK for API calls?">
+  The code below uses raw HTTP requests to show the OAuth flow end to end. Once you
+  have an access token, you don't have to hand-write API calls — official SDKs for
+  the V4 API are available in several languages. See <a href="/docs/sdks">SDKs</a>.
+</Callout>
+
 ## 1. Register your app
 
 Before your app can authenticate users, it needs a `client_id`. Nocturne supports

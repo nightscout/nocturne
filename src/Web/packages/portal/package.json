@@ -4,10 +4,11 @@
 	"type": "module",
 	"description": "Nocturne Portal - Configuration wizard and documentation",
 	"scripts": {
-		"dev": "vite dev",
-		"build": "vite build",
+		"sdk:manifest": "node scripts/generate-sdk-manifest.mjs",
+		"dev": "node scripts/generate-sdk-manifest.mjs && vite dev",
+		"build": "node scripts/generate-sdk-manifest.mjs && vite build",
 		"preview": "vite preview",
-		"check": "svelte-kit sync && svelte-check-native --tsconfig ./tsconfig.json"
+		"check": "node scripts/generate-sdk-manifest.mjs && svelte-kit sync && svelte-check-native --tsconfig ./tsconfig.json"
 	},
 	"devDependencies": {
 		"@lucide/svelte": "^0.555.0",

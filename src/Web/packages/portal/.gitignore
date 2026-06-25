@@ -4,3 +4,5 @@ static/logos/
 static/fonts/
 # Release assets are copied from deploy/portainer at build/dev time
 src/lib/release/
+# SDK manifest is derived from sdk/<lang>/config.yaml at build/dev time
+src/lib/sdk/generated/

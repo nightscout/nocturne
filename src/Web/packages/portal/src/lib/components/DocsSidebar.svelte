@@ -1,6 +1,6 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, Shield, Share2, Bell, Bot, Code2, KeyRound, Activity, LayoutGrid, ChevronRight, ChevronDown } from "@lucide/svelte";
+    import { Rocket, Download, Settings, Shield, Share2, Bell, Bot, Code2, KeyRound, Activity, LayoutGrid, Package, ChevronRight, ChevronDown } from "@lucide/svelte";
 
     const navSections = [
         {
@@ -83,6 +83,13 @@
             items: [
                 { href: "/docs/connecting-apps", label: "App authorization (PKCE)" },
                 { href: "/docs/connecting-apps/device-flow", label: "Mobile & device flow" },
+            ],
+        },
+        {
+            title: "SDKs",
+            icon: Package,
+            items: [
+                { href: "/docs/sdks", label: "Official SDKs" },
             ],
         },
         {
