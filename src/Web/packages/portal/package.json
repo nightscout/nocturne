@@ -23,6 +23,7 @@
 		"formsnap": "^2.0.1",
 		"mdsvex": "^0.12.3",
 		"mode-watcher": "^1.1.0",
+		"rehype-slug": "^6.0.0",
 		"svelte": "^5.45.4",
 		"svelte-check-native": "^0.2.0",
 		"svelte-sonner": "^1.0.7",
