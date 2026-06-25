@@ -204,6 +204,18 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     }
 
     /// <summary>
+    /// Returns the timestamp of the most recently stored basal injection, optionally scoped to a data source.
+    /// Used by connectors to resume per-source sync without re-fetching already-stored data.
+    /// </summary>
+    public async Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default)
+    {
+        var query = _context.BasalInjections.AsNoTracking().AsQueryable();
+        if (source != null)
+            query = query.Where(e => e.DataSource == source);
+        return await query.MaxAsync(e => (DateTime?)e.Timestamp, ct);
+    }
+
+    /// <summary>
     /// Counts basal injection records within a timestamp range.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>

@@ -225,6 +225,19 @@ public class TempBasalRepository : ITempBasalRepository
     }
 
     /// <summary>
+    /// Returns the start timestamp of the most recently stored temp basal, optionally scoped to a data source.
+    /// Used by connectors to resume per-source sync without re-fetching already-stored data.
+    /// </summary>
+    public async Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var query = ctx.TempBasals.AsNoTracking().AsQueryable();
+        if (source != null)
+            query = query.Where(e => e.DataSource == source);
+        return await query.MaxAsync(e => (DateTime?)e.StartTimestamp, ct);
+    }
+
+    /// <summary>
     /// Counts temporary basal records within a timestamp range.
     /// </summary>
     /// <param name="from">Optional start timestamp filter.</param>

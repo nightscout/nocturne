@@ -124,6 +124,32 @@ public class BolusRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetLatestTimestampAsync_IsScopedToSource()
+    {
+        // Regression: the per-source watermark must ignore other sources. connector-a's latest is
+        // older than connector-b's; a tenant-global latest would resume connector-a from b's clock
+        // and silently skip connector-a's backfill.
+        var aOld = new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc);
+        var aLatest = new DateTime(2026, 1, 12, 0, 0, 0, DateTimeKind.Utc);
+        var bNewer = new DateTime(2026, 1, 20, 0, 0, 0, DateTimeKind.Utc);
+
+        await _repo.CreateAsync(new Bolus { Timestamp = aOld, Insulin = 1.0, DataSource = "connector-a" });
+        await _repo.CreateAsync(new Bolus { Timestamp = aLatest, Insulin = 2.0, DataSource = "connector-a" });
+        await _repo.CreateAsync(new Bolus { Timestamp = bNewer, Insulin = 3.0, DataSource = "connector-b" });
+
+        (await _repo.GetLatestTimestampAsync("connector-a")).Should().Be(aLatest);
+        (await _repo.GetLatestTimestampAsync()).Should().Be(bNewer, "a null source returns the tenant-wide latest");
+    }
+
+    [Fact]
+    public async Task GetLatestTimestampAsync_ReturnsNull_WhenNoRecordsForSource()
+    {
+        await _repo.CreateAsync(new Bolus { Timestamp = DateTime.UtcNow, Insulin = 1.0, DataSource = "connector-b" });
+
+        (await _repo.GetLatestTimestampAsync("connector-a")).Should().BeNull();
+    }
+
+    [Fact]
     public async Task CreateAsync_WithoutDataSource_DoesNotDedupe()
     {
         // SyncIdentifier alone is not enough — needs DataSource scoping.

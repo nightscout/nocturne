@@ -77,6 +77,14 @@ public interface ITempBasalRepository
     /// <param name="ct">Cancellation token.</param>
     Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
+    /// <summary>
+    /// Retrieve the start timestamp of the most recently stored <see cref="TempBasal"/>, optionally scoped to a data source.
+    /// </summary>
+    /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
+    /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
+
     /// <summary>Insert multiple <see cref="TempBasal"/> records in a single batch operation.</summary>
     /// <param name="records">Records to insert.</param>
     /// <param name="ct">Cancellation token.</param>
