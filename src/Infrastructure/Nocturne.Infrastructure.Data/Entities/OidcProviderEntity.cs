@@ -25,6 +25,23 @@ public class OidcProviderEntity : IEntityTimestamped
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
+    /// Authentication protocol this provider speaks, stored lower-case ("oidc" or "oauth2").
+    /// "oidc" resolves endpoints via the discovery document and identity via the ID token;
+    /// "oauth2" uses the endpoints and claim mappings in <see cref="OAuth2SettingsJson"/>.
+    /// </summary>
+    [Required]
+    [MaxLength(32)]
+    [Column("provider_type")]
+    public string ProviderType { get; set; } = "oidc";
+
+    /// <summary>
+    /// Endpoint and claim configuration for a plain OAuth2 provider (JSON), null for OIDC providers.
+    /// Serialized <see cref="Nocturne.Core.Models.Authorization.OAuth2ProviderSettings"/>.
+    /// </summary>
+    [Column("oauth2_settings", TypeName = "jsonb")]
+    public string? OAuth2SettingsJson { get; set; }
+
+    /// <summary>
     /// OIDC issuer URL (e.g., "https://auth.example.com/realms/nocturne")
     /// </summary>
     [Required]

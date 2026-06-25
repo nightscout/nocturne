@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Authorization;
+
 namespace Nocturne.Core.Models.Configuration;
 
 /// <summary>
@@ -16,7 +18,21 @@ public class OidcProviderConfig
     /// <summary>Display name for this provider (shown on the login screen).</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>OIDC issuer URL (used for discovery document resolution).</summary>
+    /// <summary>
+    /// Authentication protocol. Defaults to <see cref="OidcProviderType.Oidc"/>; set to
+    /// <see cref="OidcProviderType.OAuth2"/> for a plain OAuth2 provider, supplying <see cref="OAuth2"/>.
+    /// </summary>
+    public OidcProviderType ProviderType { get; set; } = OidcProviderType.Oidc;
+
+    /// <summary>
+    /// Endpoint and claim configuration for a plain OAuth2 provider. Required when
+    /// <see cref="ProviderType"/> is <see cref="OidcProviderType.OAuth2"/>.
+    /// </summary>
+    public OAuth2ProviderSettings? OAuth2 { get; set; }
+
+    /// <summary>
+    /// Issuer URL. OIDC discovery base; for OAuth2 the stable identity namespace (e.g. <c>https://github.com</c>).
+    /// </summary>
     public string IssuerUrl { get; set; } = string.Empty;
 
     /// <summary>OAuth2 client ID registered with the provider.</summary>
