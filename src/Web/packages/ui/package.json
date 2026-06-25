@@ -7,6 +7,7 @@
     "./ui/*.svelte": "./src/lib/components/ui/*.svelte",
     "./ui/*": "./src/lib/components/ui/*/index.ts",
     "./utils": "./src/lib/utils/index.ts",
+    "./glucose-icon": "./src/lib/glucose-icon.ts",
     "./theme.css": "./src/theme.css"
   },
   "peerDependencies": {

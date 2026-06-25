@@ -1,0 +1,10 @@
+generatorName: rust
+outputDir: ./out
+globalProperties:
+  skipFormModel: true
+additionalProperties:
+  packageName: nocturne-rs
+  packageVersion: "0.1.0"
+  library: reqwest
+  supportAsync: true
+  useSingleRequestParameter: false

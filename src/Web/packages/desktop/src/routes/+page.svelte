@@ -21,6 +21,7 @@
     Monitor,
     RotateCcw,
   } from "@lucide/svelte";
+  import GlucoseCompanion from "$lib/GlucoseCompanion.svelte";
 
   type CommandError = { status?: number | null; message: string };
   type LinkInfo = { serverUrl: string };
@@ -260,4 +261,6 @@
       </CardContent>
     </Card>
   {/if}
+
+  <GlucoseCompanion />
 </main>

@@ -12,6 +12,11 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod auth;
+mod glucose_file;
+mod glucose_poll;
+mod tray;
+
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
@@ -251,12 +256,132 @@ fn cancel_login(app: tauri::AppHandle) {
     }
 }
 
+// ── Glucose companion (durable OAuth + taskbar/widget feed) ─────────────────────
+// The CareLink flow above is a one-shot connect. The glucose companion keeps a durable,
+// read-scoped token (auth.rs) and writes glucose.json on an interval for the taskbar mod and
+// the Windows 11 widget.
+
+// CGM cadence is ~5 min, so polling faster than this buys nothing.
+const GLUCOSE_POLL_SECS: u64 = 60;
+
+/// Begins the device-authorization flow for the glucose companion against `server`. Returns the
+/// user code + verification URL to display; polling for approval runs in the background and emits
+/// `companion-linked` (or `companion-link-failed`) when it resolves.
+#[tauri::command]
+async fn companion_link_start(
+    server: String,
+    app: tauri::AppHandle,
+) -> CommandResult<auth::DeviceFlowInfo> {
+    let client = http_client()?;
+    let (info, pending) = auth::begin_device_flow(&client, &server)
+        .await
+        .map_err(CommandError::new)?;
+
+    tauri::async_runtime::spawn(async move {
+        let client = match http_client() {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        match auth::await_authorization(&client, pending).await {
+            Ok(()) => {
+                let _ = app.emit("companion-linked", ());
+                // Populate the taskbar/widget now rather than waiting for the next poll tick.
+                poll_glucose(&client, &app).await;
+            }
+            Err(e) => {
+                let _ = app.emit("companion-link-failed", e);
+            }
+        }
+    });
+
+    Ok(info)
+}
+
+#[tauri::command]
+fn companion_is_linked() -> bool {
+    auth::is_linked()
+}
+
+#[tauri::command]
+fn companion_unlink() -> CommandResult<()> {
+    auth::clear().map_err(CommandError::new)
+}
+
+/// One poll cycle: refresh the token, write glucose.json, emit `glucose-updated`. Best-effort —
+/// a token-refresh or fetch failure is logged and skipped, never fatal.
+async fn poll_glucose(client: &reqwest::Client, app: &tauri::AppHandle) {
+    let (server, token) = match auth::get_valid_token(client).await {
+        Ok(pair) => pair,
+        Err(e) => {
+            eprintln!("glucose poller: {e}");
+            return;
+        }
+    };
+    match glucose_poll::poll_once(client, &server, &token).await {
+        Ok(current) => {
+            tray::update_tray(app, current.as_ref());
+            let _ = app.emit("glucose-updated", &current);
+        }
+        Err(e) => eprintln!("glucose poller: {e}"),
+    }
+}
+
+/// Background poll loop. Polls before sleeping, so a launch (or a just-completed link) populates
+/// promptly; idles while unlinked.
+fn spawn_glucose_poller(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let client = match http_client() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("glucose poller: could not start: {}", e.message);
+                return;
+            }
+        };
+        loop {
+            if auth::is_linked() {
+                poll_glucose(&client, &app).await;
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(GLUCOSE_POLL_SECS)).await;
+        }
+    });
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(SessionState::default())
+        .setup(|app| {
+            let handle = app.handle();
+
+            // Render `--` until the first poll lands a reading.
+            tray::build_tray(handle)?;
+            tray::update_tray(handle, None);
+
+            // Launch to the tray at Windows login. Idempotent — ignore "already enabled".
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let _ = app.autolaunch().enable();
+            }
+
+            spawn_glucose_poller(handle.clone());
+            Ok(())
+        })
         .on_window_event(|window, event| {
+            // Closing the main window hides it to the tray instead of quitting, so the poller
+            // keeps running. Quit is reachable from the tray menu.
+            if window.label() == tray::MAIN_WINDOW_LABEL {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                return;
+            }
+
             // Let the frontend leave its "waiting for sign-in" state if the user closes the
             // login window. Fires after a capture too; the frontend ignores it then.
             if window.label() == LOGIN_WINDOW_LABEL
@@ -269,7 +394,10 @@ fn main() {
             link,
             start_connect,
             complete_connect,
-            cancel_login
+            cancel_login,
+            companion_link_start,
+            companion_is_linked,
+            companion_unlink
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
