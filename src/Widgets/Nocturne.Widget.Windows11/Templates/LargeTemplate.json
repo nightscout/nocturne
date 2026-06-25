@@ -5,37 +5,28 @@
     "body": [
         {
             "type": "Container",
+            "style": "emphasis",
+            "bleed": true,
+            "$when": "${hasAlarm}",
             "items": [
                 {
-                    "type": "ColumnSet",
-                    "columns": [
-                        {
-                            "type": "Column",
-                            "width": "stretch",
-                            "items": [
-                                {
-                                    "type": "TextBlock",
-                                    "text": "Nocturne",
-                                    "size": "Medium",
-                                    "weight": "Bolder",
-                                    "color": "Accent"
-                                }
-                            ]
-                        },
-                        {
-                            "type": "Column",
-                            "width": "auto",
-                            "items": [
-                                {
-                                    "type": "TextBlock",
-                                    "text": "${lastUpdate}",
-                                    "size": "Small",
-                                    "isSubtle": true
-                                }
-                            ],
-                            "verticalContentAlignment": "Center"
-                        }
-                    ]
+                    "type": "TextBlock",
+                    "text": "${alarmMessage}",
+                    "weight": "Bolder",
+                    "color": "${alarmColor}",
+                    "wrap": true
+                }
+            ]
+        },
+        {
+            "type": "Container",
+            "items": [
+                {
+                    "type": "TextBlock",
+                    "text": "Updated ${lastUpdate}",
+                    "size": "Small",
+                    "isSubtle": true,
+                    "horizontalAlignment": "Right"
                 }
             ],
             "style": "emphasis",
@@ -53,14 +44,22 @@
                             "text": "${glucose}",
                             "size": "ExtraLarge",
                             "weight": "Bolder",
-                            "color": "${if(stale, 'Attention', 'Default')}"
+                            "color": "${if(hasAlarm, alarmColor, if(stale, 'Attention', 'Default'))}"
                         },
                         {
                             "type": "TextBlock",
-                            "text": "${delta} mg/dL",
+                            "text": "${delta} ${units}",
                             "size": "Medium",
                             "isSubtle": true,
                             "spacing": "None"
+                        },
+                        {
+                            "type": "TextBlock",
+                            "text": "${trendRate}",
+                            "size": "Small",
+                            "isSubtle": true,
+                            "spacing": "None",
+                            "$when": "${trendRate != ''}"
                         }
                     ],
                     "verticalContentAlignment": "Center"
@@ -80,6 +79,13 @@
                 }
             ],
             "spacing": "Medium"
+        },
+        {
+            "type": "Image",
+            "url": "${chart}",
+            "size": "stretch",
+            "spacing": "Small",
+            "$when": "${chart != ''}"
         },
         {
             "type": "ColumnSet",
@@ -161,6 +167,19 @@
                                     "type": "TextBlock",
                                     "text": "${name}",
                                     "size": "Small"
+                                }
+                            ]
+                        },
+                        {
+                            "type": "Column",
+                            "width": "auto",
+                            "verticalContentAlignment": "Center",
+                            "items": [
+                                {
+                                    "type": "TextBlock",
+                                    "text": "${percentLabel}",
+                                    "size": "Small",
+                                    "isSubtle": true
                                 }
                             ]
                         },

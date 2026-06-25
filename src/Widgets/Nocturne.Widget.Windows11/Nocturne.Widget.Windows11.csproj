@@ -28,11 +28,8 @@
 
     <!-- MSIX Package Identity -->
     <AppxPackage>true</AppxPackage>
-    <AppxBundle>Never</AppxBundle>
     <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
-    <AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
     <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
-    <PackageCertificateThumbprint>7FB8182F7259D416A16851E5C6B132B9EF2B7613</PackageCertificateThumbprint>
 
     <!-- COM Server Registration -->
     <CsWinRTAotOptimizerEnabled>true</CsWinRTAotOptimizerEnabled>
@@ -40,6 +37,30 @@
 
     <!-- Suppress warnings for preview features -->
     <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    Packaging / signing mode.
+
+    Default (dev / sideload): sign with the bundled self-signed certificate so the
+    MSIX can be installed locally for testing. See README "Install (Development)".
+
+    Store build (-p:WidgetStoreBuild=true): produce an unsigned, multi-architecture
+    .msixupload for Partner Center. The Microsoft Store re-signs the package with a
+    Microsoft-trusted certificate at ingestion, so no signing cert is needed here.
+    Used by .github/workflows/widget-store.yml.
+  -->
+  <PropertyGroup Condition="'$(WidgetStoreBuild)' == 'true'">
+    <AppxBundle>Always</AppxBundle>
+    <AppxBundlePlatforms>x64|arm64</AppxBundlePlatforms>
+    <UapAppxPackageBuildMode>StoreUpload</UapAppxPackageBuildMode>
+    <AppxPackageSigningEnabled>False</AppxPackageSigningEnabled>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(WidgetStoreBuild)' != 'true'">
+    <AppxBundle>Never</AppxBundle>
+    <AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
+    <PackageCertificateThumbprint>7FB8182F7259D416A16851E5C6B132B9EF2B7613</PackageCertificateThumbprint>
   </PropertyGroup>
 
   <ItemGroup>

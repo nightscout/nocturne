@@ -4,6 +4,21 @@
     "version": "1.5",
     "body": [
         {
+            "type": "Container",
+            "style": "emphasis",
+            "bleed": true,
+            "$when": "${hasAlarm}",
+            "items": [
+                {
+                    "type": "TextBlock",
+                    "text": "${alarmMessage}",
+                    "weight": "Bolder",
+                    "color": "${alarmColor}",
+                    "wrap": true
+                }
+            ]
+        },
+        {
             "type": "ColumnSet",
             "columns": [
                 {
@@ -15,7 +30,7 @@
                             "text": "${glucose}",
                             "size": "ExtraLarge",
                             "weight": "Bolder",
-                            "color": "${if(stale, 'Attention', 'Default')}"
+                            "color": "${if(hasAlarm, alarmColor, if(stale, 'Attention', 'Default'))}"
                         },
                         {
                             "type": "TextBlock",
@@ -41,6 +56,13 @@
                     "verticalContentAlignment": "Center"
                 }
             ]
+        },
+        {
+            "type": "Image",
+            "url": "${chart}",
+            "size": "stretch",
+            "spacing": "Small",
+            "$when": "${chart != ''}"
         },
         {
             "type": "ColumnSet",

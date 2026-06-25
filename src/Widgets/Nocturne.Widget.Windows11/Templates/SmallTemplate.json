@@ -12,12 +12,12 @@
                     "size": "ExtraLarge",
                     "weight": "Bolder",
                     "horizontalAlignment": "Center",
-                    "color": "Default"
+                    "color": "${if(hasAlarm, alarmColor, if(stale, 'Attention', 'Default'))}"
                 },
                 {
                     "type": "TextBlock",
-                    "text": "${direction}",
-                    "size": "Large",
+                    "text": "${direction} ${delta}",
+                    "size": "Medium",
                     "horizontalAlignment": "Center",
                     "spacing": "None"
                 },

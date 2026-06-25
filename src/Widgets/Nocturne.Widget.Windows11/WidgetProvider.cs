@@ -24,13 +24,29 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
     private readonly Dictionary<string, string> _templateCache = new();
     private readonly object _widgetLock = new();
 
-    private readonly ICredentialStore _credentialStore;
-    private readonly INocturneApiClient _apiClient;
-    private readonly IOAuthService _oauthService;
-    private readonly ILogger<NocturneWidgetProvider> _logger;
+    private ICredentialStore? _credStore;
+    private INocturneApiClient? _api;
+    private IOAuthService? _oauth;
+    private ILogger<NocturneWidgetProvider>? _log;
+    private IWidgetSettingsStore? _settings;
+
+    // Services resolve lazily on first use (a background widget update), never on the
+    // COM activation thread. Building the DI container is slow on a cold start and the
+    // Widgets host abandons a provider whose CreateInstance does not return promptly.
+    private ICredentialStore _credentialStore => _credStore ??= Program.Services.GetRequiredService<ICredentialStore>();
+    private INocturneApiClient _apiClient => _api ??= Program.Services.GetRequiredService<INocturneApiClient>();
+    private IOAuthService _oauthService => _oauth ??= Program.Services.GetRequiredService<IOAuthService>();
+    private ILogger<NocturneWidgetProvider> _logger => _log ??= Program.Services.GetRequiredService<ILogger<NocturneWidgetProvider>>();
+    private IWidgetSettingsStore _settingsStore => _settings ??= Program.Services.GetRequiredService<IWidgetSettingsStore>();
 
     // Polling cancellation
     private CancellationTokenSource? _pollCts;
+
+    // Background refresh while widgets are live. Windows tears down the provider process
+    // when no widgets remain, so these are scoped to that lifetime.
+    private Timer? _refreshTimer;
+    private bool _realtimeWired;
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(60);
 
     private static readonly string TemplatesPath = Path.Combine(AppContext.BaseDirectory, "Templates");
 
@@ -57,6 +73,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         None,
         EnterServerUrl,
         AwaitingAuthorization,
+        Settings,
     }
 
     /// <summary>
@@ -65,13 +82,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
     /// </summary>
     public NocturneWidgetProvider()
     {
-        Console.WriteLine("NocturneWidgetProvider initialized");
-
-        // Resolve services from the static service provider
-        _credentialStore = Program.Services.GetRequiredService<ICredentialStore>();
-        _apiClient = Program.Services.GetRequiredService<INocturneApiClient>();
-        _oauthService = Program.Services.GetRequiredService<IOAuthService>();
-        _logger = Program.Services.GetRequiredService<ILogger<NocturneWidgetProvider>>();
+        // Keep this cheap: no service resolution here (see the lazy properties above).
     }
 
     private void RecoverRunningWidgets()
@@ -112,13 +123,14 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         var widgetId = widgetContext.Id;
         var definitionId = widgetContext.DefinitionId;
 
-        Console.WriteLine($"Creating widget: {widgetId} with definition: {definitionId}");
+        _logger.LogInformation("Creating widget {WidgetId} ({DefinitionId})", widgetId, definitionId);
 
         lock (_widgetLock)
         {
             _activeWidgets[widgetId] = new WidgetInfo(widgetId, definitionId);
         }
 
+        EnsureBackgroundUpdates();
         UpdateWidget(widgetId);
     }
 
@@ -127,14 +139,22 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
     {
         Console.WriteLine($"Deleting widget: {widgetId}");
 
+        bool empty;
         lock (_widgetLock)
         {
             _activeWidgets.Remove(widgetId);
+            empty = _activeWidgets.Count == 0;
+        }
 
-            if (_activeWidgets.Count == 0)
+        if (empty)
+        {
+            _refreshTimer?.Dispose();
+            _refreshTimer = null;
+            if (_realtimeWired)
             {
-                Program.SignalEmptyWidgetList();
+                _ = _apiClient.DisconnectSignalRAsync();
             }
+            Program.SignalEmptyWidgetList();
         }
     }
 
@@ -167,6 +187,10 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
 
             case "cancelAuth":
                 HandleCancelAuth(widgetId);
+                break;
+
+            case "saveSettings":
+                _ = HandleSaveSettingsAsync(widgetId, data);
                 break;
 
             case "signOut":
@@ -205,6 +229,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             }
         }
 
+        EnsureBackgroundUpdates();
         UpdateWidget(widgetId);
     }
 
@@ -228,19 +253,97 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         var widgetId = customizationRequestedArgs.WidgetContext.Id;
         _logger.LogInformation("Customization requested for widget {WidgetId}", widgetId);
 
+        // When already connected, Customize opens settings (units, sign out); otherwise it
+        // starts the connect flow.
+        _ = OpenCustomizationAsync(widgetId);
+    }
+
+    private async Task OpenCustomizationAsync(string widgetId)
+    {
+        var connected = await _credentialStore.HasCredentialsAsync();
+
         lock (_widgetLock)
         {
             if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
             {
-                widgetInfo.CustomizationMode = CustomizationState.EnterServerUrl;
-                UpdateWidget(widgetId);
+                widgetInfo.CustomizationMode = connected
+                    ? CustomizationState.Settings
+                    : CustomizationState.EnterServerUrl;
             }
         }
+
+        UpdateWidget(widgetId);
     }
 
     private void UpdateWidget(string widgetId)
     {
         _ = UpdateWidgetAsync(widgetId);
+    }
+
+    /// <summary>
+    /// Starts the periodic refresh timer and (best-effort) the SignalR real-time connection so
+    /// the widget keeps current while it is live, rather than only when the user interacts.
+    /// Idempotent; safe to call from every activation.
+    /// </summary>
+    private void EnsureBackgroundUpdates()
+    {
+        lock (_widgetLock)
+        {
+            _refreshTimer ??= new Timer(_ => RefreshLiveWidgets(), null, RefreshInterval, RefreshInterval);
+        }
+
+        _ = EnsureRealtimeAsync();
+    }
+
+    /// <summary>
+    /// Pushes a fresh update to every active, connected widget (i.e. not mid-setup).
+    /// </summary>
+    private void RefreshLiveWidgets()
+    {
+        List<string> ids;
+        lock (_widgetLock)
+        {
+            ids = _activeWidgets.Values
+                .Where(w => w.IsActive && w.CustomizationMode == CustomizationState.None)
+                .Select(w => w.WidgetId)
+                .ToList();
+        }
+
+        foreach (var id in ids)
+        {
+            UpdateWidget(id);
+        }
+    }
+
+    /// <summary>
+    /// Subscribes to SignalR push events (new data, alarms) and connects once, if credentials
+    /// exist. Failure is non-fatal — the periodic timer remains the refresh baseline.
+    /// </summary>
+    private async Task EnsureRealtimeAsync()
+    {
+        if (_realtimeWired)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!await _credentialStore.HasCredentialsAsync())
+            {
+                return;
+            }
+
+            _realtimeWired = true;
+            _apiClient.DataUpdated += (_, _) => RefreshLiveWidgets();
+            _apiClient.AlarmReceived += (_, _) => RefreshLiveWidgets();
+            _apiClient.AlarmCleared += (_, _) => RefreshLiveWidgets();
+            await _apiClient.ConnectSignalRAsync();
+            _logger.LogInformation("Realtime updates connected");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Realtime updates unavailable; using periodic refresh only");
+        }
     }
 
     private async Task UpdateWidgetAsync(string widgetId)
@@ -266,10 +369,23 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                     template = GetServerUrlTemplate();
                     var pendingAuth = await _credentialStore.GetDeviceAuthStateAsync();
                     var existingCreds = await _credentialStore.GetCredentialsAsync();
+                    var setupSettings = await _settingsStore.GetAsync();
                     dataNode = new JsonObject
                     {
                         ["apiUrl"] = pendingAuth?.ApiUrl ?? existingCreds?.ApiUrl ?? "",
                         ["hasCredentials"] = existingCreds != null,
+                        ["unit"] = setupSettings.Unit.ToString(),
+                    };
+                    break;
+
+                case CustomizationState.Settings:
+                    template = GetSettingsTemplate();
+                    var settingsCreds = await _credentialStore.GetCredentialsAsync();
+                    var savedSettings = await _settingsStore.GetAsync();
+                    dataNode = new JsonObject
+                    {
+                        ["apiUrl"] = settingsCreds?.ApiUrl ?? "",
+                        ["unit"] = savedSettings.Unit.ToString(),
                     };
                     break;
 
@@ -302,10 +418,13 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                     }
                     else
                     {
-                        var needsPredictions = widgetInfo.DefinitionId == WidgetDefinitionIds.Large;
+                        // Small shows only the current value; Medium/Large render a trend
+                        // sparkline, so they request recent history (and Large, predictions).
+                        var isLarge = widgetInfo.DefinitionId == WidgetDefinitionIds.Large;
+                        var isSmall = widgetInfo.DefinitionId == WidgetDefinitionIds.Small;
                         var summary = await _apiClient.GetSummaryAsync(
-                            hours: 0,
-                            includePredictions: needsPredictions
+                            hours: isSmall ? 0 : 3,
+                            includePredictions: isLarge
                         );
 
                         if (summary is null)
@@ -318,8 +437,9 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                         }
                         else
                         {
+                            var settings = await _settingsStore.GetAsync();
                             template = GetGlucoseTemplate(widgetInfo.DefinitionId);
-                            dataNode = CreateGlucoseData(summary, widgetInfo.DefinitionId);
+                            dataNode = CreateGlucoseData(summary, widgetInfo.DefinitionId, settings.Unit);
                         }
                     }
                     break;
@@ -368,6 +488,17 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                         "placeholder": "https://your-nocturne-server.com",
                         "value": "${apiUrl}",
                         "isRequired": true
+                    },
+                    {
+                        "type": "Input.ChoiceSet",
+                        "id": "unit",
+                        "label": "Glucose units",
+                        "style": "compact",
+                        "value": "${unit}",
+                        "choices": [
+                            { "title": "mg/dL", "value": "MgDl" },
+                            { "title": "mmol/L", "value": "MmolL" }
+                        ]
                     }
                 ],
                 "actions": [
@@ -449,6 +580,63 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             """;
     }
 
+    private static string GetSettingsTemplate()
+    {
+        return """
+            {
+                "type": "AdaptiveCard",
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.5",
+                "body": [
+                    {
+                        "type": "TextBlock",
+                        "text": "Widget Settings",
+                        "size": "Medium",
+                        "weight": "Bolder"
+                    },
+                    {
+                        "type": "TextBlock",
+                        "text": "Connected to ${apiUrl}",
+                        "size": "Small",
+                        "wrap": true,
+                        "isSubtle": true,
+                        "spacing": "None"
+                    },
+                    {
+                        "type": "Input.ChoiceSet",
+                        "id": "unit",
+                        "label": "Glucose units",
+                        "style": "compact",
+                        "value": "${unit}",
+                        "choices": [
+                            { "title": "mg/dL", "value": "MgDl" },
+                            { "title": "mmol/L", "value": "MmolL" }
+                        ]
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "Action.Execute",
+                        "title": "Save",
+                        "verb": "saveSettings",
+                        "style": "positive"
+                    },
+                    {
+                        "type": "Action.Execute",
+                        "title": "Sign out",
+                        "verb": "signOut",
+                        "style": "destructive"
+                    },
+                    {
+                        "type": "Action.Execute",
+                        "title": "Done",
+                        "verb": "exitCustomization"
+                    }
+                ]
+            }
+            """;
+    }
+
     private static string GetSetupTemplate()
     {
         return """
@@ -462,17 +650,10 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                         "items": [
                             {
                                 "type": "TextBlock",
-                                "text": "Nocturne",
+                                "text": "Setup Required",
                                 "size": "Large",
                                 "weight": "Bolder",
                                 "horizontalAlignment": "Center"
-                            },
-                            {
-                                "type": "TextBlock",
-                                "text": "Setup Required",
-                                "size": "Medium",
-                                "horizontalAlignment": "Center",
-                                "spacing": "Small"
                             },
                             {
                                 "type": "TextBlock",
@@ -593,12 +774,18 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             """;
     }
 
-    private static JsonObject CreateGlucoseData(V4SummaryResponse summary, string definitionId)
+    private static JsonObject CreateGlucoseData(
+        V4SummaryResponse summary,
+        string definitionId,
+        GlucoseUnit unit
+    )
     {
         var current = summary.Current;
-        var glucose = current is not null ? ((int)current.Sgv).ToString() : "---";
+        var glucose = current is not null
+            ? GlucoseFormatHelper.FormatValue(current.Sgv, unit)
+            : "---";
         var direction = DirectionHelper.GetArrowText(current?.Direction.ToString());
-        var delta = FormatDelta(current?.Delta);
+        var delta = GlucoseFormatHelper.FormatDelta(current?.Delta, unit);
 
         // Calculate staleness and relative time
         var stale = false;
@@ -610,40 +797,46 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             lastUpdate = TimeAgoHelper.FormatMilliseconds(ageMs);
         }
 
+        var rate = current?.TrendRate;
         var data = new JsonObject
         {
             ["glucose"] = glucose,
             ["direction"] = direction,
             ["delta"] = delta,
+            ["units"] = unit == GlucoseUnit.MmolL ? "mmol/L" : "mg/dL",
+            ["trendRate"] = rate is not null ? $"{GlucoseFormatHelper.FormatDelta(rate, unit)}/min" : "",
             ["lastUpdate"] = lastUpdate,
             ["stale"] = stale,
         };
 
-        // IOB and COB for Medium and Large
+        // Active-alarm banner (suppressed while the alarm is silenced)
+        var alarm = summary.Alarm;
+        var hasAlarm = alarm is not null && !alarm.IsSilenced;
+        data["hasAlarm"] = hasAlarm;
+        data["alarmMessage"] = hasAlarm ? alarm!.Message : "";
+        data["alarmColor"] = IsUrgentAlarm(alarm) ? "Attention" : "Warning";
+
+        // IOB, COB, and trend sparkline for Medium and Large
         if (definitionId is WidgetDefinitionIds.Medium or WidgetDefinitionIds.Large)
         {
             data["iob"] = Math.Round(summary.Iob * 100) / 100;
             data["cob"] = (int)summary.Cob;
+
+            var (chartW, chartH) = definitionId == WidgetDefinitionIds.Large ? (600, 200) : (600, 150);
+            data["chart"] = GlucoseSparkline.RenderDataUri(summary, chartW, chartH) ?? "";
         }
 
         // Predictions and trackers for Large
         if (definitionId == WidgetDefinitionIds.Large)
         {
-            data["predictions"] = BuildPredictionsArray(summary.Predictions);
+            data["predictions"] = BuildPredictionsArray(summary.Predictions, unit);
             data["trackers"] = BuildTrackersArray(summary.Trackers);
         }
 
         return data;
     }
 
-    private static string FormatDelta(double? delta)
-    {
-        if (delta is null) return "";
-        var sign = delta >= 0 ? "+" : "";
-        return $"{sign}{delta:F1}";
-    }
-
-    private static JsonArray BuildPredictionsArray(V4Predictions? predictions)
+    private static JsonArray BuildPredictionsArray(V4Predictions? predictions, GlucoseUnit unit)
     {
         var result = new JsonArray();
         if (predictions?.Values is null || predictions.Values.Count == 0)
@@ -660,7 +853,7 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
             {
                 result.Add(new JsonObject
                 {
-                    ["value"] = ((int)predictions.Values[index]).ToString(),
+                    ["value"] = GlucoseFormatHelper.FormatValue(predictions.Values[index], unit),
                     ["time"] = $"+{targetMin}m",
                 });
             }
@@ -668,6 +861,10 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
 
         return result;
     }
+
+    private static bool IsUrgentAlarm(V4AlarmState? alarm) =>
+        alarm is not null
+        && (alarm.Level >= 2 || alarm.Type.Contains("urgent", StringComparison.OrdinalIgnoreCase));
 
     private static JsonArray BuildTrackersArray(List<V4TrackerStatus> trackers)
     {
@@ -688,11 +885,17 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                     ? $"in {FormatTrackerAge(Math.Abs(tracker.HoursUntilEvent.Value))}"
                     : "";
 
+            // Lifespan progress (Duration trackers only); empty for event-mode trackers.
+            var percentLabel = tracker.PercentElapsed is { } pe
+                ? $"{Math.Clamp((int)Math.Round(pe), 0, 100)}% used"
+                : "";
+
             result.Add(new JsonObject
             {
                 ["name"] = tracker.Name ?? "",
                 ["age"] = age,
                 ["urgencyColor"] = urgencyColor,
+                ["percentLabel"] = percentLabel,
             });
         }
         return result;
@@ -735,6 +938,11 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
                 _logger.LogWarning("Missing API URL for authentication");
                 return;
             }
+
+            // Persist the units chosen on the connect card before authorizing.
+            var settings = await _settingsStore.GetAsync();
+            settings.Unit = ParseUnit(data, settings.Unit);
+            await _settingsStore.SaveAsync(settings);
 
             _logger.LogInformation("Starting OAuth device flow for {ApiUrl}", apiUrl);
 
@@ -887,6 +1095,57 @@ public sealed class NocturneWidgetProvider : IWidgetProvider, IWidgetProvider2
         }
 
         UpdateWidget(widgetId);
+    }
+
+    private async Task HandleSaveSettingsAsync(string widgetId, string data)
+    {
+        try
+        {
+            var settings = await _settingsStore.GetAsync();
+            settings.Unit = ParseUnit(data, settings.Unit);
+            await _settingsStore.SaveAsync(settings);
+            _logger.LogInformation("Widget settings saved (unit={Unit})", settings.Unit);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving widget settings");
+        }
+
+        lock (_widgetLock)
+        {
+            if (_activeWidgets.TryGetValue(widgetId, out var widgetInfo))
+            {
+                widgetInfo.CustomizationMode = CustomizationState.None;
+            }
+        }
+
+        UpdateWidget(widgetId);
+    }
+
+    /// <summary>
+    /// Reads the "unit" input value from an Action.Execute payload, falling back to the
+    /// current value if absent or unrecognised.
+    /// </summary>
+    private static GlucoseUnit ParseUnit(string data, GlucoseUnit fallback)
+    {
+        if (string.IsNullOrWhiteSpace(data))
+            return fallback;
+
+        try
+        {
+            var form = JsonSerializer.Deserialize<JsonElement>(data);
+            if (form.TryGetProperty("unit", out var unitProp)
+                && Enum.TryParse<GlucoseUnit>(unitProp.GetString(), out var parsed))
+            {
+                return parsed;
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed payload; keep the existing setting.
+        }
+
+        return fallback;
     }
 
     private async Task HandleSignOutAsync(string widgetId)

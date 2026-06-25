@@ -67,7 +67,9 @@ Get-AppxPackage -Name '*Nocturne*'
 After installing, restart the Widget infrastructure so it discovers the new provider:
 
 ```powershell
-Stop-Process -Name WidgetBoard -Force -ErrorAction SilentlyContinue
+# The board host is "Widgets" (NOT "WidgetBoard"); killing the wrong name leaves the
+# board with a stale provider handle, so a newly (re)installed widget won't pin.
+Stop-Process -Name Widgets -Force -ErrorAction SilentlyContinue
 Stop-Process -Name WidgetService -Force -ErrorAction SilentlyContinue
 ```
 
@@ -86,13 +88,20 @@ Stop-Process -Name Nocturne.Widget.Windows11 -Force -ErrorAction SilentlyContinu
 
 Open the Windows 11 Widgets Board (Win+W), click the **+** button, and search for "Nocturne". Select the size you want to add.
 
-On first use, right-click the widget and select **Customize** to enter your Nocturne server URL and API token.
+On first use, right-click the widget and select **Customize**, enter your Nocturne server URL, then approve the short code shown by the widget on your Nocturne site (OAuth device authorization — no tokens to copy).
 
 ## Uninstall
 
 ```powershell
 Get-AppxPackage -Name '*Nocturne*' | Remove-AppxPackage
 ```
+
+## Privacy
+
+The widget talks only to the Nocturne server you configure; no data is sent to the
+Nightscout Foundation and there is no telemetry. Tokens are stored encrypted in the
+Windows Credential Manager. Full policy (also used as the Microsoft Store privacy
+URL): `/docs/windows-widget-privacy` on the Nocturne portal.
 
 ## Project Structure
 

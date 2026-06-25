@@ -21,7 +21,12 @@ internal static class Program
     public static readonly Guid WidgetProviderClsid = new("B8E3F2A1-5C4D-4E6F-8A9B-1C2D3E4F5A6B");
 
     private static ManualResetEvent? _emptyWidgetListEvent;
-    private static IServiceProvider? _serviceProvider;
+
+    // Built lazily on first widget activation. Keeping it out of the startup path lets
+    // CoRegisterClassObject run immediately — the Widgets host abandons a provider that
+    // doesn't register its COM class factory within a short timeout, and building the
+    // DI container (HTTP client, logging) on a cold start can take several seconds.
+    private static readonly Lazy<IServiceProvider> _services = new(ConfigureServices);
 
     // COM registration constants
     private const uint CLSCTX_LOCAL_SERVER = 4;
@@ -45,8 +50,7 @@ internal static class Program
     /// <summary>
     /// Gets the service provider for resolving dependencies
     /// </summary>
-    public static IServiceProvider Services => _serviceProvider
-        ?? throw new InvalidOperationException("Service provider not initialized");
+    public static IServiceProvider Services => _services.Value;
 
     [MTAThread]
     public static void Main(string[] args)
@@ -64,12 +68,10 @@ internal static class Program
             return;
         }
 
-        Console.WriteLine($"[{sw.ElapsedMilliseconds}ms] Configuring services...");
-        _serviceProvider = ConfigureServices();
-        Console.WriteLine($"[{sw.ElapsedMilliseconds}ms] Services configured");
-
         Console.WriteLine($"[{sw.ElapsedMilliseconds}ms] Initializing COM wrappers...");
-        // Initialize COM wrappers for WinRT interop - REQUIRED for widget provider
+        // Initialize COM wrappers for WinRT interop - REQUIRED for widget provider.
+        // Services are configured lazily (Program.Services) so registration below is not
+        // blocked by the cold-start cost of building the DI container.
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Console.WriteLine($"[{sw.ElapsedMilliseconds}ms] COM wrappers initialized");
 
@@ -139,6 +141,9 @@ internal static class Program
         // Credential store
         services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
 
+        // User-configurable settings (glucose units, etc.)
+        services.AddSingleton<IWidgetSettingsStore, WidgetSettingsStore>();
+
         // OAuth service
         services.AddSingleton<IOAuthService, OAuthService>();
 
@@ -174,11 +179,17 @@ internal sealed class WidgetProviderFactory<T> : IClassFactory where T : IWidget
         // Microsoft's sample uses typeof(T).GUID which is the class GUID
         if (riid == typeof(T).GUID || riid == Guids.IUnknown)
         {
-            Console.WriteLine($"Creating widget provider instance for {typeof(T).Name}...");
-            // Use MarshalInspectable to create a COM-callable wrapper for the WinRT interface
-            ppvObject = MarshalInspectable<IWidgetProvider>.FromManaged(new T());
-            Console.WriteLine($"Widget provider created, ptr: {ppvObject}");
-            return 0; // S_OK
+            try
+            {
+                // Use MarshalInspectable to create a COM-callable wrapper for the WinRT interface
+                ppvObject = MarshalInspectable<IWidgetProvider>.FromManaged(new T());
+                return 0; // S_OK
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"CreateInstance failed: {ex}");
+                return E_NOINTERFACE;
+            }
         }
 
         Console.WriteLine($"Interface not supported: {riid} (expected: {typeof(T).GUID})");
