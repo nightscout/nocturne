@@ -96,4 +96,25 @@ public class OidcProviderServiceOAuth2Tests
         provider.ProviderType.Should().Be(OidcProviderType.Oidc);
         provider.Scopes.Should().Contain("openid");
     }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetEnabledProviders_Oidc_WithDefaultEmptyScopes_BackfillsOidcDefaults()
+    {
+        // OidcProviderConfig.Scopes defaults to empty so config binding does not pollute scopes;
+        // an OIDC provider that configures none must still get the standard openid/profile/email.
+        var oidc = new OidcProviderConfig
+        {
+            Name = "Keycloak",
+            ProviderType = OidcProviderType.Oidc,
+            IssuerUrl = "https://id.example.com",
+            ClientId = "kc-client",
+            Scopes = [],
+        };
+        var service = BuildService(oidc);
+
+        var provider = (await service.GetEnabledProvidersAsync()).Single();
+
+        provider.Scopes.Should().Equal("openid", "profile", "email");
+    }
 }

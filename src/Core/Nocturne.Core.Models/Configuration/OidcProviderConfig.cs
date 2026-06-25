@@ -41,8 +41,14 @@ public class OidcProviderConfig
     /// <summary>OAuth2 client secret. Should be supplied via secrets manager, not checked into source.</summary>
     public string? ClientSecret { get; set; }
 
-    /// <summary>OIDC scopes to request during authorization.</summary>
-    public List<string> Scopes { get; set; } = ["openid", "profile", "email"];
+    /// <summary>
+    /// Scopes to request during authorization. Left empty by default: .NET configuration binding
+    /// appends config-supplied scopes to whatever the list already contains, so a non-empty default
+    /// would pollute every provider's scopes (e.g. an OAuth2 provider would get <c>openid</c> forced
+    /// on). The provider service backfills protocol defaults from an empty list — OIDC providers get
+    /// <c>openid profile email</c>, OAuth2 providers use exactly the scopes they configure.
+    /// </summary>
+    public List<string> Scopes { get; set; } = [];
 
     /// <summary>Default <see cref="Nocturne.Core.Models.Authorization.Role"/> names to assign to new users from this provider.</summary>
     public List<string> DefaultRoles { get; set; } = ["readable"];
