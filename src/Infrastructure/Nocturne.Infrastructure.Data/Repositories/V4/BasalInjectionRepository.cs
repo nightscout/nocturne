@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
@@ -233,53 +235,122 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     }
 
     /// <summary>
-    /// Bulk-create basal injection records with LegacyId-based deduplication.
-    /// Records whose LegacyId already exists for the tenant are skipped.
+    /// Bulk-create basal injection records. Atomic (the whole insert runs in one transaction via the
+    /// connection's execution strategy) and audit-aware: rows whose latest delete was user-initiated
+    /// stay blocked from resync re-creation. Deduplicates by (DataSource, SyncIdentifier) upsert and by
+    /// LegacyId. Mirrors the established <see cref="BolusRepository"/> bulk path, minus
+    /// DeduplicationService participation (BasalInjection is LegacyId-only / SyncId-keyed, never
+    /// cross-connector dedup-linked).
     /// </summary>
     public async Task<IEnumerable<BasalInjection>> BulkCreateAsync(IEnumerable<BasalInjection> records, CancellationToken ct = default)
     {
-        var entities = records.Select(BasalInjectionMapper.ToEntity).ToList();
-        if (entities.Count == 0)
-            return [];
-
-        // Intra-batch dedup: keep first occurrence per LegacyId
-        entities = entities
-            .GroupBy(e => !string.IsNullOrEmpty(e.LegacyId) ? e.LegacyId : e.Id.ToString())
-            .Select(g => g.First())
-            .ToList();
-
-        // DB-level dedup: filter out records whose LegacyId already exists
-        var legacyIds = entities
-            .Where(e => !string.IsNullOrEmpty(e.LegacyId))
-            .Select(e => e.LegacyId!)
-            .ToHashSet();
-
-        if (legacyIds.Count > 0)
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            var existingLegacyIds = await _context.BasalInjections.IgnoreQueryFilters().AsNoTracking()
-                .Where(e => e.TenantId == _context.TenantId)
-                .Where(e => legacyIds.Contains(e.LegacyId!))
-                .Select(e => e.LegacyId)
-                .ToListAsync(ct);
+            await using var tx = await _context.Database.BeginTransactionAsync(ct);
+            var entities = records.Select(BasalInjectionMapper.ToEntity).ToList();
+            if (entities.Count == 0)
+            {
+                await tx.CommitAsync(ct);
+                return [];
+            }
 
-            var existingSet = existingLegacyIds.ToHashSet();
+            // Intra-batch SyncIdentifier dedup: keep last occurrence per (DataSource, SyncIdentifier).
+            // Records without both keys keep a unique grouping key so they're not collapsed.
             entities = entities
-                .Where(e => string.IsNullOrEmpty(e.LegacyId) || !existingSet.Contains(e.LegacyId))
+                .GroupBy(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier)
+                    ? $"sync|{e.DataSource}|{e.SyncIdentifier}"
+                    : $"id|{e.Id}")
+                .Select(g => g.Last())
                 .ToList();
-        }
 
-        if (entities.Count == 0)
-            return [];
+            // DB-level SyncIdentifier upsert: rows matched by (DataSource, SyncIdentifier) are updated
+            // in place rather than inserted — so a connector replay updates the existing row instead of
+            // hitting the partial unique index. Everything else falls through to the LegacyId/insert
+            // path below. Mirrors BolusRepository.
+            var updatedEntities = new List<BasalInjectionEntity>();
+            var syncKeyed = entities
+                .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
+                .ToList();
 
-        const int batchSize = 500;
-        foreach (var batch in entities.Chunk(batchSize))
-        {
-            _context.BasalInjections.AddRange(batch);
-            await _context.SaveChangesAsync(ct);
-            _context.ChangeTracker.Clear();
-        }
+            if (syncKeyed.Count > 0)
+            {
+                var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
+                var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
 
-        return entities.Select(BasalInjectionMapper.ToDomainModel);
+                var existingRows = await _context.BasalInjections.IgnoreQueryFilters()
+                    .Where(e => e.TenantId == _context.TenantId)
+                    .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
+                    .ToListAsync(ct);
+
+                var existingByKey = existingRows
+                    .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                var toInsert = new List<BasalInjectionEntity>();
+                foreach (var entity in entities)
+                {
+                    var hasKey = !string.IsNullOrEmpty(entity.DataSource)
+                        && !string.IsNullOrEmpty(entity.SyncIdentifier);
+                    if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
+                    {
+                        // Update in place — mirror the single-record CreateAsync path via the mapper.
+                        var domain = BasalInjectionMapper.ToDomainModel(entity);
+                        BasalInjectionMapper.UpdateEntity(existing, domain);
+                        updatedEntities.Add(existing);
+                    }
+                    else
+                    {
+                        toInsert.Add(entity);
+                    }
+                }
+
+                if (updatedEntities.Count > 0)
+                {
+                    // Persist updates before the insert-chunking loop clears the tracker.
+                    await _context.SaveChangesAsync(ct);
+                }
+
+                entities = toInsert;
+            }
+
+            // Batch-level dedup: keep first occurrence per LegacyId
+            entities = entities
+                .GroupBy(e => e.LegacyId ?? e.Id.ToString())
+                .Select(g => g.First())
+                .ToList();
+
+            // DB-level dedup: filter out records whose LegacyId is blocking (active row, or a
+            // soft-deleted row whose latest delete was user-initiated). System-sweep deletes stay
+            // re-creatable. Replaces the inline existence check, which ignored the user-delete flag.
+            var legacyIds = entities
+                .Where(e => !string.IsNullOrEmpty(e.LegacyId))
+                .Select(e => e.LegacyId!)
+                .ToHashSet();
+
+            if (legacyIds.Count > 0)
+            {
+                var blockedLegacyIds = await _context.GetBlockingLegacyIdsAsync<BasalInjectionEntity>(legacyIds, ct);
+
+                entities = entities
+                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
+                    .ToList();
+            }
+
+            if (entities.Count > 0)
+            {
+                const int batchSize = 500;
+                foreach (var batch in entities.Chunk(batchSize))
+                {
+                    _context.BasalInjections.AddRange(batch);
+                    await _context.SaveChangesAsync(ct);
+                    _context.ChangeTracker.Clear();
+                }
+            }
+
+            await tx.CommitAsync(ct);
+            return updatedEntities.Concat(entities).Select(BasalInjectionMapper.ToDomainModel);
+        });
     }
 
     public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default)

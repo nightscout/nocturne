@@ -13,7 +13,8 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 /// Note: every V4 SyncId-upsert type carries a partial unique index on
 /// (tenant_id, data_source, sync_identifier). So a path that fails to upsert on a duplicate
 /// SyncIdentifier does not insert a second row — it throws a unique-violation. The asymmetry is:
-///   - BasalInjection: single CreateAsync upserts; BULK does not → bulk throws (D1).
+///   - BasalInjection: single CreateAsync upserts; BULK now upserts too after the D1 fix (was: bulk
+///     threw on a duplicate SyncIdentifier).
 ///   - SensorGlucose:  bulk upserts; single CreateAsync does not → single throws (D3).
 ///   - Bolus:          both upsert (the consistent reference).
 /// D2 pins the new-insert-plus-upserted-sibling collapse for SensorGlucose and Bolus. After delta D4
@@ -75,22 +76,25 @@ public class DedupDeltaGoldenTests
     }
 
     [Fact]
-    public async Task D1_BasalInjection_Bulk_DoesNotUpsertOnSyncId_ThrowsOnDuplicate()
+    public async Task D1_BasalInjection_Bulk_UpsertsOnSyncId_LatestWins()
     {
         var tenant = Guid.NewGuid();
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
         var repo = scope.ServiceProvider.GetRequiredService<IBasalInjectionRepository>();
 
-        // Same (DataSource, SyncIdentifier), distinct LegacyIds so both pass LegacyId dedup. The bulk
-        // path does not upsert on SyncId (the D1 bug), so the second insert hits the unique index and
-        // throws — whereas the single CreateAsync path would have collapsed these (next test).
-        var act = async () => await repo.BulkCreateAsync(new[]
+        // Same (DataSource, SyncIdentifier), distinct LegacyIds so both pass LegacyId dedup. After the
+        // D1 fix the bulk path upserts on SyncId (intra-batch keep-last + DB-level upsert), so the two
+        // collapse to a single row with the latest value — matching the single CreateAsync path and
+        // never hitting the partial unique index. (Pre-D1 baseline: this threw a DbUpdateException.)
+        await repo.BulkCreateAsync(new[]
         {
             Bi(10, "aaps", legacyId: "bi-a", syncId: "bi-sync"),
             Bi(14, "aaps", legacyId: "bi-b", syncId: "bi-sync"),
         }, CancellationToken.None);
 
-        await act.Should().ThrowAsync<DbUpdateException>("bulk does not upsert on SyncId today (D1)");
+        var rows = await _fx.QueryAsync(tenant, ctx => ctx.BasalInjections.AsNoTracking().ToListAsync());
+        rows.Should().HaveCount(1, "bulk now upserts on SyncIdentifier (D1 fix)");
+        rows[0].Units.Should().Be(14, "intra-batch keep-last makes the latest value win");
     }
 
     [Fact]
