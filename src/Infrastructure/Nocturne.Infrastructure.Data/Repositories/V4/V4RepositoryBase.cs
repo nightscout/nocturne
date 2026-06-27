@@ -44,7 +44,12 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     protected abstract void ApplyUpdate(TEntity target, TModel source);
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetAsync" />
-    public async Task<IEnumerable<TModel>> GetAsync(
+    /// <remarks>
+    /// Virtual so dedup participants (which expose an extended overload with a non-primary
+    /// LinkedRecords filter + keyset cursor) can override this 7-arg form to route through their
+    /// filtered overload, preserving the pre-base default-interface bridge behaviour.
+    /// </remarks>
+    public virtual async Task<IEnumerable<TModel>> GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true,
         CancellationToken ct = default)
@@ -77,7 +82,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CreateAsync" />
-    public async Task<TModel> CreateAsync(TModel model, CancellationToken ct = default)
+    /// <remarks>Virtual: SyncId-upsert types (Bolus, CarbIntake) override to upsert in place.</remarks>
+    public virtual async Task<TModel> CreateAsync(TModel model, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = ToEntity(model);
@@ -167,7 +173,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <summary>Soft-deletes the record(s) with the given legacy id. Returns the number affected.</summary>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    /// <remarks>Virtual: dedup participants override to route through the audited soft-delete helper.</remarks>
+    public virtual async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.Set<TEntity>()

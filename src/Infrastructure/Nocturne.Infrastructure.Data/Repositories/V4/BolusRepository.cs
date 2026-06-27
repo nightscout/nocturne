@@ -13,12 +13,14 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing bolus records in the database.
-/// Includes support for cross-connector deduplication.
+/// Repository for managing bolus records. A SyncId-upsert + DeduplicationService participant, so it
+/// inherits the shared CRUD/soft-delete surface from <see cref="V4RepositoryBase{TModel,TEntity}"/>
+/// and keeps only the dedup-specific behaviour as overrides (extended <c>GetAsync</c> with the
+/// non-primary LinkedRecords filter + keyset cursor, SyncId-upsert <c>CreateAsync</c>/
+/// <c>BulkCreateAsync</c>, and audited soft-deletes).
 /// </summary>
-public class BolusRepository : IBolusRepository
+public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
     private readonly IDeduplicationService _deduplicationService;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<BolusRepository> _logger;
@@ -35,12 +37,32 @@ public class BolusRepository : IBolusRepository
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<BolusRepository> logger)
+        : base(contextFactory)
     {
-        _contextFactory = contextFactory;
         _deduplicationService = deduplicationService;
         _auditContext = auditContext;
         _logger = logger;
     }
+
+    /// <inheritdoc />
+    protected override BolusEntity ToEntity(Bolus model) => BolusMapper.ToEntity(model);
+
+    /// <inheritdoc />
+    protected override Bolus ToDomain(BolusEntity entity) => BolusMapper.ToDomainModel(entity);
+
+    /// <inheritdoc />
+    protected override void ApplyUpdate(BolusEntity target, Bolus source) => BolusMapper.UpdateEntity(target, source);
+
+    /// <summary>
+    /// Routes the base 7-arg form through the extended bolus query (non-primary LinkedRecords
+    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
+    /// </summary>
+    public override Task<IEnumerable<Bolus>> GetAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit = 100, int offset = 0, bool descending = true,
+        CancellationToken ct = default)
+        => GetAsync(from, to, device, source, limit, offset, descending,
+            nativeOnly: false, kind: null, afterTimestamp: null, afterId: null, ct);
 
     /// <summary>
     /// Gets bolus records based on filter criteria.
@@ -74,7 +96,7 @@ public class BolusRepository : IBolusRepository
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = ctx.Boluses.AsNoTracking().AsQueryable();
         if (from.HasValue)
             query = query.Where(e => e.Timestamp >= from.Value);
@@ -118,32 +140,6 @@ public class BolusRepository : IBolusRepository
     }
 
     /// <summary>
-    /// Gets a bolus record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The bolus record, or null if not found.</returns>
-    public async Task<Bolus?> GetByIdAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.Boluses.FindAsync([id], ct);
-        return entity is null ? null : BolusMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Gets a bolus record by its legacy (MongoDB) identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The bolus record, or null if not found.</returns>
-    public async Task<Bolus?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.Boluses.FirstOrDefaultAsync(e => e.LegacyId == legacyId, ct);
-        return entity is null ? null : BolusMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
     /// Creates a new bolus record. When <c>DataSource</c> and <c>SyncIdentifier</c>
     /// match an existing row for this tenant, the record is updated in place rather
     /// than inserted — making the operation idempotent for connector replays.
@@ -152,9 +148,9 @@ public class BolusRepository : IBolusRepository
     /// <param name="model">The bolus to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created or updated bolus record.</returns>
-    public async Task<Bolus> CreateAsync(Bolus model, CancellationToken ct = default)
+    public override async Task<Bolus> CreateAsync(Bolus model, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         if (!string.IsNullOrEmpty(model.DataSource) && !string.IsNullOrEmpty(model.SyncIdentifier))
         {
             var existing = await ctx.Boluses
@@ -176,146 +172,14 @@ public class BolusRepository : IBolusRepository
     }
 
     /// <summary>
-    /// Updates an existing bolus record.
-    /// </summary>
-    /// <param name="id">The unique identifier of the record to update.</param>
-    /// <param name="model">The updated record data.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The updated bolus record.</returns>
-    public async Task<Bolus> UpdateAsync(Guid id, Bolus model, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity =
-            await ctx.Boluses.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"Bolus {id} not found");
-        BolusMapper.UpdateEntity(entity, model);
-        await ctx.SaveChangesAsync(ct);
-        return BolusMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Deletes a bolus record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity =
-            await ctx.Boluses.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"Bolus {id} not found");
-        entity.DeletedAt = DateTime.UtcNow;
-        await ctx.SaveChangesAsync(ct);
-    }
-
-    /// <inheritdoc />
-    public async Task<Bolus> RestoreAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.Boluses.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new KeyNotFoundException($"Soft-deleted Bolus {id} not found");
-        entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return BolusMapper.ToDomainModel(entity);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<Bolus>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var idSet = ids.ToHashSet();
-        var entities = await ctx.Boluses.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
-            .ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return entities.Select(BolusMapper.ToDomainModel);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<Bolus>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entities = await ctx.Boluses.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .OrderByDescending(e => e.DeletedAt)
-            .Skip(offset).Take(limit)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return entities.Select(BolusMapper.ToDomainModel);
-    }
-
-    /// <inheritdoc />
-    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.Boluses.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .CountAsync(ct);
-    }
-
-    /// <summary>
-    /// Returns the timestamp of the most recently stored record, optionally scoped to a data source.
-    /// Used by connectors to resume per-source sync without re-fetching already-stored data.
-    /// </summary>
-    public async Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.Boluses.AsNoTracking().AsQueryable();
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-        return await query.MaxAsync(e => (DateTime?)e.Timestamp, ct);
-    }
-
-    /// <summary>
-    /// Counts bolus records within a timestamp range.
-    /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The count of matching records.</returns>
-    public async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.Boluses.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-        return await query.CountAsync(ct);
-    }
-
-    /// <summary>
-    /// Gets bolus records by correlation identifier.
-    /// </summary>
-    /// <param name="correlationId">The correlation identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of bolus records.</returns>
-    public async Task<IEnumerable<Bolus>> GetByCorrelationIdAsync(
-        Guid correlationId,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entities = await ctx
-            .Boluses.AsNoTracking()
-            .Where(e => e.CorrelationId == correlationId)
-            .ToListAsync(ct);
-        return entities.Select(BolusMapper.ToDomainModel);
-    }
-
-    /// <summary>
     /// Deletes a bolus record by its legacy identifier.
     /// </summary>
     /// <param name="legacyId">The legacy identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public override async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.Boluses.Where(e => e.LegacyId == legacyId), _auditContext, ct);
     }
@@ -329,10 +193,29 @@ public class BolusRepository : IBolusRepository
     /// <returns>The number of deleted records.</returns>
     public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.Boluses.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
             _auditContext, ct);
+    }
+
+    /// <summary>
+    /// Gets bolus records by correlation identifier.
+    /// </summary>
+    /// <param name="correlationId">The correlation identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>A collection of bolus records.</returns>
+    public async Task<IEnumerable<Bolus>> GetByCorrelationIdAsync(
+        Guid correlationId,
+        CancellationToken ct = default
+    )
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx
+            .Boluses.AsNoTracking()
+            .Where(e => e.CorrelationId == correlationId)
+            .ToListAsync(ct);
+        return entities.Select(BolusMapper.ToDomainModel);
     }
 
     /// <summary>
@@ -341,12 +224,12 @@ public class BolusRepository : IBolusRepository
     /// <param name="records">The collection of records to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of created records.</returns>
-    public async Task<IEnumerable<Bolus>> BulkCreateAsync(
+    public override async Task<IEnumerable<Bolus>> BulkCreateAsync(
         IEnumerable<Bolus> records,
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var strategy = ctx.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
