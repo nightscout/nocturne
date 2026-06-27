@@ -317,10 +317,17 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
                     await ctx.SaveChangesAsync(ct);
                     ctx.ChangeTracker.Clear();
                 }
+            }
 
-                // Insert-time deduplication: link saved records to canonical groups.
-                // Only runs on newly inserted entities — updated-in-place rows were
-                // already linked when first inserted.
+            await tx.CommitAsync(ct);
+
+            // Insert-time deduplication runs AFTER commit: the ingested rows are durably
+            // persisted first, and dedup linking is best-effort (a failure is logged and
+            // healed by the reconcile service, not allowed to roll back the insert).
+            // Only runs on newly inserted entities — updated-in-place rows were already
+            // linked when first inserted.
+            if (entities.Count > 0)
+            {
                 try
                 {
                     var dedupInputs = entities.Select(e => new DeduplicationInput(
@@ -338,7 +345,6 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
                 }
             }
 
-            await tx.CommitAsync(ct);
             return updatedEntities.Concat(entities).Select(BolusMapper.ToDomainModel);
         });
     }

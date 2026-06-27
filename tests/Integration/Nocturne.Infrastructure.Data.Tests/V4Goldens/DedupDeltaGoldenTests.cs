@@ -16,26 +16,20 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 ///   - BasalInjection: single CreateAsync upserts; BULK does not → bulk throws (D1).
 ///   - SensorGlucose:  bulk upserts; single CreateAsync does not → single throws (D3).
 ///   - Bolus:          both upsert (the consistent reference).
-/// D2 (SensorGlucose re-driving dedup on inserts∪updates vs Bolus inserts-only) IS an observable
-/// behavioural delta — PR-C's normalization is a real re-baseline, not a dead-code cleanup. It is
-/// pinned by the paired goldens below:
-///   D2_SensorGlucose_UnionFeed_NewPlusUpsertedSibling_CollapseIntoOneGroup → ONE canonical group.
-///   D2_Bolus_InsertsOnlyFeed_NewPlusUpsertedSibling_StayTwoGroups          → TWO canonical groups.
+/// D2 pins the new-insert-plus-upserted-sibling collapse for SensorGlucose and Bolus. After delta D4
+/// moved Bolus's dedup to run post-commit, BOTH now collapse C with the upserted B into ONE canonical
+/// group (the DeduplicationService runs on a separate connection and sees B's upserted physical value
+/// only once committed):
+///   D2_SensorGlucose_UnionFeed_NewPlusUpsertedSibling_CollapseIntoOneGroup     → ONE canonical group.
+///   D2_Bolus_PostCommitDedup_NewPlusUpsertedSibling_CollapseIntoOneGroup       → ONE canonical group.
 /// Both run the same scenario byte-for-byte: seed a SyncId-keyed row B in its own group, then a
 /// second BulkCreateAsync carrying a fresh insert C (no SyncId) at B's time+value AND a SyncId-upsert
-/// of B onto that same time+value. The only difference is the dedup feed:
-///   - SensorGlucose unions inserts+updates (SensorGlucoseRepository.cs:287 — `entities.Concat(
-///     updatedEntities)` → `dedupInputs` at :290-297), so the upserted B is in the dedup batch and
-///     C collapses with B into one group.
-///   - Bolus feeds inserts only (BolusRepository.cs:341 — `dedupInputs` from `entities`, the whole
-///     block gated by `if (entities.Count > 0)` at :326), so B is excluded from the batch and C
-///     never collapses with it — two groups persist.
-/// (The earlier "two far-apart rows, upsert one near the other" attempt failed to distinguish them
-/// because the upsert never refreshes B's `linked_records.SourceTimestamp`, so B's persisted row
-/// stays at its old position and a new sibling can match it identically with or without the union-
-/// feed. The distinguishing case is the NEW-insert-plus-upserted-sibling batch above, where whether
-/// the engine receives B's updated value as input is what flips the grouping — confirmed empirically
-/// against the live DeduplicationService + real Postgres.)
+/// of B onto that same time+value. B's linked_records.SourceTimestamp stays at T0 (the upsert never
+/// refreshes it), inside C's ±30s window, so B is always a candidate; the collapse turns on the dedup
+/// engine value-matching against B's COMMITTED upserted row. (Pre-D4, Bolus ran dedup inside the open
+/// transaction, so its separate dedup connection saw B's OLD value and the two stayed in separate
+/// groups — that "inserts-only feed" framing conflated the dedup input list with this commit-
+/// visibility effect; the live driver is the latter.)
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("V4 goldens")]
@@ -183,21 +177,27 @@ public class DedupDeltaGoldenTests
         (await sg.CountAsync(null, null)).Should().Be(2, "SensorGlucose.CountAsync over-counts non-primary today (D7)");
     }
 
-    // ── D2: union-feed (SensorGlucose) vs inserts-only (Bolus) IS observable ───────────────────────
+    // ── D2: new-insert-plus-upserted-sibling collapse ──────────────────────────────────────────────
     //
-    // The distinguishing case: a batch carrying a fresh insert C plus a SyncId-upsert of an existing
-    // row B onto C's time+value. SensorGlucose unions inserts+updates into the dedup batch, so the
-    // engine sees B's UPDATED value and collapses C with B (one group). Bolus feeds inserts only, so B
-    // is absent from the batch and C does not collapse with it (two groups). Confirmed empirically:
-    // with the engine instrumented, the SensorGlucose matcher saw B's updated value (matched=True) and
-    // the Bolus matcher did not (matched=False), for the same candidate B in the same ±30s window.
+    // The scenario: a batch carrying a fresh insert C plus a SyncId-upsert of an existing row B onto
+    // C's time+value. B's linked_records.SourceTimestamp stays at T0 (the upsert never refreshes it),
+    // which is inside C's ±30s window — so B is always a candidate for C. Whether C collapses with B
+    // turns on whether the dedup engine, when value-matching, sees B's UPSERTED physical value.
+    //
+    // The DeduplicationService runs on its own scoped NocturneDbContext (a separate connection from
+    // the repository's BulkCreate transaction). So it sees B's upserted physical row only once that
+    // row is COMMITTED:
+    //   - SensorGlucose has always committed before running dedup → B's new value is visible →
+    //     C collapses with B into ONE group.
+    //   - Bolus, AFTER delta D4 moved dedup to run post-commit, now does the same → ONE group.
+    //     (Before D4, Bolus ran dedup inside the still-open transaction, so the separate dedup
+    //     connection saw B's OLD value, C did not value-match, and the two stayed in SEPARATE groups.
+    //     The earlier "inserts-only feed" framing of this delta conflated the dedup input list with
+    //     this commit-visibility effect; the live driver is the latter.)
     //
     // Each scenario runs as two BulkCreateAsync calls under one tenant:
     //   1. Seed B at T0 (its own canonical group), keyed by (DataSource, SyncIdentifier).
     //   2. Batch = [ C: fresh insert at T0+10s with B's value; B: SyncId-upsert moved to T0+10s ].
-    // B's linked_records.SourceTimestamp stays at T0 (never refreshed), which is inside C's ±30s
-    // window — so the candidacy is identical; what flips the result is whether B's updated value
-    // reaches the dedup batch as input.
 
     [Fact]
     public async Task D2_SensorGlucose_UnionFeed_NewPlusUpsertedSibling_CollapseIntoOneGroup()
@@ -229,7 +229,7 @@ public class DedupDeltaGoldenTests
     }
 
     [Fact]
-    public async Task D2_Bolus_InsertsOnlyFeed_NewPlusUpsertedSibling_StayTwoGroups()
+    public async Task D2_Bolus_PostCommitDedup_NewPlusUpsertedSibling_CollapseIntoOneGroup()
     {
         var tenant = Guid.NewGuid();
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
@@ -242,9 +242,10 @@ public class DedupDeltaGoldenTests
         }, CancellationToken.None);
 
         // 2. C is a fresh insert at T0+10s; B is SyncId-upserted onto T0+10s with C's value — byte-for
-        //    byte the SensorGlucose scenario above. The ONLY difference is BolusRepository feeds dedup
-        //    inserts-only (excludes the upserted B), so C never sees B in the dedup batch and they stay
-        //    in SEPARATE canonical groups. This is the observable D2 delta.
+        //    byte the SensorGlucose scenario above. After D4 moved Bolus's dedup to run post-commit,
+        //    B's upserted value is committed and therefore visible to the dedup engine's separate
+        //    connection, so C value-matches B and they collapse into ONE canonical group — matching
+        //    SensorGlucose.
         await repo.BulkCreateAsync(new[]
         {
             new Bolus { Timestamp = T0.AddSeconds(10), Insulin = 5.0, DataSource = "loop", LegacyId = "b-C" },
@@ -256,7 +257,9 @@ public class DedupDeltaGoldenTests
 
         var links = await _fx.QueryAsync(tenant, ctx =>
             ctx.LinkedRecords.AsNoTracking().Where(lr => lr.RecordType == "bolus").ToListAsync());
+        // D4 re-baseline (was 2 groups): dedup now runs after commit, so C sees B's committed upserted
+        // value and links to it — one group.
         links.Select(l => l.CanonicalId).Distinct().Should()
-            .HaveCount(2, "inserts-only feed never hands B to the dedup batch, so C stays in its own group (D2)");
+            .HaveCount(1, "post-commit dedup sees B's upserted value, so C collapses with B into one group (D4)");
     }
 }
