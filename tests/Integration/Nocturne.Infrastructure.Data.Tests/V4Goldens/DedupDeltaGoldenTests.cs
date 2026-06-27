@@ -16,9 +16,26 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 ///   - BasalInjection: single CreateAsync upserts; BULK does not → bulk throws (D1).
 ///   - SensorGlucose:  bulk upserts; single CreateAsync does not → single throws (D3).
 ///   - Bolus:          both upsert (the consistent reference).
-/// D2 (SensorGlucose re-driving dedup on inserts∪updates vs Bolus inserts-only) is intentionally
-/// NOT pinned here yet — a faithful scenario needs to distinguish the two and the obvious
-/// "merge two separate groups" scenario does not (both keep two groups). Left as a known gap.
+/// D2 (SensorGlucose re-driving dedup on inserts∪updates vs Bolus inserts-only) IS an observable
+/// behavioural delta — PR-C's normalization is a real re-baseline, not a dead-code cleanup. It is
+/// pinned by the paired goldens below:
+///   D2_SensorGlucose_UnionFeed_NewPlusUpsertedSibling_CollapseIntoOneGroup → ONE canonical group.
+///   D2_Bolus_InsertsOnlyFeed_NewPlusUpsertedSibling_StayTwoGroups          → TWO canonical groups.
+/// Both run the same scenario byte-for-byte: seed a SyncId-keyed row B in its own group, then a
+/// second BulkCreateAsync carrying a fresh insert C (no SyncId) at B's time+value AND a SyncId-upsert
+/// of B onto that same time+value. The only difference is the dedup feed:
+///   - SensorGlucose unions inserts+updates (SensorGlucoseRepository.cs:287 — `entities.Concat(
+///     updatedEntities)` → `dedupInputs` at :290-297), so the upserted B is in the dedup batch and
+///     C collapses with B into one group.
+///   - Bolus feeds inserts only (BolusRepository.cs:341 — `dedupInputs` from `entities`, the whole
+///     block gated by `if (entities.Count > 0)` at :326), so B is excluded from the batch and C
+///     never collapses with it — two groups persist.
+/// (The earlier "two far-apart rows, upsert one near the other" attempt failed to distinguish them
+/// because the upsert never refreshes B's `linked_records.SourceTimestamp`, so B's persisted row
+/// stays at its old position and a new sibling can match it identically with or without the union-
+/// feed. The distinguishing case is the NEW-insert-plus-upserted-sibling batch above, where whether
+/// the engine receives B's updated value as input is what flips the grouping — confirmed empirically
+/// against the live DeduplicationService + real Postgres.)
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("V4 goldens")]
@@ -164,5 +181,82 @@ public class DedupDeltaGoldenTests
         (await carb.CountAsync(null, null)).Should().Be(1, "CarbIntake.CountAsync excludes non-primary (D7)");
         (await bolus.CountAsync(null, null)).Should().Be(2, "Bolus.CountAsync over-counts non-primary today (D7)");
         (await sg.CountAsync(null, null)).Should().Be(2, "SensorGlucose.CountAsync over-counts non-primary today (D7)");
+    }
+
+    // ── D2: union-feed (SensorGlucose) vs inserts-only (Bolus) IS observable ───────────────────────
+    //
+    // The distinguishing case: a batch carrying a fresh insert C plus a SyncId-upsert of an existing
+    // row B onto C's time+value. SensorGlucose unions inserts+updates into the dedup batch, so the
+    // engine sees B's UPDATED value and collapses C with B (one group). Bolus feeds inserts only, so B
+    // is absent from the batch and C does not collapse with it (two groups). Confirmed empirically:
+    // with the engine instrumented, the SensorGlucose matcher saw B's updated value (matched=True) and
+    // the Bolus matcher did not (matched=False), for the same candidate B in the same ±30s window.
+    //
+    // Each scenario runs as two BulkCreateAsync calls under one tenant:
+    //   1. Seed B at T0 (its own canonical group), keyed by (DataSource, SyncIdentifier).
+    //   2. Batch = [ C: fresh insert at T0+10s with B's value; B: SyncId-upsert moved to T0+10s ].
+    // B's linked_records.SourceTimestamp stays at T0 (never refreshed), which is inside C's ±30s
+    // window — so the candidacy is identical; what flips the result is whether B's updated value
+    // reaches the dedup batch as input.
+
+    [Fact]
+    public async Task D2_SensorGlucose_UnionFeed_NewPlusUpsertedSibling_CollapseIntoOneGroup()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+
+        // 1. Seed B (SyncId-keyed) — its own canonical group.
+        await repo.BulkCreateAsync(new[]
+        {
+            new SensorGlucose { Timestamp = T0, Mgdl = 100, DataSource = "dexcom", SyncIdentifier = "sg-B" },
+        }, CancellationToken.None);
+
+        // 2. C is a fresh insert at T0+10s; B is SyncId-upserted onto T0+10s with C's value.
+        await repo.BulkCreateAsync(new[]
+        {
+            new SensorGlucose { Timestamp = T0.AddSeconds(10), Mgdl = 120, DataSource = "libre", LegacyId = "sg-C" },
+            new SensorGlucose { Timestamp = T0.AddSeconds(10), Mgdl = 120, DataSource = "dexcom", SyncIdentifier = "sg-B" },
+        }, CancellationToken.None);
+
+        (await _fx.QueryAsync(tenant, ctx => ctx.SensorGlucose.AsNoTracking().CountAsync()))
+            .Should().Be(2, "B upserts in place; C inserts — two physical rows");
+
+        var links = await _fx.QueryAsync(tenant, ctx =>
+            ctx.LinkedRecords.AsNoTracking().Where(lr => lr.RecordType == "sensorglucose").ToListAsync());
+        links.Select(l => l.CanonicalId).Distinct().Should()
+            .HaveCount(1, "C links to B via B's persisted linked_records row — one group");
+    }
+
+    [Fact]
+    public async Task D2_Bolus_InsertsOnlyFeed_NewPlusUpsertedSibling_StayTwoGroups()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<IBolusRepository>();
+
+        // 1. Seed B (SyncId-keyed) — its own canonical group.
+        await repo.BulkCreateAsync(new[]
+        {
+            new Bolus { Timestamp = T0, Insulin = 4.0, DataSource = "aaps", SyncIdentifier = "b-B" },
+        }, CancellationToken.None);
+
+        // 2. C is a fresh insert at T0+10s; B is SyncId-upserted onto T0+10s with C's value — byte-for
+        //    byte the SensorGlucose scenario above. The ONLY difference is BolusRepository feeds dedup
+        //    inserts-only (excludes the upserted B), so C never sees B in the dedup batch and they stay
+        //    in SEPARATE canonical groups. This is the observable D2 delta.
+        await repo.BulkCreateAsync(new[]
+        {
+            new Bolus { Timestamp = T0.AddSeconds(10), Insulin = 5.0, DataSource = "loop", LegacyId = "b-C" },
+            new Bolus { Timestamp = T0.AddSeconds(10), Insulin = 5.0, DataSource = "aaps", SyncIdentifier = "b-B" },
+        }, CancellationToken.None);
+
+        (await _fx.QueryAsync(tenant, ctx => ctx.Boluses.AsNoTracking().CountAsync()))
+            .Should().Be(2, "B upserts in place; C inserts — two physical rows");
+
+        var links = await _fx.QueryAsync(tenant, ctx =>
+            ctx.LinkedRecords.AsNoTracking().Where(lr => lr.RecordType == "bolus").ToListAsync());
+        links.Select(l => l.CanonicalId).Distinct().Should()
+            .HaveCount(2, "inserts-only feed never hands B to the dedup batch, so C stays in its own group (D2)");
     }
 }
