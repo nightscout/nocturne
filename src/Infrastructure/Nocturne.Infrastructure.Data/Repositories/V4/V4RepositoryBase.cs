@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -24,13 +25,24 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <typeparam name="TEntity">The EF entity type backing <typeparamref name="TModel"/>.</typeparam>
 public abstract class V4RepositoryBase<TModel, TEntity>
     where TModel : class, IV4Record
-    where TEntity : class, IV4TimeSeriesEntity
+    where TEntity : class, IV4TimeSeriesEntity, IAuditable
 {
     /// <summary>Tenant-scoped context factory. Exposed so subclasses can implement type-specific queries.</summary>
     protected ITenantDbContextFactory ContextFactory { get; }
 
-    /// <summary>Initializes the base with the tenant-scoped context factory.</summary>
-    protected V4RepositoryBase(ITenantDbContextFactory contextFactory) => ContextFactory = contextFactory;
+    /// <summary>
+    /// Actor/request metadata for the audited soft-delete path. Exposed so subclasses' type-specific
+    /// audited deletes (e.g. DeleteBySyncIdentifierAsync, DeleteByLegacyIdPrefixAsync) share the same
+    /// attribution as the base DeleteByLegacyIdAsync.
+    /// </summary>
+    protected IAuditContext AuditContext { get; }
+
+    /// <summary>Initializes the base with the tenant-scoped context factory and audit context.</summary>
+    protected V4RepositoryBase(ITenantDbContextFactory contextFactory, IAuditContext auditContext)
+    {
+        ContextFactory = contextFactory;
+        AuditContext = auditContext;
+    }
 
     // ── Per-type static-mapper bridges (the only code the base needs from each repository) ──
 
@@ -173,13 +185,16 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <summary>Soft-deletes the record(s) with the given legacy id. Returns the number affected.</summary>
-    /// <remarks>Virtual: dedup participants override to route through the audited soft-delete helper.</remarks>
+    /// <remarks>
+    /// Routes through the audited soft-delete helper so every V4 type writes a mutation_audit_log row
+    /// and carries the user-delete dedup discriminator. Virtual so types with a type-specific delete
+    /// surface can still override.
+    /// </remarks>
     public virtual async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.Set<TEntity>()
-            .Where(e => e.LegacyId == legacyId)
-            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
+        return await ctx.AuditedSoftDeleteAsync(
+            ctx.Set<TEntity>().Where(e => e.LegacyId == legacyId), AuditContext, ct);
     }
 
     /// <summary>Latest stored record timestamp, optionally scoped to a data source (connector watermark).</summary>

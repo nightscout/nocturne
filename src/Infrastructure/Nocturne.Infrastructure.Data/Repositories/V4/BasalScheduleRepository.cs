@@ -18,8 +18,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// </summary>
 public class BasalScheduleRepository : V4RepositoryBase<BasalSchedule, BasalScheduleEntity>, IBasalScheduleRepository
 {
-    private readonly IAuditContext _auditContext;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="BasalScheduleRepository"/> class.
     /// </summary>
@@ -28,9 +26,8 @@ public class BasalScheduleRepository : V4RepositoryBase<BasalSchedule, BasalSche
     /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
     public BasalScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<BasalScheduleRepository> logger)
-        : base(contextFactory)
+        : base(contextFactory, auditContext)
     {
-        _auditContext = auditContext;
     }
 
     /// <inheritdoc />
@@ -84,20 +81,6 @@ public class BasalScheduleRepository : V4RepositoryBase<BasalSchedule, BasalSche
     }
 
     /// <summary>
-    /// Deletes a basal schedule record by its legacy identifier, routing through the audited
-    /// soft-delete helper.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public override async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.BasalSchedules.Where(e => e.LegacyId == legacyId), _auditContext, ct);
-    }
-
-    /// <summary>
     /// Deletes basal schedule records by legacy identifier prefix.
     /// </summary>
     /// <param name="prefix">The legacy identifier prefix.</param>
@@ -108,7 +91,7 @@ public class BasalScheduleRepository : V4RepositoryBase<BasalSchedule, BasalSche
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.BasalSchedules.Where(e => e.LegacyId != null && e.LegacyId.StartsWith(prefix)),
-            _auditContext, ct);
+            AuditContext, ct);
     }
 
     /// <summary>

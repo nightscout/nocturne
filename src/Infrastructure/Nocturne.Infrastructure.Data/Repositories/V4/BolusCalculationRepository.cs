@@ -22,7 +22,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, BolusCalculationEntity>, IBolusCalculationRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly IAuditContext _auditContext;
     private readonly ILogger<BolusCalculationRepository> _logger;
 
     /// <summary>
@@ -38,10 +37,9 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
         IAuditContext auditContext,
         ILogger<BolusCalculationRepository> logger
     )
-        : base(contextFactory)
+        : base(contextFactory, auditContext)
     {
         _deduplicationService = deduplicationService;
-        _auditContext = auditContext;
         _logger = logger;
     }
 
@@ -116,19 +114,6 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(BolusCalculationMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Deletes a bolus calculation record by its legacy identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public override async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.BolusCalculations.Where(e => e.LegacyId == legacyId), _auditContext, ct);
     }
 
     /// <summary>

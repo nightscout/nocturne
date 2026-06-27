@@ -22,7 +22,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly IAuditContext _auditContext;
     private readonly ILogger<SensorGlucoseRepository> _logger;
 
     /// <summary>
@@ -38,10 +37,9 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         IAuditContext auditContext,
         ILogger<SensorGlucoseRepository> logger
     )
-        : base(contextFactory)
+        : base(contextFactory, auditContext)
     {
         _deduplicationService = deduplicationService;
-        _auditContext = auditContext;
         _logger = logger;
     }
 
@@ -153,19 +151,6 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(SensorGlucoseMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Deletes a sensor glucose record by its legacy identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public override async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.SensorGlucose.Where(e => e.LegacyId == legacyId), _auditContext, ct);
     }
 
     /// <summary>
@@ -330,7 +315,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
-            ctx.SensorGlucose.Where(e => e.DataSource == source), _auditContext, ct);
+            ctx.SensorGlucose.Where(e => e.DataSource == source), AuditContext, ct);
     }
 
     /// <summary>
@@ -350,6 +335,6 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         if (to.HasValue)
             query = query.Where(e => e.Timestamp < to.Value);
 
-        return await ctx.AuditedSoftDeleteAsync(query, _auditContext, ct);
+        return await ctx.AuditedSoftDeleteAsync(query, AuditContext, ct);
     }
 }

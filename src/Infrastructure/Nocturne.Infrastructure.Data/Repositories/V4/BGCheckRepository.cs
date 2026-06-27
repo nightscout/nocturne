@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -16,7 +17,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// participant, so it inherits the shared CRUD/soft-delete surface from
 /// <see cref="V4RepositoryBase{TModel,TEntity}"/> and keeps only the dedup-specific behaviour as
 /// overrides (extended <c>GetAsync</c> with the non-primary LinkedRecords filter, dedup
-/// <c>BulkCreateAsync</c>). Soft-deletes use the plain (non-audited) path, matching the base.
+/// <c>BulkCreateAsync</c>). Soft-deletes inherit the base's audited path.
 /// </summary>
 public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCheckRepository
 {
@@ -28,12 +29,14 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="deduplicationService">The deduplication service.</param>
+    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
     /// <param name="logger">The logger instance.</param>
     public BGCheckRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
+        IAuditContext auditContext,
         ILogger<BGCheckRepository> logger)
-        : base(contextFactory)
+        : base(contextFactory, auditContext)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;

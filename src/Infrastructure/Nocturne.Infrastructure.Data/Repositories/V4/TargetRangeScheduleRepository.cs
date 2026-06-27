@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -20,10 +21,11 @@ public class TargetRangeScheduleRepository : V4RepositoryBase<TargetRangeSchedul
     /// Initializes a new instance of the <see cref="TargetRangeScheduleRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
+    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
     /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public TargetRangeScheduleRepository(ITenantDbContextFactory contextFactory, ILogger<TargetRangeScheduleRepository> logger)
-        : base(contextFactory)
+    public TargetRangeScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TargetRangeScheduleRepository> logger)
+        : base(contextFactory, auditContext)
     {
     }
 

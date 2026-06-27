@@ -23,7 +23,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntity>, ICarbIntakeRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly IAuditContext _auditContext;
     private readonly ILogger<CarbIntakeRepository> _logger;
 
     /// <summary>
@@ -38,10 +37,9 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<CarbIntakeRepository> logger)
-        : base(contextFactory)
+        : base(contextFactory, auditContext)
     {
         _deduplicationService = deduplicationService;
-        _auditContext = auditContext;
         _logger = logger;
     }
 
@@ -214,19 +212,6 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
     }
 
     /// <summary>
-    /// Deletes a carbohydrate intake record by its legacy identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public override async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
-            ctx.CarbIntakes.Where(e => e.LegacyId == legacyId), _auditContext, ct);
-    }
-
-    /// <summary>
     /// Deletes carbohydrate intake records matching the given data source and sync identifier.
     /// </summary>
     /// <param name="dataSource">The external data source name.</param>
@@ -238,7 +223,7 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.CarbIntakes.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier),
-            _auditContext, ct);
+            AuditContext, ct);
     }
 
     /// <summary>

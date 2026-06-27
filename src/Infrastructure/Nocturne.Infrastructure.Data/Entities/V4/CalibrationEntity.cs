@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.Calibration
 /// </summary>
 [Table("calibrations")]
-public class CalibrationEntity : ITenantScoped, ISoftDeletable, IV4TimeSeriesEntity, ISystemTimestamped
+public class CalibrationEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4TimeSeriesEntity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -20,11 +21,11 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
     /// Initializes a new instance of the <see cref="MeterGlucoseRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
+    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
     /// <param name="logger">The logger instance.</param>
-    // logger is unused for this LegacyId-only type but retained for DI + direct test construction;
-    // it moves to the base ctor when the DeduplicationService participants (which log) are migrated.
-    public MeterGlucoseRepository(ITenantDbContextFactory contextFactory, ILogger<MeterGlucoseRepository> logger)
-        : base(contextFactory)
+    // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
+    public MeterGlucoseRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<MeterGlucoseRepository> logger)
+        : base(contextFactory, auditContext)
     {
     }
 

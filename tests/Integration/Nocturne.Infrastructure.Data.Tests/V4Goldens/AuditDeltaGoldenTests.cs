@@ -7,13 +7,12 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
 /// <summary>
 /// Goldens pinning the soft-delete-on-<c>DeleteByLegacyIdAsync</c> audit behaviour the
-/// V4RepositoryBase refactor NORMALIZES (delta D5). Today the base's <c>DeleteByLegacyIdAsync</c>
-/// is a plain <c>ExecuteUpdateAsync</c> that bypasses the change tracker, so it writes NO
-/// <see cref="MutationAuditLogEntity"/> row — only the six dedup participants that override it with
-/// the audited helper produce one. The two scenarios below pin both sides of that split so D5 lands
-/// as a deliberate, visible re-baseline:
-///   - a RAW type (BGCheck inherits the plain base) → NO audit row;
-///   - an AUDITED type (DeviceEvent overrides with the audited helper) → audit row present.
+/// V4RepositoryBase refactor NORMALIZED (delta D5). The base's <c>DeleteByLegacyIdAsync</c> now
+/// routes through the audited soft-delete helper, so EVERY V4 type writes a
+/// <see cref="MutationAuditLogEntity"/> row on a legacy-id delete — not just the dedup participants
+/// that used to override it. The two scenarios below pin both sides post-normalization:
+///   - a formerly-RAW type (BGCheck, which inherited the plain base) → audit row present (the D5 delta);
+///   - an already-AUDITED type (DeviceEvent) → audit row present (unchanged).
 /// The <see cref="V4GoldenFixture"/>'s <c>SystemAuditContext</c> short-circuits the
 /// <c>MutationAuditInterceptor</c> (IsSystem == true), so the only audit rows that can appear here
 /// come from the audited soft-delete helper, which writes them directly.
@@ -33,7 +32,7 @@ public class AuditDeltaGoldenTests
             .CountAsync(a => a.EntityType == entityType && a.EntityId == entityId && a.Action == "delete"));
 
     [Fact]
-    public async Task D5_RawType_BGCheck_DeleteByLegacyId_DoesNotWriteAuditRow()
+    public async Task D5_FormerlyRawType_BGCheck_DeleteByLegacyId_WritesAuditRow()
     {
         var tenant = Guid.NewGuid();
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
@@ -46,9 +45,9 @@ public class AuditDeltaGoldenTests
         var deleted = await repo.DeleteByLegacyIdAsync("bg-del", CancellationToken.None);
         deleted.Should().Be(1);
 
-        // Pre-D5 baseline: a RAW type inherits the plain base DeleteByLegacyIdAsync (ExecuteUpdate,
-        // change-tracker-bypassing), so NO mutation_audit_log row is written.
-        (await AuditRowCountAsync(tenant, "BGCheck", created.Id)).Should().Be(0);
+        // D5 re-baseline (was 0): the base DeleteByLegacyIdAsync now routes through the audited
+        // soft-delete helper, so a formerly-raw type writes a mutation_audit_log row too.
+        (await AuditRowCountAsync(tenant, "BGCheck", created.Id)).Should().Be(1);
     }
 
     [Fact]
