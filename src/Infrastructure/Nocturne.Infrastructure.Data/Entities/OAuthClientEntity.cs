@@ -35,7 +35,7 @@ public class OAuthClientEntity : ITenantScoped, IEntityTimestamped
 
     /// <summary>
     /// RFC 7591 software_id — reverse-DNS identifier that is stable across installs of the
-    /// same product (e.g., "org.trio.diabetes"). Used to match self-registering clients
+    /// same product (e.g., "org.nightscout.trio"). Used to match self-registering clients
     /// against the bundled known app directory for idempotent DCR.
     /// </summary>
     [MaxLength(255)]

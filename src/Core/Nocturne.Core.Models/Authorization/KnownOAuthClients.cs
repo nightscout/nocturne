@@ -16,11 +16,13 @@ public static class KnownOAuthClients
     {
         new()
         {
-            SoftwareId = "org.trio.diabetes",
+            // iOS bundle id is org.nightscout.$(DEVELOPMENT_TEAM).trio; the team segment
+            // varies per build, so the stable software_id is the team-independent base.
+            SoftwareId = "org.nightscout.trio",
             DisplayName = "Trio",
-            Homepage = "https://github.com/nightscout/Trio",
+            Homepage = "https://triodocs.org",
             LogoUri = "/logos/trio.svg",
-            RedirectUris = ["trio://oauth/callback"],
+            RedirectUris = ["org.nightscout.trio://oauth/callback"],
             TypicalScopes =
             [
                 OAuthScopes.GlucoseReadWrite,
@@ -31,11 +33,12 @@ public static class KnownOAuthClients
         },
         new()
         {
-            SoftwareId = "org.nightscoutfoundation.xdrip",
+            // Real Android applicationId (Play Store / APK identity).
+            SoftwareId = "com.eveningoutpost.dexdrip",
             DisplayName = "xDrip+",
             Homepage = "https://github.com/NightscoutFoundation/xDrip",
             LogoUri = "/logos/xdrip.svg",
-            RedirectUris = ["org.nightscoutfoundation.xdrip://oauth/callback"],
+            RedirectUris = ["com.eveningoutpost.dexdrip://oauth/callback"],
             TypicalScopes =
             [
                 OAuthScopes.GlucoseReadWrite,
@@ -61,11 +64,13 @@ public static class KnownOAuthClients
         },
         new()
         {
-            SoftwareId = "org.androidaps.aaps",
+            // Real Android applicationId. (app.aaps is only the new internal source
+            // namespace; the installed package id remains info.nightscout.androidaps.)
+            SoftwareId = "info.nightscout.androidaps",
             DisplayName = "AAPS",
-            Homepage = "https://androidaps.readthedocs.io",
+            Homepage = "https://wiki.aaps.app",
             LogoUri = "/logos/aaps.svg",
-            RedirectUris = ["org.androidaps.aaps://oauth/callback"],
+            RedirectUris = ["info.nightscout.androidaps://oauth/callback"],
             TypicalScopes =
             [
                 OAuthScopes.GlucoseReadWrite,
@@ -76,8 +81,11 @@ public static class KnownOAuthClients
         },
         new()
         {
-            SoftwareId = "github.nightscout.nightscout",
-            DisplayName = "Nightscout",
+            // The classic self-hosted Nightscout server (cgm-remote-monitor) acting as a
+            // read-only follower of a Nocturne tenant. "Nightscout" is the server, not a
+            // distinct client app, so the id is rooted on the cgm-remote-monitor repo.
+            SoftwareId = "org.nightscout.cgm-remote-monitor",
+            DisplayName = "Nightscout (server)",
             Homepage = "https://nightscout.github.io/",
             LogoUri = "/logos/nightscout.svg",
             RedirectUris = [],
@@ -91,7 +99,8 @@ public static class KnownOAuthClients
         },
         new()
         {
-            SoftwareId = "io.sugarmate",
+            // Real Android applicationId (Sugarmate is now a Tandem Diabetes Care app).
+            SoftwareId = "com.tandemdiabetes.sugarmate",
             DisplayName = "Sugarmate",
             Homepage = "https://sugarmate.io/",
             LogoUri = "/logos/sugarmate.svg",
@@ -100,9 +109,10 @@ public static class KnownOAuthClients
         },
         new()
         {
-            SoftwareId = "com.nickenilsson.nightwatch",
+            // The maintained "Nightwatch" Android app (Markus Kallander); real package id.
+            SoftwareId = "se.cornixit.nightwatch",
             DisplayName = "Nightwatch",
-            Homepage = "https://github.com/nickenilsson/nightwatch",
+            Homepage = "https://play.google.com/store/apps/details?id=se.cornixit.nightwatch",
             LogoUri = "/logos/nightwatch.svg",
             RedirectUris = [],
             TypicalScopes = [OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead],
@@ -156,7 +166,9 @@ public static class KnownOAuthClients
             DisplayName = "Nocturne Tray",
             Homepage = "https://github.com/nightscout/nocturne",
             LogoUri = "/logos/nocturne.svg",
-            RedirectUris = [],
+            // Auth-code + PKCE via a loopback listener (RFC 8252). The port varies per
+            // login; loopback redirect matching is port-agnostic at authorize time.
+            RedirectUris = ["http://127.0.0.1/callback"],
             TypicalScopes =
             [
                 OAuthScopes.GlucoseRead,
