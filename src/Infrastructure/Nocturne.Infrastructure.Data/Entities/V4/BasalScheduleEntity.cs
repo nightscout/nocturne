@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BasalSchedule
 /// </summary>
 [Table("basal_schedules")]
-public class BasalScheduleEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity, ISystemTimestamped
+public class BasalScheduleEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4TimeSeriesEntity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
