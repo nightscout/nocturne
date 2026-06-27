@@ -8,6 +8,7 @@
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { bg, bgLabel } from "$lib/utils/formatting";
 
   const reportsParams = requireDateParamsContext(14);
 
@@ -117,6 +118,7 @@
             <Button
               variant="ghost"
               size="sm"
+              class="print:hidden"
               onclick={() => (showTightRange = !showTightRange)}
             >
               {showTightRange ? "Hide" : "Show"} Tight Range
@@ -170,32 +172,34 @@
           <Card.Title class="text-lg">Distribution Statistics</Card.Title>
         </Card.Header>
         <Card.Content>
-          <Table.Root>
-            <Table.Header>
-              <Table.Row>
-                <Table.Head>Range</Table.Head>
-                <Table.Head class="text-right">Time (%)</Table.Head>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {#each rangeStats as stat}
+          <div class="overflow-x-auto print:overflow-visible">
+            <Table.Root>
+              <Table.Header>
                 <Table.Row>
-                  <Table.Cell>
-                    <div class="flex items-center gap-2">
-                      <div
-                        class="h-3 w-3 rounded-full"
-                        style="background-color: {stat.color}"
-                      ></div>
-                      {stat.key}
-                    </div>
-                  </Table.Cell>
-                  <Table.Cell class="text-right font-medium">
-                    {stat.value.toFixed(1)}%
-                  </Table.Cell>
+                  <Table.Head>Range</Table.Head>
+                  <Table.Head class="text-right">Time (%)</Table.Head>
                 </Table.Row>
-              {/each}
-            </Table.Body>
-          </Table.Root>
+              </Table.Header>
+              <Table.Body>
+                {#each rangeStats as stat}
+                  <Table.Row>
+                    <Table.Cell>
+                      <div class="flex items-center gap-2">
+                        <div
+                          class="h-3 w-3 rounded-full"
+                          style="background-color: {stat.color}"
+                        ></div>
+                        {stat.key}
+                      </div>
+                    </Table.Cell>
+                    <Table.Cell class="text-right font-medium">
+                      {stat.value.toFixed(1)}%
+                    </Table.Cell>
+                  </Table.Row>
+                {/each}
+              </Table.Body>
+            </Table.Root>
+          </div>
         </Card.Content>
       </Card.Root>
     </div>
@@ -270,7 +274,7 @@
             <div class="flex justify-between">
               <span class="text-muted-foreground">Mean Total Daily Change</span>
               <span class="text-2xl font-bold">
-                {overallStats.meanTotalDailyChange.toFixed(0)} mg/dL
+                {bg(overallStats.meanTotalDailyChange)} {bgLabel()}
               </span>
             </div>
             <div class="flex justify-between">
@@ -292,21 +296,21 @@
         <div class="grid gap-4 grid-cols-2 @4xl:grid-cols-4">
           <div class="text-center">
             <div class="text-3xl font-bold">
-              {overallStats.mean.toFixed(0)}
+              {bg(overallStats.mean)}
             </div>
-            <div class="text-sm text-muted-foreground">Mean (mg/dL)</div>
+            <div class="text-sm text-muted-foreground">Mean ({bgLabel()})</div>
           </div>
           <div class="text-center">
             <div class="text-3xl font-bold">
-              {overallStats.median.toFixed(0)}
+              {bg(overallStats.median)}
             </div>
-            <div class="text-sm text-muted-foreground">Median (mg/dL)</div>
+            <div class="text-sm text-muted-foreground">Median ({bgLabel()})</div>
           </div>
           <div class="text-center">
             <div class="text-3xl font-bold">
-              {overallStats.stdDev.toFixed(1)}
+              {bg(overallStats.stdDev)}
             </div>
-            <div class="text-sm text-muted-foreground">Std Dev</div>
+            <div class="text-sm text-muted-foreground">Std Dev ({bgLabel()})</div>
           </div>
           <div class="text-center">
             <div class="text-3xl font-bold">

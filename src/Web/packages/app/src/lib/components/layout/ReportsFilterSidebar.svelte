@@ -31,86 +31,86 @@
     { label: "90 Days", days: 90 },
   ];
 
-  // === DRAFT STATE ===
-  // These represent the user's pending selections before clicking "Apply Filters"
-  let draftDays = $state<number | undefined>(undefined);
-  let draftCalendarValue = $state<DateRange | undefined>(undefined);
+  const MS_PER_DAY = 86_400_000;
 
-  // Track whether user selected a preset or used the calendar
-  let draftMode = $state<"preset" | "calendar">("preset");
+  // === DRAFT STATE ===
+  // The pending date range selection before clicking "Apply Filters".
+  // This is the single source of truth; the highlighted preset is derived from it.
+  let draftCalendarValue = $state<DateRange | undefined>(undefined);
 
   // Initialize draft state when sidebar opens
   $effect(() => {
-    if (open) {
-      // Reset draft to current params when opening
-      draftDays = params.days ?? undefined;
-      draftMode = params.days ? "preset" : "calendar";
+    if (!open) return;
 
-      if (params.from && params.to) {
-        try {
-          const startDate = parseDate(params.from);
-          const endDate = parseDate(params.to);
-          draftCalendarValue = { start: startDate, end: endDate };
-        } catch {
-          // Fall through to days-based calculation
-          if (params.days) {
-            const endDate = today(getLocalTimeZone());
-            const startDate = endDate.subtract({ days: params.days - 1 });
-            draftCalendarValue = { start: startDate, end: endDate };
-          }
-        }
-      } else if (params.days) {
-        const endDate = today(getLocalTimeZone());
-        const startDate = endDate.subtract({ days: params.days - 1 });
-        draftCalendarValue = { start: startDate, end: endDate };
+    if (params.from && params.to) {
+      try {
+        draftCalendarValue = {
+          start: parseDate(params.from),
+          end: parseDate(params.to),
+        };
+        return;
+      } catch {
+        // Fall through to days-based calculation
       }
+    }
+
+    if (params.days) {
+      const endDate = today(getLocalTimeZone());
+      draftCalendarValue = {
+        start: endDate.subtract({ days: params.days - 1 }),
+        end: endDate,
+      };
     }
   });
 
-  // Derived state for selected days (for UI highlighting in draft mode)
-  const selectedDays = $derived(draftMode === "preset" ? draftDays : undefined);
+  // The quick-selection preset to highlight: the whole-day span of the draft
+  // range when it ends today and matches a preset, otherwise none. Derived from
+  // the range itself so it stays correct whether set via preset or calendar.
+  const selectedDays = $derived.by(() => {
+    const start = draftCalendarValue?.start;
+    const end = draftCalendarValue?.end;
+    if (!start || !end) return undefined;
+
+    const tz = getLocalTimeZone();
+    if (end.compare(today(tz)) !== 0) return undefined;
+
+    const days =
+      Math.round(
+        (end.toDate(tz).getTime() - start.toDate(tz).getTime()) / MS_PER_DAY
+      ) + 1;
+    return dayPresets.some((p) => p.days === days) ? days : undefined;
+  });
 
   function selectPreset(daysCount: number) {
-    draftDays = daysCount;
-    draftMode = "preset";
-
-    // Also update calendar to show the preset range
     const endDate = today(getLocalTimeZone());
-    const startDate = endDate.subtract({ days: daysCount - 1 });
-    draftCalendarValue = { start: startDate, end: endDate };
+    draftCalendarValue = {
+      start: endDate.subtract({ days: daysCount - 1 }),
+      end: endDate,
+    };
   }
 
   function handleCalendarChange(newValue: DateRange | undefined) {
     if (newValue?.start && newValue?.end) {
       draftCalendarValue = newValue;
-      draftMode = "calendar";
-      draftDays = undefined; // Clear preset selection
     }
   }
 
   function resetFilters() {
-    // Reset draft to default 7 days
-    draftDays = 7;
-    draftMode = "preset";
-
-    const endDate = today(getLocalTimeZone());
-    const startDate = endDate.subtract({ days: 6 });
-    draftCalendarValue = { start: startDate, end: endDate };
+    selectPreset(7);
   }
 
   function applyFilters() {
-    // Commit draft state to URL params
-    if (draftMode === "preset" && draftDays) {
-      params.setDayRange(draftDays);
-    } else if (
-      draftMode === "calendar" &&
-      draftCalendarValue?.start &&
-      draftCalendarValue?.end
-    ) {
-      params.setCustomRange(
-        draftCalendarValue.start.toString(),
-        draftCalendarValue.end.toString()
-      );
+    const start = draftCalendarValue?.start;
+    const end = draftCalendarValue?.end;
+
+    if (start && end) {
+      // A range matching a "last N days" preset commits as a relative range so it
+      // stays anchored to today; anything else commits as an explicit custom range.
+      if (selectedDays !== undefined) {
+        params.setDayRange(selectedDays);
+      } else {
+        params.setCustomRange(start.toString(), end.toString());
+      }
     }
 
     // Close the sidebar

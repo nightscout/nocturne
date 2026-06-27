@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Chart, Svg, Bars, Bar, Spline, Text, Tooltip } from "layerchart";
   import { scaleBand, scaleLinear } from "d3-scale";
+  import { bg } from "$lib/utils/formatting";
 
   // Minimum percentage to render as filled bar (below this = outline only)
 
@@ -255,7 +256,7 @@
                 textAnchor="end"
                 verticalAnchor="middle"
                 class="fill-muted-foreground text-xs tabular-nums"
-                value={`${tp.threshold}`}
+                value={`${bg(tp.threshold)}`}
               />
             {/each}
           {/if}

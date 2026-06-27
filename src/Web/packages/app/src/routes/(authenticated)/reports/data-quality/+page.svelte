@@ -131,8 +131,8 @@
 			</Card>
 		</div>
 
-		<!-- Data Quality Categories -->
-		<div class="space-y-4">
+		<!-- Data Quality Categories: in-page navigation to sub-reports -->
+		<div class="space-y-4 print:hidden">
 			<h2 class="text-lg font-semibold">Data Quality Categories</h2>
 
 			<!-- Compression Lows Card -->
@@ -198,10 +198,10 @@
 			</a>
 		</div>
 
-		<!-- Quick Actions -->
+		<!-- Quick Actions: review CTA -->
 		{#if pendingCount > 0}
 			<Card
-				class="border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-900/10"
+				class="border-amber-200 bg-amber-50/50 print:hidden dark:border-amber-900/50 dark:bg-amber-900/10"
 			>
 				<CardContent class="flex flex-col gap-3 pt-6 @lg:flex-row @lg:items-center @lg:justify-between">
 					<div class="flex items-center gap-3">
@@ -222,8 +222,8 @@
 			</Card>
 		{/if}
 
-		<!-- Run Detection -->
-		<Card>
+		<!-- Run Detection: date-range controls + trigger button -->
+		<Card class="print:hidden">
 			<CardHeader>
 				<CardTitle class="text-base">Run Detection</CardTitle>
 				<CardDescription>

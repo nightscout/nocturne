@@ -89,15 +89,15 @@
     <div class="space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 class="flex items-center gap-3 text-3xl font-bold">
-            <Layers class="h-8 w-8 text-amber-600" />
+          <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
+            <Layers class="h-6 w-6 text-amber-600 @md:h-8 @md:w-8" />
             Basal Rate Analysis
           </h1>
           <p class="mt-1 text-muted-foreground">
             Understand your background insulin delivery patterns over time
           </p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 print:hidden">
           <Button
             variant="outline"
             size="sm"
@@ -120,7 +120,9 @@
       </div>
 
       <!-- Period info -->
-      <div class="flex items-center gap-2 text-sm text-muted-foreground">
+      <div
+        class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+      >
         <Calendar class="h-4 w-4" />
         <span>
           {reportsResource.date.from.toLocaleDateString()} – {reportsResource.date.to.toLocaleDateString()}
@@ -369,8 +371,8 @@
     {/if}
 
     <!-- Navigation -->
-    <Separator />
-    <div class="flex flex-wrap items-center justify-center gap-2">
+    <Separator class="print:hidden" />
+    <div class="flex flex-wrap items-center justify-center gap-2 print:hidden">
       <Button href="/reports" variant="outline" size="sm">← All Reports</Button>
       <Button href="/reports/insulin-delivery" size="sm" class="gap-2">
         Insulin Delivery Report

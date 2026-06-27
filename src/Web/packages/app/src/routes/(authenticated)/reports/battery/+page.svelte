@@ -137,7 +137,12 @@
         Device battery statistics and charge cycle history
       </p>
     </div>
-    <Button variant="outline" size="sm" onclick={fetchData} class="shrink-0">
+    <Button
+      variant="outline"
+      size="sm"
+      onclick={fetchData}
+      class="shrink-0 print:hidden"
+    >
       <RefreshCw class="h-4 w-4 mr-2" />
       Refresh
     </Button>
@@ -171,7 +176,7 @@
   {:else}
     <!-- Device Filter (if multiple devices) -->
     {#if allDevices.length > 1}
-      <div class="flex gap-2 flex-wrap">
+      <div class="flex gap-2 flex-wrap print:hidden">
         <Button
           variant={selectedDevice === null ? "default" : "outline"}
           size="sm"
@@ -386,7 +391,7 @@
           <div class="space-y-3">
             {#each cycles.slice(0, 10) as cycle}
               <div
-                class="flex items-center justify-between p-3 rounded-lg border"
+                class="flex flex-col gap-3 p-3 rounded-lg border @md:flex-row @md:items-center @md:justify-between"
               >
                 <div class="flex items-center gap-3">
                   <div class="flex flex-col items-center">
@@ -414,7 +419,7 @@
                     {/if}
                   </div>
                 </div>
-                <div class="text-right">
+                <div class="text-right @md:shrink-0">
                   {#if cycle.dischargeDurationMinutes}
                     <div class="text-lg font-bold">
                       {formatDuration(cycle.dischargeDurationMinutes)}

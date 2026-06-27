@@ -119,7 +119,7 @@
   }
 </script>
 
-<div class="mini-overview-chart">
+<div class="mini-overview-chart print:hidden">
   <!-- Header with reset button -->
   <div
     class="w-full flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground"

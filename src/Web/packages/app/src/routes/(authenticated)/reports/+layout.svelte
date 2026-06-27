@@ -3,7 +3,7 @@
     import { Button } from "$lib/components/ui/button";
     import {ReportsFilterSidebar} from "$lib/components/layout";
     import ResourceGuard from "$lib/components/reports/ResourceGuard.svelte";
-    import {Filter, Calendar} from "lucide-svelte";
+    import {Filter, Calendar, ChevronDown} from "lucide-svelte";
     import {useDateParams, setDateParamsContext} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
 
@@ -68,23 +68,38 @@
 
 <div class="relative min-h-full bg-background">
     {#if page.url.pathname !== "/reports"}
+        <!-- Print-only report header: gives the printed page the context the
+             interactive sticky header (hidden below) carries on screen. -->
+        <div class="hidden print:block border-b border-border pb-3 mb-4 px-3">
+            <h1 class="text-xl font-bold text-foreground">{reportName}</h1>
+            <p class="text-sm text-muted-foreground">
+                {dateRangeDisplay} · Generated {new Date().toLocaleString()}
+            </p>
+        </div>
+
         <!-- Report Header - unified sticky header with sidebar trigger -->
         <!-- On mobile (md:hidden), position below the MobileHeader with top-14 -->
         <!-- On desktop (md:top-0), position at top since main header is hidden for reports -->
         <div
-                class="sticky top-14 md:top-0 z-20 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60"
+                class="sticky top-14 md:top-0 z-20 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
         >
             <div class="flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
                 <div class="flex items-center gap-2">
                     <!-- Report info -->
                     <div class="flex items-center gap-3">
                         <h1 class="text-lg font-semibold text-foreground">{reportName}</h1>
-                        <div
-                                class="hidden sm:flex items-center gap-2 text-sm text-muted-foreground"
-                        >
-                            <Calendar class="h-3 w-3"/>
-                            <span>{dateRangeDisplay}</span>
-                        </div>
+                        {#if showFilters}
+                            <button
+                                    type="button"
+                                    onclick={() => (filterSidebarOpen = true)}
+                                    class="hidden sm:flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                    aria-label="Change date range"
+                            >
+                                <Calendar class="h-3.5 w-3.5"/>
+                                <span>{dateRangeDisplay}</span>
+                                <ChevronDown class="h-3 w-3 opacity-60"/>
+                            </button>
+                        {/if}
                     </div>
                 </div>
 

@@ -336,7 +336,7 @@
         {/if}
       </CardTitle>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 print:hidden">
         <PredictionSettings
           showPredictions={effectiveShowPredictions}
           predictionMode={predictionModeValue}

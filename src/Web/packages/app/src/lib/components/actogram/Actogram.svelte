@@ -105,7 +105,7 @@
     <div class="w-20 shrink-0 flex items-center justify-center">
       {#if visibleCount !== undefined}
         <button
-          class="text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors p-0.5"
+          class="print:hidden text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors p-0.5"
           disabled={offset === 0}
           onclick={() => navigate(-7)}
           aria-label="Previous week"
@@ -162,7 +162,7 @@
   {/each}
 
   {#if visibleCount !== undefined}
-    <div class="flex">
+    <div class="flex print:hidden">
       <div class="w-20 shrink-0 flex items-center justify-center">
         <button
           class="text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors p-0.5"

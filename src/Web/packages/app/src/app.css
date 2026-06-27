@@ -9,3 +9,54 @@
   font-weight: 100 900;
   font-display: swap;
 }
+
+/*
+ * Global print foundation for report pages.
+ *
+ * Hides the app chrome (sidebar, mobile header, transient banners/toasts) that
+ * has no place on a printed report, lets the report content flow across pages
+ * instead of being clipped by the scroll container, and preserves the colors
+ * that carry clinical meaning (TIR bands, status badges). Page-specific chaff
+ * (nav cards, filter controls, scrubbers) is removed per page with `print:hidden`.
+ */
+@media print {
+  @page {
+    margin: 1.2cm;
+  }
+
+  /* Print colors faithfully — glucose bands and badges encode meaning. */
+  html,
+  body {
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* App chrome that should never appear on a printed report. */
+  [data-slot="sidebar"],
+  [data-sidebar="trigger"],
+  [data-slot="sidebar-trigger"] {
+    display: none !important;
+  }
+
+  /* Let report content flow onto multiple pages instead of being clipped by
+     the scroll container or duplicated by sticky/fixed positioning. */
+  main {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  .sticky,
+  .fixed {
+    position: static !important;
+  }
+
+  /* Keep cards, charts, and table rows from splitting across page breaks. */
+  [data-slot="card"],
+  table,
+  tr,
+  figure,
+  svg {
+    break-inside: avoid;
+  }
+}
