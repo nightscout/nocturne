@@ -20,6 +20,8 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="logger">The logger instance.</param>
+    // logger is unused for this LegacyId-only type but retained for DI + direct test construction;
+    // it moves to the base ctor when the DeduplicationService participants (which log) are migrated.
     public CalibrationRepository(ITenantDbContextFactory contextFactory, ILogger<CalibrationRepository> logger)
         : base(contextFactory)
     {
