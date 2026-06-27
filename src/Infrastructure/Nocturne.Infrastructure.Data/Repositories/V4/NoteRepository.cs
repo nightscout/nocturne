@@ -12,12 +12,14 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing note records in the database.
-/// Includes support for cross-connector deduplication.
+/// Repository for managing note records in the database. A DeduplicationService participant, so it
+/// inherits the shared CRUD/soft-delete surface from <see cref="V4RepositoryBase{TModel,TEntity}"/>
+/// and keeps only the dedup-specific behaviour as overrides (extended <c>GetAsync</c> with the
+/// non-primary LinkedRecords filter, dedup <c>BulkCreateAsync</c>). Soft-deletes use the plain
+/// (non-audited) path, matching the base.
 /// </summary>
-public class NoteRepository : INoteRepository
+public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
     private readonly IDeduplicationService _deduplicationService;
     private readonly ILogger<NoteRepository> _logger;
 
@@ -31,11 +33,30 @@ public class NoteRepository : INoteRepository
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         ILogger<NoteRepository> logger)
+        : base(contextFactory)
     {
-        _contextFactory = contextFactory;
         _deduplicationService = deduplicationService;
         _logger = logger;
     }
+
+    /// <inheritdoc />
+    protected override NoteEntity ToEntity(Note model) => NoteMapper.ToEntity(model);
+
+    /// <inheritdoc />
+    protected override Note ToDomain(NoteEntity entity) => NoteMapper.ToDomainModel(entity);
+
+    /// <inheritdoc />
+    protected override void ApplyUpdate(NoteEntity target, Note source) => NoteMapper.UpdateEntity(target, source);
+
+    /// <summary>
+    /// Routes the base 7-arg form through the extended note query (non-primary LinkedRecords
+    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
+    /// </summary>
+    public override Task<IEnumerable<Note>> GetAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit = 100, int offset = 0, bool descending = true,
+        CancellationToken ct = default)
+        => GetAsync(from, to, device, source, limit, offset, descending, nativeOnly: false, ct);
 
     /// <summary>
     /// Gets note records based on filter criteria.
@@ -63,7 +84,7 @@ public class NoteRepository : INoteRepository
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = ctx.Notes.AsNoTracking().AsQueryable();
         if (from.HasValue)
             query = query.Where(e => e.Timestamp >= from.Value);
@@ -86,160 +107,6 @@ public class NoteRepository : INoteRepository
     }
 
     /// <summary>
-    /// Gets a note record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The note record, or null if not found.</returns>
-    public async Task<Note?> GetByIdAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.Notes.FindAsync([id], ct);
-        return entity is null ? null : NoteMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Gets a note record by its legacy identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The note record, or null if not found.</returns>
-    public async Task<Note?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.Notes.FirstOrDefaultAsync(e => e.LegacyId == legacyId, ct);
-        return entity is null ? null : NoteMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Creates a new note record.
-    /// </summary>
-    /// <param name="model">The note to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The created note record.</returns>
-    public async Task<Note> CreateAsync(Note model, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = NoteMapper.ToEntity(model);
-        ctx.Notes.Add(entity);
-        await ctx.SaveChangesAsync(ct);
-        return NoteMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Updates an existing note record.
-    /// </summary>
-    /// <param name="id">The unique identifier of the record to update.</param>
-    /// <param name="model">The updated record data.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The updated note record.</returns>
-    public async Task<Note> UpdateAsync(Guid id, Note model, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity =
-            await ctx.Notes.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"Note {id} not found");
-        NoteMapper.UpdateEntity(entity, model);
-        await ctx.SaveChangesAsync(ct);
-        return NoteMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Deletes a note record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity =
-            await ctx.Notes.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"Note {id} not found");
-        entity.DeletedAt = DateTime.UtcNow;
-        await ctx.SaveChangesAsync(ct);
-    }
-
-    /// <inheritdoc />
-    public async Task<Note> RestoreAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.Notes.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new KeyNotFoundException($"Soft-deleted Note {id} not found");
-        entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return NoteMapper.ToDomainModel(entity);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<Note>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var idSet = ids.ToHashSet();
-        var entities = await ctx.Notes.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
-            .ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return entities.Select(NoteMapper.ToDomainModel);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<Note>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entities = await ctx.Notes.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .OrderByDescending(e => e.DeletedAt)
-            .Skip(offset).Take(limit)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return entities.Select(NoteMapper.ToDomainModel);
-    }
-
-    /// <inheritdoc />
-    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.Notes.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .CountAsync(ct);
-    }
-
-    /// <summary>
-    /// Returns the timestamp of the most recently stored record, optionally scoped to a data source.
-    /// Used by connectors to resume per-source sync without re-fetching already-stored data.
-    /// </summary>
-    public async Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.Notes.AsNoTracking().AsQueryable();
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-        return await query.MaxAsync(e => (DateTime?)e.Timestamp, ct);
-    }
-
-    /// <summary>
-    /// Counts note records within a timestamp range.
-    /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The count of matching records.</returns>
-    public async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.Notes.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-        return await query.CountAsync(ct);
-    }
-
-    /// <summary>
     /// Gets note records by correlation identifier.
     /// </summary>
     /// <param name="correlationId">The correlation identifier.</param>
@@ -250,25 +117,12 @@ public class NoteRepository : INoteRepository
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await ctx
             .Notes.AsNoTracking()
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(NoteMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Deletes a note record by its legacy identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.Notes.Where(e => e.LegacyId == legacyId)
-            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
     }
 
     /// <summary>
@@ -280,7 +134,7 @@ public class NoteRepository : INoteRepository
     /// <returns>The number of deleted records.</returns>
     public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.Notes.Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier)
             .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
     }
@@ -291,12 +145,12 @@ public class NoteRepository : INoteRepository
     /// <param name="records">The collection of records to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of created notes.</returns>
-    public async Task<IEnumerable<Note>> BulkCreateAsync(
+    public override async Task<IEnumerable<Note>> BulkCreateAsync(
         IEnumerable<Note> records,
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var strategy = ctx.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
