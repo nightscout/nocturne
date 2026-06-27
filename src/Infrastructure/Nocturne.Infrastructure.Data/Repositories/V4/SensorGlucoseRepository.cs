@@ -13,12 +13,14 @@ using Nocturne.Infrastructure.Data.Services;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing sensor glucose (CGM) records in the database.
-/// Includes support for cross-connector deduplication.
+/// Repository for managing sensor glucose (CGM) records in the database. A SyncId-upsert (bulk) +
+/// DeduplicationService participant, so it inherits the shared CRUD/soft-delete surface from
+/// <see cref="V4RepositoryBase{TModel,TEntity}"/> and keeps only the dedup-specific behaviour as
+/// overrides (extended <c>GetAsync</c> with the non-primary LinkedRecords filter + keyset cursor,
+/// SyncId-upsert <c>BulkCreateAsync</c>, audited soft-deletes, and source/time-range deletes).
 /// </summary>
-public class SensorGlucoseRepository : ISensorGlucoseRepository
+public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
     private readonly IDeduplicationService _deduplicationService;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<SensorGlucoseRepository> _logger;
@@ -36,12 +38,32 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         IAuditContext auditContext,
         ILogger<SensorGlucoseRepository> logger
     )
+        : base(contextFactory)
     {
-        _contextFactory = contextFactory;
         _deduplicationService = deduplicationService;
         _auditContext = auditContext;
         _logger = logger;
     }
+
+    /// <inheritdoc />
+    protected override SensorGlucoseEntity ToEntity(SensorGlucose model) => SensorGlucoseMapper.ToEntity(model);
+
+    /// <inheritdoc />
+    protected override SensorGlucose ToDomain(SensorGlucoseEntity entity) => SensorGlucoseMapper.ToDomainModel(entity);
+
+    /// <inheritdoc />
+    protected override void ApplyUpdate(SensorGlucoseEntity target, SensorGlucose source) => SensorGlucoseMapper.UpdateEntity(target, source);
+
+    /// <summary>
+    /// Routes the base 7-arg form through the extended sensor-glucose query (non-primary LinkedRecords
+    /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
+    /// </summary>
+    public override Task<IEnumerable<SensorGlucose>> GetAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit = 100, int offset = 0, bool descending = true,
+        CancellationToken ct = default)
+        => GetAsync(from, to, device, source, limit, offset, descending,
+            nativeOnly: false, afterTimestamp: null, afterId: null, ct);
 
     /// <summary>
     /// Gets sensor glucose records based on filter criteria.
@@ -73,7 +95,7 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = ctx.SensorGlucose.AsNoTracking().AsQueryable();
         if (from.HasValue)
             query = query.Where(e => e.Timestamp >= from.Value);
@@ -115,160 +137,6 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     }
 
     /// <summary>
-    /// Gets a sensor glucose record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The sensor glucose record, or null if not found.</returns>
-    public async Task<SensorGlucose?> GetByIdAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.SensorGlucose.FindAsync([id], ct);
-        return entity is null ? null : SensorGlucoseMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Gets a sensor glucose record by its legacy identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The sensor glucose record, or null if not found.</returns>
-    public async Task<SensorGlucose?> GetByLegacyIdAsync(
-        string legacyId,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.SensorGlucose.FirstOrDefaultAsync(
-            e => e.LegacyId == legacyId,
-            ct
-        );
-        return entity is null ? null : SensorGlucoseMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Creates a new sensor glucose record.
-    /// </summary>
-    /// <param name="model">The sensor glucose record to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The created sensor glucose record.</returns>
-    public async Task<SensorGlucose> CreateAsync(
-        SensorGlucose model,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = SensorGlucoseMapper.ToEntity(model);
-        ctx.SensorGlucose.Add(entity);
-        await ctx.SaveChangesAsync(ct);
-        return SensorGlucoseMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Updates an existing sensor glucose record.
-    /// </summary>
-    /// <param name="id">The unique identifier of the record to update.</param>
-    /// <param name="model">The updated record data.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The updated sensor glucose record.</returns>
-    public async Task<SensorGlucose> UpdateAsync(
-        Guid id,
-        SensorGlucose model,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity =
-            await ctx.SensorGlucose.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"SensorGlucose {id} not found");
-        SensorGlucoseMapper.UpdateEntity(entity, model);
-        await ctx.SaveChangesAsync(ct);
-        return SensorGlucoseMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Deletes a sensor glucose record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity =
-            await ctx.SensorGlucose.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"SensorGlucose {id} not found");
-        entity.DeletedAt = DateTime.UtcNow;
-        await ctx.SaveChangesAsync(ct);
-    }
-
-    /// <inheritdoc />
-    public async Task<SensorGlucose> RestoreAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.SensorGlucose.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new KeyNotFoundException($"Soft-deleted SensorGlucose {id} not found");
-        entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return SensorGlucoseMapper.ToDomainModel(entity);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<SensorGlucose>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var idSet = ids.ToHashSet();
-        var entities = await ctx.SensorGlucose.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
-            .ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return entities.Select(SensorGlucoseMapper.ToDomainModel);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<SensorGlucose>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entities = await ctx.SensorGlucose.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .OrderByDescending(e => e.DeletedAt)
-            .Skip(offset).Take(limit)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return entities.Select(SensorGlucoseMapper.ToDomainModel);
-    }
-
-    /// <inheritdoc />
-    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.SensorGlucose.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .CountAsync(ct);
-    }
-
-    /// <summary>
-    /// Counts sensor glucose records within a timestamp range.
-    /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The count of matching records.</returns>
-    public async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.SensorGlucose.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-        return await query.CountAsync(ct);
-    }
-
-    /// <summary>
     /// Gets sensor glucose records by correlation identifier.
     /// </summary>
     /// <param name="correlationId">The correlation identifier.</param>
@@ -279,7 +147,7 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await ctx
             .SensorGlucose.AsNoTracking()
             .Where(e => e.CorrelationId == correlationId)
@@ -293,9 +161,9 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     /// <param name="legacyId">The legacy identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public override async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.SensorGlucose.Where(e => e.LegacyId == legacyId), _auditContext, ct);
     }
@@ -306,12 +174,12 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     /// <param name="records">The collection of records to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of created records.</returns>
-    public async Task<IEnumerable<SensorGlucose>> BulkCreateAsync(
+    public override async Task<IEnumerable<SensorGlucose>> BulkCreateAsync(
         IEnumerable<SensorGlucose> records,
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var strategy = ctx.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
@@ -438,24 +306,6 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     }
 
     /// <summary>
-    /// Gets the timestamp of the latest sensor glucose record.
-    /// </summary>
-    /// <param name="source">Optional data source filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The latest timestamp, or null if no records found.</returns>
-    public async Task<DateTime?> GetLatestTimestampAsync(
-        string? source = null,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.SensorGlucose.AsNoTracking().AsQueryable();
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-        return await query.MaxAsync(e => (DateTime?)e.Timestamp, ct);
-    }
-
-    /// <summary>
     /// Gets the timestamp of the oldest sensor glucose record.
     /// </summary>
     /// <param name="source">Optional data source filter.</param>
@@ -466,7 +316,7 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = ctx.SensorGlucose.AsNoTracking().AsQueryable();
         if (source != null)
             query = query.Where(e => e.DataSource == source);
@@ -481,7 +331,7 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     /// <returns>Number of matching records.</returns>
     public async Task<int> CountBySourceAsync(string source, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.SensorGlucose
             .AsNoTracking()
             .Where(e => e.DataSource == source)
@@ -496,7 +346,7 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     /// <returns>Number of records deleted.</returns>
     public async Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.SensorGlucose.Where(e => e.DataSource == source), _auditContext, ct);
     }
@@ -510,7 +360,7 @@ public class SensorGlucoseRepository : ISensorGlucoseRepository
     /// <returns>Number of records deleted.</returns>
     public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = ctx.SensorGlucose.AsQueryable();
 
         if (from.HasValue)
