@@ -74,4 +74,34 @@ public class BolusGoldenTests
         rows.Should().HaveCount(1, "the SyncIdentifier match updates in place");
         rows[0].Insulin.Should().Be(4.6, "the replayed dose overwrites the original");
     }
+
+    [Fact]
+    public async Task GetAsync_SevenArg_ViaGenericInterface_ExcludesNonPrimaryDuplicates()
+    {
+        // Pins the migration's highest-risk path: the base's plain 7-arg GetAsync is overridden to
+        // route through the bolus query's non-primary LinkedRecords filter, so a deduped non-primary
+        // row is excluded even when GetAsync is invoked via the generic IV4Repository<Bolus> (the old
+        // default-interface bridge). If the override regressed, this returns 2 instead of 1.
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<IBolusRepository>();
+
+        var t0 = new DateTime(2026, 3, 3, 9, 0, 0, DateTimeKind.Utc);
+        await repo.BulkCreateAsync(
+            new[]
+            {
+                new Bolus { Timestamp = t0, Insulin = 5.0, DataSource = "aaps", LegacyId = "p-a" },
+                new Bolus { Timestamp = t0.AddSeconds(10), Insulin = 5.02, DataSource = "loop", LegacyId = "p-b" },
+            },
+            CancellationToken.None);
+
+        // Two physical rows, linked into one canonical group (one primary, one non-primary).
+        var physical = await _fx.QueryAsync(tenant, ctx => ctx.Boluses.AsNoTracking().CountAsync());
+        physical.Should().Be(2);
+
+        var v4 = (IV4Repository<Bolus>)repo;
+        var visible = await v4.GetAsync(null, null, null, null, 100, 0, true, CancellationToken.None);
+
+        visible.Should().HaveCount(1, "the 7-arg GetAsync excludes the non-primary deduped row");
+    }
 }
