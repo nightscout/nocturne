@@ -306,24 +306,6 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     }
 
     /// <summary>
-    /// Gets the timestamp of the oldest sensor glucose record.
-    /// </summary>
-    /// <param name="source">Optional data source filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The oldest timestamp, or null if no records found.</returns>
-    public async Task<DateTime?> GetOldestTimestampAsync(
-        string? source = null,
-        CancellationToken ct = default
-    )
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.SensorGlucose.AsNoTracking().AsQueryable();
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-        return await query.MinAsync(e => (DateTime?)e.Timestamp, ct);
-    }
-
-    /// <summary>
     /// Counts sensor glucose records for the given data source.
     /// </summary>
     /// <param name="source">Data source identifier.</param>

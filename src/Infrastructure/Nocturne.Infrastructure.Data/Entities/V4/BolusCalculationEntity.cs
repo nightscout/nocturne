@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BolusCalculation
 /// </summary>
 [Table("bolus_calculations")]
-public class BolusCalculationEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity, ISystemTimestamped
+public class BolusCalculationEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4TimeSeriesEntity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
