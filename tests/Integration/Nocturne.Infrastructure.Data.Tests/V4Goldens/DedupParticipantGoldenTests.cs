@@ -24,11 +24,16 @@ public class DedupParticipantGoldenTests
 
     // Two records within ±30s that match criteria must collapse to one canonical group (1 primary),
     // while both physical rows persist (dedup links, never deletes).
-    private async Task AssertOneCanonicalGroupAsync(Guid tenant, int physicalRows, Func<NocturneDbContext, Task<int>> countRows)
+    private async Task AssertOneCanonicalGroupAsync(
+        Guid tenant, int physicalRows, string recordType, Func<NocturneDbContext, Task<int>> countRows)
     {
         (await _fx.QueryAsync(tenant, countRows)).Should().Be(physicalRows, "dedup links rows, it never deletes them");
 
-        var links = await _fx.QueryAsync(tenant, ctx => ctx.LinkedRecords.AsNoTracking().ToListAsync());
+        var links = await _fx.QueryAsync(tenant, ctx =>
+            ctx.LinkedRecords.AsNoTracking().Where(lr => lr.RecordType == recordType).ToListAsync());
+        // The distinct-canonical + single-primary pair is the real grouping guard (a count alone would
+        // still be `physicalRows` if dedup split them into separate groups); the count only catches
+        // dedup not running at all.
         links.Should().HaveCount(physicalRows);
         links.Select(l => l.CanonicalId).Distinct().Should().HaveCount(1, "matching records link into one canonical group");
         links.Count(l => l.IsPrimary).Should().Be(1, "exactly one primary per canonical group");
@@ -49,7 +54,7 @@ public class DedupParticipantGoldenTests
             },
             CancellationToken.None);
 
-        await AssertOneCanonicalGroupAsync(tenant, 2, ctx => ctx.SensorGlucose.AsNoTracking().CountAsync());
+        await AssertOneCanonicalGroupAsync(tenant, 2, "sensorglucose", ctx => ctx.SensorGlucose.AsNoTracking().CountAsync());
     }
 
     [Fact]
@@ -82,7 +87,7 @@ public class DedupParticipantGoldenTests
             },
             CancellationToken.None);
 
-        await AssertOneCanonicalGroupAsync(tenant, 2, ctx => ctx.CarbIntakes.AsNoTracking().CountAsync());
+        await AssertOneCanonicalGroupAsync(tenant, 2, "carbintake", ctx => ctx.CarbIntakes.AsNoTracking().CountAsync());
     }
 
     [Fact]
@@ -115,7 +120,7 @@ public class DedupParticipantGoldenTests
             },
             CancellationToken.None);
 
-        await AssertOneCanonicalGroupAsync(tenant, 2, ctx => ctx.BGChecks.AsNoTracking().CountAsync());
+        await AssertOneCanonicalGroupAsync(tenant, 2, "bgcheck", ctx => ctx.BGChecks.AsNoTracking().CountAsync());
     }
 
     [Fact]
@@ -133,7 +138,7 @@ public class DedupParticipantGoldenTests
             },
             CancellationToken.None);
 
-        await AssertOneCanonicalGroupAsync(tenant, 2, ctx => ctx.DeviceEvents.AsNoTracking().CountAsync());
+        await AssertOneCanonicalGroupAsync(tenant, 2, "deviceevent", ctx => ctx.DeviceEvents.AsNoTracking().CountAsync());
     }
 
     [Fact]
@@ -152,7 +157,7 @@ public class DedupParticipantGoldenTests
             },
             CancellationToken.None);
 
-        await AssertOneCanonicalGroupAsync(tenant, 2, ctx => ctx.Notes.AsNoTracking().CountAsync());
+        await AssertOneCanonicalGroupAsync(tenant, 2, "note", ctx => ctx.Notes.AsNoTracking().CountAsync());
     }
 
     [Fact]
@@ -170,7 +175,7 @@ public class DedupParticipantGoldenTests
             },
             CancellationToken.None);
 
-        await AssertOneCanonicalGroupAsync(tenant, 2, ctx => ctx.BolusCalculations.AsNoTracking().CountAsync());
+        await AssertOneCanonicalGroupAsync(tenant, 2, "boluscalculation", ctx => ctx.BolusCalculations.AsNoTracking().CountAsync());
     }
 
     [Fact]
@@ -189,6 +194,6 @@ public class DedupParticipantGoldenTests
             },
             CancellationToken.None);
 
-        await AssertOneCanonicalGroupAsync(tenant, 2, ctx => ctx.TempBasals.AsNoTracking().CountAsync());
+        await AssertOneCanonicalGroupAsync(tenant, 2, "tempbasal", ctx => ctx.TempBasals.AsNoTracking().CountAsync());
     }
 }
