@@ -223,51 +223,51 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return await query.MinAsync(e => (DateTime?)e.Timestamp, ct);
     }
 
+    /// <summary>SyncId-upsert types override: match existing rows by (DataSource, SyncIdentifier), update them in
+    /// place, and return (rows updated in place, rows still to insert). Default: nothing upserted.</summary>
+    protected virtual Task<(List<TEntity> Updated, List<TEntity> ToInsert)> SplitUpsertsAsync(
+        NocturneDbContext ctx, List<TEntity> entities, CancellationToken ct)
+        => Task.FromResult((new List<TEntity>(), entities));
+
+    /// <summary>DeduplicationService participants override: link the just-inserted rows into canonical groups
+    /// (runs AFTER commit). Default: no-op.</summary>
+    protected virtual Task PostCommitDedupAsync(
+        NocturneDbContext ctx, IReadOnlyList<TEntity> inserted, CancellationToken ct)
+        => Task.CompletedTask;
+
     /// <summary>
     /// Bulk-inserts records with batch-level and DB-level deduplication by LegacyId. The base
-    /// implements the LegacyId-only path; SyncId-upsert / DeduplicationService participants override.
+    /// implements the LegacyId-only path; SyncId-upsert / DeduplicationService participants override
+    /// the <see cref="SplitUpsertsAsync"/> / <see cref="PostCommitDedupAsync"/> hooks rather than the
+    /// whole method.
     /// </summary>
     public virtual async Task<IEnumerable<TModel>> BulkCreateAsync(
-        IEnumerable<TModel> records, CancellationToken ct = default)
+        IEnumerable<TModel> recordsParam, CancellationToken ct = default)
     {
-        var entities = records.Select(ToEntity).ToList();
-        if (entities.Count == 0)
-            return [];
-
-        // Batch-level dedup: keep first occurrence per LegacyId.
-        entities = entities
-            .GroupBy(e => e.LegacyId ?? e.Id.ToString())
-            .Select(g => g.First())
-            .ToList();
-
-        // DB-level dedup: filter out records whose LegacyId already exists.
-        var legacyIds = entities
-            .Where(e => !string.IsNullOrEmpty(e.LegacyId))
-            .Select(e => e.LegacyId!)
-            .ToHashSet();
-
+        var records = recordsParam.ToList();
+        if (records.Count == 0) return [];
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var strategy = ctx.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
             await using var tx = await ctx.Database.BeginTransactionAsync(ct);
+            var entities = records.Select(ToEntity).ToList();
 
+            var (updated, toInsert) = await SplitUpsertsAsync(ctx, entities, ct);
+
+            // Batch-level LegacyId dedup
+            toInsert = toInsert.GroupBy(e => e.LegacyId ?? e.Id.ToString()).Select(g => g.First()).ToList();
+            var legacyIds = toInsert.Where(e => !string.IsNullOrEmpty(e.LegacyId)).Select(e => e.LegacyId!).ToHashSet();
             if (legacyIds.Count > 0)
             {
-                var blockedLegacyIds = await ctx.GetBlockingLegacyIdsAsync<TEntity>(legacyIds, ct);
-                entities = entities
-                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
-                    .ToList();
+                var blocked = await ctx.GetBlockingLegacyIdsAsync<TEntity>(legacyIds, ct);
+                toInsert = toInsert.Where(e => string.IsNullOrEmpty(e.LegacyId) || !blocked.Contains(e.LegacyId)).ToList();
             }
 
-            if (entities.Count == 0)
-            {
-                await tx.CommitAsync(ct);
-                return [];
-            }
+            if (toInsert.Count == 0 && updated.Count == 0) { await tx.CommitAsync(ct); return Enumerable.Empty<TModel>(); }
 
             const int batchSize = 500;
-            foreach (var batch in entities.Chunk(batchSize))
+            foreach (var batch in toInsert.Chunk(batchSize))
             {
                 ctx.Set<TEntity>().AddRange(batch);
                 await ctx.SaveChangesAsync(ct);
@@ -275,7 +275,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             }
 
             await tx.CommitAsync(ct);
-            return entities.Select(ToDomain);
+            await PostCommitDedupAsync(ctx, toInsert, ct);
+            return updated.Concat(toInsert).Select(ToDomain);
         });
     }
 }
