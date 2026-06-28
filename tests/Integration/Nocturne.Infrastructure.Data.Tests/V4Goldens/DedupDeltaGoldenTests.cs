@@ -115,19 +115,21 @@ public class DedupDeltaGoldenTests
     // ── D3: SensorGlucose single CreateAsync does NOT upsert (bulk does); Bolus single DOES ───────
 
     [Fact]
-    public async Task D3_SensorGlucose_SingleCreate_DoesNotUpsertOnSyncId_ThrowsOnDuplicate()
+    public async Task D3_SensorGlucose_SingleCreate_UpsertsOnSyncId_LatestWins()
     {
         var tenant = Guid.NewGuid();
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
         var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
 
         await repo.CreateAsync(new SensorGlucose { Timestamp = T0, Mgdl = 100, DataSource = "dexcom", SyncIdentifier = "sg-s" }, CancellationToken.None);
-        var act = async () => await repo.CreateAsync(
-            new SensorGlucose { Timestamp = T0, Mgdl = 142, DataSource = "dexcom", SyncIdentifier = "sg-s" }, CancellationToken.None);
+        await repo.CreateAsync(new SensorGlucose { Timestamp = T0, Mgdl = 142, DataSource = "dexcom", SyncIdentifier = "sg-s" }, CancellationToken.None);
 
-        // SensorGlucose single CreateAsync does NOT upsert (only bulk does, D3), so the duplicate
-        // SyncId hits the unique index and throws.
-        await act.Should().ThrowAsync<DbUpdateException>("SensorGlucose single CreateAsync does not upsert on SyncId today (D3)");
+        // D3 re-baseline: SensorGlucose single CreateAsync now upserts on (DataSource, SyncIdentifier)
+        // in place (mirroring Bolus/CarbIntake), so the duplicate SyncId updates the existing row
+        // instead of hitting the unique index — one row, latest value wins.
+        var rows = await _fx.QueryAsync(tenant, ctx => ctx.SensorGlucose.AsNoTracking().ToListAsync());
+        rows.Should().HaveCount(1, "SensorGlucose single CreateAsync upserts on SyncId (D3)");
+        rows[0].Mgdl.Should().Be(142);
     }
 
     [Fact]

@@ -135,6 +135,38 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     }
 
     /// <summary>
+    /// Creates a new sensor glucose record. When <c>DataSource</c> and <c>SyncIdentifier</c>
+    /// match an existing row for this tenant, the record is updated in place rather than
+    /// inserted — making the operation idempotent for connector replays. Tenant scoping is
+    /// implicit via the DbContext's RLS-equivalent query filter. Mirrors BolusRepository.
+    /// </summary>
+    /// <param name="model">The sensor glucose record to create.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The created or updated sensor glucose record.</returns>
+    public override async Task<SensorGlucose> CreateAsync(SensorGlucose model, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        if (!string.IsNullOrEmpty(model.DataSource) && !string.IsNullOrEmpty(model.SyncIdentifier))
+        {
+            var existing = await ctx.SensorGlucose
+                .FirstOrDefaultAsync(
+                    e => e.DataSource == model.DataSource && e.SyncIdentifier == model.SyncIdentifier,
+                    ct);
+            if (existing != null)
+            {
+                SensorGlucoseMapper.UpdateEntity(existing, model);
+                await ctx.SaveChangesAsync(ct);
+                return SensorGlucoseMapper.ToDomainModel(existing);
+            }
+        }
+
+        var entity = SensorGlucoseMapper.ToEntity(model);
+        ctx.SensorGlucose.Add(entity);
+        await ctx.SaveChangesAsync(ct);
+        return SensorGlucoseMapper.ToDomainModel(entity);
+    }
+
+    /// <summary>
     /// Gets sensor glucose records by correlation identifier.
     /// </summary>
     /// <param name="correlationId">The correlation identifier.</param>
