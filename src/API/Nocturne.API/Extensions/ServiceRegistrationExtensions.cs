@@ -661,6 +661,11 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ISignalRBroadcastService, SignalRBroadcastService>();
         services.AddScoped<ISyncProgressReporter, SignalRSyncProgressReporter>();
 
+        // Native V4 record broadcasting (companion + Prelude) over the glucose/care/device/therapy
+        // categories. Open generic so every V4 model type resolves; the repository chokepoint fires it
+        // for live writes only. Additive to the legacy v1 IDataEventSink<T> projections above.
+        services.AddScoped(typeof(IV4RecordBroadcaster<>), typeof(SignalRV4RecordBroadcaster<>));
+
         // Push notifications
         services.AddScoped<INotificationV2Service, NotificationV2Service>();
         services.AddScoped<INotificationV1Service, NotificationV1Service>();
