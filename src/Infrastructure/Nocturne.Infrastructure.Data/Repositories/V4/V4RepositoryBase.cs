@@ -174,11 +174,19 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             .CountAsync(ct);
     }
 
+    /// <summary>
+    /// Read-visibility hook applied by <see cref="CountAsync"/> (and reusable by future read paths) so
+    /// counts match the rows reads return. The base is identity; dedup participants override it to
+    /// exclude non-primary LinkedRecords for their RecordType — replacing the per-type CountAsync
+    /// overrides that each carried the same exclusion.
+    /// </summary>
+    protected virtual IQueryable<TEntity> ApplyReadVisibility(IQueryable<TEntity> query, NocturneDbContext ctx) => query;
+
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CountAsync" />
     public virtual async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.Set<TEntity>().AsNoTracking().AsQueryable();
+        var query = ApplyReadVisibility(ctx.Set<TEntity>().AsNoTracking().AsQueryable(), ctx);
         if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
         if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
         return await query.CountAsync(ct);

@@ -53,6 +53,14 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
     protected override void ApplyUpdate(CarbIntakeEntity target, CarbIntake source) => CarbIntakeMapper.UpdateEntity(target, source);
 
     /// <summary>
+    /// Excludes non-primary cross-connector duplicates so <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/>
+    /// matches the rows <c>GetAsync</c> returns (otherwise pagination totals are inflated by duplicate
+    /// meals imported from multiple connectors). Mirrors the inline filter in the extended <c>GetAsync</c>.
+    /// </summary>
+    protected override IQueryable<CarbIntakeEntity> ApplyReadVisibility(IQueryable<CarbIntakeEntity> query, NocturneDbContext ctx) =>
+        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == "carbintake" && !lr.IsPrimary && lr.RecordId == b.Id));
+
+    /// <summary>
     /// Routes the base 7-arg form through the extended carb-intake query (non-primary LinkedRecords
     /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
     /// </summary>
@@ -165,31 +173,6 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
         ctx.CarbIntakes.Add(entity);
         await ctx.SaveChangesAsync(ct);
         return CarbIntakeMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Counts carbohydrate intake records within a timestamp range.
-    /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The count of matching records.</returns>
-    public override async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
-    {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.CarbIntakes.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.Timestamp <= to.Value);
-
-        // Exclude non-primary duplicates from cross-connector deduplication so the
-        // count matches the rows GetAsync returns (otherwise pagination totals are
-        // inflated by duplicate meals imported from multiple connectors).
-        query = query.Where(b => !ctx.LinkedRecords
-            .Any(lr => lr.RecordType == "carbintake" && !lr.IsPrimary && lr.RecordId == b.Id));
-
-        return await query.CountAsync(ct);
     }
 
     /// <summary>

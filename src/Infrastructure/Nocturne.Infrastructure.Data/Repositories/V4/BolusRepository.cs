@@ -52,6 +52,13 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
     protected override void ApplyUpdate(BolusEntity target, Bolus source) => BolusMapper.UpdateEntity(target, source);
 
     /// <summary>
+    /// Excludes non-primary cross-connector duplicates so <see cref="CountAsync"/> matches the rows
+    /// <c>GetAsync</c> returns. Mirrors the inline filter in the extended <c>GetAsync</c>.
+    /// </summary>
+    protected override IQueryable<BolusEntity> ApplyReadVisibility(IQueryable<BolusEntity> query, NocturneDbContext ctx) =>
+        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == "bolus" && !lr.IsPrimary && lr.RecordId == b.Id));
+
+    /// <summary>
     /// Routes the base 7-arg form through the extended bolus query (non-primary LinkedRecords
     /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
     /// </summary>

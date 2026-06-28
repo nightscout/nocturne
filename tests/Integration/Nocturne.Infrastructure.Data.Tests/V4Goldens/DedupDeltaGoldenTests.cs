@@ -150,7 +150,7 @@ public class DedupDeltaGoldenTests
     // ── D7: only CarbIntake.CountAsync excludes non-primary links; Bolus/SensorGlucose over-count ──
 
     [Fact]
-    public async Task D7_CarbIntake_CountExcludesNonPrimary_ButBolusAndSensorGlucoseOverCount()
+    public async Task D7_AllDedupParticipants_CountExcludesNonPrimary()
     {
         var tenant = Guid.NewGuid();
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
@@ -176,11 +176,12 @@ public class DedupDeltaGoldenTests
             new SensorGlucose { Timestamp = T0.AddSeconds(10), Mgdl = 120.5, DataSource = "libre", LegacyId = "g-b" },
         }, CancellationToken.None);
 
-        // Each pair links into one canonical group. Only CarbIntake.CountAsync excludes the
-        // non-primary today (D7); Bolus and SensorGlucose over-count relative to what GetAsync returns.
+        // D7 re-baseline: each pair links into one canonical group, and ALL dedup participants now
+        // exclude the non-primary via the base CountAsync + ApplyReadVisibility hook (was: only
+        // CarbIntake excluded; Bolus and SensorGlucose over-counted at 2).
         (await carb.CountAsync(null, null)).Should().Be(1, "CarbIntake.CountAsync excludes non-primary (D7)");
-        (await bolus.CountAsync(null, null)).Should().Be(2, "Bolus.CountAsync over-counts non-primary today (D7)");
-        (await sg.CountAsync(null, null)).Should().Be(2, "SensorGlucose.CountAsync over-counts non-primary today (D7)");
+        (await bolus.CountAsync(null, null)).Should().Be(1, "Bolus.CountAsync now excludes non-primary (D7)");
+        (await sg.CountAsync(null, null)).Should().Be(1, "SensorGlucose.CountAsync now excludes non-primary (D7)");
     }
 
     // ── D2: new-insert-plus-upserted-sibling collapse ──────────────────────────────────────────────

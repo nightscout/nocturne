@@ -53,6 +53,13 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
     protected override void ApplyUpdate(BolusCalculationEntity target, BolusCalculation source) => BolusCalculationMapper.UpdateEntity(target, source);
 
     /// <summary>
+    /// Excludes non-primary cross-connector duplicates so <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/>
+    /// matches the rows <c>GetAsync</c> returns. Mirrors the inline filter in the extended <c>GetAsync</c>.
+    /// </summary>
+    protected override IQueryable<BolusCalculationEntity> ApplyReadVisibility(IQueryable<BolusCalculationEntity> query, NocturneDbContext ctx) =>
+        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == "boluscalculation" && !lr.IsPrimary && lr.RecordId == b.Id));
+
+    /// <summary>
     /// Gets bolus calculation records based on filter criteria.
     /// Deduplicates records using the <see cref="IDeduplicationService"/>.
     /// Overrides the base 7-arg form to add the non-primary LinkedRecords exclusion.

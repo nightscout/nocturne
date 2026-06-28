@@ -52,6 +52,13 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
     protected override void ApplyUpdate(BGCheckEntity target, BGCheck source) => BGCheckMapper.UpdateEntity(target, source);
 
     /// <summary>
+    /// Excludes non-primary cross-connector duplicates so <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/>
+    /// matches the rows <c>GetAsync</c> returns. Mirrors the inline filter in the extended <c>GetAsync</c>.
+    /// </summary>
+    protected override IQueryable<BGCheckEntity> ApplyReadVisibility(IQueryable<BGCheckEntity> query, NocturneDbContext ctx) =>
+        query.Where(b => !ctx.LinkedRecords.Any(lr => lr.RecordType == "bgcheck" && !lr.IsPrimary && lr.RecordId == b.Id));
+
+    /// <summary>
     /// Routes the base 7-arg form through the extended BG-check query (non-primary LinkedRecords
     /// exclusion + ordering), preserving the pre-base default-interface bridge behaviour.
     /// </summary>
