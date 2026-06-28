@@ -124,83 +124,28 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
     }
 
     /// <summary>
-    /// Performs a bulk creation of bolus calculation records, handling deduplication.
+    /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
     /// </summary>
-    /// <param name="records">The collection of records to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of created records.</returns>
-    public override async Task<IEnumerable<BolusCalculation>> BulkCreateAsync(
-        IEnumerable<BolusCalculation> records,
-        CancellationToken ct = default
-    )
+    protected override async Task PostCommitDedupAsync(
+        NocturneDbContext ctx, IReadOnlyList<BolusCalculationEntity> inserted, CancellationToken ct)
     {
-        await using var ctx = await ContextFactory.CreateAsync(ct);
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
+        if (inserted.Count == 0)
+            return;
+
+        try
         {
-            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-            var entities = records.Select(BolusCalculationMapper.ToEntity).ToList();
-            if (entities.Count == 0)
-            {
-                await tx.CommitAsync(ct);
-                return [];
-            }
+            var dedupInputs = inserted.Select(e => new DeduplicationInput(
+                RecordId: e.Id,
+                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                DataSource: e.DataSource ?? "unknown",
+                Criteria: new MatchCriteria { Carbs = e.CarbInput ?? 0, CarbsTolerance = 1.0 }
+            )).ToList();
 
-            // Batch-level dedup: keep first occurrence per LegacyId
-            entities = entities
-                .GroupBy(e => e.LegacyId ?? e.Id.ToString())
-                .Select(g => g.First())
-                .ToList();
-
-            // DB-level dedup: filter out records whose LegacyId already exists
-            var legacyIds = entities
-                .Where(e => !string.IsNullOrEmpty(e.LegacyId))
-                .Select(e => e.LegacyId!)
-                .ToHashSet();
-
-            if (legacyIds.Count > 0)
-            {
-                var blockedLegacyIds = await ctx.GetBlockingLegacyIdsAsync<BolusCalculationEntity>(legacyIds, ct);
-
-                entities = entities
-                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
-                    .ToList();
-            }
-
-            if (entities.Count == 0)
-            {
-                await tx.CommitAsync(ct);
-                return [];
-            }
-
-            const int batchSize = 500;
-            foreach (var batch in entities.Chunk(batchSize))
-            {
-                ctx.BolusCalculations.AddRange(batch);
-                await ctx.SaveChangesAsync(ct);
-                ctx.ChangeTracker.Clear();
-            }
-
-            await tx.CommitAsync(ct);
-
-            // Insert-time deduplication: link saved records to canonical groups
-            try
-            {
-                var dedupInputs = entities.Select(e => new DeduplicationInput(
-                    RecordId: e.Id,
-                    Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    DataSource: e.DataSource ?? "unknown",
-                    Criteria: new MatchCriteria { Carbs = e.CarbInput ?? 0, CarbsTolerance = 1.0 }
-                )).ToList();
-
-                await _deduplicationService.DeduplicateBatchAsync(RecordType.BolusCalculation, dedupInputs, ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BolusCalculation", entities.Count);
-            }
-
-            return entities.Select(BolusCalculationMapper.ToDomainModel);
-        });
+            await _deduplicationService.DeduplicateBatchAsync(RecordType.BolusCalculation, dedupInputs, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BolusCalculation", inserted.Count);
+        }
     }
 }
