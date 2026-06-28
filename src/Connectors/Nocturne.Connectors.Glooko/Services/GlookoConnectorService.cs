@@ -711,7 +711,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             return;
 
         var importedEntries = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
-            foodEntryImports, ConnectorSource, WriteOrigin.Live, cancellationToken); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
+            foodEntryImports, ConnectorSource, WriteOrigin.Live, cancellationToken); // Food is a dormant broadcast category — origin irrelevant until wired.
 
         if (importedEntries is not { Count: > 0 })
             return;

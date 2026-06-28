@@ -112,7 +112,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                         foodEntryImports,
                         ConnectorSource, WriteOrigin.Live,
                         cancellationToken
-                    ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
+                    ); // Food is a dormant broadcast category — origin irrelevant until wired.
                     if (imported == null)
                     {
                         result.Success = false;
