@@ -4,6 +4,7 @@ using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Devices;
 
@@ -77,7 +78,7 @@ public class DeviceEventController(IDeviceEventRepository repo)
         if (string.IsNullOrEmpty(dataSource) || string.IsNullOrEmpty(syncIdentifier))
             return BadRequest("dataSource and syncIdentifier are required");
 
-        var deleted = await ((IDeviceEventRepository)Repository).DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, ct);
+        var deleted = await ((IDeviceEventRepository)Repository).DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, WriteOrigin.Live, ct);
         return deleted > 0 ? NoContent() : NotFound();
     }
 }

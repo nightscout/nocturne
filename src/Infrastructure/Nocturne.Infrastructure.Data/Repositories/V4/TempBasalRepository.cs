@@ -9,6 +9,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -120,7 +121,7 @@ public class TempBasalRepository : ITempBasalRepository
     /// <param name="model">The temporary basal record to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created temporary basal record.</returns>
-    public async Task<TempBasal> CreateAsync(TempBasal model, CancellationToken ct = default)
+    public async Task<TempBasal> CreateAsync(TempBasal model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = TempBasalMapper.ToEntity(model);
@@ -136,7 +137,7 @@ public class TempBasalRepository : ITempBasalRepository
     /// <param name="model">The updated record data.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated temporary basal record.</returns>
-    public async Task<TempBasal> UpdateAsync(Guid id, TempBasal model, CancellationToken ct = default)
+    public async Task<TempBasal> UpdateAsync(Guid id, TempBasal model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity =
@@ -152,7 +153,7 @@ public class TempBasalRepository : ITempBasalRepository
     /// </summary>
     /// <param name="id">The unique identifier.</param>
     /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity =
@@ -163,7 +164,7 @@ public class TempBasalRepository : ITempBasalRepository
     }
 
     /// <inheritdoc />
-    public async Task<TempBasal> RestoreAsync(Guid id, CancellationToken ct = default)
+    public async Task<TempBasal> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.TempBasals.IgnoreQueryFilters()
@@ -176,7 +177,7 @@ public class TempBasalRepository : ITempBasalRepository
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<TempBasal>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    public async Task<IEnumerable<TempBasal>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var idSet = ids.ToHashSet();
@@ -217,7 +218,7 @@ public class TempBasalRepository : ITempBasalRepository
     /// <param name="legacyId">The legacy identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
@@ -263,7 +264,7 @@ public class TempBasalRepository : ITempBasalRepository
     /// <returns>A collection of created records.</returns>
     public async Task<IEnumerable<TempBasal>> BulkCreateAsync(
         IEnumerable<TempBasal> records,
-        CancellationToken ct = default
+        WriteOrigin origin, CancellationToken ct = default
     )
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);

@@ -9,6 +9,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -139,7 +140,7 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
     /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
     /// </summary>
     protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<BGCheckEntity> inserted, CancellationToken ct)
+        NocturneDbContext ctx, IReadOnlyList<BGCheckEntity> inserted, WriteOrigin origin, CancellationToken ct)
     {
         if (inserted.Count == 0)
             return;

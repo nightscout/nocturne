@@ -6,6 +6,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -87,7 +88,7 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
     /// <param name="model">The uploader snapshot to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created uploader snapshot.</returns>
-    public async Task<UploaderSnapshot> CreateAsync(UploaderSnapshot model, CancellationToken ct = default)
+    public async Task<UploaderSnapshot> CreateAsync(UploaderSnapshot model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = UploaderSnapshotMapper.ToEntity(model);
@@ -103,7 +104,7 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
     /// <param name="model">The updated snapshot data.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated uploader snapshot.</returns>
-    public async Task<UploaderSnapshot> UpdateAsync(Guid id, UploaderSnapshot model, CancellationToken ct = default)
+    public async Task<UploaderSnapshot> UpdateAsync(Guid id, UploaderSnapshot model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.UploaderSnapshots.FindAsync([id], ct)
@@ -118,7 +119,7 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
     /// </summary>
     /// <param name="id">The unique identifier.</param>
     /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.UploaderSnapshots.FindAsync([id], ct)
@@ -128,7 +129,7 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
     }
 
     /// <inheritdoc />
-    public async Task<UploaderSnapshot> RestoreAsync(Guid id, CancellationToken ct = default)
+    public async Task<UploaderSnapshot> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.UploaderSnapshots.IgnoreQueryFilters()
@@ -141,7 +142,7 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<UploaderSnapshot>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    public async Task<IEnumerable<UploaderSnapshot>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var idSet = ids.ToHashSet();
@@ -219,7 +220,7 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
     /// <param name="legacyId">The legacy identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         return await ctx.UploaderSnapshots
@@ -244,7 +245,7 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
     /// <inheritdoc />
     public async Task<IEnumerable<UploaderSnapshot>> BulkCreateAsync(
         IEnumerable<UploaderSnapshot> records,
-        CancellationToken ct = default)
+        WriteOrigin origin, CancellationToken ct = default)
     {
         var entities = records.Select(UploaderSnapshotMapper.ToEntity).ToList();
         if (entities.Count == 0)

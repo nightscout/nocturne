@@ -9,6 +9,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -152,7 +153,7 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
     /// <param name="model">The carbohydrate intake to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created or updated carbohydrate intake.</returns>
-    public override async Task<CarbIntake> CreateAsync(CarbIntake model, CancellationToken ct = default)
+    public override async Task<CarbIntake> CreateAsync(CarbIntake model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         if (!string.IsNullOrEmpty(model.DataSource) && !string.IsNullOrEmpty(model.SyncIdentifier))
@@ -201,7 +202,7 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
     /// <param name="syncIdentifier">The external sync identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default)
+    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
@@ -286,7 +287,7 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
     /// linked when first inserted.
     /// </summary>
     protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<CarbIntakeEntity> inserted, CancellationToken ct)
+        NocturneDbContext ctx, IReadOnlyList<CarbIntakeEntity> inserted, WriteOrigin origin, CancellationToken ct)
     {
         if (inserted.Count == 0)
             return;

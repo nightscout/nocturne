@@ -14,6 +14,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -71,7 +72,7 @@ public class NutritionControllerTests : IDisposable
     private void SetupCreatePassthrough(Action<CarbIntake> onCreate)
     {
         _repoMock
-            .Setup(r => r.CreateAsync(It.IsAny<CarbIntake>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.CreateAsync(It.IsAny<CarbIntake>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<CarbIntake, CancellationToken>((c, _) => onCreate(c))
             .ReturnsAsync((CarbIntake c, CancellationToken _) => c);
     }
@@ -136,7 +137,7 @@ public class NutritionControllerTests : IDisposable
             .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         _repoMock
-            .Setup(r => r.UpdateAsync(id, It.IsAny<CarbIntake>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.UpdateAsync(id, It.IsAny<CarbIntake>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<Guid, CarbIntake, CancellationToken>((_, c, _) => captured = c)
             .ReturnsAsync((Guid _, CarbIntake c, CancellationToken _) => c);
 
@@ -172,7 +173,7 @@ public class NutritionControllerTests : IDisposable
             .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         _repoMock
-            .Setup(r => r.UpdateAsync(id, It.IsAny<CarbIntake>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.UpdateAsync(id, It.IsAny<CarbIntake>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<Guid, CarbIntake, CancellationToken>((_, c, _) => captured = c)
             .ReturnsAsync((Guid _, CarbIntake c, CancellationToken _) => c);
 

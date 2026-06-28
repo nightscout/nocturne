@@ -12,6 +12,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Connectors.Eversense.Models;
 using Nocturne.Connectors.Eversense.Services;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Eversense.Tests.Services;
 
@@ -145,7 +146,7 @@ public class EversenseConnectorServiceTests
         publisherMock.Setup(p => p.Glucose.PublishSensorGlucoseAsync(
                 It.IsAny<IEnumerable<SensorGlucose>>(),
                 It.IsAny<string>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         var fixture = new ServiceFixture(
@@ -168,7 +169,7 @@ public class EversenseConnectorServiceTests
         publisherMock.Verify(p => p.Glucose.PublishSensorGlucoseAsync(
             It.Is<IEnumerable<SensorGlucose>>(sg => sg.Count() == 1),
             It.IsAny<string>(),
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -211,7 +212,7 @@ public class EversenseConnectorServiceTests
         publisherMock.Verify(p => p.Glucose.PublishSensorGlucoseAsync(
             It.IsAny<IEnumerable<SensorGlucose>>(),
             It.IsAny<string>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -243,7 +244,7 @@ public class EversenseConnectorServiceTests
         publisherMock.Verify(p => p.Glucose.PublishSensorGlucoseAsync(
             It.IsAny<IEnumerable<SensorGlucose>>(),
             It.IsAny<string>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -298,7 +299,7 @@ public class EversenseConnectorServiceTests
         publisherMock.Verify(p => p.Glucose.PublishSensorGlucoseAsync(
             It.IsAny<IEnumerable<SensorGlucose>>(),
             It.IsAny<string>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     #endregion

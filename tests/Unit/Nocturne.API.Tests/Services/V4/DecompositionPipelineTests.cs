@@ -32,10 +32,10 @@ public class DecompositionPipelineTests
     {
         var entry = new Entry { Id = "test-1", Type = "sgv" };
         _mockEntryDecomposer
-            .Setup(x => x.DecomposeAsync(entry, It.IsAny<CancellationToken>()))
+            .Setup(x => x.DecomposeAsync(entry, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult { CorrelationId = Guid.NewGuid() });
 
-        var result = await _pipeline.DecomposeAsync(entry);
+        var result = await _pipeline.DecomposeAsync(entry, WriteOrigin.Live);
 
         result.Succeeded.Should().Be(1);
         result.Failed.Should().Be(0);
@@ -47,10 +47,10 @@ public class DecompositionPipelineTests
     {
         var entry = new Entry { Id = "test-1", Type = "sgv" };
         _mockEntryDecomposer
-            .Setup(x => x.DecomposeAsync(entry, It.IsAny<CancellationToken>()))
+            .Setup(x => x.DecomposeAsync(entry, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("test error"));
 
-        var result = await _pipeline.DecomposeAsync(entry);
+        var result = await _pipeline.DecomposeAsync(entry, WriteOrigin.Live);
 
         result.Succeeded.Should().Be(0);
         result.Failed.Should().Be(1);
@@ -68,10 +68,10 @@ public class DecompositionPipelineTests
         };
 
         _mockEntryDecomposer
-            .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult { CorrelationId = Guid.NewGuid() });
 
-        var result = await _pipeline.DecomposeAsync<Entry>(entries);
+        var result = await _pipeline.DecomposeAsync<Entry>(entries, WriteOrigin.Live);
 
         result.Succeeded.Should().Be(3);
         result.Failed.Should().Be(0);
@@ -91,16 +91,16 @@ public class DecompositionPipelineTests
         _mockEntryDecomposer
             .Setup(x => x.DecomposeAsync(
                 It.Is<Entry>(e => e.Id!.StartsWith("good")),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult { CorrelationId = Guid.NewGuid() });
 
         _mockEntryDecomposer
             .Setup(x => x.DecomposeAsync(
                 It.Is<Entry>(e => e.Id!.StartsWith("bad")),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("decomposition failed"));
 
-        var result = await _pipeline.DecomposeAsync<Entry>(entries);
+        var result = await _pipeline.DecomposeAsync<Entry>(entries, WriteOrigin.Live);
 
         result.Succeeded.Should().Be(2);
         result.Failed.Should().Be(1);
@@ -119,21 +119,21 @@ public class DecompositionPipelineTests
         _mockEntryDecomposer
             .Setup(x => x.DecomposeAsync(
                 It.Is<Entry>(e => e.Id == "bad-1"),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("first fails"));
 
         _mockEntryDecomposer
             .Setup(x => x.DecomposeAsync(
                 It.Is<Entry>(e => e.Id == "good-1"),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult { CorrelationId = Guid.NewGuid() });
 
-        var result = await _pipeline.DecomposeAsync<Entry>(entries);
+        var result = await _pipeline.DecomposeAsync<Entry>(entries, WriteOrigin.Live);
 
         result.Succeeded.Should().Be(1);
         result.Failed.Should().Be(1);
         _mockEntryDecomposer.Verify(
-            x => x.DecomposeAsync(It.Is<Entry>(e => e.Id == "good-1"), It.IsAny<CancellationToken>()),
+            x => x.DecomposeAsync(It.Is<Entry>(e => e.Id == "good-1"), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -141,10 +141,10 @@ public class DecompositionPipelineTests
     public async Task DeleteByLegacyIdAsync_DelegatesToDecomposer()
     {
         _mockEntryDecomposer
-            .Setup(x => x.DeleteByLegacyIdAsync("legacy-123", It.IsAny<CancellationToken>()))
+            .Setup(x => x.DeleteByLegacyIdAsync("legacy-123", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
 
-        var result = await _pipeline.DeleteByLegacyIdAsync<Entry>("legacy-123");
+        var result = await _pipeline.DeleteByLegacyIdAsync<Entry>("legacy-123", WriteOrigin.Live);
 
         result.Should().Be(3);
     }
@@ -153,10 +153,10 @@ public class DecompositionPipelineTests
     public async Task DeleteByLegacyIdAsync_WhenDecomposerThrows_ReturnsZero()
     {
         _mockEntryDecomposer
-            .Setup(x => x.DeleteByLegacyIdAsync("legacy-123", It.IsAny<CancellationToken>()))
+            .Setup(x => x.DeleteByLegacyIdAsync("legacy-123", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("delete failed"));
 
-        var result = await _pipeline.DeleteByLegacyIdAsync<Entry>("legacy-123");
+        var result = await _pipeline.DeleteByLegacyIdAsync<Entry>("legacy-123", WriteOrigin.Live);
 
         result.Should().Be(0);
     }
@@ -164,7 +164,7 @@ public class DecompositionPipelineTests
     [Fact]
     public async Task DecomposeAsync_EmptyBatch_ReturnsZeroCounts()
     {
-        var result = await _pipeline.DecomposeAsync<Entry>(Array.Empty<Entry>());
+        var result = await _pipeline.DecomposeAsync<Entry>(Array.Empty<Entry>(), WriteOrigin.Live);
 
         result.Succeeded.Should().Be(0);
         result.Failed.Should().Be(0);

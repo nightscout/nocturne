@@ -4,6 +4,7 @@ using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -62,7 +63,7 @@ public class BasalInjectionController(
         var model = MapCreateToModel(request);
         model.InsulinContext = BuildContext(insulin!);
 
-        var created = await Repository.CreateAsync(model, ct);
+        var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
@@ -86,7 +87,7 @@ public class BasalInjectionController(
 
         try
         {
-            var updated = await Repository.UpdateAsync(id, model, ct);
+            var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)

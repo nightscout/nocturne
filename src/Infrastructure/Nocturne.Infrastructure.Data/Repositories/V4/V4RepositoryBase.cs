@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -95,7 +96,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CreateAsync" />
     /// <remarks>Virtual: SyncId-upsert types (Bolus, CarbIntake) override to upsert in place.</remarks>
-    public virtual async Task<TModel> CreateAsync(TModel model, CancellationToken ct = default)
+    public virtual async Task<TModel> CreateAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = ToEntity(model);
@@ -105,7 +106,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.UpdateAsync" />
-    public async Task<TModel> UpdateAsync(Guid id, TModel model, CancellationToken ct = default)
+    public async Task<TModel> UpdateAsync(Guid id, TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
@@ -116,7 +117,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.DeleteAsync" />
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
@@ -126,7 +127,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.RestoreAsync" />
-    public async Task<TModel> RestoreAsync(Guid id, CancellationToken ct = default)
+    public async Task<TModel> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().IgnoreQueryFilters()
@@ -139,7 +140,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.BulkRestoreAsync" />
-    public async Task<IEnumerable<TModel>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    public async Task<IEnumerable<TModel>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var idSet = ids.ToHashSet();
@@ -198,7 +199,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// and carries the user-delete dedup discriminator. Virtual so types with a type-specific delete
     /// surface can still override.
     /// </remarks>
-    public virtual async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public virtual async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
@@ -232,7 +233,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// <summary>DeduplicationService participants override: link the just-inserted rows into canonical groups
     /// (runs AFTER commit). Default: no-op.</summary>
     protected virtual Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<TEntity> inserted, CancellationToken ct)
+        NocturneDbContext ctx, IReadOnlyList<TEntity> inserted, WriteOrigin origin, CancellationToken ct)
         => Task.CompletedTask;
 
     /// <summary>
@@ -242,7 +243,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// whole method.
     /// </summary>
     public virtual async Task<IEnumerable<TModel>> BulkCreateAsync(
-        IEnumerable<TModel> recordsParam, CancellationToken ct = default)
+        IEnumerable<TModel> recordsParam, WriteOrigin origin, CancellationToken ct = default)
     {
         var records = recordsParam.ToList();
         if (records.Count == 0) return [];
@@ -275,7 +276,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             }
 
             await tx.CommitAsync(ct);
-            await PostCommitDedupAsync(ctx, toInsert, ct);
+            await PostCommitDedupAsync(ctx, toInsert, origin, ct);
             return updated.Concat(toInsert).Select(ToDomain);
         });
     }

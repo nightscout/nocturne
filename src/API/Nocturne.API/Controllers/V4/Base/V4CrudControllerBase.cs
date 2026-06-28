@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Base;
 
@@ -66,7 +67,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        var created = await Repository.CreateAsync(model, ct);
+        var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
@@ -98,7 +99,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
 
         try
         {
-            var updated = await Repository.UpdateAsync(id, model, ct);
+            var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -119,7 +120,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     {
         try
         {
-            await Repository.DeleteAsync(id, ct);
+            await Repository.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -156,7 +157,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     {
         try
         {
-            var restored = await Repository.RestoreAsync(id, ct);
+            var restored = await Repository.RestoreAsync(id, WriteOrigin.Live, ct);
             await OnAfterRestoreAsync(restored, ct);
             return Ok(restored);
         }
@@ -176,7 +177,7 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     public virtual async Task<ActionResult<IEnumerable<TModel>>> BulkRestore(
         [FromBody] Guid[] ids, CancellationToken ct = default)
     {
-        var restored = await Repository.BulkRestoreAsync(ids, ct);
+        var restored = await Repository.BulkRestoreAsync(ids, WriteOrigin.Live, ct);
         return Ok(restored);
     }
 

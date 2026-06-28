@@ -6,6 +6,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -111,7 +112,7 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
     /// <param name="model">The pump snapshot to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created pump snapshot.</returns>
-    public async Task<PumpSnapshot> CreateAsync(PumpSnapshot model, CancellationToken ct = default)
+    public async Task<PumpSnapshot> CreateAsync(PumpSnapshot model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = PumpSnapshotMapper.ToEntity(model);
@@ -127,7 +128,7 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
     /// <param name="model">The updated snapshot data.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated pump snapshot.</returns>
-    public async Task<PumpSnapshot> UpdateAsync(Guid id, PumpSnapshot model, CancellationToken ct = default)
+    public async Task<PumpSnapshot> UpdateAsync(Guid id, PumpSnapshot model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.PumpSnapshots.FindAsync([id], ct)
@@ -142,7 +143,7 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
     /// </summary>
     /// <param name="id">The unique identifier.</param>
     /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.PumpSnapshots.FindAsync([id], ct)
@@ -152,7 +153,7 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
     }
 
     /// <inheritdoc />
-    public async Task<PumpSnapshot> RestoreAsync(Guid id, CancellationToken ct = default)
+    public async Task<PumpSnapshot> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.PumpSnapshots.IgnoreQueryFilters()
@@ -165,7 +166,7 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<PumpSnapshot>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    public async Task<IEnumerable<PumpSnapshot>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var idSet = ids.ToHashSet();
@@ -243,7 +244,7 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
     /// <param name="legacyId">The legacy identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         return await ctx.PumpSnapshots
@@ -254,7 +255,7 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
     /// <inheritdoc />
     public async Task<IEnumerable<PumpSnapshot>> BulkCreateAsync(
         IEnumerable<PumpSnapshot> records,
-        CancellationToken ct = default)
+        WriteOrigin origin, CancellationToken ct = default)
     {
         var entities = records.Select(PumpSnapshotMapper.ToEntity).ToList();
         if (entities.Count == 0)

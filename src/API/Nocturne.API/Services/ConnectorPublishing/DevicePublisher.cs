@@ -38,13 +38,13 @@ internal sealed class DevicePublisher : IDevicePublisher
     public async Task<bool> PublishDeviceStatusAsync(
         IEnumerable<DeviceStatus> deviceStatuses,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
             foreach (var ds in deviceStatuses)
             {
-                await _decomposer.DecomposeAsync(ds, cancellationToken);
+                await _decomposer.DecomposeAsync(ds, origin, cancellationToken);
             }
             return true;
         }
@@ -59,7 +59,7 @@ internal sealed class DevicePublisher : IDevicePublisher
     public async Task<bool> PublishDeviceEventsAsync(
         IEnumerable<DeviceEvent> records,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -67,7 +67,7 @@ internal sealed class DevicePublisher : IDevicePublisher
             if (recordList.Count == 0) return true;
 
             using (SystemAuditScope.Push(_auditContext))
-                await _deviceEventRepository.BulkCreateAsync(recordList, cancellationToken);
+                await _deviceEventRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             _logger.LogDebug("Published {Count} DeviceEvent records for {Source}", recordList.Count, source);
             return true;
         }

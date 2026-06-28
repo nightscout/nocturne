@@ -19,6 +19,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -216,7 +217,7 @@ public class NutritionControllerMealsTests : IDisposable
             Insulin = 5.5,
             Kind = BolusKind.Manual,
             CorrelationId = existingCid,
-        });
+        }, WriteOrigin.Live);
 
         // Act: a meal is posted with the same (DataSource, SyncIdentifier) but a
         // different supplied CorrelationId. The existing bolus's CorrelationId

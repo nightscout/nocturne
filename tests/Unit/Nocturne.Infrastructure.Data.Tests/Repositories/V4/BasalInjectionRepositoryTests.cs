@@ -9,6 +9,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
@@ -79,7 +80,7 @@ public class BasalInjectionRepositoryTests : IDisposable
     [Fact]
     public async Task FindBySyncIdentifierAsync_returns_live_row_when_present()
     {
-        var created = await _repo.CreateAsync(MakeInjection("aaps", "sync-1"));
+        var created = await _repo.CreateAsync(MakeInjection("aaps", "sync-1"), WriteOrigin.Live);
 
         var found = await _repo.FindBySyncIdentifierAsync("aaps", "sync-1");
 
@@ -92,9 +93,9 @@ public class BasalInjectionRepositoryTests : IDisposable
     [Fact]
     public async Task FindBySyncIdentifierAsync_returns_null_for_soft_deleted_row()
     {
-        var created = await _repo.CreateAsync(MakeInjection("aaps", "sync-2"));
+        var created = await _repo.CreateAsync(MakeInjection("aaps", "sync-2"), WriteOrigin.Live);
 
-        await _repo.DeleteAsync(created.Id);
+        await _repo.DeleteAsync(created.Id, WriteOrigin.Live);
 
         var found = await _repo.FindBySyncIdentifierAsync("aaps", "sync-2");
         found.Should().BeNull();
@@ -109,9 +110,9 @@ public class BasalInjectionRepositoryTests : IDisposable
     [Fact]
     public async Task DeleteAsync_sets_DeletedAt()
     {
-        var created = await _repo.CreateAsync(MakeInjection("aaps", "sync-3"));
+        var created = await _repo.CreateAsync(MakeInjection("aaps", "sync-3"), WriteOrigin.Live);
 
-        await _repo.DeleteAsync(created.Id);
+        await _repo.DeleteAsync(created.Id, WriteOrigin.Live);
 
         // Normal queries (with global filter) must not return the row.
         var visible = await _context.BasalInjections.FirstOrDefaultAsync(e => e.Id == created.Id);

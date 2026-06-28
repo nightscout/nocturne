@@ -74,7 +74,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     /// <inheritdoc/>
     public async Task<DecompositionResult> DecomposeAsync(
         Activity activity,
-        CancellationToken ct = default
+        WriteOrigin origin, CancellationToken ct = default
     )
     {
         var batch = new DecompositionBatchEntity
@@ -91,11 +91,11 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 
         if (IsHeartRate(activity))
         {
-            await DecomposeHeartRateAsync(activity, result, ct);
+            await DecomposeHeartRateAsync(activity, result, origin, ct);
         }
         else if (IsStepCount(activity))
         {
-            await DecomposeStepCountAsync(activity, result, ct);
+            await DecomposeStepCountAsync(activity, result, origin, ct);
         }
         else
         {
@@ -110,7 +110,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
 
     /// <inheritdoc/>
     public async Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Activity> activities, CancellationToken ct = default)
+        IReadOnlyList<Activity> activities, WriteOrigin origin, CancellationToken ct = default)
     {
         if (activities.Count == 0)
             return new DecompositionResult();
@@ -226,7 +226,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     /// re-migration path, where the legacy row is being replaced wholesale, so a
     /// soft-delete tombstone would only block re-creation by the same legacy id.
     /// </remarks>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         var deleted = 0;
 
@@ -326,7 +326,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     private async Task DecomposeHeartRateAsync(
         Activity activity,
         DecompositionResult result,
-        CancellationToken ct
+        WriteOrigin origin, CancellationToken ct
     )
     {
         var existing =
@@ -363,7 +363,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
     private async Task DecomposeStepCountAsync(
         Activity activity,
         DecompositionResult result,
-        CancellationToken ct
+        WriteOrigin origin, CancellationToken ct
     )
     {
         var existing =

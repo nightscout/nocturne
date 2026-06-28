@@ -8,6 +8,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -72,7 +73,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     public async Task<bool> PublishTreatmentsAsync(
         IEnumerable<Treatment> treatments,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -90,16 +91,16 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     public async Task<bool> PublishBolusesAsync(
         IEnumerable<Bolus> records,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
             var recordList = records.ToList();
             if (recordList.Count == 0) return true;
 
-            await ResolvePatientInsulinsForBolusesAsync(recordList, cancellationToken);
+            await ResolvePatientInsulinsForBolusesAsync(recordList, origin, cancellationToken);
             using (SystemAuditScope.Push(_auditContext))
-                await _bolusRepository.BulkCreateAsync(recordList, cancellationToken);
+                await _bolusRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             _logger.LogDebug("Published {Count} Bolus records for {Source}", recordList.Count, source);
             return true;
         }
@@ -114,7 +115,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     public async Task<bool> PublishCarbIntakesAsync(
         IEnumerable<CarbIntake> records,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -122,7 +123,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             if (recordList.Count == 0) return true;
 
             using (SystemAuditScope.Push(_auditContext))
-                await _carbIntakeRepository.BulkCreateAsync(recordList, cancellationToken);
+                await _carbIntakeRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             _logger.LogDebug("Published {Count} CarbIntake records for {Source}", recordList.Count, source);
             return true;
         }
@@ -137,7 +138,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     public async Task<bool> PublishBGChecksAsync(
         IEnumerable<BGCheck> records,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -145,7 +146,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             if (recordList.Count == 0) return true;
 
             using (SystemAuditScope.Push(_auditContext))
-                await _bgCheckRepository.BulkCreateAsync(recordList, cancellationToken);
+                await _bgCheckRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             _logger.LogDebug("Published {Count} BGCheck records for {Source}", recordList.Count, source);
             return true;
         }
@@ -160,7 +161,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     public async Task<bool> PublishBolusCalculationsAsync(
         IEnumerable<BolusCalculation> records,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -168,7 +169,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             if (recordList.Count == 0) return true;
 
             using (SystemAuditScope.Push(_auditContext))
-                await _bolusCalculationRepository.BulkCreateAsync(recordList, cancellationToken);
+                await _bolusCalculationRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             _logger.LogDebug("Published {Count} BolusCalculation records for {Source}", recordList.Count, source);
             return true;
         }
@@ -183,7 +184,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     public async Task<bool> PublishTempBasalsAsync(
         IEnumerable<TempBasal> records,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -218,7 +219,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
                         + "(rate differs from programmed basal schedule) for {Source}",
                         reclassifiedCount, recordList.Count, source);
 
-                await _tempBasalRepository.BulkCreateAsync(recordList, cancellationToken);
+                await _tempBasalRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             }
             _logger.LogDebug("Published {Count} TempBasal records for {Source}", recordList.Count, source);
             return true;
@@ -283,16 +284,16 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     public async Task<bool> PublishBasalInjectionsAsync(
         IEnumerable<BasalInjection> records,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
             var recordList = records.ToList();
             if (recordList.Count == 0) return true;
 
-            await ResolvePatientInsulinsForBasalInjectionsAsync(recordList, cancellationToken);
+            await ResolvePatientInsulinsForBasalInjectionsAsync(recordList, origin, cancellationToken);
             using (SystemAuditScope.Push(_auditContext))
-                await _basalInjectionRepository.BulkCreateAsync(recordList, cancellationToken);
+                await _basalInjectionRepository.BulkCreateAsync(recordList, origin, cancellationToken);
 
             _logger.LogDebug("Published {Count} BasalInjection records for {Source}", recordList.Count, source);
             return true;
@@ -308,7 +309,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     public async Task<bool> PublishDecompositionBatchesAsync(
         IEnumerable<DecompositionBatch> batches,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -372,7 +373,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     /// <see cref="PatientInsulin"/> record and updates the context in place.
     /// </summary>
     private async Task ResolvePatientInsulinsForBolusesAsync(
-        List<Bolus> records, CancellationToken ct)
+        List<Bolus> records, WriteOrigin origin, CancellationToken ct)
     {
         var needsResolution = records
             .Where(r => r.InsulinContext is { PatientInsulinId: var id } && id == Guid.Empty)
@@ -385,7 +386,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         foreach (var bolus in needsResolution)
         {
             var resolved = await ResolveOrCreatePatientInsulinAsync(
-                bolus.InsulinContext!, InsulinRole.Bolus, cache, ct);
+                bolus.InsulinContext!, InsulinRole.Bolus, cache, origin, ct);
             bolus.InsulinContext = resolved;
         }
     }
@@ -396,7 +397,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     /// <see cref="PatientInsulin"/> record and updates the context in place.
     /// </summary>
     private async Task ResolvePatientInsulinsForBasalInjectionsAsync(
-        List<BasalInjection> records, CancellationToken ct)
+        List<BasalInjection> records, WriteOrigin origin, CancellationToken ct)
     {
         var needsResolution = records
             .Where(r => r.InsulinContext.PatientInsulinId == Guid.Empty)
@@ -409,7 +410,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         foreach (var injection in needsResolution)
         {
             var resolved = await ResolveOrCreatePatientInsulinAsync(
-                injection.InsulinContext, InsulinRole.Basal, cache, ct);
+                injection.InsulinContext, InsulinRole.Basal, cache, origin, ct);
             injection.InsulinContext = resolved;
         }
     }
@@ -433,6 +434,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         TreatmentInsulinContext context,
         InsulinRole role,
         List<PatientInsulin> cache,
+        WriteOrigin origin,
         CancellationToken ct)
     {
         var name = context.InsulinName;
@@ -474,7 +476,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
 
         PatientInsulin created;
         using (SystemAuditScope.Push(_auditContext))
-            created = await _patientInsulinRepository.CreateAsync(newInsulin, ct);
+            created = await _patientInsulinRepository.CreateAsync(newInsulin, origin, ct);
         cache.Add(created);
 
         _logger.LogInformation(

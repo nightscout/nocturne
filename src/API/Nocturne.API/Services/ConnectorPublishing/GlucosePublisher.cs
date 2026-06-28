@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -57,7 +58,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
     public async Task<bool> PublishEntriesAsync(
         IEnumerable<Entry> entries,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -78,7 +79,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
     public async Task<bool> PublishSensorGlucoseAsync(
         IEnumerable<SensorGlucose> records,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -88,7 +89,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
             await StampPatientDeviceIdsAsync(recordList, source, cancellationToken);
             List<SensorGlucose> created;
             using (SystemAuditScope.Push(_auditContext))
-                created = (await _sensorGlucoseRepository.BulkCreateAsync(recordList, cancellationToken)).ToList();
+                created = (await _sensorGlucoseRepository.BulkCreateAsync(recordList, origin, cancellationToken)).ToList();
             await UpdateLastReadingAtAsync(cancellationToken);
             await EvaluateAlertsForSensorGlucoseAsync(recordList, cancellationToken);
 

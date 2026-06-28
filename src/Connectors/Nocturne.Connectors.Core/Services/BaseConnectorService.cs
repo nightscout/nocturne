@@ -6,6 +6,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Core.Services;
 
@@ -539,7 +540,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Glucose.PublishEntriesAsync(entries, ConnectorSource, cancellationToken);
+        return await _publisher.Glucose.PublishEntriesAsync(entries, ConnectorSource, WriteOrigin.Live, cancellationToken); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -559,9 +560,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishTreatmentsAsync(
             treatments,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -581,9 +582,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Device.PublishDeviceStatusAsync(
             deviceStatuses,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -601,7 +602,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Metadata.PublishProfilesAsync(profiles, ConnectorSource, cancellationToken);
+        return await _publisher.Metadata.PublishProfilesAsync(profiles, ConnectorSource, WriteOrigin.Live, cancellationToken); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -619,7 +620,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Metadata.PublishFoodAsync(foods, ConnectorSource, cancellationToken);
+        return await _publisher.Metadata.PublishFoodAsync(foods, ConnectorSource, WriteOrigin.Live, cancellationToken); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -639,9 +640,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Metadata.PublishActivityAsync(
             activities,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -661,9 +662,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Metadata.PublishStateSpansAsync(
             stateSpans,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -683,9 +684,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Metadata.PublishSystemEventsAsync(
             systemEvents,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -747,9 +748,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Glucose.PublishSensorGlucoseAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -767,7 +768,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Treatments.PublishBolusesAsync(records, ConnectorSource, cancellationToken);
+        return await _publisher.Treatments.PublishBolusesAsync(records, ConnectorSource, WriteOrigin.Live, cancellationToken); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -785,7 +786,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Treatments.PublishDecompositionBatchesAsync(batches, ConnectorSource, cancellationToken);
+        return await _publisher.Treatments.PublishDecompositionBatchesAsync(batches, ConnectorSource, WriteOrigin.Live, cancellationToken); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -805,9 +806,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishCarbIntakesAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -825,7 +826,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Treatments.PublishBGChecksAsync(records, ConnectorSource, cancellationToken);
+        return await _publisher.Treatments.PublishBGChecksAsync(records, ConnectorSource, WriteOrigin.Live, cancellationToken); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -845,9 +846,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishBolusCalculationsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -865,7 +866,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Metadata.PublishNotesAsync(records, ConnectorSource, cancellationToken);
+        return await _publisher.Metadata.PublishNotesAsync(records, ConnectorSource, WriteOrigin.Live, cancellationToken); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -885,9 +886,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Device.PublishDeviceEventsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -907,9 +908,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishTempBasalsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     /// <summary>
@@ -929,9 +930,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishBasalInjectionsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
     }
 
     #endregion

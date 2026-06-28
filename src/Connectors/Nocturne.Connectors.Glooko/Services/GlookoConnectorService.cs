@@ -15,6 +15,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Glooko.Services;
 
@@ -710,7 +711,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             return;
 
         var importedEntries = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
-            foodEntryImports, ConnectorSource, cancellationToken);
+            foodEntryImports, ConnectorSource, WriteOrigin.Live, cancellationToken); // TODO(PR-D commit 3): source Backfill vs Live from initial-vs-catch-up
 
         if (importedEntries is not { Count: > 0 })
             return;

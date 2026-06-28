@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -43,18 +44,18 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <summary>Persist a new <see cref="ApsSnapshot"/> and return the saved entity.</summary>
     /// <param name="model">Record to create.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task<ApsSnapshot> CreateAsync(ApsSnapshot model, CancellationToken ct = default);
+    new Task<ApsSnapshot> CreateAsync(ApsSnapshot model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Replace an existing <see cref="ApsSnapshot"/> identified by <paramref name="id"/>.</summary>
     /// <param name="id">UUID v7 identifier of the record to update.</param>
     /// <param name="model">Updated record data.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task<ApsSnapshot> UpdateAsync(Guid id, ApsSnapshot model, CancellationToken ct = default);
+    new Task<ApsSnapshot> UpdateAsync(Guid id, ApsSnapshot model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Delete an <see cref="ApsSnapshot"/> by its UUID v7.</summary>
     /// <param name="id">UUID v7 identifier of the record to delete.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, CancellationToken ct = default);
+    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Delete the <see cref="ApsSnapshot"/> with the given legacy MongoDB ObjectId.
@@ -62,7 +63,7 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <param name="legacyId">Original MongoDB ObjectId string.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Retrieve <see cref="ApsSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
@@ -114,5 +115,5 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <returns>The records that were actually inserted (duplicates excluded).</returns>
     Task<IEnumerable<ApsSnapshot>> BulkCreateAsync(
         IEnumerable<ApsSnapshot> records,
-        CancellationToken ct = default);
+        WriteOrigin origin, CancellationToken ct = default);
 }

@@ -25,7 +25,7 @@ public interface ITreatmentDecomposer
     /// A single Treatment may produce multiple records (e.g., Bolus + CarbIntake for a Meal Bolus).
     /// Returns an empty result if the event type is unrecognized and no insulin/carbs are present.
     /// </returns>
-    Task<DecompositionResult> DecomposeAsync(Treatment treatment, CancellationToken ct = default);
+    Task<DecompositionResult> DecomposeAsync(Treatment treatment, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Decomposes a batch of legacy Treatments into v4 records using bulk-insert operations,
@@ -37,7 +37,7 @@ public interface ITreatmentDecomposer
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A single <see cref="DecompositionResult"/> containing all created v4 records.</returns>
     Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
+        IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes all v4 records that were decomposed from a legacy Treatment with the given ID.
@@ -45,7 +45,7 @@ public interface ITreatmentDecomposer
     /// <param name="legacyId">The legacy Treatment ID</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>Total number of v4 records deleted across all tables</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Bulk-deletes V4 treatment records matching the optional find filter (time range).
@@ -53,5 +53,5 @@ public interface ITreatmentDecomposer
     /// <param name="find">Optional Nightscout-compatible find query for time range filtering.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Total number of V4 records deleted across all treatment tables.</returns>
-    Task<long> BulkDeleteAsync(string? find, CancellationToken ct = default);
+    Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default);
 }

@@ -4,6 +4,7 @@ using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -53,7 +54,7 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
 
         await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
 
-        var created = await Repository.CreateAsync(model, ct);
+        var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
@@ -74,7 +75,7 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
 
         try
         {
-            var updated = await Repository.UpdateAsync(id, model, ct);
+            var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -156,7 +157,7 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
         if (string.IsNullOrEmpty(dataSource) || string.IsNullOrEmpty(syncIdentifier))
             return BadRequest("dataSource and syncIdentifier are required");
 
-        var deleted = await ((IBolusRepository)Repository).DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, ct);
+        var deleted = await ((IBolusRepository)Repository).DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, WriteOrigin.Live, ct);
         return deleted > 0 ? NoContent() : NotFound();
     }
 

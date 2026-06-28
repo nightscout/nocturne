@@ -6,6 +6,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -104,7 +105,7 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     /// <param name="model">The basal injection to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created or updated basal injection record.</returns>
-    public async Task<BasalInjection> CreateAsync(BasalInjection model, CancellationToken ct = default)
+    public async Task<BasalInjection> CreateAsync(BasalInjection model, WriteOrigin origin, CancellationToken ct = default)
     {
         if (!string.IsNullOrEmpty(model.DataSource) && !string.IsNullOrEmpty(model.SyncIdentifier))
         {
@@ -133,7 +134,7 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     /// <param name="model">The updated record data.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated basal injection record.</returns>
-    public async Task<BasalInjection> UpdateAsync(Guid id, BasalInjection model, CancellationToken ct = default)
+    public async Task<BasalInjection> UpdateAsync(Guid id, BasalInjection model, WriteOrigin origin, CancellationToken ct = default)
     {
         var entity =
             await _context.BasalInjections.FirstOrDefaultAsync(e => e.Id == id, ct)
@@ -151,7 +152,7 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     /// </summary>
     /// <param name="id">The unique identifier.</param>
     /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         var entity =
             await _context.BasalInjections.FirstOrDefaultAsync(e => e.Id == id, ct)
@@ -161,7 +162,7 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     }
 
     /// <inheritdoc />
-    public async Task<BasalInjection> RestoreAsync(Guid id, CancellationToken ct = default)
+    public async Task<BasalInjection> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         var entity = await _context.BasalInjections.IgnoreQueryFilters()
             .Where(e => e.TenantId == _context.TenantId && e.Id == id && e.DeletedAt != null)
@@ -173,7 +174,7 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<BasalInjection>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    public async Task<IEnumerable<BasalInjection>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         var idSet = ids.ToHashSet();
         var entities = await _context.BasalInjections.IgnoreQueryFilters()
@@ -242,7 +243,7 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     /// DeduplicationService participation (BasalInjection is LegacyId-only / SyncId-keyed, never
     /// cross-connector dedup-linked).
     /// </summary>
-    public async Task<IEnumerable<BasalInjection>> BulkCreateAsync(IEnumerable<BasalInjection> records, CancellationToken ct = default)
+    public async Task<IEnumerable<BasalInjection>> BulkCreateAsync(IEnumerable<BasalInjection> records, WriteOrigin origin, CancellationToken ct = default)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
@@ -353,7 +354,7 @@ public class BasalInjectionRepository : IBasalInjectionRepository
         });
     }
 
-    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default)
+    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default)
     {
         var entities = await _context.BasalInjections
             .Where(e => e.DataSource == dataSource && e.SyncIdentifier == syncIdentifier)

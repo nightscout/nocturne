@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
@@ -67,7 +68,7 @@ public class DedupDeltaGoldenTests
             Bi(10, "aaps", legacyId: "bi-1"),
             Bi(11, "loop", legacyId: "bi-2"),
             Bi(10, "aaps", legacyId: "bi-1"),
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         (await _fx.QueryAsync(tenant, ctx => ctx.BasalInjections.AsNoTracking().CountAsync()))
             .Should().Be(2, "intra-batch LegacyId dedup collapses the duplicate");
@@ -90,7 +91,7 @@ public class DedupDeltaGoldenTests
         {
             Bi(10, "aaps", legacyId: "bi-a", syncId: "bi-sync"),
             Bi(14, "aaps", legacyId: "bi-b", syncId: "bi-sync"),
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         var rows = await _fx.QueryAsync(tenant, ctx => ctx.BasalInjections.AsNoTracking().ToListAsync());
         rows.Should().HaveCount(1, "bulk now upserts on SyncIdentifier (D1 fix)");
@@ -104,8 +105,8 @@ public class DedupDeltaGoldenTests
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
         var repo = scope.ServiceProvider.GetRequiredService<IBasalInjectionRepository>();
 
-        await repo.CreateAsync(Bi(10, "aaps", syncId: "bi-sync"), CancellationToken.None);
-        await repo.CreateAsync(Bi(14, "aaps", syncId: "bi-sync"), CancellationToken.None);
+        await repo.CreateAsync(Bi(10, "aaps", syncId: "bi-sync"), WriteOrigin.Live, CancellationToken.None);
+        await repo.CreateAsync(Bi(14, "aaps", syncId: "bi-sync"), WriteOrigin.Live, CancellationToken.None);
 
         var rows = await _fx.QueryAsync(tenant, ctx => ctx.BasalInjections.AsNoTracking().ToListAsync());
         rows.Should().HaveCount(1, "single CreateAsync upserts on SyncIdentifier");
@@ -121,8 +122,8 @@ public class DedupDeltaGoldenTests
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
         var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
 
-        await repo.CreateAsync(new SensorGlucose { Timestamp = T0, Mgdl = 100, DataSource = "dexcom", SyncIdentifier = "sg-s" }, CancellationToken.None);
-        await repo.CreateAsync(new SensorGlucose { Timestamp = T0, Mgdl = 142, DataSource = "dexcom", SyncIdentifier = "sg-s" }, CancellationToken.None);
+        await repo.CreateAsync(new SensorGlucose { Timestamp = T0, Mgdl = 100, DataSource = "dexcom", SyncIdentifier = "sg-s" }, WriteOrigin.Live, CancellationToken.None);
+        await repo.CreateAsync(new SensorGlucose { Timestamp = T0, Mgdl = 142, DataSource = "dexcom", SyncIdentifier = "sg-s" }, WriteOrigin.Live, CancellationToken.None);
 
         // D3 re-baseline: SensorGlucose single CreateAsync now upserts on (DataSource, SyncIdentifier)
         // in place (mirroring Bolus/CarbIntake), so the duplicate SyncId updates the existing row
@@ -139,8 +140,8 @@ public class DedupDeltaGoldenTests
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
         var repo = scope.ServiceProvider.GetRequiredService<IBolusRepository>();
 
-        await repo.CreateAsync(new Bolus { Timestamp = T0, Insulin = 4.0, DataSource = "aaps", SyncIdentifier = "b-s" }, CancellationToken.None);
-        await repo.CreateAsync(new Bolus { Timestamp = T0, Insulin = 4.6, DataSource = "aaps", SyncIdentifier = "b-s" }, CancellationToken.None);
+        await repo.CreateAsync(new Bolus { Timestamp = T0, Insulin = 4.0, DataSource = "aaps", SyncIdentifier = "b-s" }, WriteOrigin.Live, CancellationToken.None);
+        await repo.CreateAsync(new Bolus { Timestamp = T0, Insulin = 4.6, DataSource = "aaps", SyncIdentifier = "b-s" }, WriteOrigin.Live, CancellationToken.None);
 
         var rows = await _fx.QueryAsync(tenant, ctx => ctx.Boluses.AsNoTracking().ToListAsync());
         rows.Should().HaveCount(1, "Bolus single CreateAsync upserts on SyncId (the consistent reference)");
@@ -160,21 +161,21 @@ public class DedupDeltaGoldenTests
         {
             new CarbIntake { Timestamp = T0, Carbs = 30, DataSource = "aaps", LegacyId = "c-a" },
             new CarbIntake { Timestamp = T0.AddSeconds(10), Carbs = 30.5, DataSource = "loop", LegacyId = "c-b" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         var bolus = scope.ServiceProvider.GetRequiredService<IBolusRepository>();
         await bolus.BulkCreateAsync(new[]
         {
             new Bolus { Timestamp = T0, Insulin = 5.0, DataSource = "aaps", LegacyId = "b-a" },
             new Bolus { Timestamp = T0.AddSeconds(10), Insulin = 5.02, DataSource = "loop", LegacyId = "b-b" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         var sg = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
         await sg.BulkCreateAsync(new[]
         {
             new SensorGlucose { Timestamp = T0, Mgdl = 120, DataSource = "dexcom", LegacyId = "g-a" },
             new SensorGlucose { Timestamp = T0.AddSeconds(10), Mgdl = 120.5, DataSource = "libre", LegacyId = "g-b" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         // D7 re-baseline: each pair links into one canonical group, and ALL dedup participants now
         // exclude the non-primary via the base CountAsync + ApplyReadVisibility hook (was: only
@@ -217,14 +218,14 @@ public class DedupDeltaGoldenTests
         await repo.BulkCreateAsync(new[]
         {
             new SensorGlucose { Timestamp = T0, Mgdl = 100, DataSource = "dexcom", SyncIdentifier = "sg-B" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         // 2. C is a fresh insert at T0+10s; B is SyncId-upserted onto T0+10s with C's value.
         await repo.BulkCreateAsync(new[]
         {
             new SensorGlucose { Timestamp = T0.AddSeconds(10), Mgdl = 120, DataSource = "libre", LegacyId = "sg-C" },
             new SensorGlucose { Timestamp = T0.AddSeconds(10), Mgdl = 120, DataSource = "dexcom", SyncIdentifier = "sg-B" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         (await _fx.QueryAsync(tenant, ctx => ctx.SensorGlucose.AsNoTracking().CountAsync()))
             .Should().Be(2, "B upserts in place; C inserts — two physical rows");
@@ -246,7 +247,7 @@ public class DedupDeltaGoldenTests
         await repo.BulkCreateAsync(new[]
         {
             new Bolus { Timestamp = T0, Insulin = 4.0, DataSource = "aaps", SyncIdentifier = "b-B" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         // 2. C is a fresh insert at T0+10s; B is SyncId-upserted onto T0+10s with C's value — byte-for
         //    byte the SensorGlucose scenario above. After D4 moved Bolus's dedup to run post-commit,
@@ -257,7 +258,7 @@ public class DedupDeltaGoldenTests
         {
             new Bolus { Timestamp = T0.AddSeconds(10), Insulin = 5.0, DataSource = "loop", LegacyId = "b-C" },
             new Bolus { Timestamp = T0.AddSeconds(10), Insulin = 5.0, DataSource = "aaps", SyncIdentifier = "b-B" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         (await _fx.QueryAsync(tenant, ctx => ctx.Boluses.AsNoTracking().CountAsync()))
             .Should().Be(2, "B upserts in place; C inserts — two physical rows");
@@ -281,7 +282,7 @@ public class DedupDeltaGoldenTests
         await repo.BulkCreateAsync(new[]
         {
             new CarbIntake { Timestamp = T0, Carbs = 30, DataSource = "aaps", SyncIdentifier = "c-B" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         // 2. C is a fresh insert at T0+10s; B is SyncId-upserted onto T0+10s with C's value — byte-for
         //    byte the Bolus/SensorGlucose scenarios above. CarbIntake had the same D4 post-commit flip
@@ -291,7 +292,7 @@ public class DedupDeltaGoldenTests
         {
             new CarbIntake { Timestamp = T0.AddSeconds(10), Carbs = 45, DataSource = "loop", LegacyId = "c-C" },
             new CarbIntake { Timestamp = T0.AddSeconds(10), Carbs = 45, DataSource = "aaps", SyncIdentifier = "c-B" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         (await _fx.QueryAsync(tenant, ctx => ctx.CarbIntakes.AsNoTracking().CountAsync()))
             .Should().Be(2, "B upserts in place; C inserts — two physical rows");

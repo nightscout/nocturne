@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
@@ -41,7 +42,7 @@ public class LegacyIdOnlyGoldenTests
             new MeterGlucose { Timestamp = T0, Mgdl = 100, DataSource = "aaps", LegacyId = "m-1" },
             new MeterGlucose { Timestamp = T0.AddSeconds(5), Mgdl = 101, DataSource = "loop", LegacyId = "m-2" },
             new MeterGlucose { Timestamp = T0, Mgdl = 100, DataSource = "aaps", LegacyId = "m-1" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
         await AssertLegacyIdDedupAndNoLinksAsync(tenant, ctx => ctx.MeterGlucose.AsNoTracking().CountAsync());
     }
 
@@ -56,7 +57,7 @@ public class LegacyIdOnlyGoldenTests
             new Calibration { Timestamp = T0, DataSource = "dexcom", LegacyId = "cal-1" },
             new Calibration { Timestamp = T0.AddSeconds(5), DataSource = "dexcom", LegacyId = "cal-2" },
             new Calibration { Timestamp = T0, DataSource = "dexcom", LegacyId = "cal-1" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
         await AssertLegacyIdDedupAndNoLinksAsync(tenant, ctx => ctx.Calibrations.AsNoTracking().CountAsync());
     }
 
@@ -71,7 +72,7 @@ public class LegacyIdOnlyGoldenTests
             new ApsSnapshot { Timestamp = T0, DataSource = "loop", LegacyId = "aps-1" },
             new ApsSnapshot { Timestamp = T0.AddSeconds(5), DataSource = "loop", LegacyId = "aps-2" },
             new ApsSnapshot { Timestamp = T0, DataSource = "loop", LegacyId = "aps-1" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
         await AssertLegacyIdDedupAndNoLinksAsync(tenant, ctx => ctx.ApsSnapshots.AsNoTracking().CountAsync());
     }
 
@@ -86,7 +87,7 @@ public class LegacyIdOnlyGoldenTests
             new PumpSnapshot { Timestamp = T0, DataSource = "loop", LegacyId = "pump-1" },
             new PumpSnapshot { Timestamp = T0.AddSeconds(5), DataSource = "loop", LegacyId = "pump-2" },
             new PumpSnapshot { Timestamp = T0, DataSource = "loop", LegacyId = "pump-1" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
         await AssertLegacyIdDedupAndNoLinksAsync(tenant, ctx => ctx.PumpSnapshots.AsNoTracking().CountAsync());
     }
 
@@ -101,7 +102,7 @@ public class LegacyIdOnlyGoldenTests
             new UploaderSnapshot { Timestamp = T0, DataSource = "xdrip", LegacyId = "up-1" },
             new UploaderSnapshot { Timestamp = T0.AddSeconds(5), DataSource = "xdrip", LegacyId = "up-2" },
             new UploaderSnapshot { Timestamp = T0, DataSource = "xdrip", LegacyId = "up-1" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
         await AssertLegacyIdDedupAndNoLinksAsync(tenant, ctx => ctx.UploaderSnapshots.AsNoTracking().CountAsync());
     }
 
@@ -116,7 +117,7 @@ public class LegacyIdOnlyGoldenTests
             new BasalSchedule { Timestamp = T0, DataSource = "aaps", LegacyId = "bs-1" },
             new BasalSchedule { Timestamp = T0.AddSeconds(5), DataSource = "aaps", LegacyId = "bs-2" },
             new BasalSchedule { Timestamp = T0, DataSource = "aaps", LegacyId = "bs-1" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
         await AssertLegacyIdDedupAndNoLinksAsync(tenant, ctx => ctx.BasalSchedules.AsNoTracking().CountAsync());
     }
 
@@ -131,7 +132,7 @@ public class LegacyIdOnlyGoldenTests
             new CarbRatioSchedule { Timestamp = T0, DataSource = "aaps", LegacyId = "cr-1" },
             new CarbRatioSchedule { Timestamp = T0.AddSeconds(5), DataSource = "aaps", LegacyId = "cr-2" },
             new CarbRatioSchedule { Timestamp = T0, DataSource = "aaps", LegacyId = "cr-1" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
         await AssertLegacyIdDedupAndNoLinksAsync(tenant, ctx => ctx.CarbRatioSchedules.AsNoTracking().CountAsync());
     }
 
@@ -146,7 +147,7 @@ public class LegacyIdOnlyGoldenTests
             new SensitivitySchedule { Timestamp = T0, DataSource = "aaps", LegacyId = "ss-1" },
             new SensitivitySchedule { Timestamp = T0.AddSeconds(5), DataSource = "aaps", LegacyId = "ss-2" },
             new SensitivitySchedule { Timestamp = T0, DataSource = "aaps", LegacyId = "ss-1" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
         await AssertLegacyIdDedupAndNoLinksAsync(tenant, ctx => ctx.SensitivitySchedules.AsNoTracking().CountAsync());
     }
 
@@ -161,7 +162,7 @@ public class LegacyIdOnlyGoldenTests
             new TargetRangeSchedule { Timestamp = T0, DataSource = "aaps", LegacyId = "tr-1" },
             new TargetRangeSchedule { Timestamp = T0.AddSeconds(5), DataSource = "aaps", LegacyId = "tr-2" },
             new TargetRangeSchedule { Timestamp = T0, DataSource = "aaps", LegacyId = "tr-1" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
         await AssertLegacyIdDedupAndNoLinksAsync(tenant, ctx => ctx.TargetRangeSchedules.AsNoTracking().CountAsync());
     }
 
@@ -176,7 +177,7 @@ public class LegacyIdOnlyGoldenTests
             new TherapySettings { Timestamp = T0, DataSource = "aaps", LegacyId = "th-1" },
             new TherapySettings { Timestamp = T0.AddSeconds(5), DataSource = "aaps", LegacyId = "th-2" },
             new TherapySettings { Timestamp = T0, DataSource = "aaps", LegacyId = "th-1" },
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
         await AssertLegacyIdDedupAndNoLinksAsync(tenant, ctx => ctx.TherapySettings.AsNoTracking().CountAsync());
     }
 }

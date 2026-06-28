@@ -658,7 +658,7 @@ internal class MigrationJob
 
             try
             {
-                await decomposer.DecomposeBatchAsync(entries, ct);
+                await decomposer.DecomposeBatchAsync(entries, WriteOrigin.Backfill, ct);
                 totalMigrated += entries.Length;
             }
             catch (Exception ex)
@@ -729,7 +729,7 @@ internal class MigrationJob
 
             try
             {
-                await decomposer.DecomposeBatchAsync(treatments, ct);
+                await decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Backfill, ct);
                 totalMigrated += treatments.Length;
             }
             catch (Exception ex)
@@ -802,7 +802,7 @@ internal class MigrationJob
 
             try
             {
-                await decomposer.DecomposeBatchAsync(statuses, ct);
+                await decomposer.DecomposeBatchAsync(statuses, WriteOrigin.Backfill, ct);
                 totalMigrated += statuses.Length;
             }
             catch (Exception ex)
@@ -875,7 +875,7 @@ internal class MigrationJob
                         profile.Id = Guid.CreateVersion7().ToString();
                     }
 
-                    await decomposer.DecomposeAsync(profile, ct);
+                    await decomposer.DecomposeAsync(profile, WriteOrigin.Backfill, ct);
                     totalMigrated++;
                     UpdateCollectionProgress(collectionName, profiles.Length, totalMigrated, totalFailed, false);
                     UpdateOverallProgress();
@@ -1038,7 +1038,7 @@ internal class MigrationJob
 
             try
             {
-                await decomposer.DecomposeBatchAsync(activities, ct);
+                await decomposer.DecomposeBatchAsync(activities, WriteOrigin.Backfill, ct);
                 totalMigrated += activities.Length;
             }
             catch (Exception ex)
@@ -1250,7 +1250,7 @@ internal class MigrationJob
 
         using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<Core.Contracts.V4.IDeviceStatusDecomposer>();
-        await decomposer.DecomposeAsync(status, ct);
+        await decomposer.DecomposeAsync(status, WriteOrigin.Backfill, ct);
     }
 
     private async Task TransformProfileAsync(
@@ -1295,7 +1295,7 @@ internal class MigrationJob
 
         using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<Nocturne.Core.Contracts.V4.IProfileDecomposer>();
-        await decomposer.DecomposeAsync(profile, ct);
+        await decomposer.DecomposeAsync(profile, WriteOrigin.Backfill, ct);
     }
 
     private async Task TransformFoodAsync(

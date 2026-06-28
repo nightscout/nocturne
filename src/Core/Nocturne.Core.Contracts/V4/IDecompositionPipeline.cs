@@ -20,7 +20,7 @@ public interface IDecompositionPipeline
     /// <param name="records">The legacy records to decompose.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="BatchDecompositionResult"/> summarizing successes and failures.</returns>
-    Task<BatchDecompositionResult> DecomposeAsync<T>(IEnumerable<T> records, CancellationToken ct = default) where T : class;
+    Task<BatchDecompositionResult> DecomposeAsync<T>(IEnumerable<T> records, WriteOrigin origin, CancellationToken ct = default) where T : class;
 
     /// <summary>
     /// Decomposes a single legacy record into v4 models via the appropriate
@@ -30,7 +30,7 @@ public interface IDecompositionPipeline
     /// <param name="record">The legacy record to decompose.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A <see cref="BatchDecompositionResult"/> with a single entry.</returns>
-    Task<BatchDecompositionResult> DecomposeAsync<T>(T record, CancellationToken ct = default) where T : class;
+    Task<BatchDecompositionResult> DecomposeAsync<T>(T record, WriteOrigin origin, CancellationToken ct = default) where T : class;
 
     /// <summary>
     /// Deletes all v4 records that were decomposed from a legacy record of type
@@ -40,5 +40,5 @@ public interface IDecompositionPipeline
     /// <param name="legacyId">The legacy record identifier.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The total number of v4 records deleted.</returns>
-    Task<int> DeleteByLegacyIdAsync<T>(string legacyId, CancellationToken ct = default) where T : class;
+    Task<int> DeleteByLegacyIdAsync<T>(string legacyId, WriteOrigin origin, CancellationToken ct = default) where T : class;
 }

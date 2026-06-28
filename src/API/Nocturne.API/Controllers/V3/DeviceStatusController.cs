@@ -274,7 +274,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             var projectedResults = new List<DeviceStatus>();
             foreach (var ds in recordsList)
             {
-                await _decomposer.DecomposeAsync(ds, cancellationToken);
+                await _decomposer.DecomposeAsync(ds, WriteOrigin.Live, cancellationToken);
 
                 // Project the V4 snapshots back to DeviceStatus shape for the response
                 var projected = ds;
@@ -386,8 +386,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             }
 
             // Delete old V4 records by legacy ID, then decompose the updated DeviceStatus
-            await _decomposer.DeleteByLegacyIdAsync(id, cancellationToken);
-            await _decomposer.DecomposeAsync(deviceStatus, cancellationToken);
+            await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
+            await _decomposer.DecomposeAsync(deviceStatus, WriteOrigin.Live, cancellationToken);
 
             // Project the V4 snapshots back to DeviceStatus shape for the response
             var updated = await _projection.GetByIdAsync(id, cancellationToken) ?? deviceStatus;
@@ -447,7 +447,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             var deviceStatusToDelete = await _projection.GetByIdAsync(id, cancellationToken);
 
             // Delete V4 snapshot records by legacy ID
-            var deleted = await _decomposer.DeleteByLegacyIdAsync(id, cancellationToken);
+            var deleted = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
 
             if (deleted == 0 && deviceStatusToDelete == null)
             {

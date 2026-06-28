@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -18,7 +19,7 @@ public interface IBasalInjectionRepository : IV4Repository<BasalInjection>
     /// <param name="syncIdentifier">The external sync identifier (e.g., UUID from the uploading system).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default);
+    Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Find a single <see cref="BasalInjection"/> matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>
@@ -34,7 +35,7 @@ public interface IBasalInjectionRepository : IV4Repository<BasalInjection>
     /// <param name="records">The records to create.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The created records (excludes duplicates).</returns>
-    Task<IEnumerable<BasalInjection>> BulkCreateAsync(IEnumerable<BasalInjection> records, CancellationToken ct = default);
+    Task<IEnumerable<BasalInjection>> BulkCreateAsync(IEnumerable<BasalInjection> records, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Retrieve the timestamp of the most recently stored <see cref="BasalInjection"/>, optionally scoped to a data source.

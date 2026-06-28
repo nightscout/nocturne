@@ -9,6 +9,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -150,7 +151,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     /// <param name="model">The sensor glucose record to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created or updated sensor glucose record.</returns>
-    public override async Task<SensorGlucose> CreateAsync(SensorGlucose model, CancellationToken ct = default)
+    public override async Task<SensorGlucose> CreateAsync(SensorGlucose model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         if (!string.IsNullOrEmpty(model.DataSource) && !string.IsNullOrEmpty(model.SyncIdentifier))
@@ -262,7 +263,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     /// rows skip self-relinking and add no match candidates.
     /// </summary>
     protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<SensorGlucoseEntity> inserted, CancellationToken ct)
+        NocturneDbContext ctx, IReadOnlyList<SensorGlucoseEntity> inserted, WriteOrigin origin, CancellationToken ct)
     {
         if (inserted.Count == 0) return;
 

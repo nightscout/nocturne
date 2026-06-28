@@ -6,6 +6,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -87,7 +88,7 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     /// <param name="model">The APS snapshot to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created APS snapshot.</returns>
-    public async Task<ApsSnapshot> CreateAsync(ApsSnapshot model, CancellationToken ct = default)
+    public async Task<ApsSnapshot> CreateAsync(ApsSnapshot model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = ApsSnapshotMapper.ToEntity(model);
@@ -103,7 +104,7 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     /// <param name="model">The updated snapshot data.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated APS snapshot.</returns>
-    public async Task<ApsSnapshot> UpdateAsync(Guid id, ApsSnapshot model, CancellationToken ct = default)
+    public async Task<ApsSnapshot> UpdateAsync(Guid id, ApsSnapshot model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.ApsSnapshots.FindAsync([id], ct)
@@ -118,7 +119,7 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     /// </summary>
     /// <param name="id">The unique identifier.</param>
     /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.ApsSnapshots.FindAsync([id], ct)
@@ -128,7 +129,7 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     }
 
     /// <inheritdoc />
-    public async Task<ApsSnapshot> RestoreAsync(Guid id, CancellationToken ct = default)
+    public async Task<ApsSnapshot> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.ApsSnapshots.IgnoreQueryFilters()
@@ -141,7 +142,7 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<ApsSnapshot>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    public async Task<IEnumerable<ApsSnapshot>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var idSet = ids.ToHashSet();
@@ -241,7 +242,7 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     /// <param name="legacyId">The legacy identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         return await ctx.ApsSnapshots
@@ -292,7 +293,7 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     /// <inheritdoc />
     public async Task<IEnumerable<ApsSnapshot>> BulkCreateAsync(
         IEnumerable<ApsSnapshot> records,
-        CancellationToken ct = default)
+        WriteOrigin origin, CancellationToken ct = default)
     {
         var entities = records.Select(ApsSnapshotMapper.ToEntity).ToList();
         if (entities.Count == 0)

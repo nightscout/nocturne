@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
@@ -39,10 +40,10 @@ public class AuditDeltaGoldenTests
         var repo = scope.ServiceProvider.GetRequiredService<IBGCheckRepository>();
 
         var created = await repo.CreateAsync(
-            new BGCheck { Timestamp = T0, Glucose = 95, DataSource = "manual", LegacyId = "bg-del" },
+            new BGCheck { Timestamp = T0, Glucose = 95, DataSource = "manual", LegacyId = "bg-del" }, WriteOrigin.Live,
             CancellationToken.None);
 
-        var deleted = await repo.DeleteByLegacyIdAsync("bg-del", CancellationToken.None);
+        var deleted = await repo.DeleteByLegacyIdAsync("bg-del", WriteOrigin.Live, CancellationToken.None);
         deleted.Should().Be(1);
 
         // D5 re-baseline (was 0): the base DeleteByLegacyIdAsync now routes through the audited
@@ -58,10 +59,10 @@ public class AuditDeltaGoldenTests
         var repo = scope.ServiceProvider.GetRequiredService<IDeviceEventRepository>();
 
         var created = await repo.CreateAsync(
-            new DeviceEvent { Timestamp = T0, EventType = DeviceEventType.SiteChange, DataSource = "aaps", LegacyId = "de-del" },
+            new DeviceEvent { Timestamp = T0, EventType = DeviceEventType.SiteChange, DataSource = "aaps", LegacyId = "de-del" }, WriteOrigin.Live,
             CancellationToken.None);
 
-        var deleted = await repo.DeleteByLegacyIdAsync("de-del", CancellationToken.None);
+        var deleted = await repo.DeleteByLegacyIdAsync("de-del", WriteOrigin.Live, CancellationToken.None);
         deleted.Should().Be(1);
 
         // An AUDITED type wrote an audit row before D5 and still does after (unchanged).
