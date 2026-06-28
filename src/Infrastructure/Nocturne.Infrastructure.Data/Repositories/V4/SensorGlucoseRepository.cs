@@ -264,6 +264,8 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     protected override async Task PostCommitDedupAsync(
         NocturneDbContext ctx, IReadOnlyList<SensorGlucoseEntity> inserted, CancellationToken ct)
     {
+        if (inserted.Count == 0) return;
+
         try
         {
             var dedupInputs = inserted.Select(e => new DeduplicationInput(

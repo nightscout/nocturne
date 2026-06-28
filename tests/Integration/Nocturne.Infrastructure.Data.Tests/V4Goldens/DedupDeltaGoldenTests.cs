@@ -21,7 +21,7 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 /// moved Bolus's dedup to run post-commit, BOTH now collapse C with the upserted B into ONE canonical
 /// group (the DeduplicationService runs on a separate connection and sees B's upserted physical value
 /// only once committed):
-///   D2_SensorGlucose_UnionFeed_NewPlusUpsertedSibling_CollapseIntoOneGroup     → ONE canonical group.
+///   D2_SensorGlucose_PostCommitDedup_NewPlusUpsertedSibling_CollapseIntoOneGroup     → ONE canonical group.
 ///   D2_Bolus_PostCommitDedup_NewPlusUpsertedSibling_CollapseIntoOneGroup       → ONE canonical group.
 /// Both run the same scenario byte-for-byte: seed a SyncId-keyed row B in its own group, then a
 /// second BulkCreateAsync carrying a fresh insert C (no SyncId) at B's time+value AND a SyncId-upsert
@@ -207,7 +207,7 @@ public class DedupDeltaGoldenTests
     //   2. Batch = [ C: fresh insert at T0+10s with B's value; B: SyncId-upsert moved to T0+10s ].
 
     [Fact]
-    public async Task D2_SensorGlucose_UnionFeed_NewPlusUpsertedSibling_CollapseIntoOneGroup()
+    public async Task D2_SensorGlucose_PostCommitDedup_NewPlusUpsertedSibling_CollapseIntoOneGroup()
     {
         var tenant = Guid.NewGuid();
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
