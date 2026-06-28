@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -36,8 +37,9 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<BolusRepository> logger)
-        : base(contextFactory, auditContext)
+        ILogger<BolusRepository> logger,
+        IV4RecordBroadcaster<Bolus>? broadcaster = null)
+        : base(contextFactory, auditContext, broadcaster)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;
@@ -167,14 +169,19 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
             {
                 BolusMapper.UpdateEntity(existing, model);
                 await ctx.SaveChangesAsync(ct);
-                return BolusMapper.ToDomainModel(existing);
+                var upserted = BolusMapper.ToDomainModel(existing);
+                // A single explicit upsert always broadcasts (no material-change gate on the single path).
+                await RaiseBroadcastAsync([], [upserted], [], origin, ct);
+                return upserted;
             }
         }
 
         var entity = BolusMapper.ToEntity(model);
         ctx.Boluses.Add(entity);
         await ctx.SaveChangesAsync(ct);
-        return BolusMapper.ToDomainModel(entity);
+        var created = BolusMapper.ToDomainModel(entity);
+        await RaiseBroadcastAsync([created], [], [], origin, ct);
+        return created;
     }
 
     /// <summary>
@@ -216,7 +223,7 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
     /// rows in the DB by that key and update them in place. Persists the updates inside the transaction
     /// before returning so the base's insert loop (which clears the tracker) doesn't lose them.
     /// </summary>
-    protected override async Task<(List<BolusEntity> Updated, List<BolusEntity> ToInsert)> SplitUpsertsAsync(
+    protected override async Task<UpsertSplit> SplitUpsertsAsync(
         NocturneDbContext ctx, List<BolusEntity> entities, CancellationToken ct)
     {
         // Intra-batch SyncIdentifier dedup: keep last occurrence per
@@ -237,8 +244,9 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
             .ToList();
 
         var updatedEntities = new List<BolusEntity>();
+        var materiallyChanged = new List<BolusEntity>();
         if (syncKeyed.Count == 0)
-            return (updatedEntities, entities);
+            return new UpsertSplit(updatedEntities, materiallyChanged, entities);
 
         var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
         var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
@@ -265,6 +273,9 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
                 var domain = BolusMapper.ToDomainModel(entity);
                 BolusMapper.UpdateEntity(existing, domain);
                 updatedEntities.Add(existing);
+                // Capture material changes now, before SaveChanges clears the modified flags.
+                if (HasMaterialChange(ctx, existing))
+                    materiallyChanged.Add(existing);
             }
             else
             {
@@ -278,7 +289,7 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
             await ctx.SaveChangesAsync(ct);
         }
 
-        return (updatedEntities, toInsert);
+        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert);
     }
 
     /// <summary>

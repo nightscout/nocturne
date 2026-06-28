@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -37,8 +38,9 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<CarbIntakeRepository> logger)
-        : base(contextFactory, auditContext)
+        ILogger<CarbIntakeRepository> logger,
+        IV4RecordBroadcaster<CarbIntake>? broadcaster = null)
+        : base(contextFactory, auditContext, broadcaster)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;
@@ -166,14 +168,19 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
             {
                 CarbIntakeMapper.UpdateEntity(existing, model);
                 await ctx.SaveChangesAsync(ct);
-                return CarbIntakeMapper.ToDomainModel(existing);
+                var upserted = CarbIntakeMapper.ToDomainModel(existing);
+                // A single explicit upsert always broadcasts (no material-change gate on the single path).
+                await RaiseBroadcastAsync([], [upserted], [], origin, ct);
+                return upserted;
             }
         }
 
         var entity = CarbIntakeMapper.ToEntity(model);
         ctx.CarbIntakes.Add(entity);
         await ctx.SaveChangesAsync(ct);
-        return CarbIntakeMapper.ToDomainModel(entity);
+        var created = CarbIntakeMapper.ToDomainModel(entity);
+        await RaiseBroadcastAsync([created], [], [], origin, ct);
+        return created;
     }
 
     /// <summary>
@@ -215,7 +222,7 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
     /// rows in the DB by that key and update them in place. Persists the updates inside the transaction
     /// before returning so the base's insert loop (which clears the tracker) doesn't lose them.
     /// </summary>
-    protected override async Task<(List<CarbIntakeEntity> Updated, List<CarbIntakeEntity> ToInsert)> SplitUpsertsAsync(
+    protected override async Task<UpsertSplit> SplitUpsertsAsync(
         NocturneDbContext ctx, List<CarbIntakeEntity> entities, CancellationToken ct)
     {
         // Intra-batch SyncIdentifier dedup: keep last occurrence per
@@ -236,8 +243,9 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
             .ToList();
 
         var updatedEntities = new List<CarbIntakeEntity>();
+        var materiallyChanged = new List<CarbIntakeEntity>();
         if (syncKeyed.Count == 0)
-            return (updatedEntities, entities);
+            return new UpsertSplit(updatedEntities, materiallyChanged, entities);
 
         var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
         var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
@@ -264,6 +272,9 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
                 var domain = CarbIntakeMapper.ToDomainModel(entity);
                 CarbIntakeMapper.UpdateEntity(existing, domain);
                 updatedEntities.Add(existing);
+                // Capture material changes now, before SaveChanges clears the modified flags.
+                if (HasMaterialChange(ctx, existing))
+                    materiallyChanged.Add(existing);
             }
             else
             {
@@ -277,7 +288,7 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
             await ctx.SaveChangesAsync(ct);
         }
 
-        return (updatedEntities, toInsert);
+        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert);
     }
 
     /// <summary>

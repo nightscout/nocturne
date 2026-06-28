@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -36,8 +37,9 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<DeviceEventRepository> logger)
-        : base(contextFactory, auditContext)
+        ILogger<DeviceEventRepository> logger,
+        IV4RecordBroadcaster<DeviceEvent>? broadcaster = null)
+        : base(contextFactory, auditContext, broadcaster)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;

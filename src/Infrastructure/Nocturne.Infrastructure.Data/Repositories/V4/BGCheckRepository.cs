@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -36,8 +37,9 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<BGCheckRepository> logger)
-        : base(contextFactory, auditContext)
+        ILogger<BGCheckRepository> logger,
+        IV4RecordBroadcaster<BGCheck>? broadcaster = null)
+        : base(contextFactory, auditContext, broadcaster)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;

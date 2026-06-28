@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -36,9 +37,10 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<BolusCalculationRepository> logger
+        ILogger<BolusCalculationRepository> logger,
+        IV4RecordBroadcaster<BolusCalculation>? broadcaster = null
     )
-        : base(contextFactory, auditContext)
+        : base(contextFactory, auditContext, broadcaster)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;

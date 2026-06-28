@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -36,8 +37,9 @@ public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepositor
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<NoteRepository> logger)
-        : base(contextFactory, auditContext)
+        ILogger<NoteRepository> logger,
+        IV4RecordBroadcaster<Note>? broadcaster = null)
+        : base(contextFactory, auditContext, broadcaster)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;

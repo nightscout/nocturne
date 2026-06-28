@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -25,8 +26,8 @@ public class SensitivityScheduleRepository : V4RepositoryBase<SensitivitySchedul
     /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
     /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public SensitivityScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<SensitivityScheduleRepository> logger)
-        : base(contextFactory, auditContext)
+    public SensitivityScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<SensitivityScheduleRepository> logger, IV4RecordBroadcaster<SensitivitySchedule>? broadcaster = null)
+        : base(contextFactory, auditContext, broadcaster)
     {
     }
 

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -36,9 +37,10 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<SensorGlucoseRepository> logger
+        ILogger<SensorGlucoseRepository> logger,
+        IV4RecordBroadcaster<SensorGlucose>? broadcaster = null
     )
-        : base(contextFactory, auditContext)
+        : base(contextFactory, auditContext, broadcaster)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;
@@ -164,14 +166,19 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
             {
                 SensorGlucoseMapper.UpdateEntity(existing, model);
                 await ctx.SaveChangesAsync(ct);
-                return SensorGlucoseMapper.ToDomainModel(existing);
+                var upserted = SensorGlucoseMapper.ToDomainModel(existing);
+                // A single explicit upsert always broadcasts (no material-change gate on the single path).
+                await RaiseBroadcastAsync([], [upserted], [], origin, ct);
+                return upserted;
             }
         }
 
         var entity = SensorGlucoseMapper.ToEntity(model);
         ctx.SensorGlucose.Add(entity);
         await ctx.SaveChangesAsync(ct);
-        return SensorGlucoseMapper.ToDomainModel(entity);
+        var created = SensorGlucoseMapper.ToDomainModel(entity);
+        await RaiseBroadcastAsync([created], [], [], origin, ct);
+        return created;
     }
 
     /// <summary>
@@ -199,7 +206,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     /// timestamp instead of duplicating it. Persists the updates inside the transaction before returning
     /// so the base's insert loop (which clears the tracker) doesn't lose them. Mirrors BolusRepository.
     /// </summary>
-    protected override async Task<(List<SensorGlucoseEntity> Updated, List<SensorGlucoseEntity> ToInsert)> SplitUpsertsAsync(
+    protected override async Task<UpsertSplit> SplitUpsertsAsync(
         NocturneDbContext ctx, List<SensorGlucoseEntity> entities, CancellationToken ct)
     {
         // Intra-batch SyncIdentifier dedup: keep last occurrence per (DataSource, SyncIdentifier).
@@ -214,12 +221,13 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         // DB-level SyncIdentifier upsert: rows matched by (DataSource, SyncIdentifier) are updated
         // in place. Everything else falls through to the LegacyId/insert path below.
         var updatedEntities = new List<SensorGlucoseEntity>();
+        var materiallyChanged = new List<SensorGlucoseEntity>();
         var syncKeyed = entities
             .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
             .ToList();
 
         if (syncKeyed.Count == 0)
-            return (updatedEntities, entities);
+            return new UpsertSplit(updatedEntities, materiallyChanged, entities);
 
         var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
         var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
@@ -243,6 +251,9 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
                 var domain = SensorGlucoseMapper.ToDomainModel(entity);
                 SensorGlucoseMapper.UpdateEntity(existing, domain);
                 updatedEntities.Add(existing);
+                // Capture material changes now, before SaveChanges clears the modified flags.
+                if (HasMaterialChange(ctx, existing))
+                    materiallyChanged.Add(existing);
             }
             else
             {
@@ -253,7 +264,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         if (updatedEntities.Count > 0)
             await ctx.SaveChangesAsync(ct);
 
-        return (updatedEntities, toInsert);
+        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert);
     }
 
     /// <summary>
