@@ -269,4 +269,36 @@ public class DedupDeltaGoldenTests
         links.Select(l => l.CanonicalId).Distinct().Should()
             .HaveCount(1, "post-commit dedup sees B's upserted value, so C collapses with B into one group (D4)");
     }
+
+    [Fact]
+    public async Task D2_CarbIntake_PostCommitDedup_NewPlusUpsertedSibling_CollapseIntoOneGroup()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<ICarbIntakeRepository>();
+
+        // 1. Seed B (SyncId-keyed) — its own canonical group.
+        await repo.BulkCreateAsync(new[]
+        {
+            new CarbIntake { Timestamp = T0, Carbs = 30, DataSource = "aaps", SyncIdentifier = "c-B" },
+        }, CancellationToken.None);
+
+        // 2. C is a fresh insert at T0+10s; B is SyncId-upserted onto T0+10s with C's value — byte-for
+        //    byte the Bolus/SensorGlucose scenarios above. CarbIntake had the same D4 post-commit flip
+        //    but no dedicated golden; B's upserted value is committed and therefore visible to the dedup
+        //    engine's separate connection, so C value-matches B and they collapse into ONE group.
+        await repo.BulkCreateAsync(new[]
+        {
+            new CarbIntake { Timestamp = T0.AddSeconds(10), Carbs = 45, DataSource = "loop", LegacyId = "c-C" },
+            new CarbIntake { Timestamp = T0.AddSeconds(10), Carbs = 45, DataSource = "aaps", SyncIdentifier = "c-B" },
+        }, CancellationToken.None);
+
+        (await _fx.QueryAsync(tenant, ctx => ctx.CarbIntakes.AsNoTracking().CountAsync()))
+            .Should().Be(2, "B upserts in place; C inserts — two physical rows");
+
+        var links = await _fx.QueryAsync(tenant, ctx =>
+            ctx.LinkedRecords.AsNoTracking().Where(lr => lr.RecordType == "carbintake").ToListAsync());
+        links.Select(l => l.CanonicalId).Distinct().Should()
+            .HaveCount(1, "post-commit dedup sees B's upserted value, so C collapses with B into one group");
+    }
 }

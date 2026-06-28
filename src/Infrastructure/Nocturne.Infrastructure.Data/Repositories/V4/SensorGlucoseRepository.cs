@@ -306,12 +306,14 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
 
             await tx.CommitAsync(ct);
 
-            // Insert-time deduplication: link saved records to canonical groups. Include the in-place
-            // updates (re-corrected timestamps) so their canonical grouping is re-driven on the new mills.
+            // Insert-time deduplication: link newly inserted records to canonical groups. Feeds
+            // inserts-only (matching Bolus/CarbIntake). Since dedup runs after commit (D4), upserted
+            // rows are reached as committed canonicals via their committed value, so re-feeding them is
+            // redundant — already-linked rows skip self-relinking and add no match candidates.
             var saved = entities.Concat(updatedEntities).ToList();
             try
             {
-                var dedupInputs = saved.Select(e => new DeduplicationInput(
+                var dedupInputs = entities.Select(e => new DeduplicationInput(
                     RecordId: e.Id,
                     Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                     DataSource: e.DataSource ?? "unknown",
