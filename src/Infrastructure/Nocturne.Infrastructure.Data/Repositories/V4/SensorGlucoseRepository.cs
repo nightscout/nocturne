@@ -277,7 +277,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.SensorGlucose, dedupInputs, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", inserted.Count);
         }

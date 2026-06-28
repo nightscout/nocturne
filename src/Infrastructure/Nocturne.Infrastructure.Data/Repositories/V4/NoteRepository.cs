@@ -169,7 +169,7 @@ public class NoteRepository : V4RepositoryBase<Note, NoteEntity>, INoteRepositor
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.Note, dedupInputs, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Note", inserted.Count);
         }

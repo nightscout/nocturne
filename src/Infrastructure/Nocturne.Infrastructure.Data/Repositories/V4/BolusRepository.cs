@@ -303,7 +303,7 @@ public class BolusRepository : V4RepositoryBase<Bolus, BolusEntity>, IBolusRepos
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.Bolus, dedupInputs, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Bolus", inserted.Count);
         }

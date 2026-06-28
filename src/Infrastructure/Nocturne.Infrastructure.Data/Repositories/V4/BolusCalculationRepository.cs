@@ -143,7 +143,7 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.BolusCalculation, dedupInputs, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BolusCalculation", inserted.Count);
         }

@@ -327,7 +327,7 @@ public class TempBasalRepository : ITempBasalRepository
 
                 await _deduplicationService.DeduplicateBatchAsync(RecordType.TempBasal, dedupInputs, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "TempBasal", entities.Count);
             }

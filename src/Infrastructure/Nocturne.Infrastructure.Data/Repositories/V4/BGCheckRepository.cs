@@ -155,7 +155,7 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.BGCheck, dedupInputs, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BGCheck", inserted.Count);
         }

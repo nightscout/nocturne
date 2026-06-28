@@ -302,7 +302,7 @@ public class CarbIntakeRepository : V4RepositoryBase<CarbIntake, CarbIntakeEntit
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.CarbIntake, dedupInputs, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "CarbIntake", inserted.Count);
         }

@@ -170,7 +170,7 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.DeviceEvent, dedupInputs, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "DeviceEvent", inserted.Count);
         }
