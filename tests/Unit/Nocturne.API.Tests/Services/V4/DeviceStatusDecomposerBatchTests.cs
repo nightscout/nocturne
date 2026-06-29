@@ -42,16 +42,16 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         // BulkCreateAsync returns the input records
         _apsRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.ApsSnapshot> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.ApsSnapshot> records, WriteOrigin origin, CancellationToken _) => records);
         _pumpRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.PumpSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.PumpSnapshot> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.PumpSnapshot> records, WriteOrigin origin, CancellationToken _) => records);
         _uploaderRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.UploaderSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.UploaderSnapshot> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.UploaderSnapshot> records, WriteOrigin origin, CancellationToken _) => records);
         _extrasRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceStatusExtras>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.DeviceStatusExtras> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.DeviceStatusExtras> records, WriteOrigin origin, CancellationToken _) => records);
 
         _decomposer = new DeviceStatusDecomposer(
             _context,

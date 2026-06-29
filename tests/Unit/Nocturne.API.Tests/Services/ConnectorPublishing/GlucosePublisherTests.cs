@@ -172,7 +172,7 @@ public class GlucosePublisherTests
         List<SensorGlucose>? captured = null;
         _mockSensorGlucoseRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
+            .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((records, _, _) => captured = records.ToList())
             .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
 
         var records = new List<SensorGlucose>
@@ -197,7 +197,7 @@ public class GlucosePublisherTests
         List<SensorGlucose>? captured = null;
         _mockSensorGlucoseRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
+            .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((records, _, _) => captured = records.ToList())
             .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
 
         var records = new List<SensorGlucose>
@@ -233,7 +233,7 @@ public class GlucosePublisherTests
         List<SensorGlucose>? captured = null;
         _mockSensorGlucoseRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
+            .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((records, _, _) => captured = records.ToList())
             .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
 
         var records = new List<SensorGlucose>
@@ -268,7 +268,7 @@ public class GlucosePublisherTests
         List<SensorGlucose>? captured = null;
         _mockSensorGlucoseRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
+            .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((records, _, _) => captured = records.ToList())
             .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
 
         var records = new List<SensorGlucose>
@@ -305,7 +305,7 @@ public class GlucosePublisherTests
         List<SensorGlucose>? captured = null;
         _mockSensorGlucoseRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
+            .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((records, _, _) => captured = records.ToList())
             .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
 
         var records = new List<SensorGlucose>
@@ -341,7 +341,7 @@ public class GlucosePublisherTests
         List<SensorGlucose>? captured = null;
         _mockSensorGlucoseRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
+            .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((records, _, _) => captured = records.ToList())
             .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
 
         var records = new List<SensorGlucose>
@@ -376,7 +376,7 @@ public class GlucosePublisherTests
         List<SensorGlucose>? captured = null;
         _mockSensorGlucoseRepository
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<IEnumerable<SensorGlucose>, CancellationToken>((records, _) => captured = records.ToList())
+            .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((records, _, _) => captured = records.ToList())
             .ReturnsAsync(Enumerable.Empty<SensorGlucose>());
 
         var records = new List<SensorGlucose>

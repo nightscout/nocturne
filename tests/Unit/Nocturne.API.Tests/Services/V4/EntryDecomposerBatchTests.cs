@@ -33,13 +33,13 @@ public class EntryDecomposerBatchTests : IDisposable
         // BulkCreateAsync returns the input records
         _sgRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<SensorGlucose> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin origin, CancellationToken _) => records);
         _mgRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<MeterGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<MeterGlucose> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<MeterGlucose> records, WriteOrigin origin, CancellationToken _) => records);
         _calRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<Calibration>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Calibration> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<Calibration> records, WriteOrigin origin, CancellationToken _) => records);
 
         var mockConfigProvider = new Mock<IGlucoseProcessingConfigProvider>();
         mockConfigProvider.Setup(x => x.GetSourceDefaultsAsync(It.IsAny<CancellationToken>()))

@@ -240,31 +240,31 @@ public class ProfileDecomposerBatchTests : IDisposable
     private static void SetupBulkCreateReturnsInput(Mock<ITherapySettingsRepository> mock)
     {
         mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<TherapySettings>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<TherapySettings> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<TherapySettings> records, WriteOrigin origin, CancellationToken _) => records);
     }
 
     private static void SetupBulkCreateReturnsInput(Mock<IBasalScheduleRepository> mock)
     {
         mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<BasalSchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<BasalSchedule> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<BasalSchedule> records, WriteOrigin origin, CancellationToken _) => records);
     }
 
     private static void SetupBulkCreateReturnsInput(Mock<ICarbRatioScheduleRepository> mock)
     {
         mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<CarbRatioSchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<CarbRatioSchedule> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<CarbRatioSchedule> records, WriteOrigin origin, CancellationToken _) => records);
     }
 
     private static void SetupBulkCreateReturnsInput(Mock<ISensitivityScheduleRepository> mock)
     {
         mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<SensitivitySchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<SensitivitySchedule> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<SensitivitySchedule> records, WriteOrigin origin, CancellationToken _) => records);
     }
 
     private static void SetupBulkCreateReturnsInput(Mock<ITargetRangeScheduleRepository> mock)
     {
         mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<TargetRangeSchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<TargetRangeSchedule> records, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<TargetRangeSchedule> records, WriteOrigin origin, CancellationToken _) => records);
     }
 
     #endregion

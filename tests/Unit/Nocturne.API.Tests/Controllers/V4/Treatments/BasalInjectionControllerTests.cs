@@ -48,8 +48,8 @@ public class BasalInjectionControllerTests
     {
         _repoMock
             .Setup(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<BasalInjection, CancellationToken>((b, _) => onCreate(b))
-            .ReturnsAsync((BasalInjection b, CancellationToken _) => b);
+            .Callback<BasalInjection, WriteOrigin, CancellationToken>((b, _, _) => onCreate(b))
+            .ReturnsAsync((BasalInjection b, WriteOrigin origin, CancellationToken _) => b);
     }
 
     [Fact]

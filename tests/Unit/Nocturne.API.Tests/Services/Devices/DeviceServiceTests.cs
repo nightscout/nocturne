@@ -83,7 +83,7 @@ public class DeviceServiceTests
 
         _mockRepository
             .Setup(r => r.CreateAsync(It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Device device, CancellationToken _) => device);
+            .ReturnsAsync((Device device, WriteOrigin _, CancellationToken _) => device);
 
         // Act
         var result = await _service.ResolveAsync(category, type, serial, mills);
@@ -165,7 +165,7 @@ public class DeviceServiceTests
 
         _mockRepository
             .Setup(r => r.UpdateAsync(existingId, It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, Device d, CancellationToken _) => d);
+            .ReturnsAsync((Guid _, Device d, WriteOrigin _, CancellationToken _) => d);
 
         // Act
         var result = await _service.ResolveAsync(category, type, serial, newerMills);

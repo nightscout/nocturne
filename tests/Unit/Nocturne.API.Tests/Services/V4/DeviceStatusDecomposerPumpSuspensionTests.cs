@@ -65,14 +65,14 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
         // CreateAsync echoes the model with an Id assigned, like a real repo.
         _pumpRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.PumpSnapshot m, CancellationToken _) =>
+            .ReturnsAsync((V4Models.PumpSnapshot m, WriteOrigin origin, CancellationToken _) =>
             {
                 if (m.Id == Guid.Empty) m.Id = Guid.NewGuid();
                 return m;
             });
         _pumpRepoMock
             .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid id, V4Models.PumpSnapshot m, CancellationToken _) =>
+            .ReturnsAsync((Guid id, V4Models.PumpSnapshot m, WriteOrigin origin, CancellationToken _) =>
             {
                 m.Id = id;
                 return m;
@@ -311,7 +311,7 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
         var pinnedId = Guid.NewGuid();
         _pumpRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<V4Models.PumpSnapshot>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.PumpSnapshot m, CancellationToken _) =>
+            .ReturnsAsync((V4Models.PumpSnapshot m, WriteOrigin origin, CancellationToken _) =>
             {
                 m.Id = pinnedId;
                 return m;

@@ -31,8 +31,8 @@ public class BolusControllerTests
     {
         _repoMock
             .Setup(r => r.CreateAsync(It.IsAny<Bolus>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<Bolus, CancellationToken>((b, _) => onCreate(b))
-            .ReturnsAsync((Bolus b, CancellationToken _) => b);
+            .Callback<Bolus, WriteOrigin, CancellationToken>((b, _, _) => onCreate(b))
+            .ReturnsAsync((Bolus b, WriteOrigin origin, CancellationToken _) => b);
     }
 
     [Fact]
@@ -76,8 +76,8 @@ public class BolusControllerTests
             .ReturnsAsync(existing);
         _repoMock
             .Setup(r => r.UpdateAsync(id, It.IsAny<Bolus>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<Guid, Bolus, CancellationToken>((_, b, _) => captured = b)
-            .ReturnsAsync((Guid _, Bolus b, CancellationToken _) => b);
+            .Callback<Guid, Bolus, WriteOrigin, CancellationToken>((_, b, _, _) => captured = b)
+            .ReturnsAsync((Guid _, Bolus b, WriteOrigin origin, CancellationToken _) => b);
 
         var controller = CreateController();
         var request = new UpdateBolusRequest
@@ -132,8 +132,8 @@ public class BolusControllerTests
             .ReturnsAsync(existing);
         _repoMock
             .Setup(r => r.UpdateAsync(id, It.IsAny<Bolus>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<Guid, Bolus, CancellationToken>((_, b, _) => captured = b)
-            .ReturnsAsync((Guid _, Bolus b, CancellationToken _) => b);
+            .Callback<Guid, Bolus, WriteOrigin, CancellationToken>((_, b, _, _) => captured = b)
+            .ReturnsAsync((Guid _, Bolus b, WriteOrigin origin, CancellationToken _) => b);
 
         var controller = CreateController();
         var request = new UpdateBolusRequest

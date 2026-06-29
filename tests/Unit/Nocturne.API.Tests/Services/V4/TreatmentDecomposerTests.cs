@@ -334,7 +334,7 @@ public class TreatmentDecomposerTests : IDisposable
 
         _tempBasalRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+            .ReturnsAsync((V4Models.TempBasal tb, WriteOrigin origin, CancellationToken _) => tb);
 
         // Act
         var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
@@ -2869,7 +2869,7 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync((V4Models.TempBasal?)null);
         _tempBasalRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+            .ReturnsAsync((V4Models.TempBasal tb, WriteOrigin origin, CancellationToken _) => tb);
 
         var treatment = new Treatment
         {
@@ -2918,7 +2918,7 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync((V4Models.TempBasal?)null);
         _tempBasalRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+            .ReturnsAsync((V4Models.TempBasal tb, WriteOrigin origin, CancellationToken _) => tb);
 
         var treatment = new Treatment
         {
@@ -2960,7 +2960,7 @@ public class TreatmentDecomposerTests : IDisposable
             .ReturnsAsync((V4Models.TempBasal?)null);
         _tempBasalRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<V4Models.TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((V4Models.TempBasal tb, CancellationToken _) => tb);
+            .ReturnsAsync((V4Models.TempBasal tb, WriteOrigin origin, CancellationToken _) => tb);
 
         var treatment = new Treatment
         {
@@ -3020,7 +3020,7 @@ public class TreatmentDecomposerTests : IDisposable
 
         _tempBasalRepoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.TempBasal> list, CancellationToken _) => list.ToList());
+            .ReturnsAsync((IEnumerable<V4Models.TempBasal> list, WriteOrigin origin, CancellationToken _) => list.ToList());
 
         // Act
         var result = await _decomposer.DecomposeBatchAsync(

@@ -73,8 +73,8 @@ public class NutritionControllerTests : IDisposable
     {
         _repoMock
             .Setup(r => r.CreateAsync(It.IsAny<CarbIntake>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<CarbIntake, CancellationToken>((c, _) => onCreate(c))
-            .ReturnsAsync((CarbIntake c, CancellationToken _) => c);
+            .Callback<CarbIntake, WriteOrigin, CancellationToken>((c, _, _) => onCreate(c))
+            .ReturnsAsync((CarbIntake c, WriteOrigin origin, CancellationToken _) => c);
     }
 
     [Fact]
@@ -138,8 +138,8 @@ public class NutritionControllerTests : IDisposable
             .ReturnsAsync(existing);
         _repoMock
             .Setup(r => r.UpdateAsync(id, It.IsAny<CarbIntake>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<Guid, CarbIntake, CancellationToken>((_, c, _) => captured = c)
-            .ReturnsAsync((Guid _, CarbIntake c, CancellationToken _) => c);
+            .Callback<Guid, CarbIntake, WriteOrigin, CancellationToken>((_, c, _, _) => captured = c)
+            .ReturnsAsync((Guid _, CarbIntake c, WriteOrigin origin, CancellationToken _) => c);
 
         var controller = CreateController();
         var request = new UpdateCarbIntakeRequest
@@ -174,8 +174,8 @@ public class NutritionControllerTests : IDisposable
             .ReturnsAsync(existing);
         _repoMock
             .Setup(r => r.UpdateAsync(id, It.IsAny<CarbIntake>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback<Guid, CarbIntake, CancellationToken>((_, c, _) => captured = c)
-            .ReturnsAsync((Guid _, CarbIntake c, CancellationToken _) => c);
+            .Callback<Guid, CarbIntake, WriteOrigin, CancellationToken>((_, c, _, _) => captured = c)
+            .ReturnsAsync((Guid _, CarbIntake c, WriteOrigin origin, CancellationToken _) => c);
 
         var controller = CreateController();
         var request = new UpdateCarbIntakeRequest
