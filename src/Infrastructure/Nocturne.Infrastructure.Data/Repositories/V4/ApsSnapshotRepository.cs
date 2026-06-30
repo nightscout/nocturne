@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -17,17 +18,35 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
 {
     private readonly ITenantDbContextFactory _contextFactory;
     private readonly ILogger<ApsSnapshotRepository> _logger;
+    private readonly IV4RecordBroadcaster<ApsSnapshot>? _broadcaster;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ApsSnapshotRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="logger">The logger instance.</param>
-    public ApsSnapshotRepository(ITenantDbContextFactory contextFactory, ILogger<ApsSnapshotRepository> logger)
+    /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
+    public ApsSnapshotRepository(
+        ITenantDbContextFactory contextFactory,
+        ILogger<ApsSnapshotRepository> logger,
+        IV4RecordBroadcaster<ApsSnapshot>? broadcaster = null)
     {
         _contextFactory = contextFactory;
         _logger = logger;
+        _broadcaster = broadcaster;
     }
+
+    /// <summary>
+    /// Fires the native V4 broadcast for a just-committed write — but only for <see cref="WriteOrigin.Live"/>
+    /// writes (backfill imports stay silent). Mirrors the gate in <c>V4RepositoryBase.RaiseBroadcastAsync</c>.
+    /// </summary>
+    private Task RaiseBroadcastAsync(
+        IReadOnlyList<ApsSnapshot> created,
+        IReadOnlyList<ApsSnapshot> updated,
+        IReadOnlyList<Guid> deletedIds,
+        WriteOrigin origin,
+        CancellationToken ct)
+        => V4RecordBroadcast.RaiseAsync(_broadcaster, created, updated, deletedIds, origin, ct);
 
     /// <summary>
     /// Gets APS snapshots based on filter criteria.
@@ -94,7 +113,9 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
         var entity = ApsSnapshotMapper.ToEntity(model);
         ctx.ApsSnapshots.Add(entity);
         await ctx.SaveChangesAsync(ct);
-        return ApsSnapshotMapper.ToDomainModel(entity);
+        var created = ApsSnapshotMapper.ToDomainModel(entity);
+        await RaiseBroadcastAsync([created], [], [], origin, ct);
+        return created;
     }
 
     /// <summary>
@@ -350,7 +371,10 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
             }
 
             await tx.CommitAsync(ct);
-            return entities.Select(ApsSnapshotMapper.ToDomainModel);
+
+            var created = entities.Select(ApsSnapshotMapper.ToDomainModel).ToList();
+            await RaiseBroadcastAsync(created, [], [], origin, ct);
+            return created;
         });
     }
 }

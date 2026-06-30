@@ -28,6 +28,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     // resolved fresh per sync run, so these are naturally per-run.
     private WriteOrigin? _glucosePublishOrigin;
     private WriteOrigin? _treatmentPublishOrigin;
+    private WriteOrigin? _devicePublishOrigin;
 
     /// <summary>
     ///     Base constructor for connector services using IHttpClientFactory pattern
@@ -560,6 +561,18 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
+    ///     The broadcast origin for this run's device-status (snapshot) publishes — APS, pump, and uploader
+    ///     snapshots. Backfill on the source's first-ever device-status sync (suppress so a first sync of
+    ///     history doesn't flood the device category), else Live. Memoized for the run.
+    /// </summary>
+    protected async Task<WriteOrigin> DevicePublishOriginAsync()
+    {
+        _devicePublishOrigin ??= await ResolvePublishOriginAsync(
+            () => _publisher!.Device.GetLatestDeviceStatusTimestampAsync(ConnectorSource));
+        return _devicePublishOrigin.Value;
+    }
+
+    /// <summary>
     ///     Resolves a publish origin from a resume watermark: Backfill when no prior data exists (initial
     ///     full-history sync), else Live. When the publisher is unavailable the publish will fail anyway,
     ///     so the origin is irrelevant and defaults to Live.
@@ -625,9 +638,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Device.PublishDeviceStatusAsync(
             deviceStatuses,
-            ConnectorSource, WriteOrigin.Live,
+            ConnectorSource, await DevicePublishOriginAsync(),
             cancellationToken
-        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
+        );
     }
 
     /// <summary>

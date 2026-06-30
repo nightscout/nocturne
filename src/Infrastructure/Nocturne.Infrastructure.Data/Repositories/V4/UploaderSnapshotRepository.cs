@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -17,17 +18,35 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
 {
     private readonly ITenantDbContextFactory _contextFactory;
     private readonly ILogger<UploaderSnapshotRepository> _logger;
+    private readonly IV4RecordBroadcaster<UploaderSnapshot>? _broadcaster;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UploaderSnapshotRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="logger">The logger instance.</param>
-    public UploaderSnapshotRepository(ITenantDbContextFactory contextFactory, ILogger<UploaderSnapshotRepository> logger)
+    /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
+    public UploaderSnapshotRepository(
+        ITenantDbContextFactory contextFactory,
+        ILogger<UploaderSnapshotRepository> logger,
+        IV4RecordBroadcaster<UploaderSnapshot>? broadcaster = null)
     {
         _contextFactory = contextFactory;
         _logger = logger;
+        _broadcaster = broadcaster;
     }
+
+    /// <summary>
+    /// Fires the native V4 broadcast for a just-committed write — but only for <see cref="WriteOrigin.Live"/>
+    /// writes (backfill imports stay silent). Mirrors the gate in <c>V4RepositoryBase.RaiseBroadcastAsync</c>.
+    /// </summary>
+    private Task RaiseBroadcastAsync(
+        IReadOnlyList<UploaderSnapshot> created,
+        IReadOnlyList<UploaderSnapshot> updated,
+        IReadOnlyList<Guid> deletedIds,
+        WriteOrigin origin,
+        CancellationToken ct)
+        => V4RecordBroadcast.RaiseAsync(_broadcaster, created, updated, deletedIds, origin, ct);
 
     /// <summary>
     /// Gets uploader snapshot records based on filter criteria.
@@ -94,7 +113,9 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
         var entity = UploaderSnapshotMapper.ToEntity(model);
         ctx.UploaderSnapshots.Add(entity);
         await ctx.SaveChangesAsync(ct);
-        return UploaderSnapshotMapper.ToDomainModel(entity);
+        var created = UploaderSnapshotMapper.ToDomainModel(entity);
+        await RaiseBroadcastAsync([created], [], [], origin, ct);
+        return created;
     }
 
     /// <summary>
@@ -302,7 +323,10 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
             }
 
             await tx.CommitAsync(ct);
-            return entities.Select(UploaderSnapshotMapper.ToDomainModel);
+
+            var created = entities.Select(UploaderSnapshotMapper.ToDomainModel).ToList();
+            await RaiseBroadcastAsync(created, [], [], origin, ct);
+            return created;
         });
     }
 }

@@ -66,6 +66,21 @@ public class SignalRV4RecordBroadcasterTests
     }
 
     [Fact]
+    public async Task BroadcastCreatedAsync_DeviceSnapshotType_BroadcastsToDeviceCategory()
+    {
+        var snapshot = new ApsSnapshot { Id = Guid.NewGuid() };
+
+        await Adapter<ApsSnapshot>().BroadcastCreatedAsync([snapshot]);
+
+        _broadcast.Verify(b => b.BroadcastStorageCreateAsync(
+            RealtimeCategories.Device,
+            It.Is<object>(p => (string)GetProp(p, "recordType")! == "apsSnapshot"
+                               && ReferenceEquals(GetProp(p, "doc"), snapshot))),
+            Times.Once);
+        _broadcast.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task BroadcastCreatedAsync_UnmappedType_DoesNotBroadcast()
     {
         await Adapter<BasalSchedule>().BroadcastCreatedAsync([new BasalSchedule { Id = Guid.NewGuid() }]);

@@ -5,8 +5,9 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// The single origin-gated fan-out used by every V4 write chokepoint — <see cref="V4RepositoryBase{TModel,TEntity}"/>
-/// and the two off-base repositories (TempBasal, BasalInjection) that can't inherit it. Broadcasts only
-/// for <see cref="WriteOrigin.Live"/> writes (backfill stays silent) and no-ops when no broadcaster is wired.
+/// and the off-base repositories (TempBasal, BasalInjection, and the device-status snapshot repos) that can't
+/// inherit it. Broadcasts only for <see cref="WriteOrigin.Live"/> writes (backfill stays silent) and no-ops when
+/// no broadcaster is wired.
 /// </summary>
 internal static class V4RecordBroadcast
 {

@@ -122,6 +122,43 @@ public class BroadcastGoldenTests
     }
 
     [Fact]
+    public async Task ApsSnapshotLiveBulkCreate_BroadcastsCreated()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<IApsSnapshotRepository>();
+        _fx.Capture.Clear();
+
+        await repo.BulkCreateAsync(
+            new[] { new ApsSnapshot { Timestamp = T0, DataSource = "loop", LegacyId = "aps-bc-a" } },
+            WriteOrigin.Live, CancellationToken.None);
+
+        _fx.Capture.Snapshot()
+            .Should().ContainSingle(e => e.Kind == "created" && e.ModelType == typeof(ApsSnapshot))
+            .Which.Count.Should().Be(1, "the inserted snapshot broadcasts as created on the device category");
+    }
+
+    [Fact]
+    public async Task ApsSnapshotBackfillBulkCreate_IsSilent_ButPersists()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<IApsSnapshotRepository>();
+        _fx.Capture.Clear();
+
+        await repo.BulkCreateAsync(
+            new[] { new ApsSnapshot { Timestamp = T0, DataSource = "loop", LegacyId = "aps-bf-a" } },
+            WriteOrigin.Backfill, CancellationToken.None);
+
+        _fx.Capture.Snapshot().Should().BeEmpty("backfill device-status imports never broadcast");
+
+        // Silence must not mean "didn't write" — the snapshot is persisted.
+        var rowCount = await _fx.QueryAsync(tenant, ctx =>
+            ctx.ApsSnapshots.AsNoTracking().Where(s => s.LegacyId == "aps-bf-a").CountAsync());
+        rowCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task LiveSingleCreate_BroadcastsCreated()
     {
         var tenant = Guid.NewGuid();

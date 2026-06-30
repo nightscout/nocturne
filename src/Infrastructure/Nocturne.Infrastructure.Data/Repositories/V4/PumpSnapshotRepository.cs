@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -17,17 +18,35 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
 {
     private readonly ITenantDbContextFactory _contextFactory;
     private readonly ILogger<PumpSnapshotRepository> _logger;
+    private readonly IV4RecordBroadcaster<PumpSnapshot>? _broadcaster;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PumpSnapshotRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="logger">The logger instance.</param>
-    public PumpSnapshotRepository(ITenantDbContextFactory contextFactory, ILogger<PumpSnapshotRepository> logger)
+    /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
+    public PumpSnapshotRepository(
+        ITenantDbContextFactory contextFactory,
+        ILogger<PumpSnapshotRepository> logger,
+        IV4RecordBroadcaster<PumpSnapshot>? broadcaster = null)
     {
         _contextFactory = contextFactory;
         _logger = logger;
+        _broadcaster = broadcaster;
     }
+
+    /// <summary>
+    /// Fires the native V4 broadcast for a just-committed write — but only for <see cref="WriteOrigin.Live"/>
+    /// writes (backfill imports stay silent). Mirrors the gate in <c>V4RepositoryBase.RaiseBroadcastAsync</c>.
+    /// </summary>
+    private Task RaiseBroadcastAsync(
+        IReadOnlyList<PumpSnapshot> created,
+        IReadOnlyList<PumpSnapshot> updated,
+        IReadOnlyList<Guid> deletedIds,
+        WriteOrigin origin,
+        CancellationToken ct)
+        => V4RecordBroadcast.RaiseAsync(_broadcaster, created, updated, deletedIds, origin, ct);
 
     /// <summary>
     /// Gets pump snapshot records based on filter criteria.
@@ -118,7 +137,9 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
         var entity = PumpSnapshotMapper.ToEntity(model);
         ctx.PumpSnapshots.Add(entity);
         await ctx.SaveChangesAsync(ct);
-        return PumpSnapshotMapper.ToDomainModel(entity);
+        var created = PumpSnapshotMapper.ToDomainModel(entity);
+        await RaiseBroadcastAsync([created], [], [], origin, ct);
+        return created;
     }
 
     /// <summary>
@@ -312,7 +333,10 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
             }
 
             await tx.CommitAsync(ct);
-            return entities.Select(PumpSnapshotMapper.ToDomainModel);
+
+            var created = entities.Select(PumpSnapshotMapper.ToDomainModel).ToList();
+            await RaiseBroadcastAsync(created, [], [], origin, ct);
+            return created;
         });
     }
 }
