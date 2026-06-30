@@ -82,13 +82,32 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant,
-    /// or <c>null</c> if none exist. When <paramref name="asOf"/> is non-null, restricts to
-    /// snapshots with <c>Timestamp &lt;= asOf</c>.
+    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant
+    /// as of an optional point in time, or <c>null</c> if none exist. When <paramref name="asOf"/>
+    /// is non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.
     /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="GetLatestTimestampAsync"/>, which scopes by connector data source
+    /// for resume-watermark calculation rather than by an as-of upper bound.
+    /// </remarks>
     /// <param name="asOf">Optional inclusive upper bound on Timestamp.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<DateTime?> GetLatestTimestampAsync(DateTime? asOf, CancellationToken ct = default);
+    Task<DateTime?> GetLatestTimestampAsOfAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant,
+    /// optionally scoped to a single connector data source, or <c>null</c> if none exist. When
+    /// <paramref name="source"/> is non-null, only snapshots with a matching
+    /// <see cref="ApsSnapshot.DataSource"/> are considered.
+    /// </summary>
+    /// <remarks>
+    /// Source-scoping is the resume watermark used by the connector device-status publisher: a
+    /// tenant-global latest mis-classifies a newly enabled connector's first sync as incremental
+    /// and skips its backfill.
+    /// </remarks>
+    /// <param name="source">Optional connector data source filter.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> with <c>Enacted = true</c>

@@ -289,7 +289,7 @@ public class AlertReplayServiceTests
         // The enricher uses GetLatestTimestampAsync(asOf) — pinned to each replay tick. We
         // emulate "no cycle ever happened before lastCycle, then lastCycle is the only one"
         // by returning lastCycle when asOf >= lastCycle and null otherwise.
-        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsOfAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((DateTime? asOf, CancellationToken _) =>
                 asOf is not null && asOf.Value >= lastCycle ? lastCycle : null);
 

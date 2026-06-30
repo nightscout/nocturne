@@ -18,6 +18,8 @@ public class DevicePublisherTests
     private readonly Mock<IDeviceStatusDecomposer> _mockDecomposer;
     private readonly Mock<IDeviceEventRepository> _mockDeviceEventRepository;
     private readonly Mock<IApsSnapshotRepository> _mockApsSnapshotRepository;
+    private readonly Mock<IPumpSnapshotRepository> _mockPumpSnapshotRepository;
+    private readonly Mock<IUploaderSnapshotRepository> _mockUploaderSnapshotRepository;
     private readonly DevicePublisher _publisher;
 
     public DevicePublisherTests()
@@ -25,12 +27,16 @@ public class DevicePublisherTests
         _mockDecomposer = new Mock<IDeviceStatusDecomposer>();
         _mockDeviceEventRepository = new Mock<IDeviceEventRepository>();
         _mockApsSnapshotRepository = new Mock<IApsSnapshotRepository>();
+        _mockPumpSnapshotRepository = new Mock<IPumpSnapshotRepository>();
+        _mockUploaderSnapshotRepository = new Mock<IUploaderSnapshotRepository>();
 
         _publisher = new DevicePublisher(
             _mockDecomposer.Object,
             _mockDeviceEventRepository.Object,
             Mock.Of<IAuditContext>(),
             _mockApsSnapshotRepository.Object,
+            _mockPumpSnapshotRepository.Object,
+            _mockUploaderSnapshotRepository.Object,
             NullLogger<DevicePublisher>.Instance
         );
     }
@@ -44,7 +50,7 @@ public class DevicePublisherTests
 
         result.Should().BeTrue();
         _mockDecomposer.Verify(
-            s => s.DecomposeAsync(It.IsAny<DeviceStatus>(), It.IsAny<CancellationToken>()),
+            s => s.DecomposeAsync(It.IsAny<DeviceStatus>(), "test-source", It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -53,7 +59,7 @@ public class DevicePublisherTests
     public async Task PublishDeviceStatusAsync_ReturnsFalse_OnException()
     {
         _mockDecomposer
-            .Setup(s => s.DecomposeAsync(It.IsAny<DeviceStatus>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.DecomposeAsync(It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("test error"));
 
         var result = await _publisher.PublishDeviceStatusAsync(new List<DeviceStatus> { new() }, "test-source");

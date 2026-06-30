@@ -72,6 +72,16 @@ public interface IUploaderSnapshotRepository : IV4Repository<UploaderSnapshot>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
     /// <summary>
+    /// Returns the timestamp of the most recent <see cref="UploaderSnapshot"/> for the current
+    /// tenant, optionally scoped to a single connector data source, or <c>null</c> if none exist.
+    /// When <paramref name="source"/> is non-null, only snapshots with a matching
+    /// <see cref="UploaderSnapshot.DataSource"/> are considered.
+    /// </summary>
+    /// <param name="source">Optional connector data source filter.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns the <see cref="UploaderSnapshot"/> representing the weakest uploader for the
     /// current tenant — i.e. the row with the lowest <see cref="UploaderSnapshot.Battery"/>
     /// among the most recent telemetry — or <c>null</c> if none exists.

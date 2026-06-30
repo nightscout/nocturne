@@ -14,7 +14,11 @@ public interface IDeviceStatusDecomposer
     /// Extracts APS, pump, and uploader snapshots from a DeviceStatus record
     /// and persists them to v4 tables. Idempotent via LegacyId matching.
     /// </summary>
-    Task<DecompositionResult> DecomposeAsync(DeviceStatus deviceStatus, CancellationToken ct = default);
+    /// <param name="deviceStatus">The legacy DeviceStatus record to decompose.</param>
+    /// <param name="source">Connector data source to stamp on the decomposed snapshots, or
+    /// <c>null</c> for direct v1/v3 uploads with no connector origin.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DecompositionResult> DecomposeAsync(DeviceStatus deviceStatus, string? source, CancellationToken ct = default);
 
     /// <summary>
     /// Decomposes a batch of DeviceStatus records into typed v4 snapshot tables using bulk-insert
@@ -22,9 +26,11 @@ public interface IDeviceStatusDecomposer
     /// post-insert sequential pass since transition detection depends on prior committed snapshots.
     /// </summary>
     /// <param name="statuses">DeviceStatus records to decompose.</param>
+    /// <param name="source">Connector data source to stamp on the decomposed snapshots, or
+    /// <c>null</c> for direct v1/v3 uploads with no connector origin.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<DeviceStatus> statuses, CancellationToken ct = default);
+        IReadOnlyList<DeviceStatus> statuses, string? source, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes all v4 snapshot records that were decomposed from a legacy DeviceStatus with the given ID.

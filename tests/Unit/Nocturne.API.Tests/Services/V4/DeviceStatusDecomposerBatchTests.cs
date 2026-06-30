@@ -112,7 +112,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(statuses);
+        var result = await _decomposer.DecomposeBatchAsync(statuses, source: null);
 
         // Assert
         _apsRepoMock.Verify(
@@ -141,7 +141,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
     public async Task DecomposeBatchAsync_EmptyBatch_NoRepositoryCalls()
     {
         // Act
-        var result = await _decomposer.DecomposeBatchAsync([]);
+        var result = await _decomposer.DecomposeBatchAsync([], source: null);
 
         // Assert
         _apsRepoMock.Verify(
@@ -177,7 +177,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(statuses);
+        var result = await _decomposer.DecomposeBatchAsync(statuses, source: null);
 
         // Assert
         var batch = _context.DecompositionBatches.SingleOrDefault(b => b.Id == result.CorrelationId);
@@ -217,7 +217,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(statuses);
+        var result = await _decomposer.DecomposeBatchAsync(statuses, source: null);
 
         // Assert - all three snapshot types extracted from one device status
         _apsRepoMock.Verify(
@@ -261,7 +261,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(statuses);
+        var result = await _decomposer.DecomposeBatchAsync(statuses, source: null);
 
         // Assert
         _extrasRepoMock.Verify(
@@ -306,7 +306,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(statuses);
+        var result = await _decomposer.DecomposeBatchAsync(statuses, source: null);
 
         // Assert
         _stateSpanServiceMock.Verify(

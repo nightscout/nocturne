@@ -98,6 +98,16 @@ public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
     /// <summary>
+    /// Returns the timestamp of the most recent <see cref="PumpSnapshot"/> for the current tenant,
+    /// optionally scoped to a single connector data source, or <c>null</c> if none exist. When
+    /// <paramref name="source"/> is non-null, only snapshots with a matching
+    /// <see cref="PumpSnapshot.DataSource"/> are considered.
+    /// </summary>
+    /// <param name="source">Optional connector data source filter.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
+
+    /// <summary>
     /// Bulk-insert <see cref="PumpSnapshot"/> records with batch-level and DB-level deduplication by LegacyId.
     /// </summary>
     /// <param name="records">Records to insert.</param>

@@ -24,6 +24,7 @@ public static class UploaderSnapshotMapper
             Device = model.Device,
             CorrelationId = model.CorrelationId,
             LegacyId = model.LegacyId,
+            DataSource = model.DataSource,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
             Name = model.Name,
@@ -54,6 +55,7 @@ public static class UploaderSnapshotMapper
             Device = entity.Device,
             CorrelationId = entity.CorrelationId,
             LegacyId = entity.LegacyId,
+            DataSource = entity.DataSource,
             CreatedAt = entity.SysCreatedAt,
             ModifiedAt = entity.SysUpdatedAt,
             Name = entity.Name,
@@ -81,6 +83,7 @@ public static class UploaderSnapshotMapper
         entity.Device = model.Device;
         entity.CorrelationId = model.CorrelationId;
         entity.LegacyId = model.LegacyId;
+        entity.DataSource = model.DataSource;
         entity.SysUpdatedAt = DateTime.UtcNow;
         entity.Name = model.Name;
         entity.Battery = model.Battery;

@@ -252,6 +252,15 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
     }
 
     /// <inheritdoc />
+    public async Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var query = ctx.PumpSnapshots.AsNoTracking();
+        if (source != null) query = query.Where(e => e.DataSource == source);
+        return await query.MaxAsync(e => (DateTime?)e.Timestamp, ct);
+    }
+
+    /// <inheritdoc />
     public async Task<IEnumerable<PumpSnapshot>> BulkCreateAsync(
         IEnumerable<PumpSnapshot> records,
         CancellationToken ct = default)

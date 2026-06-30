@@ -250,7 +250,7 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     }
 
     /// <inheritdoc />
-    public async Task<DateTime?> GetLatestTimestampAsync(DateTime? asOf, CancellationToken ct = default)
+    public async Task<DateTime?> GetLatestTimestampAsOfAsync(DateTime? asOf, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var query = ctx.ApsSnapshots.AsNoTracking();
@@ -259,6 +259,15 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
             .OrderByDescending(e => e.Timestamp)
             .Select(e => (DateTime?)e.Timestamp)
             .FirstOrDefaultAsync(ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var query = ctx.ApsSnapshots.AsNoTracking();
+        if (source != null) query = query.Where(e => e.DataSource == source);
+        return await query.MaxAsync(e => (DateTime?)e.Timestamp, ct);
     }
 
     /// <inheritdoc />

@@ -802,7 +802,7 @@ internal class MigrationJob
 
             try
             {
-                await decomposer.DecomposeBatchAsync(statuses, ct);
+                await decomposer.DecomposeBatchAsync(statuses, source: null, ct);
                 totalMigrated += statuses.Length;
             }
             catch (Exception ex)
@@ -1250,7 +1250,7 @@ internal class MigrationJob
 
         using var scope = CreateTenantScope();
         var decomposer = scope.ServiceProvider.GetRequiredService<Core.Contracts.V4.IDeviceStatusDecomposer>();
-        await decomposer.DecomposeAsync(status, ct);
+        await decomposer.DecomposeAsync(status, source: null, ct);
     }
 
     private async Task TransformProfileAsync(

@@ -57,7 +57,7 @@ public class ApsSnapshotRepositoryTests : IDisposable
     [Fact]
     public async Task GetLatestTimestampAsync_returns_null_when_no_rows()
     {
-        var result = await _repository.GetLatestTimestampAsync(asOf: null, CancellationToken.None);
+        var result = await _repository.GetLatestTimestampAsOfAsync(asOf: null, CancellationToken.None);
 
         result.Should().BeNull();
     }
@@ -73,7 +73,7 @@ public class ApsSnapshotRepositoryTests : IDisposable
             (t2, false, null),
             (t3, false, null));
 
-        var result = await _repository.GetLatestTimestampAsync(asOf: null, CancellationToken.None);
+        var result = await _repository.GetLatestTimestampAsOfAsync(asOf: null, CancellationToken.None);
 
         result.Should().Be(t2);
     }
@@ -90,7 +90,7 @@ public class ApsSnapshotRepositoryTests : IDisposable
             (t3, false, null));
 
         var asOf = new DateTime(2026, 4, 30, 11, 30, 0, DateTimeKind.Utc);
-        var result = await _repository.GetLatestTimestampAsync(asOf, CancellationToken.None);
+        var result = await _repository.GetLatestTimestampAsOfAsync(asOf, CancellationToken.None);
 
         result.Should().Be(t2);
     }
@@ -103,7 +103,7 @@ public class ApsSnapshotRepositoryTests : IDisposable
         await SeedAsync(TenantB, (theirRow, true, 1.0));
         await SeedAsync(TenantA, (ourRow, true, 1.0));
 
-        var result = await _repository.GetLatestTimestampAsync(asOf: null, CancellationToken.None);
+        var result = await _repository.GetLatestTimestampAsOfAsync(asOf: null, CancellationToken.None);
 
         result.Should().Be(ourRow);
     }

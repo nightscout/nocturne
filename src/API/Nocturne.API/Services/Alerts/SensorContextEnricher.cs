@@ -375,7 +375,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         {
             if (needs.NeedsLastApsCycle)
             {
-                var t = await _deps.ApsSnapshots.GetLatestTimestampAsync(asOf, ct);
+                var t = await _deps.ApsSnapshots.GetLatestTimestampAsOfAsync(asOf, ct);
                 enriched = enriched with { LastApsCycleAt = t, HasEverApsCycled = t.HasValue };
             }
             if (needs.NeedsLastApsEnacted)
