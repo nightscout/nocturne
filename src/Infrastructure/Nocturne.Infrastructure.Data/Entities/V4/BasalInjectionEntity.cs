@@ -74,7 +74,7 @@ public class BasalInjectionEntity : ITenantScoped, IAuditable, ISoftDeletable, I
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     [Column("legacy_id")]
-    [MaxLength(64)]
+    [MaxLength(255)]
     public string? LegacyId { get; set; }
 
     /// <summary>
