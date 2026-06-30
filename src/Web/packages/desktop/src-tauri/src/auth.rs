@@ -4,8 +4,8 @@
 //!
 //! Ports the Windows 11 widget's `OAuthService` pattern (src/Widgets/.../OAuthService.cs):
 //! RFC 7591 dynamic client registration, RFC 8628 device-authorization grant, refresh-token
-//! rotation, and credential persistence to the Windows Credential Manager. Read-scoped
-//! (`glucose.read therapy.read devices.read`).
+//! rotation, and credential persistence to the Windows Credential Manager. Read-scoped, plus
+//! `device.notify` so the companion can register as a notify-capable actuation target.
 //!
 //! Separate from the CareLink link-code JWT in `main.rs`, which is a one-shot connect credential;
 //! this module owns the long-lived credential the poll loop runs on.
@@ -13,7 +13,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const DEFAULT_SCOPES: &str = "glucose.read therapy.read devices.read";
+const DEFAULT_SCOPES: &str = "glucose.read therapy.read devices.read device.notify";
 const CLIENT_NAME: &str = "Nocturne Companion";
 const SOFTWARE_ID: &str = "nocturne-companion";
 const CLIENT_URI: &str = "https://github.com/nightscout/nocturne";

@@ -12,10 +12,21 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod alert_actuation;
 mod auth;
+mod client_devices;
 mod glucose_file;
 mod glucose_poll;
+mod install_id;
+mod signalr;
+mod toast;
 mod tray;
+
+/// Re-export of the durable-OAuth token resolver for the actuation modules, which need the same
+/// `(server, access_token)` pair the glucose poller runs on (refresh handled in `auth`).
+pub(crate) async fn auth_token(client: &reqwest::Client) -> Result<(String, String), String> {
+    auth::get_valid_token(client).await
+}
 
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -505,6 +516,15 @@ fn main() {
             }
 
             spawn_glucose_poller(handle.clone());
+
+            // Device-action actuation: register this install and toast on alerts (notify capability).
+            // Self-idles while unlinked, so it is safe to start unconditionally here.
+            {
+                let handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    alert_actuation::run(handle).await;
+                });
+            }
             Ok(())
         })
         .on_window_event(|window, event| {

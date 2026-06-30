@@ -372,6 +372,7 @@ mod tests {
     fn tooltip_includes_value_and_arrow() {
         let bg = CurrentBg {
             sgv_mgdl: 100.0,
+            delta_mgdl: None,
             direction: Some("FortyFiveUp".to_string()),
             mills: 0,
         };

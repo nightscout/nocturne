@@ -1,0 +1,143 @@
+//! Native Windows toast for device-action alerts.
+//!
+//! Uses the WinRT toast API (`tauri-winrt-notification`) rather than the generic tauri notification
+//! plugin so the alert can be actionable (an Acknowledge button) and, for critical severity,
+//! persistent: `Scenario::Alarm` pre-expands the toast, keeps it on screen until dismissed, and
+//! loops alarm audio. Non-critical alerts use a long-duration banner.
+//!
+//! The Acknowledge button's activation runs on a WinRT event-handler thread, so the closure owns the
+//! server URL, bearer token, and excursion id and spawns the ack HTTP call on the provided Tokio
+//! runtime handle (`on_activated` requires a `'static` closure).
+
+use crate::client_devices::DeviceActionIntent;
+use tauri_winrt_notification::{Duration, Scenario, Toast};
+
+/// App id the toast is attributed to. Reusing the PowerShell app id avoids needing a registered
+/// AppUserModelID/shortcut for toasts to appear; the dev companion isn't Start-menu-registered.
+const APP_ID: &str = Toast::POWERSHELL_APP_ID;
+
+/// Button action argument recognised by the activation handler.
+const ACK_ACTION: &str = "acknowledge";
+const MMOL_PER_MGDL: f64 = 18.0182;
+
+/// Who an ack from this toast is attributed to server-side (`acknowledgedBy`).
+const ACK_BY: &str = "desktop-companion";
+
+/// Context the ack button needs to call the acknowledge endpoint, captured into the toast's
+/// activation closure.
+#[derive(Clone)]
+pub struct AckContext {
+    pub server: String,
+    pub token: String,
+    pub excursion_id: String,
+    pub runtime: tokio::runtime::Handle,
+}
+
+/// Shows a toast for `intent`. Critical severity gets the persistent alarm scenario; others a
+/// long-duration banner. When `ack` is provided, an Acknowledge button calls the ack endpoint on
+/// click. Best-effort: a WinRT failure is returned as an error string and never panics.
+pub fn show(intent: &DeviceActionIntent, ack: Option<AckContext>) -> Result<(), String> {
+    let critical = intent.severity == "critical";
+
+    let mut toast = Toast::new(APP_ID)
+        .title(&title_line(intent))
+        .text1(&body_line(intent));
+
+    toast = if critical {
+        toast.scenario(Scenario::Alarm)
+    } else {
+        toast.duration(Duration::Long)
+    };
+
+    if let Some(ack) = ack {
+        toast = toast.add_button("Acknowledge", ACK_ACTION);
+        toast = toast.on_activated(move |action| {
+            if action.as_deref() == Some(ACK_ACTION) {
+                let ack = ack.clone();
+                ack.runtime.spawn(async move {
+                    let client = match reqwest::Client::builder()
+                        .danger_accept_invalid_certs(cfg!(debug_assertions))
+                        .build()
+                    {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("alert ack: could not build client: {e}");
+                            return;
+                        }
+                    };
+                    if let Err(e) = crate::client_devices::acknowledge(
+                        &client, &ack.server, &ack.token, &ack.excursion_id, ACK_BY,
+                    )
+                    .await
+                    {
+                        eprintln!("alert ack: {e}");
+                    }
+                });
+            }
+            Ok(())
+        });
+    }
+
+    toast.show().map_err(|e| format!("could not show toast: {e}"))
+}
+
+/// Title line: rule name, prefixed with a severity marker for critical/warning.
+fn title_line(intent: &DeviceActionIntent) -> String {
+    let name = if intent.rule_name.is_empty() { "Glucose alert" } else { &intent.rule_name };
+    match intent.severity.as_str() {
+        "critical" => format!("\u{26A0} {name}"),
+        "warning" => format!("\u{26A0} {name}"),
+        _ => name.to_string(),
+    }
+}
+
+/// Body line: severity word plus the live glucose value (mmol/L, when present in the live event).
+fn body_line(intent: &DeviceActionIntent) -> String {
+    let severity = match intent.severity.as_str() {
+        "critical" => "Critical",
+        "warning" => "Warning",
+        "info" => "Info",
+        other if !other.is_empty() => other,
+        _ => "Alert",
+    };
+    match intent.glucose_value {
+        Some(mgdl) => format!("{severity} \u{00b7} {:.1} mmol/L", mgdl / MMOL_PER_MGDL),
+        None => severity.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn intent(severity: &str, glucose: Option<f64>) -> DeviceActionIntent {
+        DeviceActionIntent {
+            intent: "opened".into(),
+            excursion_id: "e".into(),
+            rule_name: "Low glucose".into(),
+            severity: severity.into(),
+            acknowledged: false,
+            glucose_value: glucose,
+            trend: None,
+        }
+    }
+
+    #[test]
+    fn body_includes_mmol_when_glucose_present() {
+        let b = body_line(&intent("critical", Some(54.0)));
+        assert!(b.starts_with("Critical"));
+        assert!(b.contains("3.0 mmol/L"));
+    }
+
+    #[test]
+    fn body_is_severity_only_without_glucose() {
+        assert_eq!(body_line(&intent("warning", None)), "Warning");
+    }
+
+    #[test]
+    fn title_falls_back_when_rule_name_empty() {
+        let mut i = intent("info", None);
+        i.rule_name = String::new();
+        assert_eq!(title_line(&i), "Glucose alert");
+    }
+}
