@@ -145,13 +145,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
                 var boluses = await bolusTask;
                 var foods = await foodTask;
 
-                var (mappedBoluses, mappedCarbs, batches) = _v4TreatmentMapper.MapTreatments(boluses, foods);
-
-                // Persist decomposition batches before V4 records (FK constraint)
-                if (batches.Count > 0)
-                {
-                    await PublishDecompositionBatchesAsync(batches, config, cancellationToken);
-                }
+                var (mappedBoluses, mappedCarbs, _) = _v4TreatmentMapper.MapTreatments(boluses, foods);
 
                 if (activeTypes.Contains(SyncDataType.Boluses) && mappedBoluses.Count > 0)
                 {

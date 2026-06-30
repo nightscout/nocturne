@@ -150,12 +150,9 @@ public class ActivityDecomposerBatchTests : IDisposable
             Times.Once);
 
         result.CreatedRecords.Should().HaveCount(3);
-        result.CorrelationId.Should().NotBeNull();
 
-        // Verify decomposition batch was persisted
-        var batch = _context.DecompositionBatches.SingleOrDefault(b => b.Id == result.CorrelationId);
-        batch.Should().NotBeNull();
-        batch!.Source.Should().Be("activity_decomposer_batch");
+        // All records produced in one decompose share a single non-empty correlation id
+        result.CorrelationId.Should().NotBeNull().And.NotBe(Guid.Empty);
     }
 
     #region Helpers

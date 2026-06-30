@@ -439,20 +439,6 @@ public static class ServiceRegistrationExtensions
                 sinks,
                 sp.GetService<ILogger<CompositeDataEventSink<Entry>>>());
         });
-        // V4-native sensor glucose writes (POST /api/v4/glucose/sensor + connector publisher)
-        // broadcast on the real-time "entries" collection, mirroring the legacy entries path.
-        services.AddScoped<SignalRSensorGlucoseEventSink>();
-        services.AddScoped<IDataEventSink<SensorGlucose>>(sp =>
-        {
-            var sinks = new List<IDataEventSink<SensorGlucose>>
-            {
-                sp.GetRequiredService<SignalRSensorGlucoseEventSink>(),
-            };
-
-            return new CompositeDataEventSink<SensorGlucose>(
-                sinks,
-                sp.GetService<ILogger<CompositeDataEventSink<SensorGlucose>>>());
-        });
         services.AddScoped<IStateSpanService, StateSpanService>();
         services.AddScoped<DeviceStatusProjectionService>();
         services.AddScoped<IDataEventSink<DeviceStatus>>(sp =>

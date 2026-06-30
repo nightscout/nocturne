@@ -126,31 +126,6 @@ public class TreatmentPublisherTests
     }
 
     [Fact]
-    public async Task PublishDecompositionBatchesAsync_ConcurrentCalls_AcquireIndependentContexts()
-    {
-        var calls = Enumerable.Range(0, 16).Select(i =>
-            _publisher.PublishDecompositionBatchesAsync(
-                new[]
-                {
-                    new DecompositionBatch
-                    {
-                        Id = Guid.NewGuid(),
-                        Source = "test-source",
-                        SourceRecordId = $"record-{i}",
-                        CreatedAt = DateTime.UtcNow,
-                    },
-                },
-                "test-source", WriteOrigin.Live));
-
-        var results = await Task.WhenAll(calls);
-
-        results.Should().OnlyContain(r => r);
-        _mockContextFactory.Verify(
-            f => f.CreateAsync(It.IsAny<CancellationToken>()),
-            Times.Exactly(16));
-    }
-
-    [Fact]
     public async Task GetLatestTreatmentTimestampAsync_ReturnsMaxAcrossAllTreatmentTypes()
     {
         var older = new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc);

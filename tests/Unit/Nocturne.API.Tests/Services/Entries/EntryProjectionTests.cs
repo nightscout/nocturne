@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Nocturne.API.Services.Entries;
+using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Xunit;
 

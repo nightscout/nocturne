@@ -23,7 +23,6 @@ namespace Nocturne.API.Services.V4;
 /// <seealso cref="IDecomposer{T}"/>
 public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
 {
-    private readonly NocturneDbContext _dbContext;
     private readonly ITherapySettingsRepository _therapySettingsRepo;
     private readonly IBasalScheduleRepository _basalScheduleRepo;
     private readonly ICarbRatioScheduleRepository _carbRatioScheduleRepo;
@@ -32,7 +31,6 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
     private readonly IAuditContext _auditContext;
     private readonly ILogger<ProfileDecomposer> _logger;
 
-    /// <param name="dbContext">EF Core context used to persist <see cref="DecompositionBatchEntity"/> records.</param>
     /// <param name="therapySettingsRepo">Repository for <see cref="V4Models.TherapySettings"/> records.</param>
     /// <param name="basalScheduleRepo">Repository for <see cref="V4Models.BasalSchedule"/> records.</param>
     /// <param name="carbRatioScheduleRepo">Repository for <see cref="V4Models.CarbRatioSchedule"/> records.</param>
@@ -40,7 +38,6 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
     /// <param name="targetRangeScheduleRepo">Repository for <see cref="V4Models.TargetRangeSchedule"/> records.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public ProfileDecomposer(
-        NocturneDbContext dbContext,
         ITherapySettingsRepository therapySettingsRepo,
         IBasalScheduleRepository basalScheduleRepo,
         ICarbRatioScheduleRepository carbRatioScheduleRepo,
@@ -49,7 +46,6 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         IAuditContext auditContext,
         ILogger<ProfileDecomposer> logger)
     {
-        _dbContext = dbContext;
         _therapySettingsRepo = therapySettingsRepo;
         _basalScheduleRepo = basalScheduleRepo;
         _carbRatioScheduleRepo = carbRatioScheduleRepo;
@@ -62,19 +58,9 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
     /// <inheritdoc />
     public async Task<V4Models.DecompositionResult> DecomposeAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default)
     {
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "profile_decomposer",
-            SourceRecordId = profile.Id,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
         var result = new V4Models.DecompositionResult
         {
-            CorrelationId = batch.Id
+            CorrelationId = Guid.CreateVersion7()
         };
 
         if (profile.Store.Count == 0)
@@ -105,17 +91,8 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         if (profiles.Count == 0)
             return new V4Models.DecompositionResult();
 
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "profile_decomposer_batch",
-            SourceRecordId = null,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
-        var result = new V4Models.DecompositionResult { CorrelationId = batch.Id };
+        var correlationId = Guid.CreateVersion7();
+        var result = new V4Models.DecompositionResult { CorrelationId = correlationId };
 
         var therapySettingsList = new List<V4Models.TherapySettings>();
         var basalScheduleList = new List<V4Models.BasalSchedule>();
@@ -136,11 +113,11 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
                 var legacyId = $"{profile.Id}:{storeName}";
                 var isDefault = string.Equals(storeName, profile.DefaultProfile, StringComparison.OrdinalIgnoreCase);
 
-                therapySettingsList.Add(MapToTherapySettings(profile, profileData, storeName, legacyId, isDefault, batch.Id));
-                basalScheduleList.Add(MapToBasalSchedule(profile, profileData, storeName, legacyId, batch.Id));
-                carbRatioScheduleList.Add(MapToCarbRatioSchedule(profile, profileData, storeName, legacyId, batch.Id));
-                sensitivityScheduleList.Add(MapToSensitivitySchedule(profile, profileData, storeName, legacyId, batch.Id));
-                targetRangeScheduleList.Add(MapToTargetRangeSchedule(profile, profileData, storeName, legacyId, batch.Id));
+                therapySettingsList.Add(MapToTherapySettings(profile, profileData, storeName, legacyId, isDefault, correlationId));
+                basalScheduleList.Add(MapToBasalSchedule(profile, profileData, storeName, legacyId, correlationId));
+                carbRatioScheduleList.Add(MapToCarbRatioSchedule(profile, profileData, storeName, legacyId, correlationId));
+                sensitivityScheduleList.Add(MapToSensitivitySchedule(profile, profileData, storeName, legacyId, correlationId));
+                targetRangeScheduleList.Add(MapToTargetRangeSchedule(profile, profileData, storeName, legacyId, correlationId));
             }
         }
 

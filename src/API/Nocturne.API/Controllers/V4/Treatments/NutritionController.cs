@@ -115,35 +115,9 @@ public class NutritionController : ControllerBase
         if (request.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        Guid correlationId;
-        if (request.CorrelationId.HasValue)
-        {
-            var exists = await _context.DecompositionBatches.AnyAsync(b => b.Id == request.CorrelationId.Value, ct);
-            if (!exists)
-            {
-                _context.DecompositionBatches.Add(new DecompositionBatchEntity
-                {
-                    Id = request.CorrelationId.Value,
-                    TenantId = _context.TenantId,
-                    Source = "nutrition_controller",
-                    CreatedAt = DateTime.UtcNow,
-                });
-                await _context.SaveChangesAsync(ct);
-            }
-            correlationId = request.CorrelationId.Value;
-        }
-        else
-        {
-            var batch = new DecompositionBatchEntity
-            {
-                TenantId = _context.TenantId,
-                Source = "nutrition_controller",
-                CreatedAt = DateTime.UtcNow,
-            };
-            _context.DecompositionBatches.Add(batch);
-            await _context.SaveChangesAsync(ct);
-            correlationId = batch.Id;
-        }
+        // Records split from one source share a correlation_id; it is a free-standing
+        // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
+        var correlationId = request.CorrelationId ?? Guid.CreateVersion7();
 
         var model = new CarbIntake
         {
@@ -374,36 +348,9 @@ public class NutritionController : ControllerBase
         if (request.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        Guid correlationId;
-        if (request.CorrelationId.HasValue)
-        {
-            // Ensure a batch record exists for the supplied CorrelationId so the FK is satisfied
-            var exists = await _context.DecompositionBatches.AnyAsync(b => b.Id == request.CorrelationId.Value, ct);
-            if (!exists)
-            {
-                _context.DecompositionBatches.Add(new DecompositionBatchEntity
-                {
-                    Id = request.CorrelationId.Value,
-                    TenantId = _context.TenantId,
-                    Source = "nutrition_controller",
-                    CreatedAt = DateTime.UtcNow,
-                });
-                await _context.SaveChangesAsync(ct);
-            }
-            correlationId = request.CorrelationId.Value;
-        }
-        else
-        {
-            var batch = new DecompositionBatchEntity
-            {
-                TenantId = _context.TenantId,
-                Source = "nutrition_controller",
-                CreatedAt = DateTime.UtcNow,
-            };
-            _context.DecompositionBatches.Add(batch);
-            await _context.SaveChangesAsync(ct);
-            correlationId = batch.Id;
-        }
+        // The meal's bolus + carb intake share a correlation_id; it is a free-standing
+        // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
+        var correlationId = request.CorrelationId ?? Guid.CreateVersion7();
         var timestamp = request.Timestamp.UtcDateTime;
 
         var bolusModel = new Bolus

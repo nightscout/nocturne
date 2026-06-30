@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Entries;
+using Nocturne.Core.Models.Projections;
 namespace Nocturne.API.Services.Entries;
 
 /// <summary>

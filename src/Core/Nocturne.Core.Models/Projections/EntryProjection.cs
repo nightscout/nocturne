@@ -1,11 +1,13 @@
-using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
-namespace Nocturne.API.Services.Entries;
+namespace Nocturne.Core.Models.Projections;
 
 /// <summary>
-/// Projects V4 glucose models back into the legacy <see cref="Entry"/> shape
-/// for V1/V3 API compatibility.
+/// Projects V4 glucose models back into the legacy <see cref="Entry"/> shape for V1/V3 API
+/// compatibility. Lives in Core so both the API read path (<c>EntryReadService</c>) and the
+/// Infrastructure repository chokepoint (which broadcasts the legacy <c>entries</c> collection) share
+/// a single source of truth — the projected id is <c>legacyId ?? Guid</c>, so broadcasts merge against
+/// reads on the same id.
 /// </summary>
 public static class EntryProjection
 {

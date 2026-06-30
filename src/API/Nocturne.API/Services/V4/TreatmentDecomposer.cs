@@ -66,7 +66,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         "TempBasal"
     ];
 
-    /// <param name="dbContext">EF Core context used to persist <see cref="DecompositionBatchEntity"/> records and look up treatment entity PKs.</param>
+    /// <param name="dbContext">EF Core context used to look up treatment entity PKs and run bulk deletes.</param>
     /// <param name="bolusRepository">Repository for <see cref="V4Models.Bolus"/> records.</param>
     /// <param name="tempBasalRepository">Repository for <see cref="V4Models.TempBasal"/> records.</param>
     /// <param name="carbIntakeRepository">Repository for <see cref="V4Models.CarbIntake"/> records.</param>
@@ -349,19 +349,9 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     {
         NormalizeIdentity(treatment);
 
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "treatment_decomposer",
-            SourceRecordId = treatment.Id,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
         var result = new V4Models.DecompositionResult
         {
-            CorrelationId = batch.Id
+            CorrelationId = Guid.CreateVersion7()
         };
 
         var c = ClassifyTreatment(treatment);
@@ -1243,17 +1233,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (treatments.Count == 0)
             return new V4Models.DecompositionResult();
 
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "treatment_decomposer_batch",
-            SourceRecordId = null,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
-        var result = new V4Models.DecompositionResult { CorrelationId = batch.Id };
+        var correlationId = Guid.CreateVersion7();
+        var result = new V4Models.DecompositionResult { CorrelationId = correlationId };
 
         // Typed collection lists for bulk insert
         var estimatedPerType = Math.Max(1, treatments.Count / 4);
@@ -1285,7 +1266,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                 // TempBasal treatments can also be bulk-inserted
                 if (!c.IsProfileSwitch && !c.IsOverride && !c.IsTemporaryTarget)
                 {
-                    var tempBasal = MapToTempBasal(treatment, batch.Id);
+                    var tempBasal = MapToTempBasal(treatment, correlationId);
                     tempBasal.DeviceId = await _deviceService.ResolveAsync(
                         V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
                     tempBasal.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(tempBasal.DeviceId, treatment.Mills, ct);
@@ -1304,7 +1285,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                     || string.Equals(treatment.EventType, "SMB", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(treatment.EventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase);
 
-                var model = MapToBolus(treatment, batch.Id);
+                var model = MapToBolus(treatment, correlationId);
 
                 if (isAlgorithmBolus)
                 {
@@ -1319,20 +1300,20 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             }
 
             if (c.ProduceCarbIntake)
-                carbList.Add(MapToCarbIntake(treatment, batch.Id));
+                carbList.Add(MapToCarbIntake(treatment, correlationId));
 
             if (c.ProduceBGCheck)
-                bgCheckList.Add(MapToBGCheck(treatment, batch.Id));
+                bgCheckList.Add(MapToBGCheck(treatment, correlationId));
 
             if (c.ProduceNote)
-                noteList.Add(MapToNote(treatment, batch.Id, c.IsAnnouncement));
+                noteList.Add(MapToNote(treatment, correlationId, c.IsAnnouncement));
 
             if (c.ProduceBolusCalc)
-                bolusCalcList.Add(MapToBolusCalculation(treatment, batch.Id));
+                bolusCalcList.Add(MapToBolusCalculation(treatment, correlationId));
 
             if (c.ProduceDeviceEvent)
             {
-                var model = MapToDeviceEvent(treatment, batch.Id, c.ParsedDeviceEventType);
+                var model = MapToDeviceEvent(treatment, correlationId, c.ParsedDeviceEventType);
                 model.DeviceId = await _deviceService.ResolveAsync(
                     V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
                 model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
@@ -1361,7 +1342,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         var batchInsulinTimeline = new SortedDictionary<long, V4Models.TreatmentInsulinContext>();
         foreach (var (treatment, isPs, _, _) in stateSpanTreatments.Where(t => t.IsProfileSwitch))
         {
-            var spanResult = new V4Models.DecompositionResult { CorrelationId = batch.Id };
+            var spanResult = new V4Models.DecompositionResult { CorrelationId = correlationId };
             await DecomposeProfileSwitchAsync(treatment, spanResult, origin, ct);
             result.CreatedRecords.AddRange(spanResult.CreatedRecords);
             result.UpdatedRecords.AddRange(spanResult.UpdatedRecords);
@@ -1472,7 +1453,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         foreach (var (treatment, isPs, isOv, isTt) in stateSpanTreatments.Where(t => !t.IsProfileSwitch))
         {
             // Use a temporary result to collect records from helper methods
-            var spanResult = new V4Models.DecompositionResult { CorrelationId = batch.Id };
+            var spanResult = new V4Models.DecompositionResult { CorrelationId = correlationId };
 
             if (isOv)
                 await DecomposeOverrideAsync(treatment, spanResult, origin, ct);

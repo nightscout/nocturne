@@ -80,34 +80,12 @@ public class NutritionControllerGetMealsTests : IDisposable
         return controller;
     }
 
-    /// <summary>
-    /// Ensures a <see cref="DecompositionBatchEntity"/> exists for the given ID so that
-    /// seeded V4 entities can satisfy the CorrelationId FK constraint.
-    /// </summary>
-    private void EnsureBatch(Guid batchId)
-    {
-        if (!_dbContext.DecompositionBatches.Any(b => b.Id == batchId))
-        {
-            _dbContext.DecompositionBatches.Add(new DecompositionBatchEntity
-            {
-                Id = batchId,
-                TenantId = TestTenantId,
-                Source = "test",
-                CreatedAt = DateTime.UtcNow,
-            });
-            _dbContext.SaveChanges();
-        }
-    }
-
     private CarbIntakeEntity SeedCarbIntake(
         DateTime timestamp,
         double carbs,
         Guid? correlationId = null,
         string? dataSource = "nocturne-web")
     {
-        if (correlationId.HasValue)
-            EnsureBatch(correlationId.Value);
-
         var entity = new CarbIntakeEntity
         {
             TenantId = TestTenantId,
@@ -128,9 +106,6 @@ public class NutritionControllerGetMealsTests : IDisposable
         Guid? correlationId = null,
         string? dataSource = "nocturne-web")
     {
-        if (correlationId.HasValue)
-            EnsureBatch(correlationId.Value);
-
         var entity = new BolusEntity
         {
             TenantId = TestTenantId,

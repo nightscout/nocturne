@@ -79,7 +79,6 @@ public class DeviceStatusDecomposerPumpSuspensionTests : IDisposable
             });
 
         _decomposer = new DeviceStatusDecomposer(
-            _context,
             _apsRepoMock.Object,
             _pumpRepoMock.Object,
             _uploaderRepoMock.Object,

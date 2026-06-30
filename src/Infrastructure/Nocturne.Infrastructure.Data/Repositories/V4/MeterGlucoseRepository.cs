@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
@@ -25,10 +27,13 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
     /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
     /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public MeterGlucoseRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<MeterGlucoseRepository> logger, IV4RecordBroadcaster<MeterGlucose>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+    public MeterGlucoseRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<MeterGlucoseRepository> logger, IV4RecordBroadcaster<MeterGlucose>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
+        : base(contextFactory, auditContext, broadcaster, entrySink)
     {
     }
+
+    /// <inheritdoc />
+    protected override Entry? ProjectToLegacyEntry(MeterGlucose model) => EntryProjection.FromMeterGlucose(model);
 
     /// <inheritdoc />
     protected override MeterGlucoseEntity ToEntity(MeterGlucose model) => MeterGlucoseMapper.ToEntity(model);

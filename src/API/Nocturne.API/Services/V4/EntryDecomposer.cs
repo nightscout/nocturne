@@ -31,7 +31,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     private readonly IAuditContext _auditContext;
     private readonly ILogger<EntryDecomposer> _logger;
 
-    /// <param name="dbContext">EF Core context used to persist <see cref="DecompositionBatchEntity"/> records.</param>
+    /// <param name="dbContext">EF Core context used for entry bulk-delete operations.</param>
     /// <param name="sensorGlucoseRepository">Repository for <see cref="SensorGlucose"/> records.</param>
     /// <param name="meterGlucoseRepository">Repository for <see cref="MeterGlucose"/> records.</param>
     /// <param name="calibrationRepository">Repository for <see cref="Calibration"/> records.</param>
@@ -58,19 +58,9 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     /// <inheritdoc />
     public async Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default)
     {
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "entry_decomposer",
-            SourceRecordId = entry.Id,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
         var result = new DecompositionResult
         {
-            CorrelationId = batch.Id
+            CorrelationId = Guid.CreateVersion7()
         };
 
         var entryType = entry.Type?.ToLowerInvariant();
@@ -187,17 +177,8 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         if (entries.Count == 0)
             return new DecompositionResult();
 
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "entry_decomposer_batch",
-            SourceRecordId = null,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
-        var result = new DecompositionResult { CorrelationId = batch.Id };
+        var correlationId = Guid.CreateVersion7();
+        var result = new DecompositionResult { CorrelationId = correlationId };
 
         var sgvList = new List<SensorGlucose>();
         var mbgList = new List<MeterGlucose>();
@@ -209,7 +190,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
             {
                 case "sgv":
                 {
-                    var model = MapToSensorGlucose(entry, batch.Id);
+                    var model = MapToSensorGlucose(entry, correlationId);
 
                     string? gpHint = null;
                     double? smoothedHint = null;
@@ -230,10 +211,10 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
                     break;
                 }
                 case "mbg":
-                    mbgList.Add(MapToMeterGlucose(entry, batch.Id));
+                    mbgList.Add(MapToMeterGlucose(entry, correlationId));
                     break;
                 case "cal":
-                    calList.Add(MapToCalibration(entry, batch.Id));
+                    calList.Add(MapToCalibration(entry, correlationId));
                     break;
                 default:
                     _logger.LogDebug("Skipping entry with unknown type: {Type}", entry.Type);
@@ -268,38 +249,22 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     /// <inheritdoc />
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
-        // origin is accepted for interface uniformity; the v4-native delete broadcast is deferred to the glucose-unification follow-up (deletes here bypass the repository chokepoint).
-        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        var deleted = 0;
+        deleted += await _sensorGlucoseRepository.DeleteByLegacyIdAsync(legacyId, origin, ct);
+        deleted += await _meterGlucoseRepository.DeleteByLegacyIdAsync(legacyId, origin, ct);
+        deleted += await _calibrationRepository.DeleteByLegacyIdAsync(legacyId, origin, ct);
 
-        return await strategy.ExecuteAsync(async () =>
-        {
-            await using var tx = await _dbContext.Database.BeginTransactionAsync(ct);
-            var now = DateTime.UtcNow;
-            var deleted = 0;
+        if (deleted > 0)
+            _logger.LogDebug("Soft-deleted {Count} v4 records for legacy entry {LegacyId}", deleted, legacyId);
 
-            deleted += await _dbContext.SensorGlucose
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.MeterGlucose
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-            deleted += await _dbContext.Calibrations
-                .Where(e => e.LegacyId == legacyId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, now), ct);
-
-            await tx.CommitAsync(ct);
-
-            if (deleted > 0)
-                _logger.LogDebug("Soft-deleted {Count} v4 records for legacy entry {LegacyId}", deleted, legacyId);
-
-            return deleted;
-        });
+        return deleted;
     }
 
     /// <inheritdoc />
     public async Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default)
     {
-        // origin is accepted for interface uniformity; the v4-native delete broadcast is deferred to the glucose-unification follow-up (deletes here bypass the repository chokepoint).
+        // origin is accepted for interface uniformity; bulk clear-by-time-range stays a coarse op that
+        // does NOT route through the per-record chokepoint (it fires EntryService's OnBulkDeletedAsync).
         var (fromMills, toMills) = Core.Models.Entries.EntryDomainLogic.ParseTimeRangeFromFind(find);
 
         // ParseTimeRangeFromFind extracts $gte/$lte from any field, not just

@@ -7,7 +7,6 @@ using Nocturne.API.Controllers.V4.Glucose;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -21,7 +20,6 @@ public class SensorGlucoseControllerTests
     private readonly Mock<ISensorGlucoseRepository> _repoMock = new();
     private readonly Mock<IGlucoseProcessingResolver> _glucoseResolverMock = new();
     private readonly Mock<IAlertOrchestrator> _alertOrchestratorMock = new();
-    private readonly Mock<IDataEventSink<SensorGlucose>> _eventsMock = new();
     private readonly Mock<ILogger<SensorGlucoseController>> _loggerMock = new();
 
     private SensorGlucoseController CreateController()
@@ -30,7 +28,6 @@ public class SensorGlucoseControllerTests
             _repoMock.Object,
             _glucoseResolverMock.Object,
             _alertOrchestratorMock.Object,
-            _eventsMock.Object,
             _loggerMock.Object);
 
         controller.ControllerContext = new ControllerContext
@@ -78,34 +75,7 @@ public class SensorGlucoseControllerTests
     }
 
     [Fact]
-    public async Task Create_BroadcastsRealtimeEvent_ForCreatedReading()
-    {
-        // Arrange
-        var input = new UpsertSensorGlucoseRequest { Timestamp = DateTimeOffset.UtcNow, Mgdl = 120 };
-        var created = new SensorGlucose { Id = Guid.NewGuid(), Timestamp = input.Timestamp.UtcDateTime, Mgdl = 120 };
-
-        _repoMock
-            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(created);
-        _repoMock.As<IV4Repository<SensorGlucose>>()
-            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(created);
-
-        var controller = CreateController();
-
-        // Act
-        await controller.Create(input);
-
-        // Assert — the V4 write must emit a real-time create so live dashboards update without a reload.
-        _eventsMock.Verify(
-            e => e.OnCreatedAsync(
-                It.Is<IReadOnlyList<SensorGlucose>>(l => l.Count == 1 && l[0] == created),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task CreateBulk_BroadcastsRealtimeEvent_ForAllCreatedReadings()
+    public async Task CreateBulk_Returns201_WithCreatedReadings()
     {
         // Arrange
         var requests = new[]
@@ -126,18 +96,16 @@ public class SensorGlucoseControllerTests
         var controller = CreateController();
 
         // Act
-        await controller.CreateSensorGlucoseBulk(requests);
+        var result = await controller.CreateSensorGlucoseBulk(requests);
 
         // Assert
-        _eventsMock.Verify(
-            e => e.OnCreatedAsync(
-                It.Is<IReadOnlyList<SensorGlucose>>(l => l.Count == 2),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status201Created);
+        objectResult.Value.Should().BeEquivalentTo(created);
     }
 
     [Fact]
-    public async Task Update_BroadcastsRealtimeEvent_ForUpdatedReading()
+    public async Task Update_Returns200_WithUpdatedReading()
     {
         // Arrange
         var id = Guid.NewGuid();
@@ -155,35 +123,10 @@ public class SensorGlucoseControllerTests
         var controller = CreateController();
 
         // Act
-        await controller.Update(id, input);
+        var result = await controller.Update(id, input);
 
-        // Assert — an edited V4 reading must emit a real-time update so live dashboards reflect the change.
-        _eventsMock.Verify(
-            e => e.OnUpdatedAsync(updated, It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task Restore_BroadcastsRealtimeEvent_ForRestoredReading()
-    {
-        // Arrange
-        var id = Guid.NewGuid();
-        var restored = new SensorGlucose { Id = id, Timestamp = DateTime.UtcNow, Mgdl = 110 };
-
-        _repoMock
-            .Setup(r => r.RestoreAsync(id, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(restored);
-
-        var controller = CreateController();
-
-        // Act
-        await controller.Restore(id);
-
-        // Assert — a restored reading reappears, so it must surface as a real-time create.
-        _eventsMock.Verify(
-            e => e.OnCreatedAsync(
-                It.Is<IReadOnlyList<SensorGlucose>>(l => l.Count == 1 && l[0] == restored),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
+        // Assert
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().Be(updated);
     }
 }

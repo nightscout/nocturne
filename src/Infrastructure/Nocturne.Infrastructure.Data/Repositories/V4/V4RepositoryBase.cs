@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -46,29 +47,77 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// </summary>
     private readonly IV4RecordBroadcaster<TModel>? _broadcaster;
 
-    /// <summary>Initializes the base with the tenant-scoped context factory, audit context, and (optional) broadcaster.</summary>
+    /// <summary>
+    /// Legacy <see cref="Entry"/> sink fired for glucose-family writes alongside the native V4 broadcast,
+    /// so V1/V3 clients on the legacy <c>entries</c> collection still see realtime updates. Optional: when
+    /// null (e.g. a non-glucose type or a repo constructed without DI) no entries projection is fired.
+    /// Gated to <see cref="WriteOrigin.Live"/> in <see cref="RaiseEntriesProjectionAsync"/>.
+    /// </summary>
+    private readonly IDataEventSink<Entry>? _entrySink;
+
+    /// <summary>Initializes the base with the tenant-scoped context factory, audit context, (optional) broadcaster, and (optional) legacy entry sink.</summary>
     protected V4RepositoryBase(
         ITenantDbContextFactory contextFactory,
         IAuditContext auditContext,
-        IV4RecordBroadcaster<TModel>? broadcaster = null)
+        IV4RecordBroadcaster<TModel>? broadcaster = null,
+        IDataEventSink<Entry>? entrySink = null)
     {
         ContextFactory = contextFactory;
         AuditContext = auditContext;
         _broadcaster = broadcaster;
+        _entrySink = entrySink;
     }
+
+    /// <summary>
+    /// Projects a domain model to the legacy <see cref="Entry"/> shape, or null when the type has no
+    /// legacy projection. The glucose-family repos override this; non-glucose types project nothing.
+    /// </summary>
+    protected virtual Entry? ProjectToLegacyEntry(TModel model) => null;
 
     /// <summary>
     /// Fires the native V4 broadcast for a just-committed write — but only for <see cref="WriteOrigin.Live"/>
     /// writes (backfill imports stay silent so clients aren't flooded). The single gate every mutating
     /// method routes through, so the origin rule lives in exactly one place.
     /// </summary>
-    protected Task RaiseBroadcastAsync(
+    protected async Task RaiseBroadcastAsync(
         IReadOnlyList<TModel> created,
         IReadOnlyList<TModel> updated,
-        IReadOnlyList<Guid> deletedIds,
+        IReadOnlyList<TModel> deleted,
         WriteOrigin origin,
         CancellationToken ct)
-        => V4RecordBroadcast.RaiseAsync(_broadcaster, created, updated, deletedIds, origin, ct);
+    {
+        await V4RecordBroadcast.RaiseAsync(
+            _broadcaster, created, updated, deleted.Select(m => m.Id).ToList(), origin, ct);
+        await RaiseEntriesProjectionAsync(created, updated, deleted, origin, ct);
+    }
+
+    /// <summary>
+    /// Projects glucose-family writes to the legacy <see cref="Entry"/> shape and fires the legacy entry
+    /// sink — gated to <see cref="WriteOrigin.Live"/>, and a no-op when no sink is wired or the type has no
+    /// projection (<see cref="ProjectToLegacyEntry"/> returns null).
+    /// </summary>
+    private async Task RaiseEntriesProjectionAsync(
+        IReadOnlyList<TModel> created,
+        IReadOnlyList<TModel> updated,
+        IReadOnlyList<TModel> deleted,
+        WriteOrigin origin,
+        CancellationToken ct)
+    {
+        if (origin != WriteOrigin.Live || _entrySink is null)
+            return;
+
+        var createdEntries = created.Select(ProjectToLegacyEntry).OfType<Entry>().ToList();
+        if (createdEntries.Count > 0)
+            await _entrySink.OnCreatedAsync(createdEntries, ct);
+
+        foreach (var m in updated)
+            if (ProjectToLegacyEntry(m) is { } e)
+                await _entrySink.OnUpdatedAsync(e, ct);
+
+        foreach (var m in deleted)
+            if (ProjectToLegacyEntry(m) is { } e)
+                await _entrySink.OnDeletedAsync(e, ct);
+    }
 
     /// <summary>
     /// True if an upserted-in-place tracked entity changed materially (worth an <c>update</c> broadcast).
@@ -161,7 +210,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
         entity.DeletedAt = DateTime.UtcNow;
         await ctx.SaveChangesAsync(ct);
-        await RaiseBroadcastAsync([], [], [id], origin, ct);
+        var model = ToDomain(entity);
+        await RaiseBroadcastAsync([], [], [model], origin, ct);
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.RestoreAsync" />
@@ -245,10 +295,11 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     public virtual async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var deletedIds = await ctx.AuditedSoftDeleteWithIdsAsync(
+        var entities = await ctx.AuditedSoftDeleteWithEntitiesAsync(
             ctx.Set<TEntity>().Where(e => e.LegacyId == legacyId), AuditContext, ct);
-        await RaiseBroadcastAsync([], [], deletedIds, origin, ct);
-        return deletedIds.Count;
+        var models = entities.Select(ToDomain).ToList();
+        await RaiseBroadcastAsync([], [], models, origin, ct);
+        return models.Count;
     }
 
     /// <summary>Latest stored record timestamp, optionally scoped to a data source (connector watermark).</summary>

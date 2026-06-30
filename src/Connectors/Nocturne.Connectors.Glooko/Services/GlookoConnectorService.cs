@@ -514,11 +514,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
             bgChecks, PublishBGCheckDataAsync, config, cancellationToken);
 
-        // 2. Treatments (FK order: batches → boluses → carbs+foods)
-        var (boluses, carbs, batches) = _v4TreatmentMapper.MapBatchData(batchData);
-
-        if (batches.Count > 0)
-            await PublishDecompositionBatchesAsync(batches, config, cancellationToken);
+        // 2. Treatments (boluses → carbs+foods)
+        var (boluses, carbs, _) = _v4TreatmentMapper.MapBatchData(batchData);
 
         await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
             boluses, PublishBolusDataAsync, config, cancellationToken);
@@ -590,8 +587,8 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         await PublishRecordTypeAsync(result, SyncDataType.ManualBG, activeTypes,
             bgChecks, PublishBGCheckDataAsync, config, cancellationToken);
 
-        // 2. Treatments (FK order: batches → boluses → carbs+foods)
-        var (v3Boluses, v3BolusCarbIntakes, v3Batches) = _v4TreatmentMapper.MapV3Boluses(v3Data);
+        // 2. Treatments (boluses → carbs+foods)
+        var (v3Boluses, v3BolusCarbIntakes, _) = _v4TreatmentMapper.MapV3Boluses(v3Data);
 
         // Carbs: bolus wizard + history meals (preferred) or carbAll (fallback)
         var allCarbs = new List<CarbIntake>(v3BolusCarbIntakes);
@@ -602,9 +599,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             allCarbs.AddRange(historyMealCarbs);
         else
             allCarbs.AddRange(_v4TreatmentMapper.MapV3CarbAll(v3Data));
-
-        if (v3Batches.Count > 0)
-            await PublishDecompositionBatchesAsync(v3Batches, config, cancellationToken);
 
         await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
             v3Boluses, PublishBolusDataAsync, config, cancellationToken);

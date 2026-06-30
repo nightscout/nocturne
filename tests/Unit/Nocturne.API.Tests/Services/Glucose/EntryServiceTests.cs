@@ -28,6 +28,9 @@ public class EntryServiceTests
         _decomposer
             .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult());
+        _decomposer
+            .Setup(x => x.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult());
 
         _sut = new EntryService(
             _store.Object,
@@ -340,7 +343,7 @@ public class EntryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task CreateEntriesAsync_DecomposesEachEntryToV4AndFiresEvent()
+    public async Task CreateEntriesAsync_DecomposesBatchToV4()
     {
         // Arrange
         var entries = new List<Entry>
@@ -354,20 +357,24 @@ public class EntryServiceTests
 
         // Assert
         Assert.Equal(2, result.Count());
+        // The chokepoint fires per-type-batch, so the service decomposes the whole batch once.
         _decomposer.Verify(
-            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Exactly(2));
-        // Cache invalidation is handled by the EventSink, not the service
+            x => x.DecomposeBatchAsync(
+                It.Is<IReadOnlyList<Entry>>(b => b.Count == 2),
+                It.IsAny<WriteOrigin>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        // Cache invalidation + broadcasting is handled by the chokepoint, not the service.
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
         _events.Verify(
             x => x.OnCreatedAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<CancellationToken>()),
-            Times.Once);
+            Times.Never);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task CreateEntriesAsync_WhenDecomposerThrows_DoesNotFireEvent()
+    public async Task CreateEntriesAsync_WhenDecomposerThrows_Propagates()
     {
         // Arrange
         var entries = new List<Entry>
@@ -376,7 +383,7 @@ public class EntryServiceTests
         };
 
         _decomposer
-            .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Database error"));
 
         // Act & Assert
@@ -384,9 +391,6 @@ public class EntryServiceTests
             () => _sut.CreateEntriesAsync(entries, CancellationToken.None));
 
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
-        _events.Verify(
-            x => x.OnCreatedAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     [Theory]
@@ -408,7 +412,10 @@ public class EntryServiceTests
         // Assert
         Assert.Single(result);
         _decomposer.Verify(
-            x => x.DecomposeAsync(It.Is<Entry>(e => e.Type == type), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            x => x.DecomposeBatchAsync(
+                It.Is<IReadOnlyList<Entry>>(b => b.Count == 1 && b[0].Type == type),
+                It.IsAny<WriteOrigin>(),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -428,10 +435,10 @@ public class EntryServiceTests
         // Act
         var result = await _sut.CreateEntriesAsync(entries, CancellationToken.None);
 
-        // Assert — unknown types are silently filtered out
+        // Assert — unknown types are silently filtered out (empty batch never decomposed)
         Assert.Empty(result);
         _decomposer.Verify(
-            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            x => x.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -450,11 +457,14 @@ public class EntryServiceTests
         // Act
         var result = await _sut.CreateEntriesAsync(entries, CancellationToken.None);
 
-        // Assert
+        // Assert — only the two valid entries reach the batch decompose
         Assert.Equal(2, result.Count());
         _decomposer.Verify(
-            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
-            Times.Exactly(2));
+            x => x.DecomposeBatchAsync(
+                It.Is<IReadOnlyList<Entry>>(b => b.Count == 2),
+                It.IsAny<WriteOrigin>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     #endregion
@@ -464,7 +474,7 @@ public class EntryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task UpdateEntryAsync_WhenSuccessful_DecomposesAndFiresEvent()
+    public async Task UpdateEntryAsync_WhenSuccessful_Decomposes()
     {
         // Arrange
         var entryId = "60a1b2c3d4e5f6789012345";
@@ -481,21 +491,17 @@ public class EntryServiceTests
         // Assert
         Assert.NotNull(result);
         Assert.Equal(125, result.Sgv);
-        // Decomposer performs idempotent upsert via LegacyId
+        // Decomposer performs idempotent upsert via LegacyId; the chokepoint fires the update broadcast.
         _decomposer.Verify(
             x => x.DecomposeAsync(It.Is<Entry>(e => e.Id == entryId && e.Sgv == 125), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
-        // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
-        _events.Verify(
-            x => x.OnUpdatedAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
-            Times.Once);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task UpdateEntryAsync_WhenNotFound_DoesNotDecomposeOrFireEvent()
+    public async Task UpdateEntryAsync_WhenNotFound_DoesNotDecompose()
     {
         // Arrange
         var entry = new Entry { Type = "sgv", Sgv = 120, Mills = 1234567890 };
@@ -513,9 +519,6 @@ public class EntryServiceTests
             x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
-        _events.Verify(
-            x => x.OnUpdatedAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     #endregion
@@ -525,15 +528,11 @@ public class EntryServiceTests
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task DeleteEntryAsync_WhenSuccessful_DeletesFromV4AndFiresEvent()
+    public async Task DeleteEntryAsync_WhenSuccessful_DeletesFromV4()
     {
         // Arrange
         var entryId = "60a1b2c3d4e5f6789012345";
-        var entryToDelete = new Entry { Id = entryId, Type = "sgv", Sgv = 120, Mills = 1234567890 };
 
-        _store
-            .Setup(x => x.GetByIdAsync(entryId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(entryToDelete);
         _decomposer
             .Setup(x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
@@ -543,27 +542,21 @@ public class EntryServiceTests
 
         // Assert
         Assert.True(result);
+        // The per-repo chokepoint delete fires the deletion broadcast.
         _decomposer.Verify(
             x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
-        // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
-        _events.Verify(
-            x => x.OnDeletedAsync(It.Is<Entry?>(e => e != null && e.Id == entryId), It.IsAny<CancellationToken>()),
-            Times.Once);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
-    public async Task DeleteEntryAsync_WhenNotFound_DoesNotFireDeletedEvent()
+    public async Task DeleteEntryAsync_WhenNotFound_ReturnsFalse()
     {
         // Arrange
         var entryId = "invalidid";
 
-        _store
-            .Setup(x => x.GetByIdAsync(entryId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Entry?)null);
         _decomposer
             .Setup(x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
@@ -577,9 +570,6 @@ public class EntryServiceTests
             x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
-        _events.Verify(
-            x => x.OnDeletedAsync(It.IsAny<Entry?>(), It.IsAny<CancellationToken>()),
-            Times.Never);
     }
 
     #endregion

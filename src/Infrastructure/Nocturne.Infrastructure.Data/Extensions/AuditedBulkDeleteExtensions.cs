@@ -109,7 +109,7 @@ public static class AuditedBulkDeleteExtensions
         IQueryable<T> query,
         IAuditContext? auditContext,
         CancellationToken ct = default) where T : class, IAuditable, ISoftDeletable
-        => (await context.AuditedSoftDeleteWithIdsAsync(query, auditContext, ct)).Count;
+        => (await context.AuditedSoftDeleteWithEntitiesAsync(query, auditContext, ct)).Count;
 
     /// <summary>
     /// As <see cref="AuditedSoftDeleteAsync{T}"/>, but returns the ids of the soft-deleted records so the
@@ -117,6 +117,21 @@ public static class AuditedBulkDeleteExtensions
     /// snapshot, so surfacing their ids costs no extra query.
     /// </summary>
     public static async Task<List<Guid>> AuditedSoftDeleteWithIdsAsync<T>(
+        this NocturneDbContext context,
+        IQueryable<T> query,
+        IAuditContext? auditContext,
+        CancellationToken ct = default) where T : class, IAuditable, ISoftDeletable
+        => (await context.AuditedSoftDeleteWithEntitiesAsync(query, auditContext, ct))
+            .Select(e => (Guid)typeof(T).GetProperty("Id")!.GetValue(e)!)
+            .ToList();
+
+    /// <summary>
+    /// As <see cref="AuditedSoftDeleteAsync{T}"/>, but returns the soft-deleted entities so the caller can
+    /// project them (e.g. to the legacy <c>Entry</c> shape) and broadcast per-record delete events. The
+    /// records are already materialized for the audit snapshot, so surfacing them costs no extra query.
+    /// They are detached after the snapshot but still hold their loaded values.
+    /// </summary>
+    public static async Task<List<T>> AuditedSoftDeleteWithEntitiesAsync<T>(
         this NocturneDbContext context,
         IQueryable<T> query,
         IAuditContext? auditContext,
@@ -196,7 +211,7 @@ public static class AuditedBulkDeleteExtensions
                     .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete), ct);
 
             await transaction.CommitAsync(ct);
-            return auditEntries.Select(a => a.EntityId).ToList();
+            return affectedRecords;
         });
     }
 
