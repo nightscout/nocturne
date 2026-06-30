@@ -52,6 +52,46 @@ public class ApsSnapshotRepositoryTests : IDisposable
         await _context.SaveChangesAsync();
     }
 
+    private async Task SeedSourceAsync(Guid tenantId, params (DateTime ts, string? source)[] rows)
+    {
+        foreach (var (ts, source) in rows)
+        {
+            _context.ApsSnapshots.Add(new ApsSnapshotEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = tenantId,
+                Timestamp = ts,
+                UtcOffset = 0,
+                AidAlgorithm = "Loop",
+                DataSource = source,
+                SysCreatedAt = DateTime.UtcNow,
+                SysUpdatedAt = DateTime.UtcNow,
+            });
+        }
+        await _context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task GetLatestTimestampAsync_FiltersBySource()
+    {
+        // Regression: the device-status resume watermark is source-scoped. A 2nd connector's first
+        // sync must NOT inherit the 1st connector's later timestamp — a tenant-global latest would
+        // mis-classify the new connector's first sync as incremental and skip its backfill.
+        var t1 = new DateTime(2026, 4, 30, 10, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        await SeedSourceAsync(TenantA,
+            (t1, "carelink"),
+            (t2, "nightscout"));
+
+        // carelink ignores nightscout's later row.
+        (await _repository.GetLatestTimestampAsync("carelink")).Should().Be(t1);
+        (await _repository.GetLatestTimestampAsync("nightscout")).Should().Be(t2);
+        // A brand-new connector sees no prior data → triggers backfill.
+        (await _repository.GetLatestTimestampAsync("never-synced")).Should().BeNull();
+        // Unfiltered path still returns the global max.
+        (await _repository.GetLatestTimestampAsync(null)).Should().Be(t2);
+    }
+
     // --- GetLatestTimestampAsync ---
 
     [Fact]

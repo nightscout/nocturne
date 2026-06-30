@@ -66,4 +66,48 @@ public class DevicePublisherTests
 
         result.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task GetLatestDeviceStatusTimestampAsync_ReturnsMaxAcrossSnapshotRepos_ForSource()
+    {
+        var t1 = new DateTime(2026, 4, 30, 10, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 4, 30, 11, 0, 0, DateTimeKind.Utc);
+        var t3 = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc); // latest
+
+        _mockApsSnapshotRepository
+            .Setup(r => r.GetLatestTimestampAsync("src", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(t1);
+        _mockPumpSnapshotRepository
+            .Setup(r => r.GetLatestTimestampAsync("src", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(t3);
+        _mockUploaderSnapshotRepository
+            .Setup(r => r.GetLatestTimestampAsync("src", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(t2);
+
+        var result = await _publisher.GetLatestDeviceStatusTimestampAsync("src");
+
+        result.Should().Be(t3);
+        // The source is forwarded to all three repos (not APS-only-global as before).
+        _mockApsSnapshotRepository.Verify(r => r.GetLatestTimestampAsync("src", It.IsAny<CancellationToken>()), Times.Once);
+        _mockPumpSnapshotRepository.Verify(r => r.GetLatestTimestampAsync("src", It.IsAny<CancellationToken>()), Times.Once);
+        _mockUploaderSnapshotRepository.Verify(r => r.GetLatestTimestampAsync("src", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetLatestDeviceStatusTimestampAsync_ReturnsNull_WhenAllReposEmpty()
+    {
+        _mockApsSnapshotRepository
+            .Setup(r => r.GetLatestTimestampAsync("src", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+        _mockPumpSnapshotRepository
+            .Setup(r => r.GetLatestTimestampAsync("src", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+        _mockUploaderSnapshotRepository
+            .Setup(r => r.GetLatestTimestampAsync("src", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+
+        var result = await _publisher.GetLatestDeviceStatusTimestampAsync("src");
+
+        result.Should().BeNull();
+    }
 }
