@@ -26,4 +26,19 @@ public interface IClientDeviceService
     Task<IReadOnlyList<ClientDeviceDto>> GetForSubjectAsync(
         Guid subjectId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the actuation intents currently active for a push-mode device: the <em>tenant's</em>
+    /// open excursions whose rule has a <c>device_action</c> channel targeting this device's kind,
+    /// with capabilities narrowed to those the device actually has. Results are tenant-scoped, not
+    /// subject-scoped (the alert domain has no subject ownership) — this matches the tenant-broadcast
+    /// fan-out design where every device of the kind is alerted. The <paramref name="subjectId"/> is
+    /// only a device-ownership gate: empty if the caller does not own the device, or for a
+    /// local-engine device (which actuates from its own synced rules). This is the reconcile source of
+    /// truth a device reads on (re)connect.
+    /// </summary>
+    Task<IReadOnlyList<DeviceActionIntent>> GetActiveIntentsAsync(
+        Guid deviceId,
+        Guid subjectId,
+        CancellationToken cancellationToken = default);
 }

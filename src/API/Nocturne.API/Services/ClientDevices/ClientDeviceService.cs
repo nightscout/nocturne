@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.ClientDevices;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -128,6 +129,65 @@ public class ClientDeviceService : IClientDeviceService
             .ToListAsync(cancellationToken);
 
         return devices.Select(ToDto).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeviceActionIntent>> GetActiveIntentsAsync(
+        Guid deviceId,
+        Guid subjectId,
+        CancellationToken cancellationToken = default)
+    {
+        var device = await _dbContext.ClientDevices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == deviceId, cancellationToken);
+
+        // Not found, not owned by the caller, or a local-engine device (actuates from synced rules).
+        if (device is null || device.SubjectId != subjectId || DeviceKinds.HasLocalEngine(device.Kind))
+        {
+            return [];
+        }
+
+        var deviceCaps = new HashSet<string>(device.Capabilities);
+
+        var excursions = await _dbContext.AlertExcursions
+            .AsNoTracking()
+            .Include(e => e.AlertRule)
+                .ThenInclude(r => r!.Channels)
+            .Where(e => e.EndedAt == null
+                && e.AlertRule!.IsEnabled
+                && e.AlertRule.Channels.Any(c =>
+                    c.ChannelType == ChannelType.DeviceAction && c.Destination == device.Kind))
+            .OrderByDescending(e => e.StartedAt)
+            .ToListAsync(cancellationToken);
+
+        var intents = new List<DeviceActionIntent>(excursions.Count);
+        foreach (var e in excursions)
+        {
+            var channel = e.AlertRule!.Channels.FirstOrDefault(c =>
+                c.ChannelType == ChannelType.DeviceAction && c.Destination == device.Kind);
+            if (channel is null)
+            {
+                continue;
+            }
+
+            var effective = DeviceCapabilities.ParseRequestedCapabilities(channel.Metadata)
+                .Where(deviceCaps.Contains)
+                .ToList();
+
+            intents.Add(new DeviceActionIntent
+            {
+                Intent = e.AcknowledgedAt is not null ? "acknowledged" : "opened",
+                ExcursionId = e.Id,
+                RuleName = e.AlertRule.Name,
+                Severity = e.AlertRule.Severity,
+                TargetKind = device.Kind,
+                Capabilities = effective,
+                Acknowledged = e.AcknowledgedAt is not null,
+                StartedAt = e.StartedAt,
+            });
+        }
+
+        return intents;
     }
 
     private static void Apply(

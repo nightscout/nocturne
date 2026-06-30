@@ -2,9 +2,11 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.ClientDevices;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -163,5 +165,192 @@ public class ClientDeviceServiceTests
         var all = ctx.ClientDevices.IgnoreQueryFilters().ToList();
         all.Should().HaveCount(2);
         all.Select(d => d.TenantId).Should().BeEquivalentTo([tenantA, tenantB]);
+    }
+
+    private static void SeedDeviceActionExcursion(
+        NocturneDbContext ctx,
+        string targetKind,
+        string metadataJson,
+        bool open = true,
+        bool acknowledged = false)
+    {
+        var rule = new AlertRuleEntity
+        {
+            Id = Guid.NewGuid(),
+            Name = "Urgent Low",
+            Severity = AlertRuleSeverity.Critical,
+            IsEnabled = true,
+        };
+        rule.Channels.Add(new AlertRuleChannelEntity
+        {
+            Id = Guid.NewGuid(),
+            ChannelType = ChannelType.DeviceAction,
+            Destination = targetKind,
+            Metadata = metadataJson,
+        });
+        ctx.AlertRules.Add(rule);
+        ctx.AlertExcursions.Add(new AlertExcursionEntity
+        {
+            Id = Guid.NewGuid(),
+            AlertRuleId = rule.Id,
+            StartedAt = DateTime.UtcNow,
+            EndedAt = open ? null : DateTime.UtcNow,
+            AcknowledgedAt = acknowledged ? DateTime.UtcNow : null,
+        });
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_returns_intent_with_capabilities_narrowed_to_device()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(subject, new RegisterDeviceRequest
+        {
+            InstallId = "c1",
+            Kind = DeviceKinds.Companion,
+            Capabilities = [DeviceCapabilities.Notify, DeviceCapabilities.TrayFlash],
+        }, FullDeviceScopes);
+        SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\",\"tray_flash\",\"torch\"]}");
+        await ctx.SaveChangesAsync();
+
+        var intents = await svc.GetActiveIntentsAsync(device.Id, subject);
+
+        intents.Should().ContainSingle();
+        intents[0].RuleName.Should().Be("Urgent Low");
+        intents[0].Severity.Should().Be(AlertRuleSeverity.Critical);
+        // torch dropped — the device only has notify + tray_flash
+        intents[0].Capabilities.Should().BeEquivalentTo(["notify", "tray_flash"]);
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_empty_for_local_engine_device()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(subject, new RegisterDeviceRequest
+        {
+            InstallId = "p1",
+            Kind = DeviceKinds.Prelude,
+            Capabilities = [DeviceCapabilities.Notify],
+        }, FullDeviceScopes);
+        SeedDeviceActionExcursion(ctx, DeviceKinds.Prelude, "{\"capabilities\":[\"notify\"]}");
+        await ctx.SaveChangesAsync();
+
+        var intents = await svc.GetActiveIntentsAsync(device.Id, subject);
+
+        intents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_empty_when_device_not_owned_by_caller()
+    {
+        using var ctx = CreateContext();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(Guid.NewGuid(), new RegisterDeviceRequest
+        {
+            InstallId = "c1",
+            Kind = DeviceKinds.Companion,
+            Capabilities = [DeviceCapabilities.Notify],
+        }, FullDeviceScopes);
+        SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}");
+        await ctx.SaveChangesAsync();
+
+        var intents = await svc.GetActiveIntentsAsync(device.Id, Guid.NewGuid());
+
+        intents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_excludes_resolved_excursions()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(subject, new RegisterDeviceRequest
+        {
+            InstallId = "c1",
+            Kind = DeviceKinds.Companion,
+            Capabilities = [DeviceCapabilities.Notify],
+        }, FullDeviceScopes);
+        SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}", open: false);
+        await ctx.SaveChangesAsync();
+
+        var intents = await svc.GetActiveIntentsAsync(device.Id, subject);
+
+        intents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_marks_acknowledged_excursion()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(subject, new RegisterDeviceRequest
+        {
+            InstallId = "c1",
+            Kind = DeviceKinds.Companion,
+            Capabilities = [DeviceCapabilities.Notify],
+        }, FullDeviceScopes);
+        SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}", acknowledged: true);
+        await ctx.SaveChangesAsync();
+
+        var intents = await svc.GetActiveIntentsAsync(device.Id, subject);
+
+        intents.Should().ContainSingle();
+        intents[0].Acknowledged.Should().BeTrue();
+        intents[0].Intent.Should().Be("acknowledged");
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_tolerates_malformed_channel_metadata()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(subject, new RegisterDeviceRequest
+        {
+            InstallId = "c1",
+            Kind = DeviceKinds.Companion,
+            Capabilities = [DeviceCapabilities.Notify],
+        }, FullDeviceScopes);
+        SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "not valid json");
+        await ctx.SaveChangesAsync();
+
+        var intents = await svc.GetActiveIntentsAsync(device.Id, subject);
+
+        intents.Should().ContainSingle();
+        intents[0].Capabilities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_isolates_excursions_across_tenants()
+    {
+        using var ctx = TestDbContextFactory.CreateInMemoryContext();
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+
+        ctx.TenantId = tenantA;
+        var device = await svc.RegisterAsync(subject, new RegisterDeviceRequest
+        {
+            InstallId = "c1",
+            Kind = DeviceKinds.Companion,
+            Capabilities = [DeviceCapabilities.Notify],
+        }, FullDeviceScopes);
+
+        // Seed an open excursion under a DIFFERENT tenant.
+        ctx.TenantId = tenantB;
+        SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}");
+        await ctx.SaveChangesAsync();
+
+        // Query as the device's tenant — tenant B's excursion must be invisible.
+        ctx.TenantId = tenantA;
+        var intents = await svc.GetActiveIntentsAsync(device.Id, subject);
+
+        intents.Should().BeEmpty();
     }
 }

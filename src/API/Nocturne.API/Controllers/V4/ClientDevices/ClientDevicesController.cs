@@ -95,4 +95,29 @@ public class ClientDevicesController : ControllerBase
         var devices = await _deviceService.GetForSubjectAsync(subjectId.Value, cancellationToken);
         return Ok(devices.ToList());
     }
+
+    /// <summary>
+    /// The actuation intents currently active for this device — the reconcile snapshot a push-mode
+    /// device reads on (re)connect to start anything still active and drop anything resolved. Empty
+    /// for a local-engine device or one the caller does not own.
+    /// </summary>
+    [HttpGet("{id:guid}/active-intents")]
+    [RemoteQuery]
+    [Authorize]
+    [RequireScope(OAuthScopes.DeviceNotify, OAuthScopes.DeviceActuate)]
+    [ProducesResponseType(typeof(List<DeviceActionIntent>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<List<DeviceActionIntent>>> GetActiveIntents(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId is null)
+        {
+            return Unauthorized();
+        }
+
+        var intents = await _deviceService.GetActiveIntentsAsync(id, subjectId.Value, cancellationToken);
+        return Ok(intents.ToList());
+    }
 }

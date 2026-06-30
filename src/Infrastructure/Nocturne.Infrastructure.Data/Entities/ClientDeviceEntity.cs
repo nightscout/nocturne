@@ -25,7 +25,11 @@ public class ClientDeviceEntity : ITenantScoped, IAuditable
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 
-    /// <summary>The subject (user) who paired this device. Drives subject-scoped intent delivery.</summary>
+    /// <summary>
+    /// The subject (user) who paired this device. Used for the device-ownership check and to list a
+    /// user's own devices. Note: actuation fan-out is tenant-broadcast (every device of the target
+    /// kind in the tenant), not subject-scoped — the alert domain has no subject ownership.
+    /// </summary>
     [Column("subject_id")]
     public Guid SubjectId { get; set; }
 

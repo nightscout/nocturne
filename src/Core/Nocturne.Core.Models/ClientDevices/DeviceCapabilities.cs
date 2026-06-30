@@ -124,4 +124,35 @@ public static class DeviceCapabilities
         }
         return accepted;
     }
+
+    /// <summary>
+    /// Parse the requested capabilities from a <c>device_action</c> channel's metadata JSON
+    /// (<c>{"capabilities": ["notify", ...]}</c>). Returns empty on null/blank/malformed input.
+    /// </summary>
+    public static IReadOnlyList<string> ParseRequestedCapabilities(string? metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(metadataJson);
+            if (doc.RootElement.TryGetProperty("capabilities", out var caps)
+                && caps.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                return caps.EnumerateArray()
+                    .Where(x => x.ValueKind == System.Text.Json.JsonValueKind.String)
+                    .Select(x => x.GetString()!)
+                    .ToList();
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Malformed channel metadata — treat as no requested capabilities.
+        }
+
+        return [];
+    }
 }

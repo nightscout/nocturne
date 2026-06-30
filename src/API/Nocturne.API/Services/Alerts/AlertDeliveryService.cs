@@ -361,6 +361,23 @@ internal sealed class AlertDeliveryService(
                 }
                 break;
 
+            case ChannelType.DeviceAction:
+                var deviceActionProvider = serviceProvider.GetService<Providers.DeviceActionProvider>();
+                if (deviceActionProvider is not null)
+                {
+                    // Destination is the target device kind. The provider suppresses local-engine
+                    // kinds and broadcasts to push-mode devices; either of those is "handled" (the
+                    // active-intents snapshot is the source of truth for reconcile). A false result
+                    // means a misconfigured channel (unknown kind) — record it as failed so History
+                    // doesn't show a silent success.
+                    var handled = await deviceActionProvider.SendAsync(delivery.Destination, payload, channelMetadata, ct);
+                    if (handled)
+                        await MarkDeliveredAsync(delivery.Id, null, null, ct);
+                    else
+                        await MarkFailedAsync(delivery.Id, $"Unknown device_action target kind '{delivery.Destination}'", ct);
+                }
+                break;
+
             default:
                 logger.LogWarning("Unsupported channel type '{ChannelType}' for delivery {DeliveryId}",
                     delivery.ChannelType, delivery.Id);
