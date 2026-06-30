@@ -50,6 +50,7 @@
 </script>
 
 <div
+  class="@container"
   in:fly={{
     y: 30,
     duration: 500,
@@ -80,7 +81,7 @@
   <!-- Calendar Heatmap -->
   {#if chartData.length > 0}
     <div
-      class="w-full overflow-x-clip overflow-y-visible rounded-lg border border-border bg-card p-4"
+      class="w-full overflow-x-auto overflow-y-visible rounded-lg border border-border bg-card p-4 print:overflow-visible"
     >
       <div class="min-w-[900px] h-60">
         <Chart

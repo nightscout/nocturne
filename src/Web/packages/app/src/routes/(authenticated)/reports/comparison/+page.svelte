@@ -8,7 +8,7 @@
   import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { getReportsAnalysis, type DateRangeInput } from "$api/reports.remote";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
   import { getResourceContext } from "$lib/hooks/resource-context.svelte";
 
   type Preset =
@@ -188,7 +188,7 @@
       label: "Mean Glucose",
       goodWhen: "down",
       format: (v) => `${bg(v)} ${bgLabel()}`,
-      formatDelta: (d) => `${signed(d, 0)} mg/dL`,
+      formatDelta: (d) => `${bgDelta(d)} ${bgLabel()}`,
     },
     hyperHours: {
       label: "Hyper Duration",
@@ -360,8 +360,9 @@
 </script>
 
 <div class="@container space-y-6 p-3 @md:p-6">
-  <!-- Period controls -->
-  <Card.Root>
+  <!-- Period controls — pickers/toggles are print chaff; compared period
+       labels + ranges remain visible in the diff strip and TIR cards below. -->
+  <Card.Root class="print:hidden">
     <Card.Content class="space-y-4 p-4">
       <div class="flex flex-wrap items-end gap-3">
         <div class="min-w-[220px] flex-1">
@@ -550,7 +551,7 @@
                 {col.range}
               </span>
             </div>
-            <div class="h-80">
+            <div class="h-80 w-full">
               {#if col.tir}
                 <TIRStackedChart percentages={col.tir} />
               {:else}

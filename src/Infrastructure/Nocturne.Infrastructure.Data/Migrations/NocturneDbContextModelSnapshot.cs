@@ -2877,6 +2877,16 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<string>("OAuth2SettingsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("oauth2_settings");
+
+                    b.Property<string>("ProviderType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("provider_type");
+
                     b.PrimitiveCollection<string>("Scopes")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -4886,8 +4896,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("iob");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("LoopJson")
@@ -5026,8 +5036,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("glucose_type");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("SyncIdentifier")
@@ -5123,8 +5133,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("insulin_context");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("Notes")
@@ -5229,8 +5239,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("entries_json");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("ProfileName")
@@ -5366,8 +5376,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("insulin_recommendation_for_carbs");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<double?>("PreBolus")
@@ -5508,8 +5518,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("insulin_type");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<Guid?>("PatientDeviceId")
@@ -5633,8 +5643,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("intercept");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<double?>("Scale")
@@ -5735,8 +5745,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("device");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("SyncIdentifier")
@@ -5836,8 +5846,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("entries_json");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("ProfileName")
@@ -6045,8 +6055,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("event_type");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("Notes")
@@ -6196,8 +6206,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("device");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<double>("Mgdl")
@@ -6291,8 +6301,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("is_announcement");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("SyncIdentifier")
@@ -6672,8 +6682,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("iob");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("Manufacturer")
@@ -6797,8 +6807,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("entries_json");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("ProfileName")
@@ -6910,8 +6920,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("glucose_processing");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<double>("Mgdl")
@@ -7043,8 +7053,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("entries_json");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("ProfileName")
@@ -7154,8 +7164,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("insulin_context");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("Origin")
@@ -7321,8 +7331,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("is_externally_managed");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("LoopSettingsJson")
@@ -7445,8 +7455,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("is_charging");
 
                     b.Property<string>("LegacyId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
                         .HasColumnName("legacy_id");
 
                     b.Property<string>("Name")

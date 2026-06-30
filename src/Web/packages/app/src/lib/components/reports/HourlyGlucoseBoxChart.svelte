@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Chart, Axis, Svg, Tooltip, Line, Rect, Group } from "layerchart";
+  import { bgValue, bgLabel } from "$lib/utils/formatting";
 
   interface HourlyBoxPlotData {
     hour: number;
@@ -17,22 +18,30 @@
 
   let { boxPlotData }: Props = $props();
 
-  // Transform data for LayerChart
+  // Transform data for LayerChart. Box-plot values are mg/dL; convert to the user's
+  // display units so the plotted geometry, axis, and reference lines all share one scale.
   const chartData = $derived.by(() => {
-    return boxPlotData.map((data) => ({
-      hour: data.hour,
-      min: data.min,
-      q1: data.q1,
-      median: data.median,
-      q3: data.q3,
-      max: data.max,
-      outliers: data.outliers,
-      // For box plot visualization
-      lowerWhisker: data.min,
-      upperWhisker: data.max,
-      boxHeight: data.q3 - data.q1,
-      boxCenter: (data.q1 + data.q3) / 2,
-    }));
+    return boxPlotData.map((data) => {
+      const min = bgValue(data.min);
+      const q1 = bgValue(data.q1);
+      const median = bgValue(data.median);
+      const q3 = bgValue(data.q3);
+      const max = bgValue(data.max);
+      return {
+        hour: data.hour,
+        min,
+        q1,
+        median,
+        q3,
+        max,
+        outliers: data.outliers.map(bgValue),
+        // For box plot visualization
+        lowerWhisker: min,
+        upperWhisker: max,
+        boxHeight: q3 - q1,
+        boxCenter: (q1 + q3) / 2,
+      };
+    });
   });
 
   // Format hour for display
@@ -45,13 +54,15 @@
 
   // Define Y domain based on data
   const yDomain: [number, number] = $derived.by(() => {
-    if (chartData.length === 0) return [0, 400];
+    // chartData is already in display units; keep the domain in the same units.
+    const fallback: [number, number] = [0, bgValue(400)];
+    if (chartData.length === 0) return fallback;
 
     const allValues = chartData
       .flatMap((d) => [d.min, d.max, ...d.outliers])
       .filter((v) => v > 0);
 
-    if (allValues.length === 0) return [0, 400];
+    if (allValues.length === 0) return fallback;
 
     const minVal = Math.min(...allValues);
     const maxVal = Math.max(...allValues);
@@ -73,7 +84,7 @@
     >
       <Svg>
         <!-- Y-axis with glucose threshold Lines -->
-        <Axis placement="left" rule grid label="Glucose (mg/dL)" />
+        <Axis placement="left" rule grid label={`Glucose (${bgLabel()})`} />
         <Axis
           placement="bottom"
           rule
@@ -83,12 +94,12 @@
         />
         <!-- Target range background -->
         <Group class="target-ranges">
-          <!-- Target range (70-180) -->
+          <!-- Target range (70-180 mg/dL, plotted in display units) -->
           <Rect
             x={-0.5}
-            y={70}
+            y={bgValue(70)}
             width={24}
-            height={110}
+            height={bgValue(180) - bgValue(70)}
             fill="hsl(var(--success))"
             fill-opacity="0.1"
           />
@@ -97,8 +108,8 @@
             {...{
               x1: "0%",
               x2: "100%",
-              y1: 180,
-              y2: 180,
+              y1: bgValue(180),
+              y2: bgValue(180),
               stroke: "hsl(var(--destructive))",
               "stroke-width": "1",
               "stroke-dasharray": "5,5",
@@ -111,8 +122,8 @@
             {...{
               x1: "0%",
               x2: "100%",
-              y1: 70,
-              y2: 70,
+              y1: bgValue(70),
+              y2: bgValue(70),
               stroke: "hsl(var(--destructive))",
               "stroke-width": "1",
               "stroke-dasharray": "5,5",
@@ -222,11 +233,11 @@
             <div class="space-y-1">
               <div class="font-semibold">{formatHour(data.hour)}</div>
               <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                <div>Max: {data.max.toFixed(0)}</div>
-                <div>Q3: {data.q3.toFixed(0)}</div>
-                <div>Median: {data.median.toFixed(0)}</div>
-                <div>Q1: {data.q1.toFixed(0)}</div>
-                <div>Min: {data.min.toFixed(0)}</div>
+                <div>Max: {data.max}</div>
+                <div>Q3: {data.q3}</div>
+                <div>Median: {data.median}</div>
+                <div>Q1: {data.q1}</div>
+                <div>Min: {data.min}</div>
                 {#if data.outliers.length > 0}
                   <div class="col-span-2">Outliers: {data.outliers.length}</div>
                 {/if}

@@ -28,6 +28,7 @@
   import { sequences } from "$lib/coach-marks/sequences";
   import CoachParamHandler from "$lib/coach-marks/CoachParamHandler.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
+  import ChartPrintPatterns from "$lib/components/charts/print/ChartPrintPatterns.svelte";
 
   // LocalStorage key for title/favicon settings
   const SETTINGS_STORAGE_KEY = "nocturne-title-favicon-settings";
@@ -206,6 +207,7 @@
 
 <CoachMarkProvider adapter={coachMarkAdapter} {sequences} onBeforeNavigate={beforeNavigate}>
   <CoachParamHandler />
+  <ChartPrintPatterns />
   <Sidebar.Provider>
     <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} />
     <Sidebar.Inset>

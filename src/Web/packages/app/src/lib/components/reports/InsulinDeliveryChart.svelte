@@ -3,6 +3,7 @@
   import type { Bolus, BasalPoint } from "$lib/api";
   import { BasalDeliveryOrigin } from "$lib/api";
   import { Syringe } from "lucide-svelte";
+  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
 
   interface HourlyInsulinData {
     hour: number;
@@ -169,6 +170,7 @@
                       value: (d: HourlyInsulinData) => d.scheduledBasal,
                       color: "var(--insulin-scheduled-basal)",
                       label: "Scheduled Basal",
+                      props: { class: categoryPatternClass(1) },
                     },
                   ]
                 : []),
@@ -179,6 +181,7 @@
                       value: (d: HourlyInsulinData) => d.tempBasal,
                       color: "var(--insulin-additional-basal)",
                       label: "Temp Basal",
+                      props: { class: categoryPatternClass(2) },
                     },
                   ]
                 : []),
@@ -190,6 +193,7 @@
                       value: (d: HourlyInsulinData) => d.basal,
                       color: "var(--insulin-scheduled-basal)",
                       label: "Basal",
+                      props: { class: categoryPatternClass(1) },
                     },
                   ]
                 : []),
@@ -198,6 +202,7 @@
                 value: (d: HourlyInsulinData) => d.bolus,
                 color: "var(--insulin-bolus)",
                 label: "Bolus",
+                props: { class: categoryPatternClass(3) },
               },
             ]
           : [

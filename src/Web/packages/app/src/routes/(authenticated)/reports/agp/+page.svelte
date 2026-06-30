@@ -24,7 +24,7 @@
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { getReportsData } from "$api/reports.remote";
-  import { bg, bgLabel } from "$lib/utils/formatting";
+  import { bg, bgLabel, bgRange } from "$lib/utils/formatting";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
@@ -88,7 +88,7 @@
           Your typical daily glucose pattern — a standardized clinical report
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 print:hidden">
         <Button
           variant="outline"
           size="sm"
@@ -158,7 +158,7 @@
           </p>
           <p>
             <strong>Green zone</strong>
-            (70-180 mg/dL) is your target range. Time in this zone is your goal!
+            ({bgRange(70, 180)}) is your target range. Time in this zone is your goal!
           </p>
         </div>
       </details>
@@ -231,7 +231,7 @@
           pattern
         </CardDescription>
       </CardHeader>
-      <CardContent class="h-80 @lg:h-96">
+      <CardContent class="h-80 @lg:h-96 w-full">
         <AmbulatoryGlucoseProfile averagedStats={data.averagedStats} />
       </CardContent>
     </Card>
@@ -407,3 +407,15 @@
   </div>
 </div>
 {/if}
+
+<style>
+  /* Expand collapsible clinical detail when printing. */
+  @media print {
+    details > :not(summary) {
+      display: block;
+    }
+    summary {
+      display: none;
+    }
+  }
+</style>

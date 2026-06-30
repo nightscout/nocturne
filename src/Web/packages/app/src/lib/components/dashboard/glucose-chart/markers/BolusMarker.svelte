@@ -33,7 +33,7 @@
   {:else}
     <!-- Hemisphere (dome shape - curves above baseline) -->
     <path
-      d="M -8,0 A 8,8 0 0,0 8,0 Z"
+      d="M -8,0 A 8,8 0 0,1 8,0 Z"
       class="opacity-90 fill-insulin-bolus hover:opacity-100 transition-opacity"
     />
   {/if}

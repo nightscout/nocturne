@@ -80,5 +80,5 @@ export { upload } from './avatars.generated.remote';
 // './directGrants.generated.remote' - all exports collide, import directly
 export * from './oAuths.generated.remote';
 export * from './oidcs.generated.remote';
-export { registerOptions, registerComplete, discoverableLoginOptions, loginOptions, loginComplete, recoveryVerify, regenerateRecoveryCodes, getRecoveryStatus, getAuthStatus, completeOnboarding, setupOptions, setupComplete, accessRequestOptions, accessRequestComplete, inviteOptions, inviteComplete } from './passkeys.generated.remote';
+export { registerOptions, registerComplete, discoverableLoginOptions, loginOptions, loginComplete, recoveryVerify, regenerateRecoveryCodes, getRecoveryStatus, getAuthStatus, completeOnboarding, accessRequestOptions, accessRequestComplete, inviteOptions, inviteComplete } from './passkeys.generated.remote';
 export { setup, verifySetup, login } from './totps.generated.remote';

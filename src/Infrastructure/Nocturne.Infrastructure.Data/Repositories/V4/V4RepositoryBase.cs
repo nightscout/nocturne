@@ -1,0 +1,282 @@
+using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Services;
+
+namespace Nocturne.Infrastructure.Data.Repositories.V4;
+
+/// <summary>
+/// Shared CRUD, soft-delete, and LegacyId-deduplicated bulk-create implementation for the V4 record
+/// repositories. Concrete repositories supply three static-mapper bridges
+/// (<see cref="ToEntity"/>, <see cref="ToDomain"/>, <see cref="ApplyUpdate"/>) and keep only their
+/// type-specific query methods; everything that was previously copy-pasted across every repository
+/// lives here once.
+/// </summary>
+/// <remarks>
+/// Behaviour is intentionally identical to the pre-refactor per-type repositories (the golden suite
+/// holds it constant). Per-type strategy points that some types diverge on — SyncId-upsert,
+/// DeduplicationService participation, non-primary-excluding counts — are exposed as
+/// <see langword="virtual"/> members (<see cref="BulkCreateAsync"/>, <see cref="CountAsync"/>) for
+/// the dedup participants to override; the base implements the LegacyId-only path.
+/// </remarks>
+/// <typeparam name="TModel">The V4 domain record type.</typeparam>
+/// <typeparam name="TEntity">The EF entity type backing <typeparamref name="TModel"/>.</typeparam>
+public abstract class V4RepositoryBase<TModel, TEntity>
+    where TModel : class, IV4Record
+    where TEntity : class, IV4TimeSeriesEntity, IAuditable
+{
+    /// <summary>Tenant-scoped context factory. Exposed so subclasses can implement type-specific queries.</summary>
+    protected ITenantDbContextFactory ContextFactory { get; }
+
+    /// <summary>
+    /// Actor/request metadata for the audited soft-delete path. Exposed so subclasses' type-specific
+    /// audited deletes (e.g. DeleteBySyncIdentifierAsync, DeleteByLegacyIdPrefixAsync) share the same
+    /// attribution as the base DeleteByLegacyIdAsync.
+    /// </summary>
+    protected IAuditContext AuditContext { get; }
+
+    /// <summary>Initializes the base with the tenant-scoped context factory and audit context.</summary>
+    protected V4RepositoryBase(ITenantDbContextFactory contextFactory, IAuditContext auditContext)
+    {
+        ContextFactory = contextFactory;
+        AuditContext = auditContext;
+    }
+
+    // ── Per-type static-mapper bridges (the only code the base needs from each repository) ──
+
+    /// <summary>Maps a domain model to its EF entity (delegates to the type's static mapper).</summary>
+    protected abstract TEntity ToEntity(TModel model);
+
+    /// <summary>Maps an EF entity to its domain model (delegates to the type's static mapper).</summary>
+    protected abstract TModel ToDomain(TEntity entity);
+
+    /// <summary>Applies a domain model's values onto an existing tracked entity (in-place update).</summary>
+    protected abstract void ApplyUpdate(TEntity target, TModel source);
+
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetAsync" />
+    /// <remarks>
+    /// Virtual so dedup participants (which expose an extended overload with a non-primary
+    /// LinkedRecords filter + keyset cursor) can override this 7-arg form to route through their
+    /// filtered overload, preserving the pre-base default-interface bridge behaviour.
+    /// </remarks>
+    public virtual async Task<IEnumerable<TModel>> GetAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit = 100, int offset = 0, bool descending = true,
+        CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ctx.Set<TEntity>().AsNoTracking().AsQueryable();
+        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
+        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
+        if (device != null) query = query.Where(e => e.Device == device);
+        if (source != null) query = query.Where(e => e.DataSource == source);
+        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
+        var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
+        return entities.Select(ToDomain);
+    }
+
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetByIdAsync" />
+    public async Task<TModel?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await ctx.Set<TEntity>().FindAsync([id], ct);
+        return entity is null ? null : ToDomain(entity);
+    }
+
+    /// <summary>Returns a single record by its legacy (MongoDB ObjectId) identifier, or null.</summary>
+    public async Task<TModel?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await ctx.Set<TEntity>().FirstOrDefaultAsync(e => e.LegacyId == legacyId, ct);
+        return entity is null ? null : ToDomain(entity);
+    }
+
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CreateAsync" />
+    /// <remarks>Virtual: SyncId-upsert types (Bolus, CarbIntake) override to upsert in place.</remarks>
+    public virtual async Task<TModel> CreateAsync(TModel model, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = ToEntity(model);
+        ctx.Set<TEntity>().Add(entity);
+        await ctx.SaveChangesAsync(ct);
+        return ToDomain(entity);
+    }
+
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.UpdateAsync" />
+    public async Task<TModel> UpdateAsync(Guid id, TModel model, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
+            ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
+        ApplyUpdate(entity, model);
+        await ctx.SaveChangesAsync(ct);
+        return ToDomain(entity);
+    }
+
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.DeleteAsync" />
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
+            ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
+        entity.DeletedAt = DateTime.UtcNow;
+        await ctx.SaveChangesAsync(ct);
+    }
+
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.RestoreAsync" />
+    public async Task<TModel> RestoreAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await ctx.Set<TEntity>().IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException($"Soft-deleted {typeof(TModel).Name} {id} not found");
+        entity.DeletedAt = null;
+        await ctx.SaveChangesAsync(ct);
+        return ToDomain(entity);
+    }
+
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.BulkRestoreAsync" />
+    public async Task<IEnumerable<TModel>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var idSet = ids.ToHashSet();
+        var entities = await ctx.Set<TEntity>().IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
+            .ToListAsync(ct);
+        foreach (var entity in entities)
+            entity.DeletedAt = null;
+        await ctx.SaveChangesAsync(ct);
+        return entities.Select(ToDomain);
+    }
+
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetDeletedAsync" />
+    public async Task<IEnumerable<TModel>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.Set<TEntity>().IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
+            .OrderByDescending(e => e.DeletedAt)
+            .Skip(offset).Take(limit)
+            .AsNoTracking()
+            .ToListAsync(ct);
+        return entities.Select(ToDomain);
+    }
+
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CountDeletedAsync" />
+    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.Set<TEntity>().IgnoreQueryFilters()
+            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
+            .CountAsync(ct);
+    }
+
+    /// <summary>
+    /// Read-visibility hook applied by <see cref="CountAsync"/> (and reusable by future read paths) so
+    /// counts match the rows reads return. The base is identity; dedup participants override it to
+    /// exclude non-primary LinkedRecords for their RecordType — replacing the per-type CountAsync
+    /// overrides that each carried the same exclusion.
+    /// </summary>
+    protected virtual IQueryable<TEntity> ApplyReadVisibility(IQueryable<TEntity> query, NocturneDbContext ctx) => query;
+
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CountAsync" />
+    public virtual async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ApplyReadVisibility(ctx.Set<TEntity>().AsNoTracking().AsQueryable(), ctx);
+        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
+        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
+        return await query.CountAsync(ct);
+    }
+
+    /// <summary>Soft-deletes the record(s) with the given legacy id. Returns the number affected.</summary>
+    /// <remarks>
+    /// Routes through the audited soft-delete helper so every V4 type writes a mutation_audit_log row
+    /// and carries the user-delete dedup discriminator. Virtual so types with a type-specific delete
+    /// surface can still override.
+    /// </remarks>
+    public virtual async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await ctx.AuditedSoftDeleteAsync(
+            ctx.Set<TEntity>().Where(e => e.LegacyId == legacyId), AuditContext, ct);
+    }
+
+    /// <summary>Latest stored record timestamp, optionally scoped to a data source (connector watermark).</summary>
+    public async Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ctx.Set<TEntity>().AsNoTracking().AsQueryable();
+        if (source != null) query = query.Where(e => e.DataSource == source);
+        return await query.MaxAsync(e => (DateTime?)e.Timestamp, ct);
+    }
+
+    /// <summary>Oldest stored record timestamp, optionally scoped to a data source.</summary>
+    public async Task<DateTime?> GetOldestTimestampAsync(string? source = null, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ctx.Set<TEntity>().AsNoTracking().AsQueryable();
+        if (source != null) query = query.Where(e => e.DataSource == source);
+        return await query.MinAsync(e => (DateTime?)e.Timestamp, ct);
+    }
+
+    /// <summary>SyncId-upsert types override: match existing rows by (DataSource, SyncIdentifier), update them in
+    /// place, and return (rows updated in place, rows still to insert). Default: nothing upserted.</summary>
+    protected virtual Task<(List<TEntity> Updated, List<TEntity> ToInsert)> SplitUpsertsAsync(
+        NocturneDbContext ctx, List<TEntity> entities, CancellationToken ct)
+        => Task.FromResult((new List<TEntity>(), entities));
+
+    /// <summary>DeduplicationService participants override: link the just-inserted rows into canonical groups
+    /// (runs AFTER commit). Default: no-op.</summary>
+    protected virtual Task PostCommitDedupAsync(
+        NocturneDbContext ctx, IReadOnlyList<TEntity> inserted, CancellationToken ct)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Bulk-inserts records with batch-level and DB-level deduplication by LegacyId. The base
+    /// implements the LegacyId-only path; SyncId-upsert / DeduplicationService participants override
+    /// the <see cref="SplitUpsertsAsync"/> / <see cref="PostCommitDedupAsync"/> hooks rather than the
+    /// whole method.
+    /// </summary>
+    public virtual async Task<IEnumerable<TModel>> BulkCreateAsync(
+        IEnumerable<TModel> recordsParam, CancellationToken ct = default)
+    {
+        var records = recordsParam.ToList();
+        if (records.Count == 0) return [];
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var strategy = ctx.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
+            var entities = records.Select(ToEntity).ToList();
+
+            var (updated, toInsert) = await SplitUpsertsAsync(ctx, entities, ct);
+
+            // Batch-level LegacyId dedup
+            toInsert = toInsert.GroupBy(e => e.LegacyId ?? e.Id.ToString()).Select(g => g.First()).ToList();
+            var legacyIds = toInsert.Where(e => !string.IsNullOrEmpty(e.LegacyId)).Select(e => e.LegacyId!).ToHashSet();
+            if (legacyIds.Count > 0)
+            {
+                var blocked = await ctx.GetBlockingLegacyIdsAsync<TEntity>(legacyIds, ct);
+                toInsert = toInsert.Where(e => string.IsNullOrEmpty(e.LegacyId) || !blocked.Contains(e.LegacyId)).ToList();
+            }
+
+            if (toInsert.Count == 0 && updated.Count == 0) { await tx.CommitAsync(ct); return Enumerable.Empty<TModel>(); }
+
+            const int batchSize = 500;
+            foreach (var batch in toInsert.Chunk(batchSize))
+            {
+                ctx.Set<TEntity>().AddRange(batch);
+                await ctx.SaveChangesAsync(ct);
+                ctx.ChangeTracker.Clear();
+            }
+
+            await tx.CommitAsync(ct);
+            await PostCommitDedupAsync(ctx, toInsert, ct);
+            return updated.Concat(toInsert).Select(ToDomain);
+        });
+    }
+}

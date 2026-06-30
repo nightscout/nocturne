@@ -32,7 +32,7 @@
 	import AlertTriangle from 'lucide-svelte/icons/triangle-alert';
 	import History from 'lucide-svelte/icons/history';
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
-	import { time } from '$lib/utils/formatting';
+	import { time, bg, bgLabel } from '$lib/utils/formatting';
 	import type { CompressionLowSuggestion } from '$lib/api';
 
 	// Create resource with automatic layout registration - load ALL suggestions
@@ -288,7 +288,7 @@
 	<div class="@container container mx-auto space-y-6 p-3 @md:p-6">
 		<div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
 			<div class="flex items-center gap-4">
-				<Button href="/reports/data-quality" variant="ghost" size="icon">
+				<Button href="/reports/data-quality" variant="ghost" size="icon" class="print:hidden">
 					<ArrowLeft class="h-4 w-4" />
 				</Button>
 				<div>
@@ -302,7 +302,7 @@
 					</p>
 				</div>
 			</div>
-			<div class="flex shrink-0 items-center gap-2">
+			<div class="flex shrink-0 items-center gap-2 print:hidden">
 				<span class="text-sm text-muted-foreground">Status:</span>
 				<Select
 					type="single"
@@ -338,8 +338,8 @@
 					<p class="mb-4 text-muted-foreground">
 						When compression lows are detected during your sleep, they will appear here.
 					</p>
-					<div class="flex flex-col items-center gap-4">
-						<div class="flex items-center gap-2">
+					<div class="flex flex-col items-center gap-4 print:hidden">
+						<div class="flex flex-col items-center gap-2 @sm:flex-row @sm:items-end">
 							<div class="flex flex-col gap-1">
 								<label for="start-date" class="text-sm text-muted-foreground">Start Date</label>
 								<input
@@ -364,7 +364,7 @@
 							<Button
 								onclick={handleTriggerDetection}
 								disabled={isLoading || !testStartDate}
-								class="mt-5"
+								class="@sm:mt-5"
 							>
 								<RefreshCw class="mr-2 h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
 								Run Detection
@@ -390,7 +390,9 @@
 		{:else}
 			<div class="grid gap-6 @3xl:grid-cols-3">
 				<!-- Suggestion List -->
-				<div class="max-h-[600px] space-y-2 overflow-y-auto pr-2">
+				<div
+					class="max-h-[600px] space-y-2 overflow-y-auto pr-2 print:max-h-none print:overflow-visible"
+				>
 					{#each filteredSuggestions as suggestion, index (suggestion.id)}
 						{@const StatusIcon = getStatusIcon(suggestion.status)}
 						{@const isSelected = suggestion.id ? selectedSuggestions.has(suggestion.id) : false}
@@ -462,7 +464,7 @@
 											dateRange: chartDateRange,
 											enablePredictions: false,
 										})}
-										<div class="mb-6 h-64">
+										<div class="mb-6 h-64 w-full">
 											<GlucoseChartShell
 												engine={chartEngine}
 												heightClass="h-64"
@@ -487,15 +489,19 @@
 								<div class="mb-6 grid grid-cols-3 gap-4 text-center">
 									<div>
 										<p class="text-2xl font-bold">
-											{suggestionDetail.suggestion?.lowestGlucose?.toFixed(0) ?? '-'}
+											{suggestionDetail.suggestion?.lowestGlucose != null
+												? bg(suggestionDetail.suggestion.lowestGlucose)
+												: '-'}
 										</p>
-										<p class="text-sm text-muted-foreground">Lowest (mg/dL)</p>
+										<p class="text-sm text-muted-foreground">Lowest ({bgLabel()})</p>
 									</div>
 									<div>
 										<p class="text-2xl font-bold">
-											{suggestionDetail.suggestion?.dropRate?.toFixed(1) ?? '-'}
+											{suggestionDetail.suggestion?.dropRate != null
+												? bg(suggestionDetail.suggestion.dropRate)
+												: '-'}
 										</p>
-										<p class="text-sm text-muted-foreground">Drop Rate (mg/dL/min)</p>
+										<p class="text-sm text-muted-foreground">Drop Rate ({bgLabel()}/min)</p>
 									</div>
 									<div>
 										<p class="text-2xl font-bold">{suggestionDetail.suggestion?.recoveryMinutes ?? '-'}</p>
@@ -513,7 +519,7 @@
 											{time(brushDomain[0])} - {time(brushDomain[1])}
 										</p>
 										{#if isPending}
-											<p class="text-sm text-muted-foreground">
+											<p class="text-sm text-muted-foreground print:hidden">
 												Drag the handles on the chart to adjust
 											</p>
 										{/if}
@@ -522,7 +528,9 @@
 
 								<!-- Bulk Selection Bar -->
 								{#if isBulkMode}
-									<div class="mb-4 flex items-center justify-between rounded-lg bg-primary/10 p-3">
+									<div
+									class="mb-4 flex items-center justify-between rounded-lg bg-primary/10 p-3 print:hidden"
+								>
 										<span class="text-sm font-medium">{selectionCount} selected</span>
 										<div class="flex gap-2">
 											<Button
@@ -558,7 +566,7 @@
 								<!-- Actions -->
 								{#if !isBulkMode}
 									{#if isPending}
-										<div class="flex gap-4">
+										<div class="flex gap-4 print:hidden">
 											<Button
 												class="flex-1"
 												onclick={handleAccept}
@@ -587,7 +595,7 @@
 											</Button>
 										</div>
 									{:else}
-										<div class="flex gap-4">
+										<div class="flex gap-4 print:hidden">
 											<Button
 												variant="destructive"
 												class="flex-1"

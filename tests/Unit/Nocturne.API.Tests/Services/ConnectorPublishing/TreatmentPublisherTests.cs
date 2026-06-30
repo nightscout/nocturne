@@ -27,6 +27,8 @@ public class TreatmentPublisherTests
     private readonly Mock<IBolusCalculationRepository> _mockBolusCalculationRepository;
     private readonly Mock<ITempBasalRepository> _mockTempBasalRepository;
     private readonly Mock<IBasalInjectionRepository> _mockBasalInjectionRepository;
+    private readonly Mock<INoteRepository> _mockNoteRepository;
+    private readonly Mock<IDeviceEventRepository> _mockDeviceEventRepository;
     private readonly Mock<IPatientInsulinRepository> _mockPatientInsulinRepository;
     private readonly Mock<IBasalRateResolver> _mockBasalRateResolver;
     private readonly Mock<ITherapySettingsResolver> _mockTherapySettingsResolver;
@@ -50,6 +52,8 @@ public class TreatmentPublisherTests
         _mockBolusCalculationRepository = new Mock<IBolusCalculationRepository>();
         _mockTempBasalRepository = new Mock<ITempBasalRepository>();
         _mockBasalInjectionRepository = new Mock<IBasalInjectionRepository>();
+        _mockNoteRepository = new Mock<INoteRepository>();
+        _mockDeviceEventRepository = new Mock<IDeviceEventRepository>();
         _mockPatientInsulinRepository = new Mock<IPatientInsulinRepository>();
         _mockBasalRateResolver = new Mock<IBasalRateResolver>();
         _mockTherapySettingsResolver = new Mock<ITherapySettingsResolver>();
@@ -81,6 +85,8 @@ public class TreatmentPublisherTests
             _mockBolusCalculationRepository.Object,
             _mockTempBasalRepository.Object,
             _mockBasalInjectionRepository.Object,
+            _mockNoteRepository.Object,
+            _mockDeviceEventRepository.Object,
             _mockPatientInsulinRepository.Object,
             _mockBasalRateResolver.Object,
             _mockTherapySettingsResolver.Object,
@@ -144,43 +150,51 @@ public class TreatmentPublisherTests
     }
 
     [Fact]
-    public async Task GetLatestTreatmentTimestampAsync_ReturnsCreatedAt_WhenAvailable()
+    public async Task GetLatestTreatmentTimestampAsync_ReturnsMaxAcrossAllTreatmentTypes()
     {
-        var createdAt = "2026-01-15T12:00:00Z";
-        _mockTreatmentService
-            .Setup(s => s.GetTreatmentsAsync(1, 0, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Treatment> { new() { CreatedAt = createdAt } });
+        var older = new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc);
+        var newest = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        _mockBolusRepository
+            .Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(older);
+        _mockCarbIntakeRepository
+            .Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(newest);
+        // The remaining treatment repos return null (no data of that type) by default.
 
-        var result = await _publisher.GetLatestTreatmentTimestampAsync("test-source");
+        var result = await _publisher.GetLatestTreatmentTimestampAsync("connector-a");
 
-        result.Should().Be(DateTime.Parse(createdAt));
+        result.Should().Be(newest);
     }
 
     [Fact]
-    public async Task GetLatestTreatmentTimestampAsync_ReturnsTimestamp_WhenOnlyMillsSet()
+    public async Task GetLatestTreatmentTimestampAsync_IsSourceScoped_AcrossEveryTreatmentType()
     {
-        // Treatment.CreatedAt auto-generates an ISO string from Mills,
-        // so the CreatedAt parsing path is taken even when only Mills is set.
-        var fixedTime = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
-        var mills = fixedTime.ToUnixTimeMilliseconds();
-        _mockTreatmentService
-            .Setup(s => s.GetTreatmentsAsync(1, 0, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Treatment> { new() { Mills = mills } });
+        // Regression: the resume watermark must be scoped to the requesting source. A tenant-global
+        // latest (the previous behaviour) mis-classifies a newly enabled connector's first sync as
+        // incremental and silently skips its backfill. Every decomposed treatment type must be
+        // queried for THIS source, and the legacy global treatment-store query must no longer run.
+        await _publisher.GetLatestTreatmentTimestampAsync("connector-a");
 
-        var result = await _publisher.GetLatestTreatmentTimestampAsync("test-source");
-
-        result.Should().NotBeNull();
-        result!.Value.Date.Should().Be(new DateTime(2026, 1, 15));
+        _mockBolusRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockCarbIntakeRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockBGCheckRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockBolusCalculationRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockTempBasalRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockBasalInjectionRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockNoteRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockDeviceEventRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockTreatmentService.Verify(
+            s => s.GetTreatmentsAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
-    public async Task GetLatestTreatmentTimestampAsync_ReturnsNull_WhenNoTreatments()
+    public async Task GetLatestTreatmentTimestampAsync_ReturnsNull_WhenNoTreatmentsForSource()
     {
-        _mockTreatmentService
-            .Setup(s => s.GetTreatmentsAsync(1, 0, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Treatment>());
-
-        var result = await _publisher.GetLatestTreatmentTimestampAsync("test-source");
+        // No stored treatment of any type for this source — the connector should treat it as a
+        // first sync (backfill), not resume from a (nonexistent) watermark.
+        var result = await _publisher.GetLatestTreatmentTimestampAsync("connector-a");
 
         result.Should().BeNull();
     }

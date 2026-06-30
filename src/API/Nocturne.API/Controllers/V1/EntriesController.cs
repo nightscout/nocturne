@@ -544,91 +544,18 @@ public class EntriesController : ControllerBase
         );
         try
         {
-            List<Entry> entriesToCreate = new();
+            if (!TryParseEntries(entryData, out var entriesToCreate))
+            {
+                return BadRequest(
+                    new
+                    {
+                        status = 400,
+                        message = "Invalid entry data format",
+                        type = "client",
+                    }
+                );
+            }
 
-            // Handle different input types
-            if (entryData is JsonElement jsonElement)
-            {
-                // Handle JSON from HTTP requests
-                if (jsonElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var element in jsonElement.EnumerateArray())
-                    {
-                        var entry = JsonSerializer.Deserialize<Entry>(
-                            element.GetRawText(),
-                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                        );
-                        if (entry != null)
-                            entriesToCreate.Add(entry);
-                    }
-                }
-                else
-                {
-                    var entry = JsonSerializer.Deserialize<Entry>(
-                        jsonElement.GetRawText(),
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                    );
-                    if (entry != null)
-                        entriesToCreate.Add(entry);
-                }
-            }
-            else if (entryData is Entry singleEntry)
-            {
-                // Handle direct Entry object (for unit tests)
-                entriesToCreate.Add(singleEntry);
-            }
-            else if (entryData is Entry[] entryArray)
-            {
-                // Handle array of Entry objects (for unit tests)
-                entriesToCreate.AddRange(entryArray);
-            }
-            else if (entryData is IEnumerable<Entry> entryCollection)
-            {
-                // Handle IEnumerable<Entry> (for unit tests)
-                entriesToCreate.AddRange(entryCollection);
-            }
-            else
-            {
-                // Try to deserialize as JSON string if it's a raw object
-                try
-                {
-                    var jsonString = JsonSerializer.Serialize(entryData);
-                    var element = JsonSerializer.Deserialize<JsonElement>(jsonString);
-
-                    if (element.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var arrayElement in element.EnumerateArray())
-                        {
-                            var entry = JsonSerializer.Deserialize<Entry>(
-                                arrayElement.GetRawText(),
-                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                            );
-                            if (entry != null)
-                                entriesToCreate.Add(entry);
-                        }
-                    }
-                    else
-                    {
-                        var entry = JsonSerializer.Deserialize<Entry>(
-                            element.GetRawText(),
-                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                        );
-                        if (entry != null)
-                            entriesToCreate.Add(entry);
-                    }
-                }
-                catch
-                {
-                    return BadRequest(
-                        new
-                        {
-                            status = 400,
-                            message = "Invalid entry data format",
-                            type = "client",
-                        }
-                    );
-                }
-            }
             if (entriesToCreate.Count == 0)
             {
                 return BadRequest(
@@ -639,39 +566,10 @@ public class EntriesController : ControllerBase
                         type = "client",
                     }
                 );
-            } // Validate entries have meaningful data
-            var validEntries = new List<Entry>();
-            foreach (var entry in entriesToCreate)
-            {
-                // Check if entry has meaningful glucose data or is a valid non-sgv type
-                bool hasMeaningfulData = false;
-
-                // Check for meaningful glucose values
-                if (entry.Sgv.HasValue && entry.Sgv.Value > 0)
-                    hasMeaningfulData = true;
-                if (entry.Mgdl > 0)
-                    hasMeaningfulData = true;
-
-                // Check for meaningful timestamp
-                if (entry.Mills > 0)
-                    hasMeaningfulData = true;
-                if (entry.Date.HasValue)
-                    hasMeaningfulData = true;
-                if (
-                    !string.IsNullOrEmpty(entry.DateString)
-                    && entry.DateString != "1970-01-01T00:00:00.000Z"
-                )
-                    hasMeaningfulData = true;
-
-                // Allow non-sgv types with just type specified (like calibrations)
-                if (!string.IsNullOrEmpty(entry.Type) && entry.Type != "sgv")
-                    hasMeaningfulData = true;
-
-                if (hasMeaningfulData)
-                {
-                    validEntries.Add(entry);
-                }
             }
+
+            // Validate entries have meaningful data
+            var validEntries = entriesToCreate.Where(HasMeaningfulData).ToList();
 
             if (validEntries.Count == 0)
             {
@@ -688,36 +586,7 @@ public class EntriesController : ControllerBase
             // Validate and prepare entries
             foreach (var entry in validEntries)
             {
-                // Generate ID if not provided
-                if (string.IsNullOrEmpty(entry.Id))
-                {
-                    entry.Id = Guid.CreateVersion7().ToString("N");
-                }
-
-                // Set mills from date if not provided
-                if (entry.Mills == 0 && entry.Date.HasValue)
-                {
-                    var dateValue = entry.Date.Value;
-                    var dateOffset =
-                        dateValue.Kind == DateTimeKind.Unspecified
-                            ? new DateTimeOffset(dateValue, TimeSpan.Zero)
-                            : new DateTimeOffset(dateValue);
-                    entry.Mills = dateOffset.ToUnixTimeMilliseconds();
-                }
-
-                // Set dateString if not provided
-                if (string.IsNullOrEmpty(entry.DateString) && entry.Mills > 0)
-                {
-                    entry.DateString = DateTimeOffset
-                        .FromUnixTimeMilliseconds(entry.Mills)
-                        .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                }
-
-                // Default type to "sgv" if not specified
-                if (string.IsNullOrEmpty(entry.Type))
-                {
-                    entry.Type = "sgv";
-                }
+                NormalizeEntry(entry);
             }
 
             // Process entries for sanitization and timestamp conversion
@@ -798,6 +667,135 @@ public class EntriesController : ControllerBase
                     error = ex.Message,
                 }
             );
+        }
+    }
+
+    /// <summary>
+    /// Parses the loosely-typed entries request body (JsonElement, a single Entry, an Entry[]/
+    /// IEnumerable&lt;Entry&gt; from tests, or a raw object) into a list of entries. Returns false
+    /// only when a raw object cannot be deserialized as entry JSON; a malformed JsonElement instead
+    /// throws and is handled by the caller's outer catch (matching the original inline behavior).
+    /// </summary>
+    private static bool TryParseEntries(object entryData, out List<Entry> entries)
+    {
+        entries = new List<Entry>();
+
+        if (entryData is JsonElement jsonElement)
+        {
+            AddEntriesFromJsonElement(jsonElement, entries);
+        }
+        else if (entryData is Entry singleEntry)
+        {
+            entries.Add(singleEntry);
+        }
+        else if (entryData is Entry[] entryArray)
+        {
+            entries.AddRange(entryArray);
+        }
+        else if (entryData is IEnumerable<Entry> entryCollection)
+        {
+            entries.AddRange(entryCollection);
+        }
+        else
+        {
+            // Try to deserialize as JSON if it's a raw object
+            try
+            {
+                var jsonString = JsonSerializer.Serialize(entryData);
+                var element = JsonSerializer.Deserialize<JsonElement>(jsonString);
+                AddEntriesFromJsonElement(element, entries);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Appends the entries contained in a JSON element (array of entries, or a single entry) to
+    /// <paramref name="entries"/>, skipping elements that deserialize to null.
+    /// </summary>
+    private static void AddEntriesFromJsonElement(JsonElement element, List<Entry> entries)
+    {
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                var entry = DeserializeEntry(item);
+                if (entry != null)
+                    entries.Add(entry);
+            }
+        }
+        else
+        {
+            var entry = DeserializeEntry(element);
+            if (entry != null)
+                entries.Add(entry);
+        }
+    }
+
+    private static readonly JsonSerializerOptions EntryDeserializerOptions =
+        new() { PropertyNameCaseInsensitive = true };
+
+    private static Entry? DeserializeEntry(JsonElement element) =>
+        JsonSerializer.Deserialize<Entry>(element.GetRawText(), EntryDeserializerOptions);
+
+    /// <summary>
+    /// True when an entry carries meaningful glucose data, a usable timestamp, or a non-sgv type.
+    /// </summary>
+    private static bool HasMeaningfulData(Entry entry)
+    {
+        // Meaningful glucose values
+        if (entry.Sgv.HasValue && entry.Sgv.Value > 0)
+            return true;
+        if (entry.Mgdl > 0)
+            return true;
+
+        // Meaningful timestamp
+        if (entry.Mills > 0)
+            return true;
+        if (entry.Date.HasValue)
+            return true;
+        if (!string.IsNullOrEmpty(entry.DateString)
+            && entry.DateString != "1970-01-01T00:00:00.000Z")
+            return true;
+
+        // Non-sgv types with just a type specified (like calibrations)
+        if (!string.IsNullOrEmpty(entry.Type) && entry.Type != "sgv")
+            return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// Fills in derived entry fields before persistence: a generated id, a date string from mills,
+    /// and a default "sgv" type. Mills itself is not derived here — <see cref="Entry.Mills"/> is the
+    /// source of truth and already computes from the <c>date</c>/<c>dateString</c> fields as UTC, so
+    /// the controller must not re-derive it (re-deriving it inconsistently was a latent bug).
+    /// </summary>
+    private static void NormalizeEntry(Entry entry)
+    {
+        // Generate ID if not provided
+        if (string.IsNullOrEmpty(entry.Id))
+        {
+            entry.Id = Guid.CreateVersion7().ToString("N");
+        }
+
+        // Materialize dateString from mills if the client didn't send one
+        if (string.IsNullOrEmpty(entry.DateString) && entry.Mills > 0)
+        {
+            entry.DateString = DateTimeOffset
+                .FromUnixTimeMilliseconds(entry.Mills)
+                .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        }
+
+        // Default type to "sgv" if not specified
+        if (string.IsNullOrEmpty(entry.Type))
+        {
+            entry.Type = "sgv";
         }
     }
 
@@ -1089,91 +1087,17 @@ public class EntriesController : ControllerBase
 
         try
         {
-            List<Entry> entriesToCreate = new();
-
-            // Handle different input types (same logic as sync endpoint)
-            if (entryData is JsonElement jsonElement)
+            if (!TryParseEntries(entryData, out var entriesToCreate))
             {
-                // Handle JSON from HTTP requests
-                if (jsonElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var element in jsonElement.EnumerateArray())
+                return BadRequest(
+                    new
                     {
-                        var entry = JsonSerializer.Deserialize<Entry>(
-                            element.GetRawText(),
-                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                        );
-                        if (entry != null)
-                            entriesToCreate.Add(entry);
+                        status = 400,
+                        message = "Invalid entry data format",
+                        type = "client",
+                        correlationId = correlationId,
                     }
-                }
-                else
-                {
-                    var entry = JsonSerializer.Deserialize<Entry>(
-                        jsonElement.GetRawText(),
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                    );
-                    if (entry != null)
-                        entriesToCreate.Add(entry);
-                }
-            }
-            else if (entryData is Entry singleEntry)
-            {
-                // Handle direct Entry object
-                entriesToCreate.Add(singleEntry);
-            }
-            else if (entryData is Entry[] entryArray)
-            {
-                // Handle array of Entry objects
-                entriesToCreate.AddRange(entryArray);
-            }
-            else if (entryData is IEnumerable<Entry> entryCollection)
-            {
-                // Handle IEnumerable<Entry>
-                entriesToCreate.AddRange(entryCollection);
-            }
-            else
-            {
-                // Try to deserialize as JSON string if it's a raw object
-                try
-                {
-                    var jsonString = JsonSerializer.Serialize(entryData);
-                    var element = JsonSerializer.Deserialize<JsonElement>(jsonString);
-
-                    if (element.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var arrayElement in element.EnumerateArray())
-                        {
-                            var entry = JsonSerializer.Deserialize<Entry>(
-                                arrayElement.GetRawText(),
-                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                            );
-                            if (entry != null)
-                                entriesToCreate.Add(entry);
-                        }
-                    }
-                    else
-                    {
-                        var entry = JsonSerializer.Deserialize<Entry>(
-                            element.GetRawText(),
-                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                        );
-                        if (entry != null)
-                            entriesToCreate.Add(entry);
-                    }
-                }
-                catch
-                {
-                    return BadRequest(
-                        new
-                        {
-                            status = 400,
-                            message = "Invalid entry data format",
-                            type = "client",
-                            correlationId = correlationId,
-                        }
-                    );
-                }
+                );
             }
 
             if (entriesToCreate.Count == 0)
@@ -1190,38 +1114,7 @@ public class EntriesController : ControllerBase
             }
 
             // Basic validation (same as sync endpoint)
-            var validEntries = new List<Entry>();
-            foreach (var entry in entriesToCreate)
-            {
-                // Check if entry has meaningful data or is a valid non-sgv type
-                bool hasMeaningfulData = false;
-
-                // Check for meaningful glucose values
-                if (entry.Sgv.HasValue && entry.Sgv.Value > 0)
-                    hasMeaningfulData = true;
-                if (entry.Mgdl > 0)
-                    hasMeaningfulData = true;
-
-                // Check for meaningful timestamp
-                if (entry.Mills > 0)
-                    hasMeaningfulData = true;
-                if (entry.Date.HasValue)
-                    hasMeaningfulData = true;
-                if (
-                    !string.IsNullOrEmpty(entry.DateString)
-                    && entry.DateString != "1970-01-01T00:00:00.000Z"
-                )
-                    hasMeaningfulData = true;
-
-                // Allow non-sgv types with just type specified (like calibrations)
-                if (!string.IsNullOrEmpty(entry.Type) && entry.Type != "sgv")
-                    hasMeaningfulData = true;
-
-                if (hasMeaningfulData)
-                {
-                    validEntries.Add(entry);
-                }
-            }
+            var validEntries = entriesToCreate.Where(HasMeaningfulData).ToList();
 
             if (validEntries.Count == 0)
             {
@@ -1243,34 +1136,10 @@ public class EntriesController : ControllerBase
                 cancellationToken
             );
 
-            // Prepare entries for processing (same validation as sync endpoint)
+            // Prepare entries for processing
             foreach (var entry in validEntries)
             {
-                // Generate ID if not provided
-                if (string.IsNullOrEmpty(entry.Id))
-                {
-                    entry.Id = Guid.CreateVersion7().ToString("N");
-                }
-
-                // Set mills from date if not provided
-                if (entry.Mills == 0 && entry.Date.HasValue)
-                {
-                    entry.Mills = ((DateTimeOffset)entry.Date.Value).ToUnixTimeMilliseconds();
-                }
-
-                // Set dateString if not provided
-                if (string.IsNullOrEmpty(entry.DateString) && entry.Mills > 0)
-                {
-                    entry.DateString = DateTimeOffset
-                        .FromUnixTimeMilliseconds(entry.Mills)
-                        .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                }
-
-                // Default type to "sgv" if not specified
-                if (string.IsNullOrEmpty(entry.Type))
-                {
-                    entry.Type = "sgv";
-                }
+                NormalizeEntry(entry);
             }
 
             // Process entries for sanitization and timestamp conversion

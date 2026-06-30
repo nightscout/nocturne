@@ -106,8 +106,15 @@ public class DashboardChartData
 }
 
 /// <summary>
-/// Glucose threshold configuration derived from the active profile.
+/// Glucose threshold configuration for the dashboard chart.
 /// </summary>
+/// <remarks>
+/// <see cref="Low"/>/<see cref="High"/>/<see cref="VeryLow"/>/<see cref="VeryHigh"/> are the fixed
+/// clinical glycemic band used to color readings (Very Low / Low / In Range / High / Very High) and
+/// draw the in-range reference lines — they are independent of the patient's personal target.
+/// <see cref="TargetLow"/>/<see cref="TargetHigh"/> carry the personal BG target from the active
+/// profile, shown as a separate reference line; null when no profile is available.
+/// </remarks>
 public record ChartThresholdsDto
 {
     public double Low { get; init; }
@@ -115,6 +122,12 @@ public record ChartThresholdsDto
     public double VeryLow { get; init; }
     public double VeryHigh { get; init; }
     public double GlucoseYMax { get; init; }
+
+    /// <summary>Personal BG target lower bound (mg/dL) from the active profile; null when no profile.</summary>
+    public double? TargetLow { get; init; }
+
+    /// <summary>Personal BG target upper bound (mg/dL) from the active profile; null when no profile.</summary>
+    public double? TargetHigh { get; init; }
 }
 
 /// <summary>

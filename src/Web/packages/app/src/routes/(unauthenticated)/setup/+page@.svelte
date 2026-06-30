@@ -278,8 +278,11 @@
   <title>Get Started - Nocturne</title>
 </svelte:head>
 
+<!-- The onboarding surface is always dark by design. Force a `dark` theme context so
+     shadcn children (inputs, recovery-code chips, buttons) render with dark tokens even
+     when the user's system theme — applied by ModeWatcher on <html> — is light. -->
 <div
-  class="relative min-h-screen grid grid-rows-[auto_1fr_auto] text-white"
+  class="dark relative min-h-screen grid grid-rows-[auto_1fr_auto] text-white"
   style="{styleVars}; background: var(--onb-navy);"
 >
   <!-- Background gradient -->

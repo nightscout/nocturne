@@ -41,7 +41,7 @@
           if (v) selectedMetric = v as HeatmapMetric;
         }}
       >
-        <Select.Trigger class="w-[150px] h-8 text-xs">
+        <Select.Trigger class="w-[150px] h-8 text-xs print:hidden">
           <span class="truncate">
             {METRIC_OPTIONS.find((o: { value: HeatmapMetric; label: string }) => o.value === selectedMetric)?.label ?? "Avg Glucose"}
           </span>
@@ -125,7 +125,7 @@
           if (v) selectedMetric = v as HeatmapMetric;
         }}
       >
-        <Select.Trigger class="w-[150px] h-8 text-xs">
+        <Select.Trigger class="w-[150px] h-8 text-xs print:hidden">
           <span class="truncate">
             {METRIC_OPTIONS.find((o: { value: HeatmapMetric; label: string }) => o.value === selectedMetric)?.label ?? "Avg Glucose"}
           </span>

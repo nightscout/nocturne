@@ -4,6 +4,11 @@
   import type { GlycemicRiskIndex, GriTimelinePeriod } from "$lib/api/generated/nocturne-api-client";
   import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
+
+  // Stable categorical print-pattern slot per zone, so the same zone always
+  // carries the same monochrome texture regardless of render order.
+  const zonePrintSlot: Record<string, number> = { A: 1, B: 2, C: 3, D: 4, E: 5 };
 
   interface Props {
     gri: GlycemicRiskIndex;
@@ -210,6 +215,7 @@
                   fillOpacity={0.35}
                   stroke={zone.color}
                   strokeWidth={0.5}
+                  class={categoryPatternClass(zonePrintSlot[zone.label])}
                 />
               {/each}
 

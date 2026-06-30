@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BasalInjection.
 /// </summary>
 [Table("basal_injections")]
-public class BasalInjectionEntity : ITenantScoped, IAuditable, ISoftDeletable
+public class BasalInjectionEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -74,7 +74,7 @@ public class BasalInjectionEntity : ITenantScoped, IAuditable, ISoftDeletable
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     [Column("legacy_id")]
-    [MaxLength(64)]
+    [MaxLength(255)]
     public string? LegacyId { get; set; }
 
     /// <summary>

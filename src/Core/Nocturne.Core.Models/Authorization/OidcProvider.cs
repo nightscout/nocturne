@@ -18,7 +18,20 @@ public class OidcProvider
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
-    /// OIDC issuer URL
+    /// The authentication protocol this provider speaks. Defaults to standards-compliant OIDC;
+    /// <see cref="OidcProviderType.OAuth2"/> selects the plain-OAuth2 flow driven by <see cref="OAuth2"/>.
+    /// </summary>
+    public OidcProviderType ProviderType { get; set; } = OidcProviderType.Oidc;
+
+    /// <summary>
+    /// Endpoint and claim configuration for a plain OAuth2 provider. Required when
+    /// <see cref="ProviderType"/> is <see cref="OidcProviderType.OAuth2"/>; ignored for OIDC.
+    /// </summary>
+    public OAuth2ProviderSettings? OAuth2 { get; set; }
+
+    /// <summary>
+    /// Issuer URL. For OIDC this is the discovery base; for OAuth2 it is the stable identity
+    /// namespace external identities are keyed by (e.g. <c>https://github.com</c>).
     /// </summary>
     public string IssuerUrl { get; set; } = string.Empty;
 

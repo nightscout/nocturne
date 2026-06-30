@@ -32,7 +32,7 @@
   {/if}
   <!-- Hemisphere (bowl shape - curves below baseline) -->
   <path
-    d="M -8,0 A 8,8 0 0,1 8,0 Z"
+    d="M -8,0 A 8,8 0 0,0 8,0 Z"
     fill="var(--carbs)"
     class="opacity-90 hover:opacity-100 transition-opacity"
   />

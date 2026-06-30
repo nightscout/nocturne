@@ -10,9 +10,9 @@ import type { TitleFaviconSettings, ClientThresholds } from "$lib/stores/serverS
 import { directions } from "$lib/stores/serverSettings";
 import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
 import { bg as formatBg, bgDelta as formatBgDelta } from "$lib/utils/formatting";
+import { getGlucoseStatus, renderGlucoseIcon, type GlucoseStatus } from "@nocturne/ui/glucose-icon";
 
-/** Status levels for glucose values */
-export type GlucoseStatus = "very-high" | "high" | "in-range" | "low" | "very-low";
+export type { GlucoseStatus };
 
 /** Resolve CSS variable to its computed value */
 function resolveCssVar(name: string): string {
@@ -232,11 +232,7 @@ export class TitleFaviconService {
    * Determine glucose status based on value and thresholds
    */
   getGlucoseStatus(value: number, thresholds: ClientThresholds): GlucoseStatus {
-    if (value >= thresholds.high) return "very-high";
-    if (value <= thresholds.low) return "very-low";
-    if (value > thresholds.targetTop) return "high";
-    if (value < thresholds.targetBottom) return "low";
-    return "in-range";
+    return getGlucoseStatus(value, thresholds);
   }
 
   /**
@@ -299,41 +295,14 @@ export class TitleFaviconService {
   private generateFaviconDataUrl(bg: number | null, backgroundColor: string): string {
     if (!this.canvas || !this.ctx) return "";
 
-    const ctx = this.ctx;
-    const size = 32;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, size, size);
-
-    // Draw rounded rectangle background
-    const radius = 6;
-    ctx.beginPath();
-    ctx.roundRect(0, 0, size, size, radius);
-    ctx.fillStyle = backgroundColor;
-    ctx.fill();
-
-    // Draw BG value if provided
-    if (bg !== null) {
-      ctx.fillStyle = resolveCssVar("--foreground");
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
+    return renderGlucoseIcon({
       // Format BG with user's unit preference
-      const bgStr = String(formatBg(bg));
-
-      // Adjust font size based on value length
-      if (bgStr.length <= 2) {
-        ctx.font = "bold 18px system-ui, sans-serif";
-      } else if (bgStr.length <= 3) {
-        ctx.font = "bold 14px system-ui, sans-serif";
-      } else {
-        ctx.font = "bold 11px system-ui, sans-serif";
-      }
-
-      ctx.fillText(bgStr, size / 2, size / 2 + 1);
-    }
-
-    return this.canvas.toDataURL("image/png");
+      text: bg !== null ? String(formatBg(bg)) : null,
+      bgColor: backgroundColor,
+      fgColor: resolveCssVar("--foreground"),
+      size: 32,
+      radius: 6,
+    });
   }
 
   /**

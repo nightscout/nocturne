@@ -25,8 +25,8 @@ public class EntryDecomposerTests : IDisposable
         var mockDedup = new Mock<IDeduplicationService>();
         var ctxFactory = new TestTenantDbContextFactory(_context);
         var sgRepo = new SensorGlucoseRepository(ctxFactory, mockDedup.Object, new Mock<IAuditContext>().Object, NullLogger<SensorGlucoseRepository>.Instance);
-        var mgRepo = new MeterGlucoseRepository(ctxFactory, NullLogger<MeterGlucoseRepository>.Instance);
-        var calRepo = new CalibrationRepository(ctxFactory, NullLogger<CalibrationRepository>.Instance);
+        var mgRepo = new MeterGlucoseRepository(ctxFactory, new Mock<IAuditContext>().Object, NullLogger<MeterGlucoseRepository>.Instance);
+        var calRepo = new CalibrationRepository(ctxFactory, new Mock<IAuditContext>().Object, NullLogger<CalibrationRepository>.Instance);
 
         var mockConfigProvider = new Mock<IGlucoseProcessingConfigProvider>();
         mockConfigProvider.Setup(x => x.GetSourceDefaultsAsync(It.IsAny<CancellationToken>()))

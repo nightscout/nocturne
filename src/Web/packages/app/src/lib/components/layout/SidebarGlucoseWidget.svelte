@@ -5,6 +5,7 @@
     formatGlucoseValue,
     formatGlucoseDelta,
   } from "$lib/utils/formatting";
+  import { deltaColorClass } from "@nocturne/ui/glucose";
   import {
     glucoseUnits,
     sidebarWidget,
@@ -96,25 +97,6 @@
     duration: reducedMotion ? 0 : 600,
     easing: cubicOut,
   });
-
-  // Delta color based on direction severity
-  function getDeltaColor(dir: string): string {
-    switch (dir) {
-      case "DoubleUp":
-      case "DoubleDown":
-        return "text-red-500";
-      case "SingleUp":
-      case "SingleDown":
-        return "text-orange-500";
-      case "FortyFiveUp":
-      case "FortyFiveDown":
-        return "text-yellow-500";
-      case "Flat":
-        return "text-green-500";
-      default:
-        return "text-muted-foreground";
-    }
-  }
 </script>
 
 <!-- Expanded state: widget based on preference -->
@@ -137,7 +119,7 @@
         />
         {#if hasData && !isStale}
           <div class="flex flex-col items-center gap-0.5">
-            <div class="flex items-center gap-0.5 {getDeltaColor(direction)}">
+            <div class="flex items-center gap-0.5 {deltaColorClass(direction)}">
               <ArrowRight
                 class="size-4"
                 style="transform: rotate({arrowAngle.current}deg)"
@@ -184,7 +166,7 @@
     class="text-lg"
   />
   {#if hasData && !isStale}
-    <div class="flex items-center gap-0.5 {getDeltaColor(direction)}">
+    <div class="flex items-center gap-0.5 {deltaColorClass(direction)}">
       <ArrowRight
         class="size-3"
         style="transform: rotate({arrowAngle.current}deg)"

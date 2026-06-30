@@ -27,7 +27,7 @@
 >
   <!-- Hemisphere (bowl shape - curves below baseline) -->
   <path
-    d="M {size / 2 - radius},{0} A {radius},{radius} 0 0,1 {size / 2 +
+    d="M {size / 2 - radius},{0} A {radius},{radius} 0 0,0 {size / 2 +
       radius},{0} Z"
     fill={color}
   />

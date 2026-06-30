@@ -56,6 +56,19 @@ describe("formatHour", () => {
 			expect(formatHour(23, true)).toBe("23:00");
 		});
 	});
+
+	describe("fractional hours", () => {
+		it("snaps fractional ticks to the nearest hour (no decimal labels)", () => {
+			expect(formatHour(20.6, false)).toBe("9pm");
+			expect(formatHour(8.4, false)).toBe("8am");
+			expect(formatHour(20.6, true)).toBe("21:00");
+		});
+
+		it("wraps a tick rounding up to 24 back to midnight", () => {
+			expect(formatHour(23.6, false)).toBe("12am");
+			expect(formatHour(23.6, true)).toBe("00:00");
+		});
+	});
 });
 
 // ---------------------------------------------------------------------------

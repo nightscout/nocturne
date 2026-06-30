@@ -3,6 +3,7 @@
     formatPercentageDisplay,
     formatInsulinDisplay,
     formatCarbDisplay,
+    bgRange,
     type OverallAverages,
   } from "$lib/utils/formatting";
   import type { Thresholds } from "./types";
@@ -37,10 +38,10 @@
       </div>
       <div class="text-xs text-gray-500 space-y-1">
         <div>
-          TIR: {thresholds.targetBottom}-{thresholds.targetTop} mg/dL
+          TIR: {bgRange(thresholds.targetBottom, thresholds.targetTop)}
         </div>
         <div>
-          TTIR: {thresholds.targetBottom}-{thresholds.tightTargetTop} mg/dL
+          TTIR: {bgRange(thresholds.targetBottom, thresholds.tightTargetTop)}
         </div>
       </div>
     </div>

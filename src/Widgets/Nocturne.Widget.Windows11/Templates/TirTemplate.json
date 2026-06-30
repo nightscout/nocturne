@@ -1,0 +1,85 @@
+{
+    "type": "AdaptiveCard",
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "version": "1.5",
+    "body": [
+        {
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        { "type": "TextBlock", "text": "Time in Range", "weight": "Bolder" }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        {
+                            "type": "Image",
+                            "url": "${refreshIcon}",
+                            "width": "16px",
+                            "altText": "Refresh",
+                            "selectAction": { "type": "Action.Execute", "verb": "refresh" }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "Image",
+            "url": "${tirBar}",
+            "size": "stretch",
+            "spacing": "Medium",
+            "$when": "${hasTir}"
+        },
+        {
+            "type": "ColumnSet",
+            "spacing": "Small",
+            "$when": "${hasTir}",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        { "type": "TextBlock", "text": "Low", "size": "Small", "isSubtle": true, "horizontalAlignment": "Center" },
+                        { "type": "TextBlock", "text": "${tirLow}", "weight": "Bolder", "color": "Attention", "horizontalAlignment": "Center", "spacing": "None" }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        { "type": "TextBlock", "text": "In range", "size": "Small", "isSubtle": true, "horizontalAlignment": "Center" },
+                        { "type": "TextBlock", "text": "${tirInRange}", "weight": "Bolder", "color": "Good", "horizontalAlignment": "Center", "spacing": "None" }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [
+                        { "type": "TextBlock", "text": "High", "size": "Small", "isSubtle": true, "horizontalAlignment": "Center" },
+                        { "type": "TextBlock", "text": "${tirHigh}", "weight": "Bolder", "color": "Warning", "horizontalAlignment": "Center", "spacing": "None" }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "TextBlock",
+            "text": "Not enough recent data.",
+            "size": "Small",
+            "isSubtle": true,
+            "wrap": true,
+            "spacing": "Medium",
+            "$when": "${hasTir == false}"
+        }
+    ],
+    "selectAction": {
+        "type": "Action.Execute",
+        "verb": "openApp"
+    }
+}

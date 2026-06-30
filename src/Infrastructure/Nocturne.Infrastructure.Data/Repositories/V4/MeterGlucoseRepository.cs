@@ -1,197 +1,43 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
-using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing meter glucose (fingerstick) records in the database.
+/// Repository for managing meter glucose (fingerstick) records in the database. A LegacyId-only type
+/// (no SyncId-upsert, no DeduplicationService participation), so it uses the shared
+/// <see cref="V4RepositoryBase{TModel,TEntity}"/> behaviour unchanged plus the meter-glucose-specific
+/// queries below.
 /// </summary>
-public class MeterGlucoseRepository : IMeterGlucoseRepository
+public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucoseEntity>, IMeterGlucoseRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
-    private readonly ILogger<MeterGlucoseRepository> _logger;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="MeterGlucoseRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
+    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
     /// <param name="logger">The logger instance.</param>
-    public MeterGlucoseRepository(ITenantDbContextFactory contextFactory, ILogger<MeterGlucoseRepository> logger)
+    // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
+    public MeterGlucoseRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<MeterGlucoseRepository> logger)
+        : base(contextFactory, auditContext)
     {
-        _contextFactory = contextFactory;
-        _logger = logger;
-    }
-
-    /// <summary>
-    /// Gets meter glucose records based on filter criteria.
-    /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="device">Optional device filter.</param>
-    /// <param name="source">Optional data source filter.</param>
-    /// <param name="limit">The maximum number of records to return.</param>
-    /// <param name="offset">The number of records to skip.</param>
-    /// <param name="descending">Whether to sort by timestamp in descending order.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of meter glucose records.</returns>
-    public async Task<IEnumerable<MeterGlucose>> GetAsync(
-        DateTime? from, DateTime? to, string? device, string? source,
-        int limit = 100, int offset = 0, bool descending = true,
-        CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.MeterGlucose.AsNoTracking().AsQueryable();
-        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
-        if (device != null) query = query.Where(e => e.Device == device);
-        if (source != null) query = query.Where(e => e.DataSource == source);
-        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
-        var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
-        return entities.Select(MeterGlucoseMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Gets a meter glucose record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The meter glucose record, or null if not found.</returns>
-    public async Task<MeterGlucose?> GetByIdAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.MeterGlucose.FindAsync([id], ct);
-        return entity is null ? null : MeterGlucoseMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Gets a meter glucose record by its legacy identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The meter glucose record, or null if not found.</returns>
-    public async Task<MeterGlucose?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.MeterGlucose.FirstOrDefaultAsync(e => e.LegacyId == legacyId, ct);
-        return entity is null ? null : MeterGlucoseMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Creates a new meter glucose record.
-    /// </summary>
-    /// <param name="model">The meter glucose to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The created meter glucose record.</returns>
-    public async Task<MeterGlucose> CreateAsync(MeterGlucose model, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = MeterGlucoseMapper.ToEntity(model);
-        ctx.MeterGlucose.Add(entity);
-        await ctx.SaveChangesAsync(ct);
-        return MeterGlucoseMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Updates an existing meter glucose record.
-    /// </summary>
-    /// <param name="id">The unique identifier of the record to update.</param>
-    /// <param name="model">The updated record data.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The updated meter glucose record.</returns>
-    public async Task<MeterGlucose> UpdateAsync(Guid id, MeterGlucose model, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.MeterGlucose.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"MeterGlucose {id} not found");
-        MeterGlucoseMapper.UpdateEntity(entity, model);
-        await ctx.SaveChangesAsync(ct);
-        return MeterGlucoseMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Deletes a meter glucose record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.MeterGlucose.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"MeterGlucose {id} not found");
-        entity.DeletedAt = DateTime.UtcNow;
-        await ctx.SaveChangesAsync(ct);
     }
 
     /// <inheritdoc />
-    public async Task<MeterGlucose> RestoreAsync(Guid id, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.MeterGlucose.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.Id == id && e.DeletedAt != null)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new KeyNotFoundException($"Soft-deleted MeterGlucose {id} not found");
-        entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return MeterGlucoseMapper.ToDomainModel(entity);
-    }
+    protected override MeterGlucoseEntity ToEntity(MeterGlucose model) => MeterGlucoseMapper.ToEntity(model);
 
     /// <inheritdoc />
-    public async Task<IEnumerable<MeterGlucose>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var idSet = ids.ToHashSet();
-        var entities = await ctx.MeterGlucose.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && idSet.Contains(e.Id) && e.DeletedAt != null)
-            .ToListAsync(ct);
-        foreach (var entity in entities)
-            entity.DeletedAt = null;
-        await ctx.SaveChangesAsync(ct);
-        return entities.Select(MeterGlucoseMapper.ToDomainModel);
-    }
+    protected override MeterGlucose ToDomain(MeterGlucoseEntity entity) => MeterGlucoseMapper.ToDomainModel(entity);
 
     /// <inheritdoc />
-    public async Task<IEnumerable<MeterGlucose>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entities = await ctx.MeterGlucose.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .OrderByDescending(e => e.DeletedAt)
-            .Skip(offset).Take(limit)
-            .AsNoTracking()
-            .ToListAsync(ct);
-        return entities.Select(MeterGlucoseMapper.ToDomainModel);
-    }
-
-    /// <inheritdoc />
-    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.MeterGlucose.IgnoreQueryFilters()
-            .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt != null)
-            .CountAsync(ct);
-    }
-
-    /// <summary>
-    /// Counts meter glucose records within a timestamp range.
-    /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The count of matching records.</returns>
-    public async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.MeterGlucose.AsNoTracking().AsQueryable();
-        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
-        return await query.CountAsync(ct);
-    }
+    protected override void ApplyUpdate(MeterGlucoseEntity target, MeterGlucose source) =>
+        MeterGlucoseMapper.UpdateEntity(target, source);
 
     /// <summary>
     /// Gets meter glucose records by correlation identifier.
@@ -201,56 +47,12 @@ public class MeterGlucoseRepository : IMeterGlucoseRepository
     /// <returns>A collection of meter glucose records.</returns>
     public async Task<IEnumerable<MeterGlucose>> GetByCorrelationIdAsync(Guid correlationId, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var entities = await ctx.MeterGlucose
             .AsNoTracking()
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(MeterGlucoseMapper.ToDomainModel);
-    }
-
-    /// <summary>
-    /// Deletes a meter glucose record by its legacy identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.MeterGlucose
-            .Where(e => e.LegacyId == legacyId)
-            .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
-    }
-
-    /// <summary>
-    /// Gets the timestamp of the latest meter glucose record.
-    /// </summary>
-    /// <param name="source">Optional data source filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The latest timestamp, or null if no records found.</returns>
-    public async Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.MeterGlucose.AsNoTracking().AsQueryable();
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-        return await query.MaxAsync(e => (DateTime?)e.Timestamp, ct);
-    }
-
-    /// <summary>
-    /// Gets the timestamp of the oldest meter glucose record.
-    /// </summary>
-    /// <param name="source">Optional data source filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The oldest timestamp, or null if no records found.</returns>
-    public async Task<DateTime?> GetOldestTimestampAsync(string? source = null, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.MeterGlucose.AsNoTracking().AsQueryable();
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-        return await query.MinAsync(e => (DateTime?)e.Timestamp, ct);
     }
 
     /// <summary>
@@ -261,7 +63,7 @@ public class MeterGlucoseRepository : IMeterGlucoseRepository
     /// <returns>Number of records deleted.</returns>
     public async Task<int> DeleteBySourceAsync(string source, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.MeterGlucose
             .Where(e => e.DataSource == source)
             .ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
@@ -276,7 +78,7 @@ public class MeterGlucoseRepository : IMeterGlucoseRepository
     /// <returns>Number of records deleted.</returns>
     public async Task<int> DeleteByTimeRangeAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = ctx.MeterGlucose.AsQueryable();
 
         if (from.HasValue)
@@ -285,60 +87,5 @@ public class MeterGlucoseRepository : IMeterGlucoseRepository
             query = query.Where(e => e.Timestamp < to.Value);
 
         return await query.ExecuteUpdateAsync(s => s.SetProperty(e => e.DeletedAt, DateTime.UtcNow), ct);
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<MeterGlucose>> BulkCreateAsync(
-        IEnumerable<MeterGlucose> records,
-        CancellationToken ct = default)
-    {
-        var entities = records.Select(MeterGlucoseMapper.ToEntity).ToList();
-        if (entities.Count == 0)
-            return [];
-
-        // Batch-level dedup: keep first occurrence per LegacyId
-        entities = entities
-            .GroupBy(e => e.LegacyId ?? e.Id.ToString())
-            .Select(g => g.First())
-            .ToList();
-
-        // DB-level dedup: filter out records whose LegacyId already exists
-        var legacyIds = entities
-            .Where(e => !string.IsNullOrEmpty(e.LegacyId))
-            .Select(e => e.LegacyId!)
-            .ToHashSet();
-
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
-        {
-            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-
-            if (legacyIds.Count > 0)
-            {
-                var blockedLegacyIds = await ctx.GetBlockingLegacyIdsAsync<MeterGlucoseEntity>(legacyIds, ct);
-
-                entities = entities
-                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
-                    .ToList();
-            }
-
-            if (entities.Count == 0)
-            {
-                await tx.CommitAsync(ct);
-                return [];
-            }
-
-            const int batchSize = 500;
-            foreach (var batch in entities.Chunk(batchSize))
-            {
-                ctx.MeterGlucose.AddRange(batch);
-                await ctx.SaveChangesAsync(ct);
-                ctx.ChangeTracker.Clear();
-            }
-
-            await tx.CommitAsync(ct);
-            return entities.Select(MeterGlucoseMapper.ToDomainModel);
-        });
     }
 }

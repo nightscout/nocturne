@@ -1,6 +1,8 @@
-import { OAuthScope } from "$lib/api/generated/nocturne-api-client";
+// Relative import (not the $lib alias) so this module stays portable when bundled
+// by other workspace packages — the portal docs import it via @nocturne/app/constants.
+import { OAuthScope } from "../api/generated/nocturne-api-client";
 
-export { OAuthScope } from "$lib/api/generated/nocturne-api-client";
+export { OAuthScope } from "../api/generated/nocturne-api-client";
 
 export const OAUTH_SCOPE_DESCRIPTIONS: Readonly<Record<OAuthScope, string>> = {
   [OAuthScope.GlucoseRead]: "View glucose readings",

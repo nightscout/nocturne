@@ -96,14 +96,6 @@ export function historyVertices({
   });
 }
 
-/**
- * Convert a 5-minute glucose delta to a Dexcom-style trend chevron angle.
- * Mirrors `trendAngle` in the source design (concepts/shared.jsx:116-120):
- * 0° = steady (chevron points right), negative = up, positive = down,
- * clamped at ±12 mg/dL/5min so very-fast trends don't go past the ring.
- */
-export function trendAngle(deltaPer5: number): number {
-  const clamped = Math.max(-12, Math.min(12, deltaPer5));
-  if (clamped === 0) return 0;
-  return -clamped * 6;
-}
+// The trend-chevron angle is shared with the desktop companion; the single source of truth lives
+// in the design system. Re-exported here so existing `./geometry` import sites keep working.
+export { trendAngle } from "@nocturne/ui/glucose";

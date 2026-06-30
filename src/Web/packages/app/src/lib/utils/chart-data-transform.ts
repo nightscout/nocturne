@@ -65,6 +65,9 @@ export function transformChartData(data: DashboardChartData) {
 			veryLow: data.thresholds?.veryLow || 54,
 			veryHigh: data.thresholds?.veryHigh || 250,
 			glucoseYMax: data.thresholds?.glucoseYMax || 300,
+			// Personal target reference line; null when no profile is available.
+			targetLow: data.thresholds?.targetLow ?? null,
+			targetHigh: data.thresholds?.targetHigh ?? null,
 		},
 
 		bolusMarkers: (data.bolusMarkers ?? []).map((m) => ({

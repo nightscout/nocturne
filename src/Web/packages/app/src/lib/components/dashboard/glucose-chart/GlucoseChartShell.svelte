@@ -90,7 +90,8 @@
   setGlucoseChartContext(ctx);
 </script>
 
-<div class="{heightClass} w-full @container">
+<!-- print:break-inside-auto lets a tall multi-day chart flow across pages instead of being clipped by the global break-inside:avoid on svg. -->
+<div class="{heightClass} w-full @container print:break-inside-auto">
   <Chart
     data={engine.glucoseData}
     x={(d) => d.time}

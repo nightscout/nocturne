@@ -78,6 +78,14 @@ public interface IBolusCalculationRepository : IV4Repository<BolusCalculation>
     /// <param name="ct">Cancellation token.</param>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
+    /// <summary>
+    /// Retrieve the timestamp of the most recently stored <see cref="BolusCalculation"/>, optionally scoped to a data source.
+    /// </summary>
+    /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
+    /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
+
     /// <summary>Retrieve all <see cref="BolusCalculation"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records (e.g., bolus + wizard).</param>
     /// <param name="ct">Cancellation token.</param>

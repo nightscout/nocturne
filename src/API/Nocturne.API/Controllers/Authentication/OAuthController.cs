@@ -947,28 +947,25 @@ public class OAuthController : ControllerBase
             });
         }
 
-        // RFC 7591 Section 2.0.1: redirect_uris is REQUIRED for native apps
-        if (request.RedirectUris is null || request.RedirectUris.Count == 0)
+        // redirect_uris is only needed for the authorization-code flow. Device-flow
+        // (RFC 8628) and refresh-only clients register without any; a client with no
+        // registered redirect URI simply cannot use the authorization-code flow, which
+        // ValidateRedirectUriAsync already fails closed on. When present, every URI must
+        // pass RFC 8252 validation.
+        if (request.RedirectUris is { Count: > 0 })
         {
-            return BadRequest(new OAuthError
+            var invalidUris = request.RedirectUris
+                .Where(u => !redirectUriValidator.IsValidForRegistration(u))
+                .ToList();
+            if (invalidUris.Count > 0)
             {
-                Error = "invalid_redirect_uri",
-                ErrorDescription = "At least one redirect_uri is required.",
-            });
-        }
-
-        // Validate every redirect URI per RFC 8252
-        var invalidUris = request.RedirectUris
-            .Where(u => !redirectUriValidator.IsValidForRegistration(u))
-            .ToList();
-        if (invalidUris.Count > 0)
-        {
-            return BadRequest(new OAuthError
-            {
-                Error = "invalid_redirect_uri",
-                ErrorDescription =
-                    $"The following redirect_uris are not allowed: {string.Join(", ", invalidUris)}.",
-            });
+                return BadRequest(new OAuthError
+                {
+                    Error = "invalid_redirect_uri",
+                    ErrorDescription =
+                        $"The following redirect_uris are not allowed: {string.Join(", ", invalidUris)}.",
+                });
+            }
         }
 
         // Strict scope validation against the canonical registry

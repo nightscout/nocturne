@@ -124,7 +124,7 @@
     </Svg>
 
     <Tooltip.Root
-      class="bg-popover/95 text-popover-foreground rounded-lg border border-border px-2.5 py-1.5 shadow-xl"
+      class="print:hidden bg-popover/95 text-popover-foreground rounded-lg border border-border px-2.5 py-1.5 shadow-xl"
     >
       {#snippet children({ data: tooltipData })}
         {@const d = tooltipData as ActogramTooltipData}

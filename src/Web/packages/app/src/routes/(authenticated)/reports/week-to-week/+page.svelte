@@ -109,10 +109,11 @@
 
 {#if reportsResource.current}
 <div class="@container space-y-6 p-3 @md:p-6">
-  <!-- Controls -->
-  <Card.Root>
+  <!-- Week-stepper controls — navigation chaff; the compared date range stays
+       visible in the layout's print header. -->
+  <Card.Root class="print:hidden">
     <Card.Content class="p-4">
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center justify-center gap-2 @md:justify-start">
         <Button variant="outline" size="icon" onclick={previousWeek}>
           <ChevronLeft class="h-4 w-4" />
         </Button>
@@ -132,8 +133,8 @@
     </Card.Content>
   </Card.Root>
 
-  <!-- Chart -->
-  <div class="h-[400px] p-4 border rounded-sm">
+  <!-- Day-of-week comparison chart -->
+  <div class="h-[320px] w-full p-4 border rounded-sm @md:h-[400px]">
     {#if chartData.length > 0}
       <LineChart
         data={chartData}

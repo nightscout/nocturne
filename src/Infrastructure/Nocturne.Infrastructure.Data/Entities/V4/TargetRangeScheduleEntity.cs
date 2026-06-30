@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TargetRangeSchedule
 /// </summary>
 [Table("target_range_schedules")]
-public class TargetRangeScheduleEntity : ITenantScoped, ISoftDeletable, IV4Entity
+public class TargetRangeScheduleEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4TimeSeriesEntity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -67,7 +67,7 @@ public class TargetRangeScheduleEntity : ITenantScoped, ISoftDeletable, IV4Entit
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     [Column("legacy_id")]
-    [MaxLength(64)]
+    [MaxLength(255)]
     public string? LegacyId { get; set; }
 
     /// <summary>

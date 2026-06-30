@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// PostgreSQL entity for food attribution entries linked to carb intake records.
 /// </summary>
 [Table("treatment_foods")]
-public class TreatmentFoodEntity : ITenantScoped
+public class TreatmentFoodEntity : ITenantScoped, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.

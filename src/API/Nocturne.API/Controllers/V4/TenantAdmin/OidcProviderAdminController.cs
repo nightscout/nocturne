@@ -60,10 +60,13 @@ public class OidcProviderAdminController : ControllerBase
         {
             Id = Guid.CreateVersion7(),
             Name = request.Name,
+            ProviderType = request.ProviderType,
+            OAuth2 = request.OAuth2,
             IssuerUrl = request.IssuerUrl,
             ClientId = request.ClientId,
             ClientSecret = request.ClientSecret,
-            Scopes = request.Scopes ?? ["openid", "profile", "email"],
+            // Null scopes are filled with the protocol's defaults by the provider service.
+            Scopes = request.Scopes ?? [],
             ClaimMappings = request.ClaimMappings ?? new(),
             DefaultRoles = request.DefaultRoles ?? ["readable"],
             IsEnabled = request.IsEnabled,
@@ -103,6 +106,8 @@ public class OidcProviderAdminController : ControllerBase
         if (existing is null) return NotFound();
 
         existing.Name = request.Name;
+        existing.ProviderType = request.ProviderType;
+        existing.OAuth2 = request.OAuth2;
         existing.IssuerUrl = request.IssuerUrl;
         existing.ClientId = request.ClientId;
         if (request.ClientSecret is not null)
@@ -286,7 +291,9 @@ public record CreateOidcProviderRequest(
     bool IsEnabled = true,
     int DisplayOrder = 0,
     string? Icon = null,
-    string? ButtonColor = null);
+    string? ButtonColor = null,
+    OidcProviderType ProviderType = OidcProviderType.Oidc,
+    OAuth2ProviderSettings? OAuth2 = null);
 
 public record UpdateOidcProviderRequest(
     string Name,
@@ -299,7 +306,9 @@ public record UpdateOidcProviderRequest(
     bool IsEnabled = true,
     int DisplayOrder = 0,
     string? Icon = null,
-    string? ButtonColor = null);
+    string? ButtonColor = null,
+    OidcProviderType ProviderType = OidcProviderType.Oidc,
+    OAuth2ProviderSettings? OAuth2 = null);
 
 public record OidcProviderResponse(
     Guid Id,
@@ -313,7 +322,9 @@ public record OidcProviderResponse(
     bool IsEnabled,
     int DisplayOrder,
     string? Icon,
-    string? ButtonColor)
+    string? ButtonColor,
+    OidcProviderType ProviderType,
+    OAuth2ProviderSettings? OAuth2)
 {
     public static OidcProviderResponse FromDomain(OidcProvider p) => new(
         p.Id,
@@ -327,7 +338,9 @@ public record OidcProviderResponse(
         p.IsEnabled,
         p.DisplayOrder,
         p.Icon,
-        p.ButtonColor);
+        p.ButtonColor,
+        p.ProviderType,
+        p.OAuth2);
 }
 
 public record ConfigManagedResponse(bool IsConfigManaged);

@@ -7,13 +7,14 @@ namespace Nocturne.API.Tests.Authorization;
 public class KnownOAuthClientsTests
 {
     [Theory]
-    [InlineData("org.trio.diabetes", "Trio")]
-    [InlineData("org.nightscoutfoundation.xdrip", "xDrip+")]
-    [InlineData("org.androidaps.aaps", "AAPS")]
+    [InlineData("org.nightscout.trio", "Trio")]
+    [InlineData("com.eveningoutpost.dexdrip", "xDrip+")]
+    [InlineData("info.nightscout.androidaps", "AAPS")]
     [InlineData("org.loopkit.loop", "Loop")]
-    [InlineData("github.nightscout.nightscout", "Nightscout")]
-    [InlineData("io.sugarmate", "Sugarmate")]
-    [InlineData("com.nickenilsson.nightwatch", "Nightwatch")]
+    [InlineData("org.nightscout.cgm-remote-monitor", "Nightscout (server)")]
+    [InlineData("com.tandemdiabetes.sugarmate", "Sugarmate")]
+    [InlineData("se.cornixit.nightwatch", "Nightwatch")]
+    [InlineData("com.nocturne.tray", "Nocturne Tray")]
     [InlineData("dev.nocturne.prelude", "Prelude")]
     public void MatchBySoftwareId_ReturnsEntry_ForKnownSoftwareId(string softwareId, string expectedDisplayName)
     {
@@ -36,7 +37,7 @@ public class KnownOAuthClientsTests
     public void MatchBySoftwareId_IsCaseSensitive()
     {
         // software_id is case-sensitive per RFC 7591
-        KnownOAuthClients.MatchBySoftwareId("ORG.TRIO.DIABETES").Should().BeNull();
+        KnownOAuthClients.MatchBySoftwareId("ORG.NIGHTSCOUT.TRIO").Should().BeNull();
     }
 
     [Fact]

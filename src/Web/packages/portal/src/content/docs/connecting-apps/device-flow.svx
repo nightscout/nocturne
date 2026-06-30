@@ -4,6 +4,7 @@ title: Mobile App Authentication
 
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
+  import OAuthScopeTable from '$lib/components/docs/OAuthScopeTable.svelte';
 </script>
 
 # Mobile App Authentication
@@ -16,6 +17,12 @@ For web apps or desktop apps that can open a browser, see the
 Nocturne uses the Device Authorization flow for apps that either can't easily open a
 redirect-based browser flow or run on devices with limited input. The user authorizes
 on a separate device (phone, computer) by entering a short code.
+
+<Callout type="tip" title="Prefer an SDK for API calls?">
+  The code below uses raw HTTP requests to show the device flow end to end. Once you
+  have an access token, you don't have to hand-write API calls — official SDKs for
+  the V4 API are available in several languages. See <a href="/docs/sdks">SDKs</a>.
+</Callout>
 
 ## 1. Register your app
 
@@ -63,7 +70,7 @@ const deviceResponse = await fetch(
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: clientId,
-      scope: "entries.readwrite heartrate.readwrite stepcount.readwrite",
+      scope: "glucose.readwrite heartrate.readwrite stepcount.readwrite",
     }),
   }
 );
@@ -218,28 +225,7 @@ Users can also revoke your app's access from their Nocturne settings at any time
 
 Scopes control what your app can access. Request only what you need.
 
-| Scope | Access |
-|-------|--------|
-| `entries.read` | Read glucose readings |
-| `entries.readwrite` | Read and write glucose readings |
-| `treatments.read` | Read treatments (insulin, carbs, notes) |
-| `treatments.readwrite` | Read and write treatments |
-| `devicestatus.read` | Read pump and CGM device status |
-| `devicestatus.readwrite` | Read and write device status |
-| `profile.read` | Read user profile and settings |
-| `profile.readwrite` | Read and write profile |
-| `heartrate.read` | Read heart rate data |
-| `heartrate.readwrite` | Read and write heart rate data |
-| `stepcount.read` | Read step count data |
-| `stepcount.readwrite` | Read and write step count data |
-| `notifications.read` | Read notifications |
-| `notifications.readwrite` | Read and write notifications |
-| `reports.read` | Read reports |
-| `identity.read` | Read account identity |
-| `sharing.readwrite` | Manage sharing settings |
-| `health.read` | Shorthand for all `.read` health scopes |
-| `health.readwrite` | Shorthand for all `.readwrite` health scopes |
-| `*` | Full access (use sparingly) |
+<OAuthScopeTable />
 
 A `readwrite` scope always implies `read` — you don't need to request both.
 

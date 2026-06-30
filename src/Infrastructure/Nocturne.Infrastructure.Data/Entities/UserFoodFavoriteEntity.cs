@@ -7,7 +7,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// PostgreSQL entity for user food favorites.
 /// </summary>
 [Table("user_food_favorites")]
-public class UserFoodFavoriteEntity : ITenantScoped
+public class UserFoodFavoriteEntity : ITenantScoped, ISystemCreated
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.

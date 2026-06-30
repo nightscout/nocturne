@@ -184,6 +184,17 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             throw new HttpRequestException("422 UnprocessableEntity - Rate limited");
         }
 
+        // 403 on a patient-scoped endpoint (e.g. {"code":"data_cant_view"}) means the cached
+        // glookoCode is no longer authorized — typically it changed after an account/data-source
+        // re-link. Surface a distinct type so the sync re-authenticates and re-resolves the code
+        // instead of hammering the stale one until the 24h session cache expires.
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            var body = await GlookoHttpHelper.ReadResponseAsync(response);
+            _logger.LogWarning("Forbidden (403) fetching from {Url}: {Body}", absoluteUrl, body);
+            throw new GlookoDataForbiddenException($"Glooko returned 403 Forbidden for {absoluteUrl}: {body}");
+        }
+
         _logger.LogWarning("Failed to fetch from {Url}: {StatusCode}", absoluteUrl, response.StatusCode);
         throw new HttpRequestException($"HTTP {(int)response.StatusCode} {response.StatusCode}");
     }
@@ -203,6 +214,12 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 if (result.HasValue) return result;
 
                 _logger.LogWarning("Attempt {AttemptNumber} failed for {Url}", attempt + 1, url);
+            }
+            catch (GlookoDataForbiddenException)
+            {
+                // The patient code is part of the URL; retrying it unchanged will 403 again.
+                // Bubble up immediately so the caller can re-authenticate and rebuild URLs.
+                throw;
             }
             catch (HttpRequestException ex) when (ex.Message.Contains("422"))
             {
@@ -321,70 +338,51 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 "[{ConnectorSource}] Syncing {From:yyyy-MM-dd} to {To:yyyy-MM-dd} in {ChunkCount} chunk(s)",
                 ConnectorSource, from, to, chunks.Count);
 
-            for (var i = 0; i < chunks.Count; i++)
-            {
-                var (chunkFrom, chunkTo) = chunks[i];
-
-                await ReportMessageAsync(progressReporter, SyncMessageType.FetchingData,
-                    new()
-                    {
-                        ["from"] = chunkFrom.ToString("MMM dd"),
-                        ["to"] = chunkTo.ToString("MMM dd"),
-                        ["chunk"] = $"{i + 1}/{chunks.Count}",
-                    },
-                    cancellationToken);
-
-                var chunkSuccess = _syncConfig!.UseV3Api
-                    ? await FetchAndMapViaV3Async(chunkFrom, chunkTo, activeTypes, result, config, cancellationToken)
-                    : await FetchAndMapViaV2Async(chunkFrom, chunkTo, activeTypes, result, config, cancellationToken);
-
-                if (!chunkSuccess)
-                {
-                    _logger.LogWarning(
-                        "[{ConnectorSource}] Chunk {Chunk}/{Total} ({From:yyyy-MM-dd} to {To:yyyy-MM-dd}) failed, stopping sync",
-                        ConnectorSource, i + 1, chunks.Count, chunkFrom, chunkTo);
-                    result.Success = false;
-                    result.Message = "Sync failed during data fetch";
-                    result.Errors.Add($"Chunk {i + 1}/{chunks.Count} failed ({chunkFrom:yyyy-MM-dd} to {chunkTo:yyyy-MM-dd})");
-                    break;
-                }
-
-                _logger.LogInformation(
-                    "[{ConnectorSource}] Completed chunk {Chunk}/{Total} ({From:yyyy-MM-dd} to {To:yyyy-MM-dd})",
-                    ConnectorSource, i + 1, chunks.Count, chunkFrom, chunkTo);
-            }
-
-            // Profiles (V3 device settings — used in both modes, no V2 equivalent)
-            await ReportMessageAsync(progressReporter, SyncMessageType.ProcessingDataType,
-                new() { ["dataType"] = SyncDataType.Profiles.ToString() }, cancellationToken);
-
-            if (activeTypes.Contains(SyncDataType.Profiles))
+            // Run the sync; if Glooko rejects the patient code (403 data_cant_view) the cached
+            // glookoCode has gone stale (e.g. the account was re-linked), so re-authenticate once
+            // to resolve the current code and retry from scratch. A second 403 propagates to the
+            // outer handler and fails the sync rather than looping.
+            for (var attempt = 0; ; attempt++)
             {
                 try
                 {
-                    var deviceSettings = await FetchV3DeviceSettingsAsync();
-                    if (deviceSettings != null)
-                    {
-                        var profiles = _profileMapper.TransformDeviceSettingsToProfiles(deviceSettings);
-                        if (profiles.Any() && await PublishProfileDataAsync(profiles, config, cancellationToken))
-                        {
-                            result.ItemsSynced[SyncDataType.Profiles] = profiles.Count;
-                            _logger.LogInformation("[{ConnectorSource}] Published {Count} profiles from device settings",
-                                ConnectorSource, profiles.Count);
-                        }
-
-                        var profileStateSpans = _profileMapper.TransformDeviceSettingsToStateSpans(deviceSettings);
-                        if (profileStateSpans.Count > 0)
-                        {
-                            await PublishStateSpanDataAsync(profileStateSpans, config, cancellationToken);
-                            _logger.LogInformation("[{ConnectorSource}] Published {Count} profile state spans from device settings",
-                                ConnectorSource, profileStateSpans.Count);
-                        }
-                    }
+                    await RunSyncPassAsync(chunks, activeTypes, result, config, cancellationToken, progressReporter);
+                    break;
                 }
-                catch (Exception profileEx)
+                catch (GlookoDataForbiddenException ex) when (attempt == 0)
                 {
-                    _logger.LogWarning(profileEx, "[{ConnectorSource}] Failed to fetch/publish profile data", ConnectorSource);
+                    _logger.LogWarning(ex,
+                        "[{ConnectorSource}] Glooko returned 403 (data_cant_view) for patient code {Code}; the account's "
+                        + "glookoCode likely changed. Invalidating cached session and re-authenticating.",
+                        ConnectorSource, _userData?.GlookoCode);
+
+                    _tokenProvider.InvalidateToken();
+                    _sessionCookie = null;
+                    _userData = null;
+                    _meterUnits = null;
+                    _timezone = null;
+
+                    if (!await AuthenticateWithConfigAsync(config))
+                    {
+                        result.Success = false;
+                        result.Message = "Re-authentication failed after Glooko denied data access";
+                        result.Errors.Add("Re-authentication failed after Glooko returned 403 (data_cant_view)");
+                        break;
+                    }
+
+                    await ConfigureTimezoneTimelineAsync(config, cancellationToken);
+
+                    // Drop partial results from the aborted pass; the retry re-syncs from scratch
+                    // with the refreshed patient code.
+                    result.ItemsSynced.Clear();
+                    result.LastEntryTimes.Clear();
+                    result.Errors.Clear();
+                    result.Success = true;
+                    result.Message = "Sync completed successfully";
+
+                    _logger.LogInformation(
+                        "[{ConnectorSource}] Re-authenticated after 403; retrying sync with patient code {Code}",
+                        ConnectorSource, _userData?.GlookoCode);
                 }
             }
 
@@ -404,6 +402,88 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             await ReportMessageAsync(progressReporter, SyncMessageType.SyncFailed, null, cancellationToken);
             result.EndTime = DateTime.UtcNow;
             return result;
+        }
+    }
+
+    /// <summary>
+    ///     Runs one full sync pass: every date chunk followed by the profile/device-settings fetch.
+    ///     Throws <see cref="GlookoDataForbiddenException"/> when Glooko rejects the patient code, so
+    ///     the caller can re-authenticate and retry with a refreshed code.
+    /// </summary>
+    private async Task RunSyncPassAsync(
+        List<(DateTime From, DateTime To)> chunks,
+        HashSet<SyncDataType> activeTypes,
+        SyncResult result,
+        GlookoConnectorConfiguration config,
+        CancellationToken cancellationToken,
+        ISyncProgressReporter? progressReporter)
+    {
+        for (var i = 0; i < chunks.Count; i++)
+        {
+            var (chunkFrom, chunkTo) = chunks[i];
+
+            await ReportMessageAsync(progressReporter, SyncMessageType.FetchingData,
+                new()
+                {
+                    ["from"] = chunkFrom.ToString("MMM dd"),
+                    ["to"] = chunkTo.ToString("MMM dd"),
+                    ["chunk"] = $"{i + 1}/{chunks.Count}",
+                },
+                cancellationToken);
+
+            var chunkSuccess = _syncConfig!.UseV3Api
+                ? await FetchAndMapViaV3Async(chunkFrom, chunkTo, activeTypes, result, config, cancellationToken)
+                : await FetchAndMapViaV2Async(chunkFrom, chunkTo, activeTypes, result, config, cancellationToken);
+
+            if (!chunkSuccess)
+            {
+                _logger.LogWarning(
+                    "[{ConnectorSource}] Chunk {Chunk}/{Total} ({From:yyyy-MM-dd} to {To:yyyy-MM-dd}) failed, stopping sync",
+                    ConnectorSource, i + 1, chunks.Count, chunkFrom, chunkTo);
+                result.Success = false;
+                result.Message = "Sync failed during data fetch";
+                result.Errors.Add($"Chunk {i + 1}/{chunks.Count} failed ({chunkFrom:yyyy-MM-dd} to {chunkTo:yyyy-MM-dd})");
+                return;
+            }
+
+            _logger.LogInformation(
+                "[{ConnectorSource}] Completed chunk {Chunk}/{Total} ({From:yyyy-MM-dd} to {To:yyyy-MM-dd})",
+                ConnectorSource, i + 1, chunks.Count, chunkFrom, chunkTo);
+        }
+
+        // Profiles (V3 device settings — used in both modes, no V2 equivalent)
+        await ReportMessageAsync(progressReporter, SyncMessageType.ProcessingDataType,
+            new() { ["dataType"] = SyncDataType.Profiles.ToString() }, cancellationToken);
+
+        if (activeTypes.Contains(SyncDataType.Profiles))
+        {
+            try
+            {
+                var deviceSettings = await FetchV3DeviceSettingsAsync();
+                if (deviceSettings != null)
+                {
+                    var profiles = _profileMapper!.TransformDeviceSettingsToProfiles(deviceSettings);
+                    if (profiles.Any() && await PublishProfileDataAsync(profiles, config, cancellationToken))
+                    {
+                        result.ItemsSynced[SyncDataType.Profiles] = profiles.Count;
+                        _logger.LogInformation("[{ConnectorSource}] Published {Count} profiles from device settings",
+                            ConnectorSource, profiles.Count);
+                    }
+
+                    var profileStateSpans = _profileMapper.TransformDeviceSettingsToStateSpans(deviceSettings);
+                    if (profileStateSpans.Count > 0)
+                    {
+                        await PublishStateSpanDataAsync(profileStateSpans, config, cancellationToken);
+                        _logger.LogInformation("[{ConnectorSource}] Published {Count} profile state spans from device settings",
+                            ConnectorSource, profileStateSpans.Count);
+                    }
+                }
+            }
+            catch (GlookoDataForbiddenException) { throw; }
+            catch (Exception profileEx)
+            {
+                _logger.LogWarning(profileEx, "[{ConnectorSource}] Failed to fetch/publish profile data", ConnectorSource);
+            }
         }
     }
 
@@ -782,6 +862,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             return batchData;
         }
+        catch (GlookoDataForbiddenException) { throw; }
         catch (InvalidOperationException) { throw; }
         catch (HttpRequestException) { throw; }
         catch (Exception ex)
@@ -944,6 +1025,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             return graphData;
         }
+        catch (GlookoDataForbiddenException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching Glooko v3 graph data");
@@ -977,6 +1059,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
 
             return settings;
         }
+        catch (GlookoDataForbiddenException) { throw; }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching Glooko v3 device settings");

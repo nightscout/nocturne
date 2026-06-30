@@ -23,6 +23,6 @@
   });
 </script>
 
-<div class="p-3 @md:p-6">
+<div class="@container p-3 @md:p-6">
   <GlucoseChartCard {dateRange} />
 </div>

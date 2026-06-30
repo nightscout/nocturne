@@ -523,175 +523,6 @@ public class PasskeyController : ControllerBase
     }
 
     /// <summary>
-    /// Generate registration options for the first user during initial setup.
-    /// Only available when no non-system subjects exist (setup mode).
-    /// Creates the subject, assigns admin role, and returns passkey registration options.
-    /// </summary>
-    [HttpPost("setup/options")]
-    [AllowAnonymous]
-    [RemoteCommand]
-    [ProducesResponseType(typeof(PasskeyOptionsResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PasskeyOptionsResponse>> SetupOptions(
-        [FromBody] SetupOptionsRequest request)
-    {
-        var tenantId = _tenantAccessor.TenantId;
-
-        // Check whether any tenant member already has a passkey credential
-        var tenantHasPasskeys = await _dbContext.TenantMembers
-            .Where(m => m.TenantId == tenantId)
-            .AnyAsync(m => _dbContext.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId));
-        if (tenantHasPasskeys)
-        {
-            return Problem(detail: "Setup mode is not active", statusCode: 403, title: "Forbidden");
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.DisplayName))
-        {
-            return Problem(detail: "Username and display name are required", statusCode: 400, title: "Bad Request");
-        }
-
-        // Idempotent: reuse existing setup subject if the WebAuthn ceremony
-        // failed on a previous attempt (e.g. user scanned QR with phone on localhost)
-        var existingSubject = await _dbContext.Subjects
-            .FirstOrDefaultAsync(s => !s.IsSystemSubject && s.IsActive);
-
-        Guid subjectId;
-        if (existingSubject != null)
-        {
-            subjectId = existingSubject.Id;
-            // Update in case the user changed their details between attempts
-            existingSubject.Name = request.DisplayName.Trim();
-            existingSubject.Username = request.Username.Trim().ToLowerInvariant();
-            await _dbContext.SaveChangesAsync();
-
-            // Ensure the subject is a member of the current tenant.
-            // When a tenant is deleted and recreated, the subject persists but
-            // the TenantMember is cascade-deleted with the old tenant.
-            var isMember = await _dbContext.TenantMembers
-                .AnyAsync(tm => tm.TenantId == tenantId && tm.SubjectId == subjectId);
-            if (!isMember)
-            {
-                var ownerRole = await _dbContext.TenantRoles
-                    .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Slug == "owner");
-                if (ownerRole != null)
-                {
-                    await _tenantService.AddMemberAsync(tenantId, subjectId, [ownerRole.Id]);
-                }
-                await _subjectService.AssignRoleAsync(subjectId, "admin");
-            }
-        }
-        else
-        {
-            subjectId = Guid.CreateVersion7();
-            _dbContext.Subjects.Add(new Infrastructure.Data.Entities.SubjectEntity
-            {
-                Id = subjectId,
-                Name = request.DisplayName.Trim(),
-                Username = request.Username.Trim().ToLowerInvariant(),
-                IsActive = true,
-                IsSystemSubject = false,
-            });
-
-            await _dbContext.SaveChangesAsync();
-
-            // Add as owner of the default tenant (seeds roles if needed and assigns owner)
-            var ownerRole = await _dbContext.TenantRoles
-                .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Slug == "owner");
-
-            if (ownerRole != null)
-            {
-                await _tenantService.AddMemberAsync(tenantId, subjectId, [ownerRole.Id]);
-            }
-
-            // Assign admin role
-            await _subjectService.AssignRoleAsync(subjectId, "admin");
-
-            _logger.LogInformation(
-                "Setup: created first user {SubjectId} ({Username}) in tenant {TenantId}",
-                subjectId, request.Username.Trim(), tenantId);
-        }
-
-        // Generate passkey registration options for the new subject
-        var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            subjectId, request.Username.Trim(), tenantId);
-
-        return Ok(new PasskeyOptionsResponse
-        {
-            Options = result.OptionsJson,
-            ChallengeToken = result.ChallengeToken,
-        });
-    }
-
-    /// <summary>
-    /// Complete passkey registration during initial setup.
-    /// Verifies attestation, generates recovery codes, issues a full JWT session,
-    /// and exits setup mode.
-    /// </summary>
-    [HttpPost("setup/complete")]
-    [AllowAnonymous]
-    [RemoteCommand]
-    [ProducesResponseType(typeof(SetupCompleteResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<SetupCompleteResponse>> SetupComplete(
-        [FromBody] SetupCompleteRequest request)
-    {
-        var tenantId = _tenantAccessor.TenantId;
-
-        // Check whether any tenant member already has a passkey credential
-        var tenantHasPasskeys = await _dbContext.TenantMembers
-            .Where(m => m.TenantId == tenantId)
-            .AnyAsync(m => _dbContext.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId));
-        if (tenantHasPasskeys)
-        {
-            return Problem(detail: "Setup mode is not active", statusCode: 403, title: "Forbidden");
-        }
-
-        if (string.IsNullOrEmpty(request.ChallengeToken))
-        {
-            return Problem(detail: "Challenge token is required", statusCode: 400, title: "Bad Request");
-        }
-
-        try
-        {
-            var credResult = await _passkeyService.CompleteRegistrationAsync(
-                request.AttestationResponseJson, request.ChallengeToken, tenantId);
-
-            // Generate recovery codes
-            var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
-
-            var session = await _sessionService.IssueSessionAsync(
-                credResult.SubjectId,
-                new SessionContext(
-                    DeviceDescription: "Setup Passkey",
-                    IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
-                    UserAgent: Request.Headers.UserAgent.ToString()));
-
-            Response.SetSessionCookies(session, _oidcOptions);
-
-            _logger.LogInformation(
-                "Setup complete: first user {SubjectId} registered with passkey",
-                credResult.SubjectId);
-
-            return Ok(new SetupCompleteResponse
-            {
-                Success = true,
-                RecoveryCodes = recoveryCodes,
-                AccessToken = session.AccessToken,
-                RefreshToken = session.RefreshToken,
-                ExpiresIn = session.ExpiresInSeconds,
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Setup passkey registration failed");
-            return Problem(detail: "Passkey registration failed during setup", statusCode: 400, title: "Registration Failed");
-        }
-    }
-
-    /// <summary>
     /// Begin passkey registration for an anonymous access request.
     /// Creates a pending subject and returns WebAuthn registration options.
     /// Only available when <c>AllowAccessRequests</c> is enabled on the default tenant.
@@ -896,10 +727,10 @@ public class PasskeyController : ControllerBase
     [HttpPost("invite/complete")]
     [AllowAnonymous]
     [RemoteCommand]
-    [ProducesResponseType(typeof(SetupCompleteResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PasskeyRegistrationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<SetupCompleteResponse>> InviteComplete(
+    public async Task<ActionResult<PasskeyRegistrationResponse>> InviteComplete(
         [FromBody] InviteCompleteRequest request,
         [FromServices] IMemberInviteService memberInviteService)
     {
@@ -938,7 +769,7 @@ public class PasskeyController : ControllerBase
                 "Invite complete: subject {SubjectId} registered with passkey via invite",
                 credResult.SubjectId);
 
-            return Ok(new SetupCompleteResponse
+            return Ok(new PasskeyRegistrationResponse
             {
                 Success = true,
                 RecoveryCodes = recoveryCodes,
@@ -1090,27 +921,10 @@ public class AuthStatusResponse
 }
 
 /// <summary>
-/// Request for initial setup registration options (first user creation)
+/// Response for a completed passkey registration that issues a session
+/// (recovery codes plus session tokens).
 /// </summary>
-public class SetupOptionsRequest
-{
-    public string Username { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Request to complete initial setup registration
-/// </summary>
-public class SetupCompleteRequest
-{
-    public string AttestationResponseJson { get; set; } = string.Empty;
-    public string ChallengeToken { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Response for completed setup registration
-/// </summary>
-public class SetupCompleteResponse
+public class PasskeyRegistrationResponse
 {
     public bool Success { get; set; }
     public List<string> RecoveryCodes { get; set; } = new();

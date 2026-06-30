@@ -25633,114 +25633,6 @@
         ]
       }
     },
-    "/api/auth/passkey/setup/options": {
-      "post": {
-        "tags": [
-          "Passkey"
-        ],
-        "summary": "Generate registration options for the first user during initial setup.\nOnly available when no non-system subjects exist (setup mode).\nCreates the subject, assigns admin role, and returns passkey registration options.",
-        "operationId": "Passkey_SetupOptions",
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetupOptionsRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 1
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PasskeyOptionsResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command"
-      }
-    },
-    "/api/auth/passkey/setup/complete": {
-      "post": {
-        "tags": [
-          "Passkey"
-        ],
-        "summary": "Complete passkey registration during initial setup.\nVerifies attestation, generates recovery codes, issues a full JWT session,\nand exits setup mode.",
-        "operationId": "Passkey_SetupComplete",
-        "requestBody": {
-          "x-name": "request",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetupCompleteRequest"
-              }
-            }
-          },
-          "required": true,
-          "x-position": 1
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SetupCompleteResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "x-remote-type": "command"
-      }
-    },
     "/api/auth/passkey/access-request/options": {
       "post": {
         "tags": [
@@ -25933,7 +25825,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SetupCompleteResponse"
+                  "$ref": "#/components/schemas/PasskeyRegistrationResponse"
                 }
               }
             }
@@ -31853,6 +31745,54 @@
           "buttonColor": {
             "type": "string",
             "nullable": true
+          },
+          "providerType": {
+            "$ref": "#/components/schemas/OidcProviderType"
+          },
+          "oAuth2": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OAuth2ProviderSettings"
+              }
+            ]
+          }
+        }
+      },
+      "OidcProviderType": {
+        "type": "string",
+        "description": "",
+        "x-enumNames": [
+          "Oidc",
+          "OAuth2"
+        ],
+        "enum": [
+          "Oidc",
+          "OAuth2"
+        ]
+      },
+      "OAuth2ProviderSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "authorizationEndpoint": {
+            "type": "string"
+          },
+          "tokenEndpoint": {
+            "type": "string"
+          },
+          "userInfoEndpoint": {
+            "type": "string"
+          },
+          "userInfoEmailEndpoint": {
+            "type": "string",
+            "nullable": true
+          },
+          "claimMappings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },
@@ -31908,6 +31848,17 @@
           "buttonColor": {
             "type": "string",
             "nullable": true
+          },
+          "providerType": {
+            "$ref": "#/components/schemas/OidcProviderType"
+          },
+          "oAuth2": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OAuth2ProviderSettings"
+              }
+            ]
           }
         }
       },
@@ -31972,6 +31923,17 @@
           "buttonColor": {
             "type": "string",
             "nullable": true
+          },
+          "providerType": {
+            "$ref": "#/components/schemas/OidcProviderType"
+          },
+          "oAuth2": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OAuth2ProviderSettings"
+              }
+            ]
           }
         }
       },
@@ -42732,6 +42694,16 @@
           "glucoseYMax": {
             "type": "number",
             "format": "double"
+          },
+          "targetLow": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "targetHigh": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         }
       },
@@ -48355,59 +48327,6 @@
           }
         }
       },
-      "SetupOptionsRequest": {
-        "type": "object",
-        "description": "Request for initial setup registration options (first user creation)",
-        "additionalProperties": false,
-        "properties": {
-          "username": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          }
-        }
-      },
-      "SetupCompleteResponse": {
-        "type": "object",
-        "description": "Response for completed setup registration",
-        "additionalProperties": false,
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "recoveryCodes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "accessToken": {
-            "type": "string"
-          },
-          "refreshToken": {
-            "type": "string",
-            "nullable": true
-          },
-          "expiresIn": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "SetupCompleteRequest": {
-        "type": "object",
-        "description": "Request to complete initial setup registration",
-        "additionalProperties": false,
-        "properties": {
-          "attestationResponseJson": {
-            "type": "string"
-          },
-          "challengeToken": {
-            "type": "string"
-          }
-        }
-      },
       "AccessRequestOptionsRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -48445,6 +48364,33 @@
           },
           "displayName": {
             "type": "string"
+          }
+        }
+      },
+      "PasskeyRegistrationResponse": {
+        "type": "object",
+        "description": "Response for a completed passkey registration that issues a session\n(recovery codes plus session tokens).",
+        "additionalProperties": false,
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "recoveryCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "accessToken": {
+            "type": "string"
+          },
+          "refreshToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresIn": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

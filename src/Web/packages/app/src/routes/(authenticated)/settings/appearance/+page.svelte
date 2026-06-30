@@ -21,6 +21,7 @@
     chartShowPoints,
     chartAreaMode,
     chartAreaOpacity,
+    chartAlwaysShowPatterns,
     type ColorScheme,
   } from "$lib/stores/appearance-store.svelte";
   import HaloDialConfigurator from "$lib/components/settings/HaloDialConfigurator.svelte";
@@ -759,6 +760,25 @@
             />
           </div>
         {/if}
+
+        <Separator class="my-4" />
+
+        <!-- Always show patterns (accessibility) -->
+        <div class="flex items-center justify-between gap-4">
+          <div class="space-y-0.5">
+            <FormLabel>Always show chart patterns</FormLabel>
+            <p class="text-sm text-muted-foreground">
+              Add textures to chart colors so series stay distinguishable for
+              color-blind and low-vision readers. Patterns always appear when printing.
+            </p>
+          </div>
+          <Switch
+            checked={chartAlwaysShowPatterns.current}
+            onCheckedChange={(checked: boolean) => {
+              chartAlwaysShowPatterns.current = checked;
+            }}
+          />
+        </div>
       </CardContent>
     </Card>
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { BarChart } from "layerchart";
   import { PieChart } from "lucide-svelte";
+  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
 
   // Local type definitions matching the backend response structure
   interface DailyBasalBolusData {
@@ -64,11 +65,13 @@
             key: "basal",
             color: "var(--insulin-scheduled-basal)",
             label: "Basal (U)",
+            props: { class: categoryPatternClass(1) },
           },
           {
             key: "bolus",
             color: "var(--insulin-bolus)",
             label: "Bolus (U)",
+            props: { class: categoryPatternClass(3) },
           },
         ]}
         seriesLayout="stack"

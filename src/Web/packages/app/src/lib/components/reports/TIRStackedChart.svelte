@@ -1,6 +1,12 @@
 <script lang="ts">
   import { Chart, Svg, Bars, Bar, Spline, Text, Tooltip } from "layerchart";
   import { scaleBand, scaleLinear } from "d3-scale";
+  import { bg } from "$lib/utils/formatting";
+  import {
+    glucosePatternClass,
+    glucoseBgPatternClass,
+    type GlucoseRange,
+  } from "$lib/components/charts/print/chart-print-patterns";
 
   // Minimum percentage to render as filled bar (below this = outline only)
 
@@ -61,21 +67,13 @@
   ] as const;
   type RangeKey = (typeof rangeKeys)[number];
 
-  // Color mapping
-  const colorMap: Record<RangeKey, string> = {
-    veryLow: "var(--glucose-very-low)",
-    low: "var(--glucose-low)",
-    target: "var(--glucose-in-range)",
-    high: "var(--glucose-high)",
-    veryHigh: "var(--glucose-very-high)",
-  };
-
-  const labelMap: Record<RangeKey, string> = {
-    veryLow: "Very Low",
-    low: "Low",
-    target: "In Range",
-    high: "High",
-    veryHigh: "Very High",
+  // Color, label, and print-pattern bucket for each range.
+  const rangeMeta: Record<RangeKey, { color: string; label: string; pattern: GlucoseRange }> = {
+    veryLow: { color: "var(--glucose-very-low)", label: "Very Low", pattern: "very-low" },
+    low: { color: "var(--glucose-low)", label: "Low", pattern: "low" },
+    target: { color: "var(--glucose-in-range)", label: "In Range", pattern: "in-range" },
+    high: { color: "var(--glucose-high)", label: "High", pattern: "high" },
+    veryHigh: { color: "var(--glucose-very-high)", label: "Very High", pattern: "very-high" },
   };
 
   // Normalized percentages
@@ -99,7 +97,7 @@
       const displaySize = isEmpty || isTiny ? MIN_BAR_PERCENT : value;
       const start = cumulative;
       cumulative += displaySize;
-      const color = colorMap[key];
+      const color = rangeMeta[key].color;
 
       return {
         category: "TIR",
@@ -113,7 +111,7 @@
         x0: start,
         x1: cumulative,
         color,
-        label: labelMap[key],
+        label: rangeMeta[key].label,
         isTiny,
         isEmpty,
       };
@@ -125,8 +123,8 @@
     rangeKeys.map((key) => ({
       key,
       value: pct[key],
-      color: colorMap[key],
-      label: labelMap[key],
+      color: rangeMeta[key].color,
+      label: rangeMeta[key].label,
     }))
   );
 
@@ -197,7 +195,7 @@
       {#each stackedData as segment}
         {#if segment.value > 0}
           <div
-            class="h-full transition-all duration-200"
+            class={["h-full transition-all duration-200", glucoseBgPatternClass(rangeMeta[segment.range].pattern)].join(" ")}
             style="width: {segment.value}%; background-color: {segment.color};"
             title="{segment.label}: {segment.value.toFixed(1)}%"
           ></div>
@@ -215,7 +213,7 @@
       yDomain={[0, totalDisplaySize]}
       c="range"
       cDomain={[...rangeKeys]}
-      cRange={rangeKeys.map((k) => colorMap[k])}
+      cRange={rangeKeys.map((k) => rangeMeta[k].color)}
       padding={chartPadding}
       tooltip={{ mode: "band" }}
     >
@@ -238,6 +236,7 @@
                 stroke={segment.color}
                 fill={segment.isEmpty ? "transparent" : segment.color}
                 stroke-dasharray={segment.isEmpty ? "4 3" : undefined}
+                class={segment.isEmpty ? undefined : glucosePatternClass(rangeMeta[segment.range].pattern)}
               />
             {/each}
           </Bars>
@@ -255,7 +254,7 @@
                 textAnchor="end"
                 verticalAnchor="middle"
                 class="fill-muted-foreground text-xs tabular-nums"
-                value={`${tp.threshold}`}
+                value={`${bg(tp.threshold)}`}
               />
             {/each}
           {/if}

@@ -27,6 +27,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     private readonly IBolusCalculationRepository _bolusCalculationRepository;
     private readonly ITempBasalRepository _tempBasalRepository;
     private readonly IBasalInjectionRepository _basalInjectionRepository;
+    private readonly INoteRepository _noteRepository;
+    private readonly IDeviceEventRepository _deviceEventRepository;
     private readonly IPatientInsulinRepository _patientInsulinRepository;
     private readonly IBasalRateResolver _basalRateResolver;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
@@ -42,6 +44,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         IBolusCalculationRepository bolusCalculationRepository,
         ITempBasalRepository tempBasalRepository,
         IBasalInjectionRepository basalInjectionRepository,
+        INoteRepository noteRepository,
+        IDeviceEventRepository deviceEventRepository,
         IPatientInsulinRepository patientInsulinRepository,
         IBasalRateResolver basalRateResolver,
         ITherapySettingsResolver therapySettingsResolver,
@@ -56,6 +60,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         _bolusCalculationRepository = bolusCalculationRepository ?? throw new ArgumentNullException(nameof(bolusCalculationRepository));
         _tempBasalRepository = tempBasalRepository ?? throw new ArgumentNullException(nameof(tempBasalRepository));
         _basalInjectionRepository = basalInjectionRepository ?? throw new ArgumentNullException(nameof(basalInjectionRepository));
+        _noteRepository = noteRepository ?? throw new ArgumentNullException(nameof(noteRepository));
+        _deviceEventRepository = deviceEventRepository ?? throw new ArgumentNullException(nameof(deviceEventRepository));
         _patientInsulinRepository = patientInsulinRepository ?? throw new ArgumentNullException(nameof(patientInsulinRepository));
         _basalRateResolver = basalRateResolver ?? throw new ArgumentNullException(nameof(basalRateResolver));
         _therapySettingsResolver = therapySettingsResolver ?? throw new ArgumentNullException(nameof(therapySettingsResolver));
@@ -338,24 +344,24 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         string source,
         CancellationToken cancellationToken = default)
     {
-        // TODO: Filter by source to support multi-connector catch-up. Currently returns global latest.
-        var latest = (await _treatmentService.GetTreatmentsAsync(
-                count: 1,
-                skip: 0,
-                cancellationToken: cancellationToken))
-            .FirstOrDefault();
+        // The v1 "treatments" collection spans every decomposed treatment type, so the resume
+        // watermark is the latest stored record of any of them for THIS source. Source-scoping is
+        // required for multi-connector catch-up: a tenant-global latest mis-classifies a newly
+        // enabled connector's first sync as incremental and skips its backfill.
+        var candidates = new[]
+        {
+            await _bolusRepository.GetLatestTimestampAsync(source, cancellationToken),
+            await _carbIntakeRepository.GetLatestTimestampAsync(source, cancellationToken),
+            await _bgCheckRepository.GetLatestTimestampAsync(source, cancellationToken),
+            await _bolusCalculationRepository.GetLatestTimestampAsync(source, cancellationToken),
+            await _tempBasalRepository.GetLatestTimestampAsync(source, cancellationToken),
+            await _basalInjectionRepository.GetLatestTimestampAsync(source, cancellationToken),
+            await _noteRepository.GetLatestTimestampAsync(source, cancellationToken),
+            await _deviceEventRepository.GetLatestTimestampAsync(source, cancellationToken),
+        };
 
-        if (latest == null)
-            return null;
-
-        if (!string.IsNullOrEmpty(latest.CreatedAt)
-            && DateTime.TryParse(latest.CreatedAt, out var createdAt))
-            return createdAt;
-
-        if (latest.Mills > 0)
-            return DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills).UtcDateTime;
-
-        return null;
+        var present = candidates.Where(t => t.HasValue).Select(t => t!.Value).ToList();
+        return present.Count > 0 ? present.Max() : null;
     }
 
     // ── Patient Insulin resolution helpers ──────────────────────────────

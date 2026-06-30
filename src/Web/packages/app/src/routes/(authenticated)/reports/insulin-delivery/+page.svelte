@@ -160,15 +160,15 @@
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
-        <h1 class="flex items-center gap-3 text-3xl font-bold">
-          <PieChart class="h-8 w-8 text-blue-600" />
+        <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
+          <PieChart class="h-7 w-7 text-blue-600 @md:h-8 @md:w-8" />
           Insulin Delivery Report
         </h1>
         <p class="mt-1 text-muted-foreground">
           Comprehensive analysis of your basal and bolus insulin patterns
         </p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 print:hidden">
         <Button
           variant="outline"
           size="sm"
@@ -240,7 +240,7 @@
   </Card>
 
   <!-- Key Summary Stats -->
-  <div class="grid grid-cols-2 gap-4 @lg:grid-cols-5">
+  <div class="grid grid-cols-2 gap-4 @md:grid-cols-3 @lg:grid-cols-5">
     <Card class="border @lg:col-span-1">
       <CardContent class="pt-6 text-center">
         <div class="text-3xl font-bold tabular-nums text-primary">
@@ -503,8 +503,8 @@
   </Card>
 
   <!-- Navigation -->
-  <Separator />
-  <div class="flex flex-wrap items-center justify-center gap-2">
+  <Separator class="print:hidden" />
+  <div class="flex flex-wrap items-center justify-center gap-2 print:hidden">
     <Button href="/reports" variant="outline" size="sm">← All Reports</Button>
     <Button href="/reports/basal-analysis" size="sm" class="gap-2">
       Basal Rate Analysis

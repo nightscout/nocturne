@@ -50,7 +50,7 @@
 
 <!-- Mobile-only sticky header -->
 <header
-  class="md:hidden fixed top-0 left-0 right-0 z-50 flex h-14 items-center justify-between gap-2 border-b border-border bg-background/95 backdrop-blur px-4 transition-transform duration-300"
+  class="md:hidden print:hidden fixed top-0 left-0 right-0 z-50 flex h-14 items-center justify-between gap-2 border-b border-border bg-background/95 backdrop-blur px-4 transition-transform duration-300"
   class:translate-y-0={isVisible}
   class:-translate-y-full={!isVisible}
 >

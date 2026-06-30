@@ -9,7 +9,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Secret properties (passwords, API keys) are stored encrypted in SecretsJson.
 /// </summary>
 [Table("connector_configurations")]
-public class ConnectorConfigurationEntity : ITenantScoped
+public class ConnectorConfigurationEntity : ITenantScoped, ISystemTimestamped
 {
     /// <summary>
     /// Identifier of the tenant this connector configuration belongs to

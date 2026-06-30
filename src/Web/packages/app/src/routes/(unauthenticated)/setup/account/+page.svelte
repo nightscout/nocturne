@@ -4,9 +4,9 @@
   import { startRegistration } from "@simplewebauthn/browser";
   import { goto } from "$app/navigation";
   import {
-    setupOptions,
-    setupComplete,
-  } from "$lib/api/generated/passkeys.generated.remote";
+    setupOwnerOptions,
+    setupOwnerComplete,
+  } from "../setup.remote";
   import {
     getAuthState,
     getOidcProviders,
@@ -63,7 +63,7 @@
     passkeyError = null;
 
     try {
-      const response = await setupOptions({
+      const response = await setupOwnerOptions({
         username,
         displayName,
       });
@@ -72,7 +72,7 @@
 
       const attestation = await startRegistration({ optionsJSON: options });
 
-      const result = await setupComplete({
+      const result = await setupOwnerComplete({
         attestationResponseJson: JSON.stringify(attestation),
         challengeToken,
       });
