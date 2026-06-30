@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -70,37 +71,37 @@ public class ProfileDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(profiles);
+        var result = await _decomposer.DecomposeBatchAsync(profiles, WriteOrigin.Live);
 
         // Assert - 2 profiles x 5 record types = 10 total records
         _therapySettingsRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<TherapySettings>>(list => list.Count() == 2),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _basalScheduleRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<BasalSchedule>>(list => list.Count() == 2),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _carbRatioScheduleRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<CarbRatioSchedule>>(list => list.Count() == 2),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _sensitivityScheduleRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<SensitivitySchedule>>(list => list.Count() == 2),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _targetRangeScheduleRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<TargetRangeSchedule>>(list => list.Count() == 2),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         result.CreatedRecords.Should().HaveCount(10);
@@ -111,23 +112,23 @@ public class ProfileDecomposerBatchTests : IDisposable
     public async Task DecomposeBatchAsync_EmptyBatch_NoRepositoryCalls()
     {
         // Act
-        var result = await _decomposer.DecomposeBatchAsync([]);
+        var result = await _decomposer.DecomposeBatchAsync([], WriteOrigin.Live);
 
         // Assert
         _therapySettingsRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<TherapySettings>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<TherapySettings>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _basalScheduleRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<BasalSchedule>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<BasalSchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _carbRatioScheduleRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<CarbRatioSchedule>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<CarbRatioSchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _sensitivityScheduleRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<SensitivitySchedule>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<SensitivitySchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _targetRangeScheduleRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<TargetRangeSchedule>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<TargetRangeSchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
         result.CreatedRecords.Should().BeEmpty();
@@ -147,7 +148,7 @@ public class ProfileDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(profiles);
+        var result = await _decomposer.DecomposeBatchAsync(profiles, WriteOrigin.Live);
 
         // Assert - verify therapy settings were created with correct values
         _therapySettingsRepoMock.Verify(
@@ -158,7 +159,7 @@ public class ProfileDecomposerBatchTests : IDisposable
                         ts.Dia == 4.0 &&
                         ts.Timezone == "US/Eastern" &&
                         ts.IsDefault == true)),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         // A DecompositionBatchEntity was persisted
@@ -182,7 +183,7 @@ public class ProfileDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(profiles);
+        var result = await _decomposer.DecomposeBatchAsync(profiles, WriteOrigin.Live);
 
         // Assert - 2 stores x 5 record types = 10 total records
         _therapySettingsRepoMock.Verify(
@@ -191,13 +192,13 @@ public class ProfileDecomposerBatchTests : IDisposable
                     list.Count() == 2 &&
                     list.Any(ts => ts.LegacyId == "profile1:Default" && ts.IsDefault == true) &&
                     list.Any(ts => ts.LegacyId == "profile1:Exercise" && ts.IsDefault == false)),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _basalScheduleRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<BasalSchedule>>(list => list.Count() == 2),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         result.CreatedRecords.Should().HaveCount(10);
@@ -238,32 +239,32 @@ public class ProfileDecomposerBatchTests : IDisposable
 
     private static void SetupBulkCreateReturnsInput(Mock<ITherapySettingsRepository> mock)
     {
-        mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<TherapySettings>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<TherapySettings> records, CancellationToken _) => records);
+        mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<TherapySettings>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<TherapySettings> records, WriteOrigin origin, CancellationToken _) => records);
     }
 
     private static void SetupBulkCreateReturnsInput(Mock<IBasalScheduleRepository> mock)
     {
-        mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<BasalSchedule>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<BasalSchedule> records, CancellationToken _) => records);
+        mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<BasalSchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<BasalSchedule> records, WriteOrigin origin, CancellationToken _) => records);
     }
 
     private static void SetupBulkCreateReturnsInput(Mock<ICarbRatioScheduleRepository> mock)
     {
-        mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<CarbRatioSchedule>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<CarbRatioSchedule> records, CancellationToken _) => records);
+        mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<CarbRatioSchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<CarbRatioSchedule> records, WriteOrigin origin, CancellationToken _) => records);
     }
 
     private static void SetupBulkCreateReturnsInput(Mock<ISensitivityScheduleRepository> mock)
     {
-        mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<SensitivitySchedule>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<SensitivitySchedule> records, CancellationToken _) => records);
+        mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<SensitivitySchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<SensitivitySchedule> records, WriteOrigin origin, CancellationToken _) => records);
     }
 
     private static void SetupBulkCreateReturnsInput(Mock<ITargetRangeScheduleRepository> mock)
     {
-        mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<TargetRangeSchedule>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<TargetRangeSchedule> records, CancellationToken _) => records);
+        mock.Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<TargetRangeSchedule>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<TargetRangeSchedule> records, WriteOrigin origin, CancellationToken _) => records);
     }
 
     #endregion

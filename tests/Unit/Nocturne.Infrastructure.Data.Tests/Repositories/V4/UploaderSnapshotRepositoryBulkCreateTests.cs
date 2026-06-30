@@ -4,6 +4,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
@@ -50,7 +51,7 @@ public class UploaderSnapshotRepositoryBulkCreateTests : IDisposable
             CreateSnapshot("legacy-3", new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc)),
         };
 
-        var result = (await _repository.BulkCreateAsync(snapshots)).ToList();
+        var result = (await _repository.BulkCreateAsync(snapshots, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(3);
         var dbCount = _context.UploaderSnapshots.Count();
@@ -61,7 +62,7 @@ public class UploaderSnapshotRepositoryBulkCreateTests : IDisposable
     public async Task BulkCreateAsync_DeduplicatesByLegacyId_SkipsExisting()
     {
         // Pre-insert a record with legacy-1
-        await _repository.CreateAsync(CreateSnapshot("legacy-1", new DateTime(2026, 5, 1, 10, 0, 0, DateTimeKind.Utc)));
+        await _repository.CreateAsync(CreateSnapshot("legacy-1", new DateTime(2026, 5, 1, 10, 0, 0, DateTimeKind.Utc)), WriteOrigin.Live);
 
         var snapshots = new[]
         {
@@ -69,7 +70,7 @@ public class UploaderSnapshotRepositoryBulkCreateTests : IDisposable
             CreateSnapshot("legacy-new", new DateTime(2026, 5, 1, 11, 0, 0, DateTimeKind.Utc)),
         };
 
-        var result = (await _repository.BulkCreateAsync(snapshots)).ToList();
+        var result = (await _repository.BulkCreateAsync(snapshots, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         result[0].LegacyId.Should().Be("legacy-new");
@@ -86,7 +87,7 @@ public class UploaderSnapshotRepositoryBulkCreateTests : IDisposable
             CreateSnapshot("legacy-dup", new DateTime(2026, 5, 1, 11, 0, 0, DateTimeKind.Utc)),
         };
 
-        var result = (await _repository.BulkCreateAsync(snapshots)).ToList();
+        var result = (await _repository.BulkCreateAsync(snapshots, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         var dbCount = _context.UploaderSnapshots.Count();
@@ -96,7 +97,7 @@ public class UploaderSnapshotRepositoryBulkCreateTests : IDisposable
     [Fact]
     public async Task BulkCreateAsync_EmptyInput_ReturnsEmpty()
     {
-        var result = (await _repository.BulkCreateAsync([])).ToList();
+        var result = (await _repository.BulkCreateAsync([], WriteOrigin.Live)).ToList();
 
         result.Should().BeEmpty();
         var dbCount = _context.UploaderSnapshots.Count();

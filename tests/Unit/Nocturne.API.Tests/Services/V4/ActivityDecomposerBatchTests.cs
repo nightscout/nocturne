@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -47,7 +48,7 @@ public class ActivityDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(activities);
+        var result = await _decomposer.DecomposeBatchAsync(activities, WriteOrigin.Live);
 
         // Assert - heart rates stored via DbContext
         _context.HeartRates.Should().HaveCount(2);
@@ -70,7 +71,7 @@ public class ActivityDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(activities);
+        var result = await _decomposer.DecomposeBatchAsync(activities, WriteOrigin.Live);
 
         // Assert - step counts stored via DbContext
         _context.StepCounts.Should().HaveCount(1);
@@ -92,7 +93,7 @@ public class ActivityDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(activities);
+        var result = await _decomposer.DecomposeBatchAsync(activities, WriteOrigin.Live);
 
         // Assert
         _stateSpanRepoMock.Verify(
@@ -110,7 +111,7 @@ public class ActivityDecomposerBatchTests : IDisposable
     public async Task DecomposeBatchAsync_EmptyBatch_NoRepositoryCalls()
     {
         // Act
-        var result = await _decomposer.DecomposeBatchAsync([]);
+        var result = await _decomposer.DecomposeBatchAsync([], WriteOrigin.Live);
 
         // Assert
         _context.HeartRates.Should().BeEmpty();
@@ -136,7 +137,7 @@ public class ActivityDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(activities);
+        var result = await _decomposer.DecomposeBatchAsync(activities, WriteOrigin.Live);
 
         // Assert - correct routing
         _context.HeartRates.Should().HaveCount(1);

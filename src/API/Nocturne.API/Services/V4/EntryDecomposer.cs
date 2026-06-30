@@ -56,7 +56,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     }
 
     /// <inheritdoc />
-    public async Task<DecompositionResult> DecomposeAsync(Entry entry, CancellationToken ct = default)
+    public async Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default)
     {
         var batch = new DecompositionBatchEntity
         {
@@ -78,13 +78,13 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         switch (entryType)
         {
             case "sgv":
-                await DecomposeSgvAsync(entry, result, ct);
+                await DecomposeSgvAsync(entry, result, origin, ct);
                 break;
             case "mbg":
-                await DecomposeMbgAsync(entry, result, ct);
+                await DecomposeMbgAsync(entry, result, origin, ct);
                 break;
             case "cal":
-                await DecomposeCalAsync(entry, result, ct);
+                await DecomposeCalAsync(entry, result, origin, ct);
                 break;
             default:
                 _logger.LogWarning("Unknown entry type '{Type}' for entry {Id}, skipping decomposition", entry.Type, entry.Id);
@@ -94,7 +94,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         return result;
     }
 
-    private async Task DecomposeSgvAsync(Entry entry, DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeSgvAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var existing = entry.Id != null
             ? await _sensorGlucoseRepository.GetByLegacyIdAsync(entry.Id, ct)
@@ -122,19 +122,19 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _sensorGlucoseRepository.UpdateAsync(existing.Id, model, ct);
+            var updated = await _sensorGlucoseRepository.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing SensorGlucose {Id} from legacy entry {LegacyId}", existing.Id, entry.Id);
         }
         else
         {
-            var created = await _sensorGlucoseRepository.CreateAsync(model, ct);
+            var created = await _sensorGlucoseRepository.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created SensorGlucose from legacy entry {LegacyId}", entry.Id);
         }
     }
 
-    private async Task DecomposeMbgAsync(Entry entry, DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeMbgAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var existing = entry.Id != null
             ? await _meterGlucoseRepository.GetByLegacyIdAsync(entry.Id, ct)
@@ -145,19 +145,19 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _meterGlucoseRepository.UpdateAsync(existing.Id, model, ct);
+            var updated = await _meterGlucoseRepository.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing MeterGlucose {Id} from legacy entry {LegacyId}", existing.Id, entry.Id);
         }
         else
         {
-            var created = await _meterGlucoseRepository.CreateAsync(model, ct);
+            var created = await _meterGlucoseRepository.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created MeterGlucose from legacy entry {LegacyId}", entry.Id);
         }
     }
 
-    private async Task DecomposeCalAsync(Entry entry, DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeCalAsync(Entry entry, DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var existing = entry.Id != null
             ? await _calibrationRepository.GetByLegacyIdAsync(entry.Id, ct)
@@ -168,13 +168,13 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _calibrationRepository.UpdateAsync(existing.Id, model, ct);
+            var updated = await _calibrationRepository.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing Calibration {Id} from legacy entry {LegacyId}", existing.Id, entry.Id);
         }
         else
         {
-            var created = await _calibrationRepository.CreateAsync(model, ct);
+            var created = await _calibrationRepository.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created Calibration from legacy entry {LegacyId}", entry.Id);
         }
@@ -182,7 +182,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
 
     /// <inheritdoc />
     public async Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Entry> entries, CancellationToken ct = default)
+        IReadOnlyList<Entry> entries, WriteOrigin origin, CancellationToken ct = default)
     {
         if (entries.Count == 0)
             return new DecompositionResult();
@@ -245,19 +245,19 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         {
             if (sgvList.Count > 0)
             {
-                var created = await _sensorGlucoseRepository.BulkCreateAsync(sgvList, ct);
+                var created = await _sensorGlucoseRepository.BulkCreateAsync(sgvList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (mbgList.Count > 0)
             {
-                var created = await _meterGlucoseRepository.BulkCreateAsync(mbgList, ct);
+                var created = await _meterGlucoseRepository.BulkCreateAsync(mbgList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (calList.Count > 0)
             {
-                var created = await _calibrationRepository.BulkCreateAsync(calList, ct);
+                var created = await _calibrationRepository.BulkCreateAsync(calList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
         }
@@ -266,8 +266,9 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     }
 
     /// <inheritdoc />
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
+        // origin is accepted for interface uniformity; the v4-native delete broadcast is deferred to the glucose-unification follow-up (deletes here bypass the repository chokepoint).
         var strategy = _dbContext.Database.CreateExecutionStrategy();
 
         return await strategy.ExecuteAsync(async () =>
@@ -296,8 +297,9 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     }
 
     /// <inheritdoc />
-    public async Task<long> BulkDeleteAsync(string? find, CancellationToken ct = default)
+    public async Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default)
     {
+        // origin is accepted for interface uniformity; the v4-native delete broadcast is deferred to the glucose-unification follow-up (deletes here bypass the repository chokepoint).
         var (fromMills, toMills) = Core.Models.Entries.EntryDomainLogic.ParseTimeRangeFromFind(find);
 
         // ParseTimeRangeFromFind extracts $gte/$lte from any field, not just

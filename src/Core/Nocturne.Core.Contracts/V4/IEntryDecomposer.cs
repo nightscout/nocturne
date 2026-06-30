@@ -23,7 +23,7 @@ public interface IEntryDecomposer
     /// A <see cref="DecompositionResult"/> containing the created or updated v4 record.
     /// Returns an empty result if the entry type is unrecognized.
     /// </returns>
-    Task<DecompositionResult> DecomposeAsync(Entry entry, CancellationToken ct = default);
+    Task<DecompositionResult> DecomposeAsync(Entry entry, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes all v4 records that were decomposed from a legacy Entry with the given ID.
@@ -31,7 +31,7 @@ public interface IEntryDecomposer
     /// <param name="legacyId">The legacy Entry ID</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>Total number of v4 records deleted across all tables</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Bulk-deletes V4 records matching the given MongoDB-style find query.
@@ -40,7 +40,7 @@ public interface IEntryDecomposer
     /// <param name="find">Optional MongoDB-style find query for time-range extraction.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Total number of records deleted across all V4 tables.</returns>
-    Task<long> BulkDeleteAsync(string? find, CancellationToken ct = default);
+    Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Decomposes a batch of legacy entries into v4 records using bulk-insert,
@@ -54,5 +54,5 @@ public interface IEntryDecomposer
     /// contains all bulk-inserted v4 records. Entries with unrecognised types are skipped.
     /// </returns>
     Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Entry> entries, CancellationToken ct = default);
+        IReadOnlyList<Entry> entries, WriteOrigin origin, CancellationToken ct = default);
 }

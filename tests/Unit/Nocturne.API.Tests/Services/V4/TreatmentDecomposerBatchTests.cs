@@ -57,26 +57,26 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         // BulkCreateAsync returns the input records
         _bolusRepoMock
-            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.Bolus> records, CancellationToken _) => records);
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.Bolus> records, WriteOrigin origin, CancellationToken _) => records);
         _carbRepoMock
-            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.CarbIntake>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.CarbIntake> records, CancellationToken _) => records);
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.CarbIntake>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.CarbIntake> records, WriteOrigin origin, CancellationToken _) => records);
         _bgCheckRepoMock
-            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BGCheck>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.BGCheck> records, CancellationToken _) => records);
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BGCheck>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.BGCheck> records, WriteOrigin origin, CancellationToken _) => records);
         _noteRepoMock
-            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.Note>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.Note> records, CancellationToken _) => records);
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.Note>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.Note> records, WriteOrigin origin, CancellationToken _) => records);
         _bolusCalcRepoMock
-            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BolusCalculation>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.BolusCalculation> records, CancellationToken _) => records);
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BolusCalculation>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.BolusCalculation> records, WriteOrigin origin, CancellationToken _) => records);
         _deviceEventRepoMock
-            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceEvent>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.DeviceEvent> records, CancellationToken _) => records);
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceEvent>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.DeviceEvent> records, WriteOrigin origin, CancellationToken _) => records);
         _tempBasalRepoMock
-            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.TempBasal> records, CancellationToken _) => records);
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<V4Models.TempBasal> records, WriteOrigin origin, CancellationToken _) => records);
 
         // StateSpanService returns a new StateSpan
         _stateSpanServiceMock
@@ -85,8 +85,8 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         // UpdateAsync returns the input bolus (for linking pass)
         _bolusRepoMock
-            .Setup(x => x.UpdateAsync(It.IsAny<Guid>(), It.IsAny<V4Models.Bolus>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, V4Models.Bolus b, CancellationToken _) => b);
+            .Setup(x => x.UpdateAsync(It.IsAny<Guid>(), It.IsAny<V4Models.Bolus>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, V4Models.Bolus b, WriteOrigin origin, CancellationToken _) => b);
 
         // DeviceService returns null by default
         _deviceServiceMock
@@ -131,42 +131,42 @@ public class TreatmentDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(treatments);
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
 
         // Assert — correct partition sizes
         _bolusRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<V4Models.Bolus>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _carbRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<V4Models.CarbIntake>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _noteRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<V4Models.Note>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _bgCheckRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<V4Models.BGCheck>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         // No bolus calc, device event, or temp basal calls
         _bolusCalcRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BolusCalculation>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BolusCalculation>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _deviceEventRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceEvent>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceEvent>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _tempBasalRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
         result.CreatedRecords.Should().HaveCount(4);
@@ -177,29 +177,29 @@ public class TreatmentDecomposerBatchTests : IDisposable
     public async Task DecomposeBatchAsync_EmptyBatch_NoRepositoryCalls()
     {
         // Act
-        var result = await _decomposer.DecomposeBatchAsync([]);
+        var result = await _decomposer.DecomposeBatchAsync([], WriteOrigin.Live);
 
         // Assert
         _bolusRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _carbRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.CarbIntake>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.CarbIntake>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _bgCheckRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BGCheck>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BGCheck>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _noteRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.Note>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.Note>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _bolusCalcRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BolusCalculation>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BolusCalculation>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _deviceEventRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceEvent>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceEvent>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _tempBasalRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
         result.CreatedRecords.Should().BeEmpty();
@@ -217,13 +217,13 @@ public class TreatmentDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(treatments);
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
 
         // Assert — temp basal uses bulk insert
         _tempBasalRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<V4Models.TempBasal>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         // Temporary target uses individual state span upsert
@@ -255,31 +255,31 @@ public class TreatmentDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(treatments);
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
 
         // Assert — both bolus and calculation created
         _bolusRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<V4Models.Bolus>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _bolusCalcRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<V4Models.BolusCalculation>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         // Carb intake also produced (insulin + carbs override rule)
         _carbRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<V4Models.CarbIntake>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         // Linking pass: UpdateAsync called to set BolusCalculationId on the bolus
         _bolusRepoMock.Verify(
-            x => x.UpdateAsync(It.IsAny<Guid>(), It.IsAny<V4Models.Bolus>(), It.IsAny<CancellationToken>()),
+            x => x.UpdateAsync(It.IsAny<Guid>(), It.IsAny<V4Models.Bolus>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         // Verify the bolus in CreatedRecords has a linked BolusCalculationId
@@ -298,7 +298,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(treatments);
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
 
         // Assert — a DecompositionBatchEntity was persisted
         var batch = _context.DecompositionBatches.SingleOrDefault(b => b.Id == result.CorrelationId);
@@ -318,19 +318,19 @@ public class TreatmentDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(treatments);
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
 
         // Assert
         _bolusRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<V4Models.Bolus>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _carbRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<V4Models.CarbIntake>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         result.CreatedRecords.Should().HaveCount(2);
@@ -346,7 +346,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(treatments);
+        var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
 
         // Assert — profile switch uses individual upsert, not bulk insert
         _stateSpanServiceMock.Verify(
@@ -356,7 +356,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
             Times.Once);
 
         _tempBasalRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
         result.CreatedRecords.Should().HaveCount(1);

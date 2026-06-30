@@ -207,7 +207,7 @@ public class ActivityService : IActivityService
             {
                 try
                 {
-                    await _activityDecomposer.DecomposeAsync(sensorActivity, cancellationToken);
+                    await _activityDecomposer.DecomposeAsync(sensorActivity, WriteOrigin.Live, cancellationToken);
                     results.Add(sensorActivity);
                 }
                 catch (Exception ex)
@@ -307,7 +307,7 @@ public class ActivityService : IActivityService
             // Attempt to delete decomposed records (heart rate / step count)
             try
             {
-                await _activityDecomposer.DeleteByLegacyIdAsync(id, cancellationToken);
+                await _activityDecomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -372,6 +372,7 @@ public class ActivityService : IActivityService
                 {
                     await _activityDecomposer.DeleteByLegacyIdAsync(
                         activity.Id,
+                        WriteOrigin.Live,
                         cancellationToken
                     );
                 }

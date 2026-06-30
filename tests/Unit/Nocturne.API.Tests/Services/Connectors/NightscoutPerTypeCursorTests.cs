@@ -12,6 +12,7 @@ using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Models;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -37,19 +38,19 @@ public class NightscoutPerTypeCursorTests
         var glucose = new Mock<IGlucosePublisher>();
         glucose.Setup(p => p.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(latestEntry);
-        glucose.Setup(p => p.PublishEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        glucose.Setup(p => p.PublishEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         var treatments = new Mock<ITreatmentPublisher>();
         treatments.Setup(p => p.GetLatestTreatmentTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(latestTreatment);
-        treatments.Setup(p => p.PublishTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        treatments.Setup(p => p.PublishTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         var device = new Mock<IDevicePublisher>();
         device.Setup(p => p.GetLatestDeviceStatusTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(latestDeviceStatus);
-        device.Setup(p => p.PublishDeviceStatusAsync(It.IsAny<IEnumerable<DeviceStatus>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        device.Setup(p => p.PublishDeviceStatusAsync(It.IsAny<IEnumerable<DeviceStatus>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         var metadata = new Mock<IMetadataPublisher>();

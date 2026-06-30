@@ -3,6 +3,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
@@ -48,7 +49,7 @@ public class DeviceStatusExtrasRepositoryBulkCreateTests : IDisposable
             CreateRecord(Guid.NewGuid(), new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc)),
         };
 
-        var result = (await _repository.BulkCreateAsync(records)).ToList();
+        var result = (await _repository.BulkCreateAsync(records, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(3);
         var dbCount = _context.DeviceStatusExtras.Count();
@@ -62,7 +63,7 @@ public class DeviceStatusExtrasRepositoryBulkCreateTests : IDisposable
         var newCorrelationId = Guid.NewGuid();
 
         // Pre-insert a record
-        await _repository.CreateAsync(CreateRecord(existingCorrelationId, new DateTime(2026, 5, 1, 10, 0, 0, DateTimeKind.Utc)));
+        await _repository.CreateAsync(CreateRecord(existingCorrelationId, new DateTime(2026, 5, 1, 10, 0, 0, DateTimeKind.Utc)), WriteOrigin.Live);
 
         var records = new[]
         {
@@ -70,7 +71,7 @@ public class DeviceStatusExtrasRepositoryBulkCreateTests : IDisposable
             CreateRecord(newCorrelationId, new DateTime(2026, 5, 1, 11, 0, 0, DateTimeKind.Utc)),
         };
 
-        var result = (await _repository.BulkCreateAsync(records)).ToList();
+        var result = (await _repository.BulkCreateAsync(records, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         result[0].CorrelationId.Should().Be(newCorrelationId);
@@ -88,7 +89,7 @@ public class DeviceStatusExtrasRepositoryBulkCreateTests : IDisposable
             CreateRecord(sharedCorrelationId, new DateTime(2026, 5, 1, 11, 0, 0, DateTimeKind.Utc)),
         };
 
-        var result = (await _repository.BulkCreateAsync(records)).ToList();
+        var result = (await _repository.BulkCreateAsync(records, WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         var dbCount = _context.DeviceStatusExtras.Count();
@@ -98,7 +99,7 @@ public class DeviceStatusExtrasRepositoryBulkCreateTests : IDisposable
     [Fact]
     public async Task BulkCreateAsync_EmptyInput_ReturnsEmpty()
     {
-        var result = (await _repository.BulkCreateAsync([])).ToList();
+        var result = (await _repository.BulkCreateAsync([], WriteOrigin.Live)).ToList();
 
         result.Should().BeEmpty();
         var dbCount = _context.DeviceStatusExtras.Count();

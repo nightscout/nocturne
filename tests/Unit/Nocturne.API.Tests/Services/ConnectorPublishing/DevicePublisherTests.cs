@@ -46,11 +46,11 @@ public class DevicePublisherTests
     {
         var statuses = new List<DeviceStatus> { new() };
 
-        var result = await _publisher.PublishDeviceStatusAsync(statuses, "test-source");
+        var result = await _publisher.PublishDeviceStatusAsync(statuses, "test-source", WriteOrigin.Live);
 
         result.Should().BeTrue();
         _mockDecomposer.Verify(
-            s => s.DecomposeAsync(It.IsAny<DeviceStatus>(), "test-source", It.IsAny<CancellationToken>()),
+            s => s.DecomposeAsync(It.IsAny<DeviceStatus>(), "test-source", WriteOrigin.Live, It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -59,10 +59,10 @@ public class DevicePublisherTests
     public async Task PublishDeviceStatusAsync_ReturnsFalse_OnException()
     {
         _mockDecomposer
-            .Setup(s => s.DecomposeAsync(It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.DecomposeAsync(It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("test error"));
 
-        var result = await _publisher.PublishDeviceStatusAsync(new List<DeviceStatus> { new() }, "test-source");
+        var result = await _publisher.PublishDeviceStatusAsync(new List<DeviceStatus> { new() }, "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
     }

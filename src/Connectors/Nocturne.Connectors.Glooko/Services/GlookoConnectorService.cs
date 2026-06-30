@@ -15,6 +15,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Glooko.Services;
 
@@ -710,7 +711,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             return;
 
         var importedEntries = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
-            foodEntryImports, ConnectorSource, cancellationToken);
+            foodEntryImports, ConnectorSource, WriteOrigin.Live, cancellationToken); // Food is a dormant broadcast category — origin irrelevant until wired.
 
         if (importedEntries is not { Count: > 0 })
             return;

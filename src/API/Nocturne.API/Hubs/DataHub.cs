@@ -250,7 +250,7 @@ public class DataHub : TenantAwareHub
     {
         try
         {
-            var enabledCollections = new[] { "entries", "treatments", "devicestatus", "profiles" };
+            var enabledCollections = Services.Realtime.RealtimeCategories.All;
             var collections = request.Collections ?? enabledCollections;
             var subscribed = new List<string>();
 

@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -37,12 +39,43 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// </summary>
     protected IAuditContext AuditContext { get; }
 
-    /// <summary>Initializes the base with the tenant-scoped context factory and audit context.</summary>
-    protected V4RepositoryBase(ITenantDbContextFactory contextFactory, IAuditContext auditContext)
+    /// <summary>
+    /// Broadcasts native V4 record shapes to the chokepoint's realtime category. Optional: when null
+    /// (e.g. a repo constructed without DI) writes simply broadcast nothing. Fired for live writes only —
+    /// the <see cref="WriteOrigin"/> gate is applied in <see cref="RaiseBroadcastAsync"/>.
+    /// </summary>
+    private readonly IV4RecordBroadcaster<TModel>? _broadcaster;
+
+    /// <summary>Initializes the base with the tenant-scoped context factory, audit context, and (optional) broadcaster.</summary>
+    protected V4RepositoryBase(
+        ITenantDbContextFactory contextFactory,
+        IAuditContext auditContext,
+        IV4RecordBroadcaster<TModel>? broadcaster = null)
     {
         ContextFactory = contextFactory;
         AuditContext = auditContext;
+        _broadcaster = broadcaster;
     }
+
+    /// <summary>
+    /// Fires the native V4 broadcast for a just-committed write — but only for <see cref="WriteOrigin.Live"/>
+    /// writes (backfill imports stay silent so clients aren't flooded). The single gate every mutating
+    /// method routes through, so the origin rule lives in exactly one place.
+    /// </summary>
+    protected Task RaiseBroadcastAsync(
+        IReadOnlyList<TModel> created,
+        IReadOnlyList<TModel> updated,
+        IReadOnlyList<Guid> deletedIds,
+        WriteOrigin origin,
+        CancellationToken ct)
+        => V4RecordBroadcast.RaiseAsync(_broadcaster, created, updated, deletedIds, origin, ct);
+
+    /// <summary>
+    /// True if an upserted-in-place tracked entity changed materially (worth an <c>update</c> broadcast).
+    /// Same predicate the audit interceptor uses, so "broadcast update" ⟺ "audited change".
+    /// </summary>
+    protected static bool HasMaterialChange(NocturneDbContext ctx, TEntity entity)
+        => V4MaterialChange.HasMaterialChange(ctx.Entry(entity));
 
     // ── Per-type static-mapper bridges (the only code the base needs from each repository) ──
 
@@ -95,38 +128,44 @@ public abstract class V4RepositoryBase<TModel, TEntity>
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CreateAsync" />
     /// <remarks>Virtual: SyncId-upsert types (Bolus, CarbIntake) override to upsert in place.</remarks>
-    public virtual async Task<TModel> CreateAsync(TModel model, CancellationToken ct = default)
+    public virtual async Task<TModel> CreateAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = ToEntity(model);
         ctx.Set<TEntity>().Add(entity);
         await ctx.SaveChangesAsync(ct);
-        return ToDomain(entity);
+        var created = ToDomain(entity);
+        await RaiseBroadcastAsync([created], [], [], origin, ct);
+        return created;
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.UpdateAsync" />
-    public async Task<TModel> UpdateAsync(Guid id, TModel model, CancellationToken ct = default)
+    public async Task<TModel> UpdateAsync(Guid id, TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
         ApplyUpdate(entity, model);
         await ctx.SaveChangesAsync(ct);
-        return ToDomain(entity);
+        var updated = ToDomain(entity);
+        // A single explicit update is always a material change worth broadcasting.
+        await RaiseBroadcastAsync([], [updated], [], origin, ct);
+        return updated;
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.DeleteAsync" />
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
         entity.DeletedAt = DateTime.UtcNow;
         await ctx.SaveChangesAsync(ct);
+        await RaiseBroadcastAsync([], [], [id], origin, ct);
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.RestoreAsync" />
-    public async Task<TModel> RestoreAsync(Guid id, CancellationToken ct = default)
+    public async Task<TModel> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().IgnoreQueryFilters()
@@ -135,11 +174,14 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             ?? throw new KeyNotFoundException($"Soft-deleted {typeof(TModel).Name} {id} not found");
         entity.DeletedAt = null;
         await ctx.SaveChangesAsync(ct);
-        return ToDomain(entity);
+        // A restored record reappears in the dataset: broadcast it as a create so clients re-add it.
+        var restored = ToDomain(entity);
+        await RaiseBroadcastAsync([restored], [], [], origin, ct);
+        return restored;
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.BulkRestoreAsync" />
-    public async Task<IEnumerable<TModel>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    public async Task<IEnumerable<TModel>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var idSet = ids.ToHashSet();
@@ -149,7 +191,9 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         foreach (var entity in entities)
             entity.DeletedAt = null;
         await ctx.SaveChangesAsync(ct);
-        return entities.Select(ToDomain);
+        var restored = entities.Select(ToDomain).ToList();
+        await RaiseBroadcastAsync(restored, [], [], origin, ct);
+        return restored;
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetDeletedAsync" />
@@ -198,11 +242,13 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// and carries the user-delete dedup discriminator. Virtual so types with a type-specific delete
     /// surface can still override.
     /// </remarks>
-    public virtual async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public virtual async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
+        var deletedIds = await ctx.AuditedSoftDeleteWithIdsAsync(
             ctx.Set<TEntity>().Where(e => e.LegacyId == legacyId), AuditContext, ct);
+        await RaiseBroadcastAsync([], [], deletedIds, origin, ct);
+        return deletedIds.Count;
     }
 
     /// <summary>Latest stored record timestamp, optionally scoped to a data source (connector watermark).</summary>
@@ -223,16 +269,27 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return await query.MinAsync(e => (DateTime?)e.Timestamp, ct);
     }
 
+    /// <summary>
+    /// The result of <see cref="SplitUpsertsAsync"/>: rows upserted in place (returned to the caller),
+    /// the subset of those that changed materially (broadcast as <c>update</c>), and the rows still to
+    /// insert. <see cref="MateriallyChanged"/> must be a subset of <see cref="UpdatedInPlace"/>.
+    /// </summary>
+    protected readonly record struct UpsertSplit(
+        List<TEntity> UpdatedInPlace,
+        List<TEntity> MateriallyChanged,
+        List<TEntity> ToInsert);
+
     /// <summary>SyncId-upsert types override: match existing rows by (DataSource, SyncIdentifier), update them in
-    /// place, and return (rows updated in place, rows still to insert). Default: nothing upserted.</summary>
-    protected virtual Task<(List<TEntity> Updated, List<TEntity> ToInsert)> SplitUpsertsAsync(
+    /// place, and return the upserted rows, those that changed materially, and the rows still to insert.
+    /// Default: nothing upserted.</summary>
+    protected virtual Task<UpsertSplit> SplitUpsertsAsync(
         NocturneDbContext ctx, List<TEntity> entities, CancellationToken ct)
-        => Task.FromResult((new List<TEntity>(), entities));
+        => Task.FromResult(new UpsertSplit([], [], entities));
 
     /// <summary>DeduplicationService participants override: link the just-inserted rows into canonical groups
     /// (runs AFTER commit). Default: no-op.</summary>
     protected virtual Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<TEntity> inserted, CancellationToken ct)
+        NocturneDbContext ctx, IReadOnlyList<TEntity> inserted, WriteOrigin origin, CancellationToken ct)
         => Task.CompletedTask;
 
     /// <summary>
@@ -242,7 +299,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     /// whole method.
     /// </summary>
     public virtual async Task<IEnumerable<TModel>> BulkCreateAsync(
-        IEnumerable<TModel> recordsParam, CancellationToken ct = default)
+        IEnumerable<TModel> recordsParam, WriteOrigin origin, CancellationToken ct = default)
     {
         var records = recordsParam.ToList();
         if (records.Count == 0) return [];
@@ -253,7 +310,8 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             await using var tx = await ctx.Database.BeginTransactionAsync(ct);
             var entities = records.Select(ToEntity).ToList();
 
-            var (updated, toInsert) = await SplitUpsertsAsync(ctx, entities, ct);
+            var split = await SplitUpsertsAsync(ctx, entities, ct);
+            var toInsert = split.ToInsert;
 
             // Batch-level LegacyId dedup
             toInsert = toInsert.GroupBy(e => e.LegacyId ?? e.Id.ToString()).Select(g => g.First()).ToList();
@@ -264,7 +322,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
                 toInsert = toInsert.Where(e => string.IsNullOrEmpty(e.LegacyId) || !blocked.Contains(e.LegacyId)).ToList();
             }
 
-            if (toInsert.Count == 0 && updated.Count == 0) { await tx.CommitAsync(ct); return Enumerable.Empty<TModel>(); }
+            if (toInsert.Count == 0 && split.UpdatedInPlace.Count == 0) { await tx.CommitAsync(ct); return Enumerable.Empty<TModel>(); }
 
             const int batchSize = 500;
             foreach (var batch in toInsert.Chunk(batchSize))
@@ -275,8 +333,15 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             }
 
             await tx.CommitAsync(ct);
-            await PostCommitDedupAsync(ctx, toInsert, ct);
-            return updated.Concat(toInsert).Select(ToDomain);
+            await PostCommitDedupAsync(ctx, toInsert, origin, ct);
+            // Inserts broadcast as create; upserts broadcast as update only when materially changed
+            // (a connector re-poll of byte-identical rows changes nothing, so it stays silent).
+            await RaiseBroadcastAsync(
+                toInsert.Select(ToDomain).ToList(),
+                split.MateriallyChanged.Select(ToDomain).ToList(),
+                [],
+                origin, ct);
+            return split.UpdatedInPlace.Concat(toInsert).Select(ToDomain);
         });
     }
 }

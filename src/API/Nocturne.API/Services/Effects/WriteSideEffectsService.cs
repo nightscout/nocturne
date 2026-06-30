@@ -130,7 +130,7 @@ public class WriteSideEffectsService : IWriteSideEffects
 
         if (options.DecomposeToV4)
         {
-            await _pipeline.DecomposeAsync((IEnumerable<T>)records, cancellationToken);
+            await _pipeline.DecomposeAsync((IEnumerable<T>)records, WriteOrigin.Live, cancellationToken);
         }
     }
 
@@ -164,7 +164,7 @@ public class WriteSideEffectsService : IWriteSideEffects
 
         if (options.DecomposeToV4)
         {
-            await _pipeline.DecomposeAsync(record, cancellationToken);
+            await _pipeline.DecomposeAsync(record, WriteOrigin.Live, cancellationToken);
         }
     }
 
@@ -183,7 +183,7 @@ public class WriteSideEffectsService : IWriteSideEffects
 
         if (options.DecomposeToV4)
         {
-            await _pipeline.DeleteByLegacyIdAsync<T>(legacyId, cancellationToken);
+            await _pipeline.DeleteByLegacyIdAsync<T>(legacyId, WriteOrigin.Live, cancellationToken);
         }
     }
 

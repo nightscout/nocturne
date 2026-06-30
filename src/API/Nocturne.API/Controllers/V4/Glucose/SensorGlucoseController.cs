@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Glucose;
 
@@ -53,7 +54,7 @@ public class SensorGlucoseController(
 
         await glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
 
-        var created = await Repository.CreateAsync(model, ct);
+        var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
@@ -110,7 +111,7 @@ public class SensorGlucoseController(
 
         try
         {
-            var updated = await Repository.UpdateAsync(id, model, ct);
+            var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
 
             // V4 writes bypass the legacy entry sink; emit the realtime "entries" update here.
             await glucoseEvents.OnUpdatedAsync(updated, ct);
@@ -144,7 +145,7 @@ public class SensorGlucoseController(
         for (var i = 0; i < models.Count; i++)
             await glucoseResolver.ResolveAsync(models[i], requests[i].GlucoseProcessing, requests[i].SmoothedMgdl, requests[i].UnsmoothedMgdl, ct);
 
-        var created = await Repository.BulkCreateAsync(models, ct);
+        var created = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
         var createdArray = created.ToArray();
 
         // Evaluate alerts for the most recent reading only (not every historical reading during backfill)

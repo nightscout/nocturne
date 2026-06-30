@@ -6,6 +6,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Core.Services;
 
@@ -20,6 +21,13 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     protected readonly IConnectorServerResolver<TConfig> _serverResolver;
     protected readonly ILogger _logger;
     private readonly IConnectorPublisher? _publisher;
+
+    // Broadcast origin for this run's glucose / care (treatment-family) publishes, resolved once from the
+    // pre-run resume watermark and memoized so every batch and granular publish in the run agrees — a
+    // paginated or multi-call first sync can't flip to Live mid-backfill. The connector service is
+    // resolved fresh per sync run, so these are naturally per-run.
+    private WriteOrigin? _glucosePublishOrigin;
+    private WriteOrigin? _treatmentPublishOrigin;
 
     /// <summary>
     ///     Base constructor for connector services using IHttpClientFactory pattern
@@ -527,6 +535,42 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// <summary>
     ///     Submits glucose data directly to the API via HTTP
     /// </summary>
+    /// <summary>
+    ///     The broadcast origin for this run's glucose-family publishes: <see cref="WriteOrigin.Backfill"/>
+    ///     on the source's first-ever glucose sync (no prior data — suppress so a first sync of history
+    ///     doesn't flood clients), else <see cref="WriteOrigin.Live"/>. Memoized for the run.
+    /// </summary>
+    protected async Task<WriteOrigin> GlucosePublishOriginAsync()
+    {
+        _glucosePublishOrigin ??= await ResolvePublishOriginAsync(
+            () => _publisher!.Glucose.GetLatestEntryTimestampAsync(ConnectorSource));
+        return _glucosePublishOrigin.Value;
+    }
+
+    /// <summary>
+    ///     The broadcast origin for this run's care-family (treatment) publishes — Bolus, CarbIntake,
+    ///     BG check, calculations, basal, notes, device events. Backfill on the source's first-ever
+    ///     treatment sync, else Live. Memoized for the run.
+    /// </summary>
+    protected async Task<WriteOrigin> TreatmentPublishOriginAsync()
+    {
+        _treatmentPublishOrigin ??= await ResolvePublishOriginAsync(
+            () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(ConnectorSource));
+        return _treatmentPublishOrigin.Value;
+    }
+
+    /// <summary>
+    ///     Resolves a publish origin from a resume watermark: Backfill when no prior data exists (initial
+    ///     full-history sync), else Live. When the publisher is unavailable the publish will fail anyway,
+    ///     so the origin is irrelevant and defaults to Live.
+    /// </summary>
+    private async Task<WriteOrigin> ResolvePublishOriginAsync(Func<Task<DateTime?>> latestTimestamp)
+    {
+        if (_publisher is not { IsAvailable: true })
+            return WriteOrigin.Live;
+        return await latestTimestamp() is null ? WriteOrigin.Backfill : WriteOrigin.Live;
+    }
+
     protected virtual async Task<bool> PublishGlucoseDataAsync(
         IEnumerable<Entry> entries,
         TConfig config,
@@ -539,7 +583,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Glucose.PublishEntriesAsync(entries, ConnectorSource, cancellationToken);
+        return await _publisher.Glucose.PublishEntriesAsync(entries, ConnectorSource, await GlucosePublishOriginAsync(), cancellationToken);
     }
 
     /// <summary>
@@ -559,7 +603,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishTreatmentsAsync(
             treatments,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }
@@ -581,9 +625,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Device.PublishDeviceStatusAsync(
             deviceStatuses,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
     /// <summary>
@@ -601,7 +645,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Metadata.PublishProfilesAsync(profiles, ConnectorSource, cancellationToken);
+        return await _publisher.Metadata.PublishProfilesAsync(profiles, ConnectorSource, WriteOrigin.Live, cancellationToken); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
     /// <summary>
@@ -619,7 +663,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Metadata.PublishFoodAsync(foods, ConnectorSource, cancellationToken);
+        return await _publisher.Metadata.PublishFoodAsync(foods, ConnectorSource, WriteOrigin.Live, cancellationToken); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
     /// <summary>
@@ -639,9 +683,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Metadata.PublishActivityAsync(
             activities,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
     /// <summary>
@@ -661,9 +705,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Metadata.PublishStateSpansAsync(
             stateSpans,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
     /// <summary>
@@ -683,9 +727,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Metadata.PublishSystemEventsAsync(
             systemEvents,
-            ConnectorSource,
+            ConnectorSource, WriteOrigin.Live,
             cancellationToken
-        );
+        ); // Dormant broadcast category (snapshots off-base / no V4 category yet) — origin irrelevant until wired.
     }
 
     /// <summary>
@@ -747,7 +791,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Glucose.PublishSensorGlucoseAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await GlucosePublishOriginAsync(),
             cancellationToken
         );
     }
@@ -767,7 +811,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Treatments.PublishBolusesAsync(records, ConnectorSource, cancellationToken);
+        return await _publisher.Treatments.PublishBolusesAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
     }
 
     /// <summary>
@@ -785,7 +829,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Treatments.PublishDecompositionBatchesAsync(batches, ConnectorSource, cancellationToken);
+        return await _publisher.Treatments.PublishDecompositionBatchesAsync(batches, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
     }
 
     /// <summary>
@@ -805,7 +849,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishCarbIntakesAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }
@@ -825,7 +869,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Treatments.PublishBGChecksAsync(records, ConnectorSource, cancellationToken);
+        return await _publisher.Treatments.PublishBGChecksAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
     }
 
     /// <summary>
@@ -845,7 +889,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishBolusCalculationsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }
@@ -865,7 +909,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return false;
         }
 
-        return await _publisher.Metadata.PublishNotesAsync(records, ConnectorSource, cancellationToken);
+        return await _publisher.Metadata.PublishNotesAsync(records, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken);
     }
 
     /// <summary>
@@ -885,7 +929,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Device.PublishDeviceEventsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }
@@ -907,7 +951,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishTempBasalsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }
@@ -929,7 +973,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
         return await _publisher.Treatments.PublishBasalInjectionsAsync(
             records,
-            ConnectorSource,
+            ConnectorSource, await TreatmentPublishOriginAsync(),
             cancellationToken
         );
     }

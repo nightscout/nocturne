@@ -17,8 +17,10 @@ public interface IDeviceStatusDecomposer
     /// <param name="deviceStatus">The legacy DeviceStatus record to decompose.</param>
     /// <param name="source">Connector data source to stamp on the decomposed snapshots, or
     /// <c>null</c> for direct v1/v3 uploads with no connector origin.</param>
+    /// <param name="origin">Write classification used by the repository chokepoint to decide whether
+    /// to broadcast (live) or stay silent (backfill).</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<DecompositionResult> DecomposeAsync(DeviceStatus deviceStatus, string? source, CancellationToken ct = default);
+    Task<DecompositionResult> DecomposeAsync(DeviceStatus deviceStatus, string? source, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Decomposes a batch of DeviceStatus records into typed v4 snapshot tables using bulk-insert
@@ -28,9 +30,11 @@ public interface IDeviceStatusDecomposer
     /// <param name="statuses">DeviceStatus records to decompose.</param>
     /// <param name="source">Connector data source to stamp on the decomposed snapshots, or
     /// <c>null</c> for direct v1/v3 uploads with no connector origin.</param>
+    /// <param name="origin">Write classification used by the repository chokepoint to decide whether
+    /// to broadcast (live) or stay silent (backfill).</param>
     /// <param name="ct">Cancellation token.</param>
     Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<DeviceStatus> statuses, string? source, CancellationToken ct = default);
+        IReadOnlyList<DeviceStatus> statuses, string? source, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes all v4 snapshot records that were decomposed from a legacy DeviceStatus with the given ID.
@@ -38,5 +42,5 @@ public interface IDeviceStatusDecomposer
     /// <param name="legacyId">The legacy DeviceStatus ID</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>Total number of v4 records deleted across all snapshot tables</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 }

@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -81,7 +82,7 @@ public class PatientInsulinRepository : IPatientInsulinRepository
     /// <param name="model">The patient insulin to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created patient insulin record.</returns>
-    public async Task<PatientInsulin> CreateAsync(PatientInsulin model, CancellationToken ct = default)
+    public async Task<PatientInsulin> CreateAsync(PatientInsulin model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = PatientInsulinMapper.ToEntity(model);
@@ -97,7 +98,7 @@ public class PatientInsulinRepository : IPatientInsulinRepository
     /// <param name="model">The updated record data.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated patient insulin record.</returns>
-    public async Task<PatientInsulin> UpdateAsync(Guid id, PatientInsulin model, CancellationToken ct = default)
+    public async Task<PatientInsulin> UpdateAsync(Guid id, PatientInsulin model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.PatientInsulins.FindAsync([id], ct)
@@ -113,7 +114,7 @@ public class PatientInsulinRepository : IPatientInsulinRepository
     /// </summary>
     /// <param name="id">The unique identifier.</param>
     /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.PatientInsulins.FindAsync([id], ct)
@@ -124,7 +125,7 @@ public class PatientInsulinRepository : IPatientInsulinRepository
     }
 
     /// <inheritdoc />
-    public async Task<PatientInsulin> RestoreAsync(Guid id, CancellationToken ct = default)
+    public async Task<PatientInsulin> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.PatientInsulins.IgnoreQueryFilters()
@@ -137,7 +138,7 @@ public class PatientInsulinRepository : IPatientInsulinRepository
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<PatientInsulin>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    public async Task<IEnumerable<PatientInsulin>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var idSet = ids.ToHashSet();

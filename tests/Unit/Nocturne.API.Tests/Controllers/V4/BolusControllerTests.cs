@@ -7,6 +7,7 @@ using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -29,9 +30,9 @@ public class BolusControllerTests
     private void SetupCreatePassthrough(Action<Bolus> onCreate)
     {
         _repoMock
-            .Setup(r => r.CreateAsync(It.IsAny<Bolus>(), It.IsAny<CancellationToken>()))
-            .Callback<Bolus, CancellationToken>((b, _) => onCreate(b))
-            .ReturnsAsync((Bolus b, CancellationToken _) => b);
+            .Setup(r => r.CreateAsync(It.IsAny<Bolus>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Bolus, WriteOrigin, CancellationToken>((b, _, _) => onCreate(b))
+            .ReturnsAsync((Bolus b, WriteOrigin origin, CancellationToken _) => b);
     }
 
     [Fact]
@@ -74,9 +75,9 @@ public class BolusControllerTests
             .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         _repoMock
-            .Setup(r => r.UpdateAsync(id, It.IsAny<Bolus>(), It.IsAny<CancellationToken>()))
-            .Callback<Guid, Bolus, CancellationToken>((_, b, _) => captured = b)
-            .ReturnsAsync((Guid _, Bolus b, CancellationToken _) => b);
+            .Setup(r => r.UpdateAsync(id, It.IsAny<Bolus>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, Bolus, WriteOrigin, CancellationToken>((_, b, _, _) => captured = b)
+            .ReturnsAsync((Guid _, Bolus b, WriteOrigin origin, CancellationToken _) => b);
 
         var controller = CreateController();
         var request = new UpdateBolusRequest
@@ -130,9 +131,9 @@ public class BolusControllerTests
             .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         _repoMock
-            .Setup(r => r.UpdateAsync(id, It.IsAny<Bolus>(), It.IsAny<CancellationToken>()))
-            .Callback<Guid, Bolus, CancellationToken>((_, b, _) => captured = b)
-            .ReturnsAsync((Guid _, Bolus b, CancellationToken _) => b);
+            .Setup(r => r.UpdateAsync(id, It.IsAny<Bolus>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, Bolus, WriteOrigin, CancellationToken>((_, b, _, _) => captured = b)
+            .ReturnsAsync((Guid _, Bolus b, WriteOrigin origin, CancellationToken _) => b);
 
         var controller = CreateController();
         var request = new UpdateBolusRequest

@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -26,11 +27,11 @@ public interface IPatientDeviceRepository
     Task<PatientDevice?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>Creates a new patient device record.</summary>
-    Task<PatientDevice> CreateAsync(PatientDevice model, CancellationToken ct = default);
+    Task<PatientDevice> CreateAsync(PatientDevice model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Updates an existing patient device record.</summary>
-    Task<PatientDevice> UpdateAsync(Guid id, PatientDevice model, CancellationToken ct = default);
+    Task<PatientDevice> UpdateAsync(Guid id, PatientDevice model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Deletes a patient device record by ID.</summary>
-    Task DeleteAsync(Guid id, CancellationToken ct = default);
+    Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 }

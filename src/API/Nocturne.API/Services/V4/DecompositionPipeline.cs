@@ -36,7 +36,7 @@ public class DecompositionPipeline : IDecompositionPipeline
         _logger = logger;
     }
 
-    public async Task<BatchDecompositionResult> DecomposeAsync<T>(IEnumerable<T> records, CancellationToken ct = default) where T : class
+    public async Task<BatchDecompositionResult> DecomposeAsync<T>(IEnumerable<T> records, WriteOrigin origin, CancellationToken ct = default) where T : class
     {
         var result = new BatchDecompositionResult();
         var decomposer = ResolveDecomposer<T>();
@@ -45,7 +45,7 @@ public class DecompositionPipeline : IDecompositionPipeline
         {
             try
             {
-                var decomposed = await decomposer.DecomposeAsync(record, ct);
+                var decomposed = await decomposer.DecomposeAsync(record, origin, ct);
                 result.Succeeded++;
                 result.Results.Add(decomposed);
             }
@@ -59,14 +59,14 @@ public class DecompositionPipeline : IDecompositionPipeline
         return result;
     }
 
-    public async Task<BatchDecompositionResult> DecomposeAsync<T>(T record, CancellationToken ct = default) where T : class
+    public async Task<BatchDecompositionResult> DecomposeAsync<T>(T record, WriteOrigin origin, CancellationToken ct = default) where T : class
     {
         var result = new BatchDecompositionResult();
         var decomposer = ResolveDecomposer<T>();
 
         try
         {
-            var decomposed = await decomposer.DecomposeAsync(record, ct);
+            var decomposed = await decomposer.DecomposeAsync(record, origin, ct);
             result.Succeeded++;
             result.Results.Add(decomposed);
         }
@@ -79,13 +79,13 @@ public class DecompositionPipeline : IDecompositionPipeline
         return result;
     }
 
-    public async Task<int> DeleteByLegacyIdAsync<T>(string legacyId, CancellationToken ct = default) where T : class
+    public async Task<int> DeleteByLegacyIdAsync<T>(string legacyId, WriteOrigin origin, CancellationToken ct = default) where T : class
     {
         var decomposer = ResolveDecomposer<T>();
 
         try
         {
-            return await decomposer.DeleteByLegacyIdAsync(legacyId, ct);
+            return await decomposer.DeleteByLegacyIdAsync(legacyId, origin, ct);
         }
         catch (Exception ex)
         {

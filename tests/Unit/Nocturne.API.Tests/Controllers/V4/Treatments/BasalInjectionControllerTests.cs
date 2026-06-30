@@ -7,6 +7,7 @@ using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Controllers.V4.Treatments;
 
@@ -46,9 +47,9 @@ public class BasalInjectionControllerTests
     private void SetupCreatePassthrough(Action<BasalInjection> onCreate)
     {
         _repoMock
-            .Setup(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<CancellationToken>()))
-            .Callback<BasalInjection, CancellationToken>((b, _) => onCreate(b))
-            .ReturnsAsync((BasalInjection b, CancellationToken _) => b);
+            .Setup(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<BasalInjection, WriteOrigin, CancellationToken>((b, _, _) => onCreate(b))
+            .ReturnsAsync((BasalInjection b, WriteOrigin origin, CancellationToken _) => b);
     }
 
     [Fact]
@@ -66,7 +67,7 @@ public class BasalInjectionControllerTests
 
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(400);
-        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
 
         var negativeRequest = new CreateBasalInjectionRequest
         {
@@ -95,7 +96,7 @@ public class BasalInjectionControllerTests
 
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(400);
-        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -113,7 +114,7 @@ public class BasalInjectionControllerTests
 
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(400);
-        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -135,7 +136,7 @@ public class BasalInjectionControllerTests
 
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(400);
-        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -158,7 +159,7 @@ public class BasalInjectionControllerTests
 
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(400);
-        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -187,7 +188,7 @@ public class BasalInjectionControllerTests
 
         var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(400);
-        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -220,7 +221,7 @@ public class BasalInjectionControllerTests
         var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         ok.Value.Should().BeSameAs(existing);
 
-        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repoMock.Verify(r => r.CreateAsync(It.IsAny<BasalInjection>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
         _insulinRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

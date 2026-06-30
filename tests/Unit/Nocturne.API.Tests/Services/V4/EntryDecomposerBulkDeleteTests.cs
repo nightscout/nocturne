@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -42,7 +43,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         _calRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
         var decomposer = CreateDecomposer();
-        var count = await decomposer.BulkDeleteAsync(find);
+        var count = await decomposer.BulkDeleteAsync(find, WriteOrigin.Live);
 
         count.Should().Be(13);
     }
@@ -56,7 +57,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         _calRepo.Setup(r => r.DeleteByTimeRangeAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
         var decomposer = CreateDecomposer();
-        var count = await decomposer.BulkDeleteAsync(null);
+        var count = await decomposer.BulkDeleteAsync(null, WriteOrigin.Live);
 
         count.Should().Be(55);
     }
@@ -70,7 +71,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         _calRepo.Setup(r => r.DeleteByTimeRangeAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
         var decomposer = CreateDecomposer();
-        var count = await decomposer.BulkDeleteAsync("{}");
+        var count = await decomposer.BulkDeleteAsync("{}", WriteOrigin.Live);
 
         count.Should().Be(100);
     }
@@ -85,7 +86,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         var find = "{\"sgv\":{\"$gte\":180}}";
 
         var decomposer = CreateDecomposer();
-        var count = await decomposer.BulkDeleteAsync(find);
+        var count = await decomposer.BulkDeleteAsync(find, WriteOrigin.Live);
 
         count.Should().Be(0);
         _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -99,7 +100,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         // The plausibility guard should reject this
         var find = "{\"sgv\":{\"$gte\":180}}";
         var decomposer = CreateDecomposer();
-        var count = await decomposer.BulkDeleteAsync(find);
+        var count = await decomposer.BulkDeleteAsync(find, WriteOrigin.Live);
         count.Should().Be(0);
         _sgRepo.Verify(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -114,7 +115,7 @@ public class EntryDecomposerBulkDeleteTests : IDisposable
         _calRepo.Setup(r => r.DeleteByTimeRangeAsync(It.IsAny<DateTime?>(), null, It.IsAny<CancellationToken>())).ReturnsAsync(0);
 
         var decomposer = CreateDecomposer();
-        var count = await decomposer.BulkDeleteAsync(find);
+        var count = await decomposer.BulkDeleteAsync(find, WriteOrigin.Live);
 
         count.Should().Be(5);
     }

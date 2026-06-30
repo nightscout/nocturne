@@ -10,6 +10,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.V4;
 
@@ -69,7 +70,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CorrelationId.Should().NotBeNull();
@@ -106,7 +107,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
@@ -127,7 +128,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
@@ -157,7 +158,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -189,7 +190,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var mg = result.CreatedRecords[0].Should().BeOfType<MeterGlucose>().Subject;
@@ -219,7 +220,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -256,7 +257,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act - first call creates
-        var firstResult = await _decomposer.DecomposeAsync(entry);
+        var firstResult = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
         firstResult.CreatedRecords.Should().HaveCount(1);
         firstResult.UpdatedRecords.Should().BeEmpty();
 
@@ -264,7 +265,7 @@ public class EntryDecomposerTests : IDisposable
         entry.Sgv = 125.0;
 
         // Act - second call updates
-        var secondResult = await _decomposer.DecomposeAsync(entry);
+        var secondResult = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         secondResult.CreatedRecords.Should().BeEmpty();
@@ -288,12 +289,12 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act - first call creates
-        var firstResult = await _decomposer.DecomposeAsync(entry);
+        var firstResult = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
         firstResult.CreatedRecords.Should().HaveCount(1);
 
         // Act - second call updates
         entry.Mbg = 145.0;
-        var secondResult = await _decomposer.DecomposeAsync(entry);
+        var secondResult = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         secondResult.CreatedRecords.Should().BeEmpty();
@@ -313,12 +314,12 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act - first call creates
-        var firstResult = await _decomposer.DecomposeAsync(entry);
+        var firstResult = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
         firstResult.CreatedRecords.Should().HaveCount(1);
 
         // Act - second call updates
         entry.Slope = 860.0;
-        var secondResult = await _decomposer.DecomposeAsync(entry);
+        var secondResult = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         secondResult.CreatedRecords.Should().BeEmpty();
@@ -341,7 +342,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().BeEmpty();
@@ -361,7 +362,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().BeEmpty();
@@ -380,7 +381,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().BeEmpty();
@@ -400,7 +401,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -422,7 +423,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -450,7 +451,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -471,7 +472,7 @@ public class EntryDecomposerTests : IDisposable
         var entry = new Entry { Id = "zero-sgv", Type = "sgv", Mills = 1700000000000, Sgv = 0.0 };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -486,7 +487,7 @@ public class EntryDecomposerTests : IDisposable
         var entry = new Entry { Id = "negative-sgv", Type = "sgv", Mills = 1700000000000, Sgv = -5.0 };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
@@ -500,7 +501,7 @@ public class EntryDecomposerTests : IDisposable
         var entry = new Entry { Id = "both-null-sgv", Type = "sgv", Mills = 1700000000000 };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
@@ -514,7 +515,7 @@ public class EntryDecomposerTests : IDisposable
         var entry = new Entry { Id = "both-null-mbg", Type = "mbg", Mills = 1700000000000 };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var mg = result.CreatedRecords[0].Should().BeOfType<MeterGlucose>().Subject;
@@ -528,7 +529,7 @@ public class EntryDecomposerTests : IDisposable
         var entry = new Entry { Id = "minimal-cal", Type = "cal", Mills = 1700000000000 };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var cal = result.CreatedRecords[0].Should().BeOfType<Calibration>().Subject;
@@ -546,7 +547,7 @@ public class EntryDecomposerTests : IDisposable
         var entry = new Entry { Id = "hi-sgv", Type = "sgv", Mills = 1700000000000, Sgv = 400.0 };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
@@ -560,7 +561,7 @@ public class EntryDecomposerTests : IDisposable
         var entry = new Entry { Id = "zero-mills", Type = "sgv", Mills = 0, Sgv = 100.0 };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var sg = result.CreatedRecords[0].Should().BeOfType<SensorGlucose>().Subject;
@@ -578,7 +579,7 @@ public class EntryDecomposerTests : IDisposable
         var entry = new Entry { Id = "padded-type", Type = " sgv ", Mills = 1700000000000, Sgv = 100.0 };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert - " sgv " != "sgv" so it's treated as unknown
         result.CreatedRecords.Should().BeEmpty();
@@ -591,7 +592,7 @@ public class EntryDecomposerTests : IDisposable
         var entry = new Entry { Id = "mixedcase-mbg", Type = "MBG", Mills = 1700000000000, Mbg = 140.0 };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -605,7 +606,7 @@ public class EntryDecomposerTests : IDisposable
         var entry = new Entry { Id = "mixedcase-cal", Type = "Cal", Mills = 1700000000000, Slope = 800.0 };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -623,11 +624,11 @@ public class EntryDecomposerTests : IDisposable
         var entry = new Entry { Id = "preserve-id-test", Type = "sgv", Mills = 1700000000000, Sgv = 100.0 };
 
         // Act
-        var firstResult = await _decomposer.DecomposeAsync(entry);
+        var firstResult = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
         var originalId = firstResult.CreatedRecords.OfType<SensorGlucose>().Single().Id;
 
         entry.Sgv = 110.0;
-        var secondResult = await _decomposer.DecomposeAsync(entry);
+        var secondResult = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
         var updatedId = secondResult.UpdatedRecords.OfType<SensorGlucose>().Single().Id;
 
         // Assert - the V4 ID should be preserved across updates
@@ -642,8 +643,8 @@ public class EntryDecomposerTests : IDisposable
         var entry2 = new Entry { Id = null, Type = "sgv", Mills = 1700000001000, Sgv = 110.0 };
 
         // Act
-        var result1 = await _decomposer.DecomposeAsync(entry1);
-        var result2 = await _decomposer.DecomposeAsync(entry2);
+        var result1 = await _decomposer.DecomposeAsync(entry1, WriteOrigin.Live);
+        var result2 = await _decomposer.DecomposeAsync(entry2, WriteOrigin.Live);
 
         // Assert - both should create, neither should update
         result1.CreatedRecords.Should().HaveCount(1);
@@ -697,7 +698,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         result.CreatedRecords.Should().HaveCount(1);
@@ -726,7 +727,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var sg = result.CreatedRecords[0] as SensorGlucose;
@@ -755,7 +756,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var sg = result.CreatedRecords[0] as SensorGlucose;
@@ -777,7 +778,7 @@ public class EntryDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(entry);
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
 
         // Assert
         var sg = result.CreatedRecords[0] as SensorGlucose;

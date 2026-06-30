@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -58,11 +59,11 @@ public class SensorGlucoseControllerTests
         };
 
         _repoMock
-            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(created);
 
         _repoMock.As<IV4Repository<SensorGlucose>>()
-            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(created);
 
         var controller = CreateController();
@@ -84,10 +85,10 @@ public class SensorGlucoseControllerTests
         var created = new SensorGlucose { Id = Guid.NewGuid(), Timestamp = input.Timestamp.UtcDateTime, Mgdl = 120 };
 
         _repoMock
-            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(created);
         _repoMock.As<IV4Repository<SensorGlucose>>()
-            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(created);
 
         var controller = CreateController();
@@ -119,7 +120,7 @@ public class SensorGlucoseControllerTests
         };
 
         _repoMock
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(created);
 
         var controller = CreateController();
@@ -148,7 +149,7 @@ public class SensorGlucoseControllerTests
             .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
         _repoMock
-            .Setup(r => r.UpdateAsync(id, It.IsAny<SensorGlucose>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.UpdateAsync(id, It.IsAny<SensorGlucose>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(updated);
 
         var controller = CreateController();
@@ -170,7 +171,7 @@ public class SensorGlucoseControllerTests
         var restored = new SensorGlucose { Id = id, Timestamp = DateTime.UtcNow, Mgdl = 110 };
 
         _repoMock
-            .Setup(r => r.RestoreAsync(id, It.IsAny<CancellationToken>()))
+            .Setup(r => r.RestoreAsync(id, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(restored);
 
         var controller = CreateController();

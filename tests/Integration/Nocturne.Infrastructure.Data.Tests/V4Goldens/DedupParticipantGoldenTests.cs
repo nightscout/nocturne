@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
@@ -51,7 +52,7 @@ public class DedupParticipantGoldenTests
             {
                 new SensorGlucose { Timestamp = T0, Mgdl = 120, DataSource = "dexcom", LegacyId = "g-a" },
                 new SensorGlucose { Timestamp = T0.AddSeconds(10), Mgdl = 120.5, DataSource = "libre", LegacyId = "g-b" },
-            },
+            }, WriteOrigin.Live,
             CancellationToken.None);
 
         await AssertOneCanonicalGroupAsync(tenant, 2, "sensorglucose", ctx => ctx.SensorGlucose.AsNoTracking().CountAsync());
@@ -64,8 +65,8 @@ public class DedupParticipantGoldenTests
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
         var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
 
-        await repo.BulkCreateAsync(new[] { new SensorGlucose { Timestamp = T0, Mgdl = 100, DataSource = "dexcom", SyncIdentifier = "s-1" } }, CancellationToken.None);
-        await repo.BulkCreateAsync(new[] { new SensorGlucose { Timestamp = T0, Mgdl = 142, DataSource = "dexcom", SyncIdentifier = "s-1" } }, CancellationToken.None);
+        await repo.BulkCreateAsync(new[] { new SensorGlucose { Timestamp = T0, Mgdl = 100, DataSource = "dexcom", SyncIdentifier = "s-1" } }, WriteOrigin.Live, CancellationToken.None);
+        await repo.BulkCreateAsync(new[] { new SensorGlucose { Timestamp = T0, Mgdl = 142, DataSource = "dexcom", SyncIdentifier = "s-1" } }, WriteOrigin.Live, CancellationToken.None);
 
         var rows = await _fx.QueryAsync(tenant, ctx => ctx.SensorGlucose.AsNoTracking().Where(g => g.DataSource == "dexcom").ToListAsync());
         rows.Should().HaveCount(1);
@@ -84,7 +85,7 @@ public class DedupParticipantGoldenTests
             {
                 new CarbIntake { Timestamp = T0, Carbs = 30, DataSource = "aaps", LegacyId = "c-a" },
                 new CarbIntake { Timestamp = T0.AddSeconds(10), Carbs = 30.5, DataSource = "loop", LegacyId = "c-b" },
-            },
+            }, WriteOrigin.Live,
             CancellationToken.None);
 
         await AssertOneCanonicalGroupAsync(tenant, 2, "carbintake", ctx => ctx.CarbIntakes.AsNoTracking().CountAsync());
@@ -97,8 +98,8 @@ public class DedupParticipantGoldenTests
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
         var repo = scope.ServiceProvider.GetRequiredService<ICarbIntakeRepository>();
 
-        await repo.BulkCreateAsync(new[] { new CarbIntake { Timestamp = T0, Carbs = 20, DataSource = "aaps", SyncIdentifier = "c-1" } }, CancellationToken.None);
-        await repo.BulkCreateAsync(new[] { new CarbIntake { Timestamp = T0, Carbs = 45, DataSource = "aaps", SyncIdentifier = "c-1" } }, CancellationToken.None);
+        await repo.BulkCreateAsync(new[] { new CarbIntake { Timestamp = T0, Carbs = 20, DataSource = "aaps", SyncIdentifier = "c-1" } }, WriteOrigin.Live, CancellationToken.None);
+        await repo.BulkCreateAsync(new[] { new CarbIntake { Timestamp = T0, Carbs = 45, DataSource = "aaps", SyncIdentifier = "c-1" } }, WriteOrigin.Live, CancellationToken.None);
 
         var rows = await _fx.QueryAsync(tenant, ctx => ctx.CarbIntakes.AsNoTracking().Where(c => c.DataSource == "aaps").ToListAsync());
         rows.Should().HaveCount(1);
@@ -117,7 +118,7 @@ public class DedupParticipantGoldenTests
             {
                 new BGCheck { Timestamp = T0, Glucose = 95, DataSource = "manual", LegacyId = "b-a" },
                 new BGCheck { Timestamp = T0.AddSeconds(10), Glucose = 95.5, DataSource = "meter", LegacyId = "b-b" },
-            },
+            }, WriteOrigin.Live,
             CancellationToken.None);
 
         await AssertOneCanonicalGroupAsync(tenant, 2, "bgcheck", ctx => ctx.BGChecks.AsNoTracking().CountAsync());
@@ -135,7 +136,7 @@ public class DedupParticipantGoldenTests
             {
                 new DeviceEvent { Timestamp = T0, EventType = DeviceEventType.SiteChange, DataSource = "aaps", LegacyId = "d-a" },
                 new DeviceEvent { Timestamp = T0.AddSeconds(10), EventType = DeviceEventType.SiteChange, DataSource = "loop", LegacyId = "d-b" },
-            },
+            }, WriteOrigin.Live,
             CancellationToken.None);
 
         await AssertOneCanonicalGroupAsync(tenant, 2, "deviceevent", ctx => ctx.DeviceEvents.AsNoTracking().CountAsync());
@@ -154,7 +155,7 @@ public class DedupParticipantGoldenTests
             {
                 new Note { Timestamp = T0, Text = "exercise", DataSource = "aaps", LegacyId = "n-a" },
                 new Note { Timestamp = T0.AddSeconds(10), Text = "walk", DataSource = "loop", LegacyId = "n-b" },
-            },
+            }, WriteOrigin.Live,
             CancellationToken.None);
 
         await AssertOneCanonicalGroupAsync(tenant, 2, "note", ctx => ctx.Notes.AsNoTracking().CountAsync());
@@ -172,7 +173,7 @@ public class DedupParticipantGoldenTests
             {
                 new BolusCalculation { Timestamp = T0, CarbInput = 40, DataSource = "aaps", LegacyId = "bc-a" },
                 new BolusCalculation { Timestamp = T0.AddSeconds(10), CarbInput = 40.5, DataSource = "loop", LegacyId = "bc-b" },
-            },
+            }, WriteOrigin.Live,
             CancellationToken.None);
 
         await AssertOneCanonicalGroupAsync(tenant, 2, "boluscalculation", ctx => ctx.BolusCalculations.AsNoTracking().CountAsync());
@@ -191,7 +192,7 @@ public class DedupParticipantGoldenTests
             {
                 new TempBasal { StartTimestamp = T0, Rate = 0.80, Origin = TempBasalOrigin.Algorithm, DataSource = "aaps", LegacyId = "tb-a" },
                 new TempBasal { StartTimestamp = T0.AddSeconds(10), Rate = 0.82, Origin = TempBasalOrigin.Algorithm, DataSource = "loop", LegacyId = "tb-b" },
-            },
+            }, WriteOrigin.Live,
             CancellationToken.None);
 
         await AssertOneCanonicalGroupAsync(tenant, 2, "tempbasal", ctx => ctx.TempBasals.AsNoTracking().CountAsync());

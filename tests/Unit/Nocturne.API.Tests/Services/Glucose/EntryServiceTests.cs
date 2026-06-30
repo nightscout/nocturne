@@ -26,7 +26,7 @@ public class EntryServiceTests
     public EntryServiceTests()
     {
         _decomposer
-            .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult());
 
         _sut = new EntryService(
@@ -355,7 +355,7 @@ public class EntryServiceTests
         // Assert
         Assert.Equal(2, result.Count());
         _decomposer.Verify(
-            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
+            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Exactly(2));
         // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -376,7 +376,7 @@ public class EntryServiceTests
         };
 
         _decomposer
-            .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Database error"));
 
         // Act & Assert
@@ -408,7 +408,7 @@ public class EntryServiceTests
         // Assert
         Assert.Single(result);
         _decomposer.Verify(
-            x => x.DecomposeAsync(It.Is<Entry>(e => e.Type == type), It.IsAny<CancellationToken>()),
+            x => x.DecomposeAsync(It.Is<Entry>(e => e.Type == type), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -431,7 +431,7 @@ public class EntryServiceTests
         // Assert — unknown types are silently filtered out
         Assert.Empty(result);
         _decomposer.Verify(
-            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
+            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -453,7 +453,7 @@ public class EntryServiceTests
         // Assert
         Assert.Equal(2, result.Count());
         _decomposer.Verify(
-            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
+            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Exactly(2));
     }
 
@@ -483,7 +483,7 @@ public class EntryServiceTests
         Assert.Equal(125, result.Sgv);
         // Decomposer performs idempotent upsert via LegacyId
         _decomposer.Verify(
-            x => x.DecomposeAsync(It.Is<Entry>(e => e.Id == entryId && e.Sgv == 125), It.IsAny<CancellationToken>()),
+            x => x.DecomposeAsync(It.Is<Entry>(e => e.Id == entryId && e.Sgv == 125), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
         // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -510,7 +510,7 @@ public class EntryServiceTests
         // Assert
         Assert.Null(result);
         _decomposer.Verify(
-            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<CancellationToken>()),
+            x => x.DecomposeAsync(It.IsAny<Entry>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
         _events.Verify(
@@ -535,7 +535,7 @@ public class EntryServiceTests
             .Setup(x => x.GetByIdAsync(entryId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(entryToDelete);
         _decomposer
-            .Setup(x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<CancellationToken>()))
+            .Setup(x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
         // Act
@@ -544,7 +544,7 @@ public class EntryServiceTests
         // Assert
         Assert.True(result);
         _decomposer.Verify(
-            x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<CancellationToken>()),
+            x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
         // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -565,7 +565,7 @@ public class EntryServiceTests
             .Setup(x => x.GetByIdAsync(entryId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((Entry?)null);
         _decomposer
-            .Setup(x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<CancellationToken>()))
+            .Setup(x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
         // Act
@@ -574,7 +574,7 @@ public class EntryServiceTests
         // Assert
         Assert.False(result);
         _decomposer.Verify(
-            x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<CancellationToken>()),
+            x => x.DeleteByLegacyIdAsync(entryId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
         _events.Verify(
@@ -595,7 +595,7 @@ public class EntryServiceTests
         var find = "{\"type\":\"sgv\"}";
 
         _decomposer
-            .Setup(x => x.BulkDeleteAsync(find, It.IsAny<CancellationToken>()))
+            .Setup(x => x.BulkDeleteAsync(find, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(5L);
 
         // Act
@@ -603,7 +603,7 @@ public class EntryServiceTests
 
         // Assert
         Assert.Equal(5, result);
-        _decomposer.Verify(x => x.BulkDeleteAsync(find, It.IsAny<CancellationToken>()), Times.Once);
+        _decomposer.Verify(x => x.BulkDeleteAsync(find, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
         // Cache invalidation is handled by the EventSink, not the service
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
         _events.Verify(
@@ -620,7 +620,7 @@ public class EntryServiceTests
         var find = "{\"type\":\"nonexistent\"}";
 
         _decomposer
-            .Setup(x => x.BulkDeleteAsync(find, It.IsAny<CancellationToken>()))
+            .Setup(x => x.BulkDeleteAsync(find, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0L);
 
         // Act
@@ -641,7 +641,7 @@ public class EntryServiceTests
     {
         // Arrange
         _decomposer
-            .Setup(x => x.BulkDeleteAsync(null, It.IsAny<CancellationToken>()))
+            .Setup(x => x.BulkDeleteAsync(null, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(3L);
 
         // Act
@@ -649,7 +649,7 @@ public class EntryServiceTests
 
         // Assert
         Assert.Equal(3, result);
-        _decomposer.Verify(x => x.BulkDeleteAsync(null, It.IsAny<CancellationToken>()), Times.Once);
+        _decomposer.Verify(x => x.BulkDeleteAsync(null, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     #endregion

@@ -183,7 +183,7 @@ public class EntryService : IEntryService
 
         foreach (var entry in validEntries)
         {
-            await _decomposer.DecomposeAsync(entry, cancellationToken);
+            await _decomposer.DecomposeAsync(entry, WriteOrigin.Live, cancellationToken);
         }
 
         await _events.OnCreatedAsync(validEntries, cancellationToken);
@@ -207,7 +207,7 @@ public class EntryService : IEntryService
 
         // Ensure the entry carries the correct ID for LegacyId-based upsert
         entry.Id = id;
-        await _decomposer.DecomposeAsync(entry, cancellationToken);
+        await _decomposer.DecomposeAsync(entry, WriteOrigin.Live, cancellationToken);
 
         await _events.OnUpdatedAsync(entry, cancellationToken);
 
@@ -224,7 +224,7 @@ public class EntryService : IEntryService
         CancellationToken cancellationToken = default)
     {
         var entryToDelete = await _store.GetByIdAsync(id, cancellationToken);
-        var deletedCount = await _decomposer.DeleteByLegacyIdAsync(id, cancellationToken);
+        var deletedCount = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
 
         var deleted = deletedCount > 0;
         if (deleted)
@@ -241,7 +241,7 @@ public class EntryService : IEntryService
         string? find = null,
         CancellationToken cancellationToken = default)
     {
-        var deletedCount = await _decomposer.BulkDeleteAsync(find, cancellationToken);
+        var deletedCount = await _decomposer.BulkDeleteAsync(find, WriteOrigin.Live, cancellationToken);
 
         await _events.OnBulkDeletedAsync(deletedCount, cancellationToken);
 
