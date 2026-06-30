@@ -20,16 +20,11 @@ internal static class V4MaterialChange
     /// <summary>True if the tracked entity has at least one material (non-PK, non-[AuditIgnored]) modified property.</summary>
     public static bool HasMaterialChange(EntityEntry entry)
     {
-        foreach (var prop in entry.Properties)
-        {
-            if (!prop.IsModified || prop.Metadata.IsPrimaryKey())
-                continue;
-            if (IsAuditIgnored(entry.Entity.GetType(), prop.Metadata.Name))
-                continue;
-            return true;
-        }
-
-        return false;
+        var entityType = entry.Entity.GetType();
+        return entry.Properties.Any(prop =>
+            prop.IsModified
+            && !prop.Metadata.IsPrimaryKey()
+            && !IsAuditIgnored(entityType, prop.Metadata.Name));
     }
 
     private static bool IsAuditIgnored(Type entityType, string propertyName)

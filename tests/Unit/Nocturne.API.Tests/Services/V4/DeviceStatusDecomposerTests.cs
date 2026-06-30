@@ -1956,7 +1956,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         var ds = JsonSerializer.Deserialize<DeviceStatus>(json)!;
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert — configuration should end up in extras
         var extrasEntities = _context.DeviceStatusExtras.ToList();
@@ -1986,7 +1986,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var extrasEntities = _context.DeviceStatusExtras.ToList();
@@ -2008,7 +2008,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var extrasEntities = _context.DeviceStatusExtras.ToList();
@@ -2040,7 +2040,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert — no extras record should be created
         var extrasEntities = _context.DeviceStatusExtras.ToList();
@@ -2063,7 +2063,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         var ds = JsonSerializer.Deserialize<DeviceStatus>(json)!;
 
         // Act
-        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
 
         // Assert
         var extrasEntities = _context.DeviceStatusExtras.ToList();

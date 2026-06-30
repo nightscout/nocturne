@@ -262,7 +262,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(statuses, WriteOrigin.Live);
+        await _decomposer.DecomposeBatchAsync(statuses, WriteOrigin.Live);
 
         // Assert
         _extrasRepoMock.Verify(
