@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
@@ -89,12 +90,19 @@ public class V4GoldenFixture : IAsyncLifetime
         // the real chokepoint fires into BroadcastCapture (additive — existing goldens ignore it).
         services.AddSingleton<BroadcastCapture>();
         services.AddScoped(typeof(IV4RecordBroadcaster<>), typeof(CapturingV4RecordBroadcaster<>));
+        // Capturing legacy-Entry sink: the glucose repos resolve the optional IDataEventSink<Entry>, so the
+        // chokepoint's entries projection fires into EntryCapture (additive — non-glucose goldens ignore it).
+        services.AddSingleton<EntryCapture>();
+        services.AddScoped<IDataEventSink<Entry>>(sp => new CapturingEntrySink(sp.GetRequiredService<EntryCapture>()));
         RegisterV4Repositories(services);
         _provider = services.BuildServiceProvider();
     }
 
     /// <summary>The shared broadcast collector recording every chokepoint fan-out across all V4 repos.</summary>
     public BroadcastCapture Capture => _provider!.GetRequiredService<BroadcastCapture>();
+
+    /// <summary>The shared legacy-Entry projection collector recording the glucose-family chokepoint's entries fan-out.</summary>
+    public EntryCapture EntryCapture => _provider!.GetRequiredService<EntryCapture>();
 
     /// <summary>
     /// Registers the V4 record repositories under test. In production these are registered by the API
