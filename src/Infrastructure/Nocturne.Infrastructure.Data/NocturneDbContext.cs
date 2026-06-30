@@ -517,6 +517,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<DndWindowEntity> DndWindows { get; set; }
 
     /// <summary>
+    /// Gets or sets the ClientDevices table — registered app installs (Prelude, Companion) that can
+    /// be alert-engine actuation targets, with the capabilities each advertises.
+    /// </summary>
+    public DbSet<ClientDeviceEntity> ClientDevices { get; set; }
+
+    /// <summary>
     /// Gets or sets the ChatIdentityDirectory table — global routing for chat platform identities to tenant+user.
     /// </summary>
     public DbSet<ChatIdentityDirectoryEntry> ChatIdentityDirectory { get; set; }
@@ -598,6 +604,26 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
     {
+        // Client device indexes
+        // Unique per install within a tenant — the upsert key.
+        modelBuilder
+            .Entity<ClientDeviceEntity>()
+            .HasIndex(e => new { e.TenantId, e.InstallId })
+            .HasDatabaseName("ix_client_devices_tenant_install")
+            .IsUnique();
+
+        // Fan-out resolution: "all devices of this kind in the tenant".
+        modelBuilder
+            .Entity<ClientDeviceEntity>()
+            .HasIndex(e => new { e.TenantId, e.Kind })
+            .HasDatabaseName("ix_client_devices_tenant_kind");
+
+        // Subject-scoped intent delivery and listing a user's own devices.
+        modelBuilder
+            .Entity<ClientDeviceEntity>()
+            .HasIndex(e => new { e.TenantId, e.SubjectId })
+            .HasDatabaseName("ix_client_devices_tenant_subject");
+
         // Food indexes - optimized for common queries
         modelBuilder.Entity<FoodEntity>().HasIndex(f => f.Name).HasDatabaseName("ix_foods_name");
 
@@ -2907,6 +2933,25 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(e => e.IsEnabled).HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+        });
+
+        // ClientDeviceEntity — registered app installs (Prelude, Companion) as actuation targets
+        modelBuilder.Entity<ClientDeviceEntity>(entity =>
+        {
+            entity.ToTable("client_devices");
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.Property(e => e.Capabilities).HasColumnType("text[]");
+            entity.Property(e => e.LastSeenAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Revoke-cascade: removing the OAuth grant removes the device. The FK is nullable and
+            // unpopulated until the device-management flow resolves the grant, so existing rows are
+            // unaffected.
+            entity.HasOne<OAuthGrantEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.GrantId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // AlertConditionTimerEntity

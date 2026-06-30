@@ -67,6 +67,18 @@ public static class OAuthScopes
     /// <summary>Read and write access to sharing/follower configuration.</summary>
     public const string SharingReadWrite = "sharing.readwrite";
 
+    // Device actuation scopes
+    //
+    // These are capability grants, not data-access scopes: they authorize the alert engine to
+    // drive a registered client device (Prelude, the desktop Companion). They have no read/write
+    // tiers and do not imply one another — a device that should both notify and actuate hardware
+    // is granted both.
+
+    /// <summary>Allows the alert engine to push notifications to a registered client device.</summary>
+    public const string DeviceNotify = "device.notify";
+    /// <summary>Allows the alert engine to actuate hardware on a registered client device (torch, vibration, sound, full-screen).</summary>
+    public const string DeviceActuate = "device.actuate";
+
     // Full access (includes delete)
 
     /// <summary>Superuser scope granting all permissions including delete.</summary>
@@ -103,6 +115,8 @@ public static class OAuthScopes
         FoodRead,
         FoodReadWrite,
         SharingReadWrite,
+        DeviceNotify,
+        DeviceActuate,
     };
 
     /// <summary>

@@ -689,6 +689,11 @@ public static class ServiceRegistrationExtensions
         var templateRegistry = new NotificationTemplateRegistry().AddBuiltInTemplates();
         services.AddSingleton<INotificationTemplateRegistry>(templateRegistry);
 
+        // Client device registry (Prelude/Companion actuation targets)
+        services.AddScoped<
+            Nocturne.Core.Contracts.ClientDevices.IClientDeviceService,
+            Nocturne.API.Services.ClientDevices.ClientDeviceService>();
+
         // Notification action handlers (scoped -- they may depend on scoped services)
         services.AddScoped<INotificationActionHandler, MealMatchActionHandler>();
         services.AddScoped<INotificationActionHandler, TrackerSuggestionActionHandler>();
