@@ -36,11 +36,6 @@ public interface ITreatmentPublisher
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default);
 
-    Task<bool> PublishDecompositionBatchesAsync(
-        IEnumerable<DecompositionBatch> batches,
-        string source,
-        WriteOrigin origin, CancellationToken cancellationToken = default);
-
     Task<bool> PublishBasalInjectionsAsync(
         IEnumerable<BasalInjection> records,
         string source,

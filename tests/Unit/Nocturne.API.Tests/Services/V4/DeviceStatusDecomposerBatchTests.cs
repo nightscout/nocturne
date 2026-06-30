@@ -54,7 +54,6 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
             .ReturnsAsync((IEnumerable<V4Models.DeviceStatusExtras> records, WriteOrigin origin, CancellationToken _) => records);
 
         _decomposer = new DeviceStatusDecomposer(
-            _context,
             _apsRepoMock.Object,
             _pumpRepoMock.Object,
             _uploaderRepoMock.Object,
@@ -163,9 +162,9 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeBatchAsync_CreatesDecompositionBatch()
+    public async Task DecomposeBatchAsync_ProducedRecordsShareCorrelationId()
     {
-        // Arrange
+        // Arrange — one device status producing multiple sibling snapshots
         var statuses = new List<DeviceStatus>
         {
             new()
@@ -173,19 +172,19 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
                 Id = "ds-batch-1",
                 Mills = 1700000000000,
                 Device = "openaps://Samsung",
-                Pump = new PumpStatus { Reservoir = 100.0 }
+                Pump = new PumpStatus { Reservoir = 100.0 },
+                Uploader = new UploaderStatus { Battery = 70 }
             }
         };
 
         // Act
         var result = await _decomposer.DecomposeBatchAsync(statuses, WriteOrigin.Live);
 
-        // Assert
-        var batch = _context.DecompositionBatches.SingleOrDefault(b => b.Id == result.CorrelationId);
-        batch.Should().NotBeNull();
-        batch!.Source.Should().Be("device_status_decomposer_batch");
-        batch.SourceRecordId.Should().BeNull();
-        batch.TenantId.Should().Be(_context.TenantId);
+        // Assert — all produced snapshots share a single non-empty correlation id
+        result.CorrelationId.Should().NotBeNull().And.NotBe(Guid.Empty);
+        result.CreatedRecords.OfType<V4Models.IV4Record>()
+            .Should().NotBeEmpty()
+            .And.OnlyContain(r => r.CorrelationId == result.CorrelationId);
     }
 
     [Fact]

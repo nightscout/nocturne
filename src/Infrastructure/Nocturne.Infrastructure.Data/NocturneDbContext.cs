@@ -385,11 +385,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     public DbSet<TempBasalEntity> TempBasals { get; set; }
 
-    /// <summary>
-    /// Gets or sets the DecompositionBatches table for grouping V4 records decomposed from the same source
-    /// </summary>
-    public DbSet<DecompositionBatchEntity> DecompositionBatches { get; set; }
-
     // V4 Profile Decomposition Models
 
     /// <summary>
@@ -2157,10 +2152,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<UploaderSnapshotEntity>()
             .Property(e => e.Id)
             .HasValueGenerator<GuidV7ValueGenerator>();
-        modelBuilder
-            .Entity<DecompositionBatchEntity>()
-            .Property(e => e.Id)
-            .HasValueGenerator<GuidV7ValueGenerator>();
 
         // V4 Profile Decomposition UUID generators
         modelBuilder
@@ -2307,97 +2298,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .WithMany()
             .HasForeignKey(e => e.DeviceId)
             .OnDelete(DeleteBehavior.SetNull);
-
-        // DecompositionBatch → V4 entity cascade relationships (CorrelationId = batch PK)
-        modelBuilder.Entity<BolusEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<CarbIntakeEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<BGCheckEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<NoteEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<DeviceEventEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<BolusCalculationEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<TempBasalEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<SensorGlucoseEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<MeterGlucoseEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<CalibrationEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<TherapySettingsEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<BasalScheduleEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<CarbRatioScheduleEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<SensitivityScheduleEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<TargetRangeScheduleEntity>()
-            .HasOne<DecompositionBatchEntity>()
-            .WithMany()
-            .HasForeignKey(e => e.CorrelationId)
-            .OnDelete(DeleteBehavior.Cascade);
 
         // Configure automatic timestamp updates
         modelBuilder

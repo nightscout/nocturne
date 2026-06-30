@@ -38,7 +38,6 @@ public class ProfileDecomposerBatchTests : IDisposable
         SetupBulkCreateReturnsInput(_targetRangeScheduleRepoMock);
 
         _decomposer = new ProfileDecomposer(
-            _context,
             _therapySettingsRepoMock.Object,
             _basalScheduleRepoMock.Object,
             _carbRatioScheduleRepoMock.Object,
@@ -162,11 +161,11 @@ public class ProfileDecomposerBatchTests : IDisposable
                 It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
-        // A DecompositionBatchEntity was persisted
-        var batch = _context.DecompositionBatches.SingleOrDefault(b => b.Id == result.CorrelationId);
-        batch.Should().NotBeNull();
-        batch!.Source.Should().Be("profile_decomposer_batch");
-        batch.TenantId.Should().Be(_context.TenantId);
+        // All produced records share a single non-empty correlation id
+        result.CorrelationId.Should().NotBeNull().And.NotBe(Guid.Empty);
+        result.CreatedRecords.OfType<IV4Record>()
+            .Should().NotBeEmpty()
+            .And.OnlyContain(r => r.CorrelationId == result.CorrelationId);
     }
 
     [Fact]

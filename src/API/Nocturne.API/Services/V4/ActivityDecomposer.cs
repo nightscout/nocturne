@@ -77,17 +77,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         WriteOrigin origin, CancellationToken ct = default
     )
     {
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "activity_decomposer",
-            SourceRecordId = activity.Id,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
-        var result = new DecompositionResult { CorrelationId = batch.Id };
+        var result = new DecompositionResult { CorrelationId = Guid.CreateVersion7() };
 
         if (IsHeartRate(activity))
         {
@@ -115,17 +105,7 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         if (activities.Count == 0)
             return new DecompositionResult();
 
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "activity_decomposer_batch",
-            SourceRecordId = null,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
-        var result = new DecompositionResult { CorrelationId = batch.Id };
+        var result = new DecompositionResult { CorrelationId = Guid.CreateVersion7() };
 
         var heartRateList = new List<HeartRate>();
         var stepCountList = new List<StepCount>();

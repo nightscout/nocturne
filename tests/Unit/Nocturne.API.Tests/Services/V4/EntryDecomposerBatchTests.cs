@@ -124,23 +124,23 @@ public class EntryDecomposerBatchTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeBatchAsync_CreatesDecompositionBatch()
+    public async Task DecomposeBatchAsync_ProducedRecordsShareCorrelationId()
     {
-        // Arrange
+        // Arrange — multiple entries decomposed in one call
         var entries = new List<Entry>
         {
             new() { Id = "sgv1", Type = "sgv", Mills = 1700000000000, Sgv = 100.0 },
+            new() { Id = "sgv2", Type = "sgv", Mills = 1700000001000, Sgv = 110.0 },
         };
 
         // Act
         var result = await _decomposer.DecomposeBatchAsync(entries, WriteOrigin.Live);
 
-        // Assert — a DecompositionBatchEntity was persisted
-        var batch = _context.DecompositionBatches.SingleOrDefault(b => b.Id == result.CorrelationId);
-        batch.Should().NotBeNull();
-        batch!.Source.Should().Be("entry_decomposer_batch");
-        batch.SourceRecordId.Should().BeNull();
-        batch.TenantId.Should().Be(_context.TenantId);
+        // Assert — all produced records share a single non-empty correlation id
+        result.CorrelationId.Should().NotBeNull().And.NotBe(Guid.Empty);
+        result.CreatedRecords.OfType<IV4Record>()
+            .Should().NotBeEmpty()
+            .And.OnlyContain(r => r.CorrelationId == result.CorrelationId);
     }
 
     [Fact]

@@ -306,41 +306,6 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         }
     }
 
-    public async Task<bool> PublishDecompositionBatchesAsync(
-        IEnumerable<DecompositionBatch> batches,
-        string source,
-        WriteOrigin origin, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var batchList = batches.ToList();
-            if (batchList.Count == 0) return true;
-
-            await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
-            foreach (var batch in batchList)
-            {
-                ctx.DecompositionBatches.Add(new DecompositionBatchEntity
-                {
-                    Id = batch.Id,
-                    TenantId = ctx.TenantId,
-                    Source = batch.Source,
-                    SourceRecordId = batch.SourceRecordId,
-                    CreatedAt = batch.CreatedAt,
-                });
-            }
-
-            await ctx.SaveChangesAsync(cancellationToken);
-            _logger.LogDebug("Published {Count} DecompositionBatch records for {Source}", batchList.Count, source);
-            return true;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish DecompositionBatch records for {Source}", source);
-            return false;
-        }
-    }
-
     public async Task<DateTime?> GetLatestTreatmentTimestampAsync(
         string source,
         CancellationToken cancellationToken = default)

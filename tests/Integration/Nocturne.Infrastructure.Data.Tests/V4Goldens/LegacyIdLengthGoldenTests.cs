@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 
@@ -43,7 +44,7 @@ public class LegacyIdLengthGoldenTests
             Origin = TempBasalOrigin.Manual,
             DataSource = "loop",
             LegacyId = LongLegacyId,
-        }, CancellationToken.None);
+        }, WriteOrigin.Live, CancellationToken.None);
 
         var fetched = await repo.GetByLegacyIdAsync(LongLegacyId, CancellationToken.None);
         fetched.Should().NotBeNull("an over-64-char legacy id must persist, not overflow the column");

@@ -289,23 +289,22 @@ public class TreatmentDecomposerBatchTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeBatchAsync_CreatesDecompositionBatch()
+    public async Task DecomposeBatchAsync_ProducedRecordsShareCorrelationId()
     {
-        // Arrange
+        // Arrange — one treatment that produces multiple sibling records (bolus + carb)
         var treatments = new List<Treatment>
         {
-            new() { Id = "bolus-1", EventType = "Correction Bolus", Mills = 1700000000000, Insulin = 1.0 },
+            new() { Id = "meal-1", EventType = "Meal Bolus", Mills = 1700000000000, Insulin = 5.0, Carbs = 45 },
         };
 
         // Act
         var result = await _decomposer.DecomposeBatchAsync(treatments, WriteOrigin.Live);
 
-        // Assert — a DecompositionBatchEntity was persisted
-        var batch = _context.DecompositionBatches.SingleOrDefault(b => b.Id == result.CorrelationId);
-        batch.Should().NotBeNull();
-        batch!.Source.Should().Be("treatment_decomposer_batch");
-        batch.SourceRecordId.Should().BeNull();
-        batch.TenantId.Should().Be(_context.TenantId);
+        // Assert — all sibling records share a single non-empty correlation id
+        result.CorrelationId.Should().NotBeNull().And.NotBe(Guid.Empty);
+        result.CreatedRecords.OfType<V4Models.IV4Record>()
+            .Should().NotBeEmpty()
+            .And.OnlyContain(r => r.CorrelationId == result.CorrelationId);
     }
 
     [Fact]
