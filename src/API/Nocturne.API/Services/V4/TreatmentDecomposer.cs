@@ -176,7 +176,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
 
         var hash = System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(canonical));
-        // "syn-" marker + 60 hex chars fits the 64-char legacy_id column.
+        // "syn-" marker + 60 hex chars keeps the synthetic id compact (64 chars).
         return "syn-" + Convert.ToHexStringLower(hash)[..60];
 
         static string Fmt(double? value) =>
