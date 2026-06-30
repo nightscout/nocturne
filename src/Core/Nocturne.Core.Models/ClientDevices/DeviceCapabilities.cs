@@ -155,4 +155,24 @@ public static class DeviceCapabilities
 
         return [];
     }
+
+    /// <summary>
+    /// Project the registry into the static catalog the rule-builder consumes: the known kinds and,
+    /// per capability, its label, required scope, allowed kinds, and whether it is a hardware actuator
+    /// (i.e. gated on <see cref="OAuthScopes.DeviceActuate"/>).
+    /// </summary>
+    public static DeviceCapabilityCatalog BuildCatalog() => new()
+    {
+        Kinds = [.. DeviceKinds.All],
+        Capabilities = Registry.Values
+            .Select(c => new DeviceCapabilityInfo
+            {
+                Key = c.Key,
+                Label = c.Label,
+                RequiredScope = c.RequiredScope,
+                Kinds = [.. c.Kinds],
+                IsHardware = c.RequiredScope == OAuthScopes.DeviceActuate,
+            })
+            .ToList(),
+    };
 }

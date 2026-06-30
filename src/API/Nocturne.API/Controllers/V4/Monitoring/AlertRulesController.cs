@@ -7,6 +7,7 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
@@ -112,6 +113,9 @@ public class AlertRulesController : ControllerBase
         if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
             return badRequest;
 
+        if (RejectInvalidDeviceActionChannels(request.Channels) is { } badChannel)
+            return badChannel;
+
         // No cycle detection on create: the new id is server-generated, so the proposed tree
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
         await using var db = await _contextFactory.CreateAsync(ct);
@@ -179,6 +183,9 @@ public class AlertRulesController : ControllerBase
     {
         if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
             return badRequest;
+
+        if (RejectInvalidDeviceActionChannels(request.Channels) is { } badChannel)
+            return badChannel;
 
         await using var db = await _contextFactory.CreateAsync(ct);
 
@@ -396,6 +403,38 @@ public class AlertRulesController : ControllerBase
 
     #region Helpers
 
+    /// <summary>
+    /// Rejects a channel list that contains a <c>device_action</c> channel whose destination is not a
+    /// valid device kind — otherwise a typo'd kind would silently never actuate. Returns a 400
+    /// <see cref="BadRequestObjectResult"/> on the first offender, or null when all channels are valid.
+    /// </summary>
+    private ActionResult? RejectInvalidDeviceActionChannels(List<CreateAlertRuleChannelRequest>? channels)
+    {
+        if (channels is null)
+        {
+            return null;
+        }
+
+        foreach (var ch in channels)
+        {
+            if (ch.ChannelType != ChannelType.DeviceAction)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(ch.Destination) || !DeviceKinds.IsValid(ch.Destination))
+            {
+                return BadRequest(new
+                {
+                    error = $"A device_action channel's destination must be a device kind "
+                        + $"({string.Join(", ", DeviceKinds.All)}); got '{ch.Destination}'.",
+                });
+            }
+        }
+
+        return null;
+    }
+
     private static AlertRuleChannelEntity BuildChannel(
         CreateAlertRuleChannelRequest req, Guid ruleId, Guid tenantId, int sortOrder) => new()
     {
@@ -405,6 +444,7 @@ public class AlertRulesController : ControllerBase
         ChannelType = req.ChannelType,
         Destination = req.Destination ?? string.Empty,
         DestinationLabel = req.DestinationLabel,
+        Metadata = req.Metadata is not null ? JsonSerializer.Serialize(req.Metadata) : null,
         SortOrder = sortOrder,
         CreatedAt = DateTime.UtcNow,
     };
@@ -435,6 +475,7 @@ public class AlertRulesController : ControllerBase
                 Destination = c.Destination,
                 DestinationLabel = c.DestinationLabel,
                 SortOrder = c.SortOrder,
+                Metadata = c.Metadata is null ? null : DeserializeJson(c.Metadata),
             })
             .ToList(),
     };
@@ -582,6 +623,8 @@ public class AlertRuleChannelResponse
     public string Destination { get; set; } = string.Empty;
     public string? DestinationLabel { get; set; }
     public int SortOrder { get; set; }
+    /// <summary>Channel-specific config (e.g. device_action capabilities). Null when unset.</summary>
+    public object? Metadata { get; set; }
 }
 
 public class CreateAlertRuleRequest
@@ -619,9 +662,11 @@ public class UpdateAlertRuleRequest
 public class CreateAlertRuleChannelRequest
 {
     public ChannelType ChannelType { get; set; }
-    /// <summary>Channel-specific address: webhook URL, chat handle, etc. Empty for in-app/web-push.</summary>
+    /// <summary>Channel-specific address: webhook URL, chat handle, device kind for device_action, etc. Empty for in-app/web-push.</summary>
     public string? Destination { get; set; }
     public string? DestinationLabel { get; set; }
+    /// <summary>Channel-specific config, persisted as JSONB. For device_action: <c>{ "capabilities": ["notify", ...] }</c>.</summary>
+    public object? Metadata { get; set; }
 }
 
 /// <summary>

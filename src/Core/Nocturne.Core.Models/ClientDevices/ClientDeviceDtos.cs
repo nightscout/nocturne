@@ -56,3 +56,36 @@ public class ClientDeviceDto
     /// <summary>When the device was first registered.</summary>
     public DateTime CreatedAt { get; set; }
 }
+
+/// <summary>One capability in the actuation catalog, for the rule-builder's device-action picker.</summary>
+public class DeviceCapabilityInfo
+{
+    /// <summary>Wire identifier (e.g. <c>notify</c>, <c>torch</c>).</summary>
+    public string Key { get; set; } = string.Empty;
+
+    /// <summary>Factual, user-facing label.</summary>
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>OAuth scope the device's grant must hold (<c>device.notify</c> or <c>device.actuate</c>).</summary>
+    public string RequiredScope { get; set; } = string.Empty;
+
+    /// <summary>Device kinds that may expose this capability.</summary>
+    public List<string> Kinds { get; set; } = [];
+
+    /// <summary>Whether this is a hardware actuator (torch/vibrate/sound/full-screen) — the rule
+    /// builder warns when attaching one to a non-critical rule.</summary>
+    public bool IsHardware { get; set; }
+}
+
+/// <summary>
+/// The static actuation catalog: the known device kinds and the capabilities each can expose.
+/// Drives the rule-builder's device-action authoring UI from a single server-owned source.
+/// </summary>
+public class DeviceCapabilityCatalog
+{
+    /// <summary>Targetable device kinds (e.g. <c>companion</c>, <c>prelude</c>).</summary>
+    public List<string> Kinds { get; set; } = [];
+
+    /// <summary>The supported capabilities.</summary>
+    public List<DeviceCapabilityInfo> Capabilities { get; set; } = [];
+}

@@ -77,6 +77,17 @@ public class ClientDevicesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// The static device-action capability catalog (kinds + capabilities) that drives the rule
+    /// builder's device-action authoring UI. Static metadata, so no device scope is required.
+    /// </summary>
+    [HttpGet("capabilities")]
+    [RemoteQuery]
+    [Authorize]
+    [ProducesResponseType(typeof(DeviceCapabilityCatalog), StatusCodes.Status200OK)]
+    public ActionResult<DeviceCapabilityCatalog> GetCapabilityCatalog()
+        => Ok(DeviceCapabilities.BuildCatalog());
+
     /// <summary>Lists the devices registered by the current user, most-recently-seen first.</summary>
     [HttpGet]
     [RemoteQuery]
