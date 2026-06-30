@@ -460,8 +460,9 @@ public class EntryDecomposerTests : IDisposable
 
     #endregion
 
-    // Note: DeleteByLegacyIdAsync tests require PostgreSQL (ExecuteDeleteAsync is not
-    // supported by the EF Core in-memory provider) and belong in integration tests.
+    // Note: DeleteByLegacyIdAsync now routes through the per-repo chokepoint deletes, which use
+    // ExecuteUpdateAsync (unsupported by the EF Core in-memory provider), so these tests require
+    // PostgreSQL and belong in integration tests.
 
     #region Zero and Boundary Values
 

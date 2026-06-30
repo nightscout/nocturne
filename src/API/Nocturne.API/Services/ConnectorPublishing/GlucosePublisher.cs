@@ -5,7 +5,6 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -30,7 +29,6 @@ internal sealed class GlucosePublisher : IGlucosePublisher
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IAlertOrchestrator _alertOrchestrator;
     private readonly IAuditContext _auditContext;
-    private readonly IDataEventSink<SensorGlucose> _sensorGlucoseEvents;
     private readonly ILogger<GlucosePublisher> _logger;
 
     public GlucosePublisher(
@@ -41,7 +39,6 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         ITenantAccessor tenantAccessor,
         IAlertOrchestrator alertOrchestrator,
         IAuditContext auditContext,
-        IDataEventSink<SensorGlucose> sensorGlucoseEvents,
         ILogger<GlucosePublisher> logger)
     {
         _entryService = entryService ?? throw new ArgumentNullException(nameof(entryService));
@@ -51,7 +48,6 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
         _alertOrchestrator = alertOrchestrator ?? throw new ArgumentNullException(nameof(alertOrchestrator));
         _auditContext = auditContext;
-        _sensorGlucoseEvents = sensorGlucoseEvents ?? throw new ArgumentNullException(nameof(sensorGlucoseEvents));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -87,16 +83,10 @@ internal sealed class GlucosePublisher : IGlucosePublisher
             if (recordList.Count == 0) return true;
 
             await StampPatientDeviceIdsAsync(recordList, source, cancellationToken);
-            List<SensorGlucose> created;
             using (SystemAuditScope.Push(_auditContext))
-                created = (await _sensorGlucoseRepository.BulkCreateAsync(recordList, origin, cancellationToken)).ToList();
+                await _sensorGlucoseRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             await UpdateLastReadingAtAsync(cancellationToken);
             await EvaluateAlertsForSensorGlucoseAsync(recordList, cancellationToken);
-
-            // V4 writes bypass the legacy entry sink; emit the realtime "entries" create for the rows
-            // actually inserted. BulkCreateAsync dedupes by LegacyId, so connectors polling overlapping
-            // windows don't re-broadcast already-stored readings. Matches SensorGlucoseController.
-            await _sensorGlucoseEvents.OnCreatedAsync(created, cancellationToken);
 
             _logger.LogDebug("Published {Count} SensorGlucose records for {Source}", recordList.Count, source);
             return true;
