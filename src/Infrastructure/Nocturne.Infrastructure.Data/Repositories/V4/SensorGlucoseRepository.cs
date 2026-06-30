@@ -11,6 +11,7 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models.Projections;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -38,13 +39,17 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<SensorGlucoseRepository> logger,
-        IV4RecordBroadcaster<SensorGlucose>? broadcaster = null
+        IV4RecordBroadcaster<SensorGlucose>? broadcaster = null,
+        IDataEventSink<Entry>? entrySink = null
     )
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, broadcaster, entrySink)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;
     }
+
+    /// <inheritdoc />
+    protected override Entry? ProjectToLegacyEntry(SensorGlucose model) => EntryProjection.FromSensorGlucose(model);
 
     /// <inheritdoc />
     protected override SensorGlucoseEntity ToEntity(SensorGlucose model) => SensorGlucoseMapper.ToEntity(model);
