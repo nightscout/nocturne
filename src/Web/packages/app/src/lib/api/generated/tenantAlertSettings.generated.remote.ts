@@ -30,7 +30,8 @@ export const get = query(async () => {
   }
 });
 
-/** Replace the current tenant's alert settings. Upserts on first call. */
+/** Replace the current tenant's alert settings. Upserts on first call. The manual-DND toggle
+creates/clears the tenant's scope=all window; scheduled fields persist on the row. */
 export const update = command(UpdateTenantAlertSettingsRequestSchema, async (request) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {

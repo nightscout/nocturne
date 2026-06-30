@@ -445,7 +445,10 @@
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChannelsSection bind:channels={state.channels} />
+            <ChannelsSection
+              bind:channels={state.channels}
+              severity={state.severity}
+            />
           </CardContent>
         </Card>
 

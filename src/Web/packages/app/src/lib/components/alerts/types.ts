@@ -553,6 +553,9 @@ export function buildBody(state: RuleEditorState) {
 			channelType: c.channelType,
 			destination: c.destination || undefined,
 			destinationLabel: c.destinationLabel || undefined,
+			// device_action carries its selected capabilities as a JSON object;
+			// the server serialises it to JSONB. Omit for channels without metadata.
+			metadata: c.metadata ?? undefined,
 		})),
 	};
 }
@@ -613,6 +616,18 @@ export interface ChannelDef {
 	channelType: ChannelType;
 	destination: string;
 	destinationLabel?: string | null;
+	/**
+	 * Channel-specific config persisted as JSONB on the wire. For
+	 * <c>device_action</c> channels this is <c>{ capabilities: string[] }</c>;
+	 * other channel kinds leave it undefined. Sent as a JSON object — the server
+	 * serialises it; do not pre-stringify.
+	 */
+	metadata?: DeviceActionMetadata | null;
+}
+
+/** Metadata shape for a <c>device_action</c> channel. */
+export interface DeviceActionMetadata {
+	capabilities: string[];
 }
 
 export interface RuleEditorState {
@@ -710,6 +725,29 @@ function parseSnoozeConditions(snooze: unknown): ConditionNode[] {
 	return out;
 }
 
+/**
+ * Normalise a channel's wire `metadata` into the editor's {@link DeviceActionMetadata}.
+ * The server returns it as already-deserialised JSON (an object), but it may also
+ * arrive as a string on older rows; handle both and keep only a valid
+ * `capabilities` string array. Returns `null` when there's nothing usable.
+ */
+export function parseChannelMetadata(raw: unknown): DeviceActionMetadata | null {
+	if (raw === null || raw === undefined) return null;
+	let obj: unknown = raw;
+	if (typeof raw === "string") {
+		try {
+			obj = JSON.parse(raw);
+		} catch {
+			return null;
+		}
+	}
+	if (!obj || typeof obj !== "object") return null;
+	const caps = (obj as { capabilities?: unknown }).capabilities;
+	if (!Array.isArray(caps)) return null;
+	const capabilities = caps.filter((c): c is string => typeof c === "string");
+	return { capabilities };
+}
+
 export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
 	if (!r) return defaultState();
 
@@ -767,6 +805,7 @@ export function parseRule(r: AlertRuleResponse | null): RuleEditorState {
 				channelType: c.channelType ?? ChannelType.WebPush,
 				destination: c.destination ?? "",
 				destinationLabel: c.destinationLabel ?? "",
+				metadata: parseChannelMetadata(c.metadata),
 			}));
 
 	return {

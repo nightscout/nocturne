@@ -5,6 +5,10 @@
   import * as Popover from "$lib/components/ui/popover";
   import { Plus, Bell, X } from "lucide-svelte";
   import { getLinkedPlatforms } from "$api/generated/linkedPlatforms.generated.remote";
+  import { getCapabilityCatalog } from "$api/generated/clientDevices.generated.remote";
+  import { ChannelType, AlertRuleSeverity } from "$api-clients";
+  import type { DeviceCapabilityCatalog } from "$api-clients";
+  import DeviceChannelEditor from "./DeviceChannelEditor.svelte";
   import type { ChannelDef } from "./types";
   import {
     CHANNEL_META,
@@ -14,13 +18,23 @@
 
   interface Props {
     channels: ChannelDef[];
+    /** The rule's severity, forwarded to the device editor's hardware warning. */
+    severity?: AlertRuleSeverity;
   }
 
-  let { channels = $bindable() }: Props = $props();
+  let {
+    channels = $bindable(),
+    severity = AlertRuleSeverity.Warning,
+  }: Props = $props();
 
   const linkedPlatformsQuery = getLinkedPlatforms();
   const linkedPlatforms = $derived<string[]>(
     linkedPlatformsQuery.current?.platforms ?? [],
+  );
+
+  const catalogQuery = getCapabilityCatalog();
+  const catalog = $derived<DeviceCapabilityCatalog | null>(
+    catalogQuery.current ?? null,
   );
 
   function isLinked(opt: ChannelMetaEntry): boolean {
@@ -28,14 +42,29 @@
   }
 
   function addChannel(opt: ChannelMetaEntry): void {
+    const isDevice = opt.type === ChannelType.DeviceAction;
+    // Seed a device_action channel with the first catalog kind and a pre-checked
+    // `notify` capability where the kind exposes it. Other channels start blank.
+    const kind = isDevice ? (catalog?.kinds?.[0] ?? "") : "";
+    const metadata =
+      isDevice && kind
+        ? {
+            capabilities: (catalog?.capabilities ?? []).some(
+              (c) => c.key === "notify" && (c.kinds ?? []).includes(kind),
+            )
+              ? ["notify"]
+              : [],
+          }
+        : undefined;
     channels.push({
       _uid:
         typeof crypto !== "undefined" && "randomUUID" in crypto
           ? crypto.randomUUID()
           : Math.random().toString(36).slice(2),
       channelType: opt.type,
-      destination: "",
+      destination: kind,
       destinationLabel: "",
+      metadata,
     });
   }
 
@@ -91,34 +120,43 @@
             <X class="h-4 w-4" />
           </Button>
         </div>
-        {#if opt?.destinationRequired}
+        {#if opt?.isDeviceAction}
+          <DeviceChannelEditor
+            bind:channel={channels[i]}
+            {catalog}
+            {severity}
+            index={i}
+          />
+        {:else}
+          {#if opt?.destinationRequired}
+            <div class="space-y-1.5">
+              <Label class="text-xs" for="channel-dest-{i}">{opt.destinationLabel}</Label>
+              <Input
+                id="channel-dest-{i}"
+                type="text"
+                class="h-8 text-sm"
+                placeholder={opt.destinationPlaceholder}
+                value={ch.destination}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+                  channels[i].destination = e.currentTarget.value;
+                }}
+              />
+            </div>
+          {/if}
           <div class="space-y-1.5">
-            <Label class="text-xs" for="channel-dest-{i}">{opt.destinationLabel}</Label>
+            <Label class="text-xs" for="channel-label-{i}">Label (optional)</Label>
             <Input
-              id="channel-dest-{i}"
+              id="channel-label-{i}"
               type="text"
               class="h-8 text-sm"
-              placeholder={opt.destinationPlaceholder}
-              value={ch.destination}
+              placeholder="Family channel, work phone…"
+              value={ch.destinationLabel ?? ""}
               oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-                channels[i].destination = e.currentTarget.value;
+                channels[i].destinationLabel = e.currentTarget.value;
               }}
             />
           </div>
         {/if}
-        <div class="space-y-1.5">
-          <Label class="text-xs" for="channel-label-{i}">Label (optional)</Label>
-          <Input
-            id="channel-label-{i}"
-            type="text"
-            class="h-8 text-sm"
-            placeholder="Family channel, work phone…"
-            value={ch.destinationLabel ?? ""}
-            oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-              channels[i].destinationLabel = e.currentTarget.value;
-            }}
-          />
-        </div>
       </div>
     </div>
   {/each}

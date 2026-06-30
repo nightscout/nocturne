@@ -6,6 +6,7 @@ import {
 	nodeToApi,
 	parseRule,
 	buildBody,
+	parseChannelMetadata,
 } from "./types";
 
 describe("defaultClientConfig", () => {
@@ -315,5 +316,90 @@ describe("buildBody", () => {
 		const body = buildBody(state);
 		const json = JSON.stringify(body.channels);
 		expect(json).not.toContain("_uid");
+	});
+
+	it("serialises a device_action channel as {channelType, destination, metadata}", () => {
+		const state = parseRule({
+			name: "Test",
+			conditionType: "threshold",
+			conditionParams: { direction: "below", value: 70 },
+			channels: [
+				{
+					channelType: "device_action",
+					destination: "companion",
+					metadata: { capabilities: ["notify", "tray_flash"] },
+					sortOrder: 0,
+				},
+			],
+		} as never);
+		const body = buildBody(state);
+		const ch = body.channels[0];
+		expect(ch.channelType).toBe("device_action");
+		expect(ch.destination).toBe("companion");
+		// Metadata is a JSON object (not a pre-stringified string) — the server
+		// serialises it to JSONB.
+		expect(ch.metadata).toEqual({ capabilities: ["notify", "tray_flash"] });
+	});
+
+	it("omits metadata for channels without it", () => {
+		const state = parseRule({
+			name: "Test",
+			conditionType: "threshold",
+			conditionParams: { direction: "below", value: 70 },
+			channels: [{ channelType: "web_push", destination: "", sortOrder: 0 }],
+		} as never);
+		const body = buildBody(state);
+		expect(body.channels[0].metadata).toBeUndefined();
+	});
+});
+
+describe("parseChannelMetadata", () => {
+	it("returns null for null/undefined", () => {
+		expect(parseChannelMetadata(null)).toBeNull();
+		expect(parseChannelMetadata(undefined)).toBeNull();
+	});
+
+	it("reads capabilities from a deserialised object", () => {
+		expect(parseChannelMetadata({ capabilities: ["notify", "torch"] })).toEqual({
+			capabilities: ["notify", "torch"],
+		});
+	});
+
+	it("parses a JSON string form defensively", () => {
+		expect(
+			parseChannelMetadata('{"capabilities":["notify"]}'),
+		).toEqual({ capabilities: ["notify"] });
+	});
+
+	it("returns null for malformed input", () => {
+		expect(parseChannelMetadata("not json")).toBeNull();
+		expect(parseChannelMetadata({ capabilities: "nope" })).toBeNull();
+	});
+
+	it("drops non-string capability entries", () => {
+		expect(
+			parseChannelMetadata({ capabilities: ["notify", 5, null, "torch"] }),
+		).toEqual({ capabilities: ["notify", "torch"] });
+	});
+
+	it("round-trips a device_action channel through parseRule", () => {
+		const state = parseRule({
+			name: "Test",
+			conditionType: "threshold",
+			conditionParams: { direction: "below", value: 70 },
+			channels: [
+				{
+					channelType: "device_action",
+					destination: "companion",
+					metadata: { capabilities: ["notify"] },
+					sortOrder: 0,
+				},
+			],
+		} as never);
+		const device = state.channels.find(
+			(c) => c.channelType === "device_action",
+		);
+		expect(device?.destination).toBe("companion");
+		expect(device?.metadata).toEqual({ capabilities: ["notify"] });
 	});
 });
