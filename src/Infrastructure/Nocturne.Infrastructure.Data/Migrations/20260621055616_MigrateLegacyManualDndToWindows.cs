@@ -16,6 +16,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
             // Convert each tenant's currently-active manual DND into an all-window BEFORE
             // dropping the columns. dnd_windows is RLS-forced, so set the tenant context per
             // iteration (mirrors MigrateApiSecretsToDirectGrants) for the WITH CHECK to pass.
+            // The id is a UUIDv7 built inline (PG17 has no uuidv7()); created_at is the
+            // original manual start, not migration time — replay's receipt gate
+            // (DndWindowSnapshot.WasActiveAt requires created_at <= tick) must reproduce
+            // the suppression the live engine applied before the migration ran.
             migrationBuilder.Sql("""
                 DO $$
                 DECLARE
@@ -29,7 +33,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                             cleared_at, cleared_by, source, created_at
                         )
                         SELECT
-                            gen_random_uuid(),
+                            encode(
+                                set_bit(
+                                    set_bit(
+                                        overlay(uuid_send(gen_random_uuid())
+                                                placing substring(int8send((extract(epoch from clock_timestamp()) * 1000)::bigint) from 3)
+                                                from 1 for 6),
+                                        52, 1),
+                                    53, 1),
+                                'hex')::uuid,
                             s.tenant_id,
                             'all',
                             COALESCE(s.dnd_manual_started_at, now()),
@@ -37,7 +49,7 @@ namespace Nocturne.Infrastructure.Data.Migrations
                             NULL,
                             NULL,
                             'migrated:legacy-manual',
-                            now()
+                            COALESCE(s.dnd_manual_started_at, now())
                         FROM tenant_alert_settings s
                         WHERE s.tenant_id = r.id
                           AND s.dnd_manual_active = true
