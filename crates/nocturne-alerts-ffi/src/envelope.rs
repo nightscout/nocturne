@@ -20,8 +20,9 @@ use nocturne_alerts_core::excursion::{
     CloseReason, TrackerState, TrackerStateKind, TransitionType,
 };
 use nocturne_alerts_core::model::{
-    ALERT_CMP_OP_NAMES, ConditionKind, DAY_OF_WEEK_NAMES, GLUCOSE_BUCKET_NAMES, Node, PUMP_MODE_NAMES,
-    Payload, STATE_SPAN_CATEGORY_NAMES, TEMP_BASAL_METRIC_NAMES, default_payload, parse_payload,
+    ALERT_CMP_OP_NAMES, ConditionKind, DAY_OF_WEEK_NAMES, GLUCOSE_BUCKET_NAMES, Node,
+    PUMP_MODE_NAMES, Payload, STATE_SPAN_CATEGORY_NAMES, TEMP_BASAL_METRIC_NAMES, default_payload,
+    parse_payload,
 };
 use nocturne_alerts_core::paths::child_path;
 use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind, TimerStore};
@@ -657,7 +658,13 @@ fn describe_node(node: Option<&Node>, path: String, next_leaf_id: &mut i32) -> V
                 Some(p) => payload_json(p),
                 None => payload_json(&default_payload(k)),
             };
-            leaf_value(id, path, type_value, Value::String(k.wire().to_string()), params)
+            leaf_value(
+                id,
+                path,
+                type_value,
+                Value::String(k.wire().to_string()),
+                params,
+            )
         }
         None => leaf_value(id, path, type_value, Value::Null, Value::Null),
     }
