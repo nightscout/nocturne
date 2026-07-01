@@ -14,13 +14,15 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 /// <remarks>
 /// Idempotent and safe to run on every startup: only rows whose recomputed class differs from the
-/// stored one are written, so once the population is classified the scan writes nothing. The scan
-/// is per-tenant because <c>alert_rules</c> is RLS-scoped and the policy is fail-closed — a
-/// cross-tenant <c>IgnoreQueryFilters</c> read would be blocked, so we set the tenant context per
-/// iteration exactly like the sweep service does.
+/// stored one are written, so once the population is classified the scan writes nothing. Runs as a
+/// <see cref="BackgroundService"/> so the scan never gates host startup, reads only the columns
+/// the classifier needs (untracked projection), and writes via targeted
+/// <c>ExecuteUpdateAsync</c>. The scan is per-tenant because <c>alert_rules</c> is RLS-scoped and
+/// the policy is fail-closed — a cross-tenant <c>IgnoreQueryFilters</c> read would be blocked, so
+/// we set the tenant context per iteration exactly like the sweep service does.
 /// </remarks>
 /// <seealso cref="RuleScopeClassifier"/>
-public sealed class RuleScopeClassBackfillService : IHostedService
+public sealed class RuleScopeClassBackfillService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<RuleScopeClassBackfillService> _logger;
@@ -33,8 +35,11 @@ public sealed class RuleScopeClassBackfillService : IHostedService
         _logger = logger;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Detach from the sequential hosted-service startup chain before touching anything.
+        await Task.Yield();
+
         try
         {
             // Without the native engine every Classify falls back to Undirected, and the
@@ -53,41 +58,42 @@ public sealed class RuleScopeClassBackfillService : IHostedService
 
             // Tenants are not RLS-scoped, so this list read is safe without a tenant context.
             List<Guid> tenantIds;
-            await using (var lookup = await factory.CreateDbContextAsync(cancellationToken))
+            await using (var lookup = await factory.CreateDbContextAsync(stoppingToken))
             {
                 tenantIds = await lookup.Tenants
                     .AsNoTracking()
                     .Where(t => t.IsActive)
                     .Select(t => t.Id)
-                    .ToListAsync(cancellationToken);
+                    .ToListAsync(stoppingToken);
             }
 
             var updatedTotal = 0;
             foreach (var tenantId in tenantIds)
             {
-                await using var db = await factory.CreateDbContextAsync(cancellationToken);
+                await using var db = await factory.CreateDbContextAsync(stoppingToken);
                 db.TenantId = tenantId;
 
-                // Tracked (not AsNoTracking) so reclassified rows are persisted by SaveChanges.
+                // The classifier needs only the condition columns; project instead of
+                // materialising tracked entity graphs for every rule of every tenant.
                 var rules = await db.AlertRules
+                    .AsNoTracking()
                     .Where(r => r.TenantId == tenantId)
-                    .ToListAsync(cancellationToken);
+                    .Select(r => new { r.Id, r.ConditionType, r.ConditionParams, r.ScopeClass })
+                    .ToListAsync(stoppingToken);
 
-                var updated = 0;
-                foreach (var rule in rules)
-                {
-                    var computed = classifier.Classify(rule.ConditionType, rule.ConditionParams);
-                    if (rule.ScopeClass != computed)
-                    {
-                        rule.ScopeClass = computed;
-                        updated++;
-                    }
-                }
+                // Group reclassified rules so each distinct target class is one UPDATE.
+                var reclassified = rules
+                    .Select(r => (r.Id, Computed: classifier.Classify(r.ConditionType, r.ConditionParams), r.ScopeClass))
+                    .Where(r => r.ScopeClass != r.Computed)
+                    .GroupBy(r => r.Computed, r => r.Id);
 
-                if (updated > 0)
+                foreach (var group in reclassified)
                 {
-                    await db.SaveChangesAsync(cancellationToken);
-                    updatedTotal += updated;
+                    var ids = group.ToList();
+                    var scopeClass = group.Key;
+                    updatedTotal += await db.AlertRules
+                        .Where(r => ids.Contains(r.Id))
+                        .ExecuteUpdateAsync(s => s.SetProperty(r => r.ScopeClass, scopeClass), stoppingToken);
                 }
             }
 
@@ -99,11 +105,9 @@ public sealed class RuleScopeClassBackfillService : IHostedService
                     tenantIds.Count);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Error backfilling alert-rule scope classes");
         }
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
