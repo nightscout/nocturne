@@ -9,8 +9,15 @@ use serde::{Deserialize, Serialize};
 
 /// This app's device kind, per `DeviceKinds.Companion` server-side.
 pub const DEVICE_KIND: &str = "companion";
-/// Phase 1 advertises only `notify` (see `DeviceCapabilities.Notify`); `tray_flash` is a later phase.
+/// Show a native toast (`DeviceCapabilities.Notify`; requires the `device.notify` scope).
 pub const NOTIFY_CAPABILITY: &str = "notify";
+/// Flash the system tray icon (`DeviceCapabilities.TrayFlash`; requires the `device.actuate` scope).
+pub const TRAY_FLASH_CAPABILITY: &str = "tray_flash";
+
+/// Capabilities this device advertises on registration. The server narrows each intent's
+/// `capabilities` to the intersection of what the rule requested and what this set advertises, so
+/// advertising a capability is what enables actuating it. No local opt-in filtering yet (later phase).
+pub const ADVERTISED_CAPABILITIES: [&str; 2] = [NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY];
 
 /// Registration request body (camelCase to match `RegisterDeviceRequest`).
 #[derive(Serialize)]
@@ -43,6 +50,10 @@ pub struct DeviceActionIntent {
     pub rule_name: String,
     #[serde(default)]
     pub severity: String,
+    /// Capabilities the server narrowed to this device (rule request ∩ advertised). Drives which
+    /// actuations fire for the intent.
+    #[serde(default)]
+    pub capabilities: Vec<String>,
     #[serde(default)]
     pub acknowledged: bool,
     #[serde(default)]
@@ -56,10 +67,20 @@ fn default_intent() -> String {
 }
 
 impl DeviceActionIntent {
-    /// Whether this intent should currently drive a notification: it is in the `opened` phase and
-    /// not acknowledged. `resolved`/`acknowledged` phases and the `acknowledged` flag both withdraw.
+    /// Whether this intent should currently drive actuation: it is in the `opened` phase and not
+    /// acknowledged. `resolved`/`acknowledged` phases and the `acknowledged` flag both withdraw.
     pub fn is_active(&self) -> bool {
         self.intent == "opened" && !self.acknowledged
+    }
+
+    /// Whether this intent requests a native toast for this device.
+    pub fn wants_notify(&self) -> bool {
+        self.capabilities.iter().any(|c| c == NOTIFY_CAPABILITY)
+    }
+
+    /// Whether this intent requests a tray-icon flash for this device.
+    pub fn wants_tray_flash(&self) -> bool {
+        self.capabilities.iter().any(|c| c == TRAY_FLASH_CAPABILITY)
     }
 }
 
@@ -78,7 +99,7 @@ pub async fn register(
         install_id,
         kind: DEVICE_KIND,
         label,
-        capabilities: vec![NOTIFY_CAPABILITY],
+        capabilities: ADVERTISED_CAPABILITIES.to_vec(),
     };
 
     let resp = client
@@ -159,7 +180,7 @@ mod tests {
         let json = r#"[{
             "intent":"opened","excursionId":"11111111-1111-1111-1111-111111111111",
             "ruleName":"Low glucose","severity":"critical","targetKind":"companion",
-            "capabilities":["notify"],"acknowledged":false,
+            "capabilities":["notify","tray_flash"],"acknowledged":false,
             "startedAt":"2026-06-30T10:00:00Z"
         }]"#;
         let intents: Vec<DeviceActionIntent> = serde_json::from_str(json).unwrap();
@@ -170,6 +191,19 @@ mod tests {
         assert_eq!(i.severity, "critical");
         assert!(i.glucose_value.is_none());
         assert!(i.is_active());
+        assert!(i.wants_notify());
+        assert!(i.wants_tray_flash());
+    }
+
+    #[test]
+    fn capability_helpers_reflect_narrowed_set() {
+        let json = r#"{
+            "intent":"opened","excursionId":"33333333-3333-3333-3333-333333333333",
+            "severity":"warning","capabilities":["notify"],"acknowledged":false
+        }"#;
+        let i: DeviceActionIntent = serde_json::from_str(json).unwrap();
+        assert!(i.wants_notify());
+        assert!(!i.wants_tray_flash());
     }
 
     #[test]
@@ -192,6 +226,7 @@ mod tests {
             excursion_id: "x".into(),
             rule_name: String::new(),
             severity: "info".into(),
+            capabilities: vec![NOTIFY_CAPABILITY.into()],
             acknowledged: true,
             glucose_value: None,
             trend: None,

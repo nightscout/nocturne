@@ -1,12 +1,14 @@
 //! Device-action actuation loop: register, listen for `device_action` over SignalR, and reconcile
-//! against the active-intents snapshot to drive Windows toasts.
+//! against the active-intents snapshot to drive Windows toasts and tray-icon flashing.
 //!
 //! The active-intents snapshot is the source of truth, not the live event. A live `device_action`
-//! only triggers an immediate reconcile; the reconcile diffs the server's active set against an
-//! in-memory "currently actuating" set keyed on excursion id, so it is idempotent (a live event
-//! overlapping the periodic poll cannot double-toast) and self-healing (an alert closed while the
-//! companion was offline simply never appears, producing no toast). Acknowledged intents are
-//! skipped. Reconcile runs on connect, on every `device_action`, and on a ~30s interval.
+//! only triggers an immediate reconcile; the reconcile diffs the server's active set against
+//! in-memory per-capability "currently actuating" sets keyed on excursion id, so it is idempotent (a
+//! live event overlapping the periodic poll cannot double-actuate) and self-healing (an alert closed
+//! while the companion was offline simply never appears, producing nothing). Acknowledged intents are
+//! skipped. Each active intent actuates the subset of capabilities the server narrowed it to
+//! (`notify` → toast, `tray_flash` → flash), so an intent can drive both. Reconcile runs on connect,
+//! on every `device_action`, and on a ~30s interval.
 //!
 //! Transport is the hand-rolled `signalr` client; if a connection attempt fails the loop falls back
 //! to pure periodic reconcile until the next reconnect succeeds, so actuation degrades to polling
@@ -14,9 +16,21 @@
 
 use crate::client_devices::{self, DeviceActionIntent};
 use crate::toast::{self, AckContext};
+use crate::tray;
 use std::collections::HashSet;
 use std::time::Duration;
 use tokio::sync::mpsc;
+
+/// Per-capability dedup sets, keyed on excursion id, so each actuation fires once per excursion and
+/// stops when the excursion leaves the active set. Parallel sets (rather than one) because an intent
+/// may request only a subset of capabilities, and each is withdrawn independently.
+#[derive(Default)]
+struct ActuationState {
+    /// Excursions currently toasted (`notify`).
+    notified: HashSet<String>,
+    /// Excursions currently flashing the tray (`tray_flash`).
+    flashing: HashSet<String>,
+}
 
 /// Periodic reconcile cadence — the safety net under the live SignalR push.
 const RECONCILE_SECS: u64 = 30;
@@ -31,12 +45,11 @@ const RECONNECT_SECS: u64 = 30;
 /// Drives registration + actuation for as long as the app runs. Idles (retrying) while unlinked,
 /// resolving `(server, token)` via the same durable-OAuth path the glucose poller uses.
 pub async fn run(app: tauri::AppHandle) {
-    let _ = app; // reserved for future tray_flash actuation; toasts don't need the handle.
     let install_id = crate::install_id::get_or_create();
     let label = machine_label();
     let runtime = tokio::runtime::Handle::current();
 
-    let mut actuating: HashSet<String> = HashSet::new();
+    let mut state = ActuationState::default();
 
     loop {
         // Resolve a token; if unlinked or refresh fails, wait and retry (mirrors the glucose poller).
@@ -70,7 +83,7 @@ pub async fn run(app: tauri::AppHandle) {
         // device_action, and on the periodic tick. Returns when the session ages out or the
         // connection drops, so the outer loop re-resolves the token and re-registers. The pair just
         // resolved for registration is reused for this session's connect + first reconcile.
-        run_session(&client, (server, token), &device_id, &mut actuating, &runtime).await;
+        run_session(&app, &client, (server, token), &device_id, &mut state, &runtime).await;
     }
 }
 
@@ -79,10 +92,11 @@ pub async fn run(app: tauri::AppHandle) {
 /// `(server, token)` pair the outer loop resolved for registration; it is reused for this session's
 /// SignalR connect and first reconcile so a single refresh covers both.
 async fn run_session(
+    app: &tauri::AppHandle,
     client: &reqwest::Client,
     creds: (String, String),
     device_id: &str,
-    actuating: &mut HashSet<String>,
+    state: &mut ActuationState,
     runtime: &tokio::runtime::Handle,
 ) {
     // Channel the SignalR task uses to nudge a reconcile on each device_action.
@@ -104,7 +118,7 @@ async fn run_session(
         };
 
     // Reconcile immediately on (re)connect, reusing the token already resolved for `connect`.
-    reconcile_with(client, device_id, actuating, runtime, Some((server, token))).await;
+    reconcile_with(app, client, device_id, state, runtime, Some((server, token))).await;
 
     let mut ticker = tokio::time::interval(Duration::from_secs(RECONCILE_SECS));
     ticker.tick().await; // consume the immediate first tick.
@@ -115,12 +129,12 @@ async fn run_session(
     loop {
         tokio::select! {
             _ = ticker.tick() => {
-                reconcile(client, device_id, actuating, runtime).await;
+                reconcile(app, client, device_id, state, runtime).await;
             }
             nudge = rx.recv() => {
                 match nudge {
                     // A device_action arrived: reconcile now (idempotent against the periodic poll).
-                    Some(()) => reconcile(client, device_id, actuating, runtime).await,
+                    Some(()) => reconcile(app, client, device_id, state, runtime).await,
                     // SignalR task ended (disconnect). Leave the session to reconnect.
                     None => break,
                 }
@@ -163,22 +177,26 @@ fn spawn_signalr(
 /// `device_action` nudge so it rides the same refresh the poller does and picks up a re-link without
 /// restarting the session.
 async fn reconcile(
+    app: &tauri::AppHandle,
     client: &reqwest::Client,
     device_id: &str,
-    actuating: &mut HashSet<String>,
+    state: &mut ActuationState,
     runtime: &tokio::runtime::Handle,
 ) {
-    reconcile_with(client, device_id, actuating, runtime, None).await;
+    reconcile_with(app, client, device_id, state, runtime, None).await;
 }
 
-/// Diffs the server's active intents against `actuating` and drives toasts: new excursions toast,
-/// vanished excursions clear from the set. Idempotent — re-running with an unchanged server state is
-/// a no-op. Acknowledged intents are dropped (no re-alarm). `creds` reuses a token already resolved
-/// this cycle (the first reconcile of a session); `None` resolves a fresh one.
+/// Diffs the server's active intents against the actuation state and drives each capability: new
+/// excursions toast (`notify`) and/or start a tray flash (`tray_flash`); excursions that leave the
+/// active set have their toast dedup dropped and their flash stopped. Idempotent — re-running with an
+/// unchanged server state is a no-op. Acknowledged intents are dropped (no re-actuation). `creds`
+/// reuses a token already resolved this cycle (the first reconcile of a session); `None` resolves a
+/// fresh one.
 async fn reconcile_with(
+    app: &tauri::AppHandle,
     client: &reqwest::Client,
     device_id: &str,
-    actuating: &mut HashSet<String>,
+    state: &mut ActuationState,
     runtime: &tokio::runtime::Handle,
     creds: Option<(String, String)>,
 ) {
@@ -207,17 +225,28 @@ async fn reconcile_with(
         .map(|i| i.excursion_id.clone())
         .collect();
 
-    // New excursions: in the server's active set but not yet actuating → toast.
+    // New actuations per capability: fire once per excursion (HashSet::insert is the dedup gate).
     for intent in intents.iter().filter(|i| i.is_active()) {
-        if actuating.insert(intent.excursion_id.clone()) {
+        if intent.wants_notify() && state.notified.insert(intent.excursion_id.clone()) {
             show_toast(intent, &server, &token, runtime);
+        }
+        if intent.wants_tray_flash() && state.flashing.insert(intent.excursion_id.clone()) {
+            tray::set_tray_flash(app, &intent.excursion_id, true);
         }
     }
 
     // Withdrawn excursions: actuating locally but no longer active server-side → clear. Windows owns
-    // the toast lifecycle (the alarm scenario persists until dismissed); we drop our dedup record so
-    // a later re-open of the same excursion id toasts again.
-    actuating.retain(|id| active.contains(id));
+    // the toast lifecycle (the alarm scenario persists until dismissed), so notify only drops its
+    // dedup record; tray_flash is companion-owned, so each stopped excursion is told to stop and the
+    // tray restores the normal icon once the last flash clears. Dropping the dedup record lets a
+    // later re-open of the same excursion id actuate again.
+    state.notified.retain(|id| active.contains(id));
+
+    let stopped: Vec<String> = state.flashing.difference(&active).cloned().collect();
+    for id in stopped {
+        state.flashing.remove(&id);
+        tray::set_tray_flash(app, &id, false);
+    }
 }
 
 /// Shows the toast for `intent`, wiring the Acknowledge button to the ack endpoint.
@@ -256,68 +285,139 @@ fn http_client() -> Result<reqwest::Client, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client_devices::DeviceActionIntent;
+    use crate::client_devices::{DeviceActionIntent, NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY};
 
-    fn intent(id: &str, active: bool, acked: bool) -> DeviceActionIntent {
+    fn intent(id: &str, active: bool, acked: bool, caps: &[&str]) -> DeviceActionIntent {
         DeviceActionIntent {
             intent: if active { "opened".into() } else { "resolved".into() },
             excursion_id: id.into(),
             rule_name: "r".into(),
             severity: "warning".into(),
+            capabilities: caps.iter().map(|c| c.to_string()).collect(),
             acknowledged: acked,
             glucose_value: None,
             trend: None,
         }
     }
 
-    // Mirrors reconcile's set diff without the HTTP/toast side effects, to lock in the dedup rules.
-    fn diff(actuating: &mut HashSet<String>, intents: &[DeviceActionIntent]) -> Vec<String> {
+    /// What one reconcile actuated, mirroring `reconcile_with`'s per-capability diff without the HTTP
+    /// or OS side effects — the pure dedup logic under test.
+    #[derive(Default, Debug, PartialEq, Eq)]
+    struct Effects {
+        toasted: Vec<String>,
+        flash_started: Vec<String>,
+        flash_stopped: Vec<String>,
+    }
+
+    fn reconcile_effects(state: &mut ActuationState, intents: &[DeviceActionIntent]) -> Effects {
         let active: HashSet<String> = intents
             .iter()
             .filter(|i| i.is_active())
             .map(|i| i.excursion_id.clone())
             .collect();
-        let mut toasted = Vec::new();
+
+        let mut fx = Effects::default();
         for i in intents.iter().filter(|i| i.is_active()) {
-            if actuating.insert(i.excursion_id.clone()) {
-                toasted.push(i.excursion_id.clone());
+            if i.wants_notify() && state.notified.insert(i.excursion_id.clone()) {
+                fx.toasted.push(i.excursion_id.clone());
+            }
+            if i.wants_tray_flash() && state.flashing.insert(i.excursion_id.clone()) {
+                fx.flash_started.push(i.excursion_id.clone());
             }
         }
-        actuating.retain(|id| active.contains(id));
-        toasted
+
+        state.notified.retain(|id| active.contains(id));
+        let stopped: Vec<String> = state.flashing.difference(&active).cloned().collect();
+        for id in &stopped {
+            state.flashing.remove(id);
+        }
+        fx.flash_stopped = stopped;
+        fx
     }
 
     #[test]
     fn new_excursion_toasts_once_then_is_deduped() {
-        let mut set = HashSet::new();
-        let intents = vec![intent("a", true, false)];
-        assert_eq!(diff(&mut set, &intents), vec!["a".to_string()]);
+        let mut state = ActuationState::default();
+        let intents = vec![intent("a", true, false, &[NOTIFY_CAPABILITY])];
+        assert_eq!(reconcile_effects(&mut state, &intents).toasted, vec!["a".to_string()]);
         // Same active state on the next reconcile → no new toast.
-        assert!(diff(&mut set, &intents).is_empty());
+        assert!(reconcile_effects(&mut state, &intents).toasted.is_empty());
     }
 
     #[test]
     fn resolved_excursion_clears_and_can_reopen() {
-        let mut set = HashSet::new();
-        diff(&mut set, &[intent("a", true, false)]);
-        // Resolved → removed from the actuating set.
-        assert!(diff(&mut set, &[intent("a", false, false)]).is_empty());
-        assert!(!set.contains("a"));
+        let mut state = ActuationState::default();
+        reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])]);
+        // Resolved → removed from the notified set.
+        assert!(reconcile_effects(&mut state, &[intent("a", false, false, &[NOTIFY_CAPABILITY])]).toasted.is_empty());
+        assert!(!state.notified.contains("a"));
         // Re-open of the same id toasts again.
-        assert_eq!(diff(&mut set, &[intent("a", true, false)]), vec!["a".to_string()]);
+        assert_eq!(
+            reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])]).toasted,
+            vec!["a".to_string()]
+        );
     }
 
     #[test]
-    fn acknowledged_excursion_is_not_toasted() {
-        let mut set = HashSet::new();
-        assert!(diff(&mut set, &[intent("a", true, true)]).is_empty());
-        assert!(!set.contains("a"));
+    fn acknowledged_excursion_is_not_actuated() {
+        let mut state = ActuationState::default();
+        let fx = reconcile_effects(&mut state, &[intent("a", true, true, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])]);
+        assert!(fx.toasted.is_empty());
+        assert!(fx.flash_started.is_empty());
+        assert!(!state.notified.contains("a"));
+        assert!(!state.flashing.contains("a"));
     }
 
     #[test]
     fn closed_while_offline_produces_nothing() {
         // The companion was offline for the whole excursion; the snapshot is empty on reconnect.
-        let mut set = HashSet::new();
-        assert!(diff(&mut set, &[]).is_empty());
+        let mut state = ActuationState::default();
+        assert_eq!(reconcile_effects(&mut state, &[]), Effects::default());
+    }
+
+    #[test]
+    fn tray_flash_starts_once_then_is_deduped() {
+        let mut state = ActuationState::default();
+        let intents = vec![intent("a", true, false, &[TRAY_FLASH_CAPABILITY])];
+        assert_eq!(reconcile_effects(&mut state, &intents).flash_started, vec!["a".to_string()]);
+        // Same active state next reconcile → no restart (don't re-flash every 30s poll).
+        let fx = reconcile_effects(&mut state, &intents);
+        assert!(fx.flash_started.is_empty());
+        assert!(fx.flash_stopped.is_empty());
+    }
+
+    #[test]
+    fn tray_flash_stops_when_excursion_leaves_active_set() {
+        let mut state = ActuationState::default();
+        reconcile_effects(&mut state, &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])]);
+        // Resolved → flash stops and the dedup record clears.
+        let fx = reconcile_effects(&mut state, &[intent("a", false, false, &[TRAY_FLASH_CAPABILITY])]);
+        assert_eq!(fx.flash_stopped, vec!["a".to_string()]);
+        assert!(!state.flashing.contains("a"));
+        // Re-open flashes again.
+        assert_eq!(
+            reconcile_effects(&mut state, &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])]).flash_started,
+            vec!["a".to_string()]
+        );
+    }
+
+    #[test]
+    fn intent_with_both_capabilities_actuates_both() {
+        let mut state = ActuationState::default();
+        let fx = reconcile_effects(
+            &mut state,
+            &[intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])],
+        );
+        assert_eq!(fx.toasted, vec!["a".to_string()]);
+        assert_eq!(fx.flash_started, vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn notify_only_intent_does_not_flash() {
+        let mut state = ActuationState::default();
+        let fx = reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])]);
+        assert_eq!(fx.toasted, vec!["a".to_string()]);
+        assert!(fx.flash_started.is_empty());
+        assert!(!state.flashing.contains("a"));
     }
 }

@@ -116,6 +116,7 @@ mod tests {
             excursion_id: "e".into(),
             rule_name: "Low glucose".into(),
             severity: severity.into(),
+            capabilities: vec!["notify".into()],
             acknowledged: false,
             glucose_value: glucose,
             trend: None,
