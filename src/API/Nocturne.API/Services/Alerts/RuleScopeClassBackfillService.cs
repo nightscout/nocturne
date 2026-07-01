@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Alerts;
@@ -36,6 +37,16 @@ public sealed class RuleScopeClassBackfillService : IHostedService
     {
         try
         {
+            // Without the native engine every Classify falls back to Undirected, and the
+            // recompute-and-compare below would overwrite previously-correct low/high
+            // classifications with that fallback. Skip the whole scan instead of persisting it.
+            if (!AlertsInterop.IsAvailable())
+            {
+                _logger.LogWarning(
+                    "nocturne_alerts native library unavailable; skipping scope-class backfill to preserve stored classifications");
+                return;
+            }
+
             using var scope = _serviceProvider.CreateScope();
             var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
             var classifier = scope.ServiceProvider.GetRequiredService<IRuleScopeClassifier>();
