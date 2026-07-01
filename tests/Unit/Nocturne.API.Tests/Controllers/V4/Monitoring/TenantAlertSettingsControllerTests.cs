@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -50,6 +51,38 @@ public class TenantAlertSettingsControllerTests
         (await db.DndWindows.CountAsync(w => w.Scope == DndScope.All && w.ClearedAt == null)).Should().Be(0);
         // The row is retained (audit), just cleared.
         (await db.DndWindows.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ToggleOff_clearsAFutureStartedAllWindow()
+    {
+        var (controller, options) = NewController();
+
+        // A pending mute: uncleared scope=all window that has not started yet.
+        var futureId = Guid.CreateVersion7();
+        await using (var seed = new NocturneDbContext(options) { TenantId = Tenant })
+        {
+            seed.DndWindows.Add(new DndWindowEntity
+            {
+                Id = futureId,
+                TenantId = Tenant,
+                Scope = DndScope.All,
+                StartedAt = DateTime.UtcNow.AddHours(1),
+                EndsAt = DateTime.UtcNow.AddHours(2),
+                Source = "web",
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        var resp = OkValue(await controller.Update(
+            new UpdateTenantAlertSettingsRequest { DndManualActive = false }, CancellationToken.None));
+        resp.DndManualActive.Should().BeFalse();
+
+        // An explicit "DND off" cancels the pending mute; it must not activate later.
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        var window = await db.DndWindows.SingleAsync(w => w.Id == futureId);
+        window.ClearedAt.Should().NotBeNull();
+        window.ClearedBy.Should().BeNull("toggle-off is a user-clear, not a supersede");
     }
 
     [Fact]
