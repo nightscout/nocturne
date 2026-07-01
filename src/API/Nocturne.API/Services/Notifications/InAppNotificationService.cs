@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -136,6 +137,21 @@ public class InAppNotificationService : IInAppNotificationService
                 "Failed to broadcast notification created event for {NotificationId}",
                 dto.Id
             );
+        }
+
+        // Mirror qualifying non-alert notifications to the user's registered devices. Alerts reach
+        // devices via device_action channels, so alert.firing is excluded by Qualifies.
+        if (DeviceNotificationMirror.Qualifies(dto))
+        {
+            try
+            {
+                await _broadcastService.BroadcastDeviceNotificationAsync(
+                    new DeviceNotificationMirror { UserId = userId, Notification = dto });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to mirror notification {NotificationId} to devices", dto.Id);
+            }
         }
 
         return dto;

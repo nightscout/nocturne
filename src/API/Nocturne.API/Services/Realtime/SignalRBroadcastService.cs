@@ -118,6 +118,14 @@ public interface ISignalRBroadcastService
     Task BroadcastDeviceActionAsync(DeviceActionIntent intent);
 
     /// <summary>
+    /// Mirror a non-alert in-app notification to the tenant's authenticated clients. A device
+    /// surfaces it only if it owns the notification (matches <see cref="DeviceNotificationMirror.UserId"/>);
+    /// web clients ignore it. Alerts do NOT use this path (they go via device_action).
+    /// </summary>
+    /// <param name="mirror">The user-tagged notification to mirror.</param>
+    Task BroadcastDeviceNotificationAsync(DeviceNotificationMirror mirror);
+
+    /// <summary>
     /// Broadcast sync progress event to subscribers via ConfigHub
     /// </summary>
     Task BroadcastSyncProgressAsync(SyncProgressEvent progress);
@@ -600,6 +608,25 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error broadcasting device_action for excursion {ExcursionId}", intent.ExcursionId);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task BroadcastDeviceNotificationAsync(DeviceNotificationMirror mirror)
+    {
+        try
+        {
+            _logger.LogDebug(
+                "Broadcasting device_notification mirror for user {UserId}: {NotificationId}",
+                mirror.UserId, mirror.Notification.Id);
+
+            await _dataHubContext
+                .Clients.Group(TenantGroup("authorized"))
+                .SendCoreAsync("device_notification", new object[] { mirror });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error broadcasting device_notification for user {UserId}", mirror.UserId);
         }
     }
 
