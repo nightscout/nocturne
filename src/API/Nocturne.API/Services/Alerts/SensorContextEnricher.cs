@@ -213,24 +213,19 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
             // ActiveDoNotDisturb drives the do_not_disturb condition leaf and the tenant-wide
             // notion of DND, so it is non-null exactly when `all` is active — lows/highs windows
-            // feed ActiveDndScopes (the gate) only. Anchor for_minutes on the scheduled projection
-            // when present, else on the earliest active all-window (manual mute).
+            // feed ActiveDndScopes (the gate) only. When a manual (all-window) mute and the
+            // scheduled window are both active, the manual path takes precedence for the
+            // for_minutes anchor and source — the pre-window TenantAlertSettingsSnapshot.Resolve
+            // contract, preserved so overlap doesn't shift the elapsed-time anchor.
             DoNotDisturbSnapshot? dnd = null;
             if (activeScopes.Contains(DndScope.All))
             {
-                if (scheduled is not null)
-                {
-                    dnd = new DoNotDisturbSnapshot(scheduled.StartedAt, scheduled.Source);
-                }
-                else
-                {
-                    var allStartedAt = windows
-                        .Where(w => w.Scope == DndScope.All && w.IsActiveAt(now))
-                        .Select(w => w.StartedAt)
-                        .DefaultIfEmpty(now)
-                        .Min();
-                    dnd = new DoNotDisturbSnapshot(allStartedAt, "manual");
-                }
+                var activeAllWindows = windows
+                    .Where(w => w.Scope == DndScope.All && w.IsActiveAt(now))
+                    .ToList();
+                dnd = activeAllWindows.Count > 0
+                    ? new DoNotDisturbSnapshot(activeAllWindows.Min(w => w.StartedAt), "manual")
+                    : new DoNotDisturbSnapshot(scheduled!.StartedAt, scheduled.Source);
             }
 
             enriched = enriched with

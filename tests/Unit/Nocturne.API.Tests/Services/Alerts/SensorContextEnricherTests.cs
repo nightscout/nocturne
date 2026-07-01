@@ -695,6 +695,37 @@ public class SensorContextEnricherTests
         enriched.ActiveDoNotDisturb!.Source.Should().Be("scheduled");
     }
 
+    [Fact]
+    public async Task ManualWindowAndScheduledDnd_bothActive_anchorsOnTheManualWindow()
+    {
+        // Pre-window contract (TenantAlertSettingsSnapshot.Resolve): the manual path takes
+        // precedence for the for_minutes anchor and source when both are active.
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var manualStartedAt = now.AddMinutes(-90);
+        _alertRepository
+            .Setup(r => r.GetTenantAlertSettingsAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantAlertSettingsSnapshot(
+                DndScheduleEnabled: true,
+                DndScheduleStart: new TimeOnly(0, 0),
+                DndScheduleEnd: new TimeOnly(23, 0)));
+        _alertRepository
+            .Setup(r => r.GetUnclearedDndWindowsAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<DndWindowSnapshot>
+            {
+                new(DndScope.All, StartedAt: manualStartedAt, EndsAt: null, ClearedAt: null, CreatedAt: manualStartedAt),
+            });
+
+        var enricher = BuildEnricher();
+        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.ActiveDndScopes.Should().Contain(DndScope.All);
+        enriched.ActiveDoNotDisturb.Should().NotBeNull();
+        enriched.ActiveDoNotDisturb!.StartedAt.Should().Be(manualStartedAt);
+        enriched.ActiveDoNotDisturb.Source.Should().Be("manual");
+    }
+
     private static string TryResolve(string ianaId, string windowsId)
     {
         try { TimeZoneInfo.FindSystemTimeZoneById(ianaId); return ianaId; }
