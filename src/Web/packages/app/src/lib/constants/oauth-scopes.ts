@@ -4,7 +4,13 @@ import { OAuthScope } from "../api/generated/nocturne-api-client";
 
 export { OAuthScope } from "../api/generated/nocturne-api-client";
 
-export const OAUTH_SCOPE_DESCRIPTIONS: Readonly<Record<OAuthScope, string>> = {
+// The device.* scopes gate the alert engine's device-actuation feature. They are
+// not part of the generated OAuthScope enum (which covers data-access scopes), so
+// they are keyed by their literal string values here.
+export const DEVICE_NOTIFY_SCOPE = "device.notify";
+export const DEVICE_ACTUATE_SCOPE = "device.actuate";
+
+export const OAUTH_SCOPE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   [OAuthScope.GlucoseRead]: "View glucose readings",
   [OAuthScope.GlucoseReadWrite]: "View and record glucose readings",
   [OAuthScope.TreatmentsRead]: "View treatments",
@@ -27,7 +33,20 @@ export const OAUTH_SCOPE_DESCRIPTIONS: Readonly<Record<OAuthScope, string>> = {
   [OAuthScope.HealthRead]: "View all health data (read-only)",
   [OAuthScope.HealthReadWrite]: "View and update all health data",
   [OAuthScope.FullAccess]: "Full access including delete",
+  [DEVICE_NOTIFY_SCOPE]: "Send notifications to this device",
+  [DEVICE_ACTUATE_SCOPE]:
+    "Use this device's alarms — sound, vibration, flashlight, and full-screen alerts",
 } as const;
+
+/** Scopes that grant hardware/device actuation and warrant extra emphasis in consent UI. */
+export const SENSITIVE_DEVICE_SCOPES: ReadonlySet<string> = new Set([
+  DEVICE_ACTUATE_SCOPE,
+]);
+
+/** True for scopes that control device hardware (torch/vibrate/sound/full-screen). */
+export function isSensitiveDeviceScope(scope: string): boolean {
+  return SENSITIVE_DEVICE_SCOPES.has(scope);
+}
 
 export const OAUTH_AVAILABLE_SCOPES = Object.values(OAuthScope) as ReadonlyArray<OAuthScope>;
 

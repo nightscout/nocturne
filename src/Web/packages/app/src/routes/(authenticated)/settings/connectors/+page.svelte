@@ -43,6 +43,7 @@
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
   import type { DataSourceStatus } from "$lib/components/settings/DataSourceRow.svelte";
   import ConnectedApps from "$lib/components/settings/ConnectedApps.svelte";
+  import ClientDevices from "$lib/components/settings/ClientDevices.svelte";
   import ApiTokens from "$lib/components/settings/ApiTokens.svelte";
   import DeduplicationDialog from "$lib/components/connectors/DeduplicationDialog.svelte";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
@@ -639,6 +640,9 @@
 
     <!-- Connected Apps Section -->
     <ConnectedApps />
+
+    <!-- Devices Section -->
+    <ClientDevices />
 
     <!-- API Tokens Section -->
     <div id="api-tokens-section">

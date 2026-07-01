@@ -22178,6 +22178,111 @@ export class ClientDevicesClient {
     }
 
     /**
+     * Rename a device you own.
+     */
+    rename(id: string, request: RenameDeviceRequest, signal?: AbortSignal): Promise<ClientDeviceDto> {
+        let url_ = this.baseUrl + "/api/v4/client-devices/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(request);
+
+        let options_: RequestInit = {
+            body: content_,
+            method: "PATCH",
+            signal,
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processRename(_response);
+        });
+    }
+
+    protected processRename(response: Response): Promise<ClientDeviceDto> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 200) {
+            return response.text().then((_responseText) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ClientDeviceDto;
+            return result200;
+            });
+        } else if (status === 401) {
+            return response.text().then((_responseText) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result401);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<ClientDeviceDto>(null as any);
+    }
+
+    /**
+     * Revoke (remove) a device you own. Its future registrations start fresh.
+     */
+    revoke(id: string, signal?: AbortSignal): Promise<void> {
+        let url_ = this.baseUrl + "/api/v4/client-devices/{id}";
+        if (id === undefined || id === null)
+            throw new globalThis.Error("The parameter 'id' must be defined.");
+        url_ = url_.replace("{id}", encodeURIComponent("" + id));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_: RequestInit = {
+            method: "DELETE",
+            signal,
+            headers: {
+            }
+        };
+
+        return this.http.fetch(url_, options_).then((_response: Response) => {
+            return this.processRevoke(_response);
+        });
+    }
+
+    protected processRevoke(response: Response): Promise<void> {
+        const status = response.status;
+        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
+        if (status === 204) {
+            return response.text().then((_responseText) => {
+            return;
+            });
+        } else if (status === 401) {
+            return response.text().then((_responseText) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result401);
+            });
+        } else if (status === 404) {
+            return response.text().then((_responseText) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result404);
+            });
+        } else if (status !== 200 && status !== 204) {
+            return response.text().then((_responseText) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            });
+        }
+        return Promise.resolve<void>(null as any);
+    }
+
+    /**
      * The actuation intents currently active for this device — the reconcile snapshot a push-mode
     device reads on (re)connect to start anything still active and drop anything resolved. Empty
     for a local-engine device or one the caller does not own.
@@ -33858,6 +33963,10 @@ export interface DeviceCapabilityInfo {
     requiredScope?: string;
     kinds?: string[];
     isHardware?: boolean;
+}
+
+export interface RenameDeviceRequest {
+    label?: string | undefined;
 }
 
 export interface DeviceActionIntent {

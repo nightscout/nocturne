@@ -19,7 +19,10 @@
     approveDeviceForm,
     denyDeviceForm,
   } from "../oauth.remote";
-  import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
+  import {
+    getOAuthScopeDescription,
+    isSensitiveDeviceScope,
+  } from "$lib/constants/oauth-scopes";
 
   // Auth guard: redirect to login if not authenticated
   $effect(() => {
@@ -154,11 +157,21 @@
           </p>
           <ul class="space-y-2">
             {#each scopes as scope}
+              {@const sensitive = isSensitiveDeviceScope(scope)}
               <li class="flex items-start gap-3 text-sm">
-                <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <span class="text-muted-foreground">
-                  {getOAuthScopeDescription(scope)}
-                </span>
+                {#if sensitive}
+                  <ShieldAlert
+                    class="mt-0.5 h-4 w-4 shrink-0 text-destructive"
+                  />
+                  <span class="font-medium text-destructive">
+                    {getOAuthScopeDescription(scope)}
+                  </span>
+                {:else}
+                  <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <span class="text-muted-foreground">
+                    {getOAuthScopeDescription(scope)}
+                  </span>
+                {/if}
               </li>
             {/each}
           </ul>

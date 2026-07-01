@@ -20547,6 +20547,123 @@
         "x-remote-type": "query"
       }
     },
+    "/api/v4/client-devices/{id}": {
+      "patch": {
+        "tags": [
+          "Client Devices"
+        ],
+        "summary": "Rename a device you own.",
+        "operationId": "ClientDevices_Rename",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "requestBody": {
+          "x-name": "request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameDeviceRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 2
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDeviceDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetDevices"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Client Devices"
+        ],
+        "summary": "Revoke (remove) a device you own. Its future registrations start fresh.",
+        "operationId": "ClientDevices_Revoke",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            },
+            "x-position": 1
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetDevices"
+        ]
+      }
+    },
     "/api/v4/client-devices/{id}/active-intents": {
       "get": {
         "tags": [
@@ -42981,6 +43098,17 @@
           },
           "isHardware": {
             "type": "boolean"
+          }
+        }
+      },
+      "RenameDeviceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 255,
+            "nullable": true
           }
         }
       },

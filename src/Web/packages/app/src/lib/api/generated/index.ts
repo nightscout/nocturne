@@ -67,7 +67,7 @@ export * from './batteries.generated.remote';
 // './uploaderSnapshots.generated.remote' - all exports collide, import directly
 export * from './careLinkConnects.generated.remote';
 export * from './configurations.generated.remote';
-export { getCapabilityCatalog, getActiveIntents } from './clientDevices.generated.remote';
+export { getCapabilityCatalog, rename, getActiveIntents } from './clientDevices.generated.remote';
 export * from './audits.generated.remote';
 export * from './actograms.generated.remote';
 export * from './chartDatas.generated.remote';
