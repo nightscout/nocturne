@@ -132,6 +132,44 @@ public class ClientDeviceService : IClientDeviceService
     }
 
     /// <inheritdoc />
+    public async Task<ClientDeviceDto?> RenameAsync(
+        Guid deviceId,
+        Guid subjectId,
+        string? label,
+        CancellationToken cancellationToken = default)
+    {
+        var device = await _dbContext.ClientDevices
+            .FirstOrDefaultAsync(d => d.Id == deviceId, cancellationToken);
+        if (device is null || device.SubjectId != subjectId)
+        {
+            return null;
+        }
+
+        device.Label = label;
+        device.UpdatedAt = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return ToDto(device);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> DeleteAsync(
+        Guid deviceId,
+        Guid subjectId,
+        CancellationToken cancellationToken = default)
+    {
+        var device = await _dbContext.ClientDevices
+            .FirstOrDefaultAsync(d => d.Id == deviceId, cancellationToken);
+        if (device is null || device.SubjectId != subjectId)
+        {
+            return false;
+        }
+
+        _dbContext.ClientDevices.Remove(device);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DeviceActionIntent>> GetActiveIntentsAsync(
         Guid deviceId,
         Guid subjectId,

@@ -353,4 +353,57 @@ public class ClientDeviceServiceTests
 
         intents.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task RenameAsync_updates_label_for_owner()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(subject, Req("c1", DeviceKinds.Companion, "Old"), FullDeviceScopes);
+
+        var updated = await svc.RenameAsync(device.Id, subject, "New");
+
+        updated.Should().NotBeNull();
+        updated!.Label.Should().Be("New");
+    }
+
+    [Fact]
+    public async Task RenameAsync_returns_null_for_non_owner()
+    {
+        using var ctx = CreateContext();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(Guid.NewGuid(), Req("c1", DeviceKinds.Companion), FullDeviceScopes);
+
+        var updated = await svc.RenameAsync(device.Id, Guid.NewGuid(), "Hijack");
+
+        updated.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_removes_owned_device()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(subject, Req("c1", DeviceKinds.Companion), FullDeviceScopes);
+
+        var removed = await svc.DeleteAsync(device.Id, subject);
+
+        removed.Should().BeTrue();
+        ctx.ClientDevices.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_refuses_non_owner()
+    {
+        using var ctx = CreateContext();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(Guid.NewGuid(), Req("c1", DeviceKinds.Companion), FullDeviceScopes);
+
+        var removed = await svc.DeleteAsync(device.Id, Guid.NewGuid());
+
+        removed.Should().BeFalse();
+        ctx.ClientDevices.Should().ContainSingle();
+    }
 }

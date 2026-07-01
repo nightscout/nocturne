@@ -31,6 +31,14 @@ public class RegisterDeviceRequest
     public List<string> Capabilities { get; set; } = [];
 }
 
+/// <summary>Request body for renaming a registered device.</summary>
+public class RenameDeviceRequest
+{
+    /// <summary>New user-facing label (null clears it).</summary>
+    [MaxLength(255)]
+    public string? Label { get; set; }
+}
+
 /// <summary>A registered client device as returned by the API.</summary>
 /// <seealso cref="RegisterDeviceRequest"/>
 public class ClientDeviceDto

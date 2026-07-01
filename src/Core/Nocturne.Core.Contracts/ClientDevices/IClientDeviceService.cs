@@ -28,6 +28,25 @@ public interface IClientDeviceService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Rename a device the caller owns. Returns the updated device, or null if it doesn't exist or
+    /// isn't owned by <paramref name="subjectId"/>.
+    /// </summary>
+    Task<ClientDeviceDto?> RenameAsync(
+        Guid deviceId,
+        Guid subjectId,
+        string? label,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Revoke (delete) a device the caller owns. Returns false if it doesn't exist or isn't owned by
+    /// <paramref name="subjectId"/>.
+    /// </summary>
+    Task<bool> DeleteAsync(
+        Guid deviceId,
+        Guid subjectId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns the actuation intents currently active for a push-mode device: the <em>tenant's</em>
     /// open excursions whose rule has a <c>device_action</c> channel targeting this device's kind,
     /// with capabilities narrowed to those the device actually has. Results are tenant-scoped, not

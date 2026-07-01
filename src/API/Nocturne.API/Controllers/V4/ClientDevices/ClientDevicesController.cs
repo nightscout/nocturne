@@ -107,6 +107,49 @@ public class ClientDevicesController : ControllerBase
         return Ok(devices.ToList());
     }
 
+    /// <summary>Rename a device you own.</summary>
+    [HttpPatch("{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetDevices"])]
+    [Authorize]
+    [RequireScope(OAuthScopes.DeviceNotify, OAuthScopes.DeviceActuate)]
+    [ProducesResponseType(typeof(ClientDeviceDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ClientDeviceDto>> Rename(
+        Guid id,
+        [FromBody] RenameDeviceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId is null)
+        {
+            return Unauthorized();
+        }
+
+        var updated = await _deviceService.RenameAsync(id, subjectId.Value, request.Label, cancellationToken);
+        return updated is null ? NotFound() : Ok(updated);
+    }
+
+    /// <summary>Revoke (remove) a device you own. Its future registrations start fresh.</summary>
+    [HttpDelete("{id:guid}")]
+    [RemoteCommand(Invalidates = ["GetDevices"])]
+    [Authorize]
+    [RequireScope(OAuthScopes.DeviceNotify, OAuthScopes.DeviceActuate)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> Revoke(Guid id, CancellationToken cancellationToken)
+    {
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId is null)
+        {
+            return Unauthorized();
+        }
+
+        var removed = await _deviceService.DeleteAsync(id, subjectId.Value, cancellationToken);
+        return removed ? NoContent() : NotFound();
+    }
+
     /// <summary>
     /// The actuation intents currently active for this device — the reconcile snapshot a push-mode
     /// device reads on (re)connect to start anything still active and drop anything resolved. Empty
