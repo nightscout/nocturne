@@ -351,6 +351,16 @@ export const chartAreaOpacity = new PersistedState<number>(
   0.5
 );
 
+/**
+ * Always render chart range/category patterns on screen, not just in print.
+ * An accessibility aid for colour-blind and low-vision users — textures
+ * distinguish series that otherwise rely on colour alone.
+ */
+export const chartAlwaysShowPatterns = new PersistedState<boolean>(
+  "nocturne-chart-always-show-patterns",
+  false
+);
+
 // ==========================================
 // Language Preference
 // ==========================================

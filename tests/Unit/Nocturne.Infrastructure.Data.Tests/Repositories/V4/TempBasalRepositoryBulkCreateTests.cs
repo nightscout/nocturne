@@ -10,6 +10,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories.V4;
 
@@ -63,9 +64,9 @@ public class TempBasalRepositoryBulkCreateTests : IDisposable
     [Fact]
     public async Task BulkCreateAsync_ActiveLegacyId_Skipped()
     {
-        await _repository.CreateAsync(CreateRecord("legacy-1"));
+        await _repository.CreateAsync(CreateRecord("legacy-1"), WriteOrigin.Live);
 
-        var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-1")])).ToList();
+        var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-1")], WriteOrigin.Live)).ToList();
 
         result.Should().BeEmpty();
         _context.TempBasals.Count().Should().Be(1);
@@ -74,10 +75,10 @@ public class TempBasalRepositoryBulkCreateTests : IDisposable
     [Fact]
     public async Task BulkCreateAsync_SystemSoftDeleted_ReImports()
     {
-        var existing = await _repository.CreateAsync(CreateRecord("legacy-1"));
+        var existing = await _repository.CreateAsync(CreateRecord("legacy-1"), WriteOrigin.Live);
         SoftDelete(existing.Id, deletedByUser: false);
 
-        var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-1")])).ToList();
+        var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-1")], WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         result[0].Id.Should().NotBe(existing.Id);
@@ -87,10 +88,10 @@ public class TempBasalRepositoryBulkCreateTests : IDisposable
     [Fact]
     public async Task BulkCreateAsync_UserSoftDeleted_DoesNotReImport()
     {
-        var existing = await _repository.CreateAsync(CreateRecord("legacy-1"));
+        var existing = await _repository.CreateAsync(CreateRecord("legacy-1"), WriteOrigin.Live);
         SoftDelete(existing.Id, deletedByUser: true);
 
-        var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-1")])).ToList();
+        var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-1")], WriteOrigin.Live)).ToList();
 
         result.Should().BeEmpty();
         _context.TempBasals.IgnoreQueryFilters().Count().Should().Be(1);
@@ -99,11 +100,11 @@ public class TempBasalRepositoryBulkCreateTests : IDisposable
     [Fact]
     public async Task BulkCreateAsync_PreAuditSoftDeleted_ReImports()
     {
-        var existing = await _repository.CreateAsync(CreateRecord("legacy-1"));
+        var existing = await _repository.CreateAsync(CreateRecord("legacy-1"), WriteOrigin.Live);
         SoftDelete(existing.Id);
         // No audit row seeded — represents pre-audit legacy data.
 
-        var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-1")])).ToList();
+        var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-1")], WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         _context.TempBasals.IgnoreQueryFilters().Count().Should().Be(2);
@@ -112,7 +113,7 @@ public class TempBasalRepositoryBulkCreateTests : IDisposable
     [Fact]
     public async Task BulkCreateAsync_NewLegacyId_Inserts()
     {
-        var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-new")])).ToList();
+        var result = (await _repository.BulkCreateAsync([CreateRecord("legacy-new")], WriteOrigin.Live)).ToList();
 
         result.Should().HaveCount(1);
         result[0].LegacyId.Should().Be("legacy-new");

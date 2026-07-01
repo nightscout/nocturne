@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Each tenant has its own subdomain and isolated clinical data.
 /// </summary>
 [Table("tenants")]
-public class TenantEntity
+public class TenantEntity : ISystemTimestamped
 {
     /// <summary>
     /// Unique identifier for the tenant

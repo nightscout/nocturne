@@ -1,6 +1,8 @@
 <script lang="ts">
   import { PieChart, Text, Tooltip } from "layerchart";
   import type { Bolus, CarbIntake } from "$lib/api";
+  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import { cn } from "$lib/utils";
 
   interface Props {
     boluses: Bolus[];
@@ -48,6 +50,17 @@
     bolus?: Bolus;
     linkedCarbs?: number;
     time?: string;
+    /** Forwarded to the segment's <Arc> (carries the print pattern class). */
+    props?: { class: string };
+  }
+
+  // Print-pattern slots: bolus, scheduled basal, additional basal are
+  // distinguished only by colour, so each gets a distinct mono texture. The
+  // base `transition-opacity` is merged in because per-datum props replace the
+  // chart-level arc class rather than merging it.
+  const baseArcClass = "transition-opacity";
+  function arcProps(slot: number): { class: string } {
+    return { class: cn(baseArcClass, categoryPatternClass(slot)) };
   }
 
   const segmentData = $derived.by(() => {
@@ -73,6 +86,7 @@
         bolus: t,
         linkedCarbs: linkedCarb?.carbs ?? undefined,
         time,
+        props: arcProps(3),
       });
     });
 
@@ -82,6 +96,7 @@
         label: "Scheduled Basal",
         value: scheduledBasal,
         color: "var(--insulin-scheduled-basal)",
+        props: arcProps(1),
       });
     }
 
@@ -91,6 +106,7 @@
         label: "Additional Basal",
         value: additionalBasal,
         color: "var(--insulin-additional-basal)",
+        props: arcProps(2),
       });
     }
 

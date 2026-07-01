@@ -19778,8 +19778,10 @@ export class DevAdminClient {
     }
 
     /**
-     * Create a tenant, owner subject, owner membership, and a session in one call.
-    Used exclusively by the E2E test suite to bypass passkey/OIDC ceremonies.
+     * Create a tenant, owner subject, synthetic passkey, owner membership, and a session
+    in one call. The synthetic passkey satisfies the TenantSetupMiddleware credential
+    check so the returned session can immediately call tenant APIs.
+    Used by E2E tests and headless dev tooling to bypass passkey/OIDC ceremonies.
      */
     seedTenant(request: DevSeedTenantRequest, signal?: AbortSignal): Promise<DevSeedTenantResponse> {
         let url_ = this.baseUrl + "/api/v4/dev-only/admin/seed-tenant";
@@ -27702,116 +27704,6 @@ export class PasskeyClient {
     }
 
     /**
-     * Generate registration options for the first user during initial setup.
-    Only available when no non-system subjects exist (setup mode).
-    Creates the subject, assigns admin role, and returns passkey registration options.
-     */
-    setupOptions(request: SetupOptionsRequest, signal?: AbortSignal): Promise<PasskeyOptionsResponse> {
-        let url_ = this.baseUrl + "/api/auth/passkey/setup/options";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(request);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processSetupOptions(_response);
-        });
-    }
-
-    protected processSetupOptions(response: Response): Promise<PasskeyOptionsResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PasskeyOptionsResponse;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 403) {
-            return response.text().then((_responseText) => {
-            let result403: any = null;
-            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result403);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<PasskeyOptionsResponse>(null as any);
-    }
-
-    /**
-     * Complete passkey registration during initial setup.
-    Verifies attestation, generates recovery codes, issues a full JWT session,
-    and exits setup mode.
-     */
-    setupComplete(request: SetupCompleteRequest, signal?: AbortSignal): Promise<SetupCompleteResponse> {
-        let url_ = this.baseUrl + "/api/auth/passkey/setup/complete";
-        url_ = url_.replace(/[?&]$/, "");
-
-        const content_ = JSON.stringify(request);
-
-        let options_: RequestInit = {
-            body: content_,
-            method: "POST",
-            signal,
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processSetupComplete(_response);
-        });
-    }
-
-    protected processSetupComplete(response: Response): Promise<SetupCompleteResponse> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SetupCompleteResponse;
-            return result200;
-            });
-        } else if (status === 400) {
-            return response.text().then((_responseText) => {
-            let result400: any = null;
-            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result400);
-            });
-        } else if (status === 403) {
-            return response.text().then((_responseText) => {
-            let result403: any = null;
-            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
-            return throwException("A server side error occurred.", status, _responseText, _headers, result403);
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<SetupCompleteResponse>(null as any);
-    }
-
-    /**
      * Begin passkey registration for an anonymous access request.
     Creates a pending subject and returns WebAuthn registration options.
     Only available when AllowAccessRequests is enabled on the default tenant.
@@ -27986,7 +27878,7 @@ export class PasskeyClient {
      * Complete passkey registration for an invite acceptance.
     Verifies attestation, accepts the invite, generates recovery codes, and issues a session.
      */
-    inviteComplete(request: InviteCompleteRequest, signal?: AbortSignal): Promise<SetupCompleteResponse> {
+    inviteComplete(request: InviteCompleteRequest, signal?: AbortSignal): Promise<PasskeyRegistrationResponse> {
         let url_ = this.baseUrl + "/api/auth/passkey/invite/complete";
         url_ = url_.replace(/[?&]$/, "");
 
@@ -28007,13 +27899,13 @@ export class PasskeyClient {
         });
     }
 
-    protected processInviteComplete(response: Response): Promise<SetupCompleteResponse> {
+    protected processInviteComplete(response: Response): Promise<PasskeyRegistrationResponse> {
         const status = response.status;
         let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
         if (status === 200) {
             return response.text().then((_responseText) => {
             let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SetupCompleteResponse;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PasskeyRegistrationResponse;
             return result200;
             });
         } else if (status === 400) {
@@ -28033,7 +27925,7 @@ export class PasskeyClient {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
             });
         }
-        return Promise.resolve<SetupCompleteResponse>(null as any);
+        return Promise.resolve<PasskeyRegistrationResponse>(null as any);
     }
 }
 
@@ -30099,6 +29991,21 @@ export interface OidcProviderResponse {
     displayOrder?: number;
     icon?: string | undefined;
     buttonColor?: string | undefined;
+    providerType?: OidcProviderType;
+    oAuth2?: OAuth2ProviderSettings | undefined;
+}
+
+export enum OidcProviderType {
+    Oidc = "Oidc",
+    OAuth2 = "OAuth2",
+}
+
+export interface OAuth2ProviderSettings {
+    authorizationEndpoint?: string;
+    tokenEndpoint?: string;
+    userInfoEndpoint?: string;
+    userInfoEmailEndpoint?: string | undefined;
+    claimMappings?: { [key: string]: string; };
 }
 
 export interface CreateOidcProviderRequest {
@@ -30113,6 +30020,8 @@ export interface CreateOidcProviderRequest {
     displayOrder?: number;
     icon?: string | undefined;
     buttonColor?: string | undefined;
+    providerType?: OidcProviderType;
+    oAuth2?: OAuth2ProviderSettings | undefined;
 }
 
 export interface ConfigManagedResponse {
@@ -30131,6 +30040,8 @@ export interface UpdateOidcProviderRequest {
     displayOrder?: number;
     icon?: string | undefined;
     buttonColor?: string | undefined;
+    providerType?: OidcProviderType;
+    oAuth2?: OAuth2ProviderSettings | undefined;
 }
 
 export interface OidcProviderTestResult {
@@ -33589,6 +33500,8 @@ export interface ChartThresholdsDto {
     veryLow?: number;
     veryHigh?: number;
     glucoseYMax?: number;
+    targetLow?: number | undefined;
+    targetHigh?: number | undefined;
 }
 
 export interface HeartRatePointDto {
@@ -35425,27 +35338,6 @@ export interface AuthStatusResponse {
     onboardingCompleted?: boolean;
 }
 
-/** Request for initial setup registration options (first user creation) */
-export interface SetupOptionsRequest {
-    username?: string;
-    displayName?: string;
-}
-
-/** Response for completed setup registration */
-export interface SetupCompleteResponse {
-    success?: boolean;
-    recoveryCodes?: string[];
-    accessToken?: string;
-    refreshToken?: string | undefined;
-    expiresIn?: number;
-}
-
-/** Request to complete initial setup registration */
-export interface SetupCompleteRequest {
-    attestationResponseJson?: string;
-    challengeToken?: string;
-}
-
 export interface AccessRequestOptionsRequest {
     displayName?: string;
     message?: string | undefined;
@@ -35460,6 +35352,15 @@ export interface InviteOptionsRequest {
     token?: string;
     username?: string;
     displayName?: string;
+}
+
+/** Response for a completed passkey registration that issues a session (recovery codes plus session tokens). */
+export interface PasskeyRegistrationResponse {
+    success?: boolean;
+    recoveryCodes?: string[];
+    accessToken?: string;
+    refreshToken?: string | undefined;
+    expiresIn?: number;
 }
 
 export interface InviteCompleteRequest {

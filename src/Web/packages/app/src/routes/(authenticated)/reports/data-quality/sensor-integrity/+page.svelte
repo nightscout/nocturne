@@ -58,7 +58,7 @@
     <div class="space-y-3">
       <a
         href="/reports/data-quality"
-        class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
         Data Quality
@@ -84,7 +84,10 @@
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
             <CardTitle class="text-base">Daily overview</CardTitle>
-            <CardDescription>Each row is one day. Select a day to expand it.</CardDescription>
+            <CardDescription
+              >Each row is one day. <span class="print:hidden">Select a day to expand it.</span
+              ></CardDescription
+            >
           </div>
           <!-- Legend -->
           <div class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -143,10 +146,12 @@
     <Card>
       <CardHeader class="pb-3">
         <CardTitle class="text-base">Flagged windows</CardTitle>
-        <CardDescription>Select a row to expand its day above.</CardDescription>
+        <CardDescription class="print:hidden">Select a row to expand its day above.</CardDescription>
       </CardHeader>
       <CardContent>
-        <ClusterTable {clusters} onSelect={selectCluster} />
+        <div class="overflow-x-auto print:overflow-visible">
+          <ClusterTable {clusters} onSelect={selectCluster} />
+        </div>
       </CardContent>
     </Card>
 

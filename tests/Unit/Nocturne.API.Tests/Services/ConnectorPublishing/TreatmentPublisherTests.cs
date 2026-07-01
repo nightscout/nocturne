@@ -14,6 +14,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -27,6 +28,8 @@ public class TreatmentPublisherTests
     private readonly Mock<IBolusCalculationRepository> _mockBolusCalculationRepository;
     private readonly Mock<ITempBasalRepository> _mockTempBasalRepository;
     private readonly Mock<IBasalInjectionRepository> _mockBasalInjectionRepository;
+    private readonly Mock<INoteRepository> _mockNoteRepository;
+    private readonly Mock<IDeviceEventRepository> _mockDeviceEventRepository;
     private readonly Mock<IPatientInsulinRepository> _mockPatientInsulinRepository;
     private readonly Mock<IBasalRateResolver> _mockBasalRateResolver;
     private readonly Mock<ITherapySettingsResolver> _mockTherapySettingsResolver;
@@ -50,6 +53,8 @@ public class TreatmentPublisherTests
         _mockBolusCalculationRepository = new Mock<IBolusCalculationRepository>();
         _mockTempBasalRepository = new Mock<ITempBasalRepository>();
         _mockBasalInjectionRepository = new Mock<IBasalInjectionRepository>();
+        _mockNoteRepository = new Mock<INoteRepository>();
+        _mockDeviceEventRepository = new Mock<IDeviceEventRepository>();
         _mockPatientInsulinRepository = new Mock<IPatientInsulinRepository>();
         _mockBasalRateResolver = new Mock<IBasalRateResolver>();
         _mockTherapySettingsResolver = new Mock<ITherapySettingsResolver>();
@@ -81,6 +86,8 @@ public class TreatmentPublisherTests
             _mockBolusCalculationRepository.Object,
             _mockTempBasalRepository.Object,
             _mockBasalInjectionRepository.Object,
+            _mockNoteRepository.Object,
+            _mockDeviceEventRepository.Object,
             _mockPatientInsulinRepository.Object,
             _mockBasalRateResolver.Object,
             _mockTherapySettingsResolver.Object,
@@ -97,7 +104,7 @@ public class TreatmentPublisherTests
             .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(treatments);
 
-        var result = await _publisher.PublishTreatmentsAsync(treatments, "test-source");
+        var result = await _publisher.PublishTreatmentsAsync(treatments, "test-source", WriteOrigin.Live);
 
         result.Should().BeTrue();
         _mockTreatmentService.Verify(
@@ -113,74 +120,57 @@ public class TreatmentPublisherTests
             .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("test error"));
 
-        var result = await _publisher.PublishTreatmentsAsync(new List<Treatment>(), "test-source");
+        var result = await _publisher.PublishTreatmentsAsync(new List<Treatment>(), "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
     }
 
     [Fact]
-    public async Task PublishDecompositionBatchesAsync_ConcurrentCalls_AcquireIndependentContexts()
+    public async Task GetLatestTreatmentTimestampAsync_ReturnsMaxAcrossAllTreatmentTypes()
     {
-        var calls = Enumerable.Range(0, 16).Select(i =>
-            _publisher.PublishDecompositionBatchesAsync(
-                new[]
-                {
-                    new DecompositionBatch
-                    {
-                        Id = Guid.NewGuid(),
-                        Source = "test-source",
-                        SourceRecordId = $"record-{i}",
-                        CreatedAt = DateTime.UtcNow,
-                    },
-                },
-                "test-source"));
+        var older = new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc);
+        var newest = new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        _mockBolusRepository
+            .Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(older);
+        _mockCarbIntakeRepository
+            .Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(newest);
+        // The remaining treatment repos return null (no data of that type) by default.
 
-        var results = await Task.WhenAll(calls);
+        var result = await _publisher.GetLatestTreatmentTimestampAsync("connector-a");
 
-        results.Should().OnlyContain(r => r);
-        _mockContextFactory.Verify(
-            f => f.CreateAsync(It.IsAny<CancellationToken>()),
-            Times.Exactly(16));
+        result.Should().Be(newest);
     }
 
     [Fact]
-    public async Task GetLatestTreatmentTimestampAsync_ReturnsCreatedAt_WhenAvailable()
+    public async Task GetLatestTreatmentTimestampAsync_IsSourceScoped_AcrossEveryTreatmentType()
     {
-        var createdAt = "2026-01-15T12:00:00Z";
-        _mockTreatmentService
-            .Setup(s => s.GetTreatmentsAsync(1, 0, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Treatment> { new() { CreatedAt = createdAt } });
+        // Regression: the resume watermark must be scoped to the requesting source. A tenant-global
+        // latest (the previous behaviour) mis-classifies a newly enabled connector's first sync as
+        // incremental and silently skips its backfill. Every decomposed treatment type must be
+        // queried for THIS source, and the legacy global treatment-store query must no longer run.
+        await _publisher.GetLatestTreatmentTimestampAsync("connector-a");
 
-        var result = await _publisher.GetLatestTreatmentTimestampAsync("test-source");
-
-        result.Should().Be(DateTime.Parse(createdAt));
+        _mockBolusRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockCarbIntakeRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockBGCheckRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockBolusCalculationRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockTempBasalRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockBasalInjectionRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockNoteRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockDeviceEventRepository.Verify(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>()), Times.Once);
+        _mockTreatmentService.Verify(
+            s => s.GetTreatmentsAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
-    public async Task GetLatestTreatmentTimestampAsync_ReturnsTimestamp_WhenOnlyMillsSet()
+    public async Task GetLatestTreatmentTimestampAsync_ReturnsNull_WhenNoTreatmentsForSource()
     {
-        // Treatment.CreatedAt auto-generates an ISO string from Mills,
-        // so the CreatedAt parsing path is taken even when only Mills is set.
-        var fixedTime = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
-        var mills = fixedTime.ToUnixTimeMilliseconds();
-        _mockTreatmentService
-            .Setup(s => s.GetTreatmentsAsync(1, 0, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Treatment> { new() { Mills = mills } });
-
-        var result = await _publisher.GetLatestTreatmentTimestampAsync("test-source");
-
-        result.Should().NotBeNull();
-        result!.Value.Date.Should().Be(new DateTime(2026, 1, 15));
-    }
-
-    [Fact]
-    public async Task GetLatestTreatmentTimestampAsync_ReturnsNull_WhenNoTreatments()
-    {
-        _mockTreatmentService
-            .Setup(s => s.GetTreatmentsAsync(1, 0, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Treatment>());
-
-        var result = await _publisher.GetLatestTreatmentTimestampAsync("test-source");
+        // No stored treatment of any type for this source — the connector should treat it as a
+        // first sync (backfill), not resume from a (nonexistent) watermark.
+        var result = await _publisher.GetLatestTreatmentTimestampAsync("connector-a");
 
         result.Should().BeNull();
     }
@@ -209,14 +199,14 @@ public class TreatmentPublisherTests
             }
         };
 
-        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector");
+        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector", WriteOrigin.Live);
 
         result.Should().BeTrue();
         records[0].Origin.Should().Be(TempBasalOrigin.Algorithm);
         records[0].ScheduledRate.Should().Be(1.0);
         records[0].Rate.Should().Be(0.4);
         _mockTempBasalRepository.Verify(
-            r => r.BulkCreateAsync(records, It.IsAny<CancellationToken>()),
+            r => r.BulkCreateAsync(records, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -240,7 +230,7 @@ public class TreatmentPublisherTests
             }
         };
 
-        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector");
+        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector", WriteOrigin.Live);
 
         result.Should().BeTrue();
         records[0].Origin.Should().Be(TempBasalOrigin.Scheduled);
@@ -268,7 +258,7 @@ public class TreatmentPublisherTests
             }
         };
 
-        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector");
+        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector", WriteOrigin.Live);
 
         result.Should().BeTrue();
         records[0].Origin.Should().Be(TempBasalOrigin.Scheduled);
@@ -289,7 +279,7 @@ public class TreatmentPublisherTests
             new() { Id = Guid.NewGuid(), StartTimestamp = ts.AddMinutes(10), Rate = 0, ScheduledRate = null, Origin = TempBasalOrigin.Suspended },
         };
 
-        var result = await _publisher.PublishTempBasalsAsync(records, "loop-connector");
+        var result = await _publisher.PublishTempBasalsAsync(records, "loop-connector", WriteOrigin.Live);
 
         result.Should().BeTrue();
         records[0].Origin.Should().Be(TempBasalOrigin.Algorithm);
@@ -321,7 +311,7 @@ public class TreatmentPublisherTests
             }
         };
 
-        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector");
+        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector", WriteOrigin.Live);
 
         result.Should().BeTrue();
         records[0].Origin.Should().Be(TempBasalOrigin.Scheduled);
@@ -372,7 +362,7 @@ public class TreatmentPublisherTests
             }
         };
 
-        var result = await publisher.PublishTempBasalsAsync(records, "glooko-connector");
+        var result = await publisher.PublishTempBasalsAsync(records, "glooko-connector", WriteOrigin.Live);
 
         result.Should().BeTrue();
         authTypeDuringDelete.Should().BeNull("the reconcile delete must be system-attributed");
@@ -408,13 +398,13 @@ public class TreatmentPublisherTests
             new() { Id = Guid.NewGuid(), LegacyId = null, StartTimestamp = ts.AddMinutes(10), Rate = 0.7, Origin = TempBasalOrigin.Algorithm, DataSource = "glooko-connector" },
         };
 
-        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector");
+        var result = await _publisher.PublishTempBasalsAsync(records, "glooko-connector", WriteOrigin.Live);
 
         result.Should().BeTrue();
         keepLegacyIds.Should().BeEquivalentTo(new[] { "glooko_tempbasal_1", "glooko_tempbasal_2" },
             "only non-null incoming legacy ids form the keep-set");
         _mockTempBasalRepository.Verify(
-            r => r.BulkCreateAsync(records, It.IsAny<CancellationToken>()), Times.Once);
+            r => r.BulkCreateAsync(records, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -426,7 +416,7 @@ public class TreatmentPublisherTests
             new() { Id = Guid.NewGuid(), StartTimestamp = ts, Rate = 0.5, Origin = TempBasalOrigin.Algorithm },
         };
 
-        var result = await _publisher.PublishTempBasalsAsync(records, "loop-connector");
+        var result = await _publisher.PublishTempBasalsAsync(records, "loop-connector", WriteOrigin.Live);
 
         result.Should().BeTrue();
         _mockBasalRateResolver.Verify(
@@ -439,7 +429,7 @@ public class TreatmentPublisherTests
     [Fact]
     public async Task PublishBasalInjectionsAsync_EmptyList_ReturnsTrue()
     {
-        var result = await _publisher.PublishBasalInjectionsAsync([], "glooko-connector");
+        var result = await _publisher.PublishBasalInjectionsAsync([], "glooko-connector", WriteOrigin.Live);
 
         result.Should().BeTrue();
     }
@@ -451,11 +441,11 @@ public class TreatmentPublisherTests
             .Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         _mockPatientInsulinRepository
-            .Setup(r => r.CreateAsync(It.IsAny<PatientInsulin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((PatientInsulin m, CancellationToken _) => m);
+            .Setup(r => r.CreateAsync(It.IsAny<PatientInsulin>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PatientInsulin m, WriteOrigin _, CancellationToken _) => m);
         _mockBasalInjectionRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<BasalInjection> records, CancellationToken _) => records);
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => records);
 
         var records = new List<BasalInjection>
         {
@@ -477,11 +467,11 @@ public class TreatmentPublisherTests
             }
         };
 
-        var result = await _publisher.PublishBasalInjectionsAsync(records, "glooko-connector");
+        var result = await _publisher.PublishBasalInjectionsAsync(records, "glooko-connector", WriteOrigin.Live);
 
         result.Should().BeTrue();
         _mockBasalInjectionRepository.Verify(
-            r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<CancellationToken>()),
+            r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -492,11 +482,11 @@ public class TreatmentPublisherTests
             .Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         _mockPatientInsulinRepository
-            .Setup(r => r.CreateAsync(It.IsAny<PatientInsulin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((PatientInsulin m, CancellationToken _) => m);
+            .Setup(r => r.CreateAsync(It.IsAny<PatientInsulin>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PatientInsulin m, WriteOrigin _, CancellationToken _) => m);
         _mockBasalInjectionRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<BasalInjection> records, CancellationToken _) => records);
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => records);
 
         var records = new List<BasalInjection>
         {
@@ -518,7 +508,7 @@ public class TreatmentPublisherTests
             }
         };
 
-        await _publisher.PublishBasalInjectionsAsync(records, "glooko-connector");
+        await _publisher.PublishBasalInjectionsAsync(records, "glooko-connector", WriteOrigin.Live);
 
         // Should auto-create a PatientInsulin record
         _mockPatientInsulinRepository.Verify(
@@ -526,7 +516,7 @@ public class TreatmentPublisherTests
                 pi.Name == "Tresiba (Insulin Degludec)" &&
                 pi.Role == InsulinRole.Basal &&
                 pi.IsCurrent == true),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         // The record should now have a real PatientInsulinId (not Guid.Empty)
@@ -553,8 +543,8 @@ public class TreatmentPublisherTests
                 }
             ]);
         _mockBasalInjectionRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<BasalInjection> records, CancellationToken _) => records);
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => records);
 
         var records = new List<BasalInjection>
         {
@@ -576,11 +566,11 @@ public class TreatmentPublisherTests
             }
         };
 
-        await _publisher.PublishBasalInjectionsAsync(records, "glooko-connector");
+        await _publisher.PublishBasalInjectionsAsync(records, "glooko-connector", WriteOrigin.Live);
 
         // Should NOT create a new PatientInsulin — reuses existing
         _mockPatientInsulinRepository.Verify(
-            r => r.CreateAsync(It.IsAny<PatientInsulin>(), It.IsAny<CancellationToken>()),
+            r => r.CreateAsync(It.IsAny<PatientInsulin>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
         // Should resolve to the existing ID
@@ -592,8 +582,8 @@ public class TreatmentPublisherTests
     {
         var existingId = Guid.NewGuid();
         _mockBasalInjectionRepository
-            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<BasalInjection> records, CancellationToken _) => records);
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<BasalInjection> records, WriteOrigin _, CancellationToken _) => records);
 
         var records = new List<BasalInjection>
         {
@@ -615,7 +605,7 @@ public class TreatmentPublisherTests
             }
         };
 
-        await _publisher.PublishBasalInjectionsAsync(records, "glooko-connector");
+        await _publisher.PublishBasalInjectionsAsync(records, "glooko-connector", WriteOrigin.Live);
 
         // Should not touch PatientInsulin repo at all
         _mockPatientInsulinRepository.Verify(

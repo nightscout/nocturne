@@ -27,78 +27,22 @@ export interface OverallAverages {
 // Glucose Conversion & Formatting
 // =============================================================================
 
-/** Conversion factor from mg/dL to mmol/L */
-const MGDL_TO_MMOL = 18.01559;
-
-/**
- * Convert a glucose value from mg/dL to the specified units
- * @param mgdl - Glucose value in mg/dL
- * @param units - Target units ("mg/dl" or "mmol")
- * @returns Glucose value in the specified units
- */
-export function convertToDisplayUnits(mgdl: number, units: GlucoseUnits): number {
-  if (units === "mmol") {
-    return Math.round((mgdl / MGDL_TO_MMOL) * 10) / 10;
-  }
-  return Math.round(mgdl);
-}
-
-/**
- * Convert a glucose value from display units back to mg/dL
- * @param value - Glucose value in display units
- * @param units - Source units ("mg/dl" or "mmol")
- * @returns Glucose value in mg/dL
- */
-export function convertFromDisplayUnits(value: number, units: GlucoseUnits): number {
-  if (units === "mmol") {
-    return Math.round(value * MGDL_TO_MMOL);
-  }
-  return Math.round(value);
-}
-
-/**
- * Format a glucose value for display with appropriate precision
- * @param mgdl - Glucose value in mg/dL
- * @param units - Display units ("mg/dl" or "mmol")
- * @returns Formatted glucose string
- */
-export function formatGlucoseValue(mgdl: number, units: GlucoseUnits) {
-  const value = convertToDisplayUnits(mgdl, units);
-  if (units === "mmol") {
-    return Number(value.toFixed(1));
-  }
-  return Math.round(value);
-}
-
-/**
- * Format a glucose delta value for display
- * @param deltaMgdl - Delta value in mg/dL
- * @param units - Display units ("mg/dl" or "mmol")
- * @param includeSign - Whether to include +/- sign (default: true)
- * @returns Formatted delta string
- */
-export function formatGlucoseDelta(
-  deltaMgdl: number,
-  units: GlucoseUnits,
-  includeSign: boolean = true
-): string {
-  const value = convertToDisplayUnits(deltaMgdl, units);
-  const sign = includeSign && value > 0 ? "+" : "";
-
-  if (units === "mmol") {
-    return `${sign}${value.toFixed(1)}`;
-  }
-  return `${sign}${Math.round(value)}`;
-}
-
-/**
- * Get the unit label for display
- * @param units - Units type
- * @returns Human-readable unit label
- */
-export function getUnitLabel(units: GlucoseUnits): string {
-  return units === "mmol" ? "mmol/L" : "mg/dL";
-}
+// Pure unit conversion/formatting lives in the shared design system (@nocturne/ui/glucose) so the
+// web app and the desktop companion render glucose identically. Re-exported here so existing
+// import sites (`$lib/utils/formatting`) keep working unchanged.
+export {
+  convertToDisplayUnits,
+  convertFromDisplayUnits,
+  formatGlucoseValue,
+  formatGlucoseDelta,
+  getUnitLabel,
+} from "@nocturne/ui/glucose";
+import {
+  convertToDisplayUnits,
+  formatGlucoseValue,
+  formatGlucoseDelta,
+  getUnitLabel,
+} from "@nocturne/ui/glucose";
 
 /**
  * Format a glucose range for display

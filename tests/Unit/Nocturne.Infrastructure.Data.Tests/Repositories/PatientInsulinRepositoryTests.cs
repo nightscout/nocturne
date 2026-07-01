@@ -4,6 +4,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
@@ -49,10 +50,10 @@ public class PatientInsulinRepositoryTests : IDisposable
     public async Task SetPrimaryAsync_BolusInsulin_ClearsPreviousPrimaryBolus()
     {
         // Arrange
-        var first = await _repository.CreateAsync(CreateInsulin("Humalog", InsulinRole.Bolus, isPrimary: true));
+        var first = await _repository.CreateAsync(CreateInsulin("Humalog", InsulinRole.Bolus, isPrimary: true), WriteOrigin.Live);
         await _repository.SetPrimaryAsync(first.Id);
 
-        var second = await _repository.CreateAsync(CreateInsulin("NovoRapid", InsulinRole.Bolus, isPrimary: false));
+        var second = await _repository.CreateAsync(CreateInsulin("NovoRapid", InsulinRole.Bolus, isPrimary: false), WriteOrigin.Live);
 
         // Act
         await _repository.SetPrimaryAsync(second.Id);
@@ -70,10 +71,10 @@ public class PatientInsulinRepositoryTests : IDisposable
     public async Task SetPrimaryAsync_BasalInsulin_ClearsPreviousPrimaryBasal()
     {
         // Arrange
-        var first = await _repository.CreateAsync(CreateInsulin("Lantus", InsulinRole.Basal, isPrimary: true));
+        var first = await _repository.CreateAsync(CreateInsulin("Lantus", InsulinRole.Basal, isPrimary: true), WriteOrigin.Live);
         await _repository.SetPrimaryAsync(first.Id);
 
-        var second = await _repository.CreateAsync(CreateInsulin("Levemir", InsulinRole.Basal, isPrimary: false));
+        var second = await _repository.CreateAsync(CreateInsulin("Levemir", InsulinRole.Basal, isPrimary: false), WriteOrigin.Live);
 
         // Act
         await _repository.SetPrimaryAsync(second.Id);
@@ -91,7 +92,7 @@ public class PatientInsulinRepositoryTests : IDisposable
     public async Task SetPrimaryAsync_BothRole_SatisfiesBolusAndBasalLookups()
     {
         // Arrange
-        var insulin = await _repository.CreateAsync(CreateInsulin("Fiasp", InsulinRole.Both, isPrimary: false));
+        var insulin = await _repository.CreateAsync(CreateInsulin("Fiasp", InsulinRole.Both, isPrimary: false), WriteOrigin.Live);
 
         // Act
         await _repository.SetPrimaryAsync(insulin.Id);
@@ -110,12 +111,12 @@ public class PatientInsulinRepositoryTests : IDisposable
     public async Task SetPrimaryAsync_BothRole_ClearsBolusAndBasalPrimaries()
     {
         // Arrange - set up separate bolus and basal primaries
-        var bolus = await _repository.CreateAsync(CreateInsulin("Humalog", InsulinRole.Bolus, isPrimary: true));
+        var bolus = await _repository.CreateAsync(CreateInsulin("Humalog", InsulinRole.Bolus, isPrimary: true), WriteOrigin.Live);
         await _repository.SetPrimaryAsync(bolus.Id);
-        var basal = await _repository.CreateAsync(CreateInsulin("Lantus", InsulinRole.Basal, isPrimary: true));
+        var basal = await _repository.CreateAsync(CreateInsulin("Lantus", InsulinRole.Basal, isPrimary: true), WriteOrigin.Live);
         await _repository.SetPrimaryAsync(basal.Id);
 
-        var both = await _repository.CreateAsync(CreateInsulin("Fiasp", InsulinRole.Both, isPrimary: false));
+        var both = await _repository.CreateAsync(CreateInsulin("Fiasp", InsulinRole.Both, isPrimary: false), WriteOrigin.Live);
 
         // Act
         await _repository.SetPrimaryAsync(both.Id);
@@ -138,8 +139,8 @@ public class PatientInsulinRepositoryTests : IDisposable
     public async Task GetPrimaryBolusInsulinAsync_NoPrimarySet_ReturnsNull()
     {
         // Arrange - create insulins but none are primary
-        await _repository.CreateAsync(CreateInsulin("Humalog", InsulinRole.Bolus, isPrimary: false));
-        await _repository.CreateAsync(CreateInsulin("NovoRapid", InsulinRole.Bolus, isPrimary: false));
+        await _repository.CreateAsync(CreateInsulin("Humalog", InsulinRole.Bolus, isPrimary: false), WriteOrigin.Live);
+        await _repository.CreateAsync(CreateInsulin("NovoRapid", InsulinRole.Bolus, isPrimary: false), WriteOrigin.Live);
 
         // Act
         var result = await _repository.GetPrimaryBolusInsulinAsync();
@@ -152,7 +153,7 @@ public class PatientInsulinRepositoryTests : IDisposable
     public async Task GetPrimaryBasalInsulinAsync_NoPrimarySet_ReturnsNull()
     {
         // Arrange
-        await _repository.CreateAsync(CreateInsulin("Lantus", InsulinRole.Basal, isPrimary: false));
+        await _repository.CreateAsync(CreateInsulin("Lantus", InsulinRole.Basal, isPrimary: false), WriteOrigin.Live);
 
         // Act
         var result = await _repository.GetPrimaryBasalInsulinAsync();
@@ -167,7 +168,7 @@ public class PatientInsulinRepositoryTests : IDisposable
         // Arrange - create a primary bolus that is not current
         var insulin = CreateInsulin("Humalog", InsulinRole.Bolus, isPrimary: true);
         insulin.IsCurrent = false;
-        await _repository.CreateAsync(insulin);
+        await _repository.CreateAsync(insulin, WriteOrigin.Live);
         // Manually set primary since SetPrimaryAsync doesn't check IsCurrent
         var entity = await _context.PatientInsulins.FindAsync(
             (await _repository.GetAllAsync()).First().Id);

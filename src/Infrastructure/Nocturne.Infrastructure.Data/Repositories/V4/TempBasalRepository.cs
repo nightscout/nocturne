@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -9,6 +10,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -22,6 +24,7 @@ public class TempBasalRepository : ITempBasalRepository
     private readonly IDeduplicationService _deduplicationService;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<TempBasalRepository> _logger;
+    private readonly IV4RecordBroadcaster<TempBasal>? _broadcaster;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TempBasalRepository"/> class.
@@ -30,17 +33,32 @@ public class TempBasalRepository : ITempBasalRepository
     /// <param name="deduplicationService">The deduplication service.</param>
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="broadcaster">Optional native V4 broadcaster; null disables broadcasting.</param>
     public TempBasalRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<TempBasalRepository> logger)
+        ILogger<TempBasalRepository> logger,
+        IV4RecordBroadcaster<TempBasal>? broadcaster = null)
     {
         _contextFactory = contextFactory;
         _deduplicationService = deduplicationService;
         _auditContext = auditContext;
         _logger = logger;
+        _broadcaster = broadcaster;
     }
+
+    /// <summary>
+    /// Fires the native V4 broadcast for a just-committed write — but only for <see cref="WriteOrigin.Live"/>
+    /// writes (backfill imports stay silent). Mirrors the gate in <c>V4RepositoryBase.RaiseBroadcastAsync</c>.
+    /// </summary>
+    private Task RaiseBroadcastAsync(
+        IReadOnlyList<TempBasal> created,
+        IReadOnlyList<TempBasal> updated,
+        IReadOnlyList<Guid> deletedIds,
+        WriteOrigin origin,
+        CancellationToken ct)
+        => V4RecordBroadcast.RaiseAsync(_broadcaster, created, updated, deletedIds, origin, ct);
 
     /// <summary>
     /// Gets temporary basal records based on filter criteria.
@@ -120,13 +138,15 @@ public class TempBasalRepository : ITempBasalRepository
     /// <param name="model">The temporary basal record to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created temporary basal record.</returns>
-    public async Task<TempBasal> CreateAsync(TempBasal model, CancellationToken ct = default)
+    public async Task<TempBasal> CreateAsync(TempBasal model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = TempBasalMapper.ToEntity(model);
         ctx.TempBasals.Add(entity);
         await ctx.SaveChangesAsync(ct);
-        return TempBasalMapper.ToDomainModel(entity);
+        var created = TempBasalMapper.ToDomainModel(entity);
+        await RaiseBroadcastAsync([created], [], [], origin, ct);
+        return created;
     }
 
     /// <summary>
@@ -136,7 +156,7 @@ public class TempBasalRepository : ITempBasalRepository
     /// <param name="model">The updated record data.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated temporary basal record.</returns>
-    public async Task<TempBasal> UpdateAsync(Guid id, TempBasal model, CancellationToken ct = default)
+    public async Task<TempBasal> UpdateAsync(Guid id, TempBasal model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity =
@@ -144,7 +164,9 @@ public class TempBasalRepository : ITempBasalRepository
             ?? throw new KeyNotFoundException($"TempBasal {id} not found");
         TempBasalMapper.UpdateEntity(entity, model);
         await ctx.SaveChangesAsync(ct);
-        return TempBasalMapper.ToDomainModel(entity);
+        var updated = TempBasalMapper.ToDomainModel(entity);
+        await RaiseBroadcastAsync([], [updated], [], origin, ct);
+        return updated;
     }
 
     /// <summary>
@@ -152,7 +174,7 @@ public class TempBasalRepository : ITempBasalRepository
     /// </summary>
     /// <param name="id">The unique identifier.</param>
     /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity =
@@ -160,10 +182,11 @@ public class TempBasalRepository : ITempBasalRepository
             ?? throw new KeyNotFoundException($"TempBasal {id} not found");
         entity.DeletedAt = DateTime.UtcNow;
         await ctx.SaveChangesAsync(ct);
+        await RaiseBroadcastAsync([], [], [id], origin, ct);
     }
 
     /// <inheritdoc />
-    public async Task<TempBasal> RestoreAsync(Guid id, CancellationToken ct = default)
+    public async Task<TempBasal> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.TempBasals.IgnoreQueryFilters()
@@ -172,11 +195,14 @@ public class TempBasalRepository : ITempBasalRepository
             ?? throw new KeyNotFoundException($"Soft-deleted TempBasal {id} not found");
         entity.DeletedAt = null;
         await ctx.SaveChangesAsync(ct);
-        return TempBasalMapper.ToDomainModel(entity);
+        // A restored record reappears in the dataset: broadcast it as a create so clients re-add it.
+        var restored = TempBasalMapper.ToDomainModel(entity);
+        await RaiseBroadcastAsync([restored], [], [], origin, ct);
+        return restored;
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<TempBasal>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    public async Task<IEnumerable<TempBasal>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var idSet = ids.ToHashSet();
@@ -186,7 +212,9 @@ public class TempBasalRepository : ITempBasalRepository
         foreach (var entity in entities)
             entity.DeletedAt = null;
         await ctx.SaveChangesAsync(ct);
-        return entities.Select(TempBasalMapper.ToDomainModel);
+        var restored = entities.Select(TempBasalMapper.ToDomainModel).ToList();
+        await RaiseBroadcastAsync(restored, [], [], origin, ct);
+        return restored;
     }
 
     /// <inheritdoc />
@@ -217,11 +245,26 @@ public class TempBasalRepository : ITempBasalRepository
     /// <param name="legacyId">The legacy identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.AuditedSoftDeleteAsync(
+        var deletedIds = await ctx.AuditedSoftDeleteWithIdsAsync(
             ctx.TempBasals.Where(e => e.LegacyId == legacyId), _auditContext, ct);
+        await RaiseBroadcastAsync([], [], deletedIds, origin, ct);
+        return deletedIds.Count;
+    }
+
+    /// <summary>
+    /// Returns the start timestamp of the most recently stored temp basal, optionally scoped to a data source.
+    /// Used by connectors to resume per-source sync without re-fetching already-stored data.
+    /// </summary>
+    public async Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var query = ctx.TempBasals.AsNoTracking().AsQueryable();
+        if (source != null)
+            query = query.Where(e => e.DataSource == source);
+        return await query.MaxAsync(e => (DateTime?)e.StartTimestamp, ct);
     }
 
     /// <summary>
@@ -250,7 +293,7 @@ public class TempBasalRepository : ITempBasalRepository
     /// <returns>A collection of created records.</returns>
     public async Task<IEnumerable<TempBasal>> BulkCreateAsync(
         IEnumerable<TempBasal> records,
-        CancellationToken ct = default
+        WriteOrigin origin, CancellationToken ct = default
     )
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
@@ -314,12 +357,14 @@ public class TempBasalRepository : ITempBasalRepository
 
                 await _deduplicationService.DeduplicateBatchAsync(RecordType.TempBasal, dedupInputs, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "TempBasal", entities.Count);
             }
 
-            return entities.Select(TempBasalMapper.ToDomainModel);
+            var created = entities.Select(TempBasalMapper.ToDomainModel).ToList();
+            await RaiseBroadcastAsync(created, [], [], origin, ct);
+            return created;
         });
     }
 

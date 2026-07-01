@@ -167,20 +167,20 @@ public class TreatmentReadServiceTests
         });
 
         _decomposer
-            .Setup(d => d.DecomposeAsync(treatment, It.IsAny<CancellationToken>()))
+            .Setup(d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(decompositionResult);
 
         var result = await _service.CreateAsync([treatment]);
 
         result.Should().HaveCount(1);
-        _decomposer.Verify(d => d.DecomposeAsync(treatment, It.IsAny<CancellationToken>()), Times.Once);
+        _decomposer.Verify(d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task DeleteAsync_CallsPipelineAndChecksTemp()
     {
         _pipeline
-            .Setup(p => p.DeleteByLegacyIdAsync<Treatment>("t1", It.IsAny<CancellationToken>()))
+            .Setup(p => p.DeleteByLegacyIdAsync<Treatment>("t1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
         _tempBasalRepo
             .Setup(r => r.GetByLegacyIdAsync("t1", It.IsAny<CancellationToken>()))
@@ -189,6 +189,6 @@ public class TreatmentReadServiceTests
         var result = await _service.DeleteAsync("t1");
 
         result.Should().BeTrue();
-        _pipeline.Verify(p => p.DeleteByLegacyIdAsync<Treatment>("t1", It.IsAny<CancellationToken>()), Times.Once);
+        _pipeline.Verify(p => p.DeleteByLegacyIdAsync<Treatment>("t1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

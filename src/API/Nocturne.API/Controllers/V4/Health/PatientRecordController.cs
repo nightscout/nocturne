@@ -4,6 +4,7 @@ using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Health;
 
@@ -68,7 +69,7 @@ public class PatientRecordController : ControllerBase
         [FromBody] PatientRecord model,
         CancellationToken cancellationToken = default)
     {
-        var updated = await _recordRepo.UpdateAsync(model, cancellationToken);
+        var updated = await _recordRepo.UpdateAsync(model, WriteOrigin.Live, cancellationToken);
         return Ok(updated);
     }
 
@@ -99,7 +100,7 @@ public class PatientRecordController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         await ResolveDeviceIdAsync(model, cancellationToken);
-        var created = await _deviceRepo.CreateAsync(model, cancellationToken);
+        var created = await _deviceRepo.CreateAsync(model, WriteOrigin.Live, cancellationToken);
         return CreatedAtAction(nameof(GetDevices), created);
     }
 
@@ -115,7 +116,7 @@ public class PatientRecordController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         await ResolveDeviceIdAsync(model, cancellationToken);
-        var updated = await _deviceRepo.UpdateAsync(id, model, cancellationToken);
+        var updated = await _deviceRepo.UpdateAsync(id, model, WriteOrigin.Live, cancellationToken);
         return Ok(updated);
     }
 
@@ -127,7 +128,7 @@ public class PatientRecordController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DeleteDevice(Guid id, CancellationToken cancellationToken = default)
     {
-        await _deviceRepo.DeleteAsync(id, cancellationToken);
+        await _deviceRepo.DeleteAsync(id, WriteOrigin.Live, cancellationToken);
         return NoContent();
     }
 
@@ -170,7 +171,7 @@ public class PatientRecordController : ControllerBase
         [FromBody] PatientInsulin model,
         CancellationToken cancellationToken = default)
     {
-        var created = await _insulinRepo.CreateAsync(model, cancellationToken);
+        var created = await _insulinRepo.CreateAsync(model, WriteOrigin.Live, cancellationToken);
         if (created.IsPrimary)
             await _insulinRepo.SetPrimaryAsync(created.Id, cancellationToken);
         return CreatedAtAction(nameof(GetInsulins), created);
@@ -187,7 +188,7 @@ public class PatientRecordController : ControllerBase
         [FromBody] PatientInsulin model,
         CancellationToken cancellationToken = default)
     {
-        var updated = await _insulinRepo.UpdateAsync(id, model, cancellationToken);
+        var updated = await _insulinRepo.UpdateAsync(id, model, WriteOrigin.Live, cancellationToken);
         if (updated.IsPrimary)
             await _insulinRepo.SetPrimaryAsync(updated.Id, cancellationToken);
         return Ok(updated);
@@ -201,7 +202,7 @@ public class PatientRecordController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> DeleteInsulin(Guid id, CancellationToken cancellationToken = default)
     {
-        await _insulinRepo.DeleteAsync(id, cancellationToken);
+        await _insulinRepo.DeleteAsync(id, WriteOrigin.Live, cancellationToken);
         return NoContent();
     }
 

@@ -76,7 +76,7 @@ public class WriteSideEffectsServiceTests
         await _service.OnCreatedAsync("entries", entries, options);
 
         _mockPipeline.Verify(
-            p => p.DecomposeAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()),
+            p => p.DecomposeAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -89,7 +89,7 @@ public class WriteSideEffectsServiceTests
         await _service.OnCreatedAsync("entries", entries);
 
         _mockPipeline.Verify(
-            p => p.DecomposeAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()),
+            p => p.DecomposeAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never
         );
     }
@@ -116,7 +116,7 @@ public class WriteSideEffectsServiceTests
         await _service.BeforeDeleteAsync<Entry>("entry-123", options);
 
         _mockPipeline.Verify(
-            p => p.DeleteByLegacyIdAsync<Entry>("entry-123", It.IsAny<CancellationToken>()),
+            p => p.DeleteByLegacyIdAsync<Entry>("entry-123", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -158,7 +158,7 @@ public class WriteSideEffectsServiceTests
             Times.Once
         );
         _mockPipeline.Verify(
-            p => p.DecomposeAsync(entry, It.IsAny<CancellationToken>()),
+            p => p.DecomposeAsync(entry, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -194,7 +194,7 @@ public class WriteSideEffectsServiceTests
         await _service.OnCreatedAsync("entries", entries, options);
 
         _mockPipeline.Verify(
-            p => p.DecomposeAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()),
+            p => p.DecomposeAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once
         );
     }

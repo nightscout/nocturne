@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Alert from "$lib/components/ui/alert";
+  import * as Select from "$lib/components/ui/select";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -11,7 +12,33 @@
     Check,
     Globe,
   } from "lucide-svelte";
+  import { OidcProviderType } from "$api";
   import type { OidcProviderResponse, OidcProviderTestResult, TenantRoleDto } from "$api";
+
+  const OIDC_SCOPES = "openid profile email";
+
+  // GitHub is just one OAuth2 provider, expressed purely as data: the endpoints it would advertise
+  // via discovery if it spoke OIDC, plus how to read identity from its user API. Other OAuth2
+  // providers (GitLab, Discord, …) are configured the same way; this is a quick-fill, not a code path.
+  const GITHUB_PRESET = {
+    issuerUrl: "https://github.com",
+    scopes: "read:user user:email",
+    icon: "github",
+    buttonColor: "#24292e",
+    oauth2: {
+      authorizationEndpoint: "https://github.com/login/oauth/authorize",
+      tokenEndpoint: "https://github.com/login/oauth/access_token",
+      userInfoEndpoint: "https://api.github.com/user",
+      userInfoEmailEndpoint: "https://api.github.com/user/emails",
+      claimMappings: {
+        sub: "id",
+        preferred_username: "login",
+        name: "name",
+        email: "email",
+        picture: "avatar_url",
+      } as Record<string, string>,
+    },
+  };
 
   let {
     open = $bindable(false),
@@ -29,11 +56,19 @@
 
   // Form field state
   let providerName = $state("");
+  let providerType = $state<OidcProviderType>(OidcProviderType.Oidc);
   let providerIssuerUrl = $state("");
   let providerClientId = $state("");
   let providerClientSecret = $state("");
   let providerScopes = $state("openid profile email");
   let providerDefaultRoles = $state("readable");
+
+  // OAuth2-only endpoint configuration (ignored for OIDC providers).
+  let oauth2AuthEndpoint = $state("");
+  let oauth2TokenEndpoint = $state("");
+  let oauth2UserInfoEndpoint = $state("");
+  let oauth2UserInfoEmailEndpoint = $state("");
+  let oauth2ClaimMappings = $state<Record<string, string>>({});
   let providerIcon = $state("");
   let providerButtonColor = $state("");
   let providerDisplayOrder = $state(0);
@@ -48,15 +83,21 @@
   function resetProviderForm() {
     editingProvider = null;
     providerName = "";
+    providerType = OidcProviderType.Oidc;
     providerIssuerUrl = "";
     providerClientId = "";
     providerClientSecret = "";
-    providerScopes = "openid profile email";
+    providerScopes = OIDC_SCOPES;
     providerDefaultRoles = "readable";
     providerIcon = "";
     providerButtonColor = "";
     providerDisplayOrder = 0;
     providerIsEnabled = true;
+    oauth2AuthEndpoint = "";
+    oauth2TokenEndpoint = "";
+    oauth2UserInfoEndpoint = "";
+    oauth2UserInfoEmailEndpoint = "";
+    oauth2ClaimMappings = {};
     providerDialogError = null;
     testResult = null;
   }
@@ -66,6 +107,35 @@
       .split(/[,\s]+/)
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+  }
+
+  const isOAuth2 = $derived(providerType === OidcProviderType.OAuth2);
+
+  // Switching protocol clears the OIDC default scopes when moving to OAuth2 (which has no universal
+  // default) and restores them when moving back. Only while creating, so editing keeps customizations.
+  function onProviderTypeChange(value: OidcProviderType) {
+    providerType = value;
+    if (editingProvider) return;
+    if (value === OidcProviderType.OAuth2 && providerScopes === OIDC_SCOPES) {
+      providerScopes = "";
+    } else if (value === OidcProviderType.Oidc && providerScopes.trim() === "") {
+      providerScopes = OIDC_SCOPES;
+    }
+  }
+
+  // Quick-fill the OAuth2 fields for GitHub. Pure data — the backend treats this like any OAuth2 provider.
+  function applyGithubPreset() {
+    providerType = OidcProviderType.OAuth2;
+    providerIssuerUrl = GITHUB_PRESET.issuerUrl;
+    providerScopes = GITHUB_PRESET.scopes;
+    providerIcon = GITHUB_PRESET.icon;
+    providerButtonColor ||= GITHUB_PRESET.buttonColor;
+    oauth2AuthEndpoint = GITHUB_PRESET.oauth2.authorizationEndpoint;
+    oauth2TokenEndpoint = GITHUB_PRESET.oauth2.tokenEndpoint;
+    oauth2UserInfoEndpoint = GITHUB_PRESET.oauth2.userInfoEndpoint;
+    oauth2UserInfoEmailEndpoint = GITHUB_PRESET.oauth2.userInfoEmailEndpoint;
+    oauth2ClaimMappings = { ...GITHUB_PRESET.oauth2.claimMappings };
+    if (!providerName) providerName = "GitHub";
   }
 
   async function testProviderConnection() {
@@ -96,6 +166,7 @@
       const defaultRoles = parseList(providerDefaultRoles);
       const providerData = {
         name: providerName,
+        providerType,
         issuerUrl: providerIssuerUrl,
         clientId: providerClientId,
         clientSecret: providerClientSecret || undefined,
@@ -105,6 +176,15 @@
         buttonColor: providerButtonColor || undefined,
         displayOrder: providerDisplayOrder,
         isEnabled: providerIsEnabled,
+        oAuth2: isOAuth2
+          ? {
+              authorizationEndpoint: oauth2AuthEndpoint,
+              tokenEndpoint: oauth2TokenEndpoint,
+              userInfoEndpoint: oauth2UserInfoEndpoint,
+              userInfoEmailEndpoint: oauth2UserInfoEmailEndpoint || undefined,
+              claimMappings: oauth2ClaimMappings,
+            }
+          : undefined,
       };
 
       await onSave(providerData);
@@ -129,6 +209,7 @@
   $effect(() => {
     if (open && editingProvider) {
       providerName = editingProvider.name ?? "";
+      providerType = editingProvider.providerType ?? OidcProviderType.Oidc;
       providerIssuerUrl = editingProvider.issuerUrl ?? "";
       providerClientId = editingProvider.clientId ?? "";
       providerClientSecret = "";
@@ -138,6 +219,11 @@
       providerButtonColor = editingProvider.buttonColor ?? "";
       providerDisplayOrder = editingProvider.displayOrder ?? 0;
       providerIsEnabled = editingProvider.isEnabled ?? true;
+      oauth2AuthEndpoint = editingProvider.oAuth2?.authorizationEndpoint ?? "";
+      oauth2TokenEndpoint = editingProvider.oAuth2?.tokenEndpoint ?? "";
+      oauth2UserInfoEndpoint = editingProvider.oAuth2?.userInfoEndpoint ?? "";
+      oauth2UserInfoEmailEndpoint = editingProvider.oAuth2?.userInfoEmailEndpoint ?? "";
+      oauth2ClaimMappings = editingProvider.oAuth2?.claimMappings ?? {};
       providerDialogError = null;
       testResult = null;
     } else if (open && !editingProvider) {
@@ -160,7 +246,7 @@
         {editingProvider ? "Edit Identity Provider" : "Add Identity Provider"}
       </Dialog.Title>
       <Dialog.Description>
-        Configure an OpenID Connect provider for single sign-on.
+        Configure an external identity provider (OpenID Connect or OAuth 2.0) for single sign-on.
       </Dialog.Description>
     </Dialog.Header>
 
@@ -178,7 +264,37 @@
       </div>
 
       <div class="space-y-2">
-        <Label for="provider-issuer">Issuer URL</Label>
+        <Label for="provider-type">Type</Label>
+        <Select.Root
+          type="single"
+          value={providerType}
+          onValueChange={(v) => onProviderTypeChange(v as OidcProviderType)}
+        >
+          <Select.Trigger id="provider-type">
+            {isOAuth2 ? "OAuth 2.0" : "OpenID Connect"}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value={OidcProviderType.Oidc} label="OpenID Connect" />
+            <Select.Item value={OidcProviderType.OAuth2} label="OAuth 2.0" />
+          </Select.Content>
+        </Select.Root>
+      </div>
+
+      {#if isOAuth2}
+        <Alert.Root>
+          <Globe class="h-4 w-4" />
+          <Alert.Description>
+            Register an OAuth app with your provider using the callback URL
+            <code>{`{your-domain}`}/api/auth/oidc/callback</code>. Need GitHub?
+            <button type="button" class="underline" onclick={applyGithubPreset}>Use GitHub preset</button>.
+          </Alert.Description>
+        </Alert.Root>
+      {/if}
+
+      <div class="space-y-2">
+        <Label for="provider-issuer">
+          {isOAuth2 ? "Issuer (identity namespace)" : "Issuer URL"}
+        </Label>
         <Input
           id="provider-issuer"
           type="url"
@@ -186,6 +302,33 @@
           placeholder="https://accounts.example.com"
         />
       </div>
+
+      {#if isOAuth2}
+        <div class="space-y-2">
+          <Label for="provider-auth-endpoint">Authorization endpoint</Label>
+          <Input id="provider-auth-endpoint" type="url" bind:value={oauth2AuthEndpoint} />
+        </div>
+        <div class="space-y-2">
+          <Label for="provider-token-endpoint">Token endpoint</Label>
+          <Input id="provider-token-endpoint" type="url" bind:value={oauth2TokenEndpoint} />
+        </div>
+        <div class="space-y-2">
+          <Label for="provider-userinfo-endpoint">Userinfo endpoint</Label>
+          <Input id="provider-userinfo-endpoint" type="url" bind:value={oauth2UserInfoEndpoint} />
+        </div>
+        <div class="space-y-2">
+          <Label for="provider-userinfo-email-endpoint">Userinfo email endpoint (optional)</Label>
+          <Input
+            id="provider-userinfo-email-endpoint"
+            type="url"
+            bind:value={oauth2UserInfoEmailEndpoint}
+          />
+          <p class="text-xs text-muted-foreground">
+            For providers that return email separately from the profile (returns an array of
+            email/primary/verified).
+          </p>
+        </div>
+      {/if}
 
       <div class="space-y-2">
         <Label for="provider-client-id">Client ID</Label>
@@ -256,6 +399,7 @@
         <Label for="provider-enabled">Enabled</Label>
       </div>
 
+      {#if !isOAuth2}
       <div class="border-t pt-4 space-y-2">
         <Button
           variant="outline"
@@ -297,6 +441,7 @@
           {/if}
         {/if}
       </div>
+      {/if}
     </div>
 
     <Dialog.Footer>

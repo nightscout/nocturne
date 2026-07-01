@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.CarbIntake
 /// </summary>
 [Table("carb_intakes")]
-public class CarbIntakeEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity
+public class CarbIntakeEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4TimeSeriesEntity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -67,7 +67,7 @@ public class CarbIntakeEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4En
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     [Column("legacy_id")]
-    [MaxLength(64)]
+    [MaxLength(255)]
     public string? LegacyId { get; set; }
 
     /// <summary>

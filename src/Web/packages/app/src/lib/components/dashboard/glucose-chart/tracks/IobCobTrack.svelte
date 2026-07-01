@@ -66,6 +66,10 @@
   {@const iobZero = iobCobLayout.zero}
   {@const iobTrackTop = iobCobLayout.top}
   {@const iobAxisScale = iobCobLayout.axisScale}
+  <!-- Treatment markers share one baseline so a bolus (dome above) and a carb
+       entry (bowl below) at the same time meet at their flat edge and form a
+       single circle. Magnitude is conveyed by the marker labels, not height. -->
+  {@const markerBaselineY = (iobCobLayout.top + iobCobLayout.bottom) / 2}
 
   <!-- IOB axis on right -->
   <Axis
@@ -119,7 +123,7 @@
     {#if showBolus}
       {#each bolusMarkers as marker (marker.treatmentId)}
         {@const xPos = chartCtx.xScale(marker.time)}
-        {@const yPos = chartCtx.yScale(iobScale(marker.insulin ?? 0))}
+        {@const yPos = markerBaselineY}
         <BolusMarker
           {xPos}
           {yPos}
@@ -135,9 +139,7 @@
     {#if showCarbs}
       {#each carbMarkers as marker (marker.treatmentId)}
         {@const xPos = chartCtx.xScale(marker.time)}
-        {@const yPos = chartCtx.yScale(
-          iobScale((marker.carbs ?? 0) / carbRatio)
-        )}
+        {@const yPos = markerBaselineY}
         <CarbMarker
           {xPos}
           {yPos}

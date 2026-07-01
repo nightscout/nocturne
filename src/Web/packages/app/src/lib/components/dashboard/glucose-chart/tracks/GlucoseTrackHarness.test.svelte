@@ -62,6 +62,8 @@
     veryLow: 55,
     veryHigh: 250,
     glucoseYMax: 400,
+    targetLow: null,
+    targetHigh: null,
   };
 
   // Minimal stub of ChartDataEngine — GlucoseTrack only reads `glucoseData`

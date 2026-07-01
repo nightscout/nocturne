@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -49,7 +50,7 @@ public interface IBolusCalculationRepository : IV4Repository<BolusCalculation>
     /// <summary>Persist a new <see cref="BolusCalculation"/> and return the saved entity.</summary>
     /// <param name="model">Record to create.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task<BolusCalculation> CreateAsync(BolusCalculation model, CancellationToken ct = default);
+    new Task<BolusCalculation> CreateAsync(BolusCalculation model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Replace an existing <see cref="BolusCalculation"/> identified by <paramref name="id"/>.</summary>
     /// <param name="id">UUID v7 identifier of the record to update.</param>
@@ -58,25 +59,33 @@ public interface IBolusCalculationRepository : IV4Repository<BolusCalculation>
     new Task<BolusCalculation> UpdateAsync(
         Guid id,
         BolusCalculation model,
-        CancellationToken ct = default
+        WriteOrigin origin, CancellationToken ct = default
     );
 
     /// <summary>Delete a <see cref="BolusCalculation"/> by its UUID v7.</summary>
     /// <param name="id">UUID v7 identifier of the record to delete.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, CancellationToken ct = default);
+    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Delete the <see cref="BolusCalculation"/> with the given legacy MongoDB ObjectId.</summary>
     /// <param name="legacyId">Original MongoDB ObjectId string.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Count <see cref="BolusCalculation"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
     /// <param name="ct">Cancellation token.</param>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retrieve the timestamp of the most recently stored <see cref="BolusCalculation"/>, optionally scoped to a data source.
+    /// </summary>
+    /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
+    /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>Retrieve all <see cref="BolusCalculation"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records (e.g., bolus + wizard).</param>
@@ -92,6 +101,6 @@ public interface IBolusCalculationRepository : IV4Repository<BolusCalculation>
     /// <returns>The inserted records with server-assigned fields populated.</returns>
     Task<IEnumerable<BolusCalculation>> BulkCreateAsync(
         IEnumerable<BolusCalculation> records,
-        CancellationToken ct = default
+        WriteOrigin origin, CancellationToken ct = default
     );
 }

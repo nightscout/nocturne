@@ -39,7 +39,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-md">
+  <Dialog.Content class="max-w-md print:hidden">
     <Dialog.Header>
       <Dialog.Title>Multiple Entries</Dialog.Title>
       <Dialog.Description>

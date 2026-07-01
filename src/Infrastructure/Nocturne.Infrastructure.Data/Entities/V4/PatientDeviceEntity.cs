@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.PatientDevice
 /// </summary>
 [Table("patient_devices")]
-public class PatientDeviceEntity : ITenantScoped, ISoftDeletable
+public class PatientDeviceEntity : ITenantScoped, ISoftDeletable, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.

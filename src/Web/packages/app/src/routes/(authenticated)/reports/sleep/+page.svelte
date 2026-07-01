@@ -119,7 +119,7 @@
   <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
     <!-- Header -->
     <div>
-      <h1 class="text-3xl font-bold">Sleep & Overnight</h1>
+      <h1 class="text-2xl @md:text-3xl font-bold">Sleep & Overnight</h1>
       <p class="text-muted-foreground">
         Sleep patterns with overnight glucose overlay
       </p>
@@ -183,7 +183,7 @@
           Sleep Actogram
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent class="w-full overflow-x-auto print:overflow-visible">
         <Actogram
           data={sleepPoints}
           bgData={bgPoints}

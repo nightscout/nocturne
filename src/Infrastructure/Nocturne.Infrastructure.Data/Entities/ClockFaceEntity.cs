@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Stores user-created clock face layouts with drag-and-drop configured elements
 /// </summary>
 [Table("clock_faces")]
-public class ClockFaceEntity : ITenantScoped
+public class ClockFaceEntity : ITenantScoped, ISystemTimestamped, IEntityCreated
 {
     /// <summary>
     /// Identifier of the tenant this clock face belongs to

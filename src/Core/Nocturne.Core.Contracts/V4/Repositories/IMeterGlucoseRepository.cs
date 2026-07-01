@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -40,24 +41,24 @@ public interface IMeterGlucoseRepository : IV4Repository<MeterGlucose>
     /// <summary>Persist a new <see cref="MeterGlucose"/> record and return the saved entity.</summary>
     /// <param name="model">Record to create.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task<MeterGlucose> CreateAsync(MeterGlucose model, CancellationToken ct = default);
+    new Task<MeterGlucose> CreateAsync(MeterGlucose model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Replace an existing <see cref="MeterGlucose"/> identified by <paramref name="id"/>.</summary>
     /// <param name="id">UUID v7 identifier of the record to update.</param>
     /// <param name="model">Updated record data.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task<MeterGlucose> UpdateAsync(Guid id, MeterGlucose model, CancellationToken ct = default);
+    new Task<MeterGlucose> UpdateAsync(Guid id, MeterGlucose model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Delete a <see cref="MeterGlucose"/> record by its UUID v7.</summary>
     /// <param name="id">UUID v7 identifier of the record to delete.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, CancellationToken ct = default);
+    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Delete the <see cref="MeterGlucose"/> record with the given legacy MongoDB ObjectId.</summary>
     /// <param name="legacyId">Original MongoDB ObjectId string.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Count <see cref="MeterGlucose"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
@@ -111,5 +112,5 @@ public interface IMeterGlucoseRepository : IV4Repository<MeterGlucose>
     /// <returns>The records that were actually inserted (duplicates excluded).</returns>
     Task<IEnumerable<MeterGlucose>> BulkCreateAsync(
         IEnumerable<MeterGlucose> records,
-        CancellationToken ct = default);
+        WriteOrigin origin, CancellationToken ct = default);
 }

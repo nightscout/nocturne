@@ -165,6 +165,59 @@ public class DocumentProcessingServiceTests
     }
 
     [Fact]
+    public void ProcessTimestamp_HonorsClientSuppliedUtcOffset_WhenTimestampHasNoZone()
+    {
+        // AAPS/Loop upload SGV entries as date (UTC mills) + utcOffset (minutes) with no created_at.
+        // The offset is the only local-time signal for direct NS-API uploaders, so it must survive.
+        var entry = new Entry
+        {
+            Sgv = 120,
+            Mills = 1686565800000, // 2023-06-12T10:30:00Z
+            UtcOffset = -300, // client's local offset (UTC-05:00)
+        };
+
+        // Act
+        _service.ProcessTimestamp(entry);
+
+        // Assert
+        Assert.Equal(-300, entry.UtcOffset); // preserved, not clobbered to 0
+        Assert.Equal(1686565800000, entry.Mills); // instant unchanged
+    }
+
+    [Fact]
+    public void ProcessTimestamp_DefaultsUtcOffsetToZero_WhenClientOmitsIt()
+    {
+        // A mills-only entry with no offset still defaults to 0 (assume UTC).
+        var entry = new Entry { Sgv = 120, Mills = 1686565800000 };
+
+        // Act
+        _service.ProcessTimestamp(entry);
+
+        // Assert
+        Assert.Equal(0, entry.UtcOffset);
+    }
+
+    [Fact]
+    public void ProcessTimestamp_HonorsClientSuppliedUtcOffset_WithZSuffixedCreatedAt()
+    {
+        // A Z-suffixed created_at carries no real offset, so a separately-supplied utcOffset
+        // must still win (this routes through the mills+default-created_at branch).
+        var entry = new Entry
+        {
+            Sgv = 120,
+            Mills = 1686565800000,
+            CreatedAt = "2023-06-12T10:30:00.000Z",
+            UtcOffset = -300,
+        };
+
+        // Act
+        _service.ProcessTimestamp(entry);
+
+        // Assert
+        Assert.Equal(-300, entry.UtcOffset);
+    }
+
+    [Fact]
     public void SanitizeHtml_WithMaliciousContent_RemovesDangerousElements()
     {
         // Arrange

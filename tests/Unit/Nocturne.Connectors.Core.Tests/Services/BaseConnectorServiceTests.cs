@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
+using Nocturne.Core.Contracts.V4;
 using Xunit;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
@@ -36,6 +37,12 @@ public class BaseConnectorServiceTests
             IRetryDelayStrategy retryDelayStrategy,
             int maxRetries)
             => ExecuteWithRetryAsync(operation, retryDelayStrategy, maxRetries: maxRetries);
+
+        // Expose the protected per-run publish-origin resolvers so the watermark→origin mapping
+        // and the per-run memoization (anti-flood guard) can be asserted directly.
+        public Task<WriteOrigin> CallGlucoseOrigin() => GlucosePublishOriginAsync();
+        public Task<WriteOrigin> CallTreatmentOrigin() => TreatmentPublishOriginAsync();
+        public Task<WriteOrigin> CallDeviceOrigin() => DevicePublishOriginAsync();
     }
 
     public class TestConfig : BaseConnectorConfiguration
@@ -123,5 +130,199 @@ public class BaseConnectorServiceTests
         // Assert
         await act.Should().ThrowAsync<HttpRequestException>();
         attempts.Should().Be(1, "0 is clamped to a single attempt");
+    }
+
+    private static (TestConnectorService service, Mock<IConnectorPublisher> publisher,
+        Mock<IGlucosePublisher> glucose, Mock<ITreatmentPublisher> treatments,
+        Mock<IDevicePublisher> device) BuildServiceWithPublisher(
+        bool isAvailable = true)
+    {
+        var glucose = new Mock<IGlucosePublisher>();
+        var treatments = new Mock<ITreatmentPublisher>();
+        var device = new Mock<IDevicePublisher>();
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.SetupGet(p => p.IsAvailable).Returns(isAvailable);
+        publisher.SetupGet(p => p.Glucose).Returns(glucose.Object);
+        publisher.SetupGet(p => p.Treatments).Returns(treatments.Object);
+        publisher.SetupGet(p => p.Device).Returns(device.Object);
+
+        var service = new TestConnectorService(
+            new HttpClient(), Mock.Of<ILogger<TestConnectorService>>(), publisher.Object);
+        return (service, publisher, glucose, treatments, device);
+    }
+
+    [Fact]
+    public async Task GlucosePublishOriginAsync_NoPriorData_ReturnsBackfill()
+    {
+        // Arrange: null watermark = no prior glucose for this source = first-ever sync
+        var (service, _, glucose, _, _) = BuildServiceWithPublisher();
+        glucose
+            .Setup(g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+
+        // Act
+        var origin = await service.CallGlucoseOrigin();
+
+        // Assert
+        origin.Should().Be(WriteOrigin.Backfill);
+    }
+
+    [Fact]
+    public async Task GlucosePublishOriginAsync_PriorDataExists_ReturnsLive()
+    {
+        // Arrange: a non-null watermark means the source already has glucose, so this is a live catch-up
+        var (service, _, glucose, _, _) = BuildServiceWithPublisher();
+        glucose
+            .Setup(g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DateTime.UtcNow);
+
+        // Act
+        var origin = await service.CallGlucoseOrigin();
+
+        // Assert
+        origin.Should().Be(WriteOrigin.Live);
+    }
+
+    [Fact]
+    public async Task GlucosePublishOriginAsync_CalledTwice_MemoizesAndQueriesWatermarkOnce()
+    {
+        // Arrange
+        var (service, _, glucose, _, _) = BuildServiceWithPublisher();
+        glucose
+            .Setup(g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+
+        // Act: two calls within the same run
+        var first = await service.CallGlucoseOrigin();
+        var second = await service.CallGlucoseOrigin();
+
+        // Assert: identical result, and the watermark was queried only once (the anti-flood memo)
+        first.Should().Be(WriteOrigin.Backfill);
+        second.Should().Be(first);
+        glucose.Verify(
+            g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GlucosePublishOriginAsync_PublisherUnavailable_ReturnsLiveWithoutQuerying()
+    {
+        // Arrange: an unavailable publisher can't publish anyway, so origin defaults to Live and skips the query
+        var (service, _, glucose, _, _) = BuildServiceWithPublisher(isAvailable: false);
+
+        // Act
+        var origin = await service.CallGlucoseOrigin();
+
+        // Assert
+        origin.Should().Be(WriteOrigin.Live);
+        glucose.Verify(
+            g => g.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task TreatmentPublishOriginAsync_NoPriorData_ReturnsBackfill()
+    {
+        // Arrange
+        var (service, _, _, treatments, _) = BuildServiceWithPublisher();
+        treatments
+            .Setup(t => t.GetLatestTreatmentTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+
+        // Act
+        var origin = await service.CallTreatmentOrigin();
+
+        // Assert
+        origin.Should().Be(WriteOrigin.Backfill);
+    }
+
+    [Fact]
+    public async Task TreatmentPublishOriginAsync_PriorDataExists_ReturnsLive()
+    {
+        // Arrange
+        var (service, _, _, treatments, _) = BuildServiceWithPublisher();
+        treatments
+            .Setup(t => t.GetLatestTreatmentTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DateTime.UtcNow);
+
+        // Act
+        var origin = await service.CallTreatmentOrigin();
+
+        // Assert
+        origin.Should().Be(WriteOrigin.Live);
+    }
+
+    [Fact]
+    public async Task TreatmentPublishOriginAsync_CalledTwice_MemoizesAndQueriesWatermarkOnce()
+    {
+        // Arrange
+        var (service, _, _, treatments, _) = BuildServiceWithPublisher();
+        treatments
+            .Setup(t => t.GetLatestTreatmentTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+
+        // Act
+        var first = await service.CallTreatmentOrigin();
+        var second = await service.CallTreatmentOrigin();
+
+        // Assert: identical result, and the watermark was queried only once (the anti-flood memo)
+        first.Should().Be(WriteOrigin.Backfill);
+        second.Should().Be(first);
+        treatments.Verify(
+            t => t.GetLatestTreatmentTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DevicePublishOriginAsync_NoPriorData_ReturnsBackfill()
+    {
+        // Arrange: null watermark = no prior device status for this source = first-ever sync
+        var (service, _, _, _, device) = BuildServiceWithPublisher();
+        device
+            .Setup(d => d.GetLatestDeviceStatusTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+
+        // Act
+        var origin = await service.CallDeviceOrigin();
+
+        // Assert
+        origin.Should().Be(WriteOrigin.Backfill);
+    }
+
+    [Fact]
+    public async Task DevicePublishOriginAsync_PriorDataExists_ReturnsLive()
+    {
+        // Arrange: a non-null watermark means the source already has device status, so this is a live catch-up
+        var (service, _, _, _, device) = BuildServiceWithPublisher();
+        device
+            .Setup(d => d.GetLatestDeviceStatusTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DateTime.UtcNow);
+
+        // Act
+        var origin = await service.CallDeviceOrigin();
+
+        // Assert
+        origin.Should().Be(WriteOrigin.Live);
+    }
+
+    [Fact]
+    public async Task DevicePublishOriginAsync_CalledTwice_MemoizesAndQueriesWatermarkOnce()
+    {
+        // Arrange
+        var (service, _, _, _, device) = BuildServiceWithPublisher();
+        device
+            .Setup(d => d.GetLatestDeviceStatusTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+
+        // Act
+        var first = await service.CallDeviceOrigin();
+        var second = await service.CallDeviceOrigin();
+
+        // Assert: identical result, and the watermark was queried only once (the anti-flood memo)
+        first.Should().Be(WriteOrigin.Backfill);
+        second.Should().Be(first);
+        device.Verify(
+            d => d.GetLatestDeviceStatusTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 }

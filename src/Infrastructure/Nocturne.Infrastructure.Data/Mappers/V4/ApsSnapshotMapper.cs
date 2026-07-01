@@ -26,6 +26,7 @@ public static class ApsSnapshotMapper
             PatientDeviceId = model.PatientDeviceId,
             CorrelationId = model.CorrelationId,
             LegacyId = model.LegacyId,
+            DataSource = model.DataSource,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
             AidAlgorithm = model.AidAlgorithm.ToString(),
@@ -75,6 +76,7 @@ public static class ApsSnapshotMapper
             PatientDeviceId = entity.PatientDeviceId,
             CorrelationId = entity.CorrelationId,
             LegacyId = entity.LegacyId,
+            DataSource = entity.DataSource,
             CreatedAt = entity.SysCreatedAt,
             ModifiedAt = entity.SysUpdatedAt,
             AidAlgorithm = Enum.TryParse<AidAlgorithm>(entity.AidAlgorithm, out var sys) ? sys : AidAlgorithm.Unknown,
@@ -121,6 +123,7 @@ public static class ApsSnapshotMapper
         entity.PatientDeviceId = model.PatientDeviceId;
         entity.CorrelationId = model.CorrelationId;
         entity.LegacyId = model.LegacyId;
+        entity.DataSource = model.DataSource;
         entity.SysUpdatedAt = DateTime.UtcNow;
         entity.AidAlgorithm = model.AidAlgorithm.ToString();
         entity.Iob = model.Iob;

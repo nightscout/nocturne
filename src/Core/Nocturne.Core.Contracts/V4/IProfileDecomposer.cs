@@ -23,7 +23,7 @@ public interface IProfileDecomposer
     /// A <see cref="DecompositionResult"/> containing all created or updated V4 records.
     /// A single Profile with N named stores produces N sets of 5 records each.
     /// </returns>
-    Task<DecompositionResult> DecomposeAsync(Profile profile, CancellationToken ct = default);
+    Task<DecompositionResult> DecomposeAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Decomposes a batch of legacy Profiles into V4 records, using bulk insert for each schedule type.
@@ -35,7 +35,7 @@ public interface IProfileDecomposer
     /// A <see cref="DecompositionResult"/> containing all created V4 records across all profiles.
     /// </returns>
     Task<DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Profile> profiles, CancellationToken ct = default);
+        IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes all V4 records that were decomposed from a legacy Profile with the given ID.
@@ -44,5 +44,5 @@ public interface IProfileDecomposer
     /// <param name="legacyId">The legacy Profile._id</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>Total number of V4 records deleted across all tables</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 }

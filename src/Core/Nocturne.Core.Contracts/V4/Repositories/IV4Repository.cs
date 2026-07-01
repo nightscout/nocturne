@@ -1,6 +1,10 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
+
+// All mutating methods carry a required WriteOrigin (no default): the repository chokepoint uses it to
+// decide whether the write is a live event to broadcast or a backfill import to keep silent.
 
 /// <summary>
 /// Generic CRUD repository contract for all V4 <see cref="IV4Record"/> entity types.
@@ -40,42 +44,47 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// Persist a new record and return the saved entity with any server-assigned fields populated.
     /// </summary>
     /// <param name="model">Record to create.</param>
+    /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The created record as persisted.</returns>
-    Task<T> CreateAsync(T model, CancellationToken ct = default);
+    Task<T> CreateAsync(T model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Replace an existing record identified by <paramref name="id"/> with the supplied data.
     /// </summary>
     /// <param name="id">UUID v7 identifier of the record to update.</param>
     /// <param name="model">Updated record data.</param>
+    /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The updated record as persisted.</returns>
-    Task<T> UpdateAsync(Guid id, T model, CancellationToken ct = default);
+    Task<T> UpdateAsync(Guid id, T model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Delete the record with the given identifier.
     /// </summary>
     /// <param name="id">UUID v7 identifier of the record to delete.</param>
+    /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
     /// <param name="ct">Cancellation token.</param>
-    Task DeleteAsync(Guid id, CancellationToken ct = default);
+    Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Restore a soft-deleted record by clearing its DeletedAt timestamp.
     /// </summary>
     /// <param name="id">UUID v7 identifier of the soft-deleted record.</param>
+    /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The restored record.</returns>
     /// <exception cref="KeyNotFoundException">If no soft-deleted record with the given ID exists.</exception>
-    Task<T> RestoreAsync(Guid id, CancellationToken ct = default);
+    Task<T> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Restore multiple soft-deleted records by clearing their DeletedAt timestamps.
     /// </summary>
     /// <param name="ids">UUID v7 identifiers of the soft-deleted records.</param>
+    /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The restored records (only those that were actually soft-deleted).</returns>
-    Task<IEnumerable<T>> BulkRestoreAsync(IEnumerable<Guid> ids, CancellationToken ct = default);
+    Task<IEnumerable<T>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Retrieve soft-deleted records for the "trash" view, ordered by deletion date (newest first).

@@ -61,7 +61,7 @@
 
 <Tooltip.Root
   context={chartCtx}
-  class="bg-popover/95 border border-border rounded-lg shadow-xl text-xs z-50 backdrop-blur-sm"
+  class="bg-popover/95 border border-border rounded-lg shadow-xl text-xs z-50 backdrop-blur-sm print:hidden"
 >
   {#snippet children({ data })}
     {@const activeBasal = findBasal(data.time)}
@@ -263,7 +263,7 @@
   yOffset={2}
   anchor="top"
   variant="none"
-  class="text-sm font-semibold leading-3 px-2 py-1 rounded-sm whitespace-nowrap bg-background"
+  class="text-sm font-semibold leading-3 px-2 py-1 rounded-sm whitespace-nowrap bg-background print:hidden"
 >
   {#snippet children({ data })}
     <Tooltip.Item

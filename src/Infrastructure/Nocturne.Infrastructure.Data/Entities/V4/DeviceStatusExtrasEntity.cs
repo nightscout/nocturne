@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.DeviceStatusExtras
 /// </summary>
 [Table("device_status_extras")]
-public class DeviceStatusExtrasEntity : ITenantScoped, IAuditable, ISoftDeletable
+public class DeviceStatusExtrasEntity : ITenantScoped, IAuditable, ISoftDeletable, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.

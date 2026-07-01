@@ -562,7 +562,7 @@ public class ActivityServiceTests
             Times.Once
         );
         _mockActivityDecomposer.Verify(
-            d => d.DeleteByLegacyIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            d => d.DeleteByLegacyIdAsync(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Exactly(2)
         );
         _mockSignalRBroadcastService.Verify(

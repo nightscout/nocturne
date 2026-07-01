@@ -1,5 +1,6 @@
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -52,24 +53,24 @@ public interface ITempBasalRepository
     /// <summary>Persist a new <see cref="TempBasal"/> and return the saved entity.</summary>
     /// <param name="model">Record to create.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<TempBasal> CreateAsync(TempBasal model, CancellationToken ct = default);
+    Task<TempBasal> CreateAsync(TempBasal model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Replace an existing <see cref="TempBasal"/> identified by <paramref name="id"/>.</summary>
     /// <param name="id">UUID v7 identifier of the record to update.</param>
     /// <param name="model">Updated record data.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<TempBasal> UpdateAsync(Guid id, TempBasal model, CancellationToken ct = default);
+    Task<TempBasal> UpdateAsync(Guid id, TempBasal model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Delete a <see cref="TempBasal"/> by its UUID v7.</summary>
     /// <param name="id">UUID v7 identifier of the record to delete.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task DeleteAsync(Guid id, CancellationToken ct = default);
+    Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Delete the <see cref="TempBasal"/> with the given legacy MongoDB ObjectId.</summary>
     /// <param name="legacyId">Original MongoDB ObjectId string.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Count <see cref="TempBasal"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
@@ -77,13 +78,21 @@ public interface ITempBasalRepository
     /// <param name="ct">Cancellation token.</param>
     Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
+    /// <summary>
+    /// Retrieve the start timestamp of the most recently stored <see cref="TempBasal"/>, optionally scoped to a data source.
+    /// </summary>
+    /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
+    /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
+
     /// <summary>Insert multiple <see cref="TempBasal"/> records in a single batch operation.</summary>
     /// <param name="records">Records to insert.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The inserted records with server-assigned fields populated.</returns>
     Task<IEnumerable<TempBasal>> BulkCreateAsync(
         IEnumerable<TempBasal> records,
-        CancellationToken ct = default
+        WriteOrigin origin, CancellationToken ct = default
     );
 
     /// <summary>

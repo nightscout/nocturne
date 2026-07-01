@@ -6,12 +6,18 @@
     ScheduleChangeInfo,
   } from "$lib/api/generated/nocturne-api-client";
   import { History } from "lucide-svelte";
+  import { bg, bgLabel } from "$lib/utils/formatting";
 
   interface Props {
     profile?: ProfileSummary | null;
   }
 
   let { profile }: Props = $props();
+
+  // Correction-range bounds and ISF values are mg/dL per the V4 profile contract;
+  // render them in the user's preferred units (keeping the "?" fallback for gaps).
+  const bgOr = (mgdl: number | undefined | null) =>
+    mgdl != null ? bg(mgdl) : "?";
 
   const SECONDS_IN_DAY = 86400;
 
@@ -115,16 +121,16 @@
               <div
                 class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-gray-200 dark:border-gray-700 last:border-r-0 px-1 overflow-hidden"
                 style="width: {seg.widthPercent}%"
-                title="{formatTime(seg.startSeconds)}: {seg.entry.low ?? '?'}-{seg.entry.high ?? '?'}"
+                title="{formatTime(seg.startSeconds)}: {bgOr(seg.entry.low)}-{bgOr(seg.entry.high)}"
               >
                 <span class="truncate text-gray-800 dark:text-gray-200">
-                  {seg.entry.low ?? "?"}-{seg.entry.high ?? "?"}
+                  {bgOr(seg.entry.low)}-{bgOr(seg.entry.high)}
                 </span>
               </div>
             {/each}
           </div>
           <span class="w-20 shrink-0 text-right text-gray-500 dark:text-gray-400 flex items-center justify-end gap-0.5">
-            mg/dL
+            {bgLabel()}
             {@render changeIndicator(targetRangeChanged)}
           </span>
         </div>
@@ -165,16 +171,16 @@
               <div
                 class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-gray-200 dark:border-gray-700 last:border-r-0 px-1 overflow-hidden"
                 style="width: {seg.widthPercent}%"
-                title="{formatTime(seg.startSeconds)}: {seg.entry.value ?? '?'} mg/dL/U"
+                title="{formatTime(seg.startSeconds)}: {bgOr(seg.entry.value)} {bgLabel()}/U"
               >
                 <span class="truncate text-gray-800 dark:text-gray-200">
-                  {seg.entry.value ?? "?"}
+                  {bgOr(seg.entry.value)}
                 </span>
               </div>
             {/each}
           </div>
           <span class="w-20 shrink-0 text-right text-gray-500 dark:text-gray-400 flex items-center justify-end gap-0.5">
-            mg/dL/U
+            {bgLabel()}/U
             {@render changeIndicator(sensitivityChanged)}
           </span>
         </div>

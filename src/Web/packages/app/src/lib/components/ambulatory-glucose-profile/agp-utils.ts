@@ -7,6 +7,10 @@ export const AGP_LOW_THRESHOLD = 70;
 
 /** Format an hour (0-23) as a time string */
 export function formatHour(hour: number, is24Hour: boolean): string {
+	// Axis ticks can arrive fractional during interpolation; snap to the nearest
+	// hour so labels never render as decimals like "8.4pm". Wrap at 24 so a tick
+	// rounding up to 24 reads as midnight, not "24:00".
+	hour = Math.round(hour) % 24;
 	if (is24Hour) {
 		return `${hour.toString().padStart(2, "0")}:00`;
 	}

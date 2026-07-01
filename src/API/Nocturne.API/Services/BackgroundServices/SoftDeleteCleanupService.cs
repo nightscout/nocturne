@@ -23,7 +23,7 @@ public class SoftDeleteCleanupService(
     [
         "aps_snapshots", "basal_schedules", "bg_checks", "bolus_calculations",
         "boluses", "calibrations", "carb_intakes", "carb_ratio_schedules",
-        "decomposition_batches", "device_events", "device_status_extras",
+        "device_events", "device_status_extras",
         "devices", "meter_glucose", "notes", "patient_devices",
         "patient_insulins", "patient_records", "pump_snapshots",
         "sensitivity_schedules", "sensor_glucose", "target_range_schedules",

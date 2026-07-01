@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -14,7 +15,7 @@ public interface IDeviceStatusExtrasRepository
     /// <summary>Persist a new <see cref="DeviceStatusExtras"/> and return the saved entity.</summary>
     /// <param name="model">Record to create.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<DeviceStatusExtras> CreateAsync(DeviceStatusExtras model, CancellationToken ct = default);
+    Task<DeviceStatusExtras> CreateAsync(DeviceStatusExtras model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Retrieve <see cref="DeviceStatusExtras"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
@@ -35,5 +36,5 @@ public interface IDeviceStatusExtrasRepository
     /// <returns>The records that were actually inserted (duplicates excluded).</returns>
     Task<IEnumerable<DeviceStatusExtras>> BulkCreateAsync(
         IEnumerable<DeviceStatusExtras> records,
-        CancellationToken ct = default);
+        WriteOrigin origin, CancellationToken ct = default);
 }

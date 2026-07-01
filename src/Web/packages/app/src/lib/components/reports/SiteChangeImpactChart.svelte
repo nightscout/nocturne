@@ -3,6 +3,7 @@
   import { scaleOrdinal } from "d3-scale";
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import { AlertCircle } from "lucide-svelte";
+  import { bg, bgValue, bgLabel, bgRange } from "$lib/utils/formatting";
 
   // Local type definitions for site change impact analysis
   interface SiteChangeImpactDataPoint {
@@ -96,28 +97,33 @@
           d.percentile75 !== undefined &&
           d.percentile90 !== undefined
       )
+      // Convert glucose fields to the user's display units; minutes/count are unitless.
       .map((d: SiteChangeImpactDataPoint) => ({
         minutesFromChange: d.minutesFromChange!,
-        averageGlucose: d.averageGlucose ?? d.medianGlucose!,
-        medianGlucose: d.medianGlucose!,
-        stdDev: d.stdDev ?? 0,
+        averageGlucose: bgValue(d.averageGlucose ?? d.medianGlucose!),
+        medianGlucose: bgValue(d.medianGlucose!),
+        stdDev: bgValue(d.stdDev ?? 0),
         count: d.count ?? 0,
-        percentile10: d.percentile10!,
-        percentile25: d.percentile25!,
-        percentile75: d.percentile75!,
-        percentile90: d.percentile90!,
+        percentile10: bgValue(d.percentile10!),
+        percentile25: bgValue(d.percentile25!),
+        percentile75: bgValue(d.percentile75!),
+        percentile90: bgValue(d.percentile90!),
       }));
   });
 
+  // chartData is already in display units; keep the domain/margins in the same units.
   const yDomain = $derived.by(() => {
-    if (chartData.length === 0) return [40, 300];
+    if (chartData.length === 0) return [bgValue(40), bgValue(300)];
     const allValues = chartData.flatMap((d) => [
       d.percentile10,
       d.percentile90,
     ]);
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
-    return [Math.max(40, min - 20), Math.min(400, max + 20)];
+    return [
+      Math.max(bgValue(40), min - bgValue(20)),
+      Math.min(bgValue(400), max + bgValue(20)),
+    ];
   });
 
   const xDomain = $derived.by(() => {
@@ -126,19 +132,22 @@
     return [-analysis.hoursBeforeChange * 60, analysis.hoursAfterChange * 60];
   });
 
-  const legendScale = scaleOrdinal<string, string>()
-    .domain([
-      "10th-25th / 75th-90th percentile",
-      "25th-75th percentile",
-      "Median glucose",
-      "Target range (70-180)",
-    ])
-    .range([
-      "var(--percentile-outer)",
-      "var(--percentile-inner)",
-      "var(--percentile-median)",
-      "transparent",
-    ]);
+  // $derived so the unit-dependent "Target range" label tracks unit-preference changes.
+  const legendScale = $derived(
+    scaleOrdinal<string, string>()
+      .domain([
+        "10th-25th / 75th-90th percentile",
+        "25th-75th percentile",
+        "Median glucose",
+        `Target range (${bgRange(70, 180)})`,
+      ])
+      .range([
+        "var(--percentile-outer)",
+        "var(--percentile-inner)",
+        "var(--percentile-median)",
+        "transparent",
+      ])
+  );
 </script>
 
 <div class="@container w-full">
@@ -212,16 +221,16 @@
             ticks: hourlyTicks,
           },
           yAxis: {
-            label: "Glucose (mg/dL)",
+            label: `Glucose (${bgLabel()})`,
           },
         }}
         padding={{ top: 20, right: 20, bottom: 40, left: 50 }}
       >
-        <!-- Target range overlay (70-180 mg/dL) -->
+        <!-- Target range overlay (70-180 mg/dL, plotted in display units) -->
         {#snippet aboveMarks()}
           <!-- Horizontal reference lines for target range -->
-          <Rule y={70} class="stroke-success/50 stroke-1 stroke-dashed" />
-          <Rule y={180} class="stroke-warning/50 stroke-1 stroke-dashed" />
+          <Rule y={bgValue(70)} class="stroke-success/50 stroke-1 stroke-dashed" />
+          <Rule y={bgValue(180)} class="stroke-warning/50 stroke-1 stroke-dashed" />
           <!-- Vertical line at site change point -->
           <Rule x={0} class="stroke-primary stroke-2" />
         {/snippet}
@@ -246,15 +255,19 @@
         <div class="rounded-lg bg-muted/50 p-3 text-center">
           <div class="text-sm text-muted-foreground">Avg Before</div>
           <div class="text-xl font-semibold">
-            {analysis.summary.avgGlucoseBeforeChange?.toFixed(0)}
-            <span class="text-xs text-muted-foreground">mg/dL</span>
+            {analysis.summary.avgGlucoseBeforeChange != null
+              ? bg(analysis.summary.avgGlucoseBeforeChange)
+              : "–"}
+            <span class="text-xs text-muted-foreground">{bgLabel()}</span>
           </div>
         </div>
         <div class="rounded-lg bg-muted/50 p-3 text-center">
           <div class="text-sm text-muted-foreground">Avg After</div>
           <div class="text-xl font-semibold">
-            {analysis.summary.avgGlucoseAfterChange?.toFixed(0)}
-            <span class="text-xs text-muted-foreground">mg/dL</span>
+            {analysis.summary.avgGlucoseAfterChange != null
+              ? bg(analysis.summary.avgGlucoseAfterChange)
+              : "–"}
+            <span class="text-xs text-muted-foreground">{bgLabel()}</span>
           </div>
         </div>
         <div class="rounded-lg bg-muted/50 p-3 text-center">

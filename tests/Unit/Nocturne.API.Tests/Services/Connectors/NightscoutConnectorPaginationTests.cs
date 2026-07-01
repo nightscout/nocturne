@@ -9,6 +9,7 @@ using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Models;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.Connectors;
 
@@ -41,12 +42,12 @@ public class NightscoutConnectorPaginationTests
         {
             var glucoseMock = new Mock<IGlucosePublisher>();
             glucoseMock.Setup(p => p.PublishEntriesAsync(
-                    It.IsAny<IEnumerable<Entry>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<IEnumerable<Entry>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
 
             var treatmentMock = new Mock<ITreatmentPublisher>();
             treatmentMock.Setup(p => p.PublishTreatmentsAsync(
-                    It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                    It.IsAny<IEnumerable<Treatment>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
 
             var mock = new Mock<IConnectorPublisher>();

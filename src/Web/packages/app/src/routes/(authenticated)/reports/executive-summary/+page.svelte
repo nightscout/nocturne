@@ -30,6 +30,11 @@
   import { ClinicalAssessmentLevel } from "$lib/api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { bg, bgLabel, bgRange } from "$lib/utils/formatting";
+
+  // Format a nullable mg/dL value in the user's preferred units, or em dash if absent.
+  const bgOr = (mgdl: number | undefined | null) =>
+    mgdl != null ? bg(mgdl) : "–";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is standard for executive summary reports
@@ -125,14 +130,6 @@
 
 {#if reportsResource.current}
   <div class="@container container mx-auto space-y-8 p-3 @md:p-6 max-w-6xl">
-    <!-- Print-Friendly Header -->
-    <div class="print:block hidden text-center mb-8">
-      <h1 class="text-2xl font-bold">Diabetes Management Report</h1>
-      <p class="text-sm text-muted-foreground">
-        {startDate.toLocaleDateString()} – {endDate.toLocaleDateString()}
-      </p>
-    </div>
-
     {#if analysis}
       {@const tir = analysis?.timeInRange?.percentages}
       {@const durations = analysis?.timeInRange?.durations}
@@ -244,7 +241,7 @@
               Time in Range
             </CardTitle>
             <CardDescription>
-              Percentage of time in your target zone (70-180 mg/dL)
+              Percentage of time in your target zone ({bgRange(70, 180)})
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-6">
@@ -331,7 +328,7 @@
                 </summary>
                 <p class="mt-2 text-muted-foreground">
                   Calculated using the Nathan formula: eA1C = (GMI + 2.59) /
-                  1.59. Based on mean glucose of {stats?.mean?.toFixed(0)} mg/dL over
+                  1.59. Based on mean glucose of {bgOr(stats?.mean)} {bgLabel()} over
                   {dayCount}
                   days.
                 </p>
@@ -395,14 +392,13 @@
             <div class="grid grid-cols-2 gap-2 text-xs border-t pt-3">
               <div>
                 <div class="font-medium">
-                  {stats?.standardDeviation?.toFixed(0) ?? "–"} mg/dL
+                  {bgOr(stats?.standardDeviation)} {bgLabel()}
                 </div>
                 <div class="text-muted-foreground">Std. Deviation</div>
               </div>
               <div>
                 <div class="font-medium">
-                  {variability?.meanAmplitudeGlycemicExcursions?.toFixed(0) ??
-                    "–"} mg/dL
+                  {bgOr(variability?.meanAmplitudeGlycemicExcursions)} {bgLabel()}
                 </div>
                 <div class="text-muted-foreground">MAGE</div>
               </div>
@@ -429,7 +425,7 @@
               Low Blood Sugar Events
             </CardTitle>
             <CardDescription>
-              Time spent below 70 mg/dL (target: &lt;4%)
+              Time spent below {bg(70)} {bgLabel()} (target: &lt;4%)
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
@@ -449,11 +445,11 @@
               <div class="text-right text-sm">
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full bg-red-500"></div>
-                  <span>&lt;54: {tir?.veryLow?.toFixed(1) ?? 0}%</span>
+                  <span>&lt;{bg(54)}: {tir?.veryLow?.toFixed(1) ?? 0}%</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full bg-red-300"></div>
-                  <span>54-70: {tir?.low?.toFixed(1) ?? 0}%</span>
+                  <span>{bg(54)}-{bg(70)}: {tir?.low?.toFixed(1) ?? 0}%</span>
                 </div>
               </div>
             </div>
@@ -506,7 +502,7 @@
               High Blood Sugar Events
             </CardTitle>
             <CardDescription>
-              Time spent above 180 mg/dL (target: &lt;25%)
+              Time spent above {bg(180)} {bgLabel()} (target: &lt;25%)
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
@@ -526,11 +522,11 @@
               <div class="text-right text-sm">
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full bg-orange-400"></div>
-                  <span>180-250: {tir?.high?.toFixed(1) ?? 0}%</span>
+                  <span>{bg(180)}-{bg(250)}: {tir?.high?.toFixed(1) ?? 0}%</span>
                 </div>
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full bg-orange-600"></div>
-                  <span>&gt;250: {tir?.veryHigh?.toFixed(1) ?? 0}%</span>
+                  <span>&gt;{bg(250)}: {tir?.veryHigh?.toFixed(1) ?? 0}%</span>
                 </div>
               </div>
             </div>
@@ -572,27 +568,27 @@
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-1">
                 <div class="text-2xl font-bold">
-                  {stats?.mean?.toFixed(0) ?? "–"}
+                  {bgOr(stats?.mean)}
                 </div>
-                <div class="text-xs text-muted-foreground">Average (mg/dL)</div>
+                <div class="text-xs text-muted-foreground">Average ({bgLabel()})</div>
               </div>
               <div class="space-y-1">
                 <div class="text-2xl font-bold">
-                  {stats?.median?.toFixed(0) ?? "–"}
+                  {bgOr(stats?.median)}
                 </div>
-                <div class="text-xs text-muted-foreground">Median (mg/dL)</div>
+                <div class="text-xs text-muted-foreground">Median ({bgLabel()})</div>
               </div>
               <div class="space-y-1">
                 <div class="text-2xl font-bold">
-                  {stats?.min?.toFixed(0) ?? "–"}
+                  {bgOr(stats?.min)}
                 </div>
-                <div class="text-xs text-muted-foreground">Lowest (mg/dL)</div>
+                <div class="text-xs text-muted-foreground">Lowest ({bgLabel()})</div>
               </div>
               <div class="space-y-1">
                 <div class="text-2xl font-bold">
-                  {stats?.max?.toFixed(0) ?? "–"}
+                  {bgOr(stats?.max)}
                 </div>
-                <div class="text-xs text-muted-foreground">Highest (mg/dL)</div>
+                <div class="text-xs text-muted-foreground">Highest ({bgLabel()})</div>
               </div>
             </div>
 
@@ -602,25 +598,25 @@
               <div class="grid grid-cols-4 gap-2 text-xs text-center">
                 <div>
                   <div class="font-medium">
-                    {stats?.percentiles?.p10?.toFixed(0) ?? "–"}
+                    {bgOr(stats?.percentiles?.p10)}
                   </div>
                   <div class="text-muted-foreground">10th %ile</div>
                 </div>
                 <div>
                   <div class="font-medium">
-                    {stats?.percentiles?.p25?.toFixed(0) ?? "–"}
+                    {bgOr(stats?.percentiles?.p25)}
                   </div>
                   <div class="text-muted-foreground">25th %ile</div>
                 </div>
                 <div>
                   <div class="font-medium">
-                    {stats?.percentiles?.p75?.toFixed(0) ?? "–"}
+                    {bgOr(stats?.percentiles?.p75)}
                   </div>
                   <div class="text-muted-foreground">75th %ile</div>
                 </div>
                 <div>
                   <div class="font-medium">
-                    {stats?.percentiles?.p90?.toFixed(0) ?? "–"}
+                    {bgOr(stats?.percentiles?.p90)}
                   </div>
                   <div class="text-muted-foreground">90th %ile</div>
                 </div>
@@ -689,7 +685,7 @@
       </div>
 
       <!-- Navigation to Other Reports -->
-      <Card class="border-2 bg-muted/30">
+      <Card class="border-2 bg-muted/30 print:hidden">
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Zap class="w-5 h-5" />
@@ -752,6 +748,13 @@
   @media print {
     :global(body) {
       font-size: 12px;
+    }
+    /* Collapsed <details> can't be expanded on paper; reveal content, drop the toggle. */
+    details > :not(summary) {
+      display: block;
+    }
+    summary {
+      display: none;
     }
   }
 </style>

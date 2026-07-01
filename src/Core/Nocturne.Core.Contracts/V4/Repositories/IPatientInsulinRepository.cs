@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -20,13 +21,13 @@ public interface IPatientInsulinRepository
     Task<PatientInsulin?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>Creates a new patient insulin record.</summary>
-    Task<PatientInsulin> CreateAsync(PatientInsulin model, CancellationToken ct = default);
+    Task<PatientInsulin> CreateAsync(PatientInsulin model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Updates an existing patient insulin record.</summary>
-    Task<PatientInsulin> UpdateAsync(Guid id, PatientInsulin model, CancellationToken ct = default);
+    Task<PatientInsulin> UpdateAsync(Guid id, PatientInsulin model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Deletes a patient insulin record by ID.</summary>
-    Task DeleteAsync(Guid id, CancellationToken ct = default);
+    Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Returns the insulin designated as the primary bolus insulin, or null if none is set.</summary>
     Task<PatientInsulin?> GetPrimaryBolusInsulinAsync(CancellationToken ct = default);

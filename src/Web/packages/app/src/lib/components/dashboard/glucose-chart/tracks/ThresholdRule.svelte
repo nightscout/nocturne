@@ -3,7 +3,7 @@
   import { getGlucoseChartContext } from "../chart-context.svelte";
 
   interface Props {
-    level: "high" | "low" | "veryHigh" | "veryLow";
+    level: "high" | "low" | "veryHigh" | "veryLow" | "targetLow" | "targetHigh";
     class?: string;
     strokeDasharray?: string;
   }
@@ -12,8 +12,12 @@
 
   const ctx = getGlucoseChartContext();
   // Use the same glucose scale as GlucoseTrack's Spline — maps threshold
-  // into the chart's y-domain so it aligns with the glucose line.
-  const y = $derived(ctx.layout.glucose.scale(ctx.engine.thresholds[level]));
+  // into the chart's y-domain so it aligns with the glucose line. Target
+  // levels are nullable (no profile) — skip rendering when absent.
+  const value = $derived(ctx.engine.thresholds[level]);
+  const y = $derived(value == null ? null : ctx.layout.glucose.scale(value));
 </script>
 
-<Rule {y} class={className} stroke-dasharray={strokeDasharray} />
+{#if y != null}
+  <Rule {y} class={className} stroke-dasharray={strokeDasharray} />
+{/if}

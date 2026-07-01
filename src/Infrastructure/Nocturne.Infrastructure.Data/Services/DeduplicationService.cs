@@ -104,223 +104,130 @@ public class DeduplicationService : IDeduplicationService
             return Guid.CreateVersion7();
         }
 
-        // For state spans, check category and state
+        // Each typed branch scans the candidate canonical groups for a value-level match within
+        // the time window; the time-window membership alone is enough for notes.
         if (recordType == RecordType.StateSpan && criteria.Category.HasValue)
         {
-            var canonicalIds = potentialMatches.Select(m => m.CanonicalId).Distinct().ToList();
             var categoryStr = criteria.Category.Value.ToString();
-
-            foreach (var canonicalId in canonicalIds)
-            {
-                var recordIds = potentialMatches
-                    .Where(m => m.CanonicalId == canonicalId)
-                    .Select(m => m.RecordId)
-                    .ToList();
-
-                var stateSpans = await _context.StateSpans
-                    .Where(s => recordIds.Contains(s.Id))
-                    .ToListAsync(cancellationToken);
-
-                foreach (var stateSpan in stateSpans)
-                {
-                    if (!string.Equals(stateSpan.Category, categoryStr, StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    if (!string.IsNullOrEmpty(criteria.State) &&
-                        !string.Equals(stateSpan.State, criteria.State, StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    // Match found
-                    return canonicalId;
-                }
-            }
+            var match = await FindMatchingCanonicalIdAsync(
+                potentialMatches,
+                ids => _context.StateSpans.Where(s => ids.Contains(s.Id)),
+                s => string.Equals(s.Category, categoryStr, StringComparison.OrdinalIgnoreCase)
+                    && (string.IsNullOrEmpty(criteria.State)
+                        || string.Equals(s.State, criteria.State, StringComparison.OrdinalIgnoreCase)),
+                cancellationToken);
+            if (match.HasValue)
+                return match.Value;
         }
-        // For sensor glucose, check glucose value matching
         else if (recordType == RecordType.SensorGlucose && criteria.GlucoseValue.HasValue)
         {
-            var canonicalIds = potentialMatches.Select(m => m.CanonicalId).Distinct().ToList();
-
-            foreach (var canonicalId in canonicalIds)
-            {
-                var recordIds = potentialMatches
-                    .Where(m => m.CanonicalId == canonicalId)
-                    .Select(m => m.RecordId)
-                    .ToList();
-
-                var readings = await _context.SensorGlucose
-                    .Where(r => recordIds.Contains(r.Id))
-                    .ToListAsync(cancellationToken);
-
-                foreach (var reading in readings)
-                {
-                    if (Math.Abs(reading.Mgdl - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance)
-                    {
-                        return canonicalId;
-                    }
-                }
-            }
+            var match = await FindMatchingCanonicalIdAsync(
+                potentialMatches,
+                ids => _context.SensorGlucose.Where(r => ids.Contains(r.Id)),
+                r => Math.Abs(r.Mgdl - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance,
+                cancellationToken);
+            if (match.HasValue)
+                return match.Value;
         }
-        // For boluses, check insulin value matching
         else if (recordType == RecordType.Bolus && criteria.Insulin.HasValue)
         {
-            var canonicalIds = potentialMatches.Select(m => m.CanonicalId).Distinct().ToList();
-
-            foreach (var canonicalId in canonicalIds)
-            {
-                var recordIds = potentialMatches
-                    .Where(m => m.CanonicalId == canonicalId)
-                    .Select(m => m.RecordId)
-                    .ToList();
-
-                var boluses = await _context.Boluses
-                    .Where(b => recordIds.Contains(b.Id))
-                    .ToListAsync(cancellationToken);
-
-                foreach (var bolus in boluses)
-                {
-                    if (Math.Abs(bolus.Insulin - criteria.Insulin.Value) <= criteria.InsulinTolerance)
-                    {
-                        return canonicalId;
-                    }
-                }
-            }
+            var match = await FindMatchingCanonicalIdAsync(
+                potentialMatches,
+                ids => _context.Boluses.Where(b => ids.Contains(b.Id)),
+                b => Math.Abs(b.Insulin - criteria.Insulin.Value) <= criteria.InsulinTolerance,
+                cancellationToken);
+            if (match.HasValue)
+                return match.Value;
         }
-        // For carb intakes, check carbs value matching
         else if (recordType == RecordType.CarbIntake && criteria.Carbs.HasValue)
         {
-            var canonicalIds = potentialMatches.Select(m => m.CanonicalId).Distinct().ToList();
-
-            foreach (var canonicalId in canonicalIds)
-            {
-                var recordIds = potentialMatches
-                    .Where(m => m.CanonicalId == canonicalId)
-                    .Select(m => m.RecordId)
-                    .ToList();
-
-                var carbs = await _context.CarbIntakes
-                    .Where(c => recordIds.Contains(c.Id))
-                    .ToListAsync(cancellationToken);
-
-                foreach (var carb in carbs)
-                {
-                    if (Math.Abs(carb.Carbs - criteria.Carbs.Value) <= criteria.CarbsTolerance)
-                    {
-                        return canonicalId;
-                    }
-                }
-            }
+            var match = await FindMatchingCanonicalIdAsync(
+                potentialMatches,
+                ids => _context.CarbIntakes.Where(c => ids.Contains(c.Id)),
+                c => Math.Abs(c.Carbs - criteria.Carbs.Value) <= criteria.CarbsTolerance,
+                cancellationToken);
+            if (match.HasValue)
+                return match.Value;
         }
-        // For BG checks, check glucose value matching
         else if (recordType == RecordType.BGCheck && criteria.GlucoseValue.HasValue)
         {
-            var canonicalIds = potentialMatches.Select(m => m.CanonicalId).Distinct().ToList();
-
-            foreach (var canonicalId in canonicalIds)
-            {
-                var recordIds = potentialMatches
-                    .Where(m => m.CanonicalId == canonicalId)
-                    .Select(m => m.RecordId)
-                    .ToList();
-
-                var bgChecks = await _context.BGChecks
-                    .Where(bg => recordIds.Contains(bg.Id))
-                    .ToListAsync(cancellationToken);
-
-                foreach (var bg in bgChecks)
-                {
-                    if (Math.Abs(bg.Glucose - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance)
-                    {
-                        return canonicalId;
-                    }
-                }
-            }
+            var match = await FindMatchingCanonicalIdAsync(
+                potentialMatches,
+                ids => _context.BGChecks.Where(bg => ids.Contains(bg.Id)),
+                bg => Math.Abs(bg.Glucose - criteria.GlucoseValue.Value) <= criteria.GlucoseTolerance,
+                cancellationToken);
+            if (match.HasValue)
+                return match.Value;
         }
-        // For device events, check event type matching
         else if (recordType == RecordType.DeviceEvent && !string.IsNullOrEmpty(criteria.EventType))
         {
-            var canonicalIds = potentialMatches.Select(m => m.CanonicalId).Distinct().ToList();
-
-            foreach (var canonicalId in canonicalIds)
-            {
-                var recordIds = potentialMatches
-                    .Where(m => m.CanonicalId == canonicalId)
-                    .Select(m => m.RecordId)
-                    .ToList();
-
-                var events = await _context.DeviceEvents
-                    .Where(e => recordIds.Contains(e.Id))
-                    .ToListAsync(cancellationToken);
-
-                foreach (var e in events)
-                {
-                    if (string.Equals(e.EventType, criteria.EventType, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return canonicalId;
-                    }
-                }
-            }
+            var match = await FindMatchingCanonicalIdAsync(
+                potentialMatches,
+                ids => _context.DeviceEvents.Where(e => ids.Contains(e.Id)),
+                e => string.Equals(e.EventType, criteria.EventType, StringComparison.OrdinalIgnoreCase),
+                cancellationToken);
+            if (match.HasValue)
+                return match.Value;
         }
-        // For notes, time-window only matching
         else if (recordType == RecordType.Note)
         {
+            // Notes match on time window alone.
             if (potentialMatches.Count > 0)
             {
                 return potentialMatches.First().CanonicalId;
             }
         }
-        // For bolus calculations, check carb input matching
         else if (recordType == RecordType.BolusCalculation && criteria.Carbs.HasValue)
         {
-            var canonicalIds = potentialMatches.Select(m => m.CanonicalId).Distinct().ToList();
-
-            foreach (var canonicalId in canonicalIds)
-            {
-                var recordIds = potentialMatches
-                    .Where(m => m.CanonicalId == canonicalId)
-                    .Select(m => m.RecordId)
-                    .ToList();
-
-                var calcs = await _context.BolusCalculations
-                    .Where(bc => recordIds.Contains(bc.Id))
-                    .ToListAsync(cancellationToken);
-
-                foreach (var bc in calcs)
-                {
-                    if (Math.Abs((bc.CarbInput ?? 0) - criteria.Carbs.Value) <= criteria.CarbsTolerance)
-                    {
-                        return canonicalId;
-                    }
-                }
-            }
+            var match = await FindMatchingCanonicalIdAsync(
+                potentialMatches,
+                ids => _context.BolusCalculations.Where(bc => ids.Contains(bc.Id)),
+                bc => Math.Abs((bc.CarbInput ?? 0) - criteria.Carbs.Value) <= criteria.CarbsTolerance,
+                cancellationToken);
+            if (match.HasValue)
+                return match.Value;
         }
-        // For temp basals, check rate and origin matching
         else if (recordType == RecordType.TempBasal && criteria.Rate.HasValue)
         {
-            var canonicalIds = potentialMatches.Select(m => m.CanonicalId).Distinct().ToList();
-
-            foreach (var canonicalId in canonicalIds)
-            {
-                var recordIds = potentialMatches
-                    .Where(m => m.CanonicalId == canonicalId)
-                    .Select(m => m.RecordId)
-                    .ToList();
-
-                var tempBasals = await _context.TempBasals
-                    .Where(tb => recordIds.Contains(tb.Id))
-                    .ToListAsync(cancellationToken);
-
-                foreach (var tb in tempBasals)
-                {
-                    if (Math.Abs(tb.Rate - criteria.Rate.Value) <= criteria.RateTolerance)
-                    {
-                        return canonicalId;
-                    }
-                }
-            }
+            var match = await FindMatchingCanonicalIdAsync(
+                potentialMatches,
+                ids => _context.TempBasals.Where(tb => ids.Contains(tb.Id)),
+                tb => Math.Abs(tb.Rate - criteria.Rate.Value) <= criteria.RateTolerance,
+                cancellationToken);
+            if (match.HasValue)
+                return match.Value;
         }
 
         // No matching records found, create a new canonical ID
         return Guid.CreateVersion7();
+    }
+
+    /// <summary>
+    /// Scans the candidate canonical groups for one whose underlying records include a value-level
+    /// match. For each distinct canonical ID in <paramref name="potentialMatches"/>, loads that
+    /// group's records via <paramref name="query"/> and returns the canonical ID if any record
+    /// satisfies <paramref name="isMatch"/>. Returns null when no group matches. The per-record
+    /// predicate runs in memory after materialization, exactly as the original per-type loops did.
+    /// </summary>
+    private async Task<Guid?> FindMatchingCanonicalIdAsync<TEntity>(
+        List<LinkedRecordEntity> potentialMatches,
+        Func<List<Guid>, IQueryable<TEntity>> query,
+        Func<TEntity, bool> isMatch,
+        CancellationToken cancellationToken)
+    {
+        foreach (var canonicalId in potentialMatches.Select(m => m.CanonicalId).Distinct())
+        {
+            var recordIds = potentialMatches
+                .Where(m => m.CanonicalId == canonicalId)
+                .Select(m => m.RecordId)
+                .ToList();
+
+            var entities = await query(recordIds).ToListAsync(cancellationToken);
+            if (entities.Any(isMatch))
+                return canonicalId;
+        }
+
+        return null;
     }
 
     /// <inheritdoc />

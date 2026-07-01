@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -61,37 +62,45 @@ public interface ICarbIntakeRepository : IV4Repository<CarbIntake>
     /// <summary>Persist a new <see cref="CarbIntake"/> and return the saved entity.</summary>
     /// <param name="model">Record to create.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task<CarbIntake> CreateAsync(CarbIntake model, CancellationToken ct = default);
+    new Task<CarbIntake> CreateAsync(CarbIntake model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Replace an existing <see cref="CarbIntake"/> identified by <paramref name="id"/>.</summary>
     /// <param name="id">UUID v7 identifier of the record to update.</param>
     /// <param name="model">Updated record data.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task<CarbIntake> UpdateAsync(Guid id, CarbIntake model, CancellationToken ct = default);
+    new Task<CarbIntake> UpdateAsync(Guid id, CarbIntake model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Delete a <see cref="CarbIntake"/> by its UUID v7.</summary>
     /// <param name="id">UUID v7 identifier of the record to delete.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, CancellationToken ct = default);
+    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Delete the <see cref="CarbIntake"/> with the given legacy MongoDB ObjectId.</summary>
     /// <param name="legacyId">Original MongoDB ObjectId string.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Delete <see cref="CarbIntake"/> records matching the given data source and sync identifier.</summary>
     /// <param name="dataSource">The external data source name.</param>
     /// <param name="syncIdentifier">The external sync identifier (e.g., UUID from the uploading system).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted.</returns>
-    Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default);
+    Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Count <see cref="CarbIntake"/> records within an optional time range.</summary>
     /// <param name="from">Inclusive start, or <c>null</c> for no lower bound.</param>
     /// <param name="to">Exclusive end, or <c>null</c> for no upper bound.</param>
     /// <param name="ct">Cancellation token.</param>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Retrieve the timestamp of the most recently stored <see cref="CarbIntake"/>, optionally scoped to a data source.
+    /// </summary>
+    /// <remarks>Used by connectors to resume per-source sync without re-fetching already-stored data.</remarks>
+    /// <param name="source">Optional data source filter. Pass <c>null</c> to search across all sources.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>Retrieve all <see cref="CarbIntake"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking a carb entry to its associated bolus or meal.</param>
@@ -107,6 +116,6 @@ public interface ICarbIntakeRepository : IV4Repository<CarbIntake>
     /// <returns>The inserted records with server-assigned fields populated.</returns>
     Task<IEnumerable<CarbIntake>> BulkCreateAsync(
         IEnumerable<CarbIntake> records,
-        CancellationToken ct = default
+        WriteOrigin origin, CancellationToken ct = default
     );
 }

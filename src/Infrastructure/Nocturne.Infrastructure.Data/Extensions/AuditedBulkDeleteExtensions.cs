@@ -103,7 +103,35 @@ public static class AuditedBulkDeleteExtensions
     /// Executes a bulk soft delete with audit trail. Queries affected records,
     /// writes audit entries, then sets <c>DeletedAt</c> — all in one transaction.
     /// </summary>
+    /// <returns>The number of records soft-deleted.</returns>
     public static async Task<int> AuditedSoftDeleteAsync<T>(
+        this NocturneDbContext context,
+        IQueryable<T> query,
+        IAuditContext? auditContext,
+        CancellationToken ct = default) where T : class, IAuditable, ISoftDeletable
+        => (await context.AuditedSoftDeleteWithEntitiesAsync(query, auditContext, ct)).Count;
+
+    /// <summary>
+    /// As <see cref="AuditedSoftDeleteAsync{T}"/>, but returns the ids of the soft-deleted records so the
+    /// caller can broadcast per-record delete events. The records are already materialized for the audit
+    /// snapshot, so surfacing their ids costs no extra query.
+    /// </summary>
+    public static async Task<List<Guid>> AuditedSoftDeleteWithIdsAsync<T>(
+        this NocturneDbContext context,
+        IQueryable<T> query,
+        IAuditContext? auditContext,
+        CancellationToken ct = default) where T : class, IAuditable, ISoftDeletable
+        => (await context.AuditedSoftDeleteWithEntitiesAsync(query, auditContext, ct))
+            .Select(e => (Guid)typeof(T).GetProperty("Id")!.GetValue(e)!)
+            .ToList();
+
+    /// <summary>
+    /// As <see cref="AuditedSoftDeleteAsync{T}"/>, but returns the soft-deleted entities so the caller can
+    /// project them (e.g. to the legacy <c>Entry</c> shape) and broadcast per-record delete events. The
+    /// records are already materialized for the audit snapshot, so surfacing them costs no extra query.
+    /// They are detached after the snapshot but still hold their loaded values.
+    /// </summary>
+    public static async Task<List<T>> AuditedSoftDeleteWithEntitiesAsync<T>(
         this NocturneDbContext context,
         IQueryable<T> query,
         IAuditContext? auditContext,
@@ -121,7 +149,7 @@ public static class AuditedBulkDeleteExtensions
             if (affectedRecords.Count == 0)
             {
                 await transaction.CommitAsync(ct);
-                return 0;
+                return [];
             }
 
             var now = DateTime.UtcNow;
@@ -177,13 +205,13 @@ public static class AuditedBulkDeleteExtensions
             // update: a user-initiated delete blocks resync re-creation, a system sweep
             // (no auth context) leaves the row re-creatable.
             var isUserDelete = auditContext?.AuthType != null;
-            var deletedCount = await query.ExecuteUpdateAsync(
+            await query.ExecuteUpdateAsync(
                 s => s
                     .SetProperty(e => e.DeletedAt, now)
                     .SetProperty(e => EF.Property<bool>(e, "DeletedByUser"), isUserDelete), ct);
 
             await transaction.CommitAsync(ct);
-            return deletedCount;
+            return affectedRecords;
         });
     }
 

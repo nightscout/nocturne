@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Links records from different sources that represent the same underlying event.
 /// </summary>
 [Table("linked_records")]
-public class LinkedRecordEntity : ITenantScoped
+public class LinkedRecordEntity : ITenantScoped, ISystemCreated
 {
     /// <summary>
     /// Identifier of the tenant this linked record belongs to

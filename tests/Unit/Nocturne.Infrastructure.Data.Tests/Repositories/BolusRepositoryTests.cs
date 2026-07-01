@@ -11,6 +11,7 @@ using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
 
@@ -94,7 +95,7 @@ public class BolusRepositoryTests : IDisposable
             DataSource = "aaps",
             SyncIdentifier = "sync-1",
             Insulin = 5.0,
-        });
+        }, WriteOrigin.Live);
 
         // Act: Create again with same (DataSource, SyncIdentifier), different Insulin
         var second = await _repo.CreateAsync(new Bolus
@@ -103,7 +104,7 @@ public class BolusRepositoryTests : IDisposable
             DataSource = "aaps",
             SyncIdentifier = "sync-1",
             Insulin = 6.4,  // updated delivered value
-        });
+        }, WriteOrigin.Live);
 
         // Assert: same Id, new payload, only one row exists
         second.Id.Should().Be(first.Id);
@@ -116,11 +117,37 @@ public class BolusRepositoryTests : IDisposable
     public async Task CreateAsync_WithoutSyncIdentifier_DoesNotDedupe()
     {
         var timestamp = DateTime.UtcNow;
-        await _repo.CreateAsync(new Bolus { Timestamp = timestamp, Insulin = 5.0 });
-        await _repo.CreateAsync(new Bolus { Timestamp = timestamp, Insulin = 5.0 });
+        await _repo.CreateAsync(new Bolus { Timestamp = timestamp, Insulin = 5.0 }, WriteOrigin.Live);
+        await _repo.CreateAsync(new Bolus { Timestamp = timestamp, Insulin = 5.0 }, WriteOrigin.Live);
 
         var count = await _context.Boluses.CountAsync();
         count.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetLatestTimestampAsync_IsScopedToSource()
+    {
+        // Regression: the per-source watermark must ignore other sources. connector-a's latest is
+        // older than connector-b's; a tenant-global latest would resume connector-a from b's clock
+        // and silently skip connector-a's backfill.
+        var aOld = new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc);
+        var aLatest = new DateTime(2026, 1, 12, 0, 0, 0, DateTimeKind.Utc);
+        var bNewer = new DateTime(2026, 1, 20, 0, 0, 0, DateTimeKind.Utc);
+
+        await _repo.CreateAsync(new Bolus { Timestamp = aOld, Insulin = 1.0, DataSource = "connector-a" }, WriteOrigin.Live);
+        await _repo.CreateAsync(new Bolus { Timestamp = aLatest, Insulin = 2.0, DataSource = "connector-a" }, WriteOrigin.Live);
+        await _repo.CreateAsync(new Bolus { Timestamp = bNewer, Insulin = 3.0, DataSource = "connector-b" }, WriteOrigin.Live);
+
+        (await _repo.GetLatestTimestampAsync("connector-a")).Should().Be(aLatest);
+        (await _repo.GetLatestTimestampAsync()).Should().Be(bNewer, "a null source returns the tenant-wide latest");
+    }
+
+    [Fact]
+    public async Task GetLatestTimestampAsync_ReturnsNull_WhenNoRecordsForSource()
+    {
+        await _repo.CreateAsync(new Bolus { Timestamp = DateTime.UtcNow, Insulin = 1.0, DataSource = "connector-b" }, WriteOrigin.Live);
+
+        (await _repo.GetLatestTimestampAsync("connector-a")).Should().BeNull();
     }
 
     [Fact]
@@ -128,8 +155,8 @@ public class BolusRepositoryTests : IDisposable
     {
         // SyncIdentifier alone is not enough — needs DataSource scoping.
         var timestamp = DateTime.UtcNow;
-        await _repo.CreateAsync(new Bolus { Timestamp = timestamp, SyncIdentifier = "sync-1", Insulin = 5.0 });
-        await _repo.CreateAsync(new Bolus { Timestamp = timestamp, SyncIdentifier = "sync-1", Insulin = 5.0 });
+        await _repo.CreateAsync(new Bolus { Timestamp = timestamp, SyncIdentifier = "sync-1", Insulin = 5.0 }, WriteOrigin.Live);
+        await _repo.CreateAsync(new Bolus { Timestamp = timestamp, SyncIdentifier = "sync-1", Insulin = 5.0 }, WriteOrigin.Live);
 
         var count = await _context.Boluses.CountAsync();
         count.Should().Be(2);
@@ -145,14 +172,14 @@ public class BolusRepositoryTests : IDisposable
             DataSource = "aaps",
             SyncIdentifier = "sync-1",
             Insulin = 5.0,
-        });
+        }, WriteOrigin.Live);
         await _repo.CreateAsync(new Bolus
         {
             Timestamp = timestamp,
             DataSource = "loop",
             SyncIdentifier = "sync-1",
             Insulin = 5.0,
-        });
+        }, WriteOrigin.Live);
 
         var count = await _context.Boluses.CountAsync();
         count.Should().Be(2);
@@ -169,14 +196,14 @@ public class BolusRepositoryTests : IDisposable
             DataSource = "aaps",
             SyncIdentifier = "sync-1",
             Insulin = 5.0,
-        });
+        }, WriteOrigin.Live);
 
         // Bulk insert with one colliding SyncIdentifier + one new
         var results = (await _repo.BulkCreateAsync(new[]
         {
             new Bolus { Timestamp = timestamp, DataSource = "aaps", SyncIdentifier = "sync-1", Insulin = 6.4 },
             new Bolus { Timestamp = timestamp, DataSource = "aaps", SyncIdentifier = "sync-2", Insulin = 3.0 },
-        })).ToList();
+        }, WriteOrigin.Live)).ToList();
 
         results.Should().HaveCount(2);
         var dbCount = await _context.Boluses.CountAsync();
@@ -212,7 +239,7 @@ public class BolusRepositoryTests : IDisposable
         {
             new Bolus { Timestamp = timestamp, DataSource = "aaps", SyncIdentifier = "sync-1", Insulin = 5.0 },
             new Bolus { Timestamp = timestamp, DataSource = "aaps", SyncIdentifier = "sync-1", Insulin = 6.4 },
-        });
+        }, WriteOrigin.Live);
 
         var dbCount = await _context.Boluses.CountAsync();
         dbCount.Should().Be(1);

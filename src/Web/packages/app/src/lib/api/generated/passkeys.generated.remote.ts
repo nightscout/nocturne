@@ -5,8 +5,8 @@
 import { getRequestEvent, query, command } from '$app/server';
 import { error, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
-import { PasskeyRegisterOptionsRequestSchema, PasskeyRegisterCompleteRequestSchema, PasskeyLoginOptionsRequestSchema, PasskeyLoginCompleteRequestSchema, RecoveryVerifyRequestSchema, SetupOptionsRequestSchema, SetupCompleteRequestSchema, AccessRequestOptionsRequestSchema, AccessRequestCompleteRequestSchema, InviteOptionsRequestSchema, InviteCompleteRequestSchema } from '$lib/api/generated/schemas';
-import { type PasskeyRegisterOptionsRequest, type PasskeyRegisterCompleteRequest, type PasskeyLoginOptionsRequest, type PasskeyLoginCompleteRequest, type RecoveryVerifyRequest, type SetupOptionsRequest, type SetupCompleteRequest, type AccessRequestOptionsRequest, type AccessRequestCompleteRequest, type InviteOptionsRequest, type InviteCompleteRequest } from '$api';
+import { PasskeyRegisterOptionsRequestSchema, PasskeyRegisterCompleteRequestSchema, PasskeyLoginOptionsRequestSchema, PasskeyLoginCompleteRequestSchema, RecoveryVerifyRequestSchema, AccessRequestOptionsRequestSchema, AccessRequestCompleteRequestSchema, InviteOptionsRequestSchema, InviteCompleteRequestSchema } from '$lib/api/generated/schemas';
+import { type PasskeyRegisterOptionsRequest, type PasskeyRegisterCompleteRequest, type PasskeyLoginOptionsRequest, type PasskeyLoginCompleteRequest, type RecoveryVerifyRequest, type AccessRequestOptionsRequest, type AccessRequestCompleteRequest, type InviteOptionsRequest, type InviteCompleteRequest } from '$api';
 
 /** Generate registration options for a new passkey credential */
 export const registerOptions = command(PasskeyRegisterOptionsRequestSchema, async (request) => {
@@ -276,52 +276,6 @@ export const completeOnboarding = command(async () => {
     const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
     if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
     throw error(500, message ?? 'Failed to complete onboarding');
-  }
-});
-
-/** Generate registration options for the first user during initial setup.
-Only available when no non-system subjects exist (setup mode).
-Creates the subject, assigns admin role, and returns passkey registration options. */
-export const setupOptions = command(SetupOptionsRequestSchema, async (request) => {
-  const apiClient = getRequestEvent().locals.apiClient;
-  try {
-    const result = await apiClient.passkey.setupOptions(request as SetupOptionsRequest);
-    return result;
-  } catch (err) {
-    const status = (err as any)?.status;
-    if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
-    console.error('Error in passkey.setupOptions:', err);
-    const e = err as any;
-    const body = e?.body ?? e?.response;
-    const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
-    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
-    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, message ?? 'Failed to setup options');
-  }
-});
-
-/** Complete passkey registration during initial setup.
-Verifies attestation, generates recovery codes, issues a full JWT session,
-and exits setup mode. */
-export const setupComplete = command(SetupCompleteRequestSchema, async (request) => {
-  const apiClient = getRequestEvent().locals.apiClient;
-  try {
-    const result = await apiClient.passkey.setupComplete(request as SetupCompleteRequest);
-    return result;
-  } catch (err) {
-    const status = (err as any)?.status;
-    if (status === 401) { throw error(401, 'Unauthorized'); }
-    if (status === 403) throw error(403, (err as any)?.message ?? (err as any)?.detail ?? 'Forbidden');
-    console.error('Error in passkey.setupComplete:', err);
-    const e = err as any;
-    const body = e?.body ?? e?.response;
-    const errors = body?.errors ?? e?.errors;
-    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;
-    const message = flat ?? body?.message ?? body?.title ?? body?.detail ?? e?.message ?? e?.title ?? e?.detail;
-    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');
-    throw error(500, message ?? 'Failed to setup complete');
   }
 });
 

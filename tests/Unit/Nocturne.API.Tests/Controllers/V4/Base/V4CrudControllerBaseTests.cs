@@ -6,6 +6,7 @@ using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Controllers.V4.Base;
 
@@ -154,7 +155,7 @@ public class V4CrudControllerBaseTests
     {
         var request = new TestCreateRequest { Timestamp = DateTime.UtcNow, Device = "test" };
         var model = new TestRecord { Id = Guid.NewGuid(), Timestamp = request.Timestamp, Device = request.Device };
-        _repo.Setup(r => r.CreateAsync(It.IsAny<TestRecord>(), It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.CreateAsync(It.IsAny<TestRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(model);
 
         var result = await _controller.Create(request);
@@ -186,7 +187,7 @@ public class V4CrudControllerBaseTests
 
         _repo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existing);
-        _repo.Setup(r => r.UpdateAsync(id, It.IsAny<TestRecord>(), It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.UpdateAsync(id, It.IsAny<TestRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(updated);
 
         var result = await _controller.Update(id, request);
@@ -227,7 +228,7 @@ public class V4CrudControllerBaseTests
     public async Task Delete_Exists_ReturnsNoContent()
     {
         var id = Guid.NewGuid();
-        _repo.Setup(r => r.DeleteAsync(id, It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.DeleteAsync(id, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var result = await _controller.Delete(id);
@@ -239,7 +240,7 @@ public class V4CrudControllerBaseTests
     public async Task Delete_NotFound_Returns404()
     {
         var id = Guid.NewGuid();
-        _repo.Setup(r => r.DeleteAsync(id, It.IsAny<CancellationToken>()))
+        _repo.Setup(r => r.DeleteAsync(id, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new KeyNotFoundException());
 
         var result = await _controller.Delete(id);

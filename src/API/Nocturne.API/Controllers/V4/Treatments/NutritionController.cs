@@ -14,6 +14,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
 
@@ -114,35 +115,9 @@ public class NutritionController : ControllerBase
         if (request.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        Guid correlationId;
-        if (request.CorrelationId.HasValue)
-        {
-            var exists = await _context.DecompositionBatches.AnyAsync(b => b.Id == request.CorrelationId.Value, ct);
-            if (!exists)
-            {
-                _context.DecompositionBatches.Add(new DecompositionBatchEntity
-                {
-                    Id = request.CorrelationId.Value,
-                    TenantId = _context.TenantId,
-                    Source = "nutrition_controller",
-                    CreatedAt = DateTime.UtcNow,
-                });
-                await _context.SaveChangesAsync(ct);
-            }
-            correlationId = request.CorrelationId.Value;
-        }
-        else
-        {
-            var batch = new DecompositionBatchEntity
-            {
-                TenantId = _context.TenantId,
-                Source = "nutrition_controller",
-                CreatedAt = DateTime.UtcNow,
-            };
-            _context.DecompositionBatches.Add(batch);
-            await _context.SaveChangesAsync(ct);
-            correlationId = batch.Id;
-        }
+        // Records split from one source share a correlation_id; it is a free-standing
+        // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
+        var correlationId = request.CorrelationId ?? Guid.CreateVersion7();
 
         var model = new CarbIntake
         {
@@ -158,7 +133,7 @@ public class NutritionController : ControllerBase
             CorrelationId = correlationId,
         };
 
-        var created = await _carbIntakeRepo.CreateAsync(model, ct);
+        var created = await _carbIntakeRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetCarbIntakeById), new { id = created.Id }, created);
     }
 
@@ -199,7 +174,7 @@ public class NutritionController : ControllerBase
 
         try
         {
-            var updated = await _carbIntakeRepo.UpdateAsync(id, model, ct);
+            var updated = await _carbIntakeRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -219,7 +194,7 @@ public class NutritionController : ControllerBase
     {
         try
         {
-            await _carbIntakeRepo.DeleteAsync(id, ct);
+            await _carbIntakeRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -243,7 +218,7 @@ public class NutritionController : ControllerBase
         if (string.IsNullOrEmpty(dataSource) || string.IsNullOrEmpty(syncIdentifier))
             return BadRequest("dataSource and syncIdentifier are required");
 
-        var deleted = await _carbIntakeRepo.DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, ct);
+        var deleted = await _carbIntakeRepo.DeleteBySyncIdentifierAsync(dataSource, syncIdentifier, WriteOrigin.Live, ct);
         return deleted > 0 ? NoContent() : NotFound();
     }
 
@@ -373,36 +348,9 @@ public class NutritionController : ControllerBase
         if (request.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        Guid correlationId;
-        if (request.CorrelationId.HasValue)
-        {
-            // Ensure a batch record exists for the supplied CorrelationId so the FK is satisfied
-            var exists = await _context.DecompositionBatches.AnyAsync(b => b.Id == request.CorrelationId.Value, ct);
-            if (!exists)
-            {
-                _context.DecompositionBatches.Add(new DecompositionBatchEntity
-                {
-                    Id = request.CorrelationId.Value,
-                    TenantId = _context.TenantId,
-                    Source = "nutrition_controller",
-                    CreatedAt = DateTime.UtcNow,
-                });
-                await _context.SaveChangesAsync(ct);
-            }
-            correlationId = request.CorrelationId.Value;
-        }
-        else
-        {
-            var batch = new DecompositionBatchEntity
-            {
-                TenantId = _context.TenantId,
-                Source = "nutrition_controller",
-                CreatedAt = DateTime.UtcNow,
-            };
-            _context.DecompositionBatches.Add(batch);
-            await _context.SaveChangesAsync(ct);
-            correlationId = batch.Id;
-        }
+        // The meal's bolus + carb intake share a correlation_id; it is a free-standing
+        // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
+        var correlationId = request.CorrelationId ?? Guid.CreateVersion7();
         var timestamp = request.Timestamp.UtcDateTime;
 
         var bolusModel = new Bolus
@@ -460,11 +408,11 @@ public class NutritionController : ControllerBase
         }
 
         var bolusBefore = await _context.Boluses.CountAsync(ct);
-        var createdBolus = await _bolusRepo.CreateAsync(bolusModel, ct);
+        var createdBolus = await _bolusRepo.CreateAsync(bolusModel, WriteOrigin.Live, ct);
         var bolusWasNew = (await _context.Boluses.CountAsync(ct)) > bolusBefore;
 
         var carbBefore = await _context.CarbIntakes.CountAsync(ct);
-        var createdCarb = await _carbIntakeRepo.CreateAsync(carbModel, ct);
+        var createdCarb = await _carbIntakeRepo.CreateAsync(carbModel, WriteOrigin.Live, ct);
         var carbWasNew = (await _context.CarbIntakes.CountAsync(ct)) > carbBefore;
 
         await tx.CommitAsync(ct);

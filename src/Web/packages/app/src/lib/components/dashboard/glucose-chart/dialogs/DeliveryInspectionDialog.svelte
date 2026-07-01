@@ -154,7 +154,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="max-w-lg max-h-[85vh] overflow-y-auto">
+  <Dialog.Content class="max-w-lg max-h-[85vh] overflow-y-auto print:hidden">
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-3">
         <Syringe class="h-5 w-5 text-muted-foreground" />

@@ -191,7 +191,7 @@ public class TreatmentService : ITreatmentService
         ApplyJsonPatch(existing, patchData);
 
         // Re-decompose (idempotent upsert via LegacyId matching)
-        await _decomposer.DecomposeAsync(existing, cancellationToken);
+        await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
 
         await _cache.InvalidateAsync(cancellationToken);
         await _events.OnUpdatedAsync(existing, cancellationToken);
@@ -250,7 +250,7 @@ public class TreatmentService : ITreatmentService
     public async Task<long> DeleteTreatmentsAsync(
         string? find = null, CancellationToken cancellationToken = default)
     {
-        var count = await _decomposer.BulkDeleteAsync(find, cancellationToken);
+        var count = await _decomposer.BulkDeleteAsync(find, WriteOrigin.Live, cancellationToken);
         if (count > 0)
             await _cache.InvalidateAsync(cancellationToken);
         return count;

@@ -1,3 +1,22 @@
+// Keep the long-lived SvelteKit server process alive across a single request's
+// stray promise rejection. Node treats unhandled rejections as fatal by default,
+// so a benign mid-flight failure — e.g. a backend fetch aborted because the client
+// navigated away, or an API error thrown from a load/remote function that races the
+// teardown — would otherwise crash the whole web server and drop every other
+// in-flight session. Attaching any 'unhandledRejection' listener overrides that
+// fatal default; we still surface non-benign rejections to the logs.
+// Guarded against HMR re-registration in dev.
+if (!(globalThis as { __nocturneRejectionGuard?: boolean }).__nocturneRejectionGuard) {
+	(globalThis as { __nocturneRejectionGuard?: boolean }).__nocturneRejectionGuard = true;
+	process.on('unhandledRejection', (reason) => {
+		const name = (reason as { name?: string } | null)?.name;
+		// Aborted requests / timed-out probes are expected when clients disconnect —
+		// nothing actionable, so don't spam the logs.
+		if (name === 'AbortError' || name === 'TimeoutError') return;
+		console.error('Unhandled promise rejection (server kept alive):', reason);
+	});
+}
+
 // Skip all OpenTelemetry instrumentation in dev mode — the import-in-the-middle
 // ESM hook and getNodeAutoInstrumentations() add 60+ seconds to Vite startup by
 // intercepting every module load and eagerly patching ~30 Node.js packages.

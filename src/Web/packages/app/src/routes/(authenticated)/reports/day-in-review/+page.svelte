@@ -263,12 +263,12 @@
       {label}
       {#if sortColumn === column}
         {#if sortDirection === "asc"}
-          <ArrowUp class="ml-1 h-4 w-4" />
+          <ArrowUp class="ml-1 h-4 w-4 print:hidden" />
         {:else}
-          <ArrowDown class="ml-1 h-4 w-4" />
+          <ArrowDown class="ml-1 h-4 w-4 print:hidden" />
         {/if}
       {:else}
-        <ArrowUpDown class="ml-1 h-4 w-4 opacity-50" />
+        <ArrowUpDown class="ml-1 h-4 w-4 opacity-50 print:hidden" />
       {/if}
     </Button>
   </Table.Head>
@@ -277,7 +277,7 @@
 {#if dayDataResource.current}
 <div class="@container space-y-6 p-3 @md:p-6">
   <!-- Header with Navigation -->
-  <Card.Root>
+  <Card.Root class="print:hidden">
     <Card.Content class="p-4">
       <div
         class="flex flex-col gap-3 @2xl:flex-row @2xl:flex-wrap @2xl:items-center @2xl:justify-between"
@@ -436,12 +436,14 @@
 
   <!-- Historical Prediction Scrubber + APS State -->
   {#if hasApsSnapshots}
-    <RetrospectiveTimeScrubber
-      date={currentDate}
-      bind:currentTime={scrubberTime}
-      onTimeChange={handleScrubberTimeChange}
-      stepMinutes={5}
-    />
+    <div class="print:hidden">
+      <RetrospectiveTimeScrubber
+        date={currentDate}
+        bind:currentTime={scrubberTime}
+        onTimeChange={handleScrubberTimeChange}
+        stepMinutes={5}
+      />
+    </div>
     <ApsStateCard snapshot={selectedSnapshot} />
   {/if}
 
@@ -454,7 +456,7 @@
           Treatments Timeline
         </Card.Title>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 print:hidden">
           <Select.Root
             type="single"
             value={filterEventType ?? ""}
@@ -483,10 +485,11 @@
           {/if}
         </div>
       </div>
-      <Card.Description>Click on a treatment to edit it</Card.Description>
+      <Card.Description class="print:hidden">Click on a treatment to edit it</Card.Description>
     </Card.Header>
     <Card.Content>
       {#if filteredTreatments.length > 0}
+        <div class="overflow-x-auto print:overflow-visible">
         <Table.Root>
           <Table.Header>
             <Table.Row>
@@ -495,7 +498,7 @@
               {@render sortableHeader("carbs", "Carbs", true)}
               {@render sortableHeader("insulin", "Insulin", true)}
               <Table.Head>Notes</Table.Head>
-              <Table.Head class="w-[50px]"></Table.Head>
+              <Table.Head class="w-[50px] print:hidden"></Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -544,7 +547,7 @@
                 >
                   —
                 </Table.Cell>
-                <Table.Cell>
+                <Table.Cell class="print:hidden">
                   <Button variant="ghost" size="icon" class="h-8 w-8">
                     <Edit class="h-4 w-4" />
                   </Button>
@@ -553,6 +556,7 @@
             {/each}
           </Table.Body>
         </Table.Root>
+        </div>
       {:else}
         <p class="text-center text-muted-foreground py-8">
           {filterEventType

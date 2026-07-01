@@ -30,6 +30,7 @@ public class WindowsCredentialStore : ICredentialStore
     private record CredentialData
     {
         public string ApiUrl { get; init; } = string.Empty;
+        public string ClientId { get; init; } = string.Empty;
         public string AccessToken { get; init; } = string.Empty;
         public string RefreshToken { get; init; } = string.Empty;
         public long ExpiresAtUnix { get; init; }
@@ -42,6 +43,7 @@ public class WindowsCredentialStore : ICredentialStore
     private record DeviceAuthData
     {
         public string ApiUrl { get; init; } = string.Empty;
+        public string ClientId { get; init; } = string.Empty;
         public string DeviceCode { get; init; } = string.Empty;
         public string UserCode { get; init; } = string.Empty;
         public string VerificationUri { get; init; } = string.Empty;
@@ -91,6 +93,7 @@ public class WindowsCredentialStore : ICredentialStore
             var credentials = new NocturneCredentials
             {
                 ApiUrl = data.ApiUrl,
+                ClientId = data.ClientId,
                 AccessToken = data.AccessToken,
                 RefreshToken = data.RefreshToken,
                 ExpiresAt = DateTimeOffset.FromUnixTimeSeconds(data.ExpiresAtUnix),
@@ -116,6 +119,7 @@ public class WindowsCredentialStore : ICredentialStore
             var data = new CredentialData
             {
                 ApiUrl = credentials.ApiUrl,
+                ClientId = credentials.ClientId,
                 AccessToken = credentials.AccessToken,
                 RefreshToken = credentials.RefreshToken,
                 ExpiresAtUnix = credentials.ExpiresAt.ToUnixTimeSeconds(),
@@ -147,6 +151,7 @@ public class WindowsCredentialStore : ICredentialStore
         var updated = new NocturneCredentials
         {
             ApiUrl = existing.ApiUrl,
+            ClientId = existing.ClientId,
             AccessToken = accessToken,
             RefreshToken = refreshToken ?? existing.RefreshToken,
             ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(expiresIn),
@@ -190,6 +195,7 @@ public class WindowsCredentialStore : ICredentialStore
             var data = new DeviceAuthData
             {
                 ApiUrl = state.ApiUrl,
+                ClientId = state.ClientId,
                 DeviceCode = state.DeviceCode,
                 UserCode = state.UserCode,
                 VerificationUri = state.VerificationUri,
@@ -231,6 +237,7 @@ public class WindowsCredentialStore : ICredentialStore
             var state = new DeviceAuthorizationState
             {
                 ApiUrl = data.ApiUrl,
+                ClientId = data.ClientId,
                 DeviceCode = data.DeviceCode,
                 UserCode = data.UserCode,
                 VerificationUri = data.VerificationUri,

@@ -4,6 +4,21 @@
     "version": "1.5",
     "body": [
         {
+            "type": "Container",
+            "style": "emphasis",
+            "bleed": true,
+            "$when": "${hasAlarm}",
+            "items": [
+                {
+                    "type": "TextBlock",
+                    "text": "${alarmMessage}",
+                    "weight": "Bolder",
+                    "color": "${alarmColor}",
+                    "wrap": true
+                }
+            ]
+        },
+        {
             "type": "ColumnSet",
             "columns": [
                 {
@@ -15,7 +30,7 @@
                             "text": "${glucose}",
                             "size": "ExtraLarge",
                             "weight": "Bolder",
-                            "color": "${if(stale, 'Attention', 'Default')}"
+                            "color": "${if(hasAlarm, alarmColor, if(stale, 'Attention', 'Default'))}"
                         },
                         {
                             "type": "TextBlock",
@@ -41,6 +56,13 @@
                     "verticalContentAlignment": "Center"
                 }
             ]
+        },
+        {
+            "type": "Image",
+            "url": "${chart}",
+            "size": "stretch",
+            "spacing": "Small",
+            "$when": "${chart != ''}"
         },
         {
             "type": "ColumnSet",
@@ -87,24 +109,37 @@
             "spacing": "Medium"
         },
         {
-            "type": "TextBlock",
-            "text": "Updated ${lastUpdate}",
-            "size": "Small",
-            "isSubtle": true,
-            "horizontalAlignment": "Right",
-            "spacing": "Small"
-        }
-    ],
-    "actions": [
-        {
-            "type": "Action.Execute",
-            "title": "Refresh",
-            "verb": "refresh"
-        },
-        {
-            "type": "Action.Execute",
-            "title": "Open",
-            "verb": "openApp"
+            "type": "ColumnSet",
+            "spacing": "Small",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "Updated ${lastUpdate}",
+                            "size": "Small",
+                            "isSubtle": true
+                        }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "verticalContentAlignment": "Center",
+                    "items": [
+                        {
+                            "type": "Image",
+                            "url": "${refreshIcon}",
+                            "width": "16px",
+                            "altText": "Refresh",
+                            "selectAction": { "type": "Action.Execute", "verb": "refresh" }
+                        }
+                    ]
+                }
+            ]
         }
     ],
     "selectAction": {

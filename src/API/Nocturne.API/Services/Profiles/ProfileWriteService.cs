@@ -49,7 +49,7 @@ public class ProfileWriteService : IProfileWriteService
                 profile.Id = Guid.CreateVersion7().ToString();
             }
 
-            await _decomposer.DecomposeAsync(profile, cancellationToken);
+            await _decomposer.DecomposeAsync(profile, WriteOrigin.Live, cancellationToken);
         }
 
         await _sideEffects.OnCreatedAsync(
@@ -73,7 +73,7 @@ public class ProfileWriteService : IProfileWriteService
         // Ensure the profile has the correct ID for decomposition
         profile.Id = id;
 
-        await _decomposer.DecomposeAsync(profile, cancellationToken);
+        await _decomposer.DecomposeAsync(profile, WriteOrigin.Live, cancellationToken);
 
         await _sideEffects.OnUpdatedAsync(
             CollectionName,
@@ -92,7 +92,7 @@ public class ProfileWriteService : IProfileWriteService
         CancellationToken cancellationToken = default
     )
     {
-        var deleted = await _decomposer.DeleteByLegacyIdAsync(id, cancellationToken);
+        var deleted = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
 
         if (deleted > 0)
         {

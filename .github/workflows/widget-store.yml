@@ -1,0 +1,76 @@
+name: Widget Store package
+
+# Builds the Nocturne Windows 11 widget as an unsigned, multi-architecture
+# .msixupload for submission to the Microsoft Store. The Store re-signs the
+# package with a Microsoft-trusted certificate at ingestion, so no signing
+# certificate or secret is needed here.
+#
+# Trigger: push a tag like `widget-v1.0.0`, or run manually. The version baked
+# into the package comes from src/Widgets/Nocturne.Widget.Windows11/Package.appxmanifest,
+# not the tag.
+#
+# Submission is currently MANUAL: download the `widget-msixupload` artifact and
+# upload it in Partner Center. Automating submission (Store submission API) is a
+# follow-up once the listing is passing certification.
+#
+# IMPORTANT: Before the upload is accepted, Package.appxmanifest Identity
+# (Name / Publisher) must match the values reserved for this app in Partner
+# Center. Until then this workflow still builds a valid package for local
+# inspection, but Partner Center will reject an identity mismatch.
+
+on:
+  push:
+    tags:
+      - "widget-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0"
+
+      # The multi-architecture .msixupload bundle requires full MSBuild (the
+      # .NET SDK build engine does not drive the per-platform bundle build).
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+
+      # WidgetStoreBuild=true selects the unsigned, StoreUpload, x64|arm64 bundle
+      # configuration defined in Nocturne.Widget.Windows11.csproj.
+      - name: Build Store package
+        run: >
+          msbuild src\Widgets\Nocturne.Widget.Windows11\Nocturne.Widget.Windows11.csproj
+          /restore
+          /p:Configuration=Release
+          /p:WidgetStoreBuild=true
+
+      - name: Locate .msixupload
+        id: find
+        shell: pwsh
+        run: |
+          $pkg = Get-ChildItem -Path src\Widgets\Nocturne.Widget.Windows11 -Recurse -Filter *.msixupload |
+            Select-Object -First 1
+          if (-not $pkg) { throw "No .msixupload produced" }
+          Write-Host "Found $($pkg.FullName)"
+          "path=$($pkg.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: widget-msixupload
+          path: ${{ steps.find.outputs.path }}
+          if-no-files-found: error

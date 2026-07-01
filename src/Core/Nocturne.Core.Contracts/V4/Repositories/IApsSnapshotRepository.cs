@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -43,18 +44,18 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <summary>Persist a new <see cref="ApsSnapshot"/> and return the saved entity.</summary>
     /// <param name="model">Record to create.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task<ApsSnapshot> CreateAsync(ApsSnapshot model, CancellationToken ct = default);
+    new Task<ApsSnapshot> CreateAsync(ApsSnapshot model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Replace an existing <see cref="ApsSnapshot"/> identified by <paramref name="id"/>.</summary>
     /// <param name="id">UUID v7 identifier of the record to update.</param>
     /// <param name="model">Updated record data.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task<ApsSnapshot> UpdateAsync(Guid id, ApsSnapshot model, CancellationToken ct = default);
+    new Task<ApsSnapshot> UpdateAsync(Guid id, ApsSnapshot model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Delete an <see cref="ApsSnapshot"/> by its UUID v7.</summary>
     /// <param name="id">UUID v7 identifier of the record to delete.</param>
     /// <param name="ct">Cancellation token.</param>
-    new Task DeleteAsync(Guid id, CancellationToken ct = default);
+    new Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Delete the <see cref="ApsSnapshot"/> with the given legacy MongoDB ObjectId.
@@ -62,7 +63,7 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <param name="legacyId">Original MongoDB ObjectId string.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Number of records deleted (0 or 1).</returns>
-    Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default);
+    Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Retrieve <see cref="ApsSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
@@ -82,13 +83,32 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     new Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant,
-    /// or <c>null</c> if none exist. When <paramref name="asOf"/> is non-null, restricts to
-    /// snapshots with <c>Timestamp &lt;= asOf</c>.
+    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant
+    /// as of an optional point in time, or <c>null</c> if none exist. When <paramref name="asOf"/>
+    /// is non-null, restricts to snapshots with <c>Timestamp &lt;= asOf</c>.
     /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="GetLatestTimestampAsync"/>, which scopes by connector data source
+    /// for resume-watermark calculation rather than by an as-of upper bound.
+    /// </remarks>
     /// <param name="asOf">Optional inclusive upper bound on Timestamp.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<DateTime?> GetLatestTimestampAsync(DateTime? asOf, CancellationToken ct = default);
+    Task<DateTime?> GetLatestTimestampAsOfAsync(DateTime? asOf, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> for the current tenant,
+    /// optionally scoped to a single connector data source, or <c>null</c> if none exist. When
+    /// <paramref name="source"/> is non-null, only snapshots with a matching
+    /// <see cref="ApsSnapshot.DataSource"/> are considered.
+    /// </summary>
+    /// <remarks>
+    /// Source-scoping is the resume watermark used by the connector device-status publisher: a
+    /// tenant-global latest mis-classifies a newly enabled connector's first sync as incremental
+    /// and skips its backfill.
+    /// </remarks>
+    /// <param name="source">Optional connector data source filter.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the timestamp of the most recent <see cref="ApsSnapshot"/> with <c>Enacted = true</c>
@@ -114,5 +134,5 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <returns>The records that were actually inserted (duplicates excluded).</returns>
     Task<IEnumerable<ApsSnapshot>> BulkCreateAsync(
         IEnumerable<ApsSnapshot> records,
-        CancellationToken ct = default);
+        WriteOrigin origin, CancellationToken ct = default);
 }

@@ -33,8 +33,8 @@ public class TreatmentDecomposerNotesTests : IDisposable
         var ctxFactory = new TestTenantDbContextFactory(_context);
         var bolusRepo = new BolusRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BolusRepository>.Instance);
         var carbIntakeRepo = new CarbIntakeRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<CarbIntakeRepository>.Instance);
-        var bgCheckRepo = new BGCheckRepository(ctxFactory, mockDedup.Object, NullLogger<BGCheckRepository>.Instance);
-        var noteRepo = new NoteRepository(ctxFactory, mockDedup.Object, NullLogger<NoteRepository>.Instance);
+        var bgCheckRepo = new BGCheckRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BGCheckRepository>.Instance);
+        var noteRepo = new NoteRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<NoteRepository>.Instance);
         var deviceEventRepo = new DeviceEventRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<DeviceEventRepository>.Instance);
         var bolusCalcRepo = new BolusCalculationRepository(ctxFactory, mockDedup.Object, mockAudit, NullLogger<BolusCalculationRepository>.Instance);
         var stateSpanServiceMock = new Mock<IStateSpanService>();
@@ -85,7 +85,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         // Assert — should produce Bolus + CarbIntake + Note
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
@@ -110,7 +110,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             Notes = "high after lunch"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
         result.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
@@ -132,7 +132,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             Notes = "before dinner"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.OfType<V4Models.BGCheck>().Should().HaveCount(1);
         result.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
@@ -153,7 +153,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             Notes = "regular note text"
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.OfType<V4Models.Note>().Should().HaveCount(1);
     }
@@ -171,7 +171,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             Notes = ""
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.OfType<V4Models.Bolus>().Should().HaveCount(1);
         result.CreatedRecords.OfType<V4Models.CarbIntake>().Should().HaveCount(1);
@@ -191,7 +191,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             Notes = "   "
         };
 
-        var result = await _decomposer.DecomposeAsync(treatment);
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
 
         result.CreatedRecords.OfType<V4Models.Note>().Should().BeEmpty();
     }

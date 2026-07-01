@@ -10,6 +10,9 @@
   } from "$lib/components/ui/table";
   import {
     formatInsulinDisplay,
+    bg,
+    bgLabel,
+    bgRange,
   } from "$lib/utils/formatting";
   import type { DayToDayDailyData, Thresholds } from "./types";
   import { getGlucoseColor } from "$lib/utils/glucose-analytics.ts";
@@ -32,7 +35,7 @@
     <TableHeader>
       <TableRow>
         <TableHead class="w-[120px]">Date</TableHead>
-        <TableHead>Avg (mg/dL)</TableHead>
+        <TableHead>Avg ({bgLabel()})</TableHead>
         <TableHead>Range</TableHead>
         <TableHead>Readings</TableHead>
         <TableHead>Std Dev</TableHead>
@@ -55,12 +58,12 @@
               thresholds
             )}
           >
-            {Math.round(entry.analytics?.basicStats?.mean ?? 0) || "N/A"}
+            {bg(entry.analytics?.basicStats?.mean ?? 0) || "N/A"}
           </TableCell>
           <TableCell class="text-sm">
             {#if entry.readingsCount > 0}
               <div>
-                {Math.round(entry.analytics?.basicStats?.min ?? 0)} - {Math.round(
+                {bg(entry.analytics?.basicStats?.min ?? 0)} - {bg(
                   entry.analytics?.basicStats?.max ?? 0
                 )}
               </div>
@@ -73,7 +76,7 @@
           </TableCell>
           <TableCell>
             {entry.analytics?.basicStats?.standardDeviation
-              ? `${Math.round(entry.analytics.basicStats.standardDeviation)}`
+              ? `${bg(entry.analytics.basicStats.standardDeviation)}`
               : "N/A"}
           </TableCell>
           <TableCell class="text-sm">
@@ -87,7 +90,7 @@
                   0}% TTIR
               </div>
               <div class="text-xs text-gray-500">
-                ({thresholds.targetBottom}-{thresholds.tightTargetTop} mg/dL)
+                ({bgRange(thresholds.targetBottom, thresholds.tightTargetTop)})
               </div>
               {#if (entry.analytics?.timeInRange?.percentages?.low ?? 0) + (entry.analytics?.timeInRange?.percentages?.veryLow ?? 0) > 0}
                 <div class="text-red-600">

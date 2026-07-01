@@ -1,0 +1,45 @@
+---
+title: SDKs
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import SdkList from '$lib/components/docs/SdkList.svelte';
+</script>
+
+# SDKs
+
+Official Nocturne SDKs are generated from the **V4 API** OpenAPI specification and
+published to each language's standard package registry. They give you typed models
+and request methods for the V4 API surface, so you don't have to hand-write HTTP
+requests like the examples in the [Connecting your app](/docs/connecting-apps) guide.
+
+## Supported languages
+
+<SdkList />
+
+<Callout type="info" title="Versions track releases">
+  SDK versions follow Nocturne releases. Where the install line shows
+  <code>&lt;version&gt;</code>, use the latest version listed on the package's
+  registry page. The package links above always point to the current release.
+</Callout>
+
+## How SDKs fit with authentication
+
+The SDKs cover **API calls**, not the interactive authorization flow. You still obtain
+an access token using OAuth 2.0 as described in the
+[Connecting your app](/docs/connecting-apps) guide (Authorization Code + PKCE) or the
+[Mobile & device flow](/docs/connecting-apps/device-flow) guide. Once you have an
+access token, configure the SDK client to send it as a `Bearer` token and call the
+V4 API through the generated methods.
+
+Because each SDK is generated from the OpenAPI spec, the available methods and models
+mirror the V4 API exactly. For language-specific construction and method names, see the
+generated README on the package's registry page (linked above).
+
+<Callout type="tip" title="No SDK for your stack?">
+  Every SDK is generated from the same OpenAPI document. You can point any OpenAPI
+  generator at the V4 spec to produce a client in a language we don't publish yet,
+  or call the API directly over HTTP as shown in the
+  [Connecting your app](/docs/connecting-apps) guide.
+</Callout>

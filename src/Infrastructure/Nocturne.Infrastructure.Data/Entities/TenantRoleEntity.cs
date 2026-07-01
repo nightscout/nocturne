@@ -7,7 +7,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Represents a role within a tenant, defining a set of permissions for members.
 /// </summary>
 [Table("tenant_roles")]
-public class TenantRoleEntity
+public class TenantRoleEntity : ISystemTimestamped
 {
     /// <summary>
     /// Unique identifier for the tenant role

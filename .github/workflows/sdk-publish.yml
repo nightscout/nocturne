@@ -447,3 +447,50 @@ jobs:
         env:
           MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+
+  publish-rust:
+    needs: generate-spec
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download V4 spec
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-v4-spec
+          path: sdk/
+
+      - name: Generate Rust SDK
+        uses: docker://openapitools/openapi-generator-cli:latest
+        with:
+          args: >-
+            generate
+            -i sdk/openapi-v4.json
+            -c sdk/rust/config.yaml
+            -o sdk/rust/out
+            --additional-properties=packageVersion=${{ needs.generate-spec.outputs.sdk_version }}
+
+      - name: Fix file permissions
+        run: sudo chown -R $USER:$USER sdk/rust/out
+
+      - name: Fix crate metadata
+        run: |
+          sed -i 's/^license = .*/license = "AGPL-3.0-only"/' sdk/rust/out/Cargo.toml
+          sed -i 's/^authors = .*/authors = ["Nightscout Foundation"]/' sdk/rust/out/Cargo.toml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        working-directory: sdk/rust/out
+        run: cargo build --release
+
+      - name: Publish to crates.io
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: sdk/rust/out
+        run: cargo publish --allow-dirty --token "$CARGO_REGISTRY_TOKEN"
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

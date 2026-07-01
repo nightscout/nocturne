@@ -10,7 +10,7 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TempBasal
 /// </summary>
 [Table("temp_basals")]
-public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity
+public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity, ISystemTimestamped
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -73,7 +73,7 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Ent
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     [Column("legacy_id")]
-    [MaxLength(64)]
+    [MaxLength(255)]
     public string? LegacyId { get; set; }
 
     /// <summary>

@@ -3,6 +3,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Widget;
 using Nocturne.Widget.Contracts;
 
@@ -54,42 +56,87 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
     public event EventHandler<AlarmEventArgs>? AlarmCleared;
 
     /// <inheritdoc />
-    public async Task<V4SummaryResponse?> GetSummaryAsync(
+    public Task<V4SummaryResponse?> GetSummaryAsync(
         int hours = 0,
         bool includePredictions = false
-    )
+    ) => GetJsonAsync<V4SummaryResponse>(
+        $"/api/v4/summary?hours={hours}&includePredictions={includePredictions}"
+    );
+
+    /// <inheritdoc />
+    public async Task<string?> GetSummaryRawAsync(int hours = 0, bool includePredictions = false)
     {
         try
         {
-            var response = await SendSummaryRequestAsync(hours, includePredictions);
-
-            if (response.StatusCode == HttpStatusCode.Unauthorized)
-            {
-                _logger.LogDebug("Received 401, attempting token refresh");
-                var refreshResult = await _oauthService.RefreshTokenAsync();
-                if (!refreshResult.Success)
-                {
-                    _logger.LogWarning("API request failed after token refresh attempt");
-                    return null;
-                }
-
-                response = await SendSummaryRequestAsync(hours, includePredictions);
-            }
-
+            var response = await SendWithRefreshAsync(
+                $"/api/v4/summary?hours={hours}&includePredictions={includePredictions}"
+            );
             response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<V4SummaryResponse>();
+            return await response.Content.ReadAsStringAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching summary from Nocturne API");
+            _logger.LogError(ex, "Error fetching raw summary from Nocturne API");
             return null;
         }
     }
 
-    private async Task<HttpResponseMessage> SendSummaryRequestAsync(
-        int hours,
-        bool includePredictions
-    )
+    /// <inheritdoc />
+    public Task<MultiPeriodStatistics?> GetStatisticsAsync() =>
+        GetJsonAsync<MultiPeriodStatistics>("/api/v4/statistics/periods");
+
+    /// <inheritdoc />
+    public Task<DeviceAgesResponse?> GetDeviceAgesAsync() =>
+        GetJsonAsync<DeviceAgesResponse>("/api/v4/deviceage/all");
+
+    /// <inheritdoc />
+    public Task<PaginatedResponse<ApsSnapshot>?> GetLoopStatusAsync() =>
+        GetJsonAsync<PaginatedResponse<ApsSnapshot>>("/api/v4/device-status/aps?limit=1&sort=timestamp_desc");
+
+    /// <summary>
+    /// Issues an authenticated GET to <paramref name="path"/> and deserializes the JSON body,
+    /// transparently refreshing the access token once on a 401. Returns default on any failure.
+    /// </summary>
+    private async Task<T?> GetJsonAsync<T>(string path)
+    {
+        try
+        {
+            var response = await SendWithRefreshAsync(path);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<T>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching {Path} from Nocturne API", path);
+            return default;
+        }
+    }
+
+    /// <summary>
+    /// Issues an authorized GET, transparently refreshing the access token once and retrying on a
+    /// 401. The (possibly still-401) response is returned for the caller to status-check.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendWithRefreshAsync(string path)
+    {
+        var response = await SendAuthorizedGetAsync(path);
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            _logger.LogDebug("Received 401, attempting token refresh");
+            var refreshResult = await _oauthService.RefreshTokenAsync();
+            if (!refreshResult.Success)
+            {
+                _logger.LogWarning("API request failed after token refresh attempt");
+                return response;
+            }
+
+            response = await SendAuthorizedGetAsync(path);
+        }
+
+        return response;
+    }
+
+    private async Task<HttpResponseMessage> SendAuthorizedGetAsync(string path)
     {
         if (!await _oauthService.EnsureValidTokenAsync())
         {
@@ -101,9 +148,7 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
             ?? throw new InvalidOperationException("No credentials available after token validation");
 
         var baseUrl = credentials.ApiUrl.TrimEnd('/');
-        var url = $"{baseUrl}/api/v4/summary?hours={hours}&includePredictions={includePredictions}";
-
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}{path}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credentials.AccessToken);
 
         return await _httpClient.SendAsync(request);

@@ -62,7 +62,7 @@
 {#if hasAnyData}
   <div class={cn("flex flex-wrap items-center gap-2", className)}>
     {#if showLoop && loop}
-      <LoopPill data={loop} {units} />
+      <LoopPill data={loop} />
     {/if}
 
     {#if showIob && iob}

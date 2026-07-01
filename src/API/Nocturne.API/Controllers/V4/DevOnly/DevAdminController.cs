@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -932,8 +933,10 @@ public class DevAdminController : ControllerBase
     // ── Seed Tenant (E2E test bootstrap) ────────────────────────────────
 
     /// <summary>
-    /// Create a tenant, owner subject, owner membership, and a session in one call.
-    /// Used exclusively by the E2E test suite to bypass passkey/OIDC ceremonies.
+    /// Create a tenant, owner subject, synthetic passkey, owner membership, and a session
+    /// in one call. The synthetic passkey satisfies the TenantSetupMiddleware credential
+    /// check so the returned session can immediately call tenant APIs.
+    /// Used by E2E tests and headless dev tooling to bypass passkey/OIDC ceremonies.
     /// </summary>
     [HttpPost("seed-tenant")]
     public async Task<ActionResult<DevSeedTenantResponse>> SeedTenant(
@@ -965,7 +968,22 @@ public class DevAdminController : ControllerBase
             CreatedAt = DateTime.UtcNow,
         });
 
-        // 3. Owner membership with full permissions
+        // 3. Synthetic passkey credential. TenantSetupMiddleware returns 503 until a
+        // member holds a passkey or OIDC identity, so without this the session issued
+        // below cannot call any tenant API. The credential is fake bytes — it can never
+        // complete a WebAuthn assertion — it exists only to mark setup as complete.
+        _db.PasskeyCredentials.Add(new()
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = subjectResult.Subject.Id,
+            CredentialId = Encoding.UTF8.GetBytes($"dev-seed-{subjectResult.Subject.Id:N}"),
+            PublicKey = Encoding.UTF8.GetBytes($"dev-seed-pk-{subjectResult.Subject.Id:N}"),
+            SignCount = 0,
+            Label = "dev-seed (synthetic)",
+        });
+        await _db.SaveChangesAsync(ct);
+
+        // 4. Owner membership with full permissions
         await SetTenantGuc(tenant.Id, ct);
         var ownerRole = await _db.TenantRoles
             .Where(r => r.TenantId == tenant.Id && r.IsSystem && r.Slug == TenantPermissions.SeedRoles.Owner)
@@ -974,7 +992,7 @@ public class DevAdminController : ControllerBase
         await _tenantService.AddMemberAsync(
             tenant.Id, subjectResult.Subject.Id, [ownerRole.Id], ct: ct);
 
-        // 4. Session
+        // 5. Session
         var sessionContext = new SessionContext(
             DeviceDescription: "e2e-test",
             IpAddress: "127.0.0.1",

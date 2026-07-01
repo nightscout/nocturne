@@ -332,14 +332,14 @@
   {:else if connectorInfo && schema}
     <div class="space-y-6">
       <!-- Header -->
-      <div class="flex items-start justify-between">
-        <div>
+      <div class="flex items-start justify-between gap-4">
+        <div class="min-w-0">
           <h2 class="text-2xl font-bold tracking-tight">{displayName}</h2>
           {#if connectorInfo.description}
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        <Badge variant={isActive ? "default" : "secondary"}>
+        <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
           {isActive ? "Active" : "Inactive"}
         </Badge>
       </div>
@@ -381,8 +381,8 @@
       <!-- Enable/Disable Toggle -->
       {#if showToggle}
         <Card>
-          <CardContent class="flex items-center justify-between py-4">
-            <div class="space-y-0.5">
+          <CardContent class="flex items-center justify-between gap-4 py-4">
+            <div class="space-y-0.5 min-w-0">
               <Label class="text-base">Enable Connector</Label>
               <p class="text-sm text-muted-foreground">
                 When enabled, the connector will actively sync data
@@ -454,8 +454,8 @@
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-muted-foreground"
+            <div class="flex items-center justify-between gap-4">
+              <span class="shrink-0 text-sm text-muted-foreground"
                 >Supported data types</span
               >
               <div class="flex flex-wrap gap-1 justify-end">
@@ -470,7 +470,7 @@
                 {/if}
               </div>
             </div>
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-4">
               <span class="text-sm text-muted-foreground"
                 >Historical sync</span
               >
@@ -486,7 +486,7 @@
               </Badge>
             </div>
             {#if connectorCapabilities.maxHistoricalDays}
-              <div class="flex items-center justify-between">
+              <div class="flex items-center justify-between gap-4">
                 <span class="text-sm text-muted-foreground"
                   >Max historical days</span
                 >
@@ -495,7 +495,7 @@
                 </span>
               </div>
             {/if}
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-4">
               <span class="text-sm text-muted-foreground">Manual sync</span>
               <Badge
                 variant={connectorCapabilities.supportsManualSync

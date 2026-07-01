@@ -295,6 +295,11 @@ export function useDateParams(defaultDays = 7) {
       params.from = startDate.toString();
       params.to = endDate.toString();
       params.isDefault = true;
+      // A report has now seeded a full default range, so the params are
+      // initialized. Mark the flag so the layout's seeding $effect.pre (which
+      // would otherwise re-seed the layout's own default and clobber this) is
+      // a no-op when it runs after this synchronous call during init.
+      initialized = true;
       // Sync memoizedInput immediately so queries react without waiting for effects
       memoizedInput = {
         days: daysCount,

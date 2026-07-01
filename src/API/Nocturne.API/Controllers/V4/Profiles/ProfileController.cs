@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
 
@@ -163,13 +164,13 @@ public class ProfileController : ControllerBase
         foreach (var ts in all.Where(ts => ts.IsDefault && ts.Id != target.Id))
         {
             ts.IsDefault = false;
-            await _therapyRepo.UpdateAsync(ts.Id, ts, ct);
+            await _therapyRepo.UpdateAsync(ts.Id, ts, WriteOrigin.Live, ct);
         }
 
         if (!target.IsDefault)
         {
             target.IsDefault = true;
-            await _therapyRepo.UpdateAsync(target.Id, target, ct);
+            await _therapyRepo.UpdateAsync(target.Id, target, WriteOrigin.Live, ct);
         }
 
         return NoContent();
@@ -299,7 +300,7 @@ public class ProfileController : ControllerBase
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-        var created = await _therapyRepo.CreateAsync(model, ct);
+        var created = await _therapyRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetTherapySettingsById), new { id = created.Id }, created);
     }
 
@@ -323,7 +324,7 @@ public class ProfileController : ControllerBase
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
         try
         {
-            var updated = await _therapyRepo.UpdateAsync(id, model, ct);
+            var updated = await _therapyRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -343,7 +344,7 @@ public class ProfileController : ControllerBase
     {
         try
         {
-            await _therapyRepo.DeleteAsync(id, ct);
+            await _therapyRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -401,7 +402,7 @@ public class ProfileController : ControllerBase
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-        var created = await _basalRepo.CreateAsync(model, ct);
+        var created = await _basalRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetBasalScheduleById), new { id = created.Id }, created);
     }
 
@@ -425,7 +426,7 @@ public class ProfileController : ControllerBase
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
         try
         {
-            var updated = await _basalRepo.UpdateAsync(id, model, ct);
+            var updated = await _basalRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -445,7 +446,7 @@ public class ProfileController : ControllerBase
     {
         try
         {
-            await _basalRepo.DeleteAsync(id, ct);
+            await _basalRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -503,7 +504,7 @@ public class ProfileController : ControllerBase
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-        var created = await _carbRatioRepo.CreateAsync(model, ct);
+        var created = await _carbRatioRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetCarbRatioScheduleById), new { id = created.Id }, created);
     }
 
@@ -531,7 +532,7 @@ public class ProfileController : ControllerBase
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
         try
         {
-            var updated = await _carbRatioRepo.UpdateAsync(id, model, ct);
+            var updated = await _carbRatioRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -551,7 +552,7 @@ public class ProfileController : ControllerBase
     {
         try
         {
-            await _carbRatioRepo.DeleteAsync(id, ct);
+            await _carbRatioRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -609,7 +610,7 @@ public class ProfileController : ControllerBase
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-        var created = await _sensitivityRepo.CreateAsync(model, ct);
+        var created = await _sensitivityRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(
             nameof(GetSensitivityScheduleById),
             new { id = created.Id },
@@ -641,7 +642,7 @@ public class ProfileController : ControllerBase
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
         try
         {
-            var updated = await _sensitivityRepo.UpdateAsync(id, model, ct);
+            var updated = await _sensitivityRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -664,7 +665,7 @@ public class ProfileController : ControllerBase
     {
         try
         {
-            await _sensitivityRepo.DeleteAsync(id, ct);
+            await _sensitivityRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)
@@ -722,7 +723,7 @@ public class ProfileController : ControllerBase
     {
         if (model.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
-        var created = await _targetRangeRepo.CreateAsync(model, ct);
+        var created = await _targetRangeRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(
             nameof(GetTargetRangeScheduleById),
             new { id = created.Id },
@@ -754,7 +755,7 @@ public class ProfileController : ControllerBase
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
         try
         {
-            var updated = await _targetRangeRepo.UpdateAsync(id, model, ct);
+            var updated = await _targetRangeRepo.UpdateAsync(id, model, WriteOrigin.Live, ct);
             return Ok(updated);
         }
         catch (KeyNotFoundException)
@@ -777,7 +778,7 @@ public class ProfileController : ControllerBase
     {
         try
         {
-            await _targetRangeRepo.DeleteAsync(id, ct);
+            await _targetRangeRepo.DeleteAsync(id, WriteOrigin.Live, ct);
             return NoContent();
         }
         catch (KeyNotFoundException)

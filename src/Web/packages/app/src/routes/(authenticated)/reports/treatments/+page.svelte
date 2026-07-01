@@ -383,22 +383,25 @@
     <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
     <p class="mx-auto max-w-2xl text-center text-muted-foreground">
       Review and manage your insulin doses, carb entries, BG checks, notes, and
-      device events. Use filters to find specific records.
+      device events.<span class="print:hidden"> Use filters to find specific
+        records.</span>
     </p>
   </div>
 
   <!-- Summary Stats -->
   <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} {dateRange} />
 
-  <!-- Category Tabs -->
-  <TreatmentCategoryTabs
-    {activeCategory}
-    categoryCounts={counts}
-    onChange={handleCategoryChange}
-  />
+  <!-- Category Tabs — view toggle, print chaff -->
+  <div class="print:hidden">
+    <TreatmentCategoryTabs
+      {activeCategory}
+      categoryCounts={counts}
+      onChange={handleCategoryChange}
+    />
+  </div>
 
-  <!-- Filters Panel -->
-  <Card.Root>
+  <!-- Filters Panel — search + add controls, print chaff -->
+  <Card.Root class="print:hidden">
     <Card.Content class="@container p-4">
       <div
         class="flex flex-col gap-4 @lg:flex-row @lg:items-end @lg:justify-between"
@@ -487,12 +490,14 @@
   <!-- Data Table -->
   <Card.Root>
     <Card.Content class="p-0">
-      <TreatmentsDataTable
-        rows={filteredRows}
-        onDelete={confirmDelete}
-        onBulkDelete={confirmBulkDelete}
-        onRowClick={handleRowClick}
-      />
+      <div class="w-full overflow-x-auto print:overflow-visible">
+        <TreatmentsDataTable
+          rows={filteredRows}
+          onDelete={confirmDelete}
+          onBulkDelete={confirmBulkDelete}
+          onRowClick={handleRowClick}
+        />
+      </div>
     </Card.Content>
   </Card.Root>
 
