@@ -1,9 +1,12 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -183,6 +186,54 @@ public class DndWindowsControllerTests
         var (controller, _) = NewController();
         var result = await controller.Clear(Guid.NewGuid(), CancellationToken.None);
         result.Result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task Create_idOwnedByAnotherTenant_returns409()
+    {
+        // Sqlite rather than InMemory: the PK collision must surface as the relational
+        // DbUpdateException the controller catches (InMemory throws a raw
+        // ArgumentException for duplicate keys).
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseSqlite(connection)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+        var id = Guid.NewGuid();
+
+        // Seed the id under another tenant. The tenant query filter (and RLS in prod)
+        // hides it from the idempotency lookup, so the insert hits the global PK.
+        var otherTenant = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        await using (var other = new NocturneDbContext(options) { TenantId = otherTenant })
+        {
+            await other.Database.EnsureCreatedAsync();
+            // dnd_windows.tenant_id is FK'd to tenants; seed both tenant rows.
+            other.Tenants.Add(new TenantEntity { Id = Tenant, Slug = "a", DisplayName = "a" });
+            other.Tenants.Add(new TenantEntity { Id = otherTenant, Slug = "b", DisplayName = "b" });
+            other.DndWindows.Add(new DndWindowEntity
+            {
+                Id = id,
+                TenantId = otherTenant,
+                Scope = DndScope.Lows,
+                StartedAt = Now.AddMinutes(-1),
+                Source = "other-tenant",
+            });
+            await other.SaveChangesAsync();
+        }
+
+        var controller = new DndWindowsController(
+            new TestTenantDbContextFactory(new NocturneDbContext(options) { TenantId = Tenant }));
+
+        var result = await controller.Create(Request(id, DndScope.Lows), CancellationToken.None);
+
+        result.Result.Should().BeOfType<ConflictObjectResult>();
+
+        // The other tenant's window is untouched.
+        await using var db = new NocturneDbContext(options) { TenantId = otherTenant };
+        var stored = await db.DndWindows.SingleAsync(w => w.Id == id);
+        stored.TenantId.Should().Be(otherTenant);
+        stored.Source.Should().Be("other-tenant");
     }
 
     [Fact]

@@ -67,6 +67,7 @@ public class DndWindowsController : ControllerBase
     [ProducesResponseType(typeof(DndWindowResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(DndWindowResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<DndWindowResponse>> Create(
         [FromBody] CreateDndWindowRequest request, CancellationToken ct)
     {
@@ -117,8 +118,25 @@ public class DndWindowsController : ControllerBase
             // CreatedAt is the server receipt time, set by the DB default (CURRENT_TIMESTAMP).
         };
         db.DndWindows.Add(window);
-        // CreatedAt (DB default) is populated on the tracked entity by INSERT ... RETURNING.
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            // CreatedAt (DB default) is populated on the tracked entity by INSERT ... RETURNING.
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // dnd_windows.id is the global PK, but the idempotency lookup above runs under
+            // the tenant query filter (and RLS), so an id owned by another tenant is
+            // invisible and the insert hits the unique constraint. Re-check under this
+            // tenant: a concurrent same-tenant retry resolves idempotently; otherwise the
+            // id belongs to another tenant and this insert can never succeed.
+            var raced = await db.DndWindows
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.Id == request.Id, ct);
+            if (raced is not null)
+                return Ok(MapToResponse(raced));
+            return Conflict("window id is already in use.");
+        }
 
         return CreatedAtAction(nameof(GetActive), MapToResponse(window));
     }
