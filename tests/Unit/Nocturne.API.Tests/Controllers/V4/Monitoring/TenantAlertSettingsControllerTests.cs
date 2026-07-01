@@ -71,6 +71,27 @@ public class TenantAlertSettingsControllerTests
     }
 
     [Fact]
+    public async Task ToggleOn_withPastUntil_isRejected_andWritesNothing()
+    {
+        var (controller, options) = NewController();
+
+        var result = await controller.Update(
+            new UpdateTenantAlertSettingsRequest
+            {
+                DndManualActive = true,
+                DndManualUntil = DateTime.UtcNow.AddMinutes(-5),
+            },
+            CancellationToken.None);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+
+        // No never-active window row, no settings upsert.
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        (await db.DndWindows.CountAsync()).Should().Be(0);
+        (await db.TenantAlertSettings.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task Get_reflectsTheActiveWindow_andSchedulePersistsOnTheRow()
     {
         var (controller, _) = NewController();

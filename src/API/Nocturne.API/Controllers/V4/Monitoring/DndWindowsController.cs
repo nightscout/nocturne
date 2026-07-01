@@ -88,15 +88,22 @@ public class DndWindowsController : ControllerBase
         if (existing is not null)
             return Ok(MapToResponse(existing));
 
-        // Supersede the active window(s) of this scope so exactly one stays active per scope.
+        // Supersede so at most one window per scope is active. Only a window that is
+        // itself active now displaces the existing ones — an offline-authored window
+        // received after its expiry (or before its start) is recorded for audit
+        // without turning off a live mute.
         var now = DateTime.UtcNow;
-        var superseded = await db.DndWindows
-            .Where(w => w.Scope == request.Scope && w.ClearedAt == null)
-            .ToListAsync(ct);
-        foreach (var w in superseded)
+        var newWindowIsActive = startedAt <= now && (endsAt == null || now < endsAt);
+        if (newWindowIsActive)
         {
-            w.ClearedAt = now;
-            w.ClearedBy = SupersededBy;
+            var superseded = await db.DndWindows
+                .Where(w => w.Scope == request.Scope && w.ClearedAt == null)
+                .ToListAsync(ct);
+            foreach (var w in superseded)
+            {
+                w.ClearedAt = now;
+                w.ClearedBy = SupersededBy;
+            }
         }
 
         var window = new DndWindowEntity
@@ -110,10 +117,10 @@ public class DndWindowsController : ControllerBase
             // CreatedAt is the server receipt time, set by the DB default (CURRENT_TIMESTAMP).
         };
         db.DndWindows.Add(window);
+        // CreatedAt (DB default) is populated on the tracked entity by INSERT ... RETURNING.
         await db.SaveChangesAsync(ct);
 
-        var created = await db.DndWindows.AsNoTracking().FirstAsync(w => w.Id == window.Id, ct);
-        return CreatedAtAction(nameof(GetActive), MapToResponse(created));
+        return CreatedAtAction(nameof(GetActive), MapToResponse(window));
     }
 
     /// <summary>

@@ -73,6 +73,13 @@ public class TenantAlertSettingsController : ControllerBase
         await using var db = await _contextFactory.CreateAsync(ct);
         var now = DateTime.UtcNow;
 
+        // A manual mute must end in the future (mirrors DndWindowsController's ends_at
+        // guard): a past until would persist a never-active window (EndsAt <= StartedAt)
+        // — or retroactively expire the kept one without an audit clear — and the
+        // response would report DndManualActive=false despite the request saying true.
+        if (request.DndManualActive && AsUtc(request.DndManualUntil) is { } until && until <= now)
+            return BadRequest("dnd_manual_until must be in the future.");
+
         var entity = await db.TenantAlertSettings.FirstOrDefaultAsync(ct);
         var isNew = entity is null;
         entity ??= new TenantAlertSettingsEntity { TenantId = db.TenantId };

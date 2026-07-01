@@ -85,6 +85,56 @@ public class DndWindowsControllerTests
     }
 
     [Fact]
+    public async Task Create_expiredWindow_doesNotSupersedeTheActiveWindow()
+    {
+        var (controller, options) = NewController();
+        var activeId = Guid.NewGuid();
+        await controller.Create(Request(activeId, DndScope.Lows), CancellationToken.None);
+
+        // An offline-authored window received after it already expired is recorded for
+        // audit but is inactive at receipt — it must not turn off the live mute.
+        await controller.Create(
+            new CreateDndWindowRequest
+            {
+                Id = Guid.NewGuid(),
+                Scope = DndScope.Lows,
+                StartedAt = Now.AddHours(-2),
+                EndsAt = Now.AddHours(-1),
+            },
+            CancellationToken.None);
+
+        var active = OkValue(await controller.GetActive(CancellationToken.None));
+        active.Should().ContainSingle().Which.Id.Should().Be(activeId);
+
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        (await db.DndWindows.SingleAsync(w => w.Id == activeId)).ClearedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Create_futureWindow_doesNotSupersedeTheActiveWindow()
+    {
+        var (controller, options) = NewController();
+        var activeId = Guid.NewGuid();
+        await controller.Create(Request(activeId, DndScope.All), CancellationToken.None);
+
+        await controller.Create(
+            new CreateDndWindowRequest
+            {
+                Id = Guid.NewGuid(),
+                Scope = DndScope.All,
+                StartedAt = Now.AddHours(1),
+                EndsAt = Now.AddHours(2),
+            },
+            CancellationToken.None);
+
+        var active = OkValue(await controller.GetActive(CancellationToken.None));
+        active.Should().ContainSingle().Which.Id.Should().Be(activeId);
+
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        (await db.DndWindows.SingleAsync(w => w.Id == activeId)).ClearedAt.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetActive_excludesExpiredWindows()
     {
         var (controller, _) = NewController();
