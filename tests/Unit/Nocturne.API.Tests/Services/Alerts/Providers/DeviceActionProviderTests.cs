@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Alerts.Providers;
@@ -13,7 +14,7 @@ namespace Nocturne.API.Tests.Services.Alerts.Providers;
 [Trait("Category", "Unit")]
 public class DeviceActionProviderTests
 {
-    private static AlertPayload Payload() => new()
+    private static AlertPayload Payload(Guid? tenantId = null) => new()
     {
         AlertType = AlertConditionType.Threshold,
         RuleName = "Urgent Low",
@@ -23,14 +24,14 @@ public class DeviceActionProviderTests
         ReadingTimestamp = DateTime.UtcNow,
         ExcursionId = Guid.NewGuid(),
         InstanceId = Guid.NewGuid(),
-        TenantId = Guid.NewGuid(),
+        TenantId = tenantId ?? Guid.NewGuid(),
         SubjectName = "Rhys",
         ActiveExcursionCount = 1,
         Severity = AlertRuleSeverity.Critical,
     };
 
     private static DeviceActionProvider CreateProvider(Mock<ISignalRBroadcastService> broadcast)
-        => new(broadcast.Object, NullLogger<DeviceActionProvider>.Instance);
+        => new(broadcast.Object, new MemoryCache(new MemoryCacheOptions()), NullLogger<DeviceActionProvider>.Instance);
 
     [Fact]
     public async Task SendAsync_suppresses_local_engine_kind_without_broadcasting()
@@ -80,5 +81,29 @@ public class DeviceActionProviderTests
 
         handled.Should().BeFalse();
         broadcast.Verify(b => b.BroadcastDeviceActionAsync(It.IsAny<DeviceActionIntent>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendAsync_rate_limits_nudges_per_tenant_kind()
+    {
+        var broadcast = new Mock<ISignalRBroadcastService>();
+        broadcast
+            .Setup(b => b.BroadcastDeviceActionAsync(It.IsAny<DeviceActionIntent>()))
+            .Returns(Task.CompletedTask);
+        var provider = CreateProvider(broadcast);
+        var tenant = Guid.NewGuid();
+
+        // Fire well past the window budget for the same tenant+kind.
+        for (var i = 0; i < DeviceActionProvider.MaxNudgesPerWindow + 5; i++)
+        {
+            var handled = await provider.SendAsync(
+                DeviceKinds.Companion, Payload(tenant), "{\"capabilities\":[\"notify\"]}", default);
+            handled.Should().BeTrue("suppressing over-budget nudges is still 'handled' — the snapshot delivers them");
+        }
+
+        // Only the window budget is broadcast live; the rest are suppressed (snapshot still delivers).
+        broadcast.Verify(
+            b => b.BroadcastDeviceActionAsync(It.IsAny<DeviceActionIntent>()),
+            Times.Exactly(DeviceActionProvider.MaxNudgesPerWindow));
     }
 }
