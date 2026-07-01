@@ -168,7 +168,7 @@ public class ShadowAlertEngineTests
         state!.State.Should().Be("active", "the managed write is the only persisted state");
     }
 
-    [EngineNativeFact]
+    [NativeFact]
     public async Task Real_rust_shadow_agrees_with_the_managed_engine()
     {
         var rule = BuildThresholdRule();

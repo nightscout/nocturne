@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 
-namespace Nocturne.Alerts.Native.Tests;
+namespace Nocturne.Alerts.ParityCorpus.Generator.Harness;
 
 /// <summary>
 /// Deep semantic comparison of two JSON trees with contextual diff messages.
@@ -9,7 +9,7 @@ namespace Nocturne.Alerts.Native.Tests;
 /// instants, so formatting differences between engines (e.g. fractional-second
 /// rendering) don't produce false mismatches.
 /// </summary>
-internal static class JsonNodeDiff
+public static class JsonNodeDiff
 {
     /// <param name="actualName">Label for the left side in diff messages (e.g. "csharp", "ffi").</param>
     public static void Compare(JsonNode? actual, JsonNode? expected, string path, string actualName, List<string> failures)

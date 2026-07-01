@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using Nocturne.Alerts.ParityCorpus.Generator.Harness;
 using Nocturne.Core.Alerts.Native;
 using Xunit;
 

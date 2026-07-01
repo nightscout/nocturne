@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using FluentAssertions;
+using Nocturne.Alerts.ParityCorpus.Generator.Harness;
 using Nocturne.Core.Alerts.Native;
 using Xunit;
 

@@ -15,8 +15,7 @@ using Nocturne.Alerts.ParityCorpus.Generator.Scenarios;
 // the authority.
 
 var check = args.Contains("--check");
-var corpusDir = args.FirstOrDefault(a => !a.StartsWith("--"))
-    ?? Path.Combine(FindRepoRoot(), "tests", "Parity", "AlertEngineCorpus");
+var corpusDir = args.FirstOrDefault(a => !a.StartsWith("--")) ?? CorpusLocator.CorpusDirectory();
 
 var scenarios = new List<ScenarioFile>();
 scenarios.AddRange(GlucoseLeafScenarios.All());
@@ -113,15 +112,4 @@ static int Verify(string path, string expectedContent)
         return 1;
     }
     return 0;
-}
-
-static string FindRepoRoot()
-{
-    var dir = new DirectoryInfo(AppContext.BaseDirectory);
-    while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "nocturne.sln")))
-    {
-        dir = dir.Parent;
-    }
-    return dir?.FullName
-        ?? throw new InvalidOperationException("Could not locate the repo root (nocturne.sln) above " + AppContext.BaseDirectory);
 }

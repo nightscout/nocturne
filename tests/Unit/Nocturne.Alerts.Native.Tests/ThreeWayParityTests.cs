@@ -19,7 +19,7 @@ public class ThreeWayParityTests
     public static TheoryData<string> ScenarioNames()
     {
         var data = new TheoryData<string>();
-        foreach (var name in EnumerateScenarioNames())
+        foreach (var name in CorpusLocator.EnumerateScenarioNames())
             data.Add(name);
         return data;
     }
@@ -27,7 +27,7 @@ public class ThreeWayParityTests
     [Fact]
     public void Corpus_contains_at_least_100_scenarios()
     {
-        EnumerateScenarioNames().Should().HaveCountGreaterThanOrEqualTo(
+        CorpusLocator.EnumerateScenarioNames().Should().HaveCountGreaterThanOrEqualTo(
             100, "the golden corpus is the cross-engine contract; a path bug must not silently shrink the suite");
     }
 
@@ -35,13 +35,7 @@ public class ThreeWayParityTests
     [MemberData(nameof(ScenarioNames))]
     public async Task Csharp_engine_committed_snapshot_and_rust_ffi_agree(string scenarioName)
     {
-        var corpusDir = CorpusDirectory();
-        var scenarioJson = await File.ReadAllTextAsync(Path.Combine(corpusDir, $"{scenarioName}.json"));
-        var expectedJson = await File.ReadAllTextAsync(Path.Combine(corpusDir, $"{scenarioName}.expected.json"));
-
-        var scenario = JsonSerializer.Deserialize<ScenarioFile>(scenarioJson, CorpusJson.Options)
-            ?? throw new InvalidOperationException($"Failed to parse scenario '{scenarioName}'");
-        var expected = JsonNode.Parse(expectedJson)!;
+        var (scenario, expected) = await CorpusLocator.LoadScenarioAsync(scenarioName);
 
         // (a) Live C# engine via the same harness that generated the corpus.
         var csharpResult = await new ScenarioRunner().RunAsync(scenario, CancellationToken.None);
@@ -126,28 +120,4 @@ public class ThreeWayParityTests
         AutoResolveEnabled = rule.AutoResolveEnabled,
         AutoResolveParams = rule.AutoResolveParams,
     };
-
-    private static IReadOnlyList<string> EnumerateScenarioNames()
-    {
-        return Directory.EnumerateFiles(CorpusDirectory(), "*.json")
-            .Where(p => !p.EndsWith(".expected.json", StringComparison.Ordinal))
-            .Select(p => Path.GetFileNameWithoutExtension(p)!)
-            .OrderBy(n => n, StringComparer.Ordinal)
-            .ToList();
-    }
-
-    internal static string CorpusDirectory() =>
-        Path.Combine(FindRepoRoot(), "tests", "Parity", "AlertEngineCorpus");
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "nocturne.sln")))
-        {
-            dir = dir.Parent;
-        }
-        return dir?.FullName
-            ?? throw new InvalidOperationException(
-                "Could not locate the repo root (nocturne.sln) above " + AppContext.BaseDirectory);
-    }
 }
