@@ -1,3 +1,4 @@
+using System.Reflection;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
@@ -186,5 +187,60 @@ public class ShadowAlertEngineTests
 
         logger.Entries.Should().NotContain(e => e.Message.Contains("AlertEngineDivergence"));
         logger.Entries.Should().NotContain(e => e.Message.Contains("AlertEngineShadowError"));
+    }
+}
+
+/// <summary>
+/// Completeness guard for <see cref="ShadowAlertEngine"/>'s CompareAsync: every public
+/// property of <see cref="AlertEngineEvaluation"/> must appear in exactly one of the two
+/// sets below, so adding a new observable to the evaluation record forces a conscious
+/// compare-or-exclude decision instead of silently escaping shadow comparison.
+/// </summary>
+public class ShadowComparatorCompletenessTests
+{
+    /// <summary>
+    /// Properties CompareAsync compares (directly or via a wire projection):
+    /// Skipped → "skipped", ConditionMet → "condition_met",
+    /// Transition → "transition" + "close_reason", AutoResolved → "auto_resolved".
+    /// The remaining compared fields (timers, tracker_state, confirmation_count,
+    /// active_excursion) are post-state read from the stores, not evaluation properties.
+    /// </summary>
+    private static readonly IReadOnlySet<string> ComparedProperties = new HashSet<string>(StringComparer.Ordinal)
+    {
+        nameof(AlertEngineEvaluation.Skipped),
+        nameof(AlertEngineEvaluation.ConditionMet),
+        nameof(AlertEngineEvaluation.Transition),
+        nameof(AlertEngineEvaluation.AutoResolved),
+    };
+
+    /// <summary>
+    /// Properties deliberately not compared:
+    /// AutoResolveTransition — its observable effect is already covered by the
+    /// AutoResolved projection plus the tracker post-state comparisons;
+    /// LeafValues — replay-only leaf log; the shadow path runs with live options,
+    /// which never request leaf values.
+    /// </summary>
+    private static readonly IReadOnlySet<string> ExcludedProperties = new HashSet<string>(StringComparer.Ordinal)
+    {
+        nameof(AlertEngineEvaluation.AutoResolveTransition),
+        nameof(AlertEngineEvaluation.LeafValues),
+    };
+
+    [Fact]
+    public void Every_evaluation_property_is_compared_or_deliberately_excluded()
+    {
+        ComparedProperties.Intersect(ExcludedProperties).Should().BeEmpty(
+            "a property cannot be both compared and excluded");
+
+        var unaccounted = typeof(AlertEngineEvaluation)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(p => p.Name)
+            .Except(ComparedProperties.Union(ExcludedProperties))
+            .ToList();
+
+        unaccounted.Should().BeEmpty(
+            "every public property of AlertEngineEvaluation must be either compared by " +
+            "ShadowAlertEngine.CompareAsync or explicitly listed as excluded here; decide for: {0}",
+            string.Join(", ", unaccounted));
     }
 }
