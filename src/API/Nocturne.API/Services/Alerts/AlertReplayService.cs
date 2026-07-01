@@ -92,8 +92,10 @@ internal sealed class AlertReplayService(
 
         // Scoped DND (ADR 0004 D5): the tenant's windows received by the replay's end, resolved
         // per tick with WasActiveAt (receipt-gated) so replay reproduces what the live engine
-        // saw and never rewrites the offline-authoring gap. Legacy manual/scheduled DND is not
-        // reconstructible historically, so — as before D5 — replay considers windows only.
+        // saw and never rewrites the offline-authoring gap. Both the suppression scopes and the
+        // do_not_disturb leaf's ActiveDoNotDisturb snapshot re-source from these windows per
+        // tick. Scheduled DND is not reconstructible historically (the schedule row keeps no
+        // change history), so — as before D5 — replay considers windows only.
         var dndWindows = await alertRepository.GetDndWindowsAsOfAsync(tenantId, windowEnd, ct);
 
         // TODO(alerts-engine-seam): replay still evaluates through the managed
@@ -172,7 +174,10 @@ internal sealed class AlertReplayService(
             var enrichedBase = (await enricher.EnrichAsOfAsync(
                 baseContext, ordered, tenantId, tickUtc, ct))
                 with
-            { ActiveDndScopes = ResolveDndScopes(dndWindows, tickUtc) };
+            {
+                ActiveDndScopes = ResolveDndScopes(dndWindows, tickUtc),
+                ActiveDoNotDisturb = ResolveDoNotDisturb(dndWindows, tickUtc),
+            };
 
             CaptureFactSnapshots(enrichedBase, DateTime.SpecifyKind(tick, DateTimeKind.Utc), factPrev, factPoints);
 
@@ -618,6 +623,25 @@ internal sealed class AlertReplayService(
                 (scopes ??= new HashSet<DndScope>()).Add(w.Scope);
         }
         return scopes ?? NoDndScopes;
+    }
+
+    /// <summary>
+    /// The tenant-wide DND snapshot at <paramref name="atUtc"/> for the <c>do_not_disturb</c>
+    /// leaf: the earliest StartedAt among receipt-gated active <c>scope=all</c> windows with
+    /// source <c>manual</c> (the live enricher's window branch produces the same projection),
+    /// or null when no all-window was active. Scheduled DND is not reconstructible
+    /// historically, so replay's snapshot considers windows only.
+    /// </summary>
+    private static DoNotDisturbSnapshot? ResolveDoNotDisturb(
+        IReadOnlyList<DndWindowSnapshot> windows, DateTime atUtc)
+    {
+        DateTime? earliest = null;
+        foreach (var w in windows)
+        {
+            if (w.Scope == DndScope.All && w.WasActiveAt(atUtc) && (earliest is null || w.StartedAt < earliest))
+                earliest = w.StartedAt;
+        }
+        return earliest is { } startedAt ? new DoNotDisturbSnapshot(startedAt, "manual") : null;
     }
 
     private static IReadOnlyList<AlertRuleSnapshot> ApplyOverride(
