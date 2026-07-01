@@ -31,6 +31,7 @@ pub struct HubConnection {
 
 /// A parsed action to take for one complete record, decoupled from the socket so the framing +
 /// dispatch logic is unit-testable.
+#[derive(Debug)]
 enum RecordAction {
     /// Reply to a server ping (type 6) to keep the connection alive.
     Pong,
@@ -38,8 +39,34 @@ enum RecordAction {
     Close,
     /// A `device_action` invocation (type 1) arrived.
     DeviceAction,
+    /// A `device_notification` invocation (type 1) arrived, carrying the parsed mirror.
+    DeviceNotification(DeviceNotificationMirror),
     /// Anything else (completions, other targets) — no action.
     Ignore,
+}
+
+/// The in-app notification mirror the server broadcasts as `device_notification`. The server has
+/// already applied the surfacing gate (non-alert, urgency Warn+ or Alert/ActionRequired), so the
+/// client just surfaces it — after checking `user_id` matches this device's user. Tolerant of extra
+/// fields.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceNotificationMirror {
+    /// The user the notification belongs to; the client ignores events for other users in the group.
+    pub user_id: String,
+    pub notification: InAppNotification,
+}
+
+/// The minimal in-app notification fields the toast needs (server `InAppNotificationDto` carries
+/// more). `id` keys the recently-seen dedup; `title`/`subtitle` render the toast.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct InAppNotification {
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub subtitle: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -58,6 +85,10 @@ pub enum HubEvent {
     /// only a trigger to reconcile against the active-intents snapshot (the source of truth), so the
     /// caller re-fetches rather than acting on this frame directly.
     DeviceAction,
+    /// A `device_notification` (in-app notification mirror) arrived. Unlike device_action this is the
+    /// payload itself — there is no snapshot to reconcile against, so the caller toasts it directly
+    /// (after the user-id + dedup checks).
+    DeviceNotification(DeviceNotificationMirror),
     /// The server closed the connection (SignalR close frame or socket EOF). Caller should reconnect.
     Closed,
 }
@@ -132,6 +163,9 @@ impl HubConnection {
                     }
                     RecordAction::Close => return Ok(HubEvent::Closed),
                     RecordAction::DeviceAction => return Ok(HubEvent::DeviceAction),
+                    RecordAction::DeviceNotification(mirror) => {
+                        return Ok(HubEvent::DeviceNotification(mirror))
+                    }
                     RecordAction::Ignore => {}
                 }
             }
@@ -178,10 +212,28 @@ fn dispatch_record(record: &str) -> RecordAction {
         Some(6) => RecordAction::Pong,
         // Close.
         Some(7) => RecordAction::Close,
-        // device_action invocation. Other type-1 targets (and all other frames, e.g. the Authorize
-        // completion) are ignored.
+        // device_action invocation — a trigger to reconcile; the payload is dropped.
         Some(1) if target == Some("device_action") => RecordAction::DeviceAction,
+        // device_notification invocation — the mirror IS the payload (arguments[0]), toasted directly.
+        Some(1) if target == Some("device_notification") => match parse_first_arg(&value) {
+            Some(mirror) => RecordAction::DeviceNotification(mirror),
+            None => RecordAction::Ignore,
+        },
+        // Other type-1 targets and all other frames (e.g. the Authorize completion) are ignored.
         _ => RecordAction::Ignore,
+    }
+}
+
+/// Parses `arguments[0]` of an invocation into a `DeviceNotificationMirror`. Logs and returns `None`
+/// on a missing or shape-mismatched argument rather than dropping it silently.
+fn parse_first_arg(value: &serde_json::Value) -> Option<DeviceNotificationMirror> {
+    let arg = value.get("arguments").and_then(|a| a.as_array()).and_then(|a| a.first())?;
+    match serde_json::from_value::<DeviceNotificationMirror>(arg.clone()) {
+        Ok(mirror) => Some(mirror),
+        Err(e) => {
+            eprintln!("signalr: dropping malformed device_notification: {e}");
+            None
+        }
     }
 }
 
@@ -353,5 +405,31 @@ mod tests {
         ));
         // The Authorize completion (type 3) is ignored.
         assert!(matches!(dispatch_record(r#"{"type":3,"invocationId":"auth-1"}"#), RecordAction::Ignore));
+    }
+
+    #[test]
+    fn dispatch_parses_device_notification_frame() {
+        let frame = r#"{"type":1,"target":"device_notification","arguments":[
+            {"userId":"user-1","notification":{"id":"n1","type":"info","category":"System",
+             "urgency":"Warn","title":"Sync complete","subtitle":"3 devices updated"}}
+        ]}"#;
+        match dispatch_record(frame) {
+            RecordAction::DeviceNotification(m) => {
+                assert_eq!(m.user_id, "user-1");
+                assert_eq!(m.notification.id, "n1");
+                assert_eq!(m.notification.title, "Sync complete");
+                assert_eq!(m.notification.subtitle.as_deref(), Some("3 devices updated"));
+            }
+            other => panic!("expected DeviceNotification, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn dispatch_ignores_device_notification_without_arguments() {
+        // A malformed frame (no arguments) is dropped, not a panic.
+        assert!(matches!(
+            dispatch_record(r#"{"type":1,"target":"device_notification"}"#),
+            RecordAction::Ignore
+        ));
     }
 }

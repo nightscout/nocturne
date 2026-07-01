@@ -15,11 +15,16 @@
 //! rather than stopping.
 
 use crate::client_devices::{self, DeviceActionIntent};
+use crate::signalr::DeviceNotificationMirror;
 use crate::toast::{self, AckContext};
 use crate::tray;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::time::Duration;
 use tokio::sync::mpsc;
+
+/// Cap on the recently-seen notification-id set — enough to absorb a redelivery burst without
+/// growing unbounded. Oldest ids are evicted first.
+const NOTIFICATION_DEDUP_CAP: usize = 128;
 
 /// Per-capability dedup sets, keyed on excursion id, so each actuation fires once per excursion and
 /// stops when the excursion leaves the active set. Parallel sets (rather than one) because an intent
@@ -30,6 +35,34 @@ struct ActuationState {
     notified: HashSet<String>,
     /// Excursions currently flashing the tray (`tray_flash`).
     flashing: HashSet<String>,
+    /// Recently surfaced `device_notification` ids, to drop redeliveries.
+    seen_notifications: NotificationDedup,
+}
+
+/// Bounded FIFO set of recently-seen notification ids. `insert` returns whether the id is new (i.e.
+/// should be surfaced); once at capacity, inserting evicts the oldest id. Unlike the excursion
+/// actuation sets, notifications have no withdrawal signal, so the bound (not a reconcile) is what
+/// keeps it from growing.
+#[derive(Default)]
+struct NotificationDedup {
+    seen: HashSet<String>,
+    order: VecDeque<String>,
+}
+
+impl NotificationDedup {
+    /// Records `id`; returns `true` if it was not already present (caller should surface it).
+    fn insert(&mut self, id: &str) -> bool {
+        if !self.seen.insert(id.to_string()) {
+            return false;
+        }
+        self.order.push_back(id.to_string());
+        if self.order.len() > NOTIFICATION_DEDUP_CAP {
+            if let Some(evicted) = self.order.pop_front() {
+                self.seen.remove(&evicted);
+            }
+        }
+        true
+    }
 }
 
 /// Periodic reconcile cadence — the safety net under the live SignalR push.
@@ -99,10 +132,13 @@ async fn run_session(
     state: &mut ActuationState,
     runtime: &tokio::runtime::Handle,
 ) {
-    // Channel the SignalR task uses to nudge a reconcile on each device_action.
-    let (tx, mut rx) = mpsc::channel::<()>(8);
+    // Channel the SignalR task uses to relay hub events to this loop.
+    let (tx, mut rx) = mpsc::channel::<HubMessage>(16);
 
     let (server, token) = creds;
+    // This device's user, for filtering the fan-out `device_notification` events. `None` (unparseable
+    // token) makes every mirror fail the equality check, so nothing is surfaced — fail closed.
+    let subject_id = crate::auth::subject_from_token(&token);
 
     // Try to connect with the resolved token. On success `tx` moves into the receive task, so
     // `rx.recv()` yields `None` only when that task drops it (disconnect). On failure `tx` stays
@@ -131,10 +167,14 @@ async fn run_session(
             _ = ticker.tick() => {
                 reconcile(app, client, device_id, state, runtime).await;
             }
-            nudge = rx.recv() => {
-                match nudge {
+            msg = rx.recv() => {
+                match msg {
                     // A device_action arrived: reconcile now (idempotent against the periodic poll).
-                    Some(()) => reconcile(app, client, device_id, state, runtime).await,
+                    Some(HubMessage::DeviceAction) => reconcile(app, client, device_id, state, runtime).await,
+                    // An in-app notification mirror: surface it directly (no snapshot to reconcile).
+                    Some(HubMessage::Notification(mirror)) => {
+                        handle_notification(&mirror, subject_id.as_deref(), &mut state.seen_notifications);
+                    }
                     // SignalR task ended (disconnect). Leave the session to reconnect.
                     None => break,
                 }
@@ -148,26 +188,63 @@ async fn run_session(
     }
 }
 
-/// Spawns the SignalR receive pump. Sends `()` on `tx` for each `device_action`; the task ends (and
-/// drops `tx`, which the session observes as `rx.recv() == None`) when the connection closes.
+/// Toasts a `device_notification` mirror if it should be surfaced (see `should_surface_notification`).
+fn handle_notification(
+    mirror: &DeviceNotificationMirror,
+    subject_id: Option<&str>,
+    dedup: &mut NotificationDedup,
+) {
+    if !should_surface_notification(mirror, subject_id, dedup) {
+        return;
+    }
+    if let Err(e) = toast::show_notification(&mirror.notification) {
+        eprintln!("alert actuation: notification toast: {e}");
+    }
+}
+
+/// Whether a mirror should be surfaced: it must be for this device's user (`subject_id`) and not a
+/// redelivery. Records the id in `dedup` when accepted. A mirror for another user (multi-user tenant
+/// fan-out) or a duplicate id returns `false`. Pure but for the dedup mutation, so it is unit-tested.
+fn should_surface_notification(
+    mirror: &DeviceNotificationMirror,
+    subject_id: Option<&str>,
+    dedup: &mut NotificationDedup,
+) -> bool {
+    if subject_id != Some(mirror.user_id.as_str()) {
+        return false;
+    }
+    dedup.insert(&mirror.notification.id)
+}
+
+/// A hub event relayed from the SignalR receive task to the session loop.
+enum HubMessage {
+    /// A `device_action` fired — reconcile.
+    DeviceAction,
+    /// A `device_notification` mirror to surface.
+    Notification(DeviceNotificationMirror),
+}
+
+/// Spawns the SignalR receive pump. Relays each hub event on `tx`; the task ends (and drops `tx`,
+/// which the session observes as `rx.recv() == None`) when the connection closes.
 fn spawn_signalr(
     mut conn: crate::signalr::HubConnection,
-    tx: mpsc::Sender<()>,
+    tx: mpsc::Sender<HubMessage>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
-            match conn.recv().await {
-                Ok(crate::signalr::HubEvent::DeviceAction) => {
-                    // The event itself is just a trigger; reconcile is the source of truth.
-                    if tx.send(()).await.is_err() {
-                        break;
-                    }
+            let msg = match conn.recv().await {
+                Ok(crate::signalr::HubEvent::DeviceAction) => HubMessage::DeviceAction,
+                Ok(crate::signalr::HubEvent::DeviceNotification(mirror)) => {
+                    HubMessage::Notification(mirror)
                 }
                 Ok(crate::signalr::HubEvent::Closed) => break,
                 Err(e) => {
                     eprintln!("alert actuation: SignalR recv: {e}");
                     break;
                 }
+            };
+            if tx.send(msg).await.is_err() {
+                break;
             }
         }
     })
@@ -419,5 +496,59 @@ mod tests {
         assert_eq!(fx.toasted, vec!["a".to_string()]);
         assert!(fx.flash_started.is_empty());
         assert!(!state.flashing.contains("a"));
+    }
+
+    // ── device_notification: sub-filter + dedup ──────────────────────────────────────────
+
+    fn mirror(user_id: &str, notif_id: &str) -> DeviceNotificationMirror {
+        DeviceNotificationMirror {
+            user_id: user_id.into(),
+            notification: crate::signalr::InAppNotification {
+                id: notif_id.into(),
+                title: "t".into(),
+                subtitle: None,
+            },
+        }
+    }
+
+    #[test]
+    fn notification_surfaces_once_for_own_user_then_deduped() {
+        let mut dedup = NotificationDedup::default();
+        let m = mirror("me", "n1");
+        assert!(should_surface_notification(&m, Some("me"), &mut dedup));
+        // Redelivery of the same id → dropped.
+        assert!(!should_surface_notification(&m, Some("me"), &mut dedup));
+    }
+
+    #[test]
+    fn notification_for_other_user_is_dropped() {
+        let mut dedup = NotificationDedup::default();
+        let m = mirror("someone-else", "n1");
+        assert!(!should_surface_notification(&m, Some("me"), &mut dedup));
+        // A drop for the wrong user must not consume the id — the correct user could still get it.
+        assert!(should_surface_notification(&mirror("me", "n1"), Some("me"), &mut dedup));
+    }
+
+    #[test]
+    fn notification_dropped_when_subject_unknown() {
+        // Unparseable token → subject None → fail closed.
+        let mut dedup = NotificationDedup::default();
+        assert!(!should_surface_notification(&mirror("me", "n1"), None, &mut dedup));
+    }
+
+    #[test]
+    fn notification_dedup_is_bounded_and_fifo_evicts_oldest() {
+        let mut dedup = NotificationDedup::default();
+        for i in 0..NOTIFICATION_DEDUP_CAP {
+            assert!(dedup.insert(&format!("n{i}")));
+        }
+        assert_eq!(dedup.order.len(), NOTIFICATION_DEDUP_CAP);
+        // One more evicts the oldest ("n0").
+        assert!(dedup.insert("overflow"));
+        assert_eq!(dedup.order.len(), NOTIFICATION_DEDUP_CAP);
+        assert!(!dedup.seen.contains("n0"));
+        // The evicted id is treated as new again (acceptable: eviction only happens far past the
+        // redelivery window).
+        assert!(dedup.insert("n0"));
     }
 }

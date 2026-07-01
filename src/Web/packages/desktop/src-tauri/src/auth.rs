@@ -245,6 +245,63 @@ pub fn is_linked() -> bool {
     load().is_some()
 }
 
+/// Extracts the `sub` (subject id) claim from a JWT access token without verifying its signature —
+/// the token is our own, already trusted for the HTTP calls it authorizes. Splits on '.', base64url-
+/// decodes the payload segment, and reads `sub`. Returns `None` if the token isn't a well-formed JWT
+/// or has no string `sub`. Used to filter fan-out SignalR events (e.g. `device_notification`) to this
+/// device's user in a multi-user tenant.
+pub fn subject_from_token(token: &str) -> Option<String> {
+    let payload_b64 = token.split('.').nth(1)?;
+    let payload = base64url_decode(payload_b64)?;
+    let json: serde_json::Value = serde_json::from_slice(&payload).ok()?;
+    json.get("sub").and_then(|s| s.as_str()).map(str::to_string)
+}
+
+/// Decodes an unpadded base64url segment (JWT alphabet: `-`/`_`, no `=` padding). Returns `None` on
+/// any invalid character or a truncated (length ≡ 1 mod 4) input.
+fn base64url_decode(input: &str) -> Option<Vec<u8>> {
+    fn val(c: u8) -> Option<u8> {
+        match c {
+            b'A'..=b'Z' => Some(c - b'A'),
+            b'a'..=b'z' => Some(c - b'a' + 26),
+            b'0'..=b'9' => Some(c - b'0' + 52),
+            b'-' => Some(62),
+            b'_' => Some(63),
+            _ => None,
+        }
+    }
+
+    let bytes = input.as_bytes();
+    if bytes.len() % 4 == 1 {
+        return None;
+    }
+
+    let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
+    for chunk in bytes.chunks(4) {
+        let mut buf = [0u8; 4];
+        let mut n = 0;
+        for (i, &b) in chunk.iter().enumerate() {
+            buf[i] = val(b)?;
+            n += 1;
+        }
+        // n symbols -> n*6 bits -> (n*6)/8 whole bytes.
+        let combined = (u32::from(buf[0]) << 18)
+            | (u32::from(buf[1]) << 12)
+            | (u32::from(buf[2]) << 6)
+            | u32::from(buf[3]);
+        if n >= 2 {
+            out.push((combined >> 16) as u8);
+        }
+        if n >= 3 {
+            out.push((combined >> 8) as u8);
+        }
+        if n >= 4 {
+            out.push(combined as u8);
+        }
+    }
+    Some(out)
+}
+
 /// The linked server's base URL, if any. The floating clock window uses it to build the public
 /// clock URL (`{server}/clock/{id}`); returns `None` when the companion isn't linked yet.
 pub fn server_url() -> Option<String> {
@@ -364,5 +421,34 @@ mod tests {
         let t: TokenResponse = serde_json::from_str(json).unwrap();
         assert_eq!(t.access_token, "AT");
         assert!(t.refresh_token.is_none());
+    }
+
+    #[test]
+    fn subject_from_token_reads_sub_claim() {
+        // header . payload({"sub":"user-42","name":"Rhys"}) . signature — signature not verified.
+        let jwt = "eyJhbGciOiJIUzI1NiJ9\
+                   .eyJzdWIiOiJ1c2VyLTQyIiwibmFtZSI6IlJoeXMifQ\
+                   .c2lnbmF0dXJl";
+        assert_eq!(subject_from_token(jwt).as_deref(), Some("user-42"));
+    }
+
+    #[test]
+    fn subject_from_token_rejects_non_jwt() {
+        assert!(subject_from_token("not-a-jwt").is_none());
+        // Two segments but the payload has no `sub`.
+        let no_sub = "eyJhbGciOiJIUzI1NiJ9.eyJuYW1lIjoiUmh5cyJ9";
+        assert!(subject_from_token(no_sub).is_none());
+    }
+
+    #[test]
+    fn base64url_decode_round_trips_and_rejects_bad_input() {
+        // "Man" -> "TWFu" (no padding needed), 3 bytes.
+        assert_eq!(base64url_decode("TWFu").unwrap(), b"Man");
+        // "M" -> "TQ" (2 symbols -> 1 byte).
+        assert_eq!(base64url_decode("TQ").unwrap(), b"M");
+        // Length ≡ 1 mod 4 is impossible in valid base64.
+        assert!(base64url_decode("TWF").is_some()); // 3 symbols -> 2 bytes, valid
+        assert!(base64url_decode("A").is_none()); // 1 symbol, truncated
+        assert!(base64url_decode("**").is_none()); // invalid chars
     }
 }

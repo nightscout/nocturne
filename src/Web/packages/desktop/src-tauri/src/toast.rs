@@ -1,15 +1,18 @@
-//! Native Windows toast for device-action alerts.
+//! Native Windows toasts.
 //!
 //! Uses the WinRT toast API (`tauri-winrt-notification`) rather than the generic tauri notification
-//! plugin so the alert can be actionable (an Acknowledge button) and, for critical severity,
-//! persistent: `Scenario::Alarm` pre-expands the toast, keeps it on screen until dismissed, and
-//! loops alarm audio. Non-critical alerts use a long-duration banner.
+//! plugin. Two distinct paths:
+//! - `show` — device-action *alerts*: actionable (an Acknowledge button) and, for critical severity,
+//!   persistent (`Scenario::Alarm` pre-expands, stays until dismissed, loops alarm audio).
+//! - `show_notification` — ambient in-app *notification mirrors* (`device_notification`): a plain
+//!   banner with a normal duration, no alarm scenario and no action buttons.
 //!
 //! The Acknowledge button's activation runs on a WinRT event-handler thread, so the closure owns the
 //! server URL, bearer token, and excursion id and spawns the ack HTTP call on the provided Tokio
 //! runtime handle (`on_activated` requires a `'static` closure).
 
 use crate::client_devices::DeviceActionIntent;
+use crate::signalr::InAppNotification;
 use tauri_winrt_notification::{Duration, Scenario, Toast};
 
 /// App id the toast is attributed to. Reusing the PowerShell app id avoids needing a registered
@@ -81,6 +84,36 @@ pub fn show(intent: &DeviceActionIntent, ack: Option<AckContext>) -> Result<(), 
     toast.show().map_err(|e| format!("could not show toast: {e}"))
 }
 
+/// Shows an ambient notification toast mirroring an in-app notification. Unlike `show`, this is a
+/// plain banner (`Duration::Short`, no alarm scenario, no action buttons) — the server has already
+/// gated which notifications are worth surfacing. Title falls back to a generic label if absent, and
+/// the body uses the subtitle (or the title again when there is no subtitle).
+pub fn show_notification(notification: &InAppNotification) -> Result<(), String> {
+    let (title, body) = notification_lines(notification);
+    Toast::new(APP_ID)
+        .title(&title)
+        .text1(&body)
+        .duration(Duration::Short)
+        .show()
+        .map_err(|e| format!("could not show notification toast: {e}"))
+}
+
+/// Derives the `(title, body)` for a notification toast: title falls back to a generic label when
+/// blank; body uses a non-blank subtitle, else repeats the title.
+fn notification_lines(notification: &InAppNotification) -> (String, String) {
+    let title = match notification.title.trim() {
+        "" => "Nocturne",
+        t => t,
+    };
+    let body = notification
+        .subtitle
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(title);
+    (title.to_string(), body.to_string())
+}
+
 /// Title line: rule name, prefixed with a severity marker for critical/warning.
 fn title_line(intent: &DeviceActionIntent) -> String {
     let name = if intent.rule_name.is_empty() { "Glucose alert" } else { &intent.rule_name };
@@ -140,5 +173,37 @@ mod tests {
         let mut i = intent("info", None);
         i.rule_name = String::new();
         assert_eq!(title_line(&i), "Glucose alert");
+    }
+
+    fn notification(title: &str, subtitle: Option<&str>) -> InAppNotification {
+        InAppNotification {
+            id: "n1".into(),
+            title: title.into(),
+            subtitle: subtitle.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn notification_uses_title_and_subtitle() {
+        let (t, b) = notification_lines(&notification("Sync complete", Some("3 devices updated")));
+        assert_eq!(t, "Sync complete");
+        assert_eq!(b, "3 devices updated");
+    }
+
+    #[test]
+    fn notification_body_falls_back_to_title_without_subtitle() {
+        let (t, b) = notification_lines(&notification("Sync complete", None));
+        assert_eq!(t, "Sync complete");
+        assert_eq!(b, "Sync complete");
+        // A blank subtitle is treated as absent.
+        let (_, b2) = notification_lines(&notification("Sync complete", Some("  ")));
+        assert_eq!(b2, "Sync complete");
+    }
+
+    #[test]
+    fn notification_title_falls_back_when_blank() {
+        let (t, b) = notification_lines(&notification("", None));
+        assert_eq!(t, "Nocturne");
+        assert_eq!(b, "Nocturne");
     }
 }
