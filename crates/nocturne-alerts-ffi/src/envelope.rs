@@ -112,6 +112,19 @@ pub fn evaluate(request_json: &str) -> Result<Value, String> {
         )
     })?;
 
+    // Root-payload parity gate: a structurally malformed payload throws
+    // JsonException in the managed engine (caught per-rule by the orchestrator,
+    // leaving timers and tracker untouched), so it is an envelope error here —
+    // never a fail-closed evaluation that would advance the tracker.
+    if !matches!(req.rule.condition_params, Value::Null)
+        && parse_payload(kind, &req.rule.condition_params).is_err()
+    {
+        return Err(format!(
+            "malformed condition_params for '{}' (JsonException-equivalent)",
+            req.rule.condition_type.escape_default()
+        ));
+    }
+
     let rule = Rule {
         id: req.rule.id,
         condition_type: kind,

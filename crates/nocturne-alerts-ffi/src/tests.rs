@@ -482,6 +482,28 @@ fn evaluate_rejects_unknown_condition_type() {
 }
 
 #[test]
+fn evaluate_rejects_structurally_malformed_condition_params() {
+    // JsonException parity: the managed engine throws on a wrong-shape payload
+    // and the orchestrator's per-rule catch leaves timers/tracker untouched, so
+    // the envelope must reject it rather than fail-closed-evaluate (which would
+    // advance the tracker and silently close an active excursion).
+    let request = json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "condition_type": "threshold",
+            "condition_params": { "direction": 5, "value": 70 }
+        },
+        "context": {},
+        "now": "2026-01-05T12:00:00Z",
+    });
+    assert_error(
+        &evaluate(&request),
+        "malformed condition_params for 'threshold'",
+    );
+}
+
+#[test]
 fn evaluate_rejects_tracker_state_without_updated_at() {
     let request = json!({
         "schema_version": 1,
