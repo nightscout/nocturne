@@ -12071,6 +12071,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         },
         "x-remote-type": "command",
@@ -12469,53 +12479,6 @@
         "x-remote-invalidates": [
           "Get"
         ]
-      }
-    },
-    "/api/v4/trackers/alerts/pending": {
-      "get": {
-        "tags": [
-          "Tracker Alerts"
-        ],
-        "operationId": "TrackerAlerts_GetPendingAlerts",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TrackerAlertDto"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v4/trackers/alerts/sounds": {
-      "get": {
-        "tags": [
-          "Tracker Alerts"
-        ],
-        "summary": "Get available alert sounds",
-        "operationId": "TrackerAlerts_GetAvailableSounds",
-        "responses": {
-          "200": {
-            "description": "List of available sound preset names",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/v4/trackers/definitions": {
@@ -26772,6 +26735,14 @@
                 "$ref": "#/components/schemas/StateSpanActiveCondition"
               }
             ]
+          },
+          "tracker_age": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrackerAgeCondition"
+              }
+            ]
           }
         }
       },
@@ -27324,6 +27295,23 @@
           "DataExclusion",
           "TemporaryTarget"
         ]
+      },
+      "TrackerAgeCondition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tracker_definition_id": {
+            "type": "string",
+            "format": "guid"
+          },
+          "operator": {
+            "type": "string"
+          },
+          "minutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
       },
       "AuthErrorCodesMetadata": {
         "type": "object",
@@ -37426,7 +37414,8 @@
           "TimeSinceLastBolus",
           "DayOfWeek",
           "PumpState",
-          "StateSpanActive"
+          "StateSpanActive",
+          "TrackerAge"
         ],
         "enum": [
           "threshold",
@@ -37459,7 +37448,8 @@
           "time_since_last_bolus",
           "day_of_week",
           "pump_state",
-          "state_span_active"
+          "state_span_active",
+          "tracker_age"
         ]
       },
       "AlertRuleResponse": {
@@ -37502,6 +37492,11 @@
                 "$ref": "#/components/schemas/RuleScopeClass"
               }
             ]
+          },
+          "managedBy": {
+            "type": "string",
+            "description": "Owner tag when this rule is synthesised from another feature's configuration\n            (e.g. tracker:{definitionId}). Null for user-authored rules. Managed rules\n            cannot be deleted here — the owning configuration re-syncs their condition, name and\n            severity; channels and client configuration remain user-editable.",
+            "nullable": true
           },
           "autoResolveEnabled": {
             "type": "boolean"
@@ -38312,47 +38307,6 @@
             "type": "string",
             "format": "time",
             "nullable": true
-          }
-        }
-      },
-      "TrackerAlertDto": {
-        "type": "object",
-        "description": "DTO for tracker alerts returned to the frontend",
-        "additionalProperties": false,
-        "properties": {
-          "instanceId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "definitionId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "thresholdId": {
-            "type": "string",
-            "format": "guid"
-          },
-          "trackerName": {
-            "type": "string"
-          },
-          "urgency": {
-            "$ref": "#/components/schemas/NotificationUrgency"
-          },
-          "message": {
-            "type": "string"
-          },
-          "pushEnabled": {
-            "type": "boolean"
-          },
-          "audioEnabled": {
-            "type": "boolean"
-          },
-          "audioSound": {
-            "type": "string",
-            "nullable": true
-          },
-          "vibrateEnabled": {
-            "type": "boolean"
           }
         }
       },

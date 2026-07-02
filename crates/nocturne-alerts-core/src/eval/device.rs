@@ -36,8 +36,7 @@ pub(super) fn sensor_age(p: &ComparePayload, env: &Env) -> bool {
 /// running has no age, deliberately opposite to time_since_last_* cold-start
 /// infinity. **[normative]**
 pub(super) fn tracker_age(p: &TrackerAgePayload, env: &Env) -> bool {
-    let Some(reference_at) = env.ctx.active_tracker_references.get(&p.tracker_definition_id)
-    else {
+    let Some(reference_at) = env.ctx.active_trackers.get(&p.tracker_definition_id) else {
         return false;
     };
     let Some(minutes_since) = decimal_from_f64_cs(total_minutes(env.now - *reference_at)) else {

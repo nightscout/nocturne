@@ -7,7 +7,7 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 
 /// <summary>
 /// Evaluates a <see cref="TrackerAgeCondition"/> against
-/// <see cref="SensorContext.ActiveTrackerReferences"/>: minutes since the active tracker
+/// <see cref="SensorContext.ActiveTrackers"/>: minutes since the active tracker
 /// instance's reference timestamp (start for Duration trackers, scheduled time for Event
 /// trackers — resolved by the enricher). Elapsed time is negative before a scheduled event.
 /// </summary>
@@ -35,7 +35,7 @@ public sealed class TrackerAgeEvaluator : IConditionEvaluator
 
     /// <inheritdoc/>
     /// <param name="conditionParamsJson">JSON representation of a <see cref="TrackerAgeCondition"/>.</param>
-    /// <param name="context">Current sensor context including <see cref="SensorContext.ActiveTrackerReferences"/>.</param>
+    /// <param name="context">Current sensor context including <see cref="SensorContext.ActiveTrackers"/>.</param>
     /// <param name="ct">Cancellation token (unused; this evaluator performs no I/O).</param>
     public Task<bool> EvaluateAsync(string conditionParamsJson, SensorContext context, CancellationToken ct)
     {
@@ -43,7 +43,7 @@ public sealed class TrackerAgeEvaluator : IConditionEvaluator
         if (condition is null)
             return Task.FromResult(false);
 
-        if (!context.ActiveTrackerReferences.TryGetValue(condition.TrackerDefinitionId, out var referenceAt))
+        if (!context.ActiveTrackers.TryGetValue(condition.TrackerDefinitionId, out var referenceAt))
             return Task.FromResult(false);
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;

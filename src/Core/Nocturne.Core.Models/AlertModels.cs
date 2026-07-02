@@ -216,7 +216,7 @@ public record SensorContext
     /// enricher for every definition referenced by a <c>tracker_age</c> leaf in the rules
     /// being evaluated. An absent key means no active instance — the leaf evaluates false.
     /// </summary>
-    public IReadOnlyDictionary<Guid, DateTime> ActiveTrackerReferences { get; init; }
+    public IReadOnlyDictionary<Guid, DateTime> ActiveTrackers { get; init; }
         = new Dictionary<Guid, DateTime>();
 }
 

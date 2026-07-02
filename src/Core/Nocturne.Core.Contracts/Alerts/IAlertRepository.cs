@@ -165,6 +165,18 @@ public interface IAlertRepository
     Task<IReadOnlyList<SignalLossRuleSnapshot>> GetEnabledSignalLossRulesAsync(CancellationToken ct);
 
     /// <summary>
+    /// Returns all enabled rules with the given root condition type across all tenants.
+    /// Used by the sweep service to periodically evaluate wall-clock-driven rules
+    /// (e.g. <c>tracker_age</c>) that must fire even when no new reading arrives.
+    /// Rules that only reference the type inside a composite tree are not returned —
+    /// those still evaluate on the per-reading path.
+    /// </summary>
+    /// <param name="conditionType">The root condition type to filter on.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesByConditionTypeAsync(
+        Nocturne.Core.Models.Alerts.AlertConditionType conditionType, CancellationToken ct);
+
+    /// <summary>
     /// Returns the latest glucose trend rate (mg/dL per minute) for the tenant,
     /// used by rate-of-change alert conditions.
     /// </summary>

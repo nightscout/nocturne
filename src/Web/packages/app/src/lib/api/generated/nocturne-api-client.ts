@@ -13102,6 +13102,12 @@ export class DndWindowsClient {
             result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
             return throwException("A server side error occurred.", status, _responseText, _headers, result400);
             });
+        } else if (status === 409) {
+            return response.text().then((_responseText) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("A server side error occurred.", status, _responseText, _headers, result409);
+            });
         } else if (status !== 200 && status !== 204) {
             return response.text().then((_responseText) => {
             return throwException("An unexpected server error occurred.", status, _responseText, _headers);
@@ -13539,89 +13545,6 @@ export class TenantAlertSettingsClient {
             });
         }
         return Promise.resolve<TenantAlertSettingsResponse>(null as any);
-    }
-}
-
-export class TrackerAlertsClient {
-    private http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
-    private baseUrl: string;
-    protected jsonParseReviver: ((key: string, value: any) => any) | undefined = undefined;
-
-    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
-        this.http = http ? http : window as any;
-        this.baseUrl = baseUrl ?? "";
-    }
-
-    getPendingAlerts(signal?: AbortSignal): Promise<TrackerAlertDto[]> {
-        let url_ = this.baseUrl + "/api/v4/trackers/alerts/pending";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetPendingAlerts(_response);
-        });
-    }
-
-    protected processGetPendingAlerts(response: Response): Promise<TrackerAlertDto[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as TrackerAlertDto[];
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<TrackerAlertDto[]>(null as any);
-    }
-
-    /**
-     * Get available alert sounds
-     * @return List of available sound preset names
-     */
-    getAvailableSounds(signal?: AbortSignal): Promise<string[]> {
-        let url_ = this.baseUrl + "/api/v4/trackers/alerts/sounds";
-        url_ = url_.replace(/[?&]$/, "");
-
-        let options_: RequestInit = {
-            method: "GET",
-            signal,
-            headers: {
-                "Accept": "application/json"
-            }
-        };
-
-        return this.http.fetch(url_, options_).then((_response: Response) => {
-            return this.processGetAvailableSounds(_response);
-        });
-    }
-
-    protected processGetAvailableSounds(response: Response): Promise<string[]> {
-        const status = response.status;
-        let _headers: any = {}; if (response.headers && response.headers.forEach) { response.headers.forEach((v: any, k: any) => _headers[k] = v); };
-        if (status === 200) {
-            return response.text().then((_responseText) => {
-            let result200: any = null;
-            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as string[];
-            return result200;
-            });
-        } else if (status !== 200 && status !== 204) {
-            return response.text().then((_responseText) => {
-            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
-            });
-        }
-        return Promise.resolve<string[]>(null as any);
     }
 }
 
@@ -28680,6 +28603,7 @@ export interface ConditionNode {
     day_of_week?: DayOfWeekCondition | undefined;
     pump_state?: PumpStateCondition | undefined;
     state_span_active?: StateSpanActiveCondition | undefined;
+    tracker_age?: TrackerAgeCondition | undefined;
 }
 
 export interface ThresholdCondition {
@@ -28895,6 +28819,12 @@ export enum StateSpanCategory {
     Travel = "Travel",
     DataExclusion = "DataExclusion",
     TemporaryTarget = "TemporaryTarget",
+}
+
+export interface TrackerAgeCondition {
+    tracker_definition_id?: string;
+    operator?: string;
+    minutes?: number;
 }
 
 /** Metadata about authentication error codes for NSwag generation */
@@ -32174,6 +32104,7 @@ export enum AlertConditionType {
     DayOfWeek = "day_of_week",
     PumpState = "pump_state",
     StateSpanActive = "state_span_active",
+    TrackerAge = "tracker_age",
 }
 
 export interface AlertRuleResponse {
@@ -32193,6 +32124,11 @@ export interface AlertRuleResponse {
             create/update; a scoped lows/highs window silences a rule only when its
             class matches. */
     scopeClass?: RuleScopeClass;
+    /** Owner tag when this rule is synthesised from another feature's configuration
+            (e.g. tracker:{definitionId}). Null for user-authored rules. Managed rules
+            cannot be deleted here — the owning configuration re-syncs their condition, name and
+            severity; channels and client configuration remain user-editable. */
+    managedBy?: string | undefined;
     autoResolveEnabled?: boolean;
     autoResolveParams?: any | undefined;
     clientConfiguration?: any;
@@ -32454,20 +32390,6 @@ export interface UpdateTenantAlertSettingsRequest {
     dndScheduleEnabled?: boolean;
     dndScheduleStart?: string | undefined;
     dndScheduleEnd?: string | undefined;
-}
-
-/** DTO for tracker alerts returned to the frontend */
-export interface TrackerAlertDto {
-    instanceId?: string;
-    definitionId?: string;
-    thresholdId?: string;
-    trackerName?: string;
-    urgency?: NotificationUrgency;
-    message?: string;
-    pushEnabled?: boolean;
-    audioEnabled?: boolean;
-    audioSound?: string | undefined;
-    vibrateEnabled?: boolean;
 }
 
 export interface TrackerDefinitionDto {

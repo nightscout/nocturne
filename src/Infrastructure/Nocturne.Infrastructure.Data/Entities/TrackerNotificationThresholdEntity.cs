@@ -103,6 +103,15 @@ public class TrackerNotificationThresholdEntity : ITenantScoped
     #endregion
 
     /// <summary>
+    /// The managed alert rule synthesised from this threshold (condition
+    /// <c>tracker_age</c>, delivered through the alert engine's channel pipeline).
+    /// Null until the sync service has run; SET NULL on rule deletion so a lost rule
+    /// is re-synthesised by the startup backfill.
+    /// </summary>
+    [Column("alert_rule_id")]
+    public Guid? AlertRuleId { get; set; }
+
+    /// <summary>
     /// Navigation property to the parent tracker definition
     /// </summary>
     public virtual TrackerDefinitionEntity? Definition { get; set; }

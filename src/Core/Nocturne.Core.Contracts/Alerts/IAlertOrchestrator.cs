@@ -20,4 +20,15 @@ public interface IAlertOrchestrator
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A task that completes when all rules have been evaluated and any resulting alerts dispatched.</returns>
     Task EvaluateAsync(SensorContext context, CancellationToken ct);
+
+    /// <summary>
+    /// Evaluate a specific set of rules for the current tenant against <paramref name="context"/>,
+    /// with the same enrichment, DND suppression, and delivery side effects as
+    /// <see cref="EvaluateAsync"/>. Used by the sweep service for wall-clock-driven rules
+    /// (e.g. <c>tracker_age</c>) that must fire even when no new reading arrives.
+    /// </summary>
+    /// <param name="rules">The rule snapshots to evaluate. Rules from other tenants are a caller bug.</param>
+    /// <param name="context">The base <see cref="SensorContext"/> to enrich and evaluate against.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task EvaluateRulesAsync(IReadOnlyList<AlertRuleSnapshot> rules, SensorContext context, CancellationToken ct);
 }

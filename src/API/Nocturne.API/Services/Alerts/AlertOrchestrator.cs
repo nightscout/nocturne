@@ -43,8 +43,14 @@ internal sealed class AlertOrchestrator(
         if (tenantId == Guid.Empty) return;
 
         var rules = await repository.GetEnabledRulesAsync(tenantId, ct);
+        await EvaluateRulesAsync(rules, context, ct);
+    }
 
-        if (rules.Count == 0) return;
+    public async Task EvaluateRulesAsync(
+        IReadOnlyList<AlertRuleSnapshot> rules, SensorContext context, CancellationToken ct)
+    {
+        var tenantId = tenantAccessor.TenantId;
+        if (tenantId == Guid.Empty || rules.Count == 0) return;
 
         // Drop chained rules whose alert_state references resolve to disabled/deleted parents.
         var evaluable = RuleReferenceResolver.FilterEvaluable(rules);

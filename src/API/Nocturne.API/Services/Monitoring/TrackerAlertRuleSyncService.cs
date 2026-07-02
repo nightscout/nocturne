@@ -1,0 +1,255 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Alerts;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Alerts;
+using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
+
+namespace Nocturne.API.Services.Monitoring;
+
+/// <summary>
+/// Synthesises one managed alert rule per tracker notification threshold so tracker
+/// notifications ride the alert engine's full pipeline (channels, DND, acknowledgement,
+/// device actuation, replay) instead of the removed client-poll path.
+/// </summary>
+public interface ITrackerAlertRuleSyncService
+{
+    /// <summary>
+    /// Reconciles the managed alert rules for <paramref name="definitionId"/> against its
+    /// current notification thresholds: creates rules for new thresholds, overwrites the
+    /// sync-owned fields (name, description, condition, severity, scope class) on existing
+    /// ones, and deletes rules whose threshold is gone. User-editable fields (channels,
+    /// client configuration, enabled state, DND opt-out, sort order) survive re-syncs.
+    /// </summary>
+    Task SyncDefinitionAsync(Guid definitionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes every managed alert rule owned by <paramref name="definitionId"/>. Called
+    /// when the tracker definition itself is deleted.
+    /// </summary>
+    Task DeleteRulesForDefinitionAsync(Guid definitionId, CancellationToken ct = default);
+}
+
+/// <inheritdoc />
+public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
+{
+    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly IRuleScopeClassifier _scopeClassifier;
+    private readonly ILogger<TrackerAlertRuleSyncService> _logger;
+
+    /// <summary>Initialises a new <see cref="TrackerAlertRuleSyncService"/>.</summary>
+    public TrackerAlertRuleSyncService(
+        ITenantDbContextFactory contextFactory,
+        IRuleScopeClassifier scopeClassifier,
+        ILogger<TrackerAlertRuleSyncService> logger)
+    {
+        _contextFactory = contextFactory;
+        _scopeClassifier = scopeClassifier;
+        _logger = logger;
+    }
+
+    /// <summary>The <see cref="AlertRuleEntity.ManagedBy"/> tag for a tracker definition's rules.</summary>
+    public static string ManagedByTag(Guid definitionId) => $"tracker:{definitionId}";
+
+    /// <inheritdoc />
+    public async Task SyncDefinitionAsync(Guid definitionId, CancellationToken ct = default)
+    {
+        await using var db = await _contextFactory.CreateAsync(ct);
+        var tenantId = db.TenantId;
+
+        var definition = await db.TrackerDefinitions
+            .Include(d => d.NotificationThresholds)
+            .FirstOrDefaultAsync(d => d.Id == definitionId, ct);
+        if (definition is null)
+        {
+            _logger.LogWarning("Tracker definition {DefinitionId} not found; skipping rule sync", definitionId);
+            return;
+        }
+
+        var tag = ManagedByTag(definitionId);
+        var managedRules = await db.AlertRules
+            .Where(r => r.ManagedBy == tag)
+            .ToDictionaryAsync(r => r.Id, ct);
+
+        var keptRuleIds = new HashSet<Guid>();
+        foreach (var threshold in definition.NotificationThresholds.OrderBy(t => t.DisplayOrder))
+        {
+            var minutes = EffectiveMinutes(definition, threshold);
+            if (minutes is null)
+            {
+                // Misconfigured (negative threshold without lifespan) — matches the legacy
+                // evaluator's skip. Leave any previously synced rule in place untouched.
+                if (threshold.AlertRuleId is { } existingId) keptRuleIds.Add(existingId);
+                continue;
+            }
+
+            var conditionParams = JsonSerializer.Serialize(new
+            {
+                tracker_definition_id = definitionId,
+                @operator = ">=",
+                minutes = minutes.Value,
+            });
+
+            var name = Truncate($"{definition.Name}: {ThresholdLabel(definition, threshold)}", 128);
+            var severity = MapSeverity(threshold.Urgency);
+            var scopeClass = _scopeClassifier.Classify(AlertConditionType.TrackerAge, conditionParams);
+
+            if (threshold.AlertRuleId is { } ruleId && managedRules.TryGetValue(ruleId, out var rule))
+            {
+                rule.Name = name;
+                rule.Description = threshold.Description;
+                rule.ConditionType = AlertConditionType.TrackerAge;
+                rule.ConditionParams = conditionParams;
+                rule.ScopeClass = scopeClass;
+                rule.Severity = severity;
+                rule.UpdatedAt = DateTime.UtcNow;
+                keptRuleIds.Add(rule.Id);
+            }
+            else
+            {
+                var created = new AlertRuleEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = tenantId,
+                    Name = name,
+                    Description = threshold.Description,
+                    ConditionType = AlertConditionType.TrackerAge,
+                    ConditionParams = conditionParams,
+                    ScopeClass = scopeClass,
+                    Severity = severity,
+                    ManagedBy = tag,
+                    IsEnabled = true,
+                    // Quiet-hours opt-out on the threshold maps onto the alert engine's DND
+                    // bypass. Create-time seed only — the rule editor owns it afterwards.
+                    AllowThroughDnd = !threshold.RespectQuietHours,
+                    ClientConfiguration = BuildClientConfiguration(threshold),
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                };
+
+                created.Channels.Add(new AlertRuleChannelEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = tenantId,
+                    AlertRuleId = created.Id,
+                    ChannelType = ChannelType.InApp,
+                    SortOrder = 0,
+                    CreatedAt = DateTime.UtcNow,
+                });
+                if (threshold.PushEnabled)
+                {
+                    created.Channels.Add(new AlertRuleChannelEntity
+                    {
+                        Id = Guid.CreateVersion7(),
+                        TenantId = tenantId,
+                        AlertRuleId = created.Id,
+                        ChannelType = ChannelType.WebPush,
+                        SortOrder = 1,
+                        CreatedAt = DateTime.UtcNow,
+                    });
+                }
+
+                db.AlertRules.Add(created);
+                threshold.AlertRuleId = created.Id;
+                keptRuleIds.Add(created.Id);
+            }
+        }
+
+        var orphaned = managedRules.Values.Where(r => !keptRuleIds.Contains(r.Id)).ToList();
+        if (orphaned.Count > 0)
+        {
+            db.AlertRules.RemoveRange(orphaned);
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Synced {ThresholdCount} threshold(s) to managed alert rules for tracker definition {DefinitionId} ({Orphaned} removed)",
+            definition.NotificationThresholds.Count, definitionId, orphaned.Count);
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteRulesForDefinitionAsync(Guid definitionId, CancellationToken ct = default)
+    {
+        await using var db = await _contextFactory.CreateAsync(ct);
+        var tag = ManagedByTag(definitionId);
+
+        var rules = await db.AlertRules
+            .Where(r => r.ManagedBy == tag)
+            .ToListAsync(ct);
+        if (rules.Count == 0) return;
+
+        db.AlertRules.RemoveRange(rules);
+        await db.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Deleted {Count} managed alert rule(s) for removed tracker definition {DefinitionId}",
+            rules.Count, definitionId);
+    }
+
+    /// <summary>
+    /// Resolves a threshold's <c>hours</c> into the tracker_age condition's minutes,
+    /// mirroring the legacy evaluator: Event thresholds are relative to the scheduled
+    /// time (negative = before), Duration thresholds relative to start, and a negative
+    /// Duration threshold means "N hours before the lifespan ends" and is baked in as
+    /// <c>lifespan + hours</c>. Null when a negative Duration threshold has no lifespan.
+    /// </summary>
+    private static int? EffectiveMinutes(
+        TrackerDefinitionEntity definition, TrackerNotificationThresholdEntity threshold)
+    {
+        if (definition.Mode == TrackerMode.Event || threshold.Hours >= 0)
+            return threshold.Hours * 60;
+
+        if (definition.LifespanHours is not { } lifespan)
+            return null;
+
+        return (lifespan + threshold.Hours) * 60;
+    }
+
+    private static string ThresholdLabel(
+        TrackerDefinitionEntity definition, TrackerNotificationThresholdEntity threshold)
+    {
+        if (!string.IsNullOrWhiteSpace(threshold.Description))
+            return threshold.Description;
+
+        if (definition.Mode == TrackerMode.Event)
+        {
+            return threshold.Hours < 0
+                ? $"{Math.Abs(threshold.Hours)}h before"
+                : $"{threshold.Hours}h after";
+        }
+
+        return threshold.Hours < 0
+            ? $"{Math.Abs(threshold.Hours)}h before end"
+            : $"{threshold.Hours}h elapsed";
+    }
+
+    private static AlertRuleSeverity MapSeverity(NotificationUrgency urgency) => urgency switch
+    {
+        NotificationUrgency.Urgent => AlertRuleSeverity.Critical,
+        NotificationUrgency.Hazard => AlertRuleSeverity.Warning,
+        NotificationUrgency.Warn => AlertRuleSeverity.Warning,
+        _ => AlertRuleSeverity.Info,
+    };
+
+    /// <summary>
+    /// Seeds the rule's client presentation config from the threshold's legacy audio
+    /// settings. Create-time seed only — the rule editor owns it afterwards.
+    /// </summary>
+    private static string BuildClientConfiguration(TrackerNotificationThresholdEntity threshold)
+    {
+        if (!threshold.AudioEnabled && !threshold.VibrateEnabled)
+            return "{}";
+
+        return JsonSerializer.Serialize(new
+        {
+            audioEnabled = threshold.AudioEnabled,
+            audioSound = threshold.AudioSound,
+            vibrateEnabled = threshold.VibrateEnabled,
+        });
+    }
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..max];
+}

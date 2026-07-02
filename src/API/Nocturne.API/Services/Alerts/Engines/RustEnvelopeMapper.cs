@@ -170,9 +170,9 @@ internal static class RustEnvelopeMapper
                     .Select(kv => new WireStateSpan(
                         WireEnum(kv.Key.Category), kv.Key.State, Utc(kv.Value.StartedAt)!.Value))
                     .ToList(),
-            ActiveTrackers = ctx.ActiveTrackerReferences.Count == 0
+            ActiveTrackers = ctx.ActiveTrackers.Count == 0
                 ? null
-                : ctx.ActiveTrackerReferences
+                : ctx.ActiveTrackers
                     .Select(kv => new WireTrackerReference(kv.Key, Utc(kv.Value)!.Value))
                     .ToList(),
         };

@@ -97,7 +97,7 @@ pub struct SensorContext {
     /// Reference timestamp of the active tracker instance per tracker
     /// definition: start time for duration trackers, scheduled time for event
     /// trackers (resolved by the enricher). Absent key = no active instance.
-    pub active_tracker_references: HashMap<Uuid, DateTime<Utc>>,
+    pub active_trackers: HashMap<Uuid, DateTime<Utc>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -256,9 +256,9 @@ impl SensorContext {
             );
         }
 
-        let mut active_tracker_references = HashMap::new();
+        let mut active_trackers = HashMap::new();
         for t in w.active_trackers.unwrap_or_default() {
-            active_tracker_references.insert(t.tracker_definition_id, t.reference_at);
+            active_trackers.insert(t.tracker_definition_id, t.reference_at);
         }
 
         let mut active_state_spans = HashMap::new();
@@ -346,7 +346,7 @@ impl SensorContext {
                 })
                 .transpose()?,
             active_state_spans,
-            active_tracker_references,
+            active_trackers,
         })
     }
 }

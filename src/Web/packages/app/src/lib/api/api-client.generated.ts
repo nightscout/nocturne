@@ -101,7 +101,6 @@ import {
   TimezoneTimelineClient,
   TlsAuthorizationClient,
   TotpClient,
-  TrackerAlertsClient,
   TrackersClient,
   UISettingsClient,
   UploaderSnapshotClient,
@@ -213,7 +212,6 @@ export class ApiClient {
   public readonly timezoneTimeline: TimezoneTimelineClient;
   public readonly tlsAuthorization: TlsAuthorizationClient;
   public readonly totp: TotpClient;
-  public readonly trackerAlerts: TrackerAlertsClient;
   public readonly trackers: TrackersClient;
   public readonly uiSettings: UISettingsClient;
   public readonly uploaderSnapshot: UploaderSnapshotClient;
@@ -325,7 +323,6 @@ export class ApiClient {
     this.timezoneTimeline = new TimezoneTimelineClient(apiBaseUrl, http);
     this.tlsAuthorization = new TlsAuthorizationClient(apiBaseUrl, http);
     this.totp = new TotpClient(apiBaseUrl, http);
-    this.trackerAlerts = new TrackerAlertsClient(apiBaseUrl, http);
     this.trackers = new TrackersClient(apiBaseUrl, http);
     this.uiSettings = new UISettingsClient(apiBaseUrl, http);
     this.uploaderSnapshot = new UploaderSnapshotClient(apiBaseUrl, http);

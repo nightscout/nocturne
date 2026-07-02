@@ -508,7 +508,11 @@ public static class ServiceRegistrationExtensions
 
         // Tracker services
         services.AddScoped<ITrackerTriggerService, TrackerTriggerService>();
-        services.AddScoped<ITrackerAlertService, TrackerAlertService>();
+        // Tracker notifications ride the alert engine: thresholds are synthesised into
+        // managed tracker_age alert rules, backfilled once at startup for pre-existing
+        // definitions (and self-healing if a managed rule is ever lost).
+        services.AddScoped<ITrackerAlertRuleSyncService, TrackerAlertRuleSyncService>();
+        services.AddHostedService<TrackerAlertRuleBackfillService>();
         services.AddScoped<ITrackerSuggestionService, TrackerSuggestionService>();
         services.AddScoped<IDeviceAgeService, DeviceAgeService>();
 

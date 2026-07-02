@@ -434,6 +434,31 @@ public class AlertRepository : IAlertRepository
         return results;
     }
 
+    /// <inheritdoc/>
+    public virtual async Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesByConditionTypeAsync(
+        AlertConditionType conditionType, CancellationToken ct)
+    {
+        // Cross-tenant scan: iterate active tenants so RLS scopes each query correctly.
+        var results = new List<AlertRuleSnapshot>();
+        foreach (var tenantId in await GetActiveTenantIdsAsync(ct))
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(ct);
+            context.TenantId = tenantId;
+
+            var rows = await context.AlertRules
+                .AsNoTracking()
+                .Where(r => r.IsEnabled && r.ConditionType == conditionType)
+                .Select(r => new AlertRuleSnapshot(
+                    r.Id, r.TenantId, r.Name, r.ConditionType,
+                    r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
+                    r.AutoResolveEnabled, r.AutoResolveParams, r.AllowThroughDnd, r.ScopeClass))
+                .ToListAsync(ct);
+            results.AddRange(rows);
+        }
+
+        return results;
+    }
+
     /// <summary>
     /// Gets the most recent glucose trend rate for a specific tenant.
     /// </summary>

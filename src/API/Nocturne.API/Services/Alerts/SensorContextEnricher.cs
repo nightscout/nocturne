@@ -333,7 +333,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             // fetch answers "active at this instant" in both paths.
             var references = await _deps.Trackers.GetActiveTrackerReferencesAsync(
                 needs.ReferencedTrackerDefinitions, now, ct);
-            enriched = enriched with { ActiveTrackerReferences = references };
+            enriched = enriched with { ActiveTrackers = references };
         }
 
         return enriched;

@@ -1033,6 +1033,21 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .WithMany(d => d.NotificationThresholds)
             .HasForeignKey(t => t.TrackerDefinitionId);
 
+        // Managed alert rule synthesised from the threshold: SET NULL on rule deletion so
+        // the startup backfill re-synthesises rather than leaving a dangling reference.
+        modelBuilder
+            .Entity<TrackerNotificationThresholdEntity>()
+            .HasOne<AlertRuleEntity>()
+            .WithMany()
+            .HasForeignKey(t => t.AlertRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
+            .Entity<AlertRuleEntity>()
+            .HasIndex(r => r.ManagedBy)
+            .HasDatabaseName("ix_alert_rules_managed_by")
+            .HasFilter("managed_by IS NOT NULL");
+
         // Tracker Notification Thresholds indexes
         modelBuilder
             .Entity<TrackerNotificationThresholdEntity>()

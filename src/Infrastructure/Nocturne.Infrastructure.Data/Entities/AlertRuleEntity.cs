@@ -102,6 +102,18 @@ public class AlertRuleEntity : ITenantScoped, IAuditable
     public RuleScopeClass ScopeClass { get; set; } = RuleScopeClass.Undirected;
 
     /// <summary>
+    /// Owner tag for rules synthesised from another feature's configuration, e.g.
+    /// <c>tracker:{definitionId}</c> for tracker notification thresholds. Null for
+    /// user-authored rules. The owning feature overwrites the condition/name/severity
+    /// on every sync and deletes the rule with its source config; deletion through the
+    /// alert-rules API is rejected so the source config stays authoritative. Channels
+    /// and client configuration are user-editable and survive syncs.
+    /// </summary>
+    [Column("managed_by")]
+    [MaxLength(64)]
+    public string? ManagedBy { get; set; }
+
+    /// <summary>
     /// Order in which the rule should be processed or displayed
     /// </summary>
     [Column("sort_order")]

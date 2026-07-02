@@ -648,8 +648,7 @@ fn tracker_definition() -> Uuid {
 
 fn tracker_ctx(reference_at: DateTime<Utc>) -> SensorContext {
     let mut ctx = SensorContext::default();
-    ctx.active_tracker_references
-        .insert(tracker_definition(), reference_at);
+    ctx.active_trackers.insert(tracker_definition(), reference_at);
     ctx
 }
 
@@ -696,7 +695,7 @@ fn tracker_age_no_active_instance_is_false() {
 #[test]
 fn tracker_age_other_definition_is_false() {
     let mut ctx = SensorContext::default();
-    ctx.active_tracker_references
+    ctx.active_trackers
         .insert(Uuid::from_u128(0xFFFF), base() - TimeDelta::hours(48));
     assert!(!eval_payload(
         ConditionKind::TrackerAge,

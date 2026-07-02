@@ -86,6 +86,15 @@ public class AlertSweepService : BackgroundService
             {
                 _logger.LogError(ex, "Error evaluating auto-resolve");
             }
+
+            try
+            {
+                await EvaluateTrackerAgeRulesAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error evaluating tracker-age rules");
+            }
         }
 
         _logger.LogInformation("Alert Sweep Service stopped");
@@ -525,6 +534,60 @@ public class AlertSweepService : BackgroundService
                 {
                     await resolutionHandler.HandleClosedAsync(transition, tenantId, ct);
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Periodically evaluates enabled <c>tracker_age</c> rules through the orchestrator's
+    /// full pipeline. Tracker ages advance with the wall clock, not with readings — the
+    /// per-reading path alone would delay (or, with a dead sensor, entirely drop) a
+    /// "sensor expired" alert. The excursion state machine dedupes: once opened, further
+    /// sweep passes are ExcursionContinues no-ops.
+    /// </summary>
+    private async Task EvaluateTrackerAgeRulesAsync(CancellationToken ct)
+    {
+        using var lookupScope = _serviceProvider.CreateScope();
+        var lookupRepository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
+
+        var trackerRules = await lookupRepository.GetEnabledRulesByConditionTypeAsync(
+            AlertConditionType.TrackerAge, ct);
+        if (trackerRules.Count == 0) return;
+
+        foreach (var tenantGroup in trackerRules.GroupBy(r => r.TenantId))
+        {
+            var tenantId = tenantGroup.Key;
+            var tenantContext = await lookupRepository.GetTenantAlertContextAsync(tenantId, ct);
+            if (tenantContext is null || !tenantContext.IsActive) continue;
+
+            using var tenantScope = _serviceProvider.CreateScope();
+            var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
+            tenantAccessor.SetTenant(new TenantContext(
+                tenantContext.TenantId,
+                tenantContext.Slug ?? string.Empty,
+                tenantContext.DisplayName ?? string.Empty,
+                true));
+
+            var orchestrator = tenantScope.ServiceProvider.GetRequiredService<IAlertOrchestrator>();
+
+            // LatestValue stays null: tracker_age doesn't read it, and the most recent
+            // reading-dependent evaluation already ran on the per-reading path.
+            var baseContext = new SensorContext
+            {
+                LatestValue = null,
+                LatestTimestamp = tenantContext.LastReadingAt,
+                TrendRate = null,
+                LastReadingAt = tenantContext.LastReadingAt ?? DateTime.MinValue,
+            };
+
+            try
+            {
+                await orchestrator.EvaluateRulesAsync(tenantGroup.ToList(), baseContext, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Tracker-age rule evaluation failed for tenant {TenantId}", tenantId);
             }
         }
     }

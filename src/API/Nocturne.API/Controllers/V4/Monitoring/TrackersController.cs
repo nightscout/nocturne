@@ -2,11 +2,15 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Monitoring;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Abstractions;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Controllers.V4.Monitoring;
@@ -23,6 +27,9 @@ public class TrackersController : ControllerBase
 {
     private readonly ITrackerRepository _repository;
     private readonly ISignalRBroadcastService _broadcast;
+    private readonly ITrackerAlertRuleSyncService _ruleSync;
+    private readonly ITenantDbContextFactory _contextFactory;
+    private readonly IAlertAcknowledgementService _acknowledgementService;
     private readonly ILogger<TrackersController> _logger;
 
     /// <summary>
@@ -30,15 +37,24 @@ public class TrackersController : ControllerBase
     /// </summary>
     /// <param name="repository">Repository for tracker definition and log persistence.</param>
     /// <param name="broadcast">Service for broadcasting real-time tracker updates via SignalR.</param>
+    /// <param name="ruleSync">Synthesises managed alert rules from notification thresholds.</param>
+    /// <param name="contextFactory">Tenant-scoped database context factory (managed-rule lookups).</param>
+    /// <param name="acknowledgementService">Acknowledges alert excursions when a tracker is acked.</param>
     /// <param name="logger">Logger instance.</param>
     public TrackersController(
         ITrackerRepository repository,
         ISignalRBroadcastService broadcast,
+        ITrackerAlertRuleSyncService ruleSync,
+        ITenantDbContextFactory contextFactory,
+        IAlertAcknowledgementService acknowledgementService,
         ILogger<TrackersController> logger
     )
     {
         _repository = repository;
         _broadcast = broadcast;
+        _ruleSync = ruleSync;
+        _contextFactory = contextFactory;
+        _acknowledgementService = acknowledgementService;
         _logger = logger;
     }
 
@@ -93,6 +109,33 @@ public class TrackersController : ControllerBase
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Acknowledges every open, unacknowledged excursion belonging to the managed alert
+    /// rules synthesised from <paramref name="definitionId"/>'s thresholds.
+    /// </summary>
+    private async Task AcknowledgeManagedRuleExcursionsAsync(
+        Guid definitionId, string userId, CancellationToken ct)
+    {
+        await using var db = await _contextFactory.CreateAsync(ct);
+        var tag = TrackerAlertRuleSyncService.ManagedByTag(definitionId);
+
+        var excursions = await db.AlertExcursions
+            .AsNoTracking()
+            .Where(e => e.EndedAt == null && e.AcknowledgedAt == null)
+            .Join(
+                db.AlertRules.Where(r => r.ManagedBy == tag),
+                e => e.AlertRuleId,
+                r => r.Id,
+                (e, r) => e.Id)
+            .ToListAsync(ct);
+
+        foreach (var excursionId in excursions)
+        {
+            await _acknowledgementService.AcknowledgeExcursionAsync(
+                db.TenantId, excursionId, userId, broadcast: true, ct);
+        }
     }
 
     #endregion
@@ -229,6 +272,8 @@ public class TrackersController : ControllerBase
 
         var created = await _repository.CreateDefinitionAsync(entity, HttpContext.RequestAborted);
 
+        await _ruleSync.SyncDefinitionAsync(created.Id, HttpContext.RequestAborted);
+
         _logger.LogInformation(
             "Created tracker definition {Id} for user {UserId}",
             created.Id,
@@ -327,6 +372,10 @@ public class TrackersController : ControllerBase
             HttpContext.RequestAborted
         );
 
+        // Lifespan/mode/name changes shift the synthesised conditions even when the
+        // threshold list itself didn't change, so re-sync unconditionally.
+        await _ruleSync.SyncDefinitionAsync(id, HttpContext.RequestAborted);
+
         return Ok(TrackerDefinitionDto.FromEntity(updated!));
     }
 
@@ -347,6 +396,7 @@ public class TrackersController : ControllerBase
         if (existing.UserId != userId && !HttpContext.IsAdmin())
             return Forbid();
 
+        await _ruleSync.DeleteRulesForDefinitionAsync(id, HttpContext.RequestAborted);
         await _repository.DeleteDefinitionAsync(id, HttpContext.RequestAborted);
 
         _logger.LogInformation("Deleted tracker definition {Id}", id);
@@ -543,6 +593,11 @@ public class TrackersController : ControllerBase
             return Forbid();
 
         await _repository.AckInstanceAsync(id, request.SnoozeMins, HttpContext.RequestAborted);
+
+        // Acknowledge the active excursions of this definition's managed alert rules so
+        // the alert surface (history, escalation via alert_state, device intents) agrees
+        // with the tracker ack instead of showing a still-unacknowledged alert.
+        await AcknowledgeManagedRuleExcursionsAsync(existing.DefinitionId, userId, HttpContext.RequestAborted);
 
         // Broadcast ack if global
         if (request.Global)

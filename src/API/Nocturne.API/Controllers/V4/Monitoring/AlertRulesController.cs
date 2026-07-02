@@ -270,6 +270,18 @@ public class AlertRulesController : ControllerBase
         if (rule is null)
             return NotFound();
 
+        // Managed rules are owned by their source feature's configuration (e.g. a tracker
+        // notification threshold) — deleting here would only get re-synthesised by the
+        // backfill. Delete the source config instead.
+        if (rule.ManagedBy is not null)
+        {
+            return Conflict(new
+            {
+                message = $"This rule is managed by '{rule.ManagedBy}' — delete the tracker notification threshold instead.",
+                managedBy = rule.ManagedBy,
+            });
+        }
+
         // Refuse to break the alert_state graph: if any other rule references this one, the
         // caller must update or delete those first. Returning the offending ids lets the FE
         // either link to them or offer a cascade-delete.
@@ -485,6 +497,7 @@ public class AlertRulesController : ControllerBase
         Severity = entity.Severity,
         AllowThroughDnd = entity.AllowThroughDnd,
         ScopeClass = entity.ScopeClass,
+        ManagedBy = entity.ManagedBy,
         AutoResolveEnabled = entity.AutoResolveEnabled,
         AutoResolveParams = entity.AutoResolveParams is null
             ? null
@@ -633,6 +646,11 @@ public class AlertRuleResponse
     /// create/update; a scoped <c>lows</c>/<c>highs</c> window silences a rule only when its
     /// class matches.</summary>
     public RuleScopeClass ScopeClass { get; set; } = RuleScopeClass.Undirected;
+    /// <summary>Owner tag when this rule is synthesised from another feature's configuration
+    /// (e.g. <c>tracker:{definitionId}</c>). Null for user-authored rules. Managed rules
+    /// cannot be deleted here — the owning configuration re-syncs their condition, name and
+    /// severity; channels and client configuration remain user-editable.</summary>
+    public string? ManagedBy { get; set; }
     public bool AutoResolveEnabled { get; set; }
     public object? AutoResolveParams { get; set; }
     public object ClientConfiguration { get; set; } = new { };

@@ -104,7 +104,7 @@ public static class ScenarioConversions
                         s.State,
                         Utc(s.StartedAt)!.Value))
                 ?? new Dictionary<(StateSpanCategory, string?), StateSpanSnapshot>(),
-            ActiveTrackerReferences = ctx.ActiveTrackers?.ToDictionary(
+            ActiveTrackers = ctx.ActiveTrackers?.ToDictionary(
                     t => t.TrackerDefinitionId,
                     t => Utc(t.ReferenceAt)!.Value)
                 ?? new Dictionary<Guid, DateTime>(),

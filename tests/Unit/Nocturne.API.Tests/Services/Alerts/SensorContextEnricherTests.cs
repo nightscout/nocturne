@@ -39,6 +39,7 @@ public class SensorContextEnricherTests
     private readonly Mock<ITargetRangeScheduleRepository> _targetRangeScheduleRepository = new();
     private readonly Mock<IActiveProfileResolver> _activeProfileResolver = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettingsResolver = new();
+    private readonly Mock<Nocturne.Infrastructure.Data.Abstractions.ITrackerRepository> _trackerRepository = new();
     private readonly Mock<IPredictionService> _predictionService = new();
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
     private readonly Guid _tenantId = Guid.NewGuid();
@@ -485,6 +486,7 @@ public class SensorContextEnricherTests
             _targetRangeScheduleRepository.Object,
             _activeProfileResolver.Object,
             _therapySettingsResolver.Object,
+            _trackerRepository.Object,
             Options.Create(new AlertEvaluationOptions()));
         var enricher2 = new SensorContextEnricher(
             deps2,
@@ -759,6 +761,7 @@ public class SensorContextEnricherTests
             _targetRangeScheduleRepository.Object,
             _activeProfileResolver.Object,
             _therapySettingsResolver.Object,
+            _trackerRepository.Object,
             Options.Create(options ?? new AlertEvaluationOptions()));
 
         return new SensorContextEnricher(
