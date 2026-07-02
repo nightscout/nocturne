@@ -68,13 +68,19 @@ pub fn show(intent: &DeviceActionIntent, ack: Option<AckContext>) -> Result<(), 
     toast.show().map_err(|e| format!("could not show toast: {e}"))
 }
 
-/// Posts the acknowledge for `ack`, resolving a fresh token at click time. On failure the error is
-/// logged and a plain notification toast reports that the acknowledge did not go through.
+/// Posts the acknowledge for `ack`, resolving a fresh token at click time. The fresh token is only
+/// sent to the server it belongs to: if the user relinked to a different server while the toast
+/// persisted, the ack is dropped (the new server's bearer must not go to the old server's URL, and
+/// the old server's excursion can't be acknowledged with the new credential anyway) and the failure
+/// notification shown. On failure the error is logged and a plain notification toast reports that
+/// the acknowledge did not go through.
 async fn acknowledge_excursion(ack: &AckContext) {
     let result = async {
         let client = crate::http::client()?;
-        let (_, token) = crate::auth::get_valid_token(&client).await.map_err(|e| e.to_string())?;
-        crate::client_devices::acknowledge(&client, &ack.server, &token, &ack.excursion_id, ACK_BY)
+        let (server, token) =
+            crate::auth::get_valid_token(&client).await.map_err(|e| e.to_string())?;
+        check_ack_server(&server, &ack.server)?;
+        crate::client_devices::acknowledge(&client, &server, &token, &ack.excursion_id, ACK_BY)
             .await
     }
     .await;
@@ -87,6 +93,20 @@ async fn acknowledge_excursion(ack: &AckContext) {
             subtitle: Some("The acknowledge request failed. Acknowledge it in Nocturne.".to_string()),
         });
     }
+}
+
+/// Guards against cross-server token disclosure: `current` is the server the fresh token belongs
+/// to, `toast` the server the excursion was toasted from. A mismatch means the user relinked to a
+/// different server while the toast persisted — the ack must not be sent. Compared ignoring a
+/// trailing slash; both come from the stored credential's api_url, so no deeper normalization is
+/// needed.
+fn check_ack_server(current: &str, toast: &str) -> Result<(), String> {
+    if current.trim_end_matches('/') == toast.trim_end_matches('/') {
+        return Ok(());
+    }
+    Err(format!(
+        "linked server changed ({toast} -> {current}); dropping acknowledge for an excursion on the previous server"
+    ))
 }
 
 /// Shows an ambient notification toast mirroring an in-app notification. Unlike `show`, this is a
@@ -210,5 +230,20 @@ mod tests {
         let (t, b) = notification_lines(&notification("", None));
         assert_eq!(t, "Nocturne");
         assert_eq!(b, "Nocturne");
+    }
+
+    #[test]
+    fn ack_allowed_when_token_server_matches_toast_server() {
+        assert!(check_ack_server("https://t.nocturne.run", "https://t.nocturne.run").is_ok());
+        // Trailing-slash difference is not a relink.
+        assert!(check_ack_server("https://t.nocturne.run/", "https://t.nocturne.run").is_ok());
+    }
+
+    #[test]
+    fn ack_blocked_when_relinked_to_a_different_server() {
+        let err = check_ack_server("https://new.nocturne.run", "https://old.nocturne.run")
+            .expect_err("the new server's bearer must not be posted to the old server");
+        assert!(err.contains("old.nocturne.run"));
+        assert!(err.contains("new.nocturne.run"));
     }
 }

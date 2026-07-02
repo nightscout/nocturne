@@ -422,55 +422,84 @@ fn apply_flash_change(state: &mut TrayState, excursion_id: &str, on: bool) -> Fl
     }
 }
 
+/// What `set_tray_flash` must do once the state lock is released. Decided (and the generation
+/// bumped) while the lock is still held, so the (flashing set, generation) pair changes atomically:
+/// a concurrent `stop_all_flashes` cannot interleave between a start's set insert and its generation
+/// bump and leave a pulse task pinned to the newest generation with an empty flashing set.
+enum FlashAction {
+    /// Spawn the pulse task pinned to this (already bumped) generation.
+    SpawnPulse(u64),
+    /// The pulse was retired (generation already bumped); repaint the normal tile from this cached
+    /// reading.
+    Restore(Option<CurrentBg>),
+    None,
+}
+
+/// Applies `transition` to the flash generation and reports what the caller should do after
+/// releasing the state lock (the pulse task is spawned and the icon rendered outside it).
+fn plan_flash_action(
+    state: &TrayState,
+    transition: FlashTransition,
+    generation: &AtomicU64,
+) -> FlashAction {
+    match transition {
+        FlashTransition::Started => {
+            // Bumping the generation retires any previous pulse task before its next frame; the new
+            // task owns the icon from here.
+            FlashAction::SpawnPulse(generation.fetch_add(1, Ordering::SeqCst) + 1)
+        }
+        FlashTransition::Stopped => {
+            generation.fetch_add(1, Ordering::SeqCst);
+            FlashAction::Restore(state.last_reading.clone())
+        }
+        FlashTransition::Unchanged => FlashAction::None,
+    }
+}
+
 /// Starts or stops flashing the tray icon for `excursion_id`. Called from the reconcile path when an
 /// intent's capabilities include (or no longer include) `tray_flash`. Idempotent per excursion id:
 /// the first active excursion starts a single background pulse; the last one to clear stops it and
 /// restores the normal glucose icon. The glucose poll defers to the pulse via the flashing set.
 pub fn set_tray_flash(app: &AppHandle, excursion_id: &str, on: bool) {
-    let transition = {
+    let action = {
         let mut state = match tray_state().lock() {
             Ok(s) => s,
             Err(_) => return,
         };
-        apply_flash_change(&mut state, excursion_id, on)
+        let transition = apply_flash_change(&mut state, excursion_id, on);
+        plan_flash_action(&state, transition, &FLASH_GENERATION)
     };
 
-    match transition {
-        FlashTransition::Started => {
-            // Bumping the generation retires any previous pulse task before its next frame; the new
-            // task owns the icon from here.
-            let generation = FLASH_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
-            spawn_flash_task(app.clone(), generation);
-        }
-        FlashTransition::Stopped => {
-            stop_pulse_and_restore(app);
-        }
-        FlashTransition::Unchanged => {}
+    // Outside the lock: a stop that lands between the plan and the spawn has already bumped past
+    // the planned generation, so the new task exits before painting a frame.
+    match action {
+        FlashAction::SpawnPulse(generation) => spawn_flash_task(app.clone(), generation),
+        FlashAction::Restore(reading) => render_icon(app, reading.as_ref(), false),
+        FlashAction::None => {}
     }
 }
 
-/// Stops every flash at once (all actuations withdrawn — e.g. unlink): clears the flashing set,
-/// retires the pulse task, and restores the normal icon. No-op when nothing is flashing.
+/// Stops every flash at once (all actuations withdrawn — e.g. unlink/relink): clears the flashing
+/// set, retires the pulse task, and restores the normal icon. Idempotent: the generation is bumped
+/// even when nothing is flashing, so a pulse task orphaned by any interleaving is retired rather
+/// than left pulsing forever, and the extra restore repaint of the normal tile is harmless.
 pub fn stop_all_flashes(app: &AppHandle) {
-    let had_any = match tray_state().lock() {
-        Ok(mut state) => {
-            let had = !state.flashing.is_empty();
-            state.flashing.clear();
-            had
-        }
-        Err(_) => return,
+    let reading = {
+        let mut state = match tray_state().lock() {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        stop_all_and_bump(&mut state, &FLASH_GENERATION)
     };
-    if had_any {
-        stop_pulse_and_restore(app);
-    }
+    render_icon(app, reading.as_ref(), false);
 }
 
-/// Retires the current pulse task (generation bump) and repaints the normal tile from the cached
-/// reading.
-fn stop_pulse_and_restore(app: &AppHandle) {
-    FLASH_GENERATION.fetch_add(1, Ordering::SeqCst);
-    let current = tray_state().lock().ok().and_then(|s| s.last_reading.clone());
-    render_icon(app, current.as_ref(), false);
+/// The under-lock half of `stop_all_flashes`: clears the flashing set, bumps the generation
+/// unconditionally, and returns the cached reading for the restore repaint.
+fn stop_all_and_bump(state: &mut TrayState, generation: &AtomicU64) -> Option<CurrentBg> {
+    state.flashing.clear();
+    generation.fetch_add(1, Ordering::SeqCst);
+    state.last_reading.clone()
 }
 
 /// Background task that pulses the icon between the normal and attention tiles. Captures the
@@ -596,5 +625,85 @@ mod tests {
         let mut s = fresh_state();
         assert_eq!(apply_flash_change(&mut s, "ghost", false), FlashTransition::Unchanged);
         assert!(s.flashing.is_empty());
+    }
+
+    // ── flash generation: (set, generation) must change atomically ───────────────────────
+
+    fn reading(sgv_mgdl: f64) -> CurrentBg {
+        CurrentBg { sgv_mgdl, delta_mgdl: None, direction: None, mills: 0 }
+    }
+
+    #[test]
+    fn started_bumps_generation_and_pins_pulse_to_it() {
+        let generation = AtomicU64::new(7);
+        let s = fresh_state();
+        match plan_flash_action(&s, FlashTransition::Started, &generation) {
+            FlashAction::SpawnPulse(g) => assert_eq!(g, 8),
+            _ => panic!("expected SpawnPulse"),
+        }
+        assert_eq!(generation.load(Ordering::SeqCst), 8);
+    }
+
+    #[test]
+    fn stopped_bumps_generation_and_restores_cached_reading() {
+        let generation = AtomicU64::new(3);
+        let mut s = fresh_state();
+        s.last_reading = Some(reading(120.0));
+        match plan_flash_action(&s, FlashTransition::Stopped, &generation) {
+            FlashAction::Restore(Some(r)) => assert_eq!(r.sgv_mgdl, 120.0),
+            _ => panic!("expected Restore with the cached reading"),
+        }
+        // The bump retires the pulse task even before the restore render runs.
+        assert_eq!(generation.load(Ordering::SeqCst), 4);
+    }
+
+    #[test]
+    fn unchanged_leaves_generation_alone() {
+        let generation = AtomicU64::new(5);
+        let s = fresh_state();
+        assert!(matches!(
+            plan_flash_action(&s, FlashTransition::Unchanged, &generation),
+            FlashAction::None
+        ));
+        assert_eq!(generation.load(Ordering::SeqCst), 5);
+    }
+
+    #[test]
+    fn stop_all_bumps_even_when_nothing_is_flashing() {
+        // The idempotent-stop guarantee: a stop racing a start can observe an empty set, but the
+        // unconditional bump still retires whatever pulse task the start spawned.
+        let generation = AtomicU64::new(9);
+        let mut s = fresh_state();
+        stop_all_and_bump(&mut s, &generation);
+        assert_eq!(generation.load(Ordering::SeqCst), 10);
+    }
+
+    #[test]
+    fn stop_all_clears_set_and_returns_reading_for_restore() {
+        let generation = AtomicU64::new(0);
+        let mut s = fresh_state();
+        apply_flash_change(&mut s, "a", true);
+        apply_flash_change(&mut s, "b", true);
+        s.last_reading = Some(reading(90.0));
+        let r = stop_all_and_bump(&mut s, &generation);
+        assert!(s.flashing.is_empty());
+        assert_eq!(r.map(|c| c.sgv_mgdl), Some(90.0));
+        assert_eq!(generation.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn interleaved_stop_between_plan_and_spawn_retires_the_planned_pulse() {
+        // set_tray_flash plans SpawnPulse(N) under the lock, releases it, and a stop_all lands
+        // before the task's first frame: the stop's bump moves the generation past N, so the
+        // pulse's `FLASH_GENERATION == generation` gate fails immediately — no orphan pulse.
+        let generation = AtomicU64::new(0);
+        let mut s = fresh_state();
+        let transition = apply_flash_change(&mut s, "a", true);
+        let planned = match plan_flash_action(&s, transition, &generation) {
+            FlashAction::SpawnPulse(g) => g,
+            _ => panic!("expected SpawnPulse"),
+        };
+        stop_all_and_bump(&mut s, &generation);
+        assert_ne!(generation.load(Ordering::SeqCst), planned);
     }
 }

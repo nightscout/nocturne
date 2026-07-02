@@ -141,9 +141,10 @@ internal sealed class AlertDeliveryService(
         // device_action channels are the exception: push-mode devices actuate from the
         // active-intents snapshot, which only surfaces excursions that have not yet ended.
         // Give the test excursion a short future end so it appears in the snapshot for the
-        // window and then self-withdraws — no background job needed. Everything else that
-        // consumes excursions filters on EndedAt == null, so a future end still reads as
-        // "not active" there.
+        // window and then self-withdraws — no background job needed. Consumers that must treat
+        // the fire as live during the window (the snapshot, AlertAcknowledgementService) filter
+        // on EndedAt == null || EndedAt > now; alert history filters on EndedAt <= now so the
+        // future end stays out of it until the window lapses.
         var now = DateTime.UtcNow;
         var endedAt = channels.Any(c => c.ChannelType == ChannelType.DeviceAction)
             ? now + DeviceActionTestFireWindow

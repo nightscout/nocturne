@@ -7,9 +7,11 @@ import type { DeviceCapabilityCatalog } from "$api-clients";
 import type { ChannelDef } from "./types";
 
 // Mock the generated remote queries before importing the component. The
-// component reads `.current` reactively; `catalogCurrent` stays undefined to
-// model the catalog request not having resolved yet.
+// component reads `.current` and `.error` reactively; `catalogCurrent` stays
+// undefined to model the catalog request not having resolved yet, and
+// `catalogError` set with `catalogCurrent` undefined models a failed query.
 let catalogCurrent: DeviceCapabilityCatalog | undefined;
+let catalogError: Error | undefined;
 
 vi.mock("$api/generated/linkedPlatforms.generated.remote", () => ({
 	getLinkedPlatforms: () => ({
@@ -23,6 +25,9 @@ vi.mock("$api/generated/clientDevices.generated.remote", () => ({
 	getCapabilityCatalog: () => ({
 		get current() {
 			return catalogCurrent;
+		},
+		get error() {
+			return catalogError;
 		},
 	}),
 }));
@@ -50,6 +55,7 @@ describe("ChannelsSection", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		catalogCurrent = undefined;
+		catalogError = undefined;
 	});
 
 	it("disables the Device option while the capability catalog is not loaded", async () => {
@@ -60,6 +66,23 @@ describe("ChannelsSection", () => {
 
 		await expect.element(deviceItem()).toBeDisabled();
 		await expect.element(page.getByText("Loading", { exact: true })).toBeVisible();
+		expect(channels).toHaveLength(0);
+	});
+
+	it("shows Unavailable and keeps the Device option disabled when the catalog query fails", async () => {
+		catalogError = new Error("catalog fetch failed");
+		const channels = $state<ChannelDef[]>([]);
+		render(ChannelsSection, { channels, severity: AlertRuleSeverity.Warning });
+
+		await page.getByRole("button", { name: "Add channel" }).click();
+
+		await expect.element(deviceItem()).toBeDisabled();
+		await expect
+			.element(page.getByText("Unavailable", { exact: true }))
+			.toBeVisible();
+		expect(
+			page.getByText("Loading", { exact: true }).elements(),
+		).toHaveLength(0);
 		expect(channels).toHaveLength(0);
 	});
 

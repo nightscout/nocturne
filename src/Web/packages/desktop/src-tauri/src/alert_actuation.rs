@@ -26,8 +26,9 @@ use crate::toast::{self, AckContext};
 use crate::tray;
 use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
 
 /// Cap on the recently-seen notification-id set — enough to absorb a redelivery burst without
 /// growing unbounded. Oldest ids are evicted first.
@@ -82,7 +83,8 @@ const SESSION_SECS: u64 = 25 * 60;
 /// Backoff before retrying SignalR when a connect fails; periodic reconcile still runs in the gap.
 const RECONNECT_SECS: u64 = 30;
 /// Backoff after the server refuses registration (403) — the grant/user cannot register, so retrying
-/// at the reconcile cadence buys nothing; a relink restarts registration promptly via `on_unlink`.
+/// at the reconcile cadence buys nothing; `on_link`/`on_unlink` wake the loop out of the backoff so
+/// a relink restarts registration promptly.
 const REGISTER_BACKOFF_SECS: u64 = 15 * 60;
 
 /// Set while the stored grant cannot drive device alerts: it lacks the device scopes, or the server
@@ -98,12 +100,41 @@ pub fn needs_relink() -> bool {
     NEEDS_RELINK.load(Ordering::SeqCst)
 }
 
+/// Wakes the actuation loop out of any backoff/idle sleep. Signaled by `on_link`/`on_unlink`;
+/// `notify_one` stores a permit when no one is waiting, so a wake landing while the loop is
+/// mid-pass short-circuits its next sleep instead of being lost.
+fn wake() -> &'static Notify {
+    static WAKE: OnceLock<Notify> = OnceLock::new();
+    WAKE.get_or_init(Notify::new)
+}
+
+/// Sleeps up to `secs`, returning early when `notify` is signaled. Every backoff/idle sleep in the
+/// registration loop goes through this with the global `wake()`, so a link/unlink restarts the
+/// loop promptly instead of waiting out the backoff (up to 15 min after a register 403).
+async fn interruptible_sleep(notify: &Notify, secs: u64) {
+    let _ = tokio::time::timeout(Duration::from_secs(secs), notify.notified()).await;
+}
+
 /// Called when the user unlinks: withdraws every actuation immediately (stops all flashes and
-/// repaints the tray) and flags the actuation loop to reset its state and registration.
+/// repaints the tray), flags the actuation loop to reset its state and registration, and wakes it
+/// out of any backoff.
 pub fn on_unlink(app: &tauri::AppHandle) {
+    reset_registration(app);
+}
+
+/// Called when a device-flow link completes — with or without a prior unlink. A relink that
+/// replaces the stored credentials in place must reset too: any active actuations and the
+/// registration belong to the previous credential/server, and the loop may be sitting in a
+/// register backoff that would otherwise run out before the new credential is tried.
+pub fn on_link(app: &tauri::AppHandle) {
+    reset_registration(app);
+}
+
+fn reset_registration(app: &tauri::AppHandle) {
     NEEDS_RELINK.store(false, Ordering::SeqCst);
     RESET_STATE.store(true, Ordering::SeqCst);
     tray::stop_all_flashes(app);
+    wake().notify_one();
 }
 
 /// Drives registration + actuation for as long as the app runs. Idles (retrying) while unlinked,
@@ -137,7 +168,7 @@ pub async fn run(app: tauri::AppHandle) {
         if let Some(scopes) = auth::granted_scopes() {
             if !scopes.is_empty() && !has_device_scopes(&scopes) {
                 NEEDS_RELINK.store(true, Ordering::SeqCst);
-                tokio::time::sleep(Duration::from_secs(RECONCILE_SECS)).await;
+                interruptible_sleep(wake(), RECONCILE_SECS).await;
                 continue;
             }
         }
@@ -148,12 +179,12 @@ pub async fn run(app: tauri::AppHandle) {
                 // Definitively unlinked/revoked: withdraw everything and idle until a relink.
                 withdraw_all(&app, &mut state);
                 device_id = None;
-                tokio::time::sleep(Duration::from_secs(RECONCILE_SECS)).await;
+                interruptible_sleep(wake(), RECONCILE_SECS).await;
                 continue;
             }
             Err(TokenError::Transient(e)) => {
                 eprintln!("alert actuation: token: {e}");
-                tokio::time::sleep(Duration::from_secs(RECONCILE_SECS)).await;
+                interruptible_sleep(wake(), RECONCILE_SECS).await;
                 continue;
             }
         };
@@ -167,7 +198,7 @@ pub async fn run(app: tauri::AppHandle) {
                     id
                 }
                 Err(retry_secs) => {
-                    tokio::time::sleep(Duration::from_secs(retry_secs)).await;
+                    interruptible_sleep(wake(), retry_secs).await;
                     continue;
                 }
             },
@@ -321,6 +352,9 @@ async fn run_session(
                     }
                 }
                 _ = tokio::time::sleep_until(session_deadline) => break,
+                // Link/unlink: end the session now; the outer loop applies the RESET_STATE reset
+                // (fresh credentials, dropped registration) on its next pass.
+                _ = wake().notified() => break,
             };
 
             if outcome.is_some_and(ends_session) {
@@ -753,6 +787,41 @@ mod tests {
         // Unparseable token → subject None → fail closed.
         let mut dedup = NotificationDedup::default();
         assert!(!should_surface_notification(&mirror("me", "n1"), None, &mut dedup));
+    }
+
+    // ── interruptible backoff ─────────────────────────────────────────────────────────────
+
+    // Local `Notify` instances (not the global `wake()`) so parallel tests can't steal each
+    // other's permits.
+
+    #[tokio::test]
+    async fn pending_wake_short_circuits_backoff_sleep() {
+        // A permit stored before the sleep begins (link/unlink landed while the loop was mid-pass)
+        // must not be lost: the register backoff returns immediately instead of waiting 15 min.
+        let notify = Notify::new();
+        notify.notify_one();
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            interruptible_sleep(&notify, REGISTER_BACKOFF_SECS),
+        )
+        .await
+        .expect("a pending wake should short-circuit the backoff");
+    }
+
+    #[tokio::test]
+    async fn wake_during_backoff_interrupts_sleep() {
+        let notify = std::sync::Arc::new(Notify::new());
+        let sleeper = {
+            let notify = notify.clone();
+            tokio::spawn(async move { interruptible_sleep(&notify, REGISTER_BACKOFF_SECS).await })
+        };
+        // Let the sleeper start waiting, then wake it (the relink path).
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        notify.notify_one();
+        tokio::time::timeout(Duration::from_secs(5), sleeper)
+            .await
+            .expect("a wake mid-backoff should interrupt the sleep")
+            .unwrap();
     }
 
     #[test]

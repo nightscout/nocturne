@@ -180,7 +180,12 @@
         {#each CHANNEL_META as o (o.type)}
           {@const Glyph = o.icon ?? Bell}
           {@const linked = isLinked(o)}
-          {@const catalogPending = o.isDeviceAction === true && catalog === null}
+          {@const catalogFailed =
+            o.isDeviceAction === true &&
+            catalog === null &&
+            catalogQuery.error != null}
+          {@const catalogPending =
+            o.isDeviceAction === true && catalog === null && !catalogFailed}
           <Popover.Close>
             {#snippet child({ props })}
               <Button
@@ -188,7 +193,7 @@
                 type="button"
                 variant="ghost"
                 class="flex h-auto w-full items-start justify-start gap-2 rounded px-2 py-1.5 text-left font-normal hover:bg-muted"
-                disabled={catalogPending}
+                disabled={catalogPending || catalogFailed}
                 title={linked
                   ? undefined
                   : `${platformLabel(o.platform!)} not linked — connect it in Connectors & Apps to enable delivery.`}
@@ -211,6 +216,10 @@
                     {#if catalogPending}
                       <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
                         Loading
+                      </span>
+                    {:else if catalogFailed}
+                      <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        Unavailable
                       </span>
                     {:else if !linked}
                       <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">

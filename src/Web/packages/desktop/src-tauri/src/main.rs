@@ -287,6 +287,10 @@ async fn companion_link_start(
         };
         match auth::await_authorization(&client, pending).await {
             Ok(()) => {
+                // Fresh credentials were just stored (this is the only path that writes them, so
+                // it also covers a relink without a prior unlink): reset the actuation loop's
+                // registration and wake it out of any backoff.
+                alert_actuation::on_link(&app);
                 let _ = app.emit("companion-linked", ());
                 // Populate the taskbar/widget now rather than waiting for the next poll tick.
                 poll_glucose(&client, &app).await;

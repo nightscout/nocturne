@@ -140,7 +140,7 @@ public class AlertAcknowledgementServiceTests
     [Fact]
     public async Task AcknowledgeExcursion_ClosedExcursion_NoOp()
     {
-        var (excursionId, _) = await SeedActiveExcursionAsync(endedAt: DateTime.UtcNow);
+        var (excursionId, _) = await SeedActiveExcursionAsync(endedAt: DateTime.UtcNow.AddMinutes(-1));
 
         await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "user:bob", broadcast: true, CancellationToken.None);
 
@@ -152,6 +152,32 @@ public class AlertAcknowledgementServiceTests
         _broadcast.Verify(
             x => x.BroadcastAlertEventAsync(It.IsAny<string>(), It.IsAny<object>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_FutureEndedTestFire_StampsAck()
+    {
+        // A device_action test fire carries a short future EndedAt so it surfaces in the
+        // active-intents snapshot (AlertDeliveryService.TestFireAsync). While that window is
+        // open the tray is flashing — acknowledging it must work, not silently no-op.
+        var (excursionId, instanceId) = await SeedActiveExcursionAsync(
+            endedAt: DateTime.UtcNow.AddSeconds(90));
+
+        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "user:bob", broadcast: true, CancellationToken.None);
+
+        await using var db = NewUnfilteredContext();
+        var excursion = await db.AlertExcursions.IgnoreQueryFilters()
+            .FirstAsync(e => e.Id == excursionId);
+        excursion.AcknowledgedAt.Should().NotBeNull();
+        excursion.AcknowledgedBy.Should().Be("user:bob");
+
+        var instance = await db.AlertInstances.IgnoreQueryFilters()
+            .FirstAsync(i => i.Id == instanceId);
+        instance.Status.Should().Be("acknowledged");
+
+        _broadcast.Verify(
+            x => x.BroadcastAlertEventAsync("alert_acknowledged", It.IsAny<object>()),
+            Times.Once);
     }
 
     [Fact]
@@ -190,6 +216,22 @@ public class AlertAcknowledgementServiceTests
         _broadcast.Verify(
             x => x.BroadcastAlertEventAsync("alert_acknowledged", It.IsAny<object>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task AcknowledgeAll_IncludesFutureEndedTestFire_ExcludesPastEnded()
+    {
+        var (openId, _) = await SeedActiveExcursionAsync();
+        var (testFireId, _) = await SeedActiveExcursionAsync(endedAt: DateTime.UtcNow.AddSeconds(90));
+        var (closedId, _) = await SeedActiveExcursionAsync(endedAt: DateTime.UtcNow.AddMinutes(-1));
+
+        await _service.AcknowledgeAllAsync(_tenantId, "user:bob", CancellationToken.None);
+
+        await using var db = NewUnfilteredContext();
+        var allExc = await db.AlertExcursions.IgnoreQueryFilters().ToListAsync();
+        allExc.First(e => e.Id == openId).AcknowledgedBy.Should().Be("user:bob");
+        allExc.First(e => e.Id == testFireId).AcknowledgedBy.Should().Be("user:bob");
+        allExc.First(e => e.Id == closedId).AcknowledgedBy.Should().BeNull();
     }
 
     [Fact]

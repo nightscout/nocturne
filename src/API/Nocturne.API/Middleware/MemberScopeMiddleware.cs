@@ -165,6 +165,24 @@ public class MemberScopeMiddleware
                 .Where(memberScope => OAuthScopes.SatisfiesScope(currentScopes, memberScope))
                 .ToHashSet();
 
+            // Member-personal device scopes bypass the role intersection. device.notify /
+            // device.actuate authorize the alert engine to drive the member's OWN registered
+            // client devices (rows RLS-scoped to the member's subject), not patient data. Role
+            // rows are persisted per tenant at seed time and never reconciled
+            // (TenantRoleService.SeedRolesForTenantAsync skips existing slugs), so roles seeded
+            // before these atoms existed would strip the scopes for every pre-existing tenant —
+            // no relink or re-consent can fix that. Grant them from the auth token alone for any
+            // member who holds at least one permission; zero-permission members (the Denied seed
+            // role) stay fully stripped because alert actuations reveal patient state.
+            if (effectivePermissions.Count > 0)
+            {
+                foreach (var personalScope in TenantPermissions.MemberPersonalScopes)
+                {
+                    if (OAuthScopes.SatisfiesScope(currentScopes, personalScope))
+                        restrictedScopes.Add(personalScope);
+                }
+            }
+
             context.Items["GrantedScopes"] = (IReadOnlySet<string>)restrictedScopes;
 
             // Rebuild permission trie from restricted scopes

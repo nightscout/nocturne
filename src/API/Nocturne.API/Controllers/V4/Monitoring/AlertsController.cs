@@ -114,10 +114,14 @@ public class AlertsController : ControllerBase
 
         await using var db = await _contextFactory.CreateAsync(ct);
 
+        // EndedAt <= now: history is completed excursions only. device_action test fires carry
+        // a short future EndedAt (AlertDeliveryService.TestFireAsync) so they read as live in
+        // the active-intents snapshot; they join history once that window lapses.
+        var now = DateTime.UtcNow;
         var query = db.AlertExcursions
             .AsNoTracking()
             .Include(e => e.AlertRule)
-            .Where(e => e.EndedAt != null);
+            .Where(e => e.EndedAt != null && e.EndedAt <= now);
 
         if (alertRuleId.HasValue)
             query = query.Where(e => e.AlertRuleId == alertRuleId.Value);
