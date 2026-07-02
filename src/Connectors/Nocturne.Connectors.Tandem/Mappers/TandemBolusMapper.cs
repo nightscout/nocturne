@@ -55,13 +55,20 @@ public sealed class TandemBolusMapper(ILogger logger, TandemTimeResolver time)
             var timestamp = _time.ToUtc(completed.RawTimestampSeconds);
             var correlationId = Guid.CreateVersion7();
 
+            // The extended (BOLEX) completion carries the extended portion's own delivered and
+            // requested amounts; both totals must include it so a combo bolus whose extended
+            // portion was aborted early still shows programmed vs delivered consistently.
             var delivered = completed.Num("InsulinDelivered") ?? 0;
-            if (bolex != null)
-                delivered += bolex.Num("InsulinDelivered") ?? 0;
             var requested = completed.Num("InsulinRequested") ?? delivered;
+            if (bolex != null)
+            {
+                var bolexDelivered = bolex.Num("InsulinDelivered") ?? 0;
+                delivered += bolexDelivered;
+                requested += bolex.Num("InsulinRequested") ?? bolexDelivered;
+            }
 
             // Record every contributing event's sequence number for provenance, as process_bolus.py does.
-            var seqNums = string.Join(",", new[] { completed, msg1, msg2, msg3 }
+            var seqNums = string.Join(",", new[] { completed, msg1, msg2, msg3, bolex }
                 .Where(e => e != null)
                 .Select(e => e!.SeqNum.ToString()));
 

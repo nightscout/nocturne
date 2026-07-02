@@ -32,10 +32,24 @@ public class TandemMapperTests
     }
 
     [Fact]
-    public void CgmMapper_skips_zero_display_values()
+    public void CgmMapper_reports_low_sentinel_for_zero_precise_reading()
     {
+        // A precise-status reading below the reportable range (display 0) is published as the
+        // LOW sentinel 39, mirroring the Tandem Source frontend.
         var blob = TandemEventBuilder.ToBase64(
             new TandemEventBuilder(256, Raw, seqNum: 6).UInt16(4, 0).UInt32(8, (uint)Raw));
+
+        new TandemCgmMapper(NullLogger.Instance, Time).Map(TandemEventDecoder.Decode(blob))
+            .Should().ContainSingle().Which.Mgdl.Should().Be(39);
+    }
+
+    [Fact]
+    public void CgmMapper_skips_zero_display_values_with_unknown_status()
+    {
+        // Status 6 ("Do Not Show" on G7) is neither precise nor special; with no usable display
+        // value the reading is skipped rather than published as 0.
+        var blob = TandemEventBuilder.ToBase64(
+            new TandemEventBuilder(256, Raw, seqNum: 6).UInt16(2, 6).UInt16(4, 0).UInt32(8, (uint)Raw));
 
         new TandemCgmMapper(NullLogger.Instance, Time).Map(TandemEventDecoder.Decode(blob))
             .Should().BeEmpty();
