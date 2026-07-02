@@ -26,6 +26,11 @@ const CRED_USER: &str = "default";
 // Refresh this many seconds before the access token expires.
 const REFRESH_SKEW_SECS: i64 = 60;
 
+// Serializes refreshes so concurrent callers (the poll loop and the realtime hub) can't fire two
+// refresh_token grants at once and replay a rotating (single-use) refresh token, which would
+// invalidate the newer one and force a re-link.
+static REFRESH_LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+
 // Serialized as the Credential Manager secret.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 struct StoredCreds {
@@ -196,6 +201,16 @@ pub async fn await_authorization(
 /// within `REFRESH_SKEW_SECS` of expiry. Errors if there are no stored credentials (the user
 /// must link) or the refresh fails (re-link needed).
 pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String), String> {
+    let creds = load().ok_or("Not linked to a Nocturne server yet.")?;
+    if now_unix() < creds.expires_at_unix - REFRESH_SKEW_SECS {
+        return Ok((creds.api_url, creds.access_token));
+    }
+
+    // A refresh is due. Serialize it: another caller may already be refreshing, so take the lock and
+    // re-check before spending the single-use refresh token.
+    let lock = REFRESH_LOCK.get_or_init(|| tokio::sync::Mutex::new(()));
+    let _guard = lock.lock().await;
+
     let creds = load().ok_or("Not linked to a Nocturne server yet.")?;
     if now_unix() < creds.expires_at_unix - REFRESH_SKEW_SECS {
         return Ok((creds.api_url, creds.access_token));

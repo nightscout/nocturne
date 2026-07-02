@@ -14,6 +14,7 @@
 
 mod auth;
 mod glucose_file;
+mod glucose_hub;
 mod glucose_poll;
 mod tray;
 
@@ -446,7 +447,8 @@ async fn poll_glucose(client: &reqwest::Client, app: &tauri::AppHandle) {
 }
 
 /// Background poll loop. Polls before sleeping, so a launch (or a just-completed link) populates
-/// promptly; idles while unlinked.
+/// promptly; idles while unlinked. A SignalR hub (best-effort) nudges the loop to poll early on any
+/// data change; the timer remains the fallback whenever the hub is down.
 fn spawn_glucose_poller(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         let client = match http_client() {
@@ -456,11 +458,22 @@ fn spawn_glucose_poller(app: tauri::AppHandle) {
                 return;
             }
         };
+
+        // Capacity 1: a full channel means a refresh is already pending, so realtime nudges coalesce.
+        let (refresh_tx, mut refresh_rx) = tokio::sync::mpsc::channel::<()>(1);
+        glucose_hub::spawn(client.clone(), refresh_tx);
+
         loop {
             if auth::is_linked() {
                 poll_glucose(&client, &app).await;
             }
-            tokio::time::sleep(std::time::Duration::from_secs(GLUCOSE_POLL_SECS)).await;
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(GLUCOSE_POLL_SECS)) => {}
+                _ = refresh_rx.recv() => {
+                    // Drain a burst of events so many arrivals collapse into a single poll.
+                    while refresh_rx.try_recv().is_ok() {}
+                }
+            }
         }
     });
 }
