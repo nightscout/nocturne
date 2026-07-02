@@ -77,6 +77,17 @@ public static class TenantPermissions
     /// <summary>Permission to manage audit settings (retention, export).</summary>
     public const string AuditManage = "audit.manage";
 
+    // Client devices
+    //
+    // Capability grants for the member's own registered client devices (Prelude, the desktop
+    // Companion) — the alert engine drives the member's device, not the patient's hardware.
+    // Mirror OAuthScopes.DeviceNotify / OAuthScopes.DeviceActuate.
+
+    /// <summary>Allows the alert engine to push notifications to the member's registered client devices.</summary>
+    public const string DeviceNotify = "device.notify";
+    /// <summary>Allows the alert engine to actuate hardware (sound, torch, vibration) on the member's registered client devices.</summary>
+    public const string DeviceActuate = "device.actuate";
+
     // Superuser
 
     /// <summary>Superuser permission that satisfies all other permissions.</summary>
@@ -105,6 +116,8 @@ public static class TenantPermissions
         SharingGuest,
         AuditRead,
         AuditManage,
+        DeviceNotify,
+        DeviceActuate,
     ];
 
     /// <summary>
@@ -138,7 +151,10 @@ public static class TenantPermissions
     }
 
     /// <summary>
-    /// Default permissions for each seed role.
+    /// Default permissions for each seed role. Every authenticated human role gets the
+    /// <see cref="DeviceNotify"/>/<see cref="DeviceActuate"/> capability grants — they control the
+    /// member's own registered client devices, not the patient record — so any member who runs a
+    /// client app (e.g. the desktop Companion) can register it and receive alert actuations.
     /// </summary>
     public static readonly Dictionary<string, List<string>> SeedRolePermissions = new()
     {
@@ -152,6 +168,7 @@ public static class TenantPermissions
             IdentityRead,
             MembersInvite, MembersManage, TenantSettings, RolesManage, SharingManage, SharingGuest,
             AuditRead,
+            DeviceNotify, DeviceActuate,
         ],
         [SeedRoles.Caretaker] =
         [
@@ -159,6 +176,7 @@ public static class TenantPermissions
             FoodRead, HeartRateRead, StepCountRead,
             ReportsRead,
             TherapyRead, AlertsReadWrite,
+            DeviceNotify, DeviceActuate,
         ],
         [SeedRoles.Clinician] =
         [
@@ -166,8 +184,9 @@ public static class TenantPermissions
             FoodRead, HeartRateRead, StepCountRead,
             ReportsRead,
             TherapyRead, AlertsRead,
+            DeviceNotify, DeviceActuate,
         ],
-        [SeedRoles.Viewer] = [GlucoseRead, ReportsRead],
+        [SeedRoles.Viewer] = [GlucoseRead, ReportsRead, DeviceNotify, DeviceActuate],
         [SeedRoles.Denied] = [],
     };
 

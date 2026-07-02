@@ -89,4 +89,22 @@ public class DeviceCapabilitiesTests
     {
         DeviceKinds.HasLocalEngine(kind).Should().Be(expected);
     }
+
+    [Fact]
+    public void BuildCatalog_orders_push_mode_kinds_before_local_engine_kinds()
+    {
+        // The rule builder seeds a new channel from Kinds[0]; that default must be a kind the
+        // server can push intents to, not a local-engine kind it suppresses at runtime.
+        var catalog = DeviceCapabilities.BuildCatalog();
+
+        catalog.Kinds.Should().Equal(DeviceKinds.Companion, DeviceKinds.Prelude);
+    }
+
+    [Fact]
+    public void BuildCatalog_lists_all_kinds()
+    {
+        var catalog = DeviceCapabilities.BuildCatalog();
+
+        catalog.Kinds.Should().BeEquivalentTo(DeviceKinds.All);
+    }
 }

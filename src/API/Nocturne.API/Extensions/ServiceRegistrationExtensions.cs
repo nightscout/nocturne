@@ -129,6 +129,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IBolusWizardService, BolusWizardService>();
 
         services.AddScoped<IAuthorizationService, AuthorizationService>();
+        services.AddScoped<IHubTokenAuthorizer, HubTokenAuthorizer>();
         services.AddScoped<IAlexaService, AlexaService>();
 
         services.AddScoped<IStatisticsService, StatisticsService>();

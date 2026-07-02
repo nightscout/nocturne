@@ -172,7 +172,8 @@ public class ClientDeviceServiceTests
         string targetKind,
         string metadataJson,
         bool open = true,
-        bool acknowledged = false)
+        bool acknowledged = false,
+        DateTime? endedAt = null)
     {
         var rule = new AlertRuleEntity
         {
@@ -194,7 +195,7 @@ public class ClientDeviceServiceTests
             Id = Guid.NewGuid(),
             AlertRuleId = rule.Id,
             StartedAt = DateTime.UtcNow,
-            EndedAt = open ? null : DateTime.UtcNow,
+            EndedAt = endedAt ?? (open ? null : DateTime.UtcNow),
             AcknowledgedAt = acknowledged ? DateTime.UtcNow : null,
         });
     }
@@ -275,6 +276,52 @@ public class ClientDeviceServiceTests
             Capabilities = [DeviceCapabilities.Notify],
         }, FullDeviceScopes);
         SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}", open: false);
+        await ctx.SaveChangesAsync();
+
+        var intents = await svc.GetActiveIntentsAsync(device.Id, subject);
+
+        intents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_includes_test_fire_excursion_within_window()
+    {
+        // A device_action test fire ends its excursion in the near future
+        // (AlertDeliveryService.DeviceActionTestFireWindow) so it surfaces here until the
+        // window passes.
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(subject, new RegisterDeviceRequest
+        {
+            InstallId = "c1",
+            Kind = DeviceKinds.Companion,
+            Capabilities = [DeviceCapabilities.Notify],
+        }, FullDeviceScopes);
+        SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}",
+            endedAt: DateTime.UtcNow.AddSeconds(90));
+        await ctx.SaveChangesAsync();
+
+        var intents = await svc.GetActiveIntentsAsync(device.Id, subject);
+
+        intents.Should().ContainSingle();
+        intents[0].Capabilities.Should().Equal("notify");
+    }
+
+    [Fact]
+    public async Task GetActiveIntentsAsync_excludes_test_fire_excursion_after_window()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var device = await svc.RegisterAsync(subject, new RegisterDeviceRequest
+        {
+            InstallId = "c1",
+            Kind = DeviceKinds.Companion,
+            Capabilities = [DeviceCapabilities.Notify],
+        }, FullDeviceScopes);
+        SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}",
+            endedAt: DateTime.UtcNow.AddSeconds(-1));
         await ctx.SaveChangesAsync();
 
         var intents = await svc.GetActiveIntentsAsync(device.Id, subject);

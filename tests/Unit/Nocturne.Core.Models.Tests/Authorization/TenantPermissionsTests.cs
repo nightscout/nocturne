@@ -83,4 +83,31 @@ public class TenantPermissionsTests
         TenantPermissions.All.Should().Contain(TenantPermissions.AuditRead);
         TenantPermissions.All.Should().Contain(TenantPermissions.AuditManage);
     }
+
+    [Fact]
+    public void All_ContainsDeviceCapabilityPermissions()
+    {
+        TenantPermissions.All.Should().Contain(TenantPermissions.DeviceNotify);
+        TenantPermissions.All.Should().Contain(TenantPermissions.DeviceActuate);
+    }
+
+    [Theory]
+    [InlineData(TenantPermissions.SeedRoles.Admin)]
+    [InlineData(TenantPermissions.SeedRoles.Caretaker)]
+    [InlineData(TenantPermissions.SeedRoles.Clinician)]
+    [InlineData(TenantPermissions.SeedRoles.Viewer)]
+    public void SeedRoles_HumanMemberRoles_HaveDeviceCapabilityGrants(string roleSlug)
+    {
+        // Device scopes drive the member's own client devices (Companion/Prelude), not the
+        // patient record, so every authenticated human role gets them.
+        TenantPermissions.SeedRolePermissions[roleSlug]
+            .Should().Contain([TenantPermissions.DeviceNotify, TenantPermissions.DeviceActuate]);
+    }
+
+    [Fact]
+    public void SeedRoles_Denied_HasNoDeviceCapabilityGrants()
+    {
+        TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Denied]
+            .Should().BeEmpty();
+    }
 }

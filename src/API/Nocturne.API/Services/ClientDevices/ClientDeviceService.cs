@@ -187,11 +187,15 @@ public class ClientDeviceService : IClientDeviceService
 
         var deviceCaps = new HashSet<string>(device.Capabilities);
 
+        // EndedAt > now admits test fires: AlertDeliveryService.TestFireAsync gives a
+        // device_action test excursion a short future end so it appears here for the window
+        // and then self-withdraws. Real excursions always end in the past.
+        var now = DateTime.UtcNow;
         var excursions = await _dbContext.AlertExcursions
             .AsNoTracking()
             .Include(e => e.AlertRule)
                 .ThenInclude(r => r!.Channels)
-            .Where(e => e.EndedAt == null
+            .Where(e => (e.EndedAt == null || e.EndedAt > now)
                 && e.AlertRule!.IsEnabled
                 && e.AlertRule.Channels.Any(c =>
                     c.ChannelType == ChannelType.DeviceAction && c.Destination == device.Kind))

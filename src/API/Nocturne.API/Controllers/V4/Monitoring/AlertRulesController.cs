@@ -404,9 +404,11 @@ public class AlertRulesController : ControllerBase
     #region Helpers
 
     /// <summary>
-    /// Rejects a channel list that contains a <c>device_action</c> channel whose destination is not a
-    /// valid device kind — otherwise a typo'd kind would silently never actuate. Returns a 400
-    /// <see cref="BadRequestObjectResult"/> on the first offender, or null when all channels are valid.
+    /// Rejects a channel list that contains a <c>device_action</c> channel whose destination is not
+    /// a valid device kind, or whose metadata requests a capability that is unknown or not allowed
+    /// for that kind — otherwise a typo'd kind/capability would silently never actuate. Returns a
+    /// 400 <see cref="BadRequestObjectResult"/> on the first offender, or null when all channels
+    /// are valid.
     /// </summary>
     private ActionResult? RejectInvalidDeviceActionChannels(List<CreateAlertRuleChannelRequest>? channels)
     {
@@ -426,9 +428,31 @@ public class AlertRulesController : ControllerBase
             {
                 return BadRequest(new
                 {
-                    error = $"A device_action channel's destination must be a device kind "
+                    message = $"A device_action channel's destination must be a device kind "
                         + $"({string.Join(", ", DeviceKinds.All)}); got '{ch.Destination}'.",
                 });
+            }
+
+            var requested = DeviceCapabilities.ParseRequestedCapabilities(
+                ch.Metadata is not null ? JsonSerializer.Serialize(ch.Metadata) : null);
+            foreach (var capability in requested)
+            {
+                if (!DeviceCapabilities.IsKnown(capability))
+                {
+                    return BadRequest(new
+                    {
+                        message = $"Unknown device capability '{capability}'.",
+                    });
+                }
+
+                if (!DeviceCapabilities.Registry[capability].Kinds.Contains(ch.Destination))
+                {
+                    return BadRequest(new
+                    {
+                        message = $"Capability '{capability}' is not available on "
+                            + $"device kind '{ch.Destination}'.",
+                    });
+                }
             }
         }
 

@@ -121,7 +121,8 @@ public class TenantRoleServiceTests : IDisposable
         await _context.SaveChangesAsync();
 
         var effective = await _service.GetEffectivePermissionsAsync(member.Id);
-        effective.Should().BeEquivalentTo(["glucose.read", "reports.read", "treatments.read"]);
+        effective.Should().BeEquivalentTo(
+            ["glucose.read", "reports.read", "device.notify", "device.actuate", "treatments.read"]);
     }
 
     public void Dispose() => _context.Dispose();

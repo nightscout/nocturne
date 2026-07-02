@@ -851,8 +851,8 @@ public class TenantIsolationTests
     private static (DataHub hub, Mock<IGroupManager> groups) CreateDataHub(TenantContext tenantContext)
     {
         var mockLogger = new Mock<ILogger<DataHub>>();
-        var mockAuthService = new Mock<Core.Contracts.Identity.IAuthorizationService>();
-        var hub = new DataHub(mockLogger.Object, mockAuthService.Object);
+        var mockTokenAuthorizer = new Mock<Nocturne.API.Services.Identity.IHubTokenAuthorizer>();
+        var hub = new DataHub(mockLogger.Object, mockTokenAuthorizer.Object);
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["TenantContext"] = tenantContext;

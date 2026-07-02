@@ -163,7 +163,13 @@ public static class DeviceCapabilities
     /// </summary>
     public static DeviceCapabilityCatalog BuildCatalog() => new()
     {
-        Kinds = [.. DeviceKinds.All],
+        // Push-mode kinds first: the rule builder seeds a new channel from Kinds[0], and a
+        // local-engine kind (Prelude) as the default would author a channel the server
+        // suppresses at runtime.
+        Kinds = DeviceKinds.All
+            .OrderBy(DeviceKinds.HasLocalEngine)
+            .ThenBy(k => k, StringComparer.Ordinal)
+            .ToList(),
         Capabilities = Registry.Values
             .Select(c => new DeviceCapabilityInfo
             {

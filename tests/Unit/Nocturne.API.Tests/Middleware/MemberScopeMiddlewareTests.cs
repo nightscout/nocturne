@@ -208,6 +208,95 @@ public class MemberScopeMiddlewareTests
         grantedScopes!.Should().Contain("*");
     }
 
+    [Fact]
+    public async Task NonOwnerMember_WithDeviceScopedToken_RetainsDeviceScopes()
+    {
+        // A caretaker running the desktop Companion: the OAuth token carries the device
+        // capability scopes, and the caretaker seed role grants the matching permission atoms,
+        // so the scope intersection must keep them (they'd otherwise 403 on
+        // POST /api/v4/client-devices).
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var caretakerSubjectId = Guid.CreateVersion7();
+        using (var seed = new NocturneDbContext(options))
+        {
+            seed.Database.EnsureCreated();
+            TestDatabaseSeeder.Seed(seed);
+
+            seed.Subjects.Add(new Nocturne.Infrastructure.Data.Entities.SubjectEntity
+            {
+                Id = caretakerSubjectId,
+                Name = "Caretaker",
+                IsActive = true,
+                IsSystemSubject = false,
+            });
+            var memberId = Guid.CreateVersion7();
+            seed.TenantMembers.Add(new Nocturne.Infrastructure.Data.Entities.TenantMemberEntity
+            {
+                Id = memberId,
+                TenantId = TestDatabaseSeeder.TenantId,
+                SubjectId = caretakerSubjectId,
+            });
+            var roleId = Guid.CreateVersion7();
+            seed.TenantRoles.Add(new Nocturne.Infrastructure.Data.Entities.TenantRoleEntity
+            {
+                Id = roleId,
+                TenantId = TestDatabaseSeeder.TenantId,
+                Name = "Caretaker",
+                Slug = TenantPermissions.SeedRoles.Caretaker,
+                Permissions = TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker],
+                IsSystem = true,
+                SysCreatedAt = DateTime.UtcNow,
+                SysUpdatedAt = DateTime.UtcNow,
+            });
+            seed.TenantMemberRoles.Add(new Nocturne.Infrastructure.Data.Entities.TenantMemberRoleEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantMemberId = memberId,
+                TenantRoleId = roleId,
+                SysCreatedAt = DateTime.UtcNow,
+            });
+            seed.SaveChanges();
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped(_ => new NocturneDbContext(options));
+        using var provider = services.BuildServiceProvider();
+
+        // The Companion's device-flow token scopes.
+        var tokenScopes = new List<string>
+        {
+            OAuthScopes.GlucoseRead, OAuthScopes.TherapyRead, OAuthScopes.DevicesRead,
+            OAuthScopes.DeviceNotify, OAuthScopes.DeviceActuate,
+        };
+
+        var context = new DefaultHttpContext { RequestServices = provider };
+        context.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.OAuthAccessToken,
+            SubjectId = caretakerSubjectId,
+            TenantId = TestDatabaseSeeder.TenantId,
+            Scopes = tokenScopes,
+        };
+        context.Items["GrantedScopes"] = OAuthScopes.Normalize(tokenScopes);
+        context.Items["PermissionTrie"] = new PermissionTrie();
+
+        var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+
+        await middleware.InvokeAsync(context);
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().Contain(OAuthScopes.DeviceNotify);
+        grantedScopes.Should().Contain(OAuthScopes.DeviceActuate);
+        // Role atoms the token didn't request stay excluded.
+        grantedScopes.Should().NotContain(OAuthScopes.TreatmentsReadWrite);
+        grantedScopes.Should().NotContain("*");
+    }
+
     private (MemberScopeMiddleware middleware, DefaultHttpContext context) Build(AuthContext authContext)
     {
         RequestDelegate next = _ => Task.CompletedTask;

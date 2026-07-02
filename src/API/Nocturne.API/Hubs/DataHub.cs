@@ -3,11 +3,12 @@ using Microsoft.AspNetCore.SignalR;
 using Nocturne.API.Extensions;
 using Nocturne.API.Middleware;
 using Nocturne.API.Services.Devices;
-using Nocturne.Core.Contracts.Identity;
+using Nocturne.API.Services.Identity;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Hubs;
 
@@ -20,15 +21,12 @@ namespace Nocturne.API.Hubs;
 public class DataHub : TenantAwareHub
 {
     private readonly ILogger<DataHub> _logger;
-    private readonly Nocturne.Core.Contracts.Identity.IAuthorizationService _authorizationService;
+    private readonly IHubTokenAuthorizer _tokenAuthorizer;
 
-    public DataHub(
-        ILogger<DataHub> logger,
-        Nocturne.Core.Contracts.Identity.IAuthorizationService authorizationService
-    )
+    public DataHub(ILogger<DataHub> logger, IHubTokenAuthorizer tokenAuthorizer)
     {
         _logger = logger;
-        _authorizationService = authorizationService;
+        _tokenAuthorizer = tokenAuthorizer;
     }
 
     /// <summary>
@@ -55,11 +53,14 @@ public class DataHub : TenantAwareHub
             {
                 if (!string.IsNullOrEmpty(authData.Token))
                 {
-                    // Try to generate JWT from access token
-                    var authResponse = await _authorizationService.GenerateJwtFromAccessTokenAsync(
-                        authData.Token
+                    // OAuth JWT (validated + tenant-pinned + scope-checked) or legacy opaque
+                    // access token. Glucose read is the gate: the authorized group receives the
+                    // tenant's live data broadcasts.
+                    isAuthorized = await _tokenAuthorizer.IsTokenAuthorizedAsync(
+                        authData.Token,
+                        TenantContext?.TenantId,
+                        OAuthScopes.GlucoseRead
                     );
-                    isAuthorized = authResponse != null;
                 }
                 else if (!string.IsNullOrEmpty(authData.Secret))
                 {
