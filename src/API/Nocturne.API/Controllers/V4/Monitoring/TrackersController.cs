@@ -272,7 +272,10 @@ public class TrackersController : ControllerBase
 
         var created = await _repository.CreateDefinitionAsync(entity, HttpContext.RequestAborted);
 
-        await _ruleSync.SyncDefinitionAsync(created.Id, HttpContext.RequestAborted);
+        // CancellationToken.None: the definition is already committed, so a client
+        // disconnect must not leave it without its managed rules until the next startup
+        // backfill.
+        await _ruleSync.SyncDefinitionAsync(created.Id, CancellationToken.None);
 
         _logger.LogInformation(
             "Created tracker definition {Id} for user {UserId}",
@@ -374,7 +377,9 @@ public class TrackersController : ControllerBase
 
         // Lifespan/mode/name changes shift the synthesised conditions even when the
         // threshold list itself didn't change, so re-sync unconditionally.
-        await _ruleSync.SyncDefinitionAsync(id, HttpContext.RequestAborted);
+        // CancellationToken.None: the threshold writes are already committed; aborting
+        // here would leave stale rules firing at the old minutes.
+        await _ruleSync.SyncDefinitionAsync(id, CancellationToken.None);
 
         return Ok(TrackerDefinitionDto.FromEntity(updated!));
     }
@@ -396,8 +401,12 @@ public class TrackersController : ControllerBase
         if (existing.UserId != userId && !HttpContext.IsAdmin())
             return Forbid();
 
-        await _ruleSync.DeleteRulesForDefinitionAsync(id, HttpContext.RequestAborted);
+        // Definition first, rules second: if the definition delete fails the tracker
+        // keeps its rules; if the rule cleanup is interrupted the leftover rules fail
+        // closed (no active instance for a deleted definition) rather than a live
+        // tracker losing its alerts. CancellationToken.None for the same reason.
         await _repository.DeleteDefinitionAsync(id, HttpContext.RequestAborted);
+        await _ruleSync.DeleteRulesForDefinitionAsync(id, CancellationToken.None);
 
         _logger.LogInformation("Deleted tracker definition {Id}", id);
 
@@ -576,7 +585,10 @@ public class TrackersController : ControllerBase
     }
 
     /// <summary>
-    /// Acknowledge/snooze a tracker notification
+    /// Acknowledge a tracker notification. <c>SnoozeMins</c> is stored on the instance
+    /// (pill display/legacy clients); the alert-engine side is a plain acknowledgement of
+    /// the managed rules' open excursions — re-notification is the threshold ladder's and
+    /// alert_state escalation rules' job, not a snooze re-fire.
     /// </summary>
     [HttpPost("instances/{id:guid}/ack")]
     [Authorize]

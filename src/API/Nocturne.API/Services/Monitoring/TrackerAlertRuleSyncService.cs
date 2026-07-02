@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -36,16 +37,19 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
 {
     private readonly ITenantDbContextFactory _contextFactory;
     private readonly IRuleScopeClassifier _scopeClassifier;
+    private readonly IAlertReferenceService _referenceService;
     private readonly ILogger<TrackerAlertRuleSyncService> _logger;
 
     /// <summary>Initialises a new <see cref="TrackerAlertRuleSyncService"/>.</summary>
     public TrackerAlertRuleSyncService(
         ITenantDbContextFactory contextFactory,
         IRuleScopeClassifier scopeClassifier,
+        IAlertReferenceService referenceService,
         ILogger<TrackerAlertRuleSyncService> logger)
     {
         _contextFactory = contextFactory;
         _scopeClassifier = scopeClassifier;
+        _referenceService = referenceService;
         _logger = logger;
     }
 
@@ -73,39 +77,53 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             .ToDictionaryAsync(r => r.Id, ct);
 
         // The threshold editor replaces the whole threshold list (new row ids), which
-        // clears the AlertRuleId links. Adopt orphaned managed rules by their baked
-        // minutes so an unchanged threshold keeps its rule — and with it the user's
-        // channel edits and the rule's excursion history.
-        var claimedRuleIds = definition.NotificationThresholds
-            .Where(t => t.AlertRuleId is not null)
-            .Select(t => t.AlertRuleId!.Value)
+        // clears the AlertRuleId links. Adopt orphaned managed rules so a threshold keeps
+        // its rule — and with it the user's channel edits and the rule's open excursion
+        // (deleting a rule cascade-deletes its excursions, which would re-dispatch an
+        // already-acknowledged alert on the next sweep):
+        //   1. exact baked-minutes match (unchanged thresholds),
+        //   2. positional pairing of the remainder by ascending minutes (an edited-hours
+        //      threshold reclaims the rule whose old minutes it displaced).
+        var pending = definition.NotificationThresholds
+            .OrderBy(t => t.DisplayOrder)
+            .Select(t => (Threshold: t, Minutes: EffectiveMinutes(definition, t)))
+            .ToList();
+        var claimedRuleIds = pending
+            .Where(p => p.Threshold.AlertRuleId is not null)
+            .Select(p => p.Threshold.AlertRuleId!.Value)
             .ToHashSet();
-        var adoptableByMinutes = new Dictionary<int, Queue<AlertRuleEntity>>();
-        foreach (var rule in managedRules.Values.Where(r => !claimedRuleIds.Contains(r.Id)))
+        var adoptable = managedRules.Values
+            .Where(r => !claimedRuleIds.Contains(r.Id))
+            .Select(r => (Rule: r, Minutes: RuleMinutes(r)))
+            .Where(r => r.Minutes is not null)
+            .OrderBy(r => r.Minutes)
+            .ToList();
+
+        foreach (var (threshold, minutes) in pending)
         {
-            if (RuleMinutes(rule) is not { } ruleMinutes) continue;
-            if (!adoptableByMinutes.TryGetValue(ruleMinutes, out var queue))
-                adoptableByMinutes[ruleMinutes] = queue = new Queue<AlertRuleEntity>();
-            queue.Enqueue(rule);
+            if (threshold.AlertRuleId is not null || minutes is null) continue;
+            var index = adoptable.FindIndex(a => a.Minutes == minutes);
+            if (index < 0) continue;
+            threshold.AlertRuleId = adoptable[index].Rule.Id;
+            adoptable.RemoveAt(index);
+        }
+        foreach (var (threshold, minutes) in pending.OrderBy(p => p.Minutes))
+        {
+            if (threshold.AlertRuleId is not null || minutes is null) continue;
+            if (adoptable.Count == 0) break;
+            threshold.AlertRuleId = adoptable[0].Rule.Id;
+            adoptable.RemoveAt(0);
         }
 
         var keptRuleIds = new HashSet<Guid>();
-        foreach (var threshold in definition.NotificationThresholds.OrderBy(t => t.DisplayOrder))
+        foreach (var (threshold, minutes) in pending)
         {
-            var minutes = EffectiveMinutes(definition, threshold);
             if (minutes is null)
             {
                 // Misconfigured (negative threshold without lifespan) — matches the legacy
                 // evaluator's skip. Leave any previously synced rule in place untouched.
                 if (threshold.AlertRuleId is { } existingId) keptRuleIds.Add(existingId);
                 continue;
-            }
-
-            if (threshold.AlertRuleId is null
-                && adoptableByMinutes.TryGetValue(minutes.Value, out var adoptable)
-                && adoptable.Count > 0)
-            {
-                threshold.AlertRuleId = adoptable.Dequeue().Id;
             }
 
             var conditionParams = JsonSerializer.Serialize(new
@@ -181,16 +199,13 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         }
 
         var orphaned = managedRules.Values.Where(r => !keptRuleIds.Contains(r.Id)).ToList();
-        if (orphaned.Count > 0)
-        {
-            db.AlertRules.RemoveRange(orphaned);
-        }
+        var removed = await RemoveOrDisableAsync(db, orphaned, ct);
 
         await db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Synced {ThresholdCount} threshold(s) to managed alert rules for tracker definition {DefinitionId} ({Orphaned} removed)",
-            definition.NotificationThresholds.Count, definitionId, orphaned.Count);
+            definition.NotificationThresholds.Count, definitionId, removed);
     }
 
     /// <inheritdoc />
@@ -204,12 +219,44 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             .ToListAsync(ct);
         if (rules.Count == 0) return;
 
-        db.AlertRules.RemoveRange(rules);
+        var removed = await RemoveOrDisableAsync(db, rules, ct);
         await db.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Deleted {Count} managed alert rule(s) for removed tracker definition {DefinitionId}",
-            rules.Count, definitionId);
+            removed, definitionId);
+    }
+
+    /// <summary>
+    /// Deletes the given managed rules — except rules that another rule's
+    /// <c>alert_state</c> condition references. Deleting those would silently drop the
+    /// referencing (escalation) rule from every evaluation pass, so they are kept but
+    /// disabled: the referencing rule visibly stops (disabled-parent semantics, the same
+    /// state a user creates by toggling the parent off) instead of dying invisibly, and
+    /// the stale condition can no longer fire.
+    /// </summary>
+    private async Task<int> RemoveOrDisableAsync(
+        NocturneDbContext db, IReadOnlyList<AlertRuleEntity> rules, CancellationToken ct)
+    {
+        var removed = 0;
+        foreach (var rule in rules)
+        {
+            var referencing = await _referenceService.FindReferencingRulesAsync(rule.Id, ct);
+            if (referencing.Count > 0)
+            {
+                rule.IsEnabled = false;
+                rule.UpdatedAt = DateTime.UtcNow;
+                _logger.LogWarning(
+                    "Managed rule {RuleId} ('{RuleName}') is referenced by alert_state rule(s) {ReferencingIds}; disabled instead of deleted",
+                    rule.Id, rule.Name, string.Join(", ", referencing));
+                continue;
+            }
+
+            db.AlertRules.Remove(rule);
+            removed++;
+        }
+
+        return removed;
     }
 
     /// <summary>
@@ -222,7 +269,9 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         {
             using var doc = JsonDocument.Parse(rule.ConditionParams);
             return doc.RootElement.TryGetProperty("minutes", out var minutes)
-                ? minutes.GetInt32()
+                && minutes.ValueKind == JsonValueKind.Number
+                && minutes.TryGetInt32(out var value)
+                ? value
                 : null;
         }
         catch (JsonException)

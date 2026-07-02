@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -120,6 +121,9 @@ public class AlertRulesController : ControllerBase
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
         await using var db = await _contextFactory.CreateAsync(ct);
 
+        if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
+            return badTracker;
+
         var tenantId = db.TenantId;
 
         var conditionParamsJson = request.ConditionParams is not null
@@ -188,6 +192,9 @@ public class AlertRulesController : ControllerBase
             return badChannel;
 
         await using var db = await _contextFactory.CreateAsync(ct);
+
+        if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
+            return badTracker;
 
         var rule = await db.AlertRules
             .Include(r => r.Channels)
@@ -566,6 +573,60 @@ public class AlertRulesController : ControllerBase
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         PropertyNameCaseInsensitive = true,
     };
+
+    /// <summary>
+    /// Returns a <c>400 BadRequest</c> when the rule contains a <c>tracker_age</c> leaf whose
+    /// <c>tracker_definition_id</c> is missing, malformed, or does not exist for this tenant.
+    /// Without this the rule saves fine but the evaluator fails closed on every reading and
+    /// sweep pass — a rule that silently never fires (or throws into the per-rule catch when
+    /// the id can't even deserialise). Returns null when the request is acceptable.
+    /// </summary>
+    private static async Task<BadRequestObjectResult?> RejectInvalidTrackerAgeAsync(
+        NocturneDbContext db, AlertConditionType type, object? conditionParams, CancellationToken ct)
+    {
+        if (conditionParams is null)
+            return null;
+
+        var definitionIds = new List<Guid>();
+        if (type == AlertConditionType.TrackerAge)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(conditionParams);
+                var typed = JsonSerializer.Deserialize<TrackerAgeCondition>(json, ReferenceJsonOptions);
+                if (typed is null || typed.TrackerDefinitionId == Guid.Empty)
+                    return new BadRequestObjectResult("tracker_age requires a tracker_definition_id.");
+                definitionIds.Add(typed.TrackerDefinitionId);
+            }
+            catch (JsonException)
+            {
+                return new BadRequestObjectResult("tracker_age requires a valid tracker_definition_id.");
+            }
+        }
+        else
+        {
+            var root = TryDeserializeRoot(type, conditionParams);
+            if (root is not null)
+            {
+                ConditionPath.Walk<object>(root, (visited, _) =>
+                {
+                    if (visited.TrackerAge is { } trackerAge)
+                        definitionIds.Add(trackerAge.TrackerDefinitionId);
+                    return null;
+                });
+                if (definitionIds.Contains(Guid.Empty))
+                    return new BadRequestObjectResult("tracker_age requires a tracker_definition_id.");
+            }
+        }
+
+        foreach (var definitionId in definitionIds)
+        {
+            if (!await db.TrackerDefinitions.AnyAsync(d => d.Id == definitionId, ct))
+                return new BadRequestObjectResult($"Unknown tracker definition '{definitionId}'.");
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Returns a <c>400 BadRequest</c> when the rule contains a <c>state_span_active</c> leaf

@@ -38,11 +38,18 @@ public class TrackerAlertRuleSyncServiceTests
             .Setup(c => c.Classify(It.IsAny<AlertConditionType>(), It.IsAny<string>()))
             .Returns(RuleScopeClass.Undirected);
 
+        _referenceService
+            .Setup(r => r.FindReferencingRulesAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Guid>());
+
         _sut = new TrackerAlertRuleSyncService(
             factory,
             classifier.Object,
+            _referenceService.Object,
             NullLogger<TrackerAlertRuleSyncService>.Instance);
     }
+
+    private readonly Mock<IAlertReferenceService> _referenceService = new();
 
     private NocturneDbContext Db() => new(_options) { TenantId = _tenantId };
 
@@ -298,6 +305,69 @@ public class TrackerAlertRuleSyncServiceTests
 
         await using var db = Db();
         (await db.AlertRules.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Resync_edited_hours_updates_the_rule_in_place_via_positional_adoption()
+    {
+        // Wholesale replacement AND changed hours: the rule must be updated, not
+        // delete+recreated (deletion cascades the open excursion and drops channel edits).
+        var definition = await SeedDefinitionAsync(thresholds: [Threshold(24)]);
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        Guid originalRuleId;
+        await using (var db = Db())
+        {
+            originalRuleId = (await db.AlertRules.SingleAsync()).Id;
+            var old = await db.TrackerNotificationThresholds.SingleAsync();
+            db.TrackerNotificationThresholds.Remove(old);
+            db.TrackerNotificationThresholds.Add(new TrackerNotificationThresholdEntity
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                TrackerDefinitionId = definition.Id,
+                Hours = 36,
+                Urgency = NotificationUrgency.Warn,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using (var db = Db())
+        {
+            var rule = await db.AlertRules.SingleAsync();
+            rule.Id.Should().Be(originalRuleId);
+            Params(rule).GetProperty("minutes").GetInt32().Should().Be(36 * 60);
+        }
+    }
+
+    [Fact]
+    public async Task Orphan_referenced_by_alert_state_rule_is_disabled_not_deleted()
+    {
+        var definition = await SeedDefinitionAsync(thresholds: [Threshold(24)]);
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        Guid ruleId;
+        await using (var db = Db())
+        {
+            ruleId = (await db.AlertRules.SingleAsync()).Id;
+            db.TrackerNotificationThresholds.RemoveRange(await db.TrackerNotificationThresholds.ToListAsync());
+            await db.SaveChangesAsync();
+        }
+
+        _referenceService
+            .Setup(r => r.FindReferencingRulesAsync(ruleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Guid.NewGuid()]);
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using (var db = Db())
+        {
+            var rule = await db.AlertRules.SingleAsync();
+            rule.Id.Should().Be(ruleId);
+            rule.IsEnabled.Should().BeFalse();
+        }
     }
 
     private sealed class TestTenantDbContextFactory(
