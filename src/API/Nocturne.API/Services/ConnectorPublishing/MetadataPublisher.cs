@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -52,7 +53,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     public async Task<bool> PublishProfilesAsync(
         IEnumerable<Profile> profiles,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -70,7 +71,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     public async Task<bool> PublishFoodAsync(
         IEnumerable<Food> foods,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -88,7 +89,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     public async Task<IReadOnlyList<ConnectorFoodEntry>?> PublishConnectorFoodEntriesAsync(
         IEnumerable<ConnectorFoodEntryImport> entries,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -108,7 +109,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     public async Task<bool> PublishActivityAsync(
         IEnumerable<Activity> activities,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -126,7 +127,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     public async Task<bool> PublishStateSpansAsync(
         IEnumerable<StateSpan> stateSpans,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -147,7 +148,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     public async Task<bool> PublishSystemEventsAsync(
         IEnumerable<SystemEvent> systemEvents,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -165,14 +166,14 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     public async Task<bool> PublishNotesAsync(
         IEnumerable<Note> records,
         string source,
-        CancellationToken cancellationToken = default)
+        WriteOrigin origin, CancellationToken cancellationToken = default)
     {
         try
         {
             var recordList = records.ToList();
             if (recordList.Count == 0) return true;
 
-            await _noteRepository.BulkCreateAsync(recordList, cancellationToken);
+            await _noteRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             _logger.LogDebug("Published {Count} Note records for {Source}", recordList.Count, source);
             return true;
         }

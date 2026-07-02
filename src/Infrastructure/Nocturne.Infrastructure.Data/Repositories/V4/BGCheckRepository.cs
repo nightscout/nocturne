@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -9,6 +10,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -35,8 +37,9 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<BGCheckRepository> logger)
-        : base(contextFactory, auditContext)
+        ILogger<BGCheckRepository> logger,
+        IV4RecordBroadcaster<BGCheck>? broadcaster = null)
+        : base(contextFactory, auditContext, broadcaster)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;
@@ -139,7 +142,7 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
     /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
     /// </summary>
     protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<BGCheckEntity> inserted, CancellationToken ct)
+        NocturneDbContext ctx, IReadOnlyList<BGCheckEntity> inserted, WriteOrigin origin, CancellationToken ct)
     {
         if (inserted.Count == 0)
             return;

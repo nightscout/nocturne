@@ -67,6 +67,7 @@ public class DndWindowsController : ControllerBase
     [ProducesResponseType(typeof(DndWindowResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(DndWindowResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<DndWindowResponse>> Create(
         [FromBody] CreateDndWindowRequest request, CancellationToken ct)
     {
@@ -88,15 +89,22 @@ public class DndWindowsController : ControllerBase
         if (existing is not null)
             return Ok(MapToResponse(existing));
 
-        // Supersede the active window(s) of this scope so exactly one stays active per scope.
+        // Supersede so at most one window per scope is active. Only a window that is
+        // itself active now displaces the existing ones — an offline-authored window
+        // received after its expiry (or before its start) is recorded for audit
+        // without turning off a live mute.
         var now = DateTime.UtcNow;
-        var superseded = await db.DndWindows
-            .Where(w => w.Scope == request.Scope && w.ClearedAt == null)
-            .ToListAsync(ct);
-        foreach (var w in superseded)
+        var newWindowIsActive = startedAt <= now && (endsAt == null || now < endsAt);
+        if (newWindowIsActive)
         {
-            w.ClearedAt = now;
-            w.ClearedBy = SupersededBy;
+            var superseded = await db.DndWindows
+                .Where(w => w.Scope == request.Scope && w.ClearedAt == null)
+                .ToListAsync(ct);
+            foreach (var w in superseded)
+            {
+                w.ClearedAt = now;
+                w.ClearedBy = SupersededBy;
+            }
         }
 
         var window = new DndWindowEntity
@@ -110,10 +118,27 @@ public class DndWindowsController : ControllerBase
             // CreatedAt is the server receipt time, set by the DB default (CURRENT_TIMESTAMP).
         };
         db.DndWindows.Add(window);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            // CreatedAt (DB default) is populated on the tracked entity by INSERT ... RETURNING.
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // dnd_windows.id is the global PK, but the idempotency lookup above runs under
+            // the tenant query filter (and RLS), so an id owned by another tenant is
+            // invisible and the insert hits the unique constraint. Re-check under this
+            // tenant: a concurrent same-tenant retry resolves idempotently; otherwise the
+            // id belongs to another tenant and this insert can never succeed.
+            var raced = await db.DndWindows
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.Id == request.Id, ct);
+            if (raced is not null)
+                return Ok(MapToResponse(raced));
+            return Conflict("window id is already in use.");
+        }
 
-        var created = await db.DndWindows.AsNoTracking().FirstAsync(w => w.Id == window.Id, ct);
-        return CreatedAtAction(nameof(GetActive), MapToResponse(created));
+        return CreatedAtAction(nameof(GetActive), MapToResponse(window));
     }
 
     /// <summary>

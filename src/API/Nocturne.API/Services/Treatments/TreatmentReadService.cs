@@ -114,7 +114,7 @@ public class TreatmentReadService : ITreatmentStore
         {
             try
             {
-                var result = await _decomposer.DecomposeAsync(treatment, ct);
+                var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 var tempBasal = result.CreatedRecords
                     .OfType<Core.Models.V4.TempBasal>()
                     .FirstOrDefault();
@@ -141,7 +141,7 @@ public class TreatmentReadService : ITreatmentStore
         treatment.Id = id;
         try
         {
-            await _decomposer.DecomposeAsync(treatment, ct);
+            await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
             return await GetByIdAsync(id, ct);
         }
         catch (Exception ex)
@@ -154,7 +154,7 @@ public class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<bool> DeleteAsync(string id, CancellationToken ct = default)
     {
-        var deleted = await _pipeline.DeleteByLegacyIdAsync<Treatment>(id, ct);
+        var deleted = await _pipeline.DeleteByLegacyIdAsync<Treatment>(id, WriteOrigin.Live, ct);
 
         // Also check TempBasal (not covered by the pipeline's LegacyId delete)
         var tempBasal = await _tempBasalRepo.GetByLegacyIdAsync(id, ct);
@@ -165,7 +165,7 @@ public class TreatmentReadService : ITreatmentStore
         {
             try
             {
-                await _tempBasalRepo.DeleteAsync(tempBasal.Id, ct);
+                await _tempBasalRepo.DeleteAsync(tempBasal.Id, WriteOrigin.Live, ct);
                 return true;
             }
             catch (Exception ex)

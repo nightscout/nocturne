@@ -53,7 +53,7 @@
     <PackageReference Include="MongoDB.Driver" />
   </ItemGroup>
   <ItemGroup>
-    <!-- oref.wasm is optional â€” only needed when Predictions:Source=OrefWasm.
+    <!-- oref.wasm is optional — only needed when Predictions:Source=OrefWasm.
          Download from https://github.com/nightscout/nocturne-heuristics-wasm/releases
          and place in the build output directory. -->
     <Content Include="oref.wasm" Link="oref.wasm" CopyToOutputDirectory="PreserveNewest" Condition="Exists('oref.wasm')" />
@@ -87,7 +87,7 @@
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.CareLink\Nocturne.Connectors.CareLink.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Tandem\Nocturne.Connectors.Tandem.csproj" />
   </ItemGroup>
-  <!-- Diagram sources â€” published to wwwroot/diagrams/ so the OpenAPI document
+  <!-- Diagram sources — published to wwwroot/diagrams/ so the OpenAPI document
        transformers can find them in Docker (where the source tree isn't available). -->
   <ItemGroup>
     <DiagramSource Include="..\..\..\docs\diagrams\diagrams.yaml;..\..\..\docs\diagrams\*.mmd" />
@@ -111,7 +111,7 @@
     <Exec Command="$(NSwagExe_Net100) run nswag.json /variables:Configuration=$(Configuration)" WorkingDirectory="$(MSBuildProjectDirectory)" ContinueOnError="false" />
     <Message Importance="high" Text="TypeScript API client generation complete." />
   </Target>
-  <!-- Zod Schema Generation â€” runs after NSwag to generate Zod schemas from openapi.json -->
+  <!-- Zod Schema Generation — runs after NSwag to generate Zod schemas from openapi.json -->
   <!-- Uses the same GenerateNSwagClient flag so it is skipped when NSwag is skipped -->
   <Target Name="GenerateZodSchemas" AfterTargets="GenerateClient" Condition="'$(GenerateNSwagClient)' == 'true'">
     <PropertyGroup>
@@ -121,7 +121,7 @@
     <Exec Command="pnpm run generate-zod-schemas" WorkingDirectory="$(WebMonorepoRoot)" ContinueOnError="false" />
     <Message Importance="high" Text="Zod schema generation complete." />
   </Target>
-  <!-- Remote Function Codegen â€” runs after Zod schemas to generate remote functions from openapi.json -->
+  <!-- Remote Function Codegen — runs after Zod schemas to generate remote functions from openapi.json -->
   <!-- Uses the same GenerateNSwagClient flag so it is skipped when NSwag is skipped -->
   <Target Name="GenerateRemoteFunctions" AfterTargets="GenerateZodSchemas" Condition="'$(GenerateNSwagClient)' == 'true'">
     <PropertyGroup>

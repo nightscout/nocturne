@@ -127,6 +127,28 @@ jobs:
             exit 1
           fi
 
+      # The scoped-DND rule classifier (and the optional rust/shadow alert engines)
+      # load the nocturne_alerts cdylib at runtime. The API csproj packs it only when
+      # crates/target/release contains it at publish time, so build it here or the
+      # image ships without it and every rule classifies as undirected.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock') }}
+
+      - name: Build nocturne_alerts native library
+        working-directory: crates
+        run: |
+          cargo build --release -p nocturne-alerts-ffi
+          test -f target/release/libnocturne_alerts.so
+
       - name: Build and push Nocturne.API container
         if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
         working-directory: src/API/Nocturne.API

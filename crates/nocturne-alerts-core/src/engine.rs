@@ -113,9 +113,11 @@ pub fn evaluate_rule(
     let wire = rule.condition_type.wire();
 
     // Root eval: the evaluator receives the stored payload directly. A JSON
-    // null column is a null condition record (false); a structurally
-    // malformed payload would throw uncaught in C# (such rules cannot exist
-    // in the corpus) — fail closed here.
+    // null column is a null condition record (false). A structurally
+    // malformed payload throws JsonException in C# (the orchestrator's
+    // per-rule catch leaves the tracker untouched), so the FFI envelope
+    // rejects it before reaching here; this in-crate fallback stays
+    // fail-closed for direct embedders.
     let payload = match &rule.condition_params {
         Value::Null => None,
         v => parse_payload(rule.condition_type, v).ok(),

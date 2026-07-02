@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Core.Contracts.V4.Repositories;
 
@@ -38,11 +39,11 @@ public interface IDeviceRepository
     /// <summary>Persist a new <see cref="Device"/> record and return the saved entity.</summary>
     /// <param name="model">Device record to create.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<Device> CreateAsync(Device model, CancellationToken ct = default);
+    Task<Device> CreateAsync(Device model, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>Replace an existing <see cref="Device"/> identified by <paramref name="id"/>.</summary>
     /// <param name="id">UUID v7 identifier of the record to update.</param>
     /// <param name="model">Updated device data.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<Device> UpdateAsync(Guid id, Device model, CancellationToken ct = default);
+    Task<Device> UpdateAsync(Guid id, Device model, WriteOrigin origin, CancellationToken ct = default);
 }

@@ -73,6 +73,13 @@ public class TenantAlertSettingsController : ControllerBase
         await using var db = await _contextFactory.CreateAsync(ct);
         var now = DateTime.UtcNow;
 
+        // A manual mute must end in the future (mirrors DndWindowsController's ends_at
+        // guard): a past until would persist a never-active window (EndsAt <= StartedAt)
+        // — or retroactively expire the kept one without an audit clear — and the
+        // response would report DndManualActive=false despite the request saying true.
+        if (request.DndManualActive && AsUtc(request.DndManualUntil) is { } until && until <= now)
+            return BadRequest("dnd_manual_until must be in the future.");
+
         var entity = await db.TenantAlertSettings.FirstOrDefaultAsync(ct);
         var isNew = entity is null;
         entity ??= new TenantAlertSettingsEntity { TenantId = db.TenantId };
@@ -85,10 +92,13 @@ public class TenantAlertSettingsController : ControllerBase
 
         // Manual DND is a scope=all window. Toggling on ensures exactly one active all-window
         // (anchoring StartedAt on the existing one so a re-PUT doesn't reset the for_minutes
-        // anchor); toggling off clears every active all-window (user-clear, cleared_by null).
-        var activeAll = await ActiveAllWindowsAsync(db, now, ct);
+        // anchor); toggling off clears every uncleared all-window (user-clear, cleared_by
+        // null) — including future-started ones, so an explicit "DND off" also cancels a
+        // pending mute instead of letting it silently activate later (Create's supersede
+        // clears the same set).
         if (request.DndManualActive)
         {
+            var activeAll = await ActiveAllWindowsAsync(db, now, ct);
             var endsAt = AsUtc(request.DndManualUntil);
             if (activeAll.Count == 0)
             {
@@ -115,7 +125,10 @@ public class TenantAlertSettingsController : ControllerBase
         }
         else
         {
-            foreach (var w in activeAll)
+            var uncleared = await db.DndWindows
+                .Where(w => w.Scope == DndScope.All && w.ClearedAt == null)
+                .ToListAsync(ct);
+            foreach (var w in uncleared)
                 w.ClearedAt = now;
         }
 

@@ -440,20 +440,6 @@ public static class ServiceRegistrationExtensions
                 sinks,
                 sp.GetService<ILogger<CompositeDataEventSink<Entry>>>());
         });
-        // V4-native sensor glucose writes (POST /api/v4/glucose/sensor + connector publisher)
-        // broadcast on the real-time "entries" collection, mirroring the legacy entries path.
-        services.AddScoped<SignalRSensorGlucoseEventSink>();
-        services.AddScoped<IDataEventSink<SensorGlucose>>(sp =>
-        {
-            var sinks = new List<IDataEventSink<SensorGlucose>>
-            {
-                sp.GetRequiredService<SignalRSensorGlucoseEventSink>(),
-            };
-
-            return new CompositeDataEventSink<SensorGlucose>(
-                sinks,
-                sp.GetService<ILogger<CompositeDataEventSink<SensorGlucose>>>());
-        });
         services.AddScoped<IStateSpanService, StateSpanService>();
         services.AddScoped<DeviceStatusProjectionService>();
         services.AddScoped<IDataEventSink<DeviceStatus>>(sp =>
@@ -661,6 +647,11 @@ public static class ServiceRegistrationExtensions
         >();
         services.AddScoped<ISignalRBroadcastService, SignalRBroadcastService>();
         services.AddScoped<ISyncProgressReporter, SignalRSyncProgressReporter>();
+
+        // Native V4 record broadcasting (companion + Prelude) over the glucose/care/device/therapy
+        // categories. Open generic so every V4 model type resolves; the repository chokepoint fires it
+        // for live writes only. Additive to the legacy v1 IDataEventSink<T> projections above.
+        services.AddScoped(typeof(IV4RecordBroadcaster<>), typeof(SignalRV4RecordBroadcaster<>));
 
         // Push notifications
         services.AddScoped<INotificationV2Service, NotificationV2Service>();

@@ -43,7 +43,7 @@ public class TimerContinuityTests
         LastReadingAt = at,
     };
 
-    [EngineNativeFact]
+    [NativeFact]
     public async Task Timer_row_written_by_the_managed_engine_is_honoured_by_the_rust_engine()
     {
         var rule = BuildSustainedRule();
@@ -77,7 +77,7 @@ public class TimerContinuityTests
             .Should().Be(T0, "the first-true instant the managed engine recorded must survive untouched");
     }
 
-    [EngineNativeFact]
+    [NativeFact]
     public async Task Timer_row_written_by_the_rust_engine_is_honoured_by_the_managed_engine()
     {
         var rule = BuildSustainedRule();
@@ -106,7 +106,7 @@ public class TimerContinuityTests
             .Should().Be(T0, "the first-true instant the rust engine recorded must survive untouched");
     }
 
-    [EngineNativeFact]
+    [NativeFact]
     public async Task Aux_scope_timers_thread_through_the_rust_evaluate_node_path()
     {
         // EvaluateNodeAsync (the snooze / sweep auto-resolve surface) must honour and

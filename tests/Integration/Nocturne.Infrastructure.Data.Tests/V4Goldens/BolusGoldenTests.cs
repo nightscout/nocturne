@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
@@ -31,7 +32,7 @@ public class BolusGoldenTests
             {
                 new Bolus { Timestamp = t0, Insulin = 5.0, DataSource = "aaps", LegacyId = "a1" },
                 new Bolus { Timestamp = t0.AddSeconds(10), Insulin = 5.02, DataSource = "loop", LegacyId = "b1" },
-            },
+            }, WriteOrigin.Live,
             CancellationToken.None);
 
         // Dedup links rows into canonical groups; it never deletes — both rows persist physically.
@@ -59,13 +60,13 @@ public class BolusGoldenTests
 
         var t0 = new DateTime(2026, 3, 2, 8, 0, 0, DateTimeKind.Utc);
         await repo.BulkCreateAsync(
-            new[] { new Bolus { Timestamp = t0, Insulin = 4.0, DataSource = "aaps", SyncIdentifier = "sync-1" } },
+            new[] { new Bolus { Timestamp = t0, Insulin = 4.0, DataSource = "aaps", SyncIdentifier = "sync-1" } }, WriteOrigin.Live,
             CancellationToken.None);
 
         // Connector replay of the same (DataSource, SyncIdentifier) with a corrected dose upserts in
         // place rather than inserting a second row.
         await repo.BulkCreateAsync(
-            new[] { new Bolus { Timestamp = t0, Insulin = 4.6, DataSource = "aaps", SyncIdentifier = "sync-1" } },
+            new[] { new Bolus { Timestamp = t0, Insulin = 4.6, DataSource = "aaps", SyncIdentifier = "sync-1" } }, WriteOrigin.Live,
             CancellationToken.None);
 
         var rows = await _fx.QueryAsync(tenant, ctx =>
@@ -92,7 +93,7 @@ public class BolusGoldenTests
             {
                 new Bolus { Timestamp = t0, Insulin = 5.0, DataSource = "aaps", LegacyId = "p-a" },
                 new Bolus { Timestamp = t0.AddSeconds(10), Insulin = 5.02, DataSource = "loop", LegacyId = "p-b" },
-            },
+            }, WriteOrigin.Live,
             CancellationToken.None);
 
         // Two physical rows, linked into one canonical group (one primary, one non-primary).

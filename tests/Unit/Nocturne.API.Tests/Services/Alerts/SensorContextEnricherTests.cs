@@ -311,7 +311,7 @@ public class SensorContextEnricherTests
     {
         var enricher = BuildEnricher();
         var lastCycle = _timeProvider.GetUtcNow().UtcDateTime.AddMinutes(-7);
-        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsync(null, It.IsAny<CancellationToken>()))
+        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsOfAsync(null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(lastCycle);
         var rule = MakeRule(AlertConditionType.LoopStale, """{"operator":">","minutes":15}""");
 
@@ -319,7 +319,7 @@ public class SensorContextEnricherTests
 
         enriched.LastApsCycleAt.Should().Be(lastCycle);
         enriched.HasEverApsCycled.Should().BeTrue();
-        _apsSnapshotRepository.Verify(r => r.GetLatestTimestampAsync(null, It.IsAny<CancellationToken>()), Times.Once);
+        _apsSnapshotRepository.Verify(r => r.GetLatestTimestampAsOfAsync(null, It.IsAny<CancellationToken>()), Times.Once);
         _apsSnapshotRepository.Verify(r => r.GetLatestEnactedTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
         _apsSnapshotRepository.Verify(r => r.GetLatestSensitivityRatioAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
         _pumpSnapshotRepository.Verify(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -334,7 +334,7 @@ public class SensorContextEnricherTests
         // only enabled looping rule is LoopEnactionStale would never fire on a healthy loop.
         var enricher = BuildEnricher();
         var now = _timeProvider.GetUtcNow().UtcDateTime;
-        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsOfAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(now.AddMinutes(-3));
         _apsSnapshotRepository.Setup(r => r.GetLatestEnactedTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(now.AddMinutes(-3));
@@ -531,7 +531,7 @@ public class SensorContextEnricherTests
 
         await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
 
-        _apsSnapshotRepository.Verify(r => r.GetLatestTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _apsSnapshotRepository.Verify(r => r.GetLatestTimestampAsOfAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
         _apsSnapshotRepository.Verify(r => r.GetLatestEnactedTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
         _apsSnapshotRepository.Verify(r => r.GetLatestSensitivityRatioAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
         _pumpSnapshotRepository.Verify(r => r.GetLatestAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -693,6 +693,37 @@ public class SensorContextEnricherTests
         enriched.ActiveDndScopes.Should().Contain(DndScope.All);
         enriched.ActiveDoNotDisturb.Should().NotBeNull();
         enriched.ActiveDoNotDisturb!.Source.Should().Be("scheduled");
+    }
+
+    [Fact]
+    public async Task ManualWindowAndScheduledDnd_bothActive_anchorsOnTheManualWindow()
+    {
+        // Pre-window contract (TenantAlertSettingsSnapshot.Resolve): the manual path takes
+        // precedence for the for_minutes anchor and source when both are active.
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var manualStartedAt = now.AddMinutes(-90);
+        _alertRepository
+            .Setup(r => r.GetTenantAlertSettingsAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantAlertSettingsSnapshot(
+                DndScheduleEnabled: true,
+                DndScheduleStart: new TimeOnly(0, 0),
+                DndScheduleEnd: new TimeOnly(23, 0)));
+        _alertRepository
+            .Setup(r => r.GetUnclearedDndWindowsAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<DndWindowSnapshot>
+            {
+                new(DndScope.All, StartedAt: manualStartedAt, EndsAt: null, ClearedAt: null, CreatedAt: manualStartedAt),
+            });
+
+        var enricher = BuildEnricher();
+        var rule = MakeRule(AlertConditionType.Threshold, """{"direction":"below","value":70}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.ActiveDndScopes.Should().Contain(DndScope.All);
+        enriched.ActiveDoNotDisturb.Should().NotBeNull();
+        enriched.ActiveDoNotDisturb!.StartedAt.Should().Be(manualStartedAt);
+        enriched.ActiveDoNotDisturb.Source.Should().Be("manual");
     }
 
     private static string TryResolve(string ianaId, string windowsId)

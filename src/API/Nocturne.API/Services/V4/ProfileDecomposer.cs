@@ -23,7 +23,6 @@ namespace Nocturne.API.Services.V4;
 /// <seealso cref="IDecomposer{T}"/>
 public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
 {
-    private readonly NocturneDbContext _dbContext;
     private readonly ITherapySettingsRepository _therapySettingsRepo;
     private readonly IBasalScheduleRepository _basalScheduleRepo;
     private readonly ICarbRatioScheduleRepository _carbRatioScheduleRepo;
@@ -32,7 +31,6 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
     private readonly IAuditContext _auditContext;
     private readonly ILogger<ProfileDecomposer> _logger;
 
-    /// <param name="dbContext">EF Core context used to persist <see cref="DecompositionBatchEntity"/> records.</param>
     /// <param name="therapySettingsRepo">Repository for <see cref="V4Models.TherapySettings"/> records.</param>
     /// <param name="basalScheduleRepo">Repository for <see cref="V4Models.BasalSchedule"/> records.</param>
     /// <param name="carbRatioScheduleRepo">Repository for <see cref="V4Models.CarbRatioSchedule"/> records.</param>
@@ -40,7 +38,6 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
     /// <param name="targetRangeScheduleRepo">Repository for <see cref="V4Models.TargetRangeSchedule"/> records.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public ProfileDecomposer(
-        NocturneDbContext dbContext,
         ITherapySettingsRepository therapySettingsRepo,
         IBasalScheduleRepository basalScheduleRepo,
         ICarbRatioScheduleRepository carbRatioScheduleRepo,
@@ -49,7 +46,6 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         IAuditContext auditContext,
         ILogger<ProfileDecomposer> logger)
     {
-        _dbContext = dbContext;
         _therapySettingsRepo = therapySettingsRepo;
         _basalScheduleRepo = basalScheduleRepo;
         _carbRatioScheduleRepo = carbRatioScheduleRepo;
@@ -60,21 +56,11 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
     }
 
     /// <inheritdoc />
-    public async Task<V4Models.DecompositionResult> DecomposeAsync(Profile profile, CancellationToken ct = default)
+    public async Task<V4Models.DecompositionResult> DecomposeAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default)
     {
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "profile_decomposer",
-            SourceRecordId = profile.Id,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
         var result = new V4Models.DecompositionResult
         {
-            CorrelationId = batch.Id
+            CorrelationId = Guid.CreateVersion7()
         };
 
         if (profile.Store.Count == 0)
@@ -88,11 +74,11 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
             var legacyId = $"{profile.Id}:{storeName}";
             var isDefault = string.Equals(storeName, profile.DefaultProfile, StringComparison.OrdinalIgnoreCase);
 
-            await DecomposeTherapySettingsAsync(profile, profileData, storeName, legacyId, isDefault, result, ct);
-            await DecomposeBasalScheduleAsync(profile, profileData, storeName, legacyId, result, ct);
-            await DecomposeCarbRatioScheduleAsync(profile, profileData, storeName, legacyId, result, ct);
-            await DecomposeSensitivityScheduleAsync(profile, profileData, storeName, legacyId, result, ct);
-            await DecomposeTargetRangeScheduleAsync(profile, profileData, storeName, legacyId, result, ct);
+            await DecomposeTherapySettingsAsync(profile, profileData, storeName, legacyId, isDefault, result, origin, ct);
+            await DecomposeBasalScheduleAsync(profile, profileData, storeName, legacyId, result, origin, ct);
+            await DecomposeCarbRatioScheduleAsync(profile, profileData, storeName, legacyId, result, origin, ct);
+            await DecomposeSensitivityScheduleAsync(profile, profileData, storeName, legacyId, result, origin, ct);
+            await DecomposeTargetRangeScheduleAsync(profile, profileData, storeName, legacyId, result, origin, ct);
         }
 
         return result;
@@ -100,22 +86,13 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
 
     /// <inheritdoc />
     public async Task<V4Models.DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Profile> profiles, CancellationToken ct = default)
+        IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default)
     {
         if (profiles.Count == 0)
             return new V4Models.DecompositionResult();
 
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "profile_decomposer_batch",
-            SourceRecordId = null,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
-        var result = new V4Models.DecompositionResult { CorrelationId = batch.Id };
+        var correlationId = Guid.CreateVersion7();
+        var result = new V4Models.DecompositionResult { CorrelationId = correlationId };
 
         var therapySettingsList = new List<V4Models.TherapySettings>();
         var basalScheduleList = new List<V4Models.BasalSchedule>();
@@ -136,11 +113,11 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
                 var legacyId = $"{profile.Id}:{storeName}";
                 var isDefault = string.Equals(storeName, profile.DefaultProfile, StringComparison.OrdinalIgnoreCase);
 
-                therapySettingsList.Add(MapToTherapySettings(profile, profileData, storeName, legacyId, isDefault, batch.Id));
-                basalScheduleList.Add(MapToBasalSchedule(profile, profileData, storeName, legacyId, batch.Id));
-                carbRatioScheduleList.Add(MapToCarbRatioSchedule(profile, profileData, storeName, legacyId, batch.Id));
-                sensitivityScheduleList.Add(MapToSensitivitySchedule(profile, profileData, storeName, legacyId, batch.Id));
-                targetRangeScheduleList.Add(MapToTargetRangeSchedule(profile, profileData, storeName, legacyId, batch.Id));
+                therapySettingsList.Add(MapToTherapySettings(profile, profileData, storeName, legacyId, isDefault, correlationId));
+                basalScheduleList.Add(MapToBasalSchedule(profile, profileData, storeName, legacyId, correlationId));
+                carbRatioScheduleList.Add(MapToCarbRatioSchedule(profile, profileData, storeName, legacyId, correlationId));
+                sensitivityScheduleList.Add(MapToSensitivitySchedule(profile, profileData, storeName, legacyId, correlationId));
+                targetRangeScheduleList.Add(MapToTargetRangeSchedule(profile, profileData, storeName, legacyId, correlationId));
             }
         }
 
@@ -148,31 +125,31 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         {
             if (therapySettingsList.Count > 0)
             {
-                var created = await _therapySettingsRepo.BulkCreateAsync(therapySettingsList, ct);
+                var created = await _therapySettingsRepo.BulkCreateAsync(therapySettingsList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (basalScheduleList.Count > 0)
             {
-                var created = await _basalScheduleRepo.BulkCreateAsync(basalScheduleList, ct);
+                var created = await _basalScheduleRepo.BulkCreateAsync(basalScheduleList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (carbRatioScheduleList.Count > 0)
             {
-                var created = await _carbRatioScheduleRepo.BulkCreateAsync(carbRatioScheduleList, ct);
+                var created = await _carbRatioScheduleRepo.BulkCreateAsync(carbRatioScheduleList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (sensitivityScheduleList.Count > 0)
             {
-                var created = await _sensitivityScheduleRepo.BulkCreateAsync(sensitivityScheduleList, ct);
+                var created = await _sensitivityScheduleRepo.BulkCreateAsync(sensitivityScheduleList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (targetRangeScheduleList.Count > 0)
             {
-                var created = await _targetRangeScheduleRepo.BulkCreateAsync(targetRangeScheduleList, ct);
+                var created = await _targetRangeScheduleRepo.BulkCreateAsync(targetRangeScheduleList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
         }
@@ -193,7 +170,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         string legacyId,
         bool isDefault,
         V4Models.DecompositionResult result,
-        CancellationToken ct)
+        WriteOrigin origin, CancellationToken ct)
     {
         var existing = await _therapySettingsRepo.GetByLegacyIdAsync(legacyId, ct);
         var model = MapToTherapySettings(profile, profileData, storeName, legacyId, isDefault, result.CorrelationId);
@@ -201,13 +178,13 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _therapySettingsRepo.UpdateAsync(existing.Id, model, ct);
+            var updated = await _therapySettingsRepo.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing TherapySettings {Id} from legacy profile {LegacyId}", existing.Id, legacyId);
         }
         else
         {
-            var created = await _therapySettingsRepo.CreateAsync(model, ct);
+            var created = await _therapySettingsRepo.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created TherapySettings from legacy profile {LegacyId}", legacyId);
         }
@@ -219,7 +196,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         string storeName,
         string legacyId,
         V4Models.DecompositionResult result,
-        CancellationToken ct)
+        WriteOrigin origin, CancellationToken ct)
     {
         var existing = await _basalScheduleRepo.GetByLegacyIdAsync(legacyId, ct);
         var model = MapToBasalSchedule(profile, profileData, storeName, legacyId, result.CorrelationId);
@@ -227,13 +204,13 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _basalScheduleRepo.UpdateAsync(existing.Id, model, ct);
+            var updated = await _basalScheduleRepo.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing BasalSchedule {Id} from legacy profile {LegacyId}", existing.Id, legacyId);
         }
         else
         {
-            var created = await _basalScheduleRepo.CreateAsync(model, ct);
+            var created = await _basalScheduleRepo.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created BasalSchedule from legacy profile {LegacyId}", legacyId);
         }
@@ -245,7 +222,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         string storeName,
         string legacyId,
         V4Models.DecompositionResult result,
-        CancellationToken ct)
+        WriteOrigin origin, CancellationToken ct)
     {
         var existing = await _carbRatioScheduleRepo.GetByLegacyIdAsync(legacyId, ct);
         var model = MapToCarbRatioSchedule(profile, profileData, storeName, legacyId, result.CorrelationId);
@@ -253,13 +230,13 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _carbRatioScheduleRepo.UpdateAsync(existing.Id, model, ct);
+            var updated = await _carbRatioScheduleRepo.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing CarbRatioSchedule {Id} from legacy profile {LegacyId}", existing.Id, legacyId);
         }
         else
         {
-            var created = await _carbRatioScheduleRepo.CreateAsync(model, ct);
+            var created = await _carbRatioScheduleRepo.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created CarbRatioSchedule from legacy profile {LegacyId}", legacyId);
         }
@@ -271,7 +248,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         string storeName,
         string legacyId,
         V4Models.DecompositionResult result,
-        CancellationToken ct)
+        WriteOrigin origin, CancellationToken ct)
     {
         var existing = await _sensitivityScheduleRepo.GetByLegacyIdAsync(legacyId, ct);
         var model = MapToSensitivitySchedule(profile, profileData, storeName, legacyId, result.CorrelationId);
@@ -279,13 +256,13 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _sensitivityScheduleRepo.UpdateAsync(existing.Id, model, ct);
+            var updated = await _sensitivityScheduleRepo.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing SensitivitySchedule {Id} from legacy profile {LegacyId}", existing.Id, legacyId);
         }
         else
         {
-            var created = await _sensitivityScheduleRepo.CreateAsync(model, ct);
+            var created = await _sensitivityScheduleRepo.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created SensitivitySchedule from legacy profile {LegacyId}", legacyId);
         }
@@ -297,7 +274,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         string storeName,
         string legacyId,
         V4Models.DecompositionResult result,
-        CancellationToken ct)
+        WriteOrigin origin, CancellationToken ct)
     {
         var existing = await _targetRangeScheduleRepo.GetByLegacyIdAsync(legacyId, ct);
         var model = MapToTargetRangeSchedule(profile, profileData, storeName, legacyId, result.CorrelationId);
@@ -305,13 +282,13 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _targetRangeScheduleRepo.UpdateAsync(existing.Id, model, ct);
+            var updated = await _targetRangeScheduleRepo.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing TargetRangeSchedule {Id} from legacy profile {LegacyId}", existing.Id, legacyId);
         }
         else
         {
-            var created = await _targetRangeScheduleRepo.CreateAsync(model, ct);
+            var created = await _targetRangeScheduleRepo.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created TargetRangeSchedule from legacy profile {LegacyId}", legacyId);
         }
@@ -480,16 +457,16 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
     #endregion
 
     /// <inheritdoc />
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         var prefix = legacyId + ":";
         var deleted = 0;
 
-        deleted += await _therapySettingsRepo.DeleteByLegacyIdPrefixAsync(prefix, ct);
-        deleted += await _basalScheduleRepo.DeleteByLegacyIdPrefixAsync(prefix, ct);
-        deleted += await _carbRatioScheduleRepo.DeleteByLegacyIdPrefixAsync(prefix, ct);
-        deleted += await _sensitivityScheduleRepo.DeleteByLegacyIdPrefixAsync(prefix, ct);
-        deleted += await _targetRangeScheduleRepo.DeleteByLegacyIdPrefixAsync(prefix, ct);
+        deleted += await _therapySettingsRepo.DeleteByLegacyIdPrefixAsync(prefix, origin, ct);
+        deleted += await _basalScheduleRepo.DeleteByLegacyIdPrefixAsync(prefix, origin, ct);
+        deleted += await _carbRatioScheduleRepo.DeleteByLegacyIdPrefixAsync(prefix, origin, ct);
+        deleted += await _sensitivityScheduleRepo.DeleteByLegacyIdPrefixAsync(prefix, origin, ct);
+        deleted += await _targetRangeScheduleRepo.DeleteByLegacyIdPrefixAsync(prefix, origin, ct);
 
         if (deleted > 0)
             _logger.LogDebug("Deleted {Count} V4 records for legacy profile {LegacyId}", deleted, legacyId);

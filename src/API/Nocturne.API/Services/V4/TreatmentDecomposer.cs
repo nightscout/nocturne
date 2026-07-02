@@ -66,7 +66,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         "TempBasal"
     ];
 
-    /// <param name="dbContext">EF Core context used to persist <see cref="DecompositionBatchEntity"/> records and look up treatment entity PKs.</param>
+    /// <param name="dbContext">EF Core context used to look up treatment entity PKs and run bulk deletes.</param>
     /// <param name="bolusRepository">Repository for <see cref="V4Models.Bolus"/> records.</param>
     /// <param name="tempBasalRepository">Repository for <see cref="V4Models.TempBasal"/> records.</param>
     /// <param name="carbIntakeRepository">Repository for <see cref="V4Models.CarbIntake"/> records.</param>
@@ -345,23 +345,13 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     }
 
     /// <inheritdoc />
-    public async Task<V4Models.DecompositionResult> DecomposeAsync(Treatment treatment, CancellationToken ct = default)
+    public async Task<V4Models.DecompositionResult> DecomposeAsync(Treatment treatment, WriteOrigin origin, CancellationToken ct = default)
     {
         NormalizeIdentity(treatment);
 
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "treatment_decomposer",
-            SourceRecordId = treatment.Id,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
         var result = new V4Models.DecompositionResult
         {
-            CorrelationId = batch.Id
+            CorrelationId = Guid.CreateVersion7()
         };
 
         var c = ClassifyTreatment(treatment);
@@ -371,55 +361,55 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         {
             if (c.IsProfileSwitch)
             {
-                await DecomposeProfileSwitchAsync(treatment, result, ct);
+                await DecomposeProfileSwitchAsync(treatment, result, origin, ct);
             }
             else if (c.IsOverride)
             {
-                await DecomposeOverrideAsync(treatment, result, ct);
+                await DecomposeOverrideAsync(treatment, result, origin, ct);
             }
             else if (c.IsTemporaryTarget)
             {
-                await DecomposeTemporaryTargetAsync(treatment, result, ct);
+                await DecomposeTemporaryTargetAsync(treatment, result, origin, ct);
             }
             else
             {
-                await DecomposeTempBasalAsync(treatment, result, ct);
+                await DecomposeTempBasalAsync(treatment, result, origin, ct);
             }
         }
 
         // Produce v4 records
         if (c.ProduceBolus)
         {
-            await DecomposeBolusAsync(treatment, result, ct);
+            await DecomposeBolusAsync(treatment, result, origin, ct);
         }
 
         if (c.ProduceCarbIntake)
         {
-            await DecomposeCarbIntakeAsync(treatment, result, ct);
+            await DecomposeCarbIntakeAsync(treatment, result, origin, ct);
         }
 
         if (c.ProduceBGCheck)
         {
-            await DecomposeBGCheckAsync(treatment, result, ct);
+            await DecomposeBGCheckAsync(treatment, result, origin, ct);
         }
 
         if (c.ProduceNote)
         {
-            await DecomposeNoteAsync(treatment, result, c.IsAnnouncement, ct);
+            await DecomposeNoteAsync(treatment, result, c.IsAnnouncement, origin, ct);
         }
 
         if (c.ProduceBolusCalc)
         {
-            await DecomposeBolusCalculationAsync(treatment, result, ct);
+            await DecomposeBolusCalculationAsync(treatment, result, origin, ct);
         }
 
         if (c.ProduceDeviceEvent)
         {
-            await DecomposeDeviceEventAsync(treatment, result, c.ParsedDeviceEventType, ct);
+            await DecomposeDeviceEventAsync(treatment, result, c.ParsedDeviceEventType, origin, ct);
 
             if (c.ParsedDeviceEventType is DeviceEventType.PumpSuspend or DeviceEventType.PumpResume)
             {
-                await DecomposePumpSuspensionFromTreatmentAsync(treatment, c.ParsedDeviceEventType, result, ct);
+                await DecomposePumpSuspensionFromTreatmentAsync(treatment, c.ParsedDeviceEventType, result, origin, ct);
             }
         }
 
@@ -433,7 +423,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (bolus != null && bolusCalc != null && bolus.BolusCalculationId != bolusCalc.Id)
         {
             bolus.BolusCalculationId = bolusCalc.Id;
-            await _bolusRepository.UpdateAsync(bolus.Id, bolus, ct);
+            await _bolusRepository.UpdateAsync(bolus.Id, bolus, origin, ct);
         }
 
         // If nothing was produced and there's no delegation, log a warning
@@ -449,7 +439,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
 
     #region Decomposition Methods
 
-    private async Task DecomposeBolusAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeBolusAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         // Algorithm-delivered micro boluses:
         //   - isBasalInsulin flag (legacy AAPS convention)
@@ -463,7 +453,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
 
         if (isAlgorithmBolus)
         {
-            await DecomposeMicroBolusAsync(treatment, result, ct);
+            await DecomposeMicroBolusAsync(treatment, result, origin, ct);
             return;
         }
 
@@ -479,19 +469,19 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _bolusRepository.UpdateAsync(existing.Id, model, ct);
+            var updated = await _bolusRepository.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing Bolus {Id} from legacy treatment {LegacyId}", existing.Id, treatment.Id);
         }
         else
         {
-            var created = await _bolusRepository.CreateAsync(model, ct);
+            var created = await _bolusRepository.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created Bolus from legacy treatment {LegacyId}", treatment.Id);
         }
     }
 
-    private async Task DecomposeMicroBolusAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeMicroBolusAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var existing = treatment.Id != null
             ? await _bolusRepository.GetByLegacyIdAsync(treatment.Id, ct)
@@ -507,19 +497,19 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _bolusRepository.UpdateAsync(existing.Id, model, ct);
+            var updated = await _bolusRepository.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing algorithm Bolus {Id} from legacy treatment {LegacyId}", existing.Id, treatment.Id);
         }
         else
         {
-            var created = await _bolusRepository.CreateAsync(model, ct);
+            var created = await _bolusRepository.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created algorithm Bolus from legacy treatment {LegacyId}", treatment.Id);
         }
     }
 
-    private async Task DecomposeCarbIntakeAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeCarbIntakeAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var existing = treatment.Id != null
             ? await _carbIntakeRepository.GetByLegacyIdAsync(treatment.Id, ct)
@@ -531,14 +521,14 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _carbIntakeRepository.UpdateAsync(existing.Id, model, ct);
+            var updated = await _carbIntakeRepository.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             carbIntakeId = existing.Id;
             _logger.LogDebug("Updated existing CarbIntake {Id} from legacy treatment {LegacyId}", existing.Id, treatment.Id);
         }
         else
         {
-            var created = await _carbIntakeRepository.CreateAsync(model, ct);
+            var created = await _carbIntakeRepository.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             carbIntakeId = created.Id;
             _logger.LogDebug("Created CarbIntake from legacy treatment {LegacyId}", treatment.Id);
@@ -558,7 +548,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         }
     }
 
-    private async Task DecomposeBGCheckAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeBGCheckAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var existing = treatment.Id != null
             ? await _bgCheckRepository.GetByLegacyIdAsync(treatment.Id, ct)
@@ -569,19 +559,19 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _bgCheckRepository.UpdateAsync(existing.Id, model, ct);
+            var updated = await _bgCheckRepository.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing BGCheck {Id} from legacy treatment {LegacyId}", existing.Id, treatment.Id);
         }
         else
         {
-            var created = await _bgCheckRepository.CreateAsync(model, ct);
+            var created = await _bgCheckRepository.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created BGCheck from legacy treatment {LegacyId}", treatment.Id);
         }
     }
 
-    private async Task DecomposeNoteAsync(Treatment treatment, V4Models.DecompositionResult result, bool isAnnouncement, CancellationToken ct)
+    private async Task DecomposeNoteAsync(Treatment treatment, V4Models.DecompositionResult result, bool isAnnouncement, WriteOrigin origin, CancellationToken ct)
     {
         var existing = treatment.Id != null
             ? await _noteRepository.GetByLegacyIdAsync(treatment.Id, ct)
@@ -592,19 +582,19 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _noteRepository.UpdateAsync(existing.Id, model, ct);
+            var updated = await _noteRepository.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing Note {Id} from legacy treatment {LegacyId}", existing.Id, treatment.Id);
         }
         else
         {
-            var created = await _noteRepository.CreateAsync(model, ct);
+            var created = await _noteRepository.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created Note from legacy treatment {LegacyId}", treatment.Id);
         }
     }
 
-    private async Task DecomposeDeviceEventAsync(Treatment treatment, V4Models.DecompositionResult result, DeviceEventType deviceEventType, CancellationToken ct)
+    private async Task DecomposeDeviceEventAsync(Treatment treatment, V4Models.DecompositionResult result, DeviceEventType deviceEventType, WriteOrigin origin, CancellationToken ct)
     {
         var existing = treatment.Id != null
             ? await _deviceEventRepository.GetByLegacyIdAsync(treatment.Id, ct)
@@ -618,13 +608,13 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _deviceEventRepository.UpdateAsync(existing.Id, model, ct);
+            var updated = await _deviceEventRepository.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing DeviceEvent {Id} from legacy treatment {LegacyId}", existing.Id, treatment.Id);
         }
         else
         {
-            var created = await _deviceEventRepository.CreateAsync(model, ct);
+            var created = await _deviceEventRepository.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created DeviceEvent from legacy treatment {LegacyId}", treatment.Id);
         }
@@ -639,7 +629,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         Treatment treatment,
         DeviceEventType deviceEventType,
         V4Models.DecompositionResult result,
-        CancellationToken ct)
+        WriteOrigin origin, CancellationToken ct)
     {
         var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills).UtcDateTime;
 
@@ -689,7 +679,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         }
     }
 
-    private async Task DecomposeBolusCalculationAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeBolusCalculationAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var existing = treatment.Id != null
             ? await _bolusCalculationRepository.GetByLegacyIdAsync(treatment.Id, ct)
@@ -700,19 +690,19 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _bolusCalculationRepository.UpdateAsync(existing.Id, model, ct);
+            var updated = await _bolusCalculationRepository.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing BolusCalculation {Id} from legacy treatment {LegacyId}", existing.Id, treatment.Id);
         }
         else
         {
-            var created = await _bolusCalculationRepository.CreateAsync(model, ct);
+            var created = await _bolusCalculationRepository.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created BolusCalculation from legacy treatment {LegacyId}", treatment.Id);
         }
     }
 
-    private async Task DecomposeTempBasalAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeTempBasalAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var existing = treatment.Id != null
             ? await _tempBasalRepository.GetByLegacyIdAsync(treatment.Id, ct)
@@ -745,19 +735,19 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         if (existing != null)
         {
             model.Id = existing.Id;
-            var updated = await _tempBasalRepository.UpdateAsync(existing.Id, model, ct);
+            var updated = await _tempBasalRepository.UpdateAsync(existing.Id, model, origin, ct);
             result.UpdatedRecords.Add(updated);
             _logger.LogDebug("Updated existing TempBasal {Id} from legacy treatment {LegacyId}", existing.Id, treatment.Id);
         }
         else
         {
-            var created = await _tempBasalRepository.CreateAsync(model, ct);
+            var created = await _tempBasalRepository.CreateAsync(model, origin, ct);
             result.CreatedRecords.Add(created);
             _logger.LogDebug("Created TempBasal from legacy treatment {LegacyId}", treatment.Id);
         }
     }
 
-    private async Task DecomposeProfileSwitchAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeProfileSwitchAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var stateSpan = new StateSpan
         {
@@ -794,7 +784,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                         Store = { [syntheticStoreName] = profileData }
                     };
 
-                    var profileResult = await _profileDecomposer.DecomposeAsync(syntheticProfile, ct);
+                    var profileResult = await _profileDecomposer.DecomposeAsync(syntheticProfile, origin, ct);
                     result.CreatedRecords.AddRange(profileResult.CreatedRecords);
                     result.UpdatedRecords.AddRange(profileResult.UpdatedRecords);
 
@@ -813,7 +803,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         }
     }
 
-    private async Task DecomposeOverrideAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeOverrideAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var stateSpan = new StateSpan
         {
@@ -833,7 +823,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         _logger.LogDebug("Delegated Temporary Override treatment {LegacyId} to IStateSpanService", treatment.Id);
     }
 
-    private async Task DecomposeTemporaryTargetAsync(Treatment treatment, V4Models.DecompositionResult result, CancellationToken ct)
+    private async Task DecomposeTemporaryTargetAsync(Treatment treatment, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var isCancelled = treatment.Duration is null or 0
             || string.Equals(treatment.EventType, "Temporary Target Cancel", StringComparison.OrdinalIgnoreCase);
@@ -1238,22 +1228,13 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
 
     /// <inheritdoc />
     public async Task<V4Models.DecompositionResult> DecomposeBatchAsync(
-        IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
+        IReadOnlyList<Treatment> treatments, WriteOrigin origin, CancellationToken ct = default)
     {
         if (treatments.Count == 0)
             return new V4Models.DecompositionResult();
 
-        var batch = new DecompositionBatchEntity
-        {
-            TenantId = _dbContext.TenantId,
-            Source = "treatment_decomposer_batch",
-            SourceRecordId = null,
-            CreatedAt = DateTime.UtcNow,
-        };
-        _dbContext.DecompositionBatches.Add(batch);
-        await _dbContext.SaveChangesAsync(ct);
-
-        var result = new V4Models.DecompositionResult { CorrelationId = batch.Id };
+        var correlationId = Guid.CreateVersion7();
+        var result = new V4Models.DecompositionResult { CorrelationId = correlationId };
 
         // Typed collection lists for bulk insert
         var estimatedPerType = Math.Max(1, treatments.Count / 4);
@@ -1285,7 +1266,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                 // TempBasal treatments can also be bulk-inserted
                 if (!c.IsProfileSwitch && !c.IsOverride && !c.IsTemporaryTarget)
                 {
-                    var tempBasal = MapToTempBasal(treatment, batch.Id);
+                    var tempBasal = MapToTempBasal(treatment, correlationId);
                     tempBasal.DeviceId = await _deviceService.ResolveAsync(
                         V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
                     tempBasal.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(tempBasal.DeviceId, treatment.Mills, ct);
@@ -1304,7 +1285,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                     || string.Equals(treatment.EventType, "SMB", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(treatment.EventType, "Automatic Bolus", StringComparison.OrdinalIgnoreCase);
 
-                var model = MapToBolus(treatment, batch.Id);
+                var model = MapToBolus(treatment, correlationId);
 
                 if (isAlgorithmBolus)
                 {
@@ -1319,20 +1300,20 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             }
 
             if (c.ProduceCarbIntake)
-                carbList.Add(MapToCarbIntake(treatment, batch.Id));
+                carbList.Add(MapToCarbIntake(treatment, correlationId));
 
             if (c.ProduceBGCheck)
-                bgCheckList.Add(MapToBGCheck(treatment, batch.Id));
+                bgCheckList.Add(MapToBGCheck(treatment, correlationId));
 
             if (c.ProduceNote)
-                noteList.Add(MapToNote(treatment, batch.Id, c.IsAnnouncement));
+                noteList.Add(MapToNote(treatment, correlationId, c.IsAnnouncement));
 
             if (c.ProduceBolusCalc)
-                bolusCalcList.Add(MapToBolusCalculation(treatment, batch.Id));
+                bolusCalcList.Add(MapToBolusCalculation(treatment, correlationId));
 
             if (c.ProduceDeviceEvent)
             {
-                var model = MapToDeviceEvent(treatment, batch.Id, c.ParsedDeviceEventType);
+                var model = MapToDeviceEvent(treatment, correlationId, c.ParsedDeviceEventType);
                 model.DeviceId = await _deviceService.ResolveAsync(
                     V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
                 model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
@@ -1361,8 +1342,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         var batchInsulinTimeline = new SortedDictionary<long, V4Models.TreatmentInsulinContext>();
         foreach (var (treatment, isPs, _, _) in stateSpanTreatments.Where(t => t.IsProfileSwitch))
         {
-            var spanResult = new V4Models.DecompositionResult { CorrelationId = batch.Id };
-            await DecomposeProfileSwitchAsync(treatment, spanResult, ct);
+            var spanResult = new V4Models.DecompositionResult { CorrelationId = correlationId };
+            await DecomposeProfileSwitchAsync(treatment, spanResult, origin, ct);
             result.CreatedRecords.AddRange(spanResult.CreatedRecords);
             result.UpdatedRecords.AddRange(spanResult.UpdatedRecords);
 
@@ -1421,43 +1402,43 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         {
             if (bolusList.Count > 0)
             {
-                var created = await _bolusRepository.BulkCreateAsync(bolusList, ct);
+                var created = await _bolusRepository.BulkCreateAsync(bolusList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (carbList.Count > 0)
             {
-                var created = await _carbIntakeRepository.BulkCreateAsync(carbList, ct);
+                var created = await _carbIntakeRepository.BulkCreateAsync(carbList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (bgCheckList.Count > 0)
             {
-                var created = await _bgCheckRepository.BulkCreateAsync(bgCheckList, ct);
+                var created = await _bgCheckRepository.BulkCreateAsync(bgCheckList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (noteList.Count > 0)
             {
-                var created = await _noteRepository.BulkCreateAsync(noteList, ct);
+                var created = await _noteRepository.BulkCreateAsync(noteList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (bolusCalcList.Count > 0)
             {
-                var created = await _bolusCalculationRepository.BulkCreateAsync(bolusCalcList, ct);
+                var created = await _bolusCalculationRepository.BulkCreateAsync(bolusCalcList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (deviceEventList.Count > 0)
             {
-                var created = await _deviceEventRepository.BulkCreateAsync(deviceEventList, ct);
+                var created = await _deviceEventRepository.BulkCreateAsync(deviceEventList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
 
             if (tempBasalList.Count > 0)
             {
-                var created = await _tempBasalRepository.BulkCreateAsync(tempBasalList, ct);
+                var created = await _tempBasalRepository.BulkCreateAsync(tempBasalList, origin, ct);
                 result.CreatedRecords.AddRange(created);
             }
         }
@@ -1465,19 +1446,19 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         // Post-insert pump suspend/resume pass: sequential, order-dependent
         foreach (var (treatment, eventType) in pumpSuspendResumeTreatments.OrderBy(t => t.Treatment.Mills))
         {
-            await DecomposePumpSuspensionFromTreatmentAsync(treatment, eventType, result, ct);
+            await DecomposePumpSuspensionFromTreatmentAsync(treatment, eventType, result, origin, ct);
         }
 
         // Upsert remaining state spans (Override, TemporaryTarget — ProfileSwitch already done in pre-pass)
         foreach (var (treatment, isPs, isOv, isTt) in stateSpanTreatments.Where(t => !t.IsProfileSwitch))
         {
             // Use a temporary result to collect records from helper methods
-            var spanResult = new V4Models.DecompositionResult { CorrelationId = batch.Id };
+            var spanResult = new V4Models.DecompositionResult { CorrelationId = correlationId };
 
             if (isOv)
-                await DecomposeOverrideAsync(treatment, spanResult, ct);
+                await DecomposeOverrideAsync(treatment, spanResult, origin, ct);
             else if (isTt)
-                await DecomposeTemporaryTargetAsync(treatment, spanResult, ct);
+                await DecomposeTemporaryTargetAsync(treatment, spanResult, origin, ct);
 
             result.CreatedRecords.AddRange(spanResult.CreatedRecords);
             result.UpdatedRecords.AddRange(spanResult.UpdatedRecords);
@@ -1499,7 +1480,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                     && bolus.BolusCalculationId != calc.Id)
                 {
                     bolus.BolusCalculationId = calc.Id;
-                    await _bolusRepository.UpdateAsync(bolus.Id, bolus, ct);
+                    await _bolusRepository.UpdateAsync(bolus.Id, bolus, origin, ct);
                 }
             }
         }
@@ -1508,8 +1489,9 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     }
 
     /// <inheritdoc />
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, CancellationToken ct = default)
+    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
+        // origin is accepted for interface uniformity; the v4-native delete broadcast is deferred to the glucose-unification follow-up (deletes here bypass the repository chokepoint).
         var strategy = _dbContext.Database.CreateExecutionStrategy();
 
         return await strategy.ExecuteAsync(async () =>
@@ -1550,8 +1532,9 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     }
 
     /// <inheritdoc />
-    public async Task<long> BulkDeleteAsync(string? find, CancellationToken ct = default)
+    public async Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default)
     {
+        // origin is accepted for interface uniformity; the v4-native delete broadcast is deferred to the glucose-unification follow-up (deletes here bypass the repository chokepoint).
         var (fromMills, toMills) = Core.Models.Entries.EntryDomainLogic.ParseTimeRangeFromFind(find);
 
         // Reject implausible timestamps that clearly aren't time bounds

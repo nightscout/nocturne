@@ -20,8 +20,9 @@ use nocturne_alerts_core::excursion::{
     CloseReason, TrackerState, TrackerStateKind, TransitionType,
 };
 use nocturne_alerts_core::model::{
-    ALERT_CMP_OP_NAMES, ConditionKind, DAY_OF_WEEK_NAMES, GLUCOSE_BUCKET_NAMES, Node, PUMP_MODE_NAMES,
-    Payload, STATE_SPAN_CATEGORY_NAMES, TEMP_BASAL_METRIC_NAMES, default_payload, parse_payload,
+    ALERT_CMP_OP_NAMES, ConditionKind, DAY_OF_WEEK_NAMES, GLUCOSE_BUCKET_NAMES, Node,
+    PUMP_MODE_NAMES, Payload, STATE_SPAN_CATEGORY_NAMES, TEMP_BASAL_METRIC_NAMES, default_payload,
+    parse_payload,
 };
 use nocturne_alerts_core::paths::child_path;
 use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind, TimerStore};
@@ -110,6 +111,19 @@ pub fn evaluate(request_json: &str) -> Result<Value, String> {
             req.rule.condition_type.escape_default()
         )
     })?;
+
+    // Root-payload parity gate: a structurally malformed payload throws
+    // JsonException in the managed engine (caught per-rule by the orchestrator,
+    // leaving timers and tracker untouched), so it is an envelope error here —
+    // never a fail-closed evaluation that would advance the tracker.
+    if !matches!(req.rule.condition_params, Value::Null)
+        && parse_payload(kind, &req.rule.condition_params).is_err()
+    {
+        return Err(format!(
+            "malformed condition_params for '{}' (JsonException-equivalent)",
+            req.rule.condition_type.escape_default()
+        ));
+    }
 
     let rule = Rule {
         id: req.rule.id,
@@ -657,7 +671,13 @@ fn describe_node(node: Option<&Node>, path: String, next_leaf_id: &mut i32) -> V
                 Some(p) => payload_json(p),
                 None => payload_json(&default_payload(k)),
             };
-            leaf_value(id, path, type_value, Value::String(k.wire().to_string()), params)
+            leaf_value(
+                id,
+                path,
+                type_value,
+                Value::String(k.wire().to_string()),
+                params,
+            )
         }
         None => leaf_value(id, path, type_value, Value::Null, Value::Null),
     }

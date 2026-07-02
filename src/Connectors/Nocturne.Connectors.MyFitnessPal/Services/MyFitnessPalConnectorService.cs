@@ -10,6 +10,7 @@ using Nocturne.Connectors.MyFitnessPal.Configurations;
 using Nocturne.Connectors.MyFitnessPal.Models;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.MyFitnessPal.Services;
 
@@ -109,9 +110,9 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 {
                     var imported = await _connectorPublisher.Metadata.PublishConnectorFoodEntriesAsync(
                         foodEntryImports,
-                        ConnectorSource,
+                        ConnectorSource, WriteOrigin.Live,
                         cancellationToken
-                    );
+                    ); // Food is a dormant broadcast category — origin irrelevant until wired.
                     if (imported == null)
                     {
                         result.Success = false;

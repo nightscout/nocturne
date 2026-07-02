@@ -238,13 +238,6 @@ public class MyLifeConnectorService(
                     {
                         var records = eventProcessor.MapRecords(treatmentEvents, treatmentContext);
 
-                        // Persist decomposition batches before V4 records (FK constraint)
-                        if (records.DecompositionBatches.Count > 0)
-                        {
-                            await PublishDecompositionBatchesAsync(
-                                records.DecompositionBatches, config, cancellationToken);
-                        }
-
                         var monthCtx = batch.Month;
                         await PublishRecordTypeAsync(result, SyncDataType.Boluses, activeTypes,
                             records.Boluses, PublishBolusDataAsync, config, cancellationToken, monthCtx);

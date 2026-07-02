@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -9,6 +10,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -35,9 +37,10 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<BolusCalculationRepository> logger
+        ILogger<BolusCalculationRepository> logger,
+        IV4RecordBroadcaster<BolusCalculation>? broadcaster = null
     )
-        : base(contextFactory, auditContext)
+        : base(contextFactory, auditContext, broadcaster)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;
@@ -127,7 +130,7 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
     /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
     /// </summary>
     protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<BolusCalculationEntity> inserted, CancellationToken ct)
+        NocturneDbContext ctx, IReadOnlyList<BolusCalculationEntity> inserted, WriteOrigin origin, CancellationToken ct)
     {
         if (inserted.Count == 0)
             return;

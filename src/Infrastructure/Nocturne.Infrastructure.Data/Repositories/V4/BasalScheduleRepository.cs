@@ -1,12 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -25,8 +27,8 @@ public class BasalScheduleRepository : V4RepositoryBase<BasalSchedule, BasalSche
     /// <param name="auditContext">The audit context for tracking mutations.</param>
     /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public BasalScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<BasalScheduleRepository> logger)
-        : base(contextFactory, auditContext)
+    public BasalScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<BasalScheduleRepository> logger, IV4RecordBroadcaster<BasalSchedule>? broadcaster = null)
+        : base(contextFactory, auditContext, broadcaster)
     {
     }
 
@@ -86,7 +88,7 @@ public class BasalScheduleRepository : V4RepositoryBase<BasalSchedule, BasalSche
     /// <param name="prefix">The legacy identifier prefix.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteByLegacyIdPrefixAsync(string prefix, CancellationToken ct = default)
+    public async Task<int> DeleteByLegacyIdPrefixAsync(string prefix, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(

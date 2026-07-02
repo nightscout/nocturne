@@ -15,10 +15,10 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
-using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -196,16 +196,6 @@ public class NutritionControllerMealsTests : IDisposable
         var existingCid = Guid.NewGuid();
         var syncId = Guid.NewGuid().ToString();
 
-        // Arrange: a batch must exist for the FK constraint on CorrelationId.
-        _dbContext.DecompositionBatches.Add(new DecompositionBatchEntity
-        {
-            Id = existingCid,
-            TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001"),
-            Source = "test",
-            CreatedAt = DateTime.UtcNow,
-        });
-        await _dbContext.SaveChangesAsync();
-
         // Arrange: a bolus already exists with (DataSource, SyncIdentifier) and
         // its own CorrelationId (simulating a prior POST /insulin/boluses call).
         await _bolusRepo.CreateAsync(new Bolus
@@ -216,7 +206,7 @@ public class NutritionControllerMealsTests : IDisposable
             Insulin = 5.5,
             Kind = BolusKind.Manual,
             CorrelationId = existingCid,
-        });
+        }, WriteOrigin.Live);
 
         // Act: a meal is posted with the same (DataSource, SyncIdentifier) but a
         // different supplied CorrelationId. The existing bolus's CorrelationId

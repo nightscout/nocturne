@@ -18309,7 +18309,7 @@
         "tags": [
           "Dev Admin"
         ],
-        "summary": "Create a tenant, owner subject, owner membership, and a session in one call.\nUsed exclusively by the E2E test suite to bypass passkey/OIDC ceremonies.",
+        "summary": "Create a tenant, owner subject, synthetic passkey, owner membership, and a session\nin one call. The synthetic passkey satisfies the TenantSetupMiddleware credential\ncheck so the returned session can immediately call tenant APIs.\nUsed by E2E tests and headless dev tooling to bypass passkey/OIDC ceremonies.",
         "operationId": "DevAdmin_SeedTenant",
         "requestBody": {
           "x-name": "request",

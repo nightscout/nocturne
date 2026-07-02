@@ -5,10 +5,10 @@ using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Alerts;
-using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Controllers.V4.Glucose;
 
@@ -31,7 +31,6 @@ public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
     IGlucoseProcessingResolver glucoseResolver,
     IAlertOrchestrator alertOrchestrator,
-    IDataEventSink<SensorGlucose> glucoseEvents,
     ILogger<SensorGlucoseController> logger)
     : V4CrudControllerBase<SensorGlucose, UpsertSensorGlucoseRequest, UpsertSensorGlucoseRequest, ISensorGlucoseRepository>(repo)
 {
@@ -53,7 +52,7 @@ public class SensorGlucoseController(
 
         await glucoseResolver.ResolveAsync(model, request.GlucoseProcessing, request.SmoothedMgdl, request.UnsmoothedMgdl, ct);
 
-        var created = await Repository.CreateAsync(model, ct);
+        var created = await Repository.CreateAsync(model, WriteOrigin.Live, ct);
         created = await OnAfterCreateAsync(created, ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
@@ -110,10 +109,7 @@ public class SensorGlucoseController(
 
         try
         {
-            var updated = await Repository.UpdateAsync(id, model, ct);
-
-            // V4 writes bypass the legacy entry sink; emit the realtime "entries" update here.
-            await glucoseEvents.OnUpdatedAsync(updated, ct);
+            var updated = await Repository.UpdateAsync(id, model, WriteOrigin.Live, ct);
 
             return Ok(updated);
         }
@@ -144,7 +140,7 @@ public class SensorGlucoseController(
         for (var i = 0; i < models.Count; i++)
             await glucoseResolver.ResolveAsync(models[i], requests[i].GlucoseProcessing, requests[i].SmoothedMgdl, requests[i].UnsmoothedMgdl, ct);
 
-        var created = await Repository.BulkCreateAsync(models, ct);
+        var created = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
         var createdArray = created.ToArray();
 
         // Evaluate alerts for the most recent reading only (not every historical reading during backfill)
@@ -167,9 +163,6 @@ public class SensorGlucoseController(
                 logger.LogWarning(ex, "Alert evaluation failed after bulk SensorGlucose creation");
             }
         }
-
-        // V4 writes bypass the legacy entry sink; emit the realtime "entries" create here.
-        await glucoseEvents.OnCreatedAsync(createdArray, ct);
 
         return StatusCode(201, createdArray);
     }
@@ -196,16 +189,6 @@ public class SensorGlucoseController(
             logger.LogWarning(ex, "Alert evaluation failed after V4 SensorGlucose creation");
         }
 
-        // V4 writes bypass the legacy entry sink; emit the realtime "entries" create here.
-        await glucoseEvents.OnCreatedAsync(new[] { created }, ct);
-
         return created;
-    }
-
-    protected override async Task OnAfterRestoreAsync(SensorGlucose restored, CancellationToken ct)
-    {
-        // A restored reading reappears in the dataset; broadcast it as an "entries" create so the
-        // web client re-adds it. V4 restores bypass the legacy entry sink.
-        await glucoseEvents.OnCreatedAsync(new[] { restored }, ct);
     }
 }

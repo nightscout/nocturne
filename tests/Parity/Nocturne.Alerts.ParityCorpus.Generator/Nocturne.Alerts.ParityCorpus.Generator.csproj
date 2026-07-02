@@ -14,5 +14,8 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\..\src\API\Nocturne.API\Nocturne.API.csproj" />
+        <!-- The Harness native-availability gate (NativeFact/NativeTheory) derives from xunit
+             attributes; both alert test projects consume it from here. -->
+        <PackageReference Include="xunit" />
     </ItemGroup>
 </Project>

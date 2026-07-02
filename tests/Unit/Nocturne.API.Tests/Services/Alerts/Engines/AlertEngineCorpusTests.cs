@@ -22,7 +22,7 @@ public class AlertEngineCorpusTests
     public static TheoryData<string> ScenarioNames()
     {
         var data = new TheoryData<string>();
-        foreach (var name in EngineTestHarness.EnumerateScenarioNames())
+        foreach (var name in CorpusLocator.EnumerateScenarioNames())
             data.Add(name);
         return data;
     }
@@ -30,7 +30,7 @@ public class AlertEngineCorpusTests
     [Fact]
     public void Corpus_contains_at_least_100_scenarios()
     {
-        EngineTestHarness.EnumerateScenarioNames().Should().HaveCountGreaterThanOrEqualTo(
+        CorpusLocator.EnumerateScenarioNames().Should().HaveCountGreaterThanOrEqualTo(
             100, "the golden corpus is the cross-engine contract; a path bug must not silently shrink the suite");
     }
 
@@ -38,16 +38,16 @@ public class AlertEngineCorpusTests
     [MemberData(nameof(ScenarioNames))]
     public async Task Managed_engine_reproduces_the_committed_snapshot(string scenarioName)
     {
-        var (scenario, expected) = await EngineTestHarness.LoadScenarioAsync(scenarioName);
+        var (scenario, expected) = await CorpusLocator.LoadScenarioAsync(scenarioName);
         var actual = await RunScenarioAsync(scenario, useRustEngine: false);
         AssertMatches(actual, expected, scenarioName, "managed");
     }
 
-    [EngineNativeTheory]
+    [NativeTheory]
     [MemberData(nameof(ScenarioNames))]
     public async Task Rust_backed_engine_reproduces_the_committed_snapshot(string scenarioName)
     {
-        var (scenario, expected) = await EngineTestHarness.LoadScenarioAsync(scenarioName);
+        var (scenario, expected) = await CorpusLocator.LoadScenarioAsync(scenarioName);
         var actual = await RunScenarioAsync(scenario, useRustEngine: true);
         AssertMatches(actual, expected, scenarioName, "rust");
     }
@@ -60,7 +60,7 @@ public class AlertEngineCorpusTests
     private static async Task<JsonNode> RunScenarioAsync(ScenarioFile scenario, bool useRustEngine)
     {
         var ct = CancellationToken.None;
-        var rules = scenario.Rules.Select(EngineTestHarness.ToAlertRule).ToList();
+        var rules = scenario.Rules.Select(ScenarioConversions.ToAlertRule).ToList();
         var snapshots = scenario.Rules.Select(EngineTestHarness.ToSnapshot).ToList();
 
         var time = new ManualTimeProvider();
@@ -89,7 +89,7 @@ public class AlertEngineCorpusTests
         {
             var at = DateTime.SpecifyKind(tick.At, DateTimeKind.Utc);
             time.SetUtcNow(at);
-            var context = EngineTestHarness.ToSensorContext(tick.Context);
+            var context = ScenarioConversions.ToSensorContext(tick.Context);
 
             var ruleResults = new List<ExpectedRuleResult>(scenario.Rules.Count);
             foreach (var (scenarioRule, snapshot) in scenario.Rules.Zip(snapshots))
@@ -109,7 +109,7 @@ public class AlertEngineCorpusTests
     private static void AssertMatches(JsonNode actual, JsonNode expected, string scenarioName, string engine)
     {
         var failures = new List<string>();
-        EngineTestHarness.Diff(actual, expected, $"scenario {scenarioName} ({engine})", failures);
+        JsonNodeDiff.Compare(actual, expected, $"scenario {scenarioName} ({engine})", engine, failures);
         failures.Should().BeEmpty(
             "the {0} engine driven through the IAlertEvaluationEngine seam must reproduce the committed snapshot; differences:\n{1}",
             engine, string.Join("\n", failures));

@@ -32,14 +32,14 @@ public class EntryDecomposerBatchTests : IDisposable
 
         // BulkCreateAsync returns the input records
         _sgRepoMock
-            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<SensorGlucose> records, CancellationToken _) => records);
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin origin, CancellationToken _) => records);
         _mgRepoMock
-            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<MeterGlucose>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<MeterGlucose> records, CancellationToken _) => records);
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<MeterGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<MeterGlucose> records, WriteOrigin origin, CancellationToken _) => records);
         _calRepoMock
-            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<Calibration>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Calibration> records, CancellationToken _) => records);
+            .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<Calibration>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Calibration> records, WriteOrigin origin, CancellationToken _) => records);
 
         var mockConfigProvider = new Mock<IGlucoseProcessingConfigProvider>();
         mockConfigProvider.Setup(x => x.GetSourceDefaultsAsync(It.IsAny<CancellationToken>()))
@@ -77,25 +77,25 @@ public class EntryDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(entries);
+        var result = await _decomposer.DecomposeBatchAsync(entries, WriteOrigin.Live);
 
         // Assert — correct partition sizes
         _sgRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<SensorGlucose>>(list => list.Count() == 2),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _mgRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<MeterGlucose>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         _calRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<Calibration>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
 
         result.CreatedRecords.Should().HaveCount(4);
@@ -106,17 +106,17 @@ public class EntryDecomposerBatchTests : IDisposable
     public async Task DecomposeBatchAsync_EmptyBatch_NoRepositoryCalls()
     {
         // Act
-        var result = await _decomposer.DecomposeBatchAsync([]);
+        var result = await _decomposer.DecomposeBatchAsync([], WriteOrigin.Live);
 
         // Assert
         _sgRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _mgRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<MeterGlucose>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<MeterGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _calRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<Calibration>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<Calibration>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
         result.CreatedRecords.Should().BeEmpty();
@@ -124,23 +124,23 @@ public class EntryDecomposerBatchTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeBatchAsync_CreatesDecompositionBatch()
+    public async Task DecomposeBatchAsync_ProducedRecordsShareCorrelationId()
     {
-        // Arrange
+        // Arrange — multiple entries decomposed in one call
         var entries = new List<Entry>
         {
             new() { Id = "sgv1", Type = "sgv", Mills = 1700000000000, Sgv = 100.0 },
+            new() { Id = "sgv2", Type = "sgv", Mills = 1700000001000, Sgv = 110.0 },
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(entries);
+        var result = await _decomposer.DecomposeBatchAsync(entries, WriteOrigin.Live);
 
-        // Assert — a DecompositionBatchEntity was persisted
-        var batch = _context.DecompositionBatches.SingleOrDefault(b => b.Id == result.CorrelationId);
-        batch.Should().NotBeNull();
-        batch!.Source.Should().Be("entry_decomposer_batch");
-        batch.SourceRecordId.Should().BeNull();
-        batch.TenantId.Should().Be(_context.TenantId);
+        // Assert — all produced records share a single non-empty correlation id
+        result.CorrelationId.Should().NotBeNull().And.NotBe(Guid.Empty);
+        result.CreatedRecords.OfType<IV4Record>()
+            .Should().NotBeEmpty()
+            .And.OnlyContain(r => r.CorrelationId == result.CorrelationId);
     }
 
     [Fact]
@@ -154,19 +154,19 @@ public class EntryDecomposerBatchTests : IDisposable
         };
 
         // Act
-        var result = await _decomposer.DecomposeBatchAsync(entries);
+        var result = await _decomposer.DecomposeBatchAsync(entries, WriteOrigin.Live);
 
         // Assert — only 1 sgv, rawbg skipped
         _sgRepoMock.Verify(
             x => x.BulkCreateAsync(
                 It.Is<IEnumerable<SensorGlucose>>(list => list.Count() == 1),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
         _mgRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<MeterGlucose>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<MeterGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _calRepoMock.Verify(
-            x => x.BulkCreateAsync(It.IsAny<IEnumerable<Calibration>>(), It.IsAny<CancellationToken>()),
+            x => x.BulkCreateAsync(It.IsAny<IEnumerable<Calibration>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
 
         result.CreatedRecords.Should().HaveCount(1);

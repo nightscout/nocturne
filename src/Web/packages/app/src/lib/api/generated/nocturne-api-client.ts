@@ -19928,8 +19928,10 @@ export class DevAdminClient {
     }
 
     /**
-     * Create a tenant, owner subject, owner membership, and a session in one call.
-    Used exclusively by the E2E test suite to bypass passkey/OIDC ceremonies.
+     * Create a tenant, owner subject, synthetic passkey, owner membership, and a session
+    in one call. The synthetic passkey satisfies the TenantSetupMiddleware credential
+    check so the returned session can immediately call tenant APIs.
+    Used by E2E tests and headless dev tooling to bypass passkey/OIDC ceremonies.
      */
     seedTenant(request: DevSeedTenantRequest, signal?: AbortSignal): Promise<DevSeedTenantResponse> {
         let url_ = this.baseUrl + "/api/v4/dev-only/admin/seed-tenant";

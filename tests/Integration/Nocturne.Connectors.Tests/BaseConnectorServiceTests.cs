@@ -11,6 +11,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Models;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Connectors.Tests.Integration;
 
@@ -64,7 +65,7 @@ public class BaseConnectorServiceTests
                 m.PublishEntriesAsync(
                     It.IsAny<IEnumerable<Entry>>(),
                     It.IsAny<string>(),
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()
                 )
             )
             .ReturnsAsync(true);
@@ -80,7 +81,7 @@ public class BaseConnectorServiceTests
                 m.PublishEntriesAsync(
                     It.Is<IEnumerable<Entry>>(e => e.Count() == 2),
                     It.Is<string>(s => s == "test-connector"),
-                    It.IsAny<CancellationToken>()
+                    It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()
                 ),
             Times.Once
         );

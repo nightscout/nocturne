@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -9,6 +10,7 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -35,8 +37,9 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
-        ILogger<DeviceEventRepository> logger)
-        : base(contextFactory, auditContext)
+        ILogger<DeviceEventRepository> logger,
+        IV4RecordBroadcaster<DeviceEvent>? broadcaster = null)
+        : base(contextFactory, auditContext, broadcaster)
     {
         _deduplicationService = deduplicationService;
         _logger = logger;
@@ -142,7 +145,7 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
     /// <param name="syncIdentifier">The external sync identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
-    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, CancellationToken ct = default)
+    public async Task<int> DeleteBySyncIdentifierAsync(string dataSource, string syncIdentifier, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
@@ -154,7 +157,7 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
     /// Insert-time deduplication: link saved records to canonical groups (runs after commit).
     /// </summary>
     protected override async Task PostCommitDedupAsync(
-        NocturneDbContext ctx, IReadOnlyList<DeviceEventEntity> inserted, CancellationToken ct)
+        NocturneDbContext ctx, IReadOnlyList<DeviceEventEntity> inserted, WriteOrigin origin, CancellationToken ct)
     {
         if (inserted.Count == 0)
             return;

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Nocturne.API.Services.Alerts.Evaluators;
@@ -90,11 +91,26 @@ internal static class RustEnvelopeMapper
     }
 
     /// <summary>
+    /// Per-instance memo for <see cref="BuildContext"/>: the orchestrator (and the shadow
+    /// evaluator) pass the same enriched immutable <see cref="SensorContext"/> to every
+    /// rule of a tick, so the wire element is built and serialised once per context
+    /// instance. Keyed by reference; <see cref="ConditionalWeakTable{TKey,TValue}.GetValue"/>
+    /// is thread-safe and entries are collected with their context.
+    /// </summary>
+    private static readonly ConditionalWeakTable<SensorContext, object> ContextElementCache = new();
+
+    /// <summary>
     /// Projects a <see cref="SensorContext"/> onto the corpus <c>ScenarioContext</c> wire
     /// shape. Field-by-field total against the generator's <c>ScenarioModels.cs</c>
     /// (its <c>ToSensorContext</c> is the inverse of this mapping).
     /// </summary>
-    public static JsonElement BuildContext(SensorContext ctx)
+    public static JsonElement BuildContext(SensorContext ctx) => (JsonElement)BuildContextBoxed(ctx);
+
+    /// <summary>Memoised boxed element; internal so tests can assert reference identity.</summary>
+    internal static object BuildContextBoxed(SensorContext ctx) =>
+        ContextElementCache.GetValue(ctx, static c => BuildContextElement(c));
+
+    private static object BuildContextElement(SensorContext ctx)
     {
         var wire = new WireContext
         {

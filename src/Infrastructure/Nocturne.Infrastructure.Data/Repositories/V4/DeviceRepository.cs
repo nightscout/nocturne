@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
@@ -58,7 +59,7 @@ public class DeviceRepository : IDeviceRepository
     /// <param name="model">The device to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created device.</returns>
-    public async Task<Device> CreateAsync(Device model, CancellationToken ct = default)
+    public async Task<Device> CreateAsync(Device model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = DeviceMapper.ToEntity(model);
@@ -74,7 +75,7 @@ public class DeviceRepository : IDeviceRepository
     /// <param name="model">The updated device data.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated device.</returns>
-    public async Task<Device> UpdateAsync(Guid id, Device model, CancellationToken ct = default)
+    public async Task<Device> UpdateAsync(Guid id, Device model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity =

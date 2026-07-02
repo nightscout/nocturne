@@ -57,6 +57,12 @@ public class PumpSnapshotEntity : ITenantScoped, ISoftDeletable, IV4Entity, ISys
     public string? LegacyId { get; set; }
 
     /// <summary>
+    /// Connector data source that produced this snapshot (null for direct v1/v3 uploads).
+    /// </summary>
+    [Column("data_source")]
+    public string? DataSource { get; set; }
+
+    /// <summary>
     /// System tracking: when record was inserted
     /// </summary>
     [Column("sys_created_at")]

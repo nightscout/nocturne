@@ -251,6 +251,45 @@ public class AlertReplayServiceTests
     }
 
     [Fact]
+    public async Task DoNotDisturbLeaf_EvaluatesTrueAtTicksWhereAnAllWindowWasActive()
+    {
+        // A do_not_disturb(is_active=true) rule with AllowThroughDnd so the fire is not
+        // itself suppressed by the same all-window that makes the leaf true.
+        var ruleId = Guid.NewGuid();
+        var rule = new AlertRuleSnapshot(ruleId, _tenantId, "dnd-on", AlertConditionType.DoNotDisturb,
+            """{"is_active":true}""", AlertRuleSeverity.Info, "{}", 0,
+            AutoResolveEnabled: false, AutoResolveParams: null, AllowThroughDnd: true);
+        var date = new DateOnly(2026, 4, 28);
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { rule });
+
+        // A scope=all window active (and received) 02:00-03:00; replay must reconstruct
+        // ActiveDoNotDisturb from it so the leaf evaluates true across exactly that span.
+        _alertRepository.Setup(r => r.GetDndWindowsAsOfAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new DndWindowSnapshot(DndScope.All, StartedAt: dayStart.AddHours(2),
+                    EndsAt: dayStart.AddHours(3), ClearedAt: null, CreatedAt: dayStart.AddHours(2)),
+            });
+
+        // The leaf needs no glucose; replay still walks the day on no-data ticks.
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<SensorGlucose>());
+
+        var result = await _sut.ReplayAsync(date, "UTC", null, null, CancellationToken.None);
+
+        // One leading-edge fire at the window start; the leaf goes false again at expiry.
+        result.Events.Should().ContainSingle();
+        result.Events[0].RuleId.Should().Be(ruleId);
+        result.Events[0].Kind.Should().Be(AlertReplayEventKind.Fired);
+        result.Events[0].At.Should().Be(dayStart.AddHours(2));
+    }
+
+    [Fact]
     public async Task MultipleRules_OrderedByTopologicalDependency()
     {
         // Rule A: threshold < 70
@@ -368,7 +407,7 @@ public class AlertReplayServiceTests
         // The enricher uses GetLatestTimestampAsync(asOf) — pinned to each replay tick. We
         // emulate "no cycle ever happened before lastCycle, then lastCycle is the only one"
         // by returning lastCycle when asOf >= lastCycle and null otherwise.
-        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+        _apsSnapshotRepository.Setup(r => r.GetLatestTimestampAsOfAsync(It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((DateTime? asOf, CancellationToken _) =>
                 asOf is not null && asOf.Value >= lastCycle ? lastCycle : null);
 

@@ -12,13 +12,13 @@
 //! - `rate_of_change.direction` `falling` → low,     `rising` → high
 //! - `predicted.operator`       `<` `<=` → low,      `>` `>=` → high  (`==` → none)
 //! - `glucose_bucket.buckets`   very_low/low → low,  high/very_high → high
-//!                              (in_range/tight_range → neither; a set leaf can span both)
+//!   (in_range/tight_range → neither; a set leaf can span both)
 //!
 //! `composite`/`sustained` recurse; everything else is non-directional. Any
 //! directional leaf reached **under a `not`** taints the whole rule to
 //! `undirected` (negation flips the clinical meaning — conservative, rare).
 
-use crate::model::{parse_payload, ConditionKind, Node, Payload};
+use crate::model::{ConditionKind, Node, Payload, parse_payload};
 use serde_json::Value;
 
 /// A rule's low/high classification. Wire strings match the server
@@ -48,10 +48,10 @@ impl ScopeClass {
 /// default that never lets a scoped mute silence an unclassifiable rule.
 pub fn classify(condition_type: &str, condition_params: &Value) -> ScopeClass {
     let mut acc = Acc::default();
-    if let Some(kind) = ConditionKind::resolve(condition_type) {
-        if let Ok(payload) = parse_payload(kind, condition_params) {
-            walk_kind(kind, Some(&payload), false, &mut acc);
-        }
+    if let Some(kind) = ConditionKind::resolve(condition_type)
+        && let Ok(payload) = parse_payload(kind, condition_params)
+    {
+        walk_kind(kind, Some(&payload), false, &mut acc);
     }
     acc.resolve()
 }
@@ -213,28 +213,43 @@ mod tests {
 
     #[test]
     fn threshold_below_is_low() {
-        assert_eq!(class("threshold", json!({"direction":"below","value":70})), ScopeClass::Low);
+        assert_eq!(
+            class("threshold", json!({"direction":"below","value":70})),
+            ScopeClass::Low
+        );
     }
 
     #[test]
     fn threshold_above_is_high() {
-        assert_eq!(class("threshold", json!({"direction":"above","value":250})), ScopeClass::High);
+        assert_eq!(
+            class("threshold", json!({"direction":"above","value":250})),
+            ScopeClass::High
+        );
     }
 
     #[test]
     fn rate_of_change_falling_is_low() {
-        assert_eq!(class("rate_of_change", json!({"direction":"falling","rate":2})), ScopeClass::Low);
+        assert_eq!(
+            class("rate_of_change", json!({"direction":"falling","rate":2})),
+            ScopeClass::Low
+        );
     }
 
     #[test]
     fn rate_of_change_rising_is_high() {
-        assert_eq!(class("rate_of_change", json!({"direction":"rising","rate":2})), ScopeClass::High);
+        assert_eq!(
+            class("rate_of_change", json!({"direction":"rising","rate":2})),
+            ScopeClass::High
+        );
     }
 
     #[test]
     fn predicted_less_than_is_low() {
         assert_eq!(
-            class("predicted", json!({"operator":"<","value":70,"within_minutes":15})),
+            class(
+                "predicted",
+                json!({"operator":"<","value":70,"within_minutes":15})
+            ),
             ScopeClass::Low
         );
     }
@@ -242,7 +257,10 @@ mod tests {
     #[test]
     fn predicted_greater_than_is_high() {
         assert_eq!(
-            class("predicted", json!({"operator":">=","value":250,"within_minutes":15})),
+            class(
+                "predicted",
+                json!({"operator":">=","value":250,"within_minutes":15})
+            ),
             ScopeClass::High
         );
     }
@@ -250,35 +268,53 @@ mod tests {
     #[test]
     fn predicted_equals_is_undirected() {
         assert_eq!(
-            class("predicted", json!({"operator":"==","value":100,"within_minutes":15})),
+            class(
+                "predicted",
+                json!({"operator":"==","value":100,"within_minutes":15})
+            ),
             ScopeClass::Undirected
         );
     }
 
     #[test]
     fn glucose_bucket_low_side_is_low() {
-        assert_eq!(class("glucose_bucket", json!({"buckets":[0,1]})), ScopeClass::Low);
+        assert_eq!(
+            class("glucose_bucket", json!({"buckets":[0,1]})),
+            ScopeClass::Low
+        );
     }
 
     #[test]
     fn glucose_bucket_high_side_is_high() {
-        assert_eq!(class("glucose_bucket", json!({"buckets":[4,5]})), ScopeClass::High);
+        assert_eq!(
+            class("glucose_bucket", json!({"buckets":[4,5]})),
+            ScopeClass::High
+        );
     }
 
     #[test]
     fn glucose_bucket_spanning_both_is_composite() {
-        assert_eq!(class("glucose_bucket", json!({"buckets":[0,5]})), ScopeClass::Composite);
+        assert_eq!(
+            class("glucose_bucket", json!({"buckets":[0,5]})),
+            ScopeClass::Composite
+        );
     }
 
     #[test]
     fn glucose_bucket_in_range_only_is_undirected() {
         // 2 tight_range, 3 in_range — neither side.
-        assert_eq!(class("glucose_bucket", json!({"buckets":[2,3]})), ScopeClass::Undirected);
+        assert_eq!(
+            class("glucose_bucket", json!({"buckets":[2,3]})),
+            ScopeClass::Undirected
+        );
     }
 
     #[test]
     fn signal_loss_is_undirected() {
-        assert_eq!(class("signal_loss", json!({"timeout_minutes":20})), ScopeClass::Undirected);
+        assert_eq!(
+            class("signal_loss", json!({"timeout_minutes":20})),
+            ScopeClass::Undirected
+        );
     }
 
     #[test]

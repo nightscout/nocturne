@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Services.ConnectorPublishing;
 
@@ -57,7 +58,7 @@ public class MetadataPublisherTests
         var profiles = new List<Profile> { new() };
 
         var publisher = CreatePublisher();
-        var result = await publisher.PublishProfilesAsync(profiles, "test-source");
+        var result = await publisher.PublishProfilesAsync(profiles, "test-source", WriteOrigin.Live);
 
         result.Should().BeTrue();
         _mockProfileDataService.Verify(
@@ -72,7 +73,7 @@ public class MetadataPublisherTests
         var foods = new List<Food> { new() };
 
         var publisher = CreatePublisher();
-        var result = await publisher.PublishFoodAsync(foods, "test-source");
+        var result = await publisher.PublishFoodAsync(foods, "test-source", WriteOrigin.Live);
 
         result.Should().BeTrue();
         _mockFoodService.Verify(
@@ -90,7 +91,7 @@ public class MetadataPublisherTests
             .ReturnsAsync(new List<ConnectorFoodEntry> { new() });
 
         var publisher = CreatePublisher();
-        var result = await publisher.PublishConnectorFoodEntriesAsync(entries, "test-source");
+        var result = await publisher.PublishConnectorFoodEntriesAsync(entries, "test-source", WriteOrigin.Live);
 
         result.Should().NotBeNull();
         result.Should().HaveCount(1);
@@ -106,7 +107,7 @@ public class MetadataPublisherTests
         var activities = new List<Activity> { new() };
 
         var publisher = CreatePublisher();
-        var result = await publisher.PublishActivityAsync(activities, "test-source");
+        var result = await publisher.PublishActivityAsync(activities, "test-source", WriteOrigin.Live);
 
         result.Should().BeTrue();
         _mockActivityService.Verify(
@@ -121,7 +122,7 @@ public class MetadataPublisherTests
         var spans = new List<StateSpan> { new(), new(), new() };
         var publisher = CreatePublisher();
 
-        var result = await publisher.PublishStateSpansAsync(spans, "test-source");
+        var result = await publisher.PublishStateSpansAsync(spans, "test-source", WriteOrigin.Live);
 
         result.Should().BeTrue();
         _mockStateSpanService.Verify(
@@ -138,7 +139,7 @@ public class MetadataPublisherTests
             .ThrowsAsync(new InvalidOperationException("test error"));
         var publisher = CreatePublisher();
 
-        var result = await publisher.PublishStateSpansAsync(new List<StateSpan> { new() }, "test-source");
+        var result = await publisher.PublishStateSpansAsync(new List<StateSpan> { new() }, "test-source", WriteOrigin.Live);
 
         result.Should().BeFalse();
     }

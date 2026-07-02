@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Xunit;
+using Nocturne.Core.Contracts.V4;
 
 namespace Nocturne.API.Tests.Controllers.V4;
 
@@ -54,8 +55,8 @@ public class PatientRecordControllerTests
             .ReturnsAsync(expectedDeviceId);
 
         _deviceRepo
-            .Setup(x => x.CreateAsync(It.IsAny<PatientDevice>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((PatientDevice m, CancellationToken _) => m);
+            .Setup(x => x.CreateAsync(It.IsAny<PatientDevice>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PatientDevice m, WriteOrigin origin, CancellationToken _) => m);
 
         // Act
         var result = await _controller.CreateDevice(model);
@@ -86,8 +87,8 @@ public class PatientRecordControllerTests
         };
 
         _deviceRepo
-            .Setup(x => x.CreateAsync(It.IsAny<PatientDevice>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((PatientDevice m, CancellationToken _) => m);
+            .Setup(x => x.CreateAsync(It.IsAny<PatientDevice>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PatientDevice m, WriteOrigin origin, CancellationToken _) => m);
 
         // Act
         await _controller.CreateDevice(model);
@@ -125,8 +126,8 @@ public class PatientRecordControllerTests
             .ReturnsAsync(expectedDeviceId);
 
         _deviceRepo
-            .Setup(x => x.UpdateAsync(deviceId, It.IsAny<PatientDevice>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, PatientDevice m, CancellationToken _) => m);
+            .Setup(x => x.UpdateAsync(deviceId, It.IsAny<PatientDevice>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, PatientDevice m, WriteOrigin origin, CancellationToken _) => m);
 
         // Act
         var result = await _controller.UpdateDevice(deviceId, model);
@@ -157,8 +158,8 @@ public class PatientRecordControllerTests
         };
 
         _deviceRepo
-            .Setup(x => x.CreateAsync(It.IsAny<PatientDevice>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((PatientDevice m, CancellationToken _) => m);
+            .Setup(x => x.CreateAsync(It.IsAny<PatientDevice>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PatientDevice m, WriteOrigin origin, CancellationToken _) => m);
 
         // Act
         await _controller.CreateDevice(model);

@@ -9,11 +9,11 @@ namespace Nocturne.API.Services.Glucose;
 /// collection that the web dashboard subscribes to.
 /// </summary>
 /// <remarks>
-/// Single source of truth for the SensorGlucose → Entry projection, shared by the read side
-/// (<see cref="Nocturne.API.Services.V4.V4ToLegacyProjectionService"/>) and the real-time
-/// broadcast side (<see cref="SignalRSensorGlucoseEventSink"/>).
+/// Used by the read side (<see cref="Nocturne.API.Services.V4.V4ToLegacyProjectionService"/>). The
+/// realtime <c>entries</c> broadcast now projects from the repository chokepoint via
+/// <c>Nocturne.Core.Models.Projections.EntryProjection</c>, which is the canonical projection (it sets
+/// the entry id to <c>legacyId ?? Guid</c> so broadcasts merge against reads on the same id).
 /// </remarks>
-/// <seealso cref="SignalRSensorGlucoseEventSink"/>
 public static class SensorGlucoseToEntryMapper
 {
     /// <summary>

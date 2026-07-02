@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Mappers.V4;
@@ -23,10 +26,13 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
     /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
-    public CalibrationRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger)
-        : base(contextFactory, auditContext)
+    public CalibrationRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger, IV4RecordBroadcaster<Calibration>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
+        : base(contextFactory, auditContext, broadcaster, entrySink)
     {
     }
+
+    /// <inheritdoc />
+    protected override Entry? ProjectToLegacyEntry(Calibration model) => EntryProjection.FromCalibration(model);
 
     /// <inheritdoc />
     protected override CalibrationEntity ToEntity(Calibration model) => CalibrationMapper.ToEntity(model);
