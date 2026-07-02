@@ -37,6 +37,12 @@ public sealed class TandemPumpEvent
 
     public required uint SeqNum { get; init; }
 
+    /// <summary>
+    /// The pump-logs sequence group; together with <see cref="SeqNum"/> it identifies an event
+    /// uniquely across date windows. Always 0 on the legacy binary path (which has no such field).
+    /// </summary>
+    public long SequenceGroup { get; init; }
+
     /// <summary>Seconds since the Tandem epoch (2008-01-01), as stored in the event header.</summary>
     public required long RawTimestampSeconds { get; init; }
 

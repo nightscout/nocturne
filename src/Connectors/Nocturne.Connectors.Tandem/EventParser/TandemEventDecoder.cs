@@ -1,20 +1,150 @@
 using System.Buffers.Binary;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Tandem.Configurations;
+using Nocturne.Connectors.Tandem.Models;
 
 namespace Nocturne.Connectors.Tandem.EventParser;
 
 /// <summary>
-/// Decodes the base64 pump-event payload returned by the Tandem Source API into
-/// <see cref="TandemPumpEvent"/> records. Mirrors <c>tconnectsync</c>'s
-/// <c>eventparser/raw_event.py</c> (the 26-byte big-endian header) and the generated event
-/// classes (per-field decode and transforms), but is driven by <see cref="TandemEventCatalog"/>.
+/// Decodes Tandem pump events into <see cref="TandemPumpEvent"/> records, from either the
+/// server-decoded JSON of the pump-logs endpoint (<see cref="Decode(TandemPumpLogEvent, ILogger?)"/>)
+/// or the legacy base64 binary payload of the retired reportsfacade endpoint. Mirrors
+/// <c>tconnectsync</c> v3's <c>eventparser</c> (which likewise accepts both formats): the 26-byte
+/// big-endian header, the normalized-name matching of <c>eventProperties</c> keys, and the
+/// per-field transforms — but is driven by <see cref="TandemEventCatalog"/>.
 /// </summary>
-public static class TandemEventDecoder
+public static partial class TandemEventDecoder
 {
     /// <summary>
-    /// Decodes a base64 events blob into the contained events. Unknown event ids are still returned
-    /// (with no decoded fields) so callers can count them; recognised ids carry decoded fields.
+    /// Decodes one pump-logs JSON event. The server pre-decodes fields into
+    /// <c>eventProperties</c> with <b>raw</b> values, so the schema transforms (ratio scaling,
+    /// enum/dictionary names, bitmask bits) still apply; property keys are camelCase and are
+    /// matched to schema field names by normalization (tconnectsync's <c>_norm</c>). Unknown event
+    /// codes are still returned (with no decoded fields) so callers can count them.
+    /// </summary>
+    public static TandemPumpEvent Decode(TandemPumpLogEvent logEvent, ILogger? logger = null)
+    {
+        // pumpDateTime is the pump's local wall-clock with no tz. Parsing it as if UTC reproduces
+        // the binary header's raw value (local wall-clock seconds since the Tandem epoch), so
+        // TandemTimeResolver applies the configured offset identically on both paths.
+        long rawTimestampSeconds = 0;
+        if (DateTimeOffset.TryParse(
+                logEvent.PumpDateTime, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var wallClock))
+            rawTimestampSeconds = wallClock.ToUnixTimeSeconds() - TandemConstants.TandemEpochUnixSeconds;
+        else
+            logger?.LogDebug(
+                "Unparseable pumpDateTime '{PumpDateTime}' on event code {Code}",
+                logEvent.PumpDateTime, logEvent.EventCode);
+
+        if (!TandemEventCatalog.Definitions.TryGetValue(logEvent.EventCode, out var definition))
+            return new TandemPumpEvent
+            {
+                Id = logEvent.EventCode,
+                Name = "RawEvent",
+                Source = 0,
+                SeqNum = logEvent.SequenceNumber,
+                SequenceGroup = logEvent.SequenceGroup,
+                RawTimestampSeconds = rawTimestampSeconds,
+                IsKnown = false,
+            };
+
+        var props = new Dictionary<string, JsonElement>(logEvent.EventProperties.Count);
+        foreach (var (key, value) in logEvent.EventProperties)
+            props[Norm(key)] = value;
+
+        var fields = new Dictionary<string, TandemFieldValue>(definition.Fields.Count);
+        foreach (var field in definition.Fields)
+            if (props.TryGetValue(Norm(field.Name), out var value)
+                && TryDecodeJsonField(field, value, logger) is { } decoded)
+                fields[field.Name] = decoded;
+
+        return new TandemPumpEvent
+        {
+            Id = logEvent.EventCode,
+            Name = definition.Name,
+            Source = 0,
+            SeqNum = logEvent.SequenceNumber,
+            SequenceGroup = logEvent.SequenceGroup,
+            RawTimestampSeconds = rawTimestampSeconds,
+            IsKnown = true,
+            Fields = fields,
+        };
+    }
+
+    private static TandemFieldValue? TryDecodeJsonField(
+        TandemFieldDefinition field, JsonElement value, ILogger? logger)
+    {
+        var isBitmask = field.Transforms.Any(t => t.Kind == TandemTransformKind.Bitmask);
+
+        double numeric;
+        long rawInteger;
+        var isFloat = field.Type == TandemFieldType.Float32;
+
+        if (isBitmask && value.ValueKind == JsonValueKind.Array)
+        {
+            // Bitmask fields arrive as arrays of set-bit indices (tconnectsync's
+            // _bitmask_arr_to_int); fold them back into the integer the transforms expect.
+            rawInteger = 0;
+            foreach (var bit in value.EnumerateArray())
+                if (TryGetNumber(bit, out var bitNumeric, out _))
+                    rawInteger |= 1L << (int)bitNumeric;
+            numeric = rawInteger;
+            isFloat = false;
+        }
+        else if (TryGetNumber(value, out numeric, out rawInteger))
+        {
+            if (isFloat)
+                rawInteger = 0;
+        }
+        else
+        {
+            logger?.LogDebug(
+                "Unusable eventProperties value of kind {Kind} for field {Field}; skipping",
+                value.ValueKind, field.Name);
+            return null;
+        }
+
+        return ApplyTransforms(field, numeric, rawInteger, isFloat);
+    }
+
+    private static bool TryGetNumber(JsonElement value, out double numeric, out long rawInteger)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Number:
+                numeric = value.GetDouble();
+                rawInteger = value.TryGetInt64(out var l) ? l : (long)numeric;
+                return true;
+            case JsonValueKind.String when double.TryParse(
+                value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed):
+                numeric = parsed;
+                rawInteger = (long)parsed;
+                return true;
+            case JsonValueKind.True or JsonValueKind.False:
+                rawInteger = value.ValueKind == JsonValueKind.True ? 1 : 0;
+                numeric = rawInteger;
+                return true;
+            default:
+                numeric = 0;
+                rawInteger = 0;
+                return false;
+        }
+    }
+
+    /// <summary>Normalizes a schema field name or JSON property key for matching: lowercase, alphanumerics only.</summary>
+    internal static string Norm(string name) => NormRegex().Replace(name.ToLowerInvariant(), "");
+
+    [GeneratedRegex("[^a-z0-9]")]
+    private static partial Regex NormRegex();
+
+    /// <summary>
+    /// Decodes a legacy base64 events blob (the retired reportsfacade payload) into the contained
+    /// events. Unknown event ids are still returned (with no decoded fields) so callers can count
+    /// them; recognised ids carry decoded fields.
     /// </summary>
     public static IReadOnlyList<TandemPumpEvent> Decode(string? base64Events, ILogger? logger = null)
     {
@@ -95,6 +225,12 @@ public static class TandemEventDecoder
         var slice = record[pos..];
         var (numeric, rawInteger, isFloat) = ReadPrimitive(slice, field.Type);
 
+        return ApplyTransforms(field, numeric, rawInteger, isFloat);
+    }
+
+    private static TandemFieldValue ApplyTransforms(
+        TandemFieldDefinition field, double numeric, long rawInteger, bool isFloat)
+    {
         string? name = null;
         IReadOnlyList<string> bits = [];
 

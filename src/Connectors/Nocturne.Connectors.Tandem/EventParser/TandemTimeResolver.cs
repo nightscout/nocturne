@@ -25,4 +25,11 @@ public sealed class TandemTimeResolver(double timezoneOffsetHours)
             .UtcDateTime;
         return wallClock - _offset;
     }
+
+    /// <summary>
+    /// Converts a naive pump-local wall-clock value (e.g. the BFF's <c>maxDateOfEvents</c> /
+    /// <c>availableDataRange</c>, which carry no timezone) to UTC.
+    /// </summary>
+    public DateTime ToUtc(DateTime wallClock) =>
+        DateTime.SpecifyKind(wallClock - _offset, DateTimeKind.Utc);
 }

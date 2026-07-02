@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -21,7 +22,6 @@ namespace Nocturne.Connectors.Tandem.Services;
 /// </summary>
 public class TandemConnectorService : BaseConnectorService<TandemConnectorConfiguration>
 {
-    private const int ChunkDays = 7;
 
     private readonly TandemAuthTokenProvider _tokenProvider;
     private readonly IRetryDelayStrategy _retryDelayStrategy;
@@ -88,15 +88,16 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
                 return result;
             }
 
-            var metadata = await _apiClient.GetPumpEventMetadataAsync(region, token, pumperId, cancellationToken);
-            var device = ChooseDevice(metadata, config.PumpSerialNumber);
+            var pumper = await _apiClient.GetPumperAsync(region, token, pumperId, cancellationToken);
+            var pumps = pumper?.Pumps ?? [];
+            var device = ChooseDevice(pumps, config.PumpSerialNumber);
             if (device == null)
             {
-                if (metadata.Count > 0 && IsRealSerial(config.PumpSerialNumber))
+                if (pumps.Count > 0 && IsRealSerial(config.PumpSerialNumber))
                 {
                     // A configured serial that matches no pump is a misconfiguration, not an empty
                     // account — surface it (with the valid serials) so a typo is diagnosable.
-                    var serials = string.Join(", ", metadata.Select(m => m.SerialNumber));
+                    var serials = string.Join(", ", pumps.Select(m => m.SerialNumber));
                     _logger.LogError(
                         "[{Source}] Configured pump serial {Serial} not found on account; available: {Serials}",
                         ConnectorSource, config.PumpSerialNumber, serials);
@@ -137,10 +138,10 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     }
 
     private async Task SyncProfilesAsync(
-        TandemPumpEventMetadata device, TandemTimeResolver time, SyncResult result,
+        TandemBffPump device, TandemTimeResolver time, SyncResult result,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var profile = new TandemProfileMapper(_logger).Map(device.LastUpload?.Settings);
+        var profile = new TandemProfileMapper(_logger).Map(device.Settings?.Details);
         if (profile == null)
             return;
 
@@ -154,17 +155,17 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     }
 
     private async Task SyncEventsAsync(
-        TandemConstants.RegionUrls region, string pumperId, TandemPumpEventMetadata device,
+        TandemConstants.RegionUrls region, string pumperId, TandemBffPump device,
         HashSet<SyncDataType> enabled, TandemTimeResolver time, SyncResult result,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
-        var end = device.MaxDateWithEvents?.UtcDateTime ?? DateTime.UtcNow;
-        var start = await ResolveStartAsync(config, device);
+        var end = ParseWallClockUtc(device.MaxDateOfEvents, time) ?? DateTime.UtcNow;
+        var start = await ResolveStartAsync(config, device, time);
         if (start >= end)
         {
             _logger.LogInformation(
                 "[{Source}] Nothing to sync for device {Device} (start {Start} >= end {End})",
-                ConnectorSource, device.TconnectDeviceId, start, end);
+                ConnectorSource, device.AssignmentId, start, end);
             return;
         }
 
@@ -184,17 +185,21 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         // Fetch and decode every window first, then map over the full event set. Bolus
         // reassembly (request messages + completion) and sleep/exercise start/stop pairing can
         // straddle a window boundary, so — like tconnectsync, which processes the whole requested
-        // range in one pass — the connector must not map each window in isolation.
+        // range in one pass — the connector must not map each window in isolation. Events that
+        // appear in more than one window are deduplicated by their (sequenceGroup, sequenceNumber)
+        // identity, and the separately-returned clockChanges are not consumed (matching upstream).
         var allEvents = new List<TandemPumpEvent>();
+        var seen = new HashSet<(long, uint)>();
         foreach (var (windowStart, windowEnd) in Chunk(start, end))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var raw = await FetchWindowAsync(
-                region, pumperId, device.TconnectDeviceId, windowStart, windowEnd, eventIdsFilter,
+            var response = await FetchWindowAsync(
+                region, pumperId, device.AssignmentId, windowStart, windowEnd, eventIdsFilter,
                 config, cancellationToken);
-            if (raw != null)
-                allEvents.AddRange(TandemEventDecoder.Decode(raw, _logger));
+            foreach (var logEvent in response?.Events ?? [])
+                if (seen.Add((logEvent.SequenceGroup, logEvent.SequenceNumber)))
+                    allEvents.Add(TandemEventDecoder.Decode(logEvent, _logger));
         }
 
         if (allEvents.Count == 0)
@@ -277,8 +282,8 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         }
     }
 
-    private async Task<string?> FetchWindowAsync(
-        TandemConstants.RegionUrls region, string pumperId, string tconnectDeviceId,
+    private async Task<TandemPumpLogsResponse?> FetchWindowAsync(
+        TandemConstants.RegionUrls region, string pumperId, string deviceAssignmentId,
         DateTime windowStart, DateTime windowEnd, int[]? eventIdsFilter,
         TandemConnectorConfiguration config, CancellationToken cancellationToken)
     {
@@ -287,8 +292,8 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             return null;
 
         return await ExecuteWithRetryAsync(
-            () => _apiClient.GetPumpEventsRawAsync(
-                region, token!, pumperId, tconnectDeviceId, windowStart, windowEnd, eventIdsFilter, cancellationToken),
+            () => _apiClient.GetPumpLogsAsync(
+                region, token!, pumperId, deviceAssignmentId, windowStart, windowEnd, eventIdsFilter, cancellationToken),
             _retryDelayStrategy,
             async () =>
             {
@@ -305,7 +310,8 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
     /// Resolves the start of the sync window: the earliest catch-up point across glucose and
     /// treatments (so no enabled data type is missed), never earlier than the pump's first event.
     /// </summary>
-    private async Task<DateTime> ResolveStartAsync(TandemConnectorConfiguration config, TandemPumpEventMetadata device)
+    private async Task<DateTime> ResolveStartAsync(
+        TandemConnectorConfiguration config, TandemBffPump device, TandemTimeResolver time)
     {
         var glucoseSince = await CalculateSinceTimestampAsync(config);
         var treatmentSince = await CalculateTreatmentSinceTimestampAsync(config);
@@ -313,7 +319,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         var candidates = new[] { glucoseSince, treatmentSince }.Where(d => d.HasValue).Select(d => d!.Value).ToList();
         var start = candidates.Count > 0 ? candidates.Min() : DefaultInitialSyncFloor();
 
-        if (device.MinDateWithEvents?.UtcDateTime is { } min && min > start)
+        if (ParseWallClockUtc(device.AvailableDataRange?.Start, time) is { } min && min > start)
             start = min;
 
         return start;
@@ -321,22 +327,39 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
 
     /// <summary>
     /// Selects the pump to follow: the one matching the configured serial number, or — when none is
-    /// configured — the pump with the most recent events. Mirrors tconnectsync's ChooseDevice.
+    /// configured — the pump with the most recent events, skipping pumps that have never uploaded
+    /// (null <c>maxDateOfEvents</c>) and falling back to the first pump when none has events.
+    /// Mirrors tconnectsync's ChooseDevice.
     /// </summary>
-    internal static TandemPumpEventMetadata? ChooseDevice(
-        IReadOnlyList<TandemPumpEventMetadata> metadata, string? serialNumber)
+    internal static TandemBffPump? ChooseDevice(
+        IReadOnlyList<TandemBffPump> pumps, string? serialNumber)
     {
-        if (metadata.Count == 0)
+        if (pumps.Count == 0)
             return null;
 
         if (IsRealSerial(serialNumber))
-            return metadata.FirstOrDefault(m =>
+            return pumps.FirstOrDefault(m =>
                 string.Equals(m.SerialNumber, serialNumber, StringComparison.OrdinalIgnoreCase));
 
-        return metadata
-            .OrderByDescending(m => m.MaxDateWithEvents ?? DateTimeOffset.MinValue)
-            .First();
+        // maxDateOfEvents values share the pump's timezone, so ordering the naive wall-clock
+        // values directly is equivalent to ordering their UTC conversions.
+        return pumps
+            .Where(m => ParseWallClock(m.MaxDateOfEvents) != null)
+            .OrderByDescending(m => ParseWallClock(m.MaxDateOfEvents)!.Value)
+            .FirstOrDefault() ?? pumps[0];
     }
+
+    /// <summary>Parses a naive pump-local BFF timestamp, or null when absent/unparseable.</summary>
+    private static DateTime? ParseWallClock(string? value) =>
+        DateTime.TryParse(
+            value, CultureInfo.InvariantCulture,
+            DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed)
+            ? parsed
+            : null;
+
+    /// <summary>Parses a naive pump-local BFF timestamp and converts it to UTC via the configured offset.</summary>
+    private static DateTime? ParseWallClockUtc(string? value, TandemTimeResolver time) =>
+        ParseWallClock(value) is { } wallClock ? time.ToUtc(wallClock) : null;
 
     /// <summary>
     /// Whether a configured serial actually selects a pump. Empty/whitespace means "no preference",
@@ -353,16 +376,22 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             .SelectMany(list => list!)
             .ToList();
 
+    /// <summary>
+    /// Splits the range into inclusive day-granular windows no larger than the pump-logs endpoint's
+    /// ~4-week cap, mirroring tconnectsync's <c>_pump_log_windows</c>. Bounds are dates: the API
+    /// expands them to T00:00:00Z–T23:59:59Z, so adjacent windows do not overlap.
+    /// </summary>
     private static IEnumerable<(DateTime Start, DateTime End)> Chunk(DateTime start, DateTime end)
     {
-        var cursor = start;
-        while (cursor < end)
+        var cursor = start.Date;
+        var last = end.Date;
+        while (cursor <= last)
         {
-            var next = cursor.AddDays(ChunkDays);
-            if (next > end)
-                next = end;
-            yield return (cursor, next);
-            cursor = next;
+            var windowEnd = cursor.AddDays(TandemConstants.PumpLogsWindowDays - 1);
+            if (windowEnd > last)
+                windowEnd = last;
+            yield return (cursor, windowEnd);
+            cursor = windowEnd.AddDays(1);
         }
     }
 }

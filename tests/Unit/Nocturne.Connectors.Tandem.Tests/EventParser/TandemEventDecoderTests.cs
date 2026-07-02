@@ -91,7 +91,7 @@ public class TandemEventDecoderTests
     [Fact]
     public void Decode_returns_empty_for_blank_input()
     {
-        TandemEventDecoder.Decode(null).Should().BeEmpty();
+        TandemEventDecoder.Decode((string?)null).Should().BeEmpty();
         TandemEventDecoder.Decode("").Should().BeEmpty();
     }
 }

@@ -62,8 +62,8 @@ public sealed class TandemProfileMapper(ILogger logger)
             Basal = segments.Select(s => TimeValue(s.StartTime, s.BasalRate / 1000.0)).ToList(),
             CarbRatio = segments.Select(s => TimeValue(s.StartTime, s.CarbRatio / 1000.0)).ToList(),
             Sens = segments.Select(s => TimeValue(s.StartTime, s.Isf)).ToList(),
-            TargetLow = [TimeValue(0, cgm?.LowGlucoseAlert?.MgPerDl ?? 0)],
-            TargetHigh = [TimeValue(0, cgm?.HighGlucoseAlert?.MgPerDl ?? 0)],
+            TargetLow = [TimeValue(0, cgm?.LowGlucoseAlertMgPerDl ?? 0)],
+            TargetHigh = [TimeValue(0, cgm?.HighGlucoseAlertMgPerDl ?? 0)],
         };
     }
 

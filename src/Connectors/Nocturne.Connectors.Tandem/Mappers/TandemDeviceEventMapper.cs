@@ -26,10 +26,12 @@ public sealed class TandemDeviceEventMapper(ILogger logger, TandemTimeResolver t
         {
             var mapped = ev.Name switch
             {
+                // InsulinVolume is populated on t:slim X2 / Mobi; V2Volume is a legacy fallback.
                 "LID_CARTRIDGE_FILLED" => (DeviceEventType.ReservoirChange,
-                    "Cartridge Filled" + Volume(ev.Num("V2Volume"), "filled")),
+                    "Cartridge Filled" + Volume(Positive(ev.Num("InsulinVolume")) ?? ev.Num("V2Volume"), "filled")),
                 "LID_CANNULA_FILLED" => (DeviceEventType.CannulaChange,
                     "Cannula Filled" + Volume(ev.Num("PrimeSize"), "primed")),
+                // PrimeSize is -1 ("not recorded") on real tubing fills; Volume() hides it.
                 "LID_TUBING_FILLED" => (DeviceEventType.TubePriming,
                     "Tubing Filled" + Volume(ev.Num("PrimeSize"), "primed")),
                 "LID_PUMPING_SUSPENDED" => (DeviceEventType.PumpSuspend,
@@ -69,4 +71,6 @@ public sealed class TandemDeviceEventMapper(ILogger logger, TandemTimeResolver t
 
     private static string Volume(double? units, string verb) =>
         units is > 0 ? $" ({units.Value.ToString("0.##", CultureInfo.InvariantCulture)}u {verb})" : string.Empty;
+
+    private static double? Positive(double? value) => value is > 0 ? value : null;
 }

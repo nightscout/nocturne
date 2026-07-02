@@ -28,16 +28,25 @@ public static class TandemConstants
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
     /// <summary>
-    /// The event IDs the Tandem Source backend itself requests by default. When the connector is not
-    /// fetching the full history-log (i.e. device status / "fetch all" is off) it filters to these,
-    /// matching <c>tconnectsync</c>'s <c>DEFAULT_EVENT_IDS</c>.
+    /// The event IDs the Tandem Source web app itself requests by default (its
+    /// <c>getLogIDList()</c>, 55 ids including the FSL3 CGM events 477/480/486). When the connector
+    /// is not fetching the full history-log (i.e. device status / "fetch all" is off) it filters to
+    /// these, matching <c>tconnectsync</c>'s <c>DEFAULT_EVENT_IDS</c>. Note the pump-logs endpoint
+    /// currently ignores this filter server-side; it is sent anyway to mirror the web app and stay
+    /// forward-compatible.
     /// </summary>
     public static readonly int[] DefaultEventIds =
     [
         229, 5, 28, 4, 26, 99, 279, 3, 16, 59, 21, 55, 20, 280, 64, 65, 66, 61, 33, 371, 171, 369,
-        460, 172, 370, 461, 372, 399, 256, 213, 406, 394, 212, 404, 214, 405, 447, 313, 60, 14, 6,
-        90, 230, 140, 12, 11, 53, 13, 63, 203, 307, 191
+        460, 172, 370, 461, 372, 480, 399, 256, 213, 406, 477, 394, 212, 404, 214, 405, 486, 447,
+        313, 60, 14, 6, 90, 230, 140, 12, 11, 53, 13, 63, 203, 307, 191
     ];
+
+    /// <summary>
+    /// The pump-logs endpoint caps each request at roughly four weeks; longer ranges are paged in
+    /// inclusive date windows no larger than this (tconnectsync's <c>PUMP_LOGS_WINDOW_DAYS</c>).
+    /// </summary>
+    public const int PumpLogsWindowDays = 28;
 
     /// <summary>Per-region Tandem Source endpoints.</summary>
     public sealed record RegionUrls(
@@ -56,7 +65,7 @@ public static class TandemConstants
         TokenEndpoint: "https://tdcservices.tandemdiabetes.com/accounts/api/connect/token",
         JwksUrl: "https://tdcservices.tandemdiabetes.com/accounts/api/.well-known/openid-configuration/jwks",
         Issuer: "https://tdcservices.tandemdiabetes.com/accounts/api",
-        ClientId: "0oa27ho9tpZE9Arjy4h7",
+        ClientId: "0oa4wnbvtladeyVZX4h7",
         RedirectUri: "https://sso.tandemdiabetes.com/auth/callback",
         SourceUrl: "https://source.tandemdiabetes.com/");
 

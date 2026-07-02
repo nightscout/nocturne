@@ -8,9 +8,10 @@ using Nocturne.Connectors.Tandem.Models;
 namespace Nocturne.Connectors.Tandem.Services;
 
 /// <summary>
-/// Thin client over the Tandem Source reports API. Endpoints and the base64 pump-events payload
-/// shape are ported from <c>tconnectsync</c>'s <c>api/tandemsource.py</c>. Non-success responses
-/// throw <see cref="HttpRequestException"/> (carrying the status code) so the caller's retry/
+/// Thin client over the Tandem Source "BFF" reports API. Endpoints and payload shapes are ported
+/// from <c>tconnectsync</c> v3's <c>api/tandemsource.py</c> (the pre-BFF <c>reportsfacade</c>
+/// endpoints were retired by Tandem in June 2026). Non-success responses throw
+/// <see cref="HttpRequestException"/> (carrying the status code) so the caller's retry/
 /// re-authentication loop can react to 401/5xx.
 /// </summary>
 public sealed class TandemSourceApiClient(HttpClient httpClient, ILogger logger)
@@ -18,41 +19,46 @@ public sealed class TandemSourceApiClient(HttpClient httpClient, ILogger logger)
     private readonly HttpClient _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    /// <summary>Returns metadata for every pump on the account.</summary>
-    public async Task<List<TandemPumpEventMetadata>> GetPumpEventMetadataAsync(
+    /// <summary>Returns the pumper profile plus every pump on the account.</summary>
+    public async Task<TandemBffPumper?> GetPumperAsync(
         TandemConstants.RegionUrls region, string accessToken, string pumperId,
         CancellationToken cancellationToken)
     {
         var json = await GetStringAsync(
             region, accessToken,
-            $"api/reports/reportsfacade/{pumperId}/pumpeventmetadata",
+            $"api/reports/bff/pumper/{pumperId}",
             cancellationToken);
 
-        return JsonSerializer.Deserialize<List<TandemPumpEventMetadata>>(json)
-               ?? [];
+        return JsonSerializer.Deserialize<TandemBffPumper>(json);
     }
 
     /// <summary>
-    /// Returns the raw base64 pump-events payload for a device over a date range. When
-    /// <paramref name="eventIdsFilter"/> is null the full history log is returned, otherwise the
-    /// request is filtered to those event ids (matching the Tandem Source backend default).
+    /// Returns the server-decoded pump events for a device over an inclusive date window. The
+    /// server caps each window at roughly four weeks (<see cref="TandemConstants.PumpLogsWindowDays"/>);
+    /// callers page longer ranges. When <paramref name="eventIdsFilter"/> is null the full history
+    /// log is requested; the server currently ignores the filter and returns every event in the
+    /// window regardless, but it is sent to mirror the Tandem Source web app.
     /// </summary>
-    public async Task<string?> GetPumpEventsRawAsync(
+    public async Task<TandemPumpLogsResponse?> GetPumpLogsAsync(
         TandemConstants.RegionUrls region, string accessToken, string pumperId,
-        string tconnectDeviceId, DateTime minDate, DateTime maxDate, int[]? eventIdsFilter,
+        string deviceAssignmentId, DateTime minDate, DateTime maxDate, int[]? eventIdsFilter,
         CancellationToken cancellationToken)
     {
         var min = minDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var max = maxDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var endpoint =
-            $"api/reports/reportsfacade/pumpevents/{pumperId}/{tconnectDeviceId}?minDate={min}&maxDate={max}";
-        if (eventIdsFilter is { Length: > 0 })
-            endpoint += "&eventIds=" + string.Join("%2C", eventIdsFilter);
+        var query = new Dictionary<string, string>
+        {
+            ["pumperId"] = pumperId,
+            ["startDate"] = $"{min}T00:00:00Z",
+            ["endDate"] = $"{max}T23:59:59Z",
+            ["eventIds"] = eventIdsFilter is { Length: > 0 } ? string.Join(",", eventIdsFilter) : string.Empty,
+        };
+        var endpoint = $"api/reports/bff/pump-logs/{deviceAssignmentId}?" +
+            string.Join("&", query.Select(kv => $"{kv.Key}={Uri.EscapeDataString(kv.Value)}"));
 
         var json = await GetStringAsync(region, accessToken, endpoint, cancellationToken);
 
-        // The endpoint returns the base64 events as a JSON string literal.
-        return JsonSerializer.Deserialize<string>(json);
+        return JsonSerializer.Deserialize<TandemPumpLogsResponse>(json);
     }
 
     private async Task<string> GetStringAsync(
@@ -62,8 +68,9 @@ public sealed class TandemSourceApiClient(HttpClient httpClient, ILogger logger)
         var url = region.SourceUrl + endpoint;
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        request.Headers.TryAddWithoutValidation("Origin", "https://tconnect.tandemdiabetes.com");
-        request.Headers.TryAddWithoutValidation("Referer", "https://tconnect.tandemdiabetes.com/");
+        // The WAF enforces same-origin: Origin/Referer must match the Source host, else HTTP 403.
+        request.Headers.TryAddWithoutValidation("Origin", region.SourceUrl.TrimEnd('/'));
+        request.Headers.TryAddWithoutValidation("Referer", region.SourceUrl);
         request.Headers.UserAgent.ParseAdd(TandemConstants.UserAgent);
 
         var response = await _httpClient.SendAsync(request, cancellationToken);

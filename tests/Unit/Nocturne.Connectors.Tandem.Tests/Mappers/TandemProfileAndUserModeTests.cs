@@ -42,8 +42,8 @@ public class TandemProfileAndUserModeTests
             },
             CgmSettings = new TandemPumpCgmSettings
             {
-                LowGlucoseAlert = new TandemGlucoseAlertSettings { MgPerDl = 70 },
-                HighGlucoseAlert = new TandemGlucoseAlertSettings { MgPerDl = 180 },
+                LowGlucoseAlertMgPerDl = 70,
+                HighGlucoseAlertMgPerDl = 180,
             },
         };
 
