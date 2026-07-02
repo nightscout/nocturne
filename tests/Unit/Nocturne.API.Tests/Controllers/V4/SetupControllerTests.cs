@@ -40,6 +40,14 @@ public class SetupControllerTests : IDisposable
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
 
+        // GetSoleTenantWithoutOwnerAsync/EnsureOwnerSubjectAsync scope their queries
+        // with `SELECT set_config('app.current_tenant_id', ...)`, a PostgreSQL-only
+        // function. Register a no-op stand-in so the sole-tenant guard paths execute
+        // under SQLite (there is no RLS here, so all rows are visible — which is what
+        // we want for asserting the credential-based guard logic).
+        _connection.CreateFunction<string, string, bool, string>(
+            "set_config", (_, value, _) => value);
+
         _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseSqlite(_connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
@@ -331,6 +339,65 @@ public class SetupControllerTests : IDisposable
             new SetupTenantRequest("any-slug", "Any Name"), CancellationToken.None);
         var ok = createResult.Should().BeOfType<OkObjectResult>().Subject;
         ok.Value.Should().BeOfType<SetupTenantResponse>().Subject.TenantId.Should().Be(newTenantId);
+    }
+
+    [Fact]
+    public async Task OwnerOptions_WhenSoleTenantHasCredentiallessMember_ProceedsPastGuard()
+    {
+        // The real-world soft-lock: OwnerOptions previously created a subject +
+        // membership, then the WebAuthn ceremony failed/was abandoned so no passkey
+        // was stored. Retrying must resume setup, not dead-end on owner_already_exists.
+        var tenantId = Guid.CreateVersion7();
+        var subjectId = Guid.CreateVersion7();
+
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
+        });
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId, Name = "Incomplete Owner", Username = "owner",
+            IsActive = true, IsSystemSubject = false,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            SubjectId = subjectId,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{}", "challenge-token"));
+
+        // Act
+        var result = await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "owner", DisplayName = "Owner" },
+            CancellationToken.None);
+
+        // Assert — guard passed; registration options were issued
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = ok.Value.Should().BeOfType<SetupOwnerOptionsResponse>().Subject;
+        response.ChallengeToken.Should().Be("challenge-token");
+        response.TenantId.Should().Be(tenantId);
+    }
+
+    [Fact]
+    public async Task OwnerOptions_WhenSoleTenantHasCredentialedMember_Returns409OwnerAlreadyExists()
+    {
+        // The guard must still block once a member holds real credentials — a
+        // completed setup should not be re-openable.
+        await SeedConfiguredTenantAsync("my-instance", "My Instance");
+
+        // Act
+        var result = await _controller.OwnerOptions(
+            new SetupOwnerOptionsRequest { Username = "someone", DisplayName = "Someone" },
+            CancellationToken.None);
+
+        // Assert
+        var conflict = result.Should().BeOfType<ConflictObjectResult>().Subject;
+        conflict.Value.Should().BeEquivalentTo(new { error = "owner_already_exists" });
     }
 
     // SoftLock_TenantWithOnlySystemMembers_OwnerOptionsSucceeds is an

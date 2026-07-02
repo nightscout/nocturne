@@ -405,16 +405,19 @@ public partial class SetupController : ControllerBase
             "SELECT set_config('app.current_tenant_id', {0}, false)",
             tenant.Id.ToString());
 
-        var hasNonSystemMembers = await context.TenantMembers
-            .Where(tm => tm.TenantId == tenant.Id)
-            .Join(
-                context.Subjects.Where(s => !s.IsSystemSubject),
-                tm => tm.SubjectId,
-                s => s.Id,
-                (tm, s) => tm)
-            .AnyAsync(ct);
+        // Setup is "complete" only once a member holds real credentials (passkey or
+        // OIDC). A credential-less member is a half-finished setup left behind by an
+        // abandoned or failed WebAuthn/OIDC ceremony — EnsureOwnerSubjectAsync reuses
+        // that subject idempotently, so let the flow resume instead of dead-ending on
+        // owner_already_exists. Mirrors the CreateTenant guard and
+        // TenantSetupMiddleware's hasCredentials check.
+        var hasOwnerWithCredentials = await context.TenantMembers
+            .Where(m => m.TenantId == tenant.Id)
+            .AnyAsync(m =>
+                context.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
+                context.SubjectOidcIdentities.Any(o => o.SubjectId == m.SubjectId), ct);
 
-        if (hasNonSystemMembers)
+        if (hasOwnerWithCredentials)
             return (null, Conflict(new { error = "owner_already_exists" }));
 
         return (tenant, null);
