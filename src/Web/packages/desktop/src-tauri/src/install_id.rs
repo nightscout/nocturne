@@ -37,6 +37,17 @@ pub fn get_or_create() -> String {
         }
     }
 
+    write_new(&path)
+}
+
+/// Replaces the persisted install id with a fresh UUID and returns it. Used when the server reports
+/// the current id is registered to a different subject (409 on register) — e.g. the machine was
+/// relinked as a different user — which no amount of retrying with the same id can fix.
+pub fn regenerate() -> String {
+    write_new(&install_id_path())
+}
+
+fn write_new(path: &std::path::Path) -> String {
     let id = uuid::Uuid::new_v4().to_string();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -44,7 +55,7 @@ pub fn get_or_create() -> String {
     // Write atomically (temp file + same-volume rename) so a crash mid-write can never leave a
     // truncated, corrupt id behind. A failure falls through to the in-memory id for this session.
     let tmp = path.with_extension("txt.tmp");
-    if std::fs::write(&tmp, &id).and_then(|()| std::fs::rename(&tmp, &path)).is_err() {
+    if std::fs::write(&tmp, &id).and_then(|()| std::fs::rename(&tmp, path)).is_err() {
         let _ = std::fs::remove_file(&tmp);
     }
     id

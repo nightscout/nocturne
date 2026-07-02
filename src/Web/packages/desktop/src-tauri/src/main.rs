@@ -17,16 +17,11 @@ mod auth;
 mod client_devices;
 mod glucose_file;
 mod glucose_poll;
+mod http;
 mod install_id;
 mod signalr;
 mod toast;
 mod tray;
-
-/// Re-export of the durable-OAuth token resolver for the actuation modules, which need the same
-/// `(server, access_token)` pair the glucose poller runs on (refresh handled in `auth`).
-pub(crate) async fn auth_token(client: &reqwest::Client) -> Result<(String, String), String> {
-    auth::get_valid_token(client).await
-}
 
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -90,11 +85,7 @@ struct CompleteResponse {
 }
 
 fn http_client() -> CommandResult<reqwest::Client> {
-    reqwest::Client::builder()
-        // Local dev runs behind the Aspire gateway's self-signed certificate.
-        .danger_accept_invalid_certs(cfg!(debug_assertions))
-        .build()
-        .map_err(|e| CommandError::new(format!("Could not create HTTP client: {e}")))
+    http::client().map_err(CommandError::new)
 }
 
 /// Parses and stores a `nocturne-connect://link?server=…&token=…` link code.
@@ -314,9 +305,30 @@ fn companion_is_linked() -> bool {
     auth::is_linked()
 }
 
+/// Link state plus whether device alerts need a relink (the stored grant lacks the device scopes,
+/// or the server refuses this install's registration).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LinkStatus {
+    linked: bool,
+    needs_relink: bool,
+}
+
 #[tauri::command]
-fn companion_unlink() -> CommandResult<()> {
-    auth::clear().map_err(CommandError::new)
+fn companion_link_status() -> LinkStatus {
+    LinkStatus {
+        linked: auth::is_linked(),
+        needs_relink: alert_actuation::needs_relink(),
+    }
+}
+
+#[tauri::command]
+fn companion_unlink(app: tauri::AppHandle) -> CommandResult<()> {
+    auth::clear().map_err(CommandError::new)?;
+    // Unlink definitively withdraws every device actuation: flashes stop and the tray repaints now;
+    // the actuation loop drops its state and registration on its next pass.
+    alert_actuation::on_unlink(&app);
+    Ok(())
 }
 
 /// The latest reading from the last-written glucose file, for the readout to show on load. Live
@@ -400,7 +412,9 @@ struct ClockFaceSummary {
 #[tauri::command]
 async fn list_clock_faces() -> CommandResult<Vec<ClockFaceSummary>> {
     let client = http_client()?;
-    let (server, token) = auth::get_valid_token(&client).await.map_err(CommandError::new)?;
+    let (server, token) = auth::get_valid_token(&client)
+        .await
+        .map_err(|e| CommandError::new(e.to_string()))?;
     let resp = client
         .get(format!("{server}/api/v4/clockfaces"))
         .bearer_auth(&token)
@@ -562,6 +576,7 @@ fn main() {
             cancel_login,
             companion_link_start,
             companion_is_linked,
+            companion_link_status,
             companion_unlink,
             get_current_glucose,
             open_floating_clock,

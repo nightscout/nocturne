@@ -7,6 +7,31 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Error from a client-devices API call. `status` carries the HTTP status when a response was
+/// received, so callers branch on it (e.g. 409 on register → regenerate the install id) instead of
+/// parsing message strings.
+#[derive(Debug)]
+pub struct ApiError {
+    pub status: Option<u16>,
+    pub message: String,
+}
+
+impl ApiError {
+    fn network(message: String) -> Self {
+        Self { status: None, message }
+    }
+
+    fn http(status: u16, message: String) -> Self {
+        Self { status: Some(status), message }
+    }
+}
+
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
 /// This app's device kind, per `DeviceKinds.Companion` server-side.
 pub const DEVICE_KIND: &str = "companion";
 /// Show a native toast (`DeviceCapabilities.Notify`; requires the `device.notify` scope).
@@ -93,7 +118,7 @@ pub async fn register(
     token: &str,
     install_id: &str,
     label: &str,
-) -> Result<String, String> {
+) -> Result<String, ApiError> {
     let server = server.trim_end_matches('/');
     let body = RegisterRequest {
         install_id,
@@ -108,16 +133,17 @@ pub async fn register(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Could not reach {server}: {e}"))?;
+        .map_err(|e| ApiError::network(format!("Could not reach {server}: {e}")))?;
 
     if !resp.status().is_success() {
-        return Err(format!("device registration returned HTTP {}", resp.status().as_u16()));
+        let status = resp.status().as_u16();
+        return Err(ApiError::http(status, format!("device registration returned HTTP {status}")));
     }
 
     let device: RegisterResponse = resp
         .json()
         .await
-        .map_err(|e| format!("Unexpected registration response: {e}"))?;
+        .map_err(|e| ApiError::network(format!("Unexpected registration response: {e}")))?;
     Ok(device.id)
 }
 
@@ -128,22 +154,23 @@ pub async fn active_intents(
     server: &str,
     token: &str,
     device_id: &str,
-) -> Result<Vec<DeviceActionIntent>, String> {
+) -> Result<Vec<DeviceActionIntent>, ApiError> {
     let server = server.trim_end_matches('/');
     let resp = client
         .get(format!("{server}/api/v4/client-devices/{device_id}/active-intents"))
         .bearer_auth(token)
         .send()
         .await
-        .map_err(|e| format!("Could not reach {server}: {e}"))?;
+        .map_err(|e| ApiError::network(format!("Could not reach {server}: {e}")))?;
 
     if !resp.status().is_success() {
-        return Err(format!("active-intents returned HTTP {}", resp.status().as_u16()));
+        let status = resp.status().as_u16();
+        return Err(ApiError::http(status, format!("active-intents returned HTTP {status}")));
     }
 
     resp.json::<Vec<DeviceActionIntent>>()
         .await
-        .map_err(|e| format!("Unexpected active-intents response: {e}"))
+        .map_err(|e| ApiError::network(format!("Unexpected active-intents response: {e}")))
 }
 
 /// Acknowledges an excursion (`POST /api/v4/alerts/excursions/{id}/acknowledge`). Best-effort: wired

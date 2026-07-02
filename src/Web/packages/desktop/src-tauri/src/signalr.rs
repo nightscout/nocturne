@@ -11,6 +11,7 @@
 
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
+use std::collections::VecDeque;
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
@@ -27,6 +28,10 @@ pub struct HubConnection {
     /// across WS frames or coalesce several into one, so incoming payloads are appended here and only
     /// complete records (up to the last 0x1E) are parsed; the trailing remainder carries forward.
     buffer: String,
+    /// Parsed actions drained from the buffer but not yet returned. `recv` returns on the first
+    /// actionable record, so the rest of a coalesced batch waits here for the next `recv` instead of
+    /// being dropped.
+    pending: VecDeque<RecordAction>,
 }
 
 /// A parsed action to take for one complete record, decoupled from the socket so the framing +
@@ -126,7 +131,7 @@ impl HubConnection {
         });
         send_record(&mut ws, authorize.to_string().as_bytes()).await?;
 
-        Ok(Self { ws, buffer: String::new() })
+        Ok(Self { ws, buffer: String::new(), pending: VecDeque::new() })
     }
 
     /// Waits for the next hub event, answering pings transparently. Returns `HubEvent::Closed` when
@@ -134,10 +139,26 @@ impl HubConnection {
     /// consumed silently.
     ///
     /// Each WS payload is appended to the re-assembly buffer; only complete 0x1E-terminated records
-    /// are dispatched, so a record split across frames is held until its terminator arrives and
-    /// several coalesced into one frame are all processed.
+    /// are dispatched, so a record split across frames is held until its terminator arrives. Records
+    /// coalesced into one frame are all parsed onto the pending queue; each `recv` drains the queue
+    /// (answering pings) before reading the socket again, so a record behind the one returned is
+    /// delivered on the next call rather than lost.
     pub async fn recv(&mut self) -> Result<HubEvent, String> {
         loop {
+            while let Some(action) = self.pending.pop_front() {
+                match action {
+                    RecordAction::Pong => {
+                        let _ = send_record(&mut self.ws, br#"{"type":6}"#).await;
+                    }
+                    RecordAction::Close => return Ok(HubEvent::Closed),
+                    RecordAction::DeviceAction => return Ok(HubEvent::DeviceAction),
+                    RecordAction::DeviceNotification(mirror) => {
+                        return Ok(HubEvent::DeviceNotification(mirror))
+                    }
+                    RecordAction::Ignore => {}
+                }
+            }
+
             let msg = match self.ws.next().await {
                 Some(Ok(m)) => m,
                 Some(Err(e)) => return Err(format!("WebSocket error: {e}")),
@@ -155,21 +176,18 @@ impl HubConnection {
                 _ => continue,
             };
 
-            self.buffer.push_str(&payload);
-            for record in drain_complete_records(&mut self.buffer) {
-                match dispatch_record(&record) {
-                    RecordAction::Pong => {
-                        let _ = send_record(&mut self.ws, br#"{"type":6}"#).await;
-                    }
-                    RecordAction::Close => return Ok(HubEvent::Closed),
-                    RecordAction::DeviceAction => return Ok(HubEvent::DeviceAction),
-                    RecordAction::DeviceNotification(mirror) => {
-                        return Ok(HubEvent::DeviceNotification(mirror))
-                    }
-                    RecordAction::Ignore => {}
-                }
-            }
+            buffer_payload(&mut self.buffer, &mut self.pending, &payload);
         }
+    }
+}
+
+/// Appends one WS payload to the re-assembly buffer and parses every newly complete record onto the
+/// pending queue in arrival order. Split out of `recv` (no socket involved) so the coalescing
+/// behavior is unit-testable.
+fn buffer_payload(buffer: &mut String, pending: &mut VecDeque<RecordAction>, payload: &str) {
+    buffer.push_str(payload);
+    for record in drain_complete_records(buffer) {
+        pending.push_back(dispatch_record(&record));
     }
 }
 
@@ -240,10 +258,7 @@ fn parse_first_arg(value: &serde_json::Value) -> Option<DeviceNotificationMirror
 /// `POST {server}/hubs/data/negotiate?negotiateVersion=1` (bearer) → connection token. Honours a
 /// one-hop redirect (`url`/`accessToken`) if the server returns one, falling back to connectionId.
 async fn negotiate(server: &str, token: &str) -> Result<String, String> {
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(cfg!(debug_assertions))
-        .build()
-        .map_err(|e| format!("could not build client: {e}"))?;
+    let client = crate::http::client()?;
 
     let resp = client
         .post(format!("{server}/hubs/data/negotiate?negotiateVersion=1"))
@@ -363,6 +378,40 @@ mod tests {
         assert!(matches!(dispatch_record(&records[1]), RecordAction::DeviceAction));
         // Both records were terminated, so nothing carries forward.
         assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn coalesced_actionable_records_are_all_queued_in_order() {
+        // Two actionable records (plus a ping between them) in one coalesced frame: all three are
+        // queued, so the ones behind the first returned event are delivered, not dropped, and the
+        // mid-batch ping is still answered before the next socket read.
+        let mut buf = String::new();
+        let mut pending = VecDeque::new();
+        let frame = format!(
+            "{{\"type\":1,\"target\":\"device_action\"}}{RS}\
+             {{\"type\":6}}{RS}\
+             {{\"type\":1,\"target\":\"device_notification\",\"arguments\":[\
+               {{\"userId\":\"u1\",\"notification\":{{\"id\":\"n1\",\"title\":\"t\"}}}}]}}{RS}"
+        );
+        buffer_payload(&mut buf, &mut pending, &frame);
+        assert_eq!(pending.len(), 3);
+        assert!(matches!(pending[0], RecordAction::DeviceAction));
+        assert!(matches!(pending[1], RecordAction::Pong));
+        assert!(matches!(pending[2], RecordAction::DeviceNotification(_)));
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn buffer_payload_holds_partial_record_across_calls() {
+        let mut buf = String::new();
+        let mut pending = VecDeque::new();
+        let full = format!("{{\"type\":1,\"target\":\"device_action\"}}{RS}");
+        let split = full.len() / 2;
+        buffer_payload(&mut buf, &mut pending, &full[..split]);
+        assert!(pending.is_empty());
+        buffer_payload(&mut buf, &mut pending, &full[split..]);
+        assert_eq!(pending.len(), 1);
+        assert!(matches!(pending[0], RecordAction::DeviceAction));
     }
 
     #[test]

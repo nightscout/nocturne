@@ -8,8 +8,10 @@
 //!   banner with a normal duration, no alarm scenario and no action buttons.
 //!
 //! The Acknowledge button's activation runs on a WinRT event-handler thread, so the closure owns the
-//! server URL, bearer token, and excursion id and spawns the ack HTTP call on the provided Tokio
-//! runtime handle (`on_activated` requires a `'static` closure).
+//! server URL and excursion id and spawns the ack HTTP call on the provided Tokio runtime handle
+//! (`on_activated` requires a `'static` closure). The bearer token is deliberately NOT captured:
+//! critical toasts persist until dismissed, which can be long past the reconcile-time token's expiry,
+//! so a fresh token is resolved when the button is clicked.
 
 use crate::client_devices::DeviceActionIntent;
 use crate::signalr::InAppNotification;
@@ -26,12 +28,11 @@ const MMOL_PER_MGDL: f64 = 18.0182;
 /// Who an ack from this toast is attributed to server-side (`acknowledgedBy`).
 const ACK_BY: &str = "desktop-companion";
 
-/// Context the ack button needs to call the acknowledge endpoint, captured into the toast's
-/// activation closure.
+/// What identifies the ack, captured into the toast's activation closure. The token is resolved
+/// fresh at click time (see module docs), so only the target server and excursion are carried.
 #[derive(Clone)]
 pub struct AckContext {
     pub server: String,
-    pub token: String,
     pub excursion_id: String,
     pub runtime: tokio::runtime::Handle,
 }
@@ -57,31 +58,35 @@ pub fn show(intent: &DeviceActionIntent, ack: Option<AckContext>) -> Result<(), 
         toast = toast.on_activated(move |action| {
             if action.as_deref() == Some(ACK_ACTION) {
                 let ack = ack.clone();
-                ack.runtime.spawn(async move {
-                    let client = match reqwest::Client::builder()
-                        .danger_accept_invalid_certs(cfg!(debug_assertions))
-                        .build()
-                    {
-                        Ok(c) => c,
-                        Err(e) => {
-                            eprintln!("alert ack: could not build client: {e}");
-                            return;
-                        }
-                    };
-                    if let Err(e) = crate::client_devices::acknowledge(
-                        &client, &ack.server, &ack.token, &ack.excursion_id, ACK_BY,
-                    )
-                    .await
-                    {
-                        eprintln!("alert ack: {e}");
-                    }
-                });
+                let runtime = ack.runtime.clone();
+                runtime.spawn(async move { acknowledge_excursion(&ack).await });
             }
             Ok(())
         });
     }
 
     toast.show().map_err(|e| format!("could not show toast: {e}"))
+}
+
+/// Posts the acknowledge for `ack`, resolving a fresh token at click time. On failure the error is
+/// logged and a plain notification toast reports that the acknowledge did not go through.
+async fn acknowledge_excursion(ack: &AckContext) {
+    let result = async {
+        let client = crate::http::client()?;
+        let (_, token) = crate::auth::get_valid_token(&client).await.map_err(|e| e.to_string())?;
+        crate::client_devices::acknowledge(&client, &ack.server, &token, &ack.excursion_id, ACK_BY)
+            .await
+    }
+    .await;
+
+    if let Err(e) = result {
+        eprintln!("alert ack: {e}");
+        let _ = show_notification(&InAppNotification {
+            id: format!("ack-failed-{}", ack.excursion_id),
+            title: "Alert not acknowledged".to_string(),
+            subtitle: Some("The acknowledge request failed. Acknowledge it in Nocturne.".to_string()),
+        });
+    }
 }
 
 /// Shows an ambient notification toast mirroring an in-app notification. Unlike `show`, this is a

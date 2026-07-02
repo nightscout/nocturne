@@ -68,6 +68,23 @@ struct OAuthError {
     error_description: Option<String>,
 }
 
+/// Why a token could not be produced. `NotLinked` is definitive — there is no usable credential
+/// (never linked, or the refresh grant was rejected) and only a relink fixes it. `Transient` should
+/// be retried with the same credential.
+#[derive(Debug)]
+pub enum TokenError {
+    NotLinked(String),
+    Transient(String),
+}
+
+impl std::fmt::Display for TokenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenError::NotLinked(m) | TokenError::Transient(m) => f.write_str(m),
+        }
+    }
+}
+
 /// Shown to the user to complete the device-authorization ceremony.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -194,15 +211,18 @@ pub async fn await_authorization(
 }
 
 /// Returns `(api_url, access_token)` for the poller, refreshing the access token first if it is
-/// within `REFRESH_SKEW_SECS` of expiry. Errors if there are no stored credentials (the user
-/// must link) or the refresh fails (re-link needed).
-pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String), String> {
-    let creds = load().ok_or("Not linked to a Nocturne server yet.")?;
+/// within `REFRESH_SKEW_SECS` of expiry. `TokenError::NotLinked` means there is no usable
+/// credential (never linked, or the refresh grant was rejected — re-link needed);
+/// `TokenError::Transient` means the refresh should be retried later.
+pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String), TokenError> {
+    let creds = load().ok_or_else(|| TokenError::NotLinked("Not linked to a Nocturne server yet.".to_string()))?;
     if now_unix() < creds.expires_at_unix - REFRESH_SKEW_SECS {
         return Ok((creds.api_url, creds.access_token));
     }
     if creds.refresh_token.is_empty() {
-        return Err("Session expired and there is no refresh token; please link again.".to_string());
+        return Err(TokenError::NotLinked(
+            "Session expired and there is no refresh token; please link again.".to_string(),
+        ));
     }
 
     let resp = client
@@ -214,16 +234,26 @@ pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String
         ])
         .send()
         .await
-        .map_err(|e| format!("Could not reach {}: {e}", creds.api_url))?;
+        .map_err(|e| TokenError::Transient(format!("Could not reach {}: {e}", creds.api_url)))?;
 
     if !resp.status().is_success() {
-        return Err(format!("Token refresh failed ({}); please link again.", oauth_error(resp).await));
+        let status = resp.status().as_u16();
+        return Err(match resp.json::<OAuthError>().await {
+            // `invalid_grant` means the refresh token itself was rejected (revoked/expired): the
+            // stored credential is dead. Any other error could be transient.
+            Ok(e) if e.error == "invalid_grant" => TokenError::NotLinked(format!(
+                "Token refresh was rejected ({}); please link again.",
+                describe_oauth(&e)
+            )),
+            Ok(e) => TokenError::Transient(format!("Token refresh failed ({}).", describe_oauth(&e))),
+            Err(_) => TokenError::Transient(format!("Token refresh failed (HTTP {status}).")),
+        });
     }
 
     let token: TokenResponse = resp
         .json()
         .await
-        .map_err(|e| format!("Unexpected refresh response: {e}"))?;
+        .map_err(|e| TokenError::Transient(format!("Unexpected refresh response: {e}")))?;
 
     let refreshed = StoredCreds {
         api_url: creds.api_url.clone(),
@@ -237,12 +267,18 @@ pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String
             .map(|s| s.split_whitespace().map(str::to_string).collect())
             .unwrap_or(creds.scopes),
     };
-    store(&refreshed)?;
+    store(&refreshed).map_err(TokenError::Transient)?;
     Ok((refreshed.api_url, token.access_token))
 }
 
 pub fn is_linked() -> bool {
     load().is_some()
+}
+
+/// The scopes granted to the stored credential, if linked. Empty when the server did not echo a
+/// `scope` on the token response (callers should treat that as unknown, not missing).
+pub fn granted_scopes() -> Option<Vec<String>> {
+    load().map(|c| c.scopes)
 }
 
 /// Extracts the `sub` (subject id) claim from a JWT access token without verifying its signature —
@@ -357,11 +393,16 @@ async fn oauth_error_code(resp: reqwest::Response) -> String {
 async fn oauth_error(resp: reqwest::Response) -> String {
     let status = resp.status().as_u16();
     match resp.json::<OAuthError>().await {
-        Ok(e) => match e.error_description {
-            Some(d) => format!("{}: {d}", e.error),
-            None => e.error,
-        },
+        Ok(e) => describe_oauth(&e),
         Err(_) => format!("HTTP {status}"),
+    }
+}
+
+/// `error: error_description` when a description is present, else just the code.
+fn describe_oauth(e: &OAuthError) -> String {
+    match &e.error_description {
+        Some(d) => format!("{}: {d}", e.error),
+        None => e.error.clone(),
     }
 }
 

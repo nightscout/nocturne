@@ -10,15 +10,22 @@
 //! (`notify` → toast, `tray_flash` → flash), so an intent can drive both. Reconcile runs on connect,
 //! on every `device_action`, and on a ~30s interval.
 //!
+//! Registration happens once per process and the device id is reused across sessions; it is
+//! re-resolved only when the server invalidates it (401/404 on the snapshot, 409 on register) or the
+//! credential changes (unlink). A definitive credential loss (unlink/revoked grant) withdraws every
+//! active actuation; transient failures keep state so nothing is spuriously withdrawn.
+//!
 //! Transport is the hand-rolled `signalr` client; if a connection attempt fails the loop falls back
 //! to pure periodic reconcile until the next reconnect succeeds, so actuation degrades to polling
 //! rather than stopping.
 
+use crate::auth::{self, TokenError};
 use crate::client_devices::{self, DeviceActionIntent};
 use crate::signalr::DeviceNotificationMirror;
 use crate::toast::{self, AckContext};
 use crate::tray;
 use std::collections::{HashSet, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -74,56 +81,183 @@ const RECONCILE_SECS: u64 = 30;
 const SESSION_SECS: u64 = 25 * 60;
 /// Backoff before retrying SignalR when a connect fails; periodic reconcile still runs in the gap.
 const RECONNECT_SECS: u64 = 30;
+/// Backoff after the server refuses registration (403) — the grant/user cannot register, so retrying
+/// at the reconcile cadence buys nothing; a relink restarts registration promptly via `on_unlink`.
+const REGISTER_BACKOFF_SECS: u64 = 15 * 60;
+
+/// Set while the stored grant cannot drive device alerts: it lacks the device scopes, or the server
+/// refuses this install's registration (403). Read by the `companion_link_status` command; cleared
+/// on a successful registration or an unlink.
+static NEEDS_RELINK: AtomicBool = AtomicBool::new(false);
+
+/// Set by `on_unlink` so the loop drops its per-excursion state and registration on its next pass
+/// (the tray flashes are already stopped synchronously by `on_unlink`).
+static RESET_STATE: AtomicBool = AtomicBool::new(false);
+
+pub fn needs_relink() -> bool {
+    NEEDS_RELINK.load(Ordering::SeqCst)
+}
+
+/// Called when the user unlinks: withdraws every actuation immediately (stops all flashes and
+/// repaints the tray) and flags the actuation loop to reset its state and registration.
+pub fn on_unlink(app: &tauri::AppHandle) {
+    NEEDS_RELINK.store(false, Ordering::SeqCst);
+    RESET_STATE.store(true, Ordering::SeqCst);
+    tray::stop_all_flashes(app);
+}
 
 /// Drives registration + actuation for as long as the app runs. Idles (retrying) while unlinked,
 /// resolving `(server, token)` via the same durable-OAuth path the glucose poller uses.
 pub async fn run(app: tauri::AppHandle) {
-    let install_id = crate::install_id::get_or_create();
+    let mut install_id = crate::install_id::get_or_create();
     let label = machine_label();
     let runtime = tokio::runtime::Handle::current();
 
+    let client = match crate::http::client() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("alert actuation: {e}");
+            return;
+        }
+    };
+
     let mut state = ActuationState::default();
+    // Registration is per-process: kept across sessions, dropped only when invalidated.
+    let mut device_id: Option<String> = None;
 
     loop {
-        // Resolve a token; if unlinked or refresh fails, wait and retry (mirrors the glucose poller).
-        let client = match http_client() {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("alert actuation: {e}");
+        if RESET_STATE.swap(false, Ordering::SeqCst) {
+            clear_actuations(&mut state);
+            device_id = None;
+        }
+
+        // A grant without the device scopes would 403 on register forever (pre-upgrade tokens:
+        // refresh never re-scopes), so surface the relink-needed state and idle instead of hammering
+        // the endpoint. Only a relink changes the stored scopes.
+        if let Some(scopes) = auth::granted_scopes() {
+            if !scopes.is_empty() && !has_device_scopes(&scopes) {
+                NEEDS_RELINK.store(true, Ordering::SeqCst);
                 tokio::time::sleep(Duration::from_secs(RECONCILE_SECS)).await;
                 continue;
             }
-        };
-        let (server, token) = match crate::auth_token(&client).await {
+        }
+
+        let (server, token) = match auth::get_valid_token(&client).await {
             Ok(pair) => pair,
-            Err(_) => {
+            Err(TokenError::NotLinked(_)) => {
+                // Definitively unlinked/revoked: withdraw everything and idle until a relink.
+                withdraw_all(&app, &mut state);
+                device_id = None;
+                tokio::time::sleep(Duration::from_secs(RECONCILE_SECS)).await;
+                continue;
+            }
+            Err(TokenError::Transient(e)) => {
+                eprintln!("alert actuation: token: {e}");
                 tokio::time::sleep(Duration::from_secs(RECONCILE_SECS)).await;
                 continue;
             }
         };
 
-        // Register (idempotent) to get this install's server device id.
-        let device_id = match client_devices::register(&client, &server, &token, &install_id, &label).await {
-            Ok(id) => id,
-            Err(e) => {
-                eprintln!("alert actuation: register: {e}");
-                tokio::time::sleep(Duration::from_secs(RECONCILE_SECS)).await;
-                continue;
-            }
+        let session_device_id = match &device_id {
+            Some(id) => id.clone(),
+            None => match register_install(&client, &server, &token, &mut install_id, &label).await {
+                Ok(id) => {
+                    NEEDS_RELINK.store(false, Ordering::SeqCst);
+                    device_id = Some(id.clone());
+                    id
+                }
+                Err(retry_secs) => {
+                    tokio::time::sleep(Duration::from_secs(retry_secs)).await;
+                    continue;
+                }
+            },
         };
 
         // One session: hold a SignalR connection (best-effort) and reconcile on connect, on each
-        // device_action, and on the periodic tick. Returns when the session ages out or the
-        // connection drops, so the outer loop re-resolves the token and re-registers. The pair just
-        // resolved for registration is reused for this session's connect + first reconcile.
-        run_session(&app, &client, (server, token), &device_id, &mut state, &runtime).await;
+        // device_action, and on the periodic tick. Returns when the session ages out, the connection
+        // drops, or the registration/credential is invalidated. The pair just resolved above is
+        // reused for the session's connect + first reconcile.
+        match run_session(&app, &client, (server, token), &session_device_id, &mut state, &runtime).await
+        {
+            SessionEnd::Recycle => {}
+            SessionEnd::InvalidateRegistration => device_id = None,
+        }
     }
 }
 
-/// Runs one actuation session until it should be torn down (connection lost or session age-out).
-/// Spawns the SignalR receive task (if it connects) and owns the reconcile timer. `creds` is the
-/// `(server, token)` pair the outer loop resolved for registration; it is reused for this session's
-/// SignalR connect and first reconcile so a single refresh covers both.
+/// What the registration loop should do about a failed register, by HTTP status.
+#[derive(Debug, PartialEq, Eq)]
+enum RegisterRecovery {
+    /// 409: the install id is registered to another subject — regenerate the id and retry once.
+    RegenerateId,
+    /// 403: this user/grant may not register actuation devices — back off and surface needs-relink.
+    NeedsRelink,
+    /// Anything else — transient; retry at the normal cadence.
+    Retry,
+}
+
+fn classify_register_error(status: Option<u16>) -> RegisterRecovery {
+    match status {
+        Some(409) => RegisterRecovery::RegenerateId,
+        Some(403) => RegisterRecovery::NeedsRelink,
+        _ => RegisterRecovery::Retry,
+    }
+}
+
+/// Registers this install, recovering from a 409 (install id owned by another subject — the old
+/// device row stays until its owner revokes it) by regenerating the id and retrying once. Returns
+/// the server device id, or how many seconds the caller should wait before the next attempt. Sets
+/// `NEEDS_RELINK` when the server refuses with 403.
+async fn register_install(
+    client: &reqwest::Client,
+    server: &str,
+    token: &str,
+    install_id: &mut String,
+    label: &str,
+) -> Result<String, u64> {
+    let mut regenerated = false;
+    loop {
+        match client_devices::register(client, server, token, install_id, label).await {
+            Ok(id) => return Ok(id),
+            Err(e) => {
+                eprintln!("alert actuation: register: {e}");
+                match classify_register_error(e.status) {
+                    RegisterRecovery::RegenerateId if !regenerated => {
+                        regenerated = true;
+                        *install_id = crate::install_id::regenerate();
+                    }
+                    RegisterRecovery::NeedsRelink => {
+                        NEEDS_RELINK.store(true, Ordering::SeqCst);
+                        return Err(REGISTER_BACKOFF_SECS);
+                    }
+                    _ => return Err(RECONCILE_SECS),
+                }
+            }
+        }
+    }
+}
+
+/// Whether `scopes` includes both scopes device actuation needs (`device.notify` for toasts,
+/// `device.actuate` for tray flash). An empty list means the server did not echo scopes — the caller
+/// treats that as unknown, not missing.
+fn has_device_scopes(scopes: &[String]) -> bool {
+    ["device.notify", "device.actuate"]
+        .iter()
+        .all(|required| scopes.iter().any(|s| s == required))
+}
+
+/// Why a session ended: `Recycle` reconnects with the same registration; `InvalidateRegistration`
+/// makes the outer loop re-register (device id rejected, or the credential is gone).
+enum SessionEnd {
+    Recycle,
+    InvalidateRegistration,
+}
+
+/// Runs one actuation session until it should be torn down (connection lost, session age-out, or the
+/// registration/credential invalidated). Spawns the SignalR receive task (if it connects) and owns
+/// the reconcile timer. `creds` is the `(server, token)` pair the outer loop resolved for
+/// registration; it is reused for this session's SignalR connect and first reconcile so a single
+/// refresh covers both.
 async fn run_session(
     app: &tauri::AppHandle,
     client: &reqwest::Client,
@@ -131,7 +265,7 @@ async fn run_session(
     device_id: &str,
     state: &mut ActuationState,
     runtime: &tokio::runtime::Handle,
-) {
+) -> SessionEnd {
     // Channel the SignalR task uses to relay hub events to this loop.
     let (tx, mut rx) = mpsc::channel::<HubMessage>(16);
 
@@ -153,39 +287,61 @@ async fn run_session(
             }
         };
 
+    let mut end = SessionEnd::Recycle;
+
     // Reconcile immediately on (re)connect, reusing the token already resolved for `connect`.
-    reconcile_with(app, client, device_id, state, runtime, Some((server, token))).await;
+    if ends_session(reconcile_with(app, client, device_id, state, runtime, Some((server, token))).await)
+    {
+        end = SessionEnd::InvalidateRegistration;
+    } else {
+        let mut ticker = tokio::time::interval(Duration::from_secs(RECONCILE_SECS));
+        ticker.tick().await; // consume the immediate first tick.
 
-    let mut ticker = tokio::time::interval(Duration::from_secs(RECONCILE_SECS));
-    ticker.tick().await; // consume the immediate first tick.
+        // Bound the session so the token gets refreshed and (if dropped) the connection re-establishes.
+        let session_deadline = tokio::time::Instant::now() + Duration::from_secs(session_secs);
 
-    // Bound the session so the token gets refreshed and (if dropped) the connection re-establishes.
-    let session_deadline = tokio::time::Instant::now() + Duration::from_secs(session_secs);
-
-    loop {
-        tokio::select! {
-            _ = ticker.tick() => {
-                reconcile(app, client, device_id, state, runtime).await;
-            }
-            msg = rx.recv() => {
-                match msg {
-                    // A device_action arrived: reconcile now (idempotent against the periodic poll).
-                    Some(HubMessage::DeviceAction) => reconcile(app, client, device_id, state, runtime).await,
-                    // An in-app notification mirror: surface it directly (no snapshot to reconcile).
-                    Some(HubMessage::Notification(mirror)) => {
-                        handle_notification(&mirror, subject_id.as_deref(), &mut state.seen_notifications);
-                    }
-                    // SignalR task ended (disconnect). Leave the session to reconnect.
-                    None => break,
+        loop {
+            let outcome = tokio::select! {
+                _ = ticker.tick() => {
+                    Some(reconcile(app, client, device_id, state, runtime).await)
                 }
+                msg = rx.recv() => {
+                    match msg {
+                        // A device_action arrived: reconcile now (idempotent against the periodic poll).
+                        Some(HubMessage::DeviceAction) => {
+                            Some(reconcile(app, client, device_id, state, runtime).await)
+                        }
+                        // An in-app notification mirror: surface it directly (no snapshot to reconcile).
+                        Some(HubMessage::Notification(mirror)) => {
+                            handle_notification(&mirror, subject_id.as_deref(), &mut state.seen_notifications);
+                            None
+                        }
+                        // SignalR task ended (disconnect). Leave the session to reconnect.
+                        None => break,
+                    }
+                }
+                _ = tokio::time::sleep_until(session_deadline) => break,
+            };
+
+            if outcome.is_some_and(ends_session) {
+                end = SessionEnd::InvalidateRegistration;
+                break;
             }
-            _ = tokio::time::sleep_until(session_deadline) => break,
         }
     }
 
     if let Some(task) = signalr_task {
         task.abort();
     }
+    end
+}
+
+/// Whether a reconcile outcome should tear the session down and re-resolve registration.
+fn ends_session(outcome: ReconcileOutcome) -> bool {
+    matches!(
+        outcome,
+        ReconcileOutcome::NotLinked | ReconcileOutcome::InvalidRegistration
+    )
 }
 
 /// Toasts a `device_notification` mirror if it should be surfaced (see `should_surface_notification`).
@@ -250,6 +406,18 @@ fn spawn_signalr(
     })
 }
 
+/// Outcome of one reconcile pass, for the session/outer loop to react to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReconcileOutcome {
+    Ok,
+    /// Credentials are definitively gone/revoked; all actuations were withdrawn.
+    NotLinked,
+    /// The server rejected the device id (401/404) — re-register.
+    InvalidRegistration,
+    /// Transient failure; actuation state kept so nothing is spuriously withdrawn.
+    Transient,
+}
+
 /// Reconcile that re-resolves `(server, token)` itself — used by the periodic tick and the
 /// `device_action` nudge so it rides the same refresh the poller does and picks up a re-link without
 /// restarting the session.
@@ -259,16 +427,16 @@ async fn reconcile(
     device_id: &str,
     state: &mut ActuationState,
     runtime: &tokio::runtime::Handle,
-) {
-    reconcile_with(app, client, device_id, state, runtime, None).await;
+) -> ReconcileOutcome {
+    reconcile_with(app, client, device_id, state, runtime, None).await
 }
 
-/// Diffs the server's active intents against the actuation state and drives each capability: new
-/// excursions toast (`notify`) and/or start a tray flash (`tray_flash`); excursions that leave the
-/// active set have their toast dedup dropped and their flash stopped. Idempotent — re-running with an
-/// unchanged server state is a no-op. Acknowledged intents are dropped (no re-actuation). `creds`
-/// reuses a token already resolved this cycle (the first reconcile of a session); `None` resolves a
-/// fresh one.
+/// Fetches the active-intents snapshot and applies the per-capability diff (`reconcile_effects`):
+/// new excursions toast (`notify`) and/or start a tray flash (`tray_flash`); excursions that leave
+/// the active set have their toast dedup dropped and their flash stopped. Idempotent — re-running
+/// with an unchanged server state is a no-op. A definitive credential loss withdraws every actuation;
+/// transient failures keep state. `creds` reuses a token already resolved this cycle (the first
+/// reconcile of a session); `None` resolves a fresh one.
 async fn reconcile_with(
     app: &tauri::AppHandle,
     client: &reqwest::Client,
@@ -276,14 +444,18 @@ async fn reconcile_with(
     state: &mut ActuationState,
     runtime: &tokio::runtime::Handle,
     creds: Option<(String, String)>,
-) {
+) -> ReconcileOutcome {
     let (server, token) = match creds {
         Some(pair) => pair,
-        None => match crate::auth_token(client).await {
+        None => match auth::get_valid_token(client).await {
             Ok(pair) => pair,
-            Err(e) => {
+            Err(TokenError::NotLinked(_)) => {
+                withdraw_all(app, state);
+                return ReconcileOutcome::NotLinked;
+            }
+            Err(TokenError::Transient(e)) => {
                 eprintln!("alert actuation: reconcile token: {e}");
-                return;
+                return ReconcileOutcome::Transient;
             }
         },
     };
@@ -292,50 +464,92 @@ async fn reconcile_with(
         Ok(i) => i,
         Err(e) => {
             eprintln!("alert actuation: active-intents: {e}");
-            return;
+            return match e.status {
+                Some(401) | Some(404) => ReconcileOutcome::InvalidRegistration,
+                _ => ReconcileOutcome::Transient,
+            };
         }
     };
 
+    let effects = reconcile_effects(state, &intents);
+    for intent in &effects.toast {
+        show_toast(intent, &server, runtime);
+    }
+    for id in &effects.flash_start {
+        tray::set_tray_flash(app, id, true);
+    }
+    for id in &effects.flash_stop {
+        tray::set_tray_flash(app, id, false);
+    }
+    ReconcileOutcome::Ok
+}
+
+/// What one reconcile pass actuates/withdraws — the pure per-capability diff of the server's active
+/// intents against the local actuation state. Shared by `reconcile_with` and the unit tests, so the
+/// algorithm under test is the one that ships.
+#[derive(Default, Debug, PartialEq)]
+struct ReconcileEffects {
+    /// Intents to toast (`notify` newly active).
+    toast: Vec<DeviceActionIntent>,
+    /// Excursions whose tray flash starts.
+    flash_start: Vec<String>,
+    /// Excursions whose tray flash stops.
+    flash_stop: Vec<String>,
+}
+
+fn reconcile_effects(state: &mut ActuationState, intents: &[DeviceActionIntent]) -> ReconcileEffects {
     let active: HashSet<String> = intents
         .iter()
         .filter(|i| i.is_active())
         .map(|i| i.excursion_id.clone())
         .collect();
 
+    let mut effects = ReconcileEffects::default();
+
     // New actuations per capability: fire once per excursion (HashSet::insert is the dedup gate).
     for intent in intents.iter().filter(|i| i.is_active()) {
         if intent.wants_notify() && state.notified.insert(intent.excursion_id.clone()) {
-            show_toast(intent, &server, &token, runtime);
+            effects.toast.push(intent.clone());
         }
         if intent.wants_tray_flash() && state.flashing.insert(intent.excursion_id.clone()) {
-            tray::set_tray_flash(app, &intent.excursion_id, true);
+            effects.flash_start.push(intent.excursion_id.clone());
         }
     }
 
     // Withdrawn excursions: actuating locally but no longer active server-side → clear. Windows owns
     // the toast lifecycle (the alarm scenario persists until dismissed), so notify only drops its
-    // dedup record; tray_flash is companion-owned, so each stopped excursion is told to stop and the
-    // tray restores the normal icon once the last flash clears. Dropping the dedup record lets a
-    // later re-open of the same excursion id actuate again.
+    // dedup record; tray_flash is companion-owned, so each stopped excursion is reported for an
+    // explicit stop. Dropping the dedup record lets a later re-open of the same excursion id actuate
+    // again.
     state.notified.retain(|id| active.contains(id));
-
-    let stopped: Vec<String> = state.flashing.difference(&active).cloned().collect();
-    for id in stopped {
-        state.flashing.remove(&id);
-        tray::set_tray_flash(app, &id, false);
+    effects.flash_stop = state.flashing.difference(&active).cloned().collect();
+    for id in &effects.flash_stop {
+        state.flashing.remove(id);
     }
+
+    effects
 }
 
-/// Shows the toast for `intent`, wiring the Acknowledge button to the ack endpoint.
-fn show_toast(
-    intent: &DeviceActionIntent,
-    server: &str,
-    token: &str,
-    runtime: &tokio::runtime::Handle,
-) {
+/// Withdraws every active actuation: clears the per-excursion state and stops all tray flashes
+/// (restoring the normal icon). For definitive credential loss (unlink/revoked) — a transient
+/// failure must NOT come through here.
+fn withdraw_all(app: &tauri::AppHandle, state: &mut ActuationState) {
+    clear_actuations(state);
+    tray::stop_all_flashes(app);
+}
+
+/// Clears the per-excursion actuation sets. The notification dedup is kept — redelivery suppression
+/// stays valid across a relink.
+fn clear_actuations(state: &mut ActuationState) {
+    state.notified.clear();
+    state.flashing.clear();
+}
+
+/// Shows the toast for `intent`, wiring the Acknowledge button to the ack endpoint. The ack context
+/// carries no token — the toast can outlive it; a fresh one is resolved at click time.
+fn show_toast(intent: &DeviceActionIntent, server: &str, runtime: &tokio::runtime::Handle) {
     let ack = AckContext {
         server: server.to_string(),
-        token: token.to_string(),
         excursion_id: intent.excursion_id.clone(),
         runtime: runtime.clone(),
     };
@@ -352,17 +566,10 @@ fn machine_label() -> String {
         .unwrap_or_else(|| "Desktop Companion".to_string())
 }
 
-fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .danger_accept_invalid_certs(cfg!(debug_assertions))
-        .build()
-        .map_err(|e| format!("could not create HTTP client: {e}"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client_devices::{DeviceActionIntent, NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY};
+    use crate::client_devices::{NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY};
 
     fn intent(id: &str, active: bool, acked: bool, caps: &[&str]) -> DeviceActionIntent {
         DeviceActionIntent {
@@ -377,48 +584,19 @@ mod tests {
         }
     }
 
-    /// What one reconcile actuated, mirroring `reconcile_with`'s per-capability diff without the HTTP
-    /// or OS side effects — the pure dedup logic under test.
-    #[derive(Default, Debug, PartialEq, Eq)]
-    struct Effects {
-        toasted: Vec<String>,
-        flash_started: Vec<String>,
-        flash_stopped: Vec<String>,
-    }
-
-    fn reconcile_effects(state: &mut ActuationState, intents: &[DeviceActionIntent]) -> Effects {
-        let active: HashSet<String> = intents
-            .iter()
-            .filter(|i| i.is_active())
-            .map(|i| i.excursion_id.clone())
-            .collect();
-
-        let mut fx = Effects::default();
-        for i in intents.iter().filter(|i| i.is_active()) {
-            if i.wants_notify() && state.notified.insert(i.excursion_id.clone()) {
-                fx.toasted.push(i.excursion_id.clone());
-            }
-            if i.wants_tray_flash() && state.flashing.insert(i.excursion_id.clone()) {
-                fx.flash_started.push(i.excursion_id.clone());
-            }
+    impl ReconcileEffects {
+        fn toasted_ids(&self) -> Vec<&str> {
+            self.toast.iter().map(|i| i.excursion_id.as_str()).collect()
         }
-
-        state.notified.retain(|id| active.contains(id));
-        let stopped: Vec<String> = state.flashing.difference(&active).cloned().collect();
-        for id in &stopped {
-            state.flashing.remove(id);
-        }
-        fx.flash_stopped = stopped;
-        fx
     }
 
     #[test]
     fn new_excursion_toasts_once_then_is_deduped() {
         let mut state = ActuationState::default();
         let intents = vec![intent("a", true, false, &[NOTIFY_CAPABILITY])];
-        assert_eq!(reconcile_effects(&mut state, &intents).toasted, vec!["a".to_string()]);
+        assert_eq!(reconcile_effects(&mut state, &intents).toasted_ids(), vec!["a"]);
         // Same active state on the next reconcile → no new toast.
-        assert!(reconcile_effects(&mut state, &intents).toasted.is_empty());
+        assert!(reconcile_effects(&mut state, &intents).toast.is_empty());
     }
 
     #[test]
@@ -426,12 +604,12 @@ mod tests {
         let mut state = ActuationState::default();
         reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])]);
         // Resolved → removed from the notified set.
-        assert!(reconcile_effects(&mut state, &[intent("a", false, false, &[NOTIFY_CAPABILITY])]).toasted.is_empty());
+        assert!(reconcile_effects(&mut state, &[intent("a", false, false, &[NOTIFY_CAPABILITY])]).toast.is_empty());
         assert!(!state.notified.contains("a"));
         // Re-open of the same id toasts again.
         assert_eq!(
-            reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])]).toasted,
-            vec!["a".to_string()]
+            reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])]).toasted_ids(),
+            vec!["a"]
         );
     }
 
@@ -439,8 +617,8 @@ mod tests {
     fn acknowledged_excursion_is_not_actuated() {
         let mut state = ActuationState::default();
         let fx = reconcile_effects(&mut state, &[intent("a", true, true, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])]);
-        assert!(fx.toasted.is_empty());
-        assert!(fx.flash_started.is_empty());
+        assert!(fx.toast.is_empty());
+        assert!(fx.flash_start.is_empty());
         assert!(!state.notified.contains("a"));
         assert!(!state.flashing.contains("a"));
     }
@@ -449,18 +627,18 @@ mod tests {
     fn closed_while_offline_produces_nothing() {
         // The companion was offline for the whole excursion; the snapshot is empty on reconnect.
         let mut state = ActuationState::default();
-        assert_eq!(reconcile_effects(&mut state, &[]), Effects::default());
+        assert_eq!(reconcile_effects(&mut state, &[]), ReconcileEffects::default());
     }
 
     #[test]
     fn tray_flash_starts_once_then_is_deduped() {
         let mut state = ActuationState::default();
         let intents = vec![intent("a", true, false, &[TRAY_FLASH_CAPABILITY])];
-        assert_eq!(reconcile_effects(&mut state, &intents).flash_started, vec!["a".to_string()]);
+        assert_eq!(reconcile_effects(&mut state, &intents).flash_start, vec!["a".to_string()]);
         // Same active state next reconcile → no restart (don't re-flash every 30s poll).
         let fx = reconcile_effects(&mut state, &intents);
-        assert!(fx.flash_started.is_empty());
-        assert!(fx.flash_stopped.is_empty());
+        assert!(fx.flash_start.is_empty());
+        assert!(fx.flash_stop.is_empty());
     }
 
     #[test]
@@ -469,11 +647,11 @@ mod tests {
         reconcile_effects(&mut state, &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])]);
         // Resolved → flash stops and the dedup record clears.
         let fx = reconcile_effects(&mut state, &[intent("a", false, false, &[TRAY_FLASH_CAPABILITY])]);
-        assert_eq!(fx.flash_stopped, vec!["a".to_string()]);
+        assert_eq!(fx.flash_stop, vec!["a".to_string()]);
         assert!(!state.flashing.contains("a"));
         // Re-open flashes again.
         assert_eq!(
-            reconcile_effects(&mut state, &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])]).flash_started,
+            reconcile_effects(&mut state, &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])]).flash_start,
             vec!["a".to_string()]
         );
     }
@@ -485,17 +663,58 @@ mod tests {
             &mut state,
             &[intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])],
         );
-        assert_eq!(fx.toasted, vec!["a".to_string()]);
-        assert_eq!(fx.flash_started, vec!["a".to_string()]);
+        assert_eq!(fx.toasted_ids(), vec!["a"]);
+        assert_eq!(fx.flash_start, vec!["a".to_string()]);
     }
 
     #[test]
     fn notify_only_intent_does_not_flash() {
         let mut state = ActuationState::default();
         let fx = reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])]);
-        assert_eq!(fx.toasted, vec!["a".to_string()]);
-        assert!(fx.flash_started.is_empty());
+        assert_eq!(fx.toasted_ids(), vec!["a"]);
+        assert!(fx.flash_start.is_empty());
         assert!(!state.flashing.contains("a"));
+    }
+
+    #[test]
+    fn withdraw_all_clears_state_and_next_reconcile_reactuates() {
+        let mut state = ActuationState::default();
+        let intents = vec![intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])];
+        reconcile_effects(&mut state, &intents);
+        assert!(state.notified.contains("a"));
+        assert!(state.flashing.contains("a"));
+
+        // Definitive credential loss withdraws everything…
+        clear_actuations(&mut state);
+        assert!(state.notified.is_empty());
+        assert!(state.flashing.is_empty());
+
+        // …and a later relink with the excursion still active re-actuates both capabilities.
+        let fx = reconcile_effects(&mut state, &intents);
+        assert_eq!(fx.toasted_ids(), vec!["a"]);
+        assert_eq!(fx.flash_start, vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn register_errors_classify_by_status() {
+        assert_eq!(classify_register_error(Some(409)), RegisterRecovery::RegenerateId);
+        assert_eq!(classify_register_error(Some(403)), RegisterRecovery::NeedsRelink);
+        assert_eq!(classify_register_error(Some(500)), RegisterRecovery::Retry);
+        // No response at all (network) is transient.
+        assert_eq!(classify_register_error(None), RegisterRecovery::Retry);
+    }
+
+    #[test]
+    fn device_scope_check_requires_both_scopes() {
+        let full: Vec<String> = ["glucose.read", "device.notify", "device.actuate"]
+            .iter().map(|s| s.to_string()).collect();
+        assert!(has_device_scopes(&full));
+        // A pre-upgrade grant (read scopes only) lacks them.
+        let stale: Vec<String> = ["glucose.read", "therapy.read"].iter().map(|s| s.to_string()).collect();
+        assert!(!has_device_scopes(&stale));
+        // One of the two is not enough.
+        let partial: Vec<String> = ["device.notify"].iter().map(|s| s.to_string()).collect();
+        assert!(!has_device_scopes(&partial));
     }
 
     // ── device_notification: sub-filter + dedup ──────────────────────────────────────────

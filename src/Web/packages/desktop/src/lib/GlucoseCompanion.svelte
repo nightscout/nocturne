@@ -25,7 +25,11 @@
 
   type Phase = "input" | "waiting" | "linked";
 
+  // Matches the camelCase LinkStatus returned by the `companion_link_status` Rust command.
+  type LinkStatus = { linked: boolean; needsRelink: boolean };
+
   let phase = $state<Phase>("input");
+  let needsRelink = $state(false);
   let server = $state("");
   let busy = $state(false);
   let error = $state<string | null>(null);
@@ -48,8 +52,9 @@
 
   async function refreshLinked() {
     try {
-      const linked = await invoke<boolean>("companion_is_linked");
-      phase = linked ? "linked" : phase === "linked" ? "input" : phase;
+      const status = await invoke<LinkStatus>("companion_link_status");
+      needsRelink = status.needsRelink;
+      phase = status.linked ? "linked" : phase === "linked" ? "input" : phase;
     } catch (e) {
       error = describeError(e);
     }
@@ -183,6 +188,12 @@
         <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
         <div class="text-sm">
           <p class="font-medium">Connected — glucose is syncing to your taskbar.</p>
+          {#if needsRelink}
+            <p class="text-muted-foreground">
+              Device alerts need permissions this link doesn't have. Unlink and link again to enable
+              them.
+            </p>
+          {/if}
           {#if updatedAt}
             <p class="text-muted-foreground">Last updated just now.</p>
           {/if}

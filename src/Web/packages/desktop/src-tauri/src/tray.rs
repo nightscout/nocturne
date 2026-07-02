@@ -11,8 +11,8 @@
 
 use crate::glucose_poll::CurrentBg;
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
@@ -70,7 +70,7 @@ struct TrayState {
 }
 
 fn tray_state() -> &'static Mutex<TrayState> {
-    static STATE: std::sync::OnceLock<Mutex<TrayState>> = std::sync::OnceLock::new();
+    static STATE: OnceLock<Mutex<TrayState>> = OnceLock::new();
     STATE.get_or_init(|| {
         Mutex::new(TrayState {
             last_reading: None,
@@ -79,13 +79,10 @@ fn tray_state() -> &'static Mutex<TrayState> {
     })
 }
 
-/// True while at least one excursion requests a flash — i.e. the flash task owns the icon and the
-/// glucose poll must not overwrite it.
-static FLASH_ACTIVE: AtomicBool = AtomicBool::new(false);
-
-fn flash_active() -> bool {
-    FLASH_ACTIVE.load(Ordering::SeqCst)
-}
+/// Monotonic flash generation. Every start/stop transition bumps it; a pulse task captures the value
+/// it was spawned under and exits once the global moves past it, so stale tasks can neither
+/// accumulate alongside a newer one nor paint an attention frame after a stop's restore render.
+static FLASH_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 fn status_from_mgdl(sgv_mgdl: f64) -> GlucoseStatus {
     if sgv_mgdl < LOW_THRESHOLD_MGDL {
@@ -209,8 +206,7 @@ fn fill_rounded_rect(buf: &mut [u8], color: (u8, u8, u8)) {
 /// `(rgba, width, height)`. `None` if the font can't be read/parsed — callers then leave the
 /// default icon and just update the tooltip.
 fn rasterize(text: &str, bg_color: (u8, u8, u8)) -> Option<(Vec<u8>, u32, u32)> {
-    let font_bytes = std::fs::read(FONT_PATH).ok()?;
-    let font = fontdue::Font::from_bytes(font_bytes, fontdue::FontSettings::default()).ok()?;
+    let font = font()?;
 
     // Font size by display-text length, mirroring the web favicon (`@nocturne/ui` glucose-icon):
     // <=2 chars -> 18px, <=3 -> 14px, else 11px.
@@ -293,6 +289,18 @@ fn rasterize(text: &str, bg_color: (u8, u8, u8)) -> Option<(Vec<u8>, u32, u32)> 
     Some((rgba, ICON_SIZE, ICON_SIZE))
 }
 
+/// The parsed tray font, read and parsed once — `rasterize` runs every poll and every 600ms flash
+/// frame, so the file read + parse must not repeat per call. A read/parse failure is remembered as
+/// `None` (the font set doesn't change while Windows is up).
+fn font() -> Option<&'static fontdue::Font> {
+    static FONT: OnceLock<Option<fontdue::Font>> = OnceLock::new();
+    FONT.get_or_init(|| {
+        let bytes = std::fs::read(FONT_PATH).ok()?;
+        fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default()).ok()
+    })
+    .as_ref()
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.show();
@@ -341,9 +349,13 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 /// Caches `current` as the last reading. While a flash is active the flash task owns the icon, so
 /// only the tooltip is refreshed here — the icon is left to the pulse (which re-reads the cache).
 pub fn update_tray(app: &AppHandle, current: Option<&CurrentBg>) {
-    if let Ok(mut state) = tray_state().lock() {
-        state.last_reading = current.cloned();
-    }
+    let flashing = match tray_state().lock() {
+        Ok(mut state) => {
+            state.last_reading = current.cloned();
+            !state.flashing.is_empty()
+        }
+        Err(_) => false,
+    };
 
     let tray = match app.tray_by_id(TRAY_ID) {
         Some(t) => t,
@@ -351,7 +363,8 @@ pub fn update_tray(app: &AppHandle, current: Option<&CurrentBg>) {
     };
     let _ = tray.set_tooltip(Some(tooltip_text(current)));
 
-    if flash_active() {
+    // While flashing, the pulse task owns the icon (it re-reads the cache just updated above).
+    if flashing {
         return;
     }
     render_icon(app, current, false);
@@ -412,7 +425,7 @@ fn apply_flash_change(state: &mut TrayState, excursion_id: &str, on: bool) -> Fl
 /// Starts or stops flashing the tray icon for `excursion_id`. Called from the reconcile path when an
 /// intent's capabilities include (or no longer include) `tray_flash`. Idempotent per excursion id:
 /// the first active excursion starts a single background pulse; the last one to clear stops it and
-/// restores the normal glucose icon. Coordinates with the glucose poll via `flash_active`.
+/// restores the normal glucose icon. The glucose poll defers to the pulse via the flashing set.
 pub fn set_tray_flash(app: &AppHandle, excursion_id: &str, on: bool) {
     let transition = {
         let mut state = match tray_state().lock() {
@@ -424,28 +437,58 @@ pub fn set_tray_flash(app: &AppHandle, excursion_id: &str, on: bool) {
 
     match transition {
         FlashTransition::Started => {
-            FLASH_ACTIVE.store(true, Ordering::SeqCst);
-            spawn_flash_task(app.clone());
+            // Bumping the generation retires any previous pulse task before its next frame; the new
+            // task owns the icon from here.
+            let generation = FLASH_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+            spawn_flash_task(app.clone(), generation);
         }
         FlashTransition::Stopped => {
-            // Clearing the flag halts the pulse task at its next tick; restore the normal icon now.
-            FLASH_ACTIVE.store(false, Ordering::SeqCst);
-            let current = tray_state().lock().ok().and_then(|s| s.last_reading.clone());
-            render_icon(app, current.as_ref(), false);
+            stop_pulse_and_restore(app);
         }
         FlashTransition::Unchanged => {}
     }
 }
 
-/// Background task that pulses the icon between the normal and attention tiles while `flash_active`.
-/// Re-reads the cached reading each frame so a glucose poll landing mid-flash is reflected. Exits
-/// (leaving the icon restored by `set_tray_flash`'s Stopped arm) once flashing clears.
-fn spawn_flash_task(app: AppHandle) {
+/// Stops every flash at once (all actuations withdrawn — e.g. unlink): clears the flashing set,
+/// retires the pulse task, and restores the normal icon. No-op when nothing is flashing.
+pub fn stop_all_flashes(app: &AppHandle) {
+    let had_any = match tray_state().lock() {
+        Ok(mut state) => {
+            let had = !state.flashing.is_empty();
+            state.flashing.clear();
+            had
+        }
+        Err(_) => return,
+    };
+    if had_any {
+        stop_pulse_and_restore(app);
+    }
+}
+
+/// Retires the current pulse task (generation bump) and repaints the normal tile from the cached
+/// reading.
+fn stop_pulse_and_restore(app: &AppHandle) {
+    FLASH_GENERATION.fetch_add(1, Ordering::SeqCst);
+    let current = tray_state().lock().ok().and_then(|s| s.last_reading.clone());
+    render_icon(app, current.as_ref(), false);
+}
+
+/// Background task that pulses the icon between the normal and attention tiles. Captures the
+/// generation it was spawned under and exits once the global generation moves past it (a stop, or a
+/// newer start). Re-reads the cached reading each frame so a glucose poll landing mid-flash is
+/// reflected. A stop can race one in-flight render, so the post-render generation check repaints the
+/// normal tile rather than leaving the attention frame as the last one painted.
+fn spawn_flash_task(app: AppHandle, generation: u64) {
     tauri::async_runtime::spawn(async move {
         let mut attention = true;
-        while flash_active() {
+        while FLASH_GENERATION.load(Ordering::SeqCst) == generation {
             let current = tray_state().lock().ok().and_then(|s| s.last_reading.clone());
             render_icon(&app, current.as_ref(), attention);
+            if FLASH_GENERATION.load(Ordering::SeqCst) != generation {
+                let current = tray_state().lock().ok().and_then(|s| s.last_reading.clone());
+                render_icon(&app, current.as_ref(), false);
+                break;
+            }
             attention = !attention;
             tokio::time::sleep(std::time::Duration::from_millis(FLASH_INTERVAL_MS)).await;
         }
