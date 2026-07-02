@@ -24,7 +24,7 @@ public class ShareDataCategoriesGuardTests
     {
         "alert_condition_timers", "alert_custom_sounds", "alert_deliveries", "alert_excursions",
         "alert_instances", "alert_invites", "alert_rule_channels", "alert_rules", "alert_tracker_state",
-        "basal_schedules", "body_weights", "carb_ratio_schedules", "clock_faces", "coach_mark_states",
+        "basal_schedules", "body_weights", "carb_ratio_schedules", "client_devices", "clock_faces", "coach_mark_states",
         "compression_low_suggestions", "connector_configurations", "data_source_metadata",
         "dedup_reconcile_state", "devices", "discrepancy_analyses",
         "discrepancy_details", "dnd_windows", "in_app_notifications", "linked_records", "membership_requests",
