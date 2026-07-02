@@ -7,7 +7,10 @@ import {
 	parseRule,
 	buildBody,
 	parseChannelMetadata,
+	validateChannels,
+	type ChannelDef,
 } from "./types";
+import { ChannelType } from "$api-clients";
 
 describe("defaultClientConfig", () => {
 	it("returns valid audio defaults", () => {
@@ -401,5 +404,48 @@ describe("parseChannelMetadata", () => {
 		);
 		expect(device?.destination).toBe("companion");
 		expect(device?.metadata).toEqual({ capabilities: ["notify"] });
+	});
+});
+
+describe("validateChannels", () => {
+	function channel(over: Partial<ChannelDef> = {}): ChannelDef {
+		return {
+			channelType: ChannelType.WebPush,
+			destination: "",
+			destinationLabel: "",
+			...over,
+		};
+	}
+
+	it("rejects a device_action channel with an empty destination", () => {
+		const result = validateChannels([
+			channel({ channelType: ChannelType.DeviceAction, destination: "" }),
+		]);
+		expect(result).toMatch(/device kind/i);
+	});
+
+	it("accepts a device_action channel with a kind selected", () => {
+		expect(
+			validateChannels([
+				channel({
+					channelType: ChannelType.DeviceAction,
+					destination: "companion",
+					metadata: { capabilities: ["notify"] },
+				}),
+			]),
+		).toBeNull();
+	});
+
+	it("does not require a destination for non-device channels", () => {
+		expect(
+			validateChannels([
+				channel({ channelType: ChannelType.WebPush, destination: "" }),
+				channel({ channelType: ChannelType.InApp, destination: "" }),
+			]),
+		).toBeNull();
+	});
+
+	it("accepts an empty channel list", () => {
+		expect(validateChannels([])).toBeNull();
 	});
 });

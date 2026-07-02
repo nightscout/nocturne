@@ -16,6 +16,7 @@
     Pencil,
   } from "lucide-svelte";
   import { timeAgo } from "$lib/utils";
+  import { deviceKindLabel } from "$lib/utils/device-kind-labels";
   import {
     getDevices,
     getCapabilityCatalog,
@@ -35,16 +36,6 @@
     }
     return map;
   });
-
-  /** Human-facing name for a device kind. */
-  const KIND_LABELS: Record<string, string> = {
-    companion: "Companion",
-    prelude: "Prelude",
-  };
-  function kindLabel(kind: string | undefined): string {
-    if (!kind) return "Device";
-    return KIND_LABELS[kind] ?? kind;
-  }
 
   // Inline rename state.
   let editingId = $state<string | null>(null);
@@ -165,11 +156,11 @@
                   />
                 {:else}
                   <span class="truncate">
-                    {device.label || kindLabel(device.kind)}
+                    {device.label || deviceKindLabel(device.kind)}
                   </span>
                 {/if}
                 <Badge variant="secondary" class="shrink-0">
-                  {kindLabel(device.kind)}
+                  {deviceKindLabel(device.kind)}
                 </Badge>
               </Card.Title>
             </div>

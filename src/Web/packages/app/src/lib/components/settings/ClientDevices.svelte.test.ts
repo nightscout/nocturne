@@ -75,6 +75,15 @@ describe("ClientDevices", () => {
     await expect.element(page.getByText("Flashlight")).toBeVisible();
   });
 
+  it("title-cases an unknown device kind in the badge", async () => {
+    devicesCurrent = [makeDevice({ kind: "widget", label: undefined, capabilities: [] })];
+    render(ClientDevices);
+
+    // Shared deviceKindLabel falls back to the title-cased kind; it appears as
+    // both the display name (no label) and the kind badge.
+    await expect.element(page.getByText("Widget", { exact: true }).first()).toBeVisible();
+  });
+
   it("renames a device via inline edit -> rename command", async () => {
     devicesCurrent = [makeDevice()];
     render(ClientDevices);

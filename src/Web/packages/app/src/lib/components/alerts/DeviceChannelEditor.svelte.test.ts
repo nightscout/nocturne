@@ -150,6 +150,32 @@ describe("DeviceChannelEditor", () => {
 		expect(document.querySelector('[data-testid="device-hardware-warning"]')).toBeNull();
 	});
 
+	it("renders no kind options when the catalog is not loaded", async () => {
+		const channel = $state(deviceChannel());
+		render(DeviceChannelEditor, {
+			channel,
+			catalog: null,
+			severity: AlertRuleSeverity.Warning,
+			index: 0,
+		});
+
+		await expect.element(page.getByText("Select a kind")).toBeVisible();
+		await page.getByTestId("device-kind-trigger").click();
+		expect(document.querySelectorAll('[role="option"]')).toHaveLength(0);
+	});
+
+	it("title-cases unknown kinds via the shared label helper", async () => {
+		const channel = $state(deviceChannel({ destination: "widget" }));
+		render(DeviceChannelEditor, {
+			channel,
+			catalog: { kinds: ["widget"], capabilities: [] },
+			severity: AlertRuleSeverity.Warning,
+			index: 0,
+		});
+
+		await expect.element(page.getByTestId("device-kind-trigger")).toHaveTextContent("Widget");
+	});
+
 	it("does not warn when only non-hardware capabilities are selected", async () => {
 		const channel = $state(
 			deviceChannel({ destination: "companion", metadata: { capabilities: ["notify"] } }),

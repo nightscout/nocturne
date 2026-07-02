@@ -55,6 +55,7 @@
     ensureCompositeRoot,
     defaultPayload,
     buildBody,
+    validateChannels,
     type RuleEditorState,
   } from "$lib/components/alerts/types";
 
@@ -133,6 +134,11 @@
   // ---- Save ------------------------------------------------------------
 
   async function save(): Promise<void> {
+    const channelError = validateChannels(state.channels);
+    if (channelError) {
+      error = channelError;
+      return;
+    }
     saving = true;
     error = null;
     try {

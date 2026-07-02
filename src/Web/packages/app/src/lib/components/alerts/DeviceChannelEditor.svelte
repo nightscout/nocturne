@@ -6,6 +6,7 @@
   import { AlertRuleSeverity } from "$api-clients";
   import type { DeviceCapabilityCatalog } from "$api-clients";
   import type { ChannelDef } from "./types";
+  import { deviceKindLabel } from "$lib/utils/device-kind-labels";
 
   interface Props {
     /** The single device_action channel being edited. */
@@ -19,17 +20,6 @@
   }
 
   let { channel = $bindable(), catalog, severity, index }: Props = $props();
-
-  // Human labels for the known kinds. Falls back to a title-cased key for any
-  // kind the catalog adds later.
-  const KIND_LABELS: Record<string, string> = {
-    companion: "Companion",
-    prelude: "Prelude",
-  };
-
-  function kindLabel(kind: string): string {
-    return KIND_LABELS[kind] ?? kind.charAt(0).toUpperCase() + kind.slice(1);
-  }
 
   const kinds = $derived<string[]>(catalog?.kinds ?? []);
 
@@ -98,11 +88,11 @@
         class="h-8 w-48 text-sm"
         data-testid="device-kind-trigger"
       >
-        {selectedKind ? kindLabel(selectedKind) : "Select a kind"}
+        {selectedKind ? deviceKindLabel(selectedKind) : "Select a kind"}
       </Select.Trigger>
       <Select.Content>
         {#each kinds as kind (kind)}
-          <Select.Item value={kind} label={kindLabel(kind)} />
+          <Select.Item value={kind} label={deviceKindLabel(kind)} />
         {/each}
       </Select.Content>
     </Select.Root>

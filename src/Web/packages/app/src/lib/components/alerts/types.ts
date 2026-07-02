@@ -560,6 +560,21 @@ export function buildBody(state: RuleEditorState) {
 	};
 }
 
+/**
+ * Client-side pre-save validation for the channel list. Returns a message
+ * describing the first invalid channel, or `null` when the list is saveable.
+ * Mirrors the server's rejection of a device_action channel without a kind so
+ * the editor can block the save instead of surfacing a generic 400.
+ */
+export function validateChannels(channels: ChannelDef[]): string | null {
+	for (const c of channels) {
+		if (c.channelType === ChannelType.DeviceAction && !c.destination) {
+			return "The Device channel has no device kind selected. Choose a kind or remove the channel.";
+		}
+	}
+	return null;
+}
+
 // ---------------------------------------------------------------------------
 // Existing client-config / schedule shapes (unchanged)
 // ---------------------------------------------------------------------------
