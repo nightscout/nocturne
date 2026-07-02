@@ -40,32 +40,6 @@ public class DataUpdateEventArgs : EventArgs
 }
 
 /// <summary>
-/// Event arguments for tracker update events
-/// </summary>
-public class TrackerUpdateEventArgs : EventArgs
-{
-    /// <summary>
-    /// Gets the tracker identifier
-    /// </summary>
-    public string TrackerId { get; init; } = string.Empty;
-
-    /// <summary>
-    /// Gets the tracker name
-    /// </summary>
-    public string TrackerName { get; init; } = string.Empty;
-
-    /// <summary>
-    /// Gets the current age in hours
-    /// </summary>
-    public double AgeHours { get; init; }
-
-    /// <summary>
-    /// Gets the expected lifespan in hours
-    /// </summary>
-    public double LifespanHours { get; init; }
-}
-
-/// <summary>
 /// Event arguments for alarm events
 /// </summary>
 public class AlarmEventArgs : EventArgs
@@ -154,14 +128,10 @@ public interface INocturneApiClient
     Task DisconnectSignalRAsync();
 
     /// <summary>
-    /// Raised when new data is available from the server
+    /// Raised when new data is available from the server (glucose, treatments, device status, or
+    /// device-age trackers). Consumers typically re-fetch the summary in response.
     /// </summary>
     event EventHandler<DataUpdateEventArgs>? DataUpdated;
-
-    /// <summary>
-    /// Raised when a tracker's state changes
-    /// </summary>
-    event EventHandler<TrackerUpdateEventArgs>? TrackerUpdated;
 
     /// <summary>
     /// Raised when an alarm is triggered

@@ -27,6 +27,11 @@ const CRED_USER: &str = "default";
 // Refresh this many seconds before the access token expires.
 const REFRESH_SKEW_SECS: i64 = 60;
 
+// Serializes refreshes so concurrent callers (the poll loop and the realtime hub) can't fire two
+// refresh_token grants at once and replay a rotating (single-use) refresh token, which would
+// invalidate the newer one and force a re-link.
+static REFRESH_LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+
 // Serialized as the Credential Manager secret.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 struct StoredCreds {
@@ -126,7 +131,7 @@ pub async fn begin_device_flow(
         .form(&[("client_id", client_id.as_str()), ("scope", DEFAULT_SCOPES)])
         .send()
         .await
-        .map_err(|e| format!("Could not reach {api_url}: {e}"))?;
+        .map_err(|e| format!("Could not reach {api_url}: {}", crate::error_chain(&e)))?;
 
     if !resp.status().is_success() {
         return Err(format!("Device authorization failed ({}).", oauth_error(resp).await));
@@ -177,7 +182,7 @@ pub async fn await_authorization(
             ])
             .send()
             .await
-            .map_err(|e| format!("Could not reach the server: {e}"))?;
+            .map_err(|e| format!("Could not reach the server: {}", crate::error_chain(&e)))?;
 
         if resp.status().is_success() {
             let token: TokenResponse = resp
@@ -219,6 +224,16 @@ pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String
     if now_unix() < creds.expires_at_unix - REFRESH_SKEW_SECS {
         return Ok((creds.api_url, creds.access_token));
     }
+
+    // A refresh is due. Serialize it: another caller may already be refreshing, so take the lock and
+    // re-check before spending the single-use refresh token.
+    let lock = REFRESH_LOCK.get_or_init(|| tokio::sync::Mutex::new(()));
+    let _guard = lock.lock().await;
+
+    let creds = load().ok_or_else(|| TokenError::NotLinked("Not linked to a Nocturne server yet.".to_string()))?;
+    if now_unix() < creds.expires_at_unix - REFRESH_SKEW_SECS {
+        return Ok((creds.api_url, creds.access_token));
+    }
     if creds.refresh_token.is_empty() {
         return Err(TokenError::NotLinked(
             "Session expired and there is no refresh token; please link again.".to_string(),
@@ -234,7 +249,9 @@ pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String
         ])
         .send()
         .await
-        .map_err(|e| TokenError::Transient(format!("Could not reach {}: {e}", creds.api_url)))?;
+        .map_err(|e| {
+            TokenError::Transient(format!("Could not reach {}: {}", creds.api_url, crate::error_chain(&e)))
+        })?;
 
     if !resp.status().is_success() {
         let status = resp.status().as_u16();
@@ -368,7 +385,7 @@ async fn register_client(client: &reqwest::Client, api_url: &str) -> Result<Stri
         }))
         .send()
         .await
-        .map_err(|e| format!("Could not reach {api_url}: {e}"))?;
+        .map_err(|e| format!("Could not reach {api_url}: {}", crate::error_chain(&e)))?;
 
     if !resp.status().is_success() {
         return Err(format!("Client registration failed ({}).", oauth_error(resp).await));

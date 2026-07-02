@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Models;
@@ -20,8 +21,22 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
     private readonly IOAuthService _oauthService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<NocturneApiClient> _logger;
-    private HubConnection? _hubConnection;
+    private HubConnection? _dataHubConnection;
+    private HubConnection? _alarmHubConnection;
     private bool _disposed;
+
+    /// <summary>Client identifier sent with the data-hub authorization request.</summary>
+    private const string ClientName = "Nocturne.Widget.Windows11";
+
+    /// <summary>Notification level (URGENT) at or above which an alarm is treated as urgent.</summary>
+    private const int UrgentAlarmLevel = 2;
+
+    /// <summary>
+    /// Record collections the data hub subscribes to: the native V4 categories (glucose/care/device)
+    /// plus the legacy v1 collections, so realtime works whether the tenant writes V4 or legacy shapes.
+    /// </summary>
+    private static readonly string[] SubscribedCollections =
+        ["glucose", "care", "device", "entries", "treatments", "devicestatus"];
 
     /// <summary>
     /// Initializes a new instance of the NocturneApiClient
@@ -45,9 +60,6 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
 
     /// <inheritdoc />
     public event EventHandler<DataUpdateEventArgs>? DataUpdated;
-
-    /// <inheritdoc />
-    public event EventHandler<TrackerUpdateEventArgs>? TrackerUpdated;
 
     /// <inheritdoc />
     public event EventHandler<AlarmEventArgs>? AlarmReceived;
@@ -157,7 +169,7 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
     /// <inheritdoc />
     public async Task ConnectSignalRAsync()
     {
-        if (_hubConnection is not null)
+        if (_dataHubConnection is not null || _alarmHubConnection is not null)
         {
             _logger.LogWarning("SignalR connection already exists");
             return;
@@ -177,144 +189,63 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
             return;
         }
 
+        var baseUrl = credentials.ApiUrl.TrimEnd('/');
+
         try
         {
-            var hubUrl = $"{credentials.ApiUrl.TrimEnd('/')}/hubs/nocturne";
+            // DataHub carries glucose/care/device record events (create/update/delete), legacy entries
+            // (dataUpdate), and tracker state; AlarmHub carries alarm notifications. The widget re-fetches
+            // over HTTP on any signal, so each event collapses to a single "refresh now" trigger.
+            _dataHubConnection = BuildHubConnection($"{baseUrl}/hubs/data", "data");
+            ConfigureDataHubHandlers(_dataHubConnection);
+            // Group membership is per-connection, so a full reconnect must re-authorize and re-subscribe,
+            // then re-fetch once to recover any pushes missed during the reconnect gap.
+            _dataHubConnection.Reconnected += async _ =>
+            {
+                await JoinDataGroupsAsync();
+                RaiseDataUpdated("reconnect");
+            };
 
-            _hubConnection = new HubConnectionBuilder()
-                .WithUrl(
-                    hubUrl,
-                    options =>
-                    {
-                        // Use Bearer token for SignalR authentication
-                        options.AccessTokenProvider = async () =>
-                        {
-                            await _oauthService.EnsureValidTokenAsync();
-                            var creds = await _credentialStore.GetCredentialsAsync();
-                            return creds?.AccessToken;
-                        };
-                    }
-                )
-                .WithAutomaticReconnect()
-                .Build();
+            _alarmHubConnection = BuildHubConnection($"{baseUrl}/hubs/alarms", "alarm");
+            ConfigureAlarmHubHandlers(_alarmHubConnection);
+            _alarmHubConnection.Reconnected += async _ => await JoinAlarmGroupAsync();
 
-            ConfigureHubHandlers(_hubConnection);
+            await _dataHubConnection.StartAsync();
+            await JoinDataGroupsAsync();
 
-            await _hubConnection.StartAsync();
-            _logger.LogInformation("SignalR connection established");
+            await _alarmHubConnection.StartAsync();
+            await JoinAlarmGroupAsync();
+
+            _logger.LogInformation("SignalR connections established");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to connect to SignalR hub");
-            _hubConnection = null;
+            _logger.LogError(ex, "Failed to connect to SignalR hubs");
+            await DisconnectSignalRAsync();
             throw;
         }
     }
 
-    /// <inheritdoc />
-    public async Task DisconnectSignalRAsync()
+    /// <summary>
+    /// Builds a hub connection that authenticates with the current OAuth access token and reconnects
+    /// automatically. <paramref name="label"/> only tags log messages.
+    /// </summary>
+    private HubConnection BuildHubConnection(string url, string label)
     {
-        if (_hubConnection is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await _hubConnection.StopAsync();
-            await _hubConnection.DisposeAsync();
-            _logger.LogInformation("SignalR connection closed");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error disconnecting from SignalR hub");
-        }
-        finally
-        {
-            _hubConnection = null;
-        }
-    }
-
-    private void ConfigureHubHandlers(HubConnection connection)
-    {
-        connection.On<string, long>(
-            "DataUpdated",
-            (dataType, timestamp) =>
-            {
-                DataUpdated?.Invoke(
-                    this,
-                    new DataUpdateEventArgs { DataType = dataType, Timestamp = timestamp }
-                );
-            }
-        );
-
-        connection.On<string, string, double, double>(
-            "TrackerUpdated",
-            (trackerId, trackerName, ageHours, lifespanHours) =>
-            {
-                TrackerUpdated?.Invoke(
-                    this,
-                    new TrackerUpdateEventArgs
-                    {
-                        TrackerId = trackerId,
-                        TrackerName = trackerName,
-                        AgeHours = ageHours,
-                        LifespanHours = lifespanHours,
-                    }
-                );
-            }
-        );
-
-        connection.On<string, string, string, int, bool, long>(
-            "AlarmReceived",
-            (alarmId, title, message, level, urgent, timestamp) =>
-            {
-                AlarmReceived?.Invoke(
-                    this,
-                    new AlarmEventArgs
-                    {
-                        AlarmId = alarmId,
-                        Title = title,
-                        Message = message,
-                        Level = level,
-                        Urgent = urgent,
-                        Timestamp = timestamp,
-                    }
-                );
-            }
-        );
-
-        connection.On<string, string, string, int, bool, long>(
-            "AlarmCleared",
-            (alarmId, title, message, level, urgent, timestamp) =>
-            {
-                AlarmCleared?.Invoke(
-                    this,
-                    new AlarmEventArgs
-                    {
-                        AlarmId = alarmId,
-                        Title = title,
-                        Message = message,
-                        Level = level,
-                        Urgent = urgent,
-                        Timestamp = timestamp,
-                    }
-                );
-            }
-        );
+        var connection = new HubConnectionBuilder()
+            .WithUrl(url, options => options.AccessTokenProvider = GetAccessTokenAsync)
+            .WithAutomaticReconnect()
+            .Build();
 
         connection.Reconnecting += error =>
         {
-            _logger.LogWarning(error, "SignalR connection lost, attempting to reconnect");
+            _logger.LogWarning(error, "SignalR {Hub} hub connection lost, reconnecting", label);
             return Task.CompletedTask;
         };
 
         connection.Reconnected += connectionId =>
         {
-            _logger.LogInformation(
-                "SignalR reconnected with connection ID {ConnectionId}",
-                connectionId
-            );
+            _logger.LogInformation("SignalR {Hub} hub reconnected ({ConnectionId})", label, connectionId);
             return Task.CompletedTask;
         };
 
@@ -322,14 +253,230 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
         {
             if (error is not null)
             {
-                _logger.LogError(error, "SignalR connection closed with error");
+                _logger.LogError(error, "SignalR {Hub} hub connection closed with error", label);
             }
             else
             {
-                _logger.LogInformation("SignalR connection closed");
+                _logger.LogInformation("SignalR {Hub} hub connection closed", label);
             }
             return Task.CompletedTask;
         };
+
+        return connection;
+    }
+
+    /// <summary>Resolves a fresh access token for the SignalR handshake, refreshing if needed.</summary>
+    private async Task<string?> GetAccessTokenAsync()
+    {
+        await _oauthService.EnsureValidTokenAsync();
+        var creds = await _credentialStore.GetCredentialsAsync();
+        return creds?.AccessToken;
+    }
+
+    /// <summary>
+    /// Authorizes the data-hub connection (joins the tenant "authorized" group for legacy entries and
+    /// tracker events) and subscribes to the V4/legacy record collection groups. Both hub methods
+    /// authenticate in-band from the supplied access token.
+    /// </summary>
+    private async Task JoinDataGroupsAsync()
+    {
+        if (_dataHubConnection is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var token = await GetAccessTokenAsync();
+            // Authorize joins the tenant "authorized" group and reports success in-band. A failure here
+            // (e.g. a token that failed to refresh) leaves the connection alive but subscribed to nothing,
+            // so surface it rather than silently degrading to poll-only.
+            var authorized = await _dataHubConnection.InvokeAsync<JsonElement>(
+                "Authorize",
+                new { client = ClientName, token }
+            );
+            if (!GetBool(authorized, "success"))
+            {
+                _logger.LogWarning("Data hub rejected authorization; realtime updates will not be received");
+            }
+
+            await _dataHubConnection.InvokeAsync("Subscribe", new { collections = SubscribedCollections });
+        }
+        catch (HubException ex)
+        {
+            _logger.LogWarning(ex, "Failed to authorize/subscribe on the data hub");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to authorize/subscribe on the data hub");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Failed to authorize/subscribe on the data hub");
+        }
+    }
+
+    /// <summary>Subscribes the alarm-hub connection to the tenant alarm-subscribers group.</summary>
+    private async Task JoinAlarmGroupAsync()
+    {
+        if (_alarmHubConnection is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var token = await GetAccessTokenAsync();
+            var subscribed = await _alarmHubConnection.InvokeAsync<JsonElement>(
+                "Subscribe",
+                new { jwtToken = token }
+            );
+            if (!GetBool(subscribed, "success"))
+            {
+                _logger.LogWarning("Alarm hub rejected subscription; alarm updates will not be received");
+            }
+        }
+        catch (HubException ex)
+        {
+            _logger.LogWarning(ex, "Failed to subscribe on the alarm hub");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to subscribe on the alarm hub");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Failed to subscribe on the alarm hub");
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task DisconnectSignalRAsync()
+    {
+        await DisposeHubAsync(_dataHubConnection);
+        _dataHubConnection = null;
+
+        await DisposeHubAsync(_alarmHubConnection);
+        _alarmHubConnection = null;
+    }
+
+    private async Task DisposeHubAsync(HubConnection? connection)
+    {
+        if (connection is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await connection.StopAsync();
+            await connection.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error disconnecting from SignalR hub");
+        }
+    }
+
+    private void ConfigureDataHubHandlers(HubConnection connection)
+    {
+        // Legacy v1 entries broadcast (tenant "authorized" group).
+        connection.On<JsonElement>("dataUpdate", _ => RaiseDataUpdated("entries"));
+
+        // Native V4 record events (glucose/care/device groups); the payload is { recordType, doc }.
+        connection.On<JsonElement>("create", payload => RaiseDataUpdated(RecordType(payload)));
+        connection.On<JsonElement>("update", payload => RaiseDataUpdated(RecordType(payload)));
+        connection.On<JsonElement>("delete", payload => RaiseDataUpdated(RecordType(payload)));
+
+        // Device-age tracker recomputation (drives the Ages widget).
+        connection.On<JsonElement>("trackerUpdate", _ => RaiseDataUpdated("tracker"));
+    }
+
+    private void ConfigureAlarmHubHandlers(HubConnection connection)
+    {
+        connection.On<JsonElement>("alarm", payload => RaiseAlarm(payload, urgent: false, cleared: false));
+        connection.On<JsonElement>("urgent_alarm", payload => RaiseAlarm(payload, urgent: true, cleared: false));
+        connection.On<JsonElement>("clear_alarm", payload => RaiseAlarm(payload, urgent: false, cleared: true));
+    }
+
+    private void RaiseDataUpdated(string dataType) =>
+        DataUpdated?.Invoke(
+            this,
+            new DataUpdateEventArgs
+            {
+                DataType = dataType,
+                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            }
+        );
+
+    private void RaiseAlarm(JsonElement payload, bool urgent, bool cleared)
+    {
+        var level = GetInt(payload, "level");
+        var args = new AlarmEventArgs
+        {
+            AlarmId = GetString(payload, "group"),
+            Title = GetString(payload, "title"),
+            Message = GetString(payload, "message"),
+            Level = level,
+            Urgent = urgent || level >= UrgentAlarmLevel,
+            Timestamp = GetLong(payload, "timestamp"),
+        };
+
+        if (cleared)
+        {
+            AlarmCleared?.Invoke(this, args);
+        }
+        else
+        {
+            AlarmReceived?.Invoke(this, args);
+        }
+    }
+
+    /// <summary>Reads the V4 <c>recordType</c> discriminator from a create/update/delete payload.</summary>
+    private static string RecordType(JsonElement payload) =>
+        TryGetProperty(payload, "recordType", out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? "unknown"
+            : "unknown";
+
+    private static string GetString(JsonElement obj, string name) =>
+        TryGetProperty(obj, name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? string.Empty
+            : string.Empty;
+
+    private static int GetInt(JsonElement obj, string name) =>
+        TryGetProperty(obj, name, out var value)
+        && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt32(out var result)
+            ? result
+            : 0;
+
+    private static long GetLong(JsonElement obj, string name) =>
+        TryGetProperty(obj, name, out var value)
+        && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt64(out var result)
+            ? result
+            : 0;
+
+    private static bool GetBool(JsonElement obj, string name) =>
+        TryGetProperty(obj, name, out var value) && value.ValueKind == JsonValueKind.True;
+
+    /// <summary>Case-insensitive property lookup, tolerant of SignalR's JSON casing.</summary>
+    private static bool TryGetProperty(JsonElement obj, string name, out JsonElement value)
+    {
+        if (obj.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in obj.EnumerateObject())
+            {
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
     }
 
     /// <summary>

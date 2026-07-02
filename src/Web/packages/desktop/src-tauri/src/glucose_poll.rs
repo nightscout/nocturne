@@ -75,7 +75,7 @@ pub async fn poll_once(
         .bearer_auth(token)
         .send()
         .await
-        .map_err(|e| format!("Could not reach {server}: {e}"))?;
+        .map_err(|e| format!("Could not reach {server}: {}", crate::error_chain(&e)))?;
 
     if !resp.status().is_success() {
         return Err(format!("summary returned HTTP {}", resp.status().as_u16()));
