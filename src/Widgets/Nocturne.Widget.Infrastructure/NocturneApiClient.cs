@@ -302,7 +302,15 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
 
             await _dataHubConnection.InvokeAsync("Subscribe", new { collections = SubscribedCollections });
         }
-        catch (Exception ex)
+        catch (HubException ex)
+        {
+            _logger.LogWarning(ex, "Failed to authorize/subscribe on the data hub");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to authorize/subscribe on the data hub");
+        }
+        catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Failed to authorize/subscribe on the data hub");
         }
@@ -328,7 +336,15 @@ public class NocturneApiClient : INocturneApiClient, IAsyncDisposable
                 _logger.LogWarning("Alarm hub rejected subscription; alarm updates will not be received");
             }
         }
-        catch (Exception ex)
+        catch (HubException ex)
+        {
+            _logger.LogWarning(ex, "Failed to subscribe on the alarm hub");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to subscribe on the alarm hub");
+        }
+        catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Failed to subscribe on the alarm hub");
         }
