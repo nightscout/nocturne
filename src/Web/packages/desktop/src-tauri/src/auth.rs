@@ -113,7 +113,7 @@ pub async fn begin_device_flow(
         .form(&[("client_id", client_id.as_str()), ("scope", DEFAULT_SCOPES)])
         .send()
         .await
-        .map_err(|e| format!("Could not reach {api_url}: {e}"))?;
+        .map_err(|e| format!("Could not reach {api_url}: {}", crate::error_chain(&e)))?;
 
     if !resp.status().is_success() {
         return Err(format!("Device authorization failed ({}).", oauth_error(resp).await));
@@ -164,7 +164,7 @@ pub async fn await_authorization(
             ])
             .send()
             .await
-            .map_err(|e| format!("Could not reach the server: {e}"))?;
+            .map_err(|e| format!("Could not reach the server: {}", crate::error_chain(&e)))?;
 
         if resp.status().is_success() {
             let token: TokenResponse = resp
@@ -228,7 +228,7 @@ pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String
         ])
         .send()
         .await
-        .map_err(|e| format!("Could not reach {}: {e}", creds.api_url))?;
+        .map_err(|e| format!("Could not reach {}: {}", creds.api_url, crate::error_chain(&e)))?;
 
     if !resp.status().is_success() {
         return Err(format!("Token refresh failed ({}); please link again.", oauth_error(resp).await));
@@ -289,7 +289,7 @@ async fn register_client(client: &reqwest::Client, api_url: &str) -> Result<Stri
         }))
         .send()
         .await
-        .map_err(|e| format!("Could not reach {api_url}: {e}"))?;
+        .map_err(|e| format!("Could not reach {api_url}: {}", crate::error_chain(&e)))?;
 
     if !resp.status().is_success() {
         return Err(format!("Client registration failed ({}).", oauth_error(resp).await));
