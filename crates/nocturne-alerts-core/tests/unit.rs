@@ -648,7 +648,8 @@ fn tracker_definition() -> Uuid {
 
 fn tracker_ctx(reference_at: DateTime<Utc>) -> SensorContext {
     let mut ctx = SensorContext::default();
-    ctx.active_trackers.insert(tracker_definition(), reference_at);
+    ctx.active_trackers
+        .insert(tracker_definition(), reference_at);
     ctx
 }
 

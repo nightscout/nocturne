@@ -69,9 +69,10 @@ floats are not acceptable.
 
 Elapsed-time leaves are mixed:
 
-- `staleness`, `loop_stale`, `loop_enaction_stale`, `site_age`, `sensor_age` compute
-  elapsed as `(decimal)(now - anchor).TotalMinutes/Hours/Days` — i.e. **`double`
-  arithmetic first, then cast to decimal**, then exact-decimal comparison.
+- `staleness`, `loop_stale`, `loop_enaction_stale`, `site_age`, `sensor_age`,
+  `tracker_age` compute elapsed as `(decimal)(now - anchor).TotalMinutes/Hours/Days` —
+  i.e. **`double` arithmetic first, then cast to decimal**, then exact-decimal
+  comparison.
 - `alert_state` (`for_minutes`), `pump_suspended`, `override_active`, `do_not_disturb`,
   `pump_state`, `state_span_active`, `sustained`, `time_since_last_carb/bolus` compare in
   **`double`** (`.TotalMinutes >= forMinutes`).
@@ -169,6 +170,7 @@ below are non-strict/strict exactly as written.
 | `day_of_week` | `days: [..]` (string names or ints) | `TenantTimeZoneId`, now | local `now.DayOfWeek ∈ days` | empty/missing days ⇒ false; tenant tz null/unknown ⇒ UTC |
 | `pump_state` | `mode`, `is_active`, `for_minutes?` | `ActivePumpState` | `is_active:false`: true whenever active mode ≠ `mode` (**including no active span**). `is_active:true`: mode must match; `for_minutes` anchors at `StartedAt` (double, `>=`) | no guard |
 | `state_span_active` | `category`, `state?`, `is_active`, `for_minutes?` | `ActiveStateSpans[(category, state)]` | `category == pump_mode` ⇒ **always false** (defence in depth). `is_active:false`: true iff no snapshot under the exact `(category, state)` key (null state = "any of category" — the enricher loads that key shape). `is_active:true`: snapshot must exist; `for_minutes` anchors at `StartedAt` | no guard |
+| `tracker_age` | `tracker_definition_id` (Guid), `operator`, `minutes` | `ActiveTrackers[tracker_definition_id]`, now | `Compare((decimal)(now-reference).TotalMinutes, op, minutes)` — reference is the active instance's start (Duration) or scheduled time (Event), resolved by the enricher; elapsed is **negative before a scheduled event**, so negative `minutes` with `>=` means "within N minutes before the event" | no active instance for the definition ⇒ **false** — a tracker that isn't running has no age (deliberately opposite to `time_since_last_*` cold-start infinity) |
 
 `composite` / `not` / `sustained` (containers):
 

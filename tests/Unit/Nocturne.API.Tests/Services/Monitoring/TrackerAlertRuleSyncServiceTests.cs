@@ -219,6 +219,53 @@ public class TrackerAlertRuleSyncServiceTests
     }
 
     [Fact]
+    public async Task Resync_adopts_orphaned_rules_after_wholesale_threshold_replacement()
+    {
+        // The threshold editor replaces the whole list with fresh rows (new ids, null
+        // AlertRuleId); an unchanged threshold must keep its rule and channel edits.
+        var definition = await SeedDefinitionAsync(thresholds: [Threshold(24)]);
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        Guid originalRuleId;
+        await using (var db = Db())
+        {
+            var rule = await db.AlertRules.Include(r => r.Channels).SingleAsync();
+            originalRuleId = rule.Id;
+            rule.Channels.Add(new AlertRuleChannelEntity
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                AlertRuleId = rule.Id,
+                ChannelType = ChannelType.Webhook,
+                Destination = "https://example.test/hook",
+                SortOrder = 5,
+            });
+
+            var old = await db.TrackerNotificationThresholds.SingleAsync();
+            db.TrackerNotificationThresholds.Remove(old);
+            db.TrackerNotificationThresholds.Add(new TrackerNotificationThresholdEntity
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                TrackerDefinitionId = definition.Id,
+                Hours = 24,
+                Urgency = NotificationUrgency.Warn,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using (var db = Db())
+        {
+            var rule = await db.AlertRules.Include(r => r.Channels).SingleAsync();
+            rule.Id.Should().Be(originalRuleId);
+            rule.Channels.Should().Contain(c => c.ChannelType == ChannelType.Webhook);
+            (await db.TrackerNotificationThresholds.SingleAsync()).AlertRuleId.Should().Be(originalRuleId);
+        }
+    }
+
+    [Fact]
     public async Task Resync_deletes_rules_for_removed_thresholds()
     {
         var definition = await SeedDefinitionAsync(thresholds: [Threshold(24), Threshold(48)]);

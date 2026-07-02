@@ -72,6 +72,23 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             .Where(r => r.ManagedBy == tag)
             .ToDictionaryAsync(r => r.Id, ct);
 
+        // The threshold editor replaces the whole threshold list (new row ids), which
+        // clears the AlertRuleId links. Adopt orphaned managed rules by their baked
+        // minutes so an unchanged threshold keeps its rule — and with it the user's
+        // channel edits and the rule's excursion history.
+        var claimedRuleIds = definition.NotificationThresholds
+            .Where(t => t.AlertRuleId is not null)
+            .Select(t => t.AlertRuleId!.Value)
+            .ToHashSet();
+        var adoptableByMinutes = new Dictionary<int, Queue<AlertRuleEntity>>();
+        foreach (var rule in managedRules.Values.Where(r => !claimedRuleIds.Contains(r.Id)))
+        {
+            if (RuleMinutes(rule) is not { } ruleMinutes) continue;
+            if (!adoptableByMinutes.TryGetValue(ruleMinutes, out var queue))
+                adoptableByMinutes[ruleMinutes] = queue = new Queue<AlertRuleEntity>();
+            queue.Enqueue(rule);
+        }
+
         var keptRuleIds = new HashSet<Guid>();
         foreach (var threshold in definition.NotificationThresholds.OrderBy(t => t.DisplayOrder))
         {
@@ -82,6 +99,13 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                 // evaluator's skip. Leave any previously synced rule in place untouched.
                 if (threshold.AlertRuleId is { } existingId) keptRuleIds.Add(existingId);
                 continue;
+            }
+
+            if (threshold.AlertRuleId is null
+                && adoptableByMinutes.TryGetValue(minutes.Value, out var adoptable)
+                && adoptable.Count > 0)
+            {
+                threshold.AlertRuleId = adoptable.Dequeue().Id;
             }
 
             var conditionParams = JsonSerializer.Serialize(new
@@ -186,6 +210,25 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         _logger.LogInformation(
             "Deleted {Count} managed alert rule(s) for removed tracker definition {DefinitionId}",
             rules.Count, definitionId);
+    }
+
+    /// <summary>
+    /// The baked minutes of a managed rule's stored condition, or null when the stored
+    /// params can't be read (never written by this service, but fail soft).
+    /// </summary>
+    private static int? RuleMinutes(AlertRuleEntity rule)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(rule.ConditionParams);
+            return doc.RootElement.TryGetProperty("minutes", out var minutes)
+                ? minutes.GetInt32()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

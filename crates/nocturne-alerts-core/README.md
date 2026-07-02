@@ -47,7 +47,7 @@ The crate is **pure evaluation**: no I/O, no clock, no persistence.
 
 ```bash
 cd crates
-cargo test --workspace                          # parity corpus (103 scenarios) + unit tests
+cargo test --workspace                          # parity corpus (109 scenarios) + unit tests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
 ```
