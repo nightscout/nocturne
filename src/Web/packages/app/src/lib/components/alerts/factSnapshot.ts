@@ -54,7 +54,7 @@ export class FactSnapshotLog {
  * the playhead. Returns <c>null</c> for non-numeric leaves
  * (composite/not/sustained wrappers, predicted, trend, time_of_day,
  * glucose_bucket, day_of_week, pump_state, state_span_active, do_not_disturb,
- * alert_state, signal_loss). The fact keys match the snake_case wire names on
+ * alert_state, signal_loss, tracker_age). The fact keys match the snake_case wire names on
  * the backend's <c>[ReplayFact]</c> attributes — keep both sides in sync if you
  * add a new comparison leaf.
  */

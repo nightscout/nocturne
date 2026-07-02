@@ -179,6 +179,30 @@ describe("summarizeCondition", () => {
 		expect(summarizeCondition(node)).toBe("alert abcdef firing");
 	});
 
+	it("renders tracker age with hour-aligned minutes as hours", () => {
+		const node: ConditionNode = {
+			type: "tracker_age",
+			tracker_age: {
+				tracker_definition_id: "abc-123",
+				operator: ">=",
+				minutes: 2880,
+			},
+		};
+		expect(summarizeCondition(node)).toBe("Tracker age ≥ 48h");
+	});
+
+	it("keeps the sign on a negative tracker age", () => {
+		const node: ConditionNode = {
+			type: "tracker_age",
+			tracker_age: {
+				tracker_definition_id: "abc-123",
+				operator: "<=",
+				minutes: -120,
+			},
+		};
+		expect(summarizeCondition(node)).toBe("Tracker age ≤ -2h");
+	});
+
 	it("renders DND with sustained duration", () => {
 		const node: ConditionNode = {
 			type: "do_not_disturb",

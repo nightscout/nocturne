@@ -180,4 +180,9 @@
       {/if}
     </p>
   {/if}
+
+  <p class="text-xs text-muted-foreground">
+    Each threshold is delivered through a managed alert rule. Channels can be
+    configured on the Alerts page.
+  </p>
 </div>

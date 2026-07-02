@@ -193,6 +193,11 @@ export function summarizeCondition(
 			const verb = p.is_active ? `${subject} active` : `${subject} not active`;
 			return p.for_minutes ? `${verb} for ${formatMinutes(p.for_minutes)}` : verb;
 		}
+		case "tracker_age": {
+			const p = node.tracker_age;
+			if (!p) return "";
+			return `Tracker age ${opSymbol(p.operator as ComparisonOperator)} ${formatSignedMinutes(p.minutes ?? 0)}`;
+		}
 	}
 }
 
@@ -292,6 +297,12 @@ function formatMinutes(minutes: number): string {
 		return `${hours}h`;
 	}
 	return `${minutes}m`;
+}
+
+/** Like {@link formatMinutes}, but keeps the sign for negative durations
+ *  (tracker_age uses negative minutes for "before the scheduled event"). */
+function formatSignedMinutes(minutes: number): string {
+	return minutes < 0 ? `-${formatMinutes(-minutes)}` : formatMinutes(minutes);
 }
 
 function formatHours(hours: number): string {

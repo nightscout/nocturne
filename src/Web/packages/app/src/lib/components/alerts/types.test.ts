@@ -69,6 +69,16 @@ describe("defaultPayload", () => {
 		expect(node.time_of_day?.timezone).toBe(expected);
 		expect(expected).toBeTruthy();
 	});
+
+	it("tracker_age default has an empty definition id, >= operator, and 0 minutes", () => {
+		const node = defaultPayload("tracker_age");
+		expect(node.type).toBe("tracker_age");
+		expect(node.tracker_age).toEqual({
+			tracker_definition_id: "",
+			operator: ">=",
+			minutes: 0,
+		});
+	});
 });
 
 describe("nodeFromApi / nodeToApi", () => {

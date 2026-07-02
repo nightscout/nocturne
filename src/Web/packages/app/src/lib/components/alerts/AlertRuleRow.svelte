@@ -84,6 +84,9 @@
       {#if !rule.isEnabled}
         <Badge variant="secondary" class="text-[10px]">Disabled</Badge>
       {/if}
+      {#if rule.managedBy}
+        <Badge variant="secondary" class="text-[10px]">Managed by tracker</Badge>
+      {/if}
     </div>
     <div class="truncate text-xs text-muted-foreground" title={chip}>
       {chip || "No condition configured"}
@@ -153,38 +156,43 @@
           {/if}
           Test fire
         </DropdownMenu.Item>
-        <DropdownMenu.Separator />
-        <AlertDialog.Root>
-          <AlertDialog.Trigger>
-            {#snippet child({ props }: { props: Record<string, unknown> })}
-              <DropdownMenu.Item
-                {...props}
-                class="text-destructive"
-                onSelect={(e: Event) => e.preventDefault()}
-              >
-                <Trash2 class="h-4 w-4 mr-2" /> Delete
-              </DropdownMenu.Item>
-            {/snippet}
-          </AlertDialog.Trigger>
-          <AlertDialog.Content>
-            <AlertDialog.Header>
-              <AlertDialog.Title>Delete "{rule.name}"?</AlertDialog.Title>
-              <AlertDialog.Description>
-                This rule will stop firing immediately. Existing alert history
-                is preserved. This action cannot be undone.
-              </AlertDialog.Description>
-            </AlertDialog.Header>
-            <AlertDialog.Footer>
-              <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-              <AlertDialog.Action onclick={onDelete} disabled={isDeleting}>
-                {#if isDeleting}
-                  <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-                {/if}
-                Delete
-              </AlertDialog.Action>
-            </AlertDialog.Footer>
-          </AlertDialog.Content>
-        </AlertDialog.Root>
+        <!-- Managed rules live and die with their tracker threshold (the server
+             returns 409 on DELETE) — hide the delete action; editing channels
+             etc. stays available. -->
+        {#if !rule.managedBy}
+          <DropdownMenu.Separator />
+          <AlertDialog.Root>
+            <AlertDialog.Trigger>
+              {#snippet child({ props }: { props: Record<string, unknown> })}
+                <DropdownMenu.Item
+                  {...props}
+                  class="text-destructive"
+                  onSelect={(e: Event) => e.preventDefault()}
+                >
+                  <Trash2 class="h-4 w-4 mr-2" /> Delete
+                </DropdownMenu.Item>
+              {/snippet}
+            </AlertDialog.Trigger>
+            <AlertDialog.Content>
+              <AlertDialog.Header>
+                <AlertDialog.Title>Delete "{rule.name}"?</AlertDialog.Title>
+                <AlertDialog.Description>
+                  This rule will stop firing immediately. Existing alert history
+                  is preserved. This action cannot be undone.
+                </AlertDialog.Description>
+              </AlertDialog.Header>
+              <AlertDialog.Footer>
+                <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+                <AlertDialog.Action onclick={onDelete} disabled={isDeleting}>
+                  {#if isDeleting}
+                    <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+                  {/if}
+                  Delete
+                </AlertDialog.Action>
+              </AlertDialog.Footer>
+            </AlertDialog.Content>
+          </AlertDialog.Root>
+        {/if}
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   </div>

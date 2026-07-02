@@ -56,7 +56,8 @@ export type LucideIconName =
 	| "bell-off"
 	| "calendar-clock"
 	| "calendar-days"
-	| "moon";
+	| "moon"
+	| "timer";
 
 /**
  * Authoritative leaf-fact catalogue. Order within each group is the order
@@ -85,6 +86,7 @@ export const LEAF_FACTS: readonly FactDef[] = [
 	{ kind: "reservoir", label: "Reservoir", description: "Pump reservoir level (units)", group: "device", icon: "fuel" },
 	{ kind: "site_age", label: "Site age", description: "Hours since last infusion site change", group: "device", icon: "calendar-clock" },
 	{ kind: "sensor_age", label: "Sensor age", description: "Days since CGM sensor start", group: "device", icon: "calendar-clock" },
+	{ kind: "tracker_age", label: "Tracker age", description: "Time since a tracker's start (Duration) or scheduled time (Event); negative before the event. A tracker with no active instance never matches", group: "device", icon: "timer" },
 	{ kind: "pump_battery", label: "Pump battery", description: "Pump battery percent", group: "device", icon: "battery" },
 	{ kind: "uploader_battery", label: "Phone battery", description: "Uploader phone battery percent", group: "device", icon: "smartphone" },
 	{ kind: "loop_stale", label: "Loop has stopped", description: "No APS cycle for N minutes", group: "device", icon: "wifi-off" },

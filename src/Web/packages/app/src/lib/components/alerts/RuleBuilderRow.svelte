@@ -89,6 +89,7 @@
     "calendar-clock": CalendarClock,
     "calendar-days": CalendarDays,
     moon: Moon,
+    timer: Timer,
   };
 
   // Map the alert builder's trend buckets to the shared `Direction` enum so

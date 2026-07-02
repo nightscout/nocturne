@@ -92,6 +92,16 @@ describe("TrackerNotificationEditor", () => {
 			.toBeDisabled();
 	});
 
+	it("shows the managed-alert-rule helper text", async () => {
+		render(TrackerNotificationEditor, { notifications: [] });
+
+		await expect
+			.element(
+				page.getByText(/Each threshold is delivered through a managed alert rule/),
+			)
+			.toBeVisible();
+	});
+
 	it("renders remove buttons for each notification", async () => {
 		render(TrackerNotificationEditor, {
 			notifications: [

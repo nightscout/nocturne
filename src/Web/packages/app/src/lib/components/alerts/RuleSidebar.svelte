@@ -133,6 +133,7 @@
     "calendar-clock": CalendarClock,
     "calendar-days": CalendarDays,
     moon: Moon,
+    timer: Timer,
   };
 
   // Pin the rule under edit to the top so it's always visible. Other rules

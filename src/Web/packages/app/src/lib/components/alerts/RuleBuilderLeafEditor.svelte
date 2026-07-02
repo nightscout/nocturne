@@ -5,6 +5,9 @@
   import { Switch } from "$lib/components/ui/switch";
   import { bg, bgLabel, convertFromDisplayUnits } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { untrack } from "svelte";
+  import { getDefinitions } from "$api/generated/trackers.generated.remote";
+  import type { TrackerDefinitionDto } from "$api";
   import {
     type ConditionNode,
     type ComparisonOperator,
@@ -38,6 +41,15 @@
   }
 
   let { node, availableRules = [] }: Props = $props();
+
+  // A mounted leaf editor's kind never changes (the picker adds new leaves
+  // rather than retyping existing ones), so the query can be created
+  // conditionally at init — same pattern as ClockFaceRenderer. untrack makes
+  // the intentional initial-value read explicit.
+  const definitionsQuery = untrack(() => node.type) === "tracker_age" ? getDefinitions({}) : null;
+  const trackerDefinitions = $derived<TrackerDefinitionDto[]>(
+    definitionsQuery?.current ?? [],
+  );
 
   // Display strings for operators and trend buckets. Stored on the wire as the
   // literal symbol/key; formatted symbols (≥, ≤) are display-only.
@@ -684,6 +696,60 @@
       />
       <span class="text-xs text-muted-foreground">min</span>
     {/if}
+  {:else if node.type === "tracker_age" && node.tracker_age}
+    {@const selectedDef = trackerDefinitions.find(
+      (d) => d.id === node.tracker_age?.tracker_definition_id,
+    )}
+    <Select.Root
+      type="single"
+      value={node.tracker_age.tracker_definition_id ?? ""}
+      onValueChange={(v) => {
+        if (node.tracker_age) node.tracker_age.tracker_definition_id = v;
+      }}
+    >
+      <Select.Trigger class="h-7 w-44 px-2 text-xs">
+        {selectedDef?.name ?? "Select a tracker"}
+      </Select.Trigger>
+      <Select.Content>
+        {#each trackerDefinitions as def (def.id)}
+          <Select.Item value={def.id ?? ""} label={def.name ?? ""} />
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <Select.Root
+      type="single"
+      value={(node.tracker_age.operator as ComparisonOperator) ?? ">="}
+      onValueChange={(v) => {
+        if (node.tracker_age) node.tracker_age.operator = v as ComparisonOperator;
+      }}
+    >
+      <Select.Trigger class="h-7 w-14 px-2 text-xs">
+        {opLabels[(node.tracker_age.operator as ComparisonOperator) ?? ">="]}
+      </Select.Trigger>
+      <Select.Content>
+        {#each Object.entries(opLabels) as [op, label] (op)}
+          <Select.Item value={op} {label} />
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <Input
+      type="number"
+      step="1"
+      class="h-7 w-20 px-2 text-right text-xs tabular-nums"
+      value={(node.tracker_age.minutes ?? 0) / 60}
+      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+        if (node.tracker_age)
+          node.tracker_age.minutes = Math.round(
+            parseNumber(
+              e.currentTarget.value,
+              (node.tracker_age.minutes ?? 0) / 60,
+            ) * 60,
+          );
+      }}
+    />
+    <span class="text-xs text-muted-foreground">
+      h (negative = before a scheduled event)
+    </span>
   {/if}
 </div>
 
