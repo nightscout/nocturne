@@ -170,6 +170,11 @@ internal static class RustEnvelopeMapper
                     .Select(kv => new WireStateSpan(
                         WireEnum(kv.Key.Category), kv.Key.State, Utc(kv.Value.StartedAt)!.Value))
                     .ToList(),
+            ActiveTrackers = ctx.ActiveTrackerReferences.Count == 0
+                ? null
+                : ctx.ActiveTrackerReferences
+                    .Select(kv => new WireTrackerReference(kv.Key, Utc(kv.Value)!.Value))
+                    .ToList(),
         };
 
         return JsonSerializer.SerializeToElement(wire, AlertEnvelopeJson.Options);
@@ -271,6 +276,7 @@ internal static class RustEnvelopeMapper
         [JsonPropertyName("tenant_time_zone_id")] public string? TenantTimeZoneId { get; init; }
         [JsonPropertyName("active_pump_state")] public WirePumpState? ActivePumpState { get; init; }
         [JsonPropertyName("active_state_spans")] public List<WireStateSpan>? ActiveStateSpans { get; init; }
+        [JsonPropertyName("active_trackers")] public List<WireTrackerReference>? ActiveTrackers { get; init; }
     }
 
     private sealed record WirePrediction(
@@ -303,4 +309,8 @@ internal static class RustEnvelopeMapper
         [property: JsonPropertyName("category")] string Category,
         [property: JsonPropertyName("state")] string? State,
         [property: JsonPropertyName("started_at")] DateTime StartedAt);
+
+    private sealed record WireTrackerReference(
+        [property: JsonPropertyName("tracker_definition_id")] Guid TrackerDefinitionId,
+        [property: JsonPropertyName("reference_at")] DateTime ReferenceAt);
 }

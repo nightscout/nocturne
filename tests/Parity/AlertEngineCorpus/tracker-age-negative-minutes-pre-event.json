@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "name": "tracker-age-negative-minutes-pre-event",
+  "description": "elapsed is negative before a scheduled event; \u003E= -1440 is already true 12h out, \u003E= -360 is not yet",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "tracker_age",
+      "condition_params": {
+        "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+        "operator": "\u003E=",
+        "minutes": -1440
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "tracker_age",
+      "condition_params": {
+        "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+        "operator": "\u003E=",
+        "minutes": -360
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_trackers": [
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+            "reference_at": "2026-01-06T00:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T18:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T18:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T18:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_trackers": [
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+            "reference_at": "2026-01-06T00:00:00Z"
+          }
+        ]
+      }
+    }
+  ]
+}

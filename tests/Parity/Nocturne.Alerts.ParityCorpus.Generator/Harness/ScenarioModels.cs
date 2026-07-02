@@ -150,6 +150,7 @@ public sealed record ScenarioContext
     [JsonPropertyName("tenant_time_zone_id")] public string? TenantTimeZoneId { get; init; }
     [JsonPropertyName("active_pump_state")] public ScenarioPumpState? ActivePumpState { get; init; }
     [JsonPropertyName("active_state_spans")] public List<ScenarioStateSpan>? ActiveStateSpans { get; init; }
+    [JsonPropertyName("active_trackers")] public List<ScenarioTrackerReference>? ActiveTrackers { get; init; }
 }
 
 public sealed record ScenarioPrediction(
@@ -184,6 +185,12 @@ public sealed record ScenarioStateSpan(
     [property: JsonPropertyName("category")] string Category,
     [property: JsonPropertyName("state")] string? State,
     [property: JsonPropertyName("started_at")] DateTime StartedAt);
+
+/// <summary>Active domain-tracker instance reference for the <c>tracker_age</c> leaf:
+/// start time for Duration trackers, scheduled time for Event trackers.</summary>
+public sealed record ScenarioTrackerReference(
+    [property: JsonPropertyName("tracker_definition_id")] Guid TrackerDefinitionId,
+    [property: JsonPropertyName("reference_at")] DateTime ReferenceAt);
 
 // ---------------------------------------------------------------------------
 // Expected snapshot output

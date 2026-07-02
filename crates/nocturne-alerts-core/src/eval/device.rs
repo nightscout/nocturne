@@ -5,7 +5,7 @@ use rust_decimal::Decimal;
 
 use super::Env;
 use crate::compare::{compare, decimal_from_f64_cs, total_days, total_hours, total_minutes};
-use crate::model::{ActiveForPayload, ComparePayload, MinutesComparePayload};
+use crate::model::{ActiveForPayload, ComparePayload, MinutesComparePayload, TrackerAgePayload};
 
 /// Site age in **hours** (f64 then C# decimal cast); no site change → false.
 pub(super) fn site_age(p: &ComparePayload, env: &Env) -> bool {
@@ -27,6 +27,27 @@ pub(super) fn sensor_age(p: &ComparePayload, env: &Env) -> bool {
         return false;
     };
     compare(age, p.operator.as_deref(), p.value)
+}
+
+/// Minutes since the active tracker instance's reference timestamp for the
+/// payload's tracker definition (start for duration trackers, scheduled time
+/// for event trackers — resolved by the enricher). Elapsed is negative before
+/// a scheduled event. No active instance → false: a tracker that isn't
+/// running has no age, deliberately opposite to time_since_last_* cold-start
+/// infinity. **[normative]**
+pub(super) fn tracker_age(p: &TrackerAgePayload, env: &Env) -> bool {
+    let Some(reference_at) = env.ctx.active_tracker_references.get(&p.tracker_definition_id)
+    else {
+        return false;
+    };
+    let Some(minutes_since) = decimal_from_f64_cs(total_minutes(env.now - *reference_at)) else {
+        return false;
+    };
+    compare(
+        minutes_since,
+        p.operator.as_deref(),
+        Decimal::from(p.minutes),
+    )
 }
 
 /// Guarded by `HasEverApsCycled`; a null cycle timestamp is false (no infinity

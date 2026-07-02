@@ -112,6 +112,7 @@ pub fn eval_kind(
         (ConditionKind::DayOfWeek, Payload::DayOfWeek(p)) => clock::day_of_week(p, env),
         (ConditionKind::PumpState, Payload::PumpState(p)) => spans::pump_state(p, env),
         (ConditionKind::StateSpanActive, Payload::StateSpan(p)) => spans::state_span_active(p, env),
+        (ConditionKind::TrackerAge, Payload::TrackerAge(p)) => device::tracker_age(p, env),
         // A payload variant can only be stored under its own kind's key, so a
         // mismatch is unreachable; fail closed regardless.
         _ => false,

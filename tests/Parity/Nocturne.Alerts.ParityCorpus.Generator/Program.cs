@@ -26,6 +26,7 @@ scenarios.AddRange(AlertStateAndTimeSinceScenarios.All());
 scenarios.AddRange(ContainerScenarios.All());
 scenarios.AddRange(SustainedScenarios.All());
 scenarios.AddRange(TrackerScenarios.All());
+scenarios.AddRange(TrackerAgeScenarios.All());
 scenarios.AddRange(AutoResolveScenarios.All());
 
 var duplicate = scenarios.GroupBy(s => s.Name).FirstOrDefault(g => g.Count() > 1);

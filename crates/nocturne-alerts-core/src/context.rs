@@ -94,6 +94,10 @@ pub struct SensorContext {
     /// Keyed by `(StateSpanCategory ordinal, state)`; a `None` state means
     /// "any state of this category" (the enricher loads that exact key shape).
     pub active_state_spans: HashMap<(i64, Option<String>), StateSpanSnapshot>,
+    /// Reference timestamp of the active tracker instance per tracker
+    /// definition: start time for duration trackers, scheduled time for event
+    /// trackers (resolved by the enricher). Absent key = no active instance.
+    pub active_tracker_references: HashMap<Uuid, DateTime<Utc>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +168,8 @@ struct WireContext {
     active_pump_state: Option<WirePumpState>,
     #[serde(default)]
     active_state_spans: Option<Vec<WireStateSpan>>,
+    #[serde(default)]
+    active_trackers: Option<Vec<WireTrackerReference>>,
 }
 
 #[derive(Deserialize)]
@@ -208,6 +214,12 @@ struct WireStateSpan {
     started_at: DateTime<Utc>,
 }
 
+#[derive(Deserialize)]
+struct WireTrackerReference {
+    tracker_definition_id: Uuid,
+    reference_at: DateTime<Utc>,
+}
+
 fn dec(n: &Number, what: &str) -> Result<Decimal, String> {
     decimal_from_number(n).ok_or_else(|| format!("invalid decimal for {what}: {n}"))
 }
@@ -242,6 +254,11 @@ impl SensorContext {
                     acknowledged_at: a.acknowledged_at,
                 },
             );
+        }
+
+        let mut active_tracker_references = HashMap::new();
+        for t in w.active_trackers.unwrap_or_default() {
+            active_tracker_references.insert(t.tracker_definition_id, t.reference_at);
         }
 
         let mut active_state_spans = HashMap::new();
@@ -329,6 +346,7 @@ impl SensorContext {
                 })
                 .transpose()?,
             active_state_spans,
+            active_tracker_references,
         })
     }
 }

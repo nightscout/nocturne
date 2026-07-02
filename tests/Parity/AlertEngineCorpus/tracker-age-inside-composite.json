@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "name": "tracker-age-inside-composite",
+  "description": "tracker_age composes like any leaf (and with time_of_day)",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "composite",
+      "condition_params": {
+        "operator": "and",
+        "conditions": [
+          {
+            "type": "tracker_age",
+            "tracker_age": {
+              "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+              "operator": "\u003E=",
+              "minutes": 2880
+            }
+          },
+          {
+            "type": "time_of_day",
+            "time_of_day": {
+              "from": "10:00",
+              "to": "14:00"
+            }
+          }
+        ]
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_trackers": [
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+            "reference_at": "2026-01-03T11:00:00Z"
+          }
+        ]
+      }
+    }
+  ]
+}

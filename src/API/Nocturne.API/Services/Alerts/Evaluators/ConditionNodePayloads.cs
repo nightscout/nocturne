@@ -58,6 +58,7 @@ internal static class ConditionNodePayloads
             "day_of_week" => node.DayOfWeek,
             "pump_state" => node.PumpState,
             "state_span_active" => node.StateSpanActive,
+            "tracker_age" => node.TrackerAge,
             _ => null,
         };
 

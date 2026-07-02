@@ -58,10 +58,11 @@ pub enum ConditionKind {
     DayOfWeek,
     PumpState,
     StateSpanActive,
+    TrackerAge,
 }
 
 /// `(kind, wire name, C# enum member name)` in declaration order.
-const KINDS: [(ConditionKind, &str, &str); 31] = [
+const KINDS: [(ConditionKind, &str, &str); 32] = [
     (ConditionKind::Threshold, "threshold", "Threshold"),
     (
         ConditionKind::RateOfChange,
@@ -137,6 +138,7 @@ const KINDS: [(ConditionKind, &str, &str); 31] = [
         "state_span_active",
         "StateSpanActive",
     ),
+    (ConditionKind::TrackerAge, "tracker_age", "TrackerAge"),
 ];
 
 impl ConditionKind {
@@ -499,6 +501,15 @@ pub struct PumpStatePayload {
     pub for_minutes: Option<i32>,
 }
 
+/// `tracker_age`: minutes since the active tracker instance's reference
+/// timestamp (start for duration trackers, scheduled time for event trackers).
+#[derive(Debug, Clone, Default)]
+pub struct TrackerAgePayload {
+    pub tracker_definition_id: Uuid,
+    pub operator: Option<String>,
+    pub minutes: i32,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct StateSpanPayload {
     /// `StateSpanCategory` ordinal; missing defaults to 0 (PumpMode), which
@@ -532,6 +543,7 @@ pub enum Payload {
     DayOfWeek(DayOfWeekPayload),
     PumpState(PumpStatePayload),
     StateSpan(StateSpanPayload),
+    TrackerAge(TrackerAgePayload),
 }
 
 /// Parses the payload object for `kind`. The value must be a JSON object —
@@ -637,6 +649,11 @@ pub fn parse_payload(kind: ConditionKind, v: &Value) -> ParseResult<Payload> {
             state: f_string(o, "state")?,
             is_active: f_bool(o, "is_active")?,
             for_minutes: f_opt_i32(o, "for_minutes")?,
+        }),
+        ConditionKind::TrackerAge => Payload::TrackerAge(TrackerAgePayload {
+            tracker_definition_id: f_uuid(o, "tracker_definition_id")?,
+            operator: f_string(o, "operator")?,
+            minutes: f_i32(o, "minutes")?,
         }),
     };
     Ok(p)

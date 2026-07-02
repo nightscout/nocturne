@@ -274,6 +274,49 @@ public class TrackerRepository : ITrackerRepository
             .ToListAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
+    public virtual async Task<Dictionary<Guid, DateTime>> GetActiveTrackerReferencesAsync(
+        IReadOnlySet<Guid> definitionIds,
+        DateTime at,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (definitionIds.Count == 0)
+            return new Dictionary<Guid, DateTime>();
+
+        var ids = definitionIds.ToList();
+        var instances = await _context
+            .TrackerInstances.AsNoTracking()
+            .Where(i => ids.Contains(i.DefinitionId)
+                && i.StartedAt <= at
+                && (i.CompletedAt == null || i.CompletedAt > at))
+            .OrderByDescending(i => i.StartedAt)
+            .Select(i => new
+            {
+                i.DefinitionId,
+                i.StartedAt,
+                i.ScheduledAt,
+                i.Definition!.Mode,
+            })
+            .ToListAsync(cancellationToken);
+
+        var references = new Dictionary<Guid, DateTime>();
+        foreach (var instance in instances)
+        {
+            // Newest-first ordering: the first instance seen per definition wins.
+            if (references.ContainsKey(instance.DefinitionId))
+                continue;
+
+            var reference = instance.Mode == TrackerMode.Event
+                ? instance.ScheduledAt
+                : instance.StartedAt;
+            if (reference is { } referenceAt)
+                references[instance.DefinitionId] = referenceAt;
+        }
+
+        return references;
+    }
+
     /// <summary>
     /// Get completed tracker instances for history
     /// </summary>

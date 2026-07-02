@@ -637,3 +637,126 @@ fn tracker_reopen_after_close_creates_fresh_excursion_ordinal() {
     assert_eq!(t.kind, TransitionType::ExcursionOpened);
     assert_eq!(t.excursion, Some(2));
 }
+
+// ---------------------------------------------------------------------------
+// tracker_age (domain tracker instances, distinct from the excursion tracker)
+// ---------------------------------------------------------------------------
+
+fn tracker_definition() -> Uuid {
+    Uuid::from_u128(0xABCD)
+}
+
+fn tracker_ctx(reference_at: DateTime<Utc>) -> SensorContext {
+    let mut ctx = SensorContext::default();
+    ctx.active_tracker_references
+        .insert(tracker_definition(), reference_at);
+    ctx
+}
+
+fn tracker_age_payload(operator: &str, minutes: i32) -> Value {
+    json!({
+        "tracker_definition_id": tracker_definition().to_string(),
+        "operator": operator,
+        "minutes": minutes,
+    })
+}
+
+#[test]
+fn tracker_age_fires_at_and_after_threshold() {
+    // Started 48h ago, threshold >= 48h.
+    let ctx = tracker_ctx(base() - TimeDelta::hours(48));
+    assert!(eval_payload(
+        ConditionKind::TrackerAge,
+        &tracker_age_payload(">=", 48 * 60),
+        &ctx
+    ));
+}
+
+#[test]
+fn tracker_age_false_before_threshold() {
+    let ctx = tracker_ctx(base() - TimeDelta::hours(47));
+    assert!(!eval_payload(
+        ConditionKind::TrackerAge,
+        &tracker_age_payload(">=", 48 * 60),
+        &ctx
+    ));
+}
+
+#[test]
+fn tracker_age_no_active_instance_is_false() {
+    // Deliberately opposite to time_since_last_* cold-start infinity.
+    let ctx = SensorContext::default();
+    assert!(!eval_payload(
+        ConditionKind::TrackerAge,
+        &tracker_age_payload(">=", 0),
+        &ctx
+    ));
+}
+
+#[test]
+fn tracker_age_other_definition_is_false() {
+    let mut ctx = SensorContext::default();
+    ctx.active_tracker_references
+        .insert(Uuid::from_u128(0xFFFF), base() - TimeDelta::hours(48));
+    assert!(!eval_payload(
+        ConditionKind::TrackerAge,
+        &tracker_age_payload(">=", 60),
+        &ctx
+    ));
+}
+
+#[test]
+fn tracker_age_negative_minutes_pre_event_window() {
+    // Event tracker scheduled 12h from now: elapsed is -720 minutes.
+    // A "-24h before event" threshold (minutes = -1440) is already crossed;
+    // a "-6h before event" threshold (minutes = -360) is not yet.
+    let ctx = tracker_ctx(base() + TimeDelta::hours(12));
+    assert!(eval_payload(
+        ConditionKind::TrackerAge,
+        &tracker_age_payload(">=", -1440),
+        &ctx
+    ));
+    assert!(!eval_payload(
+        ConditionKind::TrackerAge,
+        &tracker_age_payload(">=", -360),
+        &ctx
+    ));
+}
+
+#[test]
+fn tracker_age_unknown_operator_is_false() {
+    let ctx = tracker_ctx(base() - TimeDelta::hours(48));
+    assert!(!eval_payload(
+        ConditionKind::TrackerAge,
+        &tracker_age_payload("~", 60),
+        &ctx
+    ));
+}
+
+#[test]
+fn tracker_age_missing_definition_id_is_nil_uuid_lookup() {
+    // Absent tracker_definition_id parses as Uuid::nil (C# default); only a
+    // context entry under the nil key would match.
+    let ctx = tracker_ctx(base() - TimeDelta::hours(48));
+    let payload = json!({ "operator": ">=", "minutes": 0 });
+    assert!(!eval_payload(ConditionKind::TrackerAge, &payload, &ctx));
+}
+
+#[test]
+fn tracker_age_wire_context_round_trips() {
+    let wire = json!({
+        "active_trackers": [
+            {
+                "tracker_definition_id": tracker_definition().to_string(),
+                "reference_at": "2026-01-03T12:00:00Z",
+            }
+        ]
+    });
+    let ctx: SensorContext = serde_json::from_value(wire).expect("context parses");
+    // base() is 2026-01-05T12:00:00Z — 48h after the reference.
+    assert!(eval_payload(
+        ConditionKind::TrackerAge,
+        &tracker_age_payload(">=", 48 * 60),
+        &ctx
+    ));
+}

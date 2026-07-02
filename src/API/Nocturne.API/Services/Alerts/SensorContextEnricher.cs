@@ -326,6 +326,16 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             enriched = enriched with { ActiveStateSpans = dict };
         }
 
+        if (needs.ReferencedTrackerDefinitions.Count > 0)
+        {
+            // One query for the whole referenced set. `now` is the live clock for
+            // orchestrator/sweep passes and the replay tick for replay, so the same
+            // fetch answers "active at this instant" in both paths.
+            var references = await _deps.Trackers.GetActiveTrackerReferencesAsync(
+                needs.ReferencedTrackerDefinitions, now, ct);
+            enriched = enriched with { ActiveTrackerReferences = references };
+        }
+
         return enriched;
     }
 

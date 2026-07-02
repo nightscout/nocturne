@@ -209,6 +209,15 @@ public record SensorContext
     /// </summary>
     public IReadOnlyDictionary<(StateSpanCategory Category, string? State), StateSpanSnapshot> ActiveStateSpans { get; init; }
         = new Dictionary<(StateSpanCategory, string?), StateSpanSnapshot>();
+
+    /// <summary>
+    /// Reference timestamp of the active tracker instance per tracker definition: start
+    /// time for Duration trackers, scheduled time for Event trackers. Populated by the
+    /// enricher for every definition referenced by a <c>tracker_age</c> leaf in the rules
+    /// being evaluated. An absent key means no active instance — the leaf evaluates false.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, DateTime> ActiveTrackerReferences { get; init; }
+        = new Dictionary<Guid, DateTime>();
 }
 
 /// <summary>
@@ -447,6 +456,17 @@ public record StateSpanActiveCondition(
     [property: JsonPropertyName("is_active")] bool IsActive,
     [property: JsonPropertyName("for_minutes")] int? ForMinutes);
 
+/// <summary>Tracker-age condition: minutes since the active tracker instance's reference
+/// timestamp (start for Duration trackers, scheduled time for Event trackers) compared
+/// against <see cref="Minutes"/>. Elapsed time is negative before a scheduled event, so a
+/// negative <see cref="Minutes"/> with <c>&gt;=</c> expresses "within N minutes before the
+/// event". No active instance for the definition evaluates false — a tracker that isn't
+/// running has no age (deliberately opposite to the time_since_last_* cold-start infinity).</summary>
+public record TrackerAgeCondition(
+    [property: JsonPropertyName("tracker_definition_id")] Guid TrackerDefinitionId,
+    string Operator,
+    int Minutes);
+
 /// <summary>Selects which TempBasal field a TempBasalCondition compares.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<TempBasalMetric>))]
 public enum TempBasalMetric
@@ -495,7 +515,8 @@ public record ConditionNode(
     [property: JsonPropertyName("time_since_last_bolus")] TimeSinceLastBolusCondition? TimeSinceLastBolus = null,
     [property: JsonPropertyName("day_of_week")] DayOfWeekCondition? DayOfWeek = null,
     [property: JsonPropertyName("pump_state")] PumpStateCondition? PumpState = null,
-    [property: JsonPropertyName("state_span_active")] StateSpanActiveCondition? StateSpanActive = null
+    [property: JsonPropertyName("state_span_active")] StateSpanActiveCondition? StateSpanActive = null,
+    [property: JsonPropertyName("tracker_age")] TrackerAgeCondition? TrackerAge = null
 );
 
 /// <summary>

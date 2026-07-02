@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "name": "tracker-age-crosses-threshold",
+  "description": "tracker_age \u003E= 2880 opens once the active instance\u0027s age crosses 48h and continues while active",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "tracker_age",
+      "condition_params": {
+        "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+        "operator": "\u003E=",
+        "minutes": 2880
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_trackers": [
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+            "reference_at": "2026-01-03T13:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T12:55:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:55:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:55:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_trackers": [
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+            "reference_at": "2026-01-03T13:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T13:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T13:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T13:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_trackers": [
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+            "reference_at": "2026-01-03T13:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "at": "2026-01-05T13:10:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T13:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T13:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_trackers": [
+          {
+            "tracker_definition_id": "00000000-0000-0000-0001-000000000001",
+            "reference_at": "2026-01-03T13:00:00Z"
+          }
+        ]
+      }
+    }
+  ]
+}
