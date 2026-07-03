@@ -3,8 +3,9 @@
 //! There is no mature Rust SignalR client, so this hand-rolls the parts the companion needs against
 //! `DataHub`: HTTP `negotiate` (negotiation is required — the server does not allow skip-negotiation),
 //! open the WebSocket with the returned connection token, send the JSON-protocol handshake, invoke the
-//! `Authorize` hub method with the OAuth token, answer server pings, and surface incoming
-//! `device_action` invocations. Messages are JSON records terminated by the 0x1e record separator.
+//! `Authorize` and `Subscribe` hub methods, answer server pings, and surface incoming invocations —
+//! the typed device targets plus any target the caller subscribed to by name. Messages are JSON
+//! records terminated by the 0x1e record separator.
 //!
 //! This is deliberately not a general SignalR client: it handles invocation (type 1), ping (type 6),
 //! completion (type 3), and close (type 7); other frame types are ignored.
@@ -19,9 +20,17 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 /// SignalR record separator (RS, 0x1e) that terminates every JSON message.
 const RECORD_SEPARATOR: u8 = 0x1e;
 
+/// Collections passed to `Subscribe`: the native V4 categories plus the legacy v1 collections, so
+/// realtime fires whether the tenant writes V4 or legacy shapes. Matches the Windows widget.
+const COLLECTIONS: [&str; 6] = ["glucose", "care", "device", "entries", "treatments", "devicestatus"];
+
+/// Server events broadcast for the subscribed collections; each means "data changed". Consumers
+/// re-fetch over HTTP rather than parsing payloads, so the event name is all a subscriber needs.
+pub static DATA_EVENTS: [&str; 5] = ["dataUpdate", "create", "update", "delete", "trackerUpdate"];
+
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
-/// A connected, authorized DataHub stream that yields `device_action` payloads.
+/// A connected, authorized DataHub stream that yields device and subscribed data events.
 pub struct HubConnection {
     ws: WsStream,
     /// Re-assembly buffer for the 0x1E-framed record stream. The server may split one JSON record
@@ -32,6 +41,9 @@ pub struct HubConnection {
     /// actionable record, so the rest of a coalesced batch waits here for the next `recv` instead of
     /// being dropped.
     pending: VecDeque<RecordAction>,
+    /// Invocation targets (beyond the typed device targets) the caller wants surfaced as
+    /// `HubEvent::Named`; anything else is ignored.
+    subscribed: &'static [&'static str],
 }
 
 /// A parsed action to take for one complete record, decoupled from the socket so the framing +
@@ -46,7 +58,10 @@ enum RecordAction {
     DeviceAction,
     /// A `device_notification` invocation (type 1) arrived, carrying the parsed mirror.
     DeviceNotification(DeviceNotificationMirror),
-    /// Anything else (completions, other targets) — no action.
+    /// A subscribed invocation target arrived. Neither the name nor the payload is carried: the
+    /// consumer treats every subscribed event the same ("data changed — re-fetch").
+    Named,
+    /// Anything else (completions, unsubscribed targets) — no action.
     Ignore,
 }
 
@@ -94,15 +109,24 @@ pub enum HubEvent {
     /// payload itself — there is no snapshot to reconcile against, so the caller toasts it directly
     /// (after the user-id + dedup checks).
     DeviceNotification(DeviceNotificationMirror),
+    /// A subscribed data-event invocation arrived (see `DATA_EVENTS`). Like device_action the
+    /// payload (and the name — every subscribed event means the same "data changed") is dropped:
+    /// the event is only a trigger to re-fetch over HTTP.
+    Named,
     /// The server closed the connection (SignalR close frame or socket EOF). Caller should reconnect.
     Closed,
 }
 
 impl HubConnection {
-    /// Negotiates, opens the WebSocket, performs the JSON handshake, and invokes `Authorize` with
-    /// `token`. Returns a connection ready to `recv` `device_action` events. `server` is the tenant
-    /// base URL (https); the WS URL is derived from it.
-    pub async fn connect(server: &str, token: &str) -> Result<Self, String> {
+    /// Negotiates, opens the WebSocket, performs the JSON handshake, and invokes `Authorize` (with
+    /// `token`) and `Subscribe`. Returns a connection ready to `recv` device events plus any
+    /// invocation named in `subscribed`. `server` is the tenant base URL (https); the WS URL is
+    /// derived from it.
+    pub async fn connect(
+        server: &str,
+        token: &str,
+        subscribed: &'static [&'static str],
+    ) -> Result<Self, String> {
         let server = server.trim_end_matches('/');
         let connection_token = negotiate(server, token).await?;
 
@@ -131,7 +155,18 @@ impl HubConnection {
         });
         send_record(&mut ws, authorize.to_string().as_bytes()).await?;
 
-        Ok(Self { ws, buffer: String::new(), pending: VecDeque::new() })
+        // Subscribe joins the per-collection groups so the DATA_EVENTS broadcasts reach us. Group
+        // membership is per-connection (it does not survive a reconnect), so it must happen here on
+        // every new connection, not once per process.
+        let subscribe = serde_json::json!({
+            "type": 1,
+            "invocationId": "sub-1",
+            "target": "Subscribe",
+            "arguments": [{ "collections": COLLECTIONS }]
+        });
+        send_record(&mut ws, subscribe.to_string().as_bytes()).await?;
+
+        Ok(Self { ws, buffer: String::new(), pending: VecDeque::new(), subscribed })
     }
 
     /// Waits for the next hub event, answering pings transparently. Returns `HubEvent::Closed` when
@@ -155,6 +190,7 @@ impl HubConnection {
                     RecordAction::DeviceNotification(mirror) => {
                         return Ok(HubEvent::DeviceNotification(mirror))
                     }
+                    RecordAction::Named => return Ok(HubEvent::Named),
                     RecordAction::Ignore => {}
                 }
             }
@@ -176,7 +212,7 @@ impl HubConnection {
                 _ => continue,
             };
 
-            buffer_payload(&mut self.buffer, &mut self.pending, &payload);
+            buffer_payload(&mut self.buffer, &mut self.pending, &payload, self.subscribed);
         }
     }
 }
@@ -184,10 +220,15 @@ impl HubConnection {
 /// Appends one WS payload to the re-assembly buffer and parses every newly complete record onto the
 /// pending queue in arrival order. Split out of `recv` (no socket involved) so the coalescing
 /// behavior is unit-testable.
-fn buffer_payload(buffer: &mut String, pending: &mut VecDeque<RecordAction>, payload: &str) {
+fn buffer_payload(
+    buffer: &mut String,
+    pending: &mut VecDeque<RecordAction>,
+    payload: &str,
+    subscribed: &[&str],
+) {
     buffer.push_str(payload);
     for record in drain_complete_records(buffer) {
-        pending.push_back(dispatch_record(&record));
+        pending.push_back(dispatch_record(&record, subscribed));
     }
 }
 
@@ -213,9 +254,11 @@ fn drain_complete_records(buffer: &mut String) -> Vec<String> {
         .collect()
 }
 
-/// Classifies one complete record into the action `recv` should take. A genuine parse error on a
-/// complete record is logged (it indicates a field/shape mismatch worth diagnosing) and ignored.
-fn dispatch_record(record: &str) -> RecordAction {
+/// Classifies one complete record into the action `recv` should take. Type-1 targets outside the
+/// typed device pair surface as `Named` when listed in `subscribed`, else are ignored. A genuine
+/// parse error on a complete record is logged (it indicates a field/shape mismatch worth
+/// diagnosing) and ignored.
+fn dispatch_record(record: &str, subscribed: &[&str]) -> RecordAction {
     let value: serde_json::Value = match serde_json::from_str(record) {
         Ok(v) => v,
         Err(e) => {
@@ -237,7 +280,9 @@ fn dispatch_record(record: &str) -> RecordAction {
             Some(mirror) => RecordAction::DeviceNotification(mirror),
             None => RecordAction::Ignore,
         },
-        // Other type-1 targets and all other frames (e.g. the Authorize completion) are ignored.
+        // A caller-subscribed data event — arriving is the whole signal; the payload is dropped.
+        Some(1) if target.is_some_and(|t| subscribed.iter().any(|s| *s == t)) => RecordAction::Named,
+        // Unsubscribed type-1 targets and all other frames (e.g. invocation completions) are ignored.
         _ => RecordAction::Ignore,
     }
 }
@@ -368,14 +413,17 @@ mod tests {
 
     const RS: char = RECORD_SEPARATOR as char;
 
+    /// No named subscriptions — the typed device targets don't depend on the set.
+    const NO_SUBS: &[&str] = &[];
+
     #[test]
     fn coalesced_records_in_one_chunk_all_drain() {
         let mut buf = String::new();
         buf.push_str(&format!("{{\"type\":6}}{RS}{{\"type\":1,\"target\":\"device_action\"}}{RS}"));
         let records = drain_complete_records(&mut buf);
         assert_eq!(records.len(), 2);
-        assert!(matches!(dispatch_record(&records[0]), RecordAction::Pong));
-        assert!(matches!(dispatch_record(&records[1]), RecordAction::DeviceAction));
+        assert!(matches!(dispatch_record(&records[0], NO_SUBS), RecordAction::Pong));
+        assert!(matches!(dispatch_record(&records[1], NO_SUBS), RecordAction::DeviceAction));
         // Both records were terminated, so nothing carries forward.
         assert!(buf.is_empty());
     }
@@ -393,7 +441,7 @@ mod tests {
              {{\"type\":1,\"target\":\"device_notification\",\"arguments\":[\
                {{\"userId\":\"u1\",\"notification\":{{\"id\":\"n1\",\"title\":\"t\"}}}}]}}{RS}"
         );
-        buffer_payload(&mut buf, &mut pending, &frame);
+        buffer_payload(&mut buf, &mut pending, &frame, NO_SUBS);
         assert_eq!(pending.len(), 3);
         assert!(matches!(pending[0], RecordAction::DeviceAction));
         assert!(matches!(pending[1], RecordAction::Pong));
@@ -407,9 +455,9 @@ mod tests {
         let mut pending = VecDeque::new();
         let full = format!("{{\"type\":1,\"target\":\"device_action\"}}{RS}");
         let split = full.len() / 2;
-        buffer_payload(&mut buf, &mut pending, &full[..split]);
+        buffer_payload(&mut buf, &mut pending, &full[..split], NO_SUBS);
         assert!(pending.is_empty());
-        buffer_payload(&mut buf, &mut pending, &full[split..]);
+        buffer_payload(&mut buf, &mut pending, &full[split..], NO_SUBS);
         assert_eq!(pending.len(), 1);
         assert!(matches!(pending[0], RecordAction::DeviceAction));
     }
@@ -429,7 +477,7 @@ mod tests {
         buf.push_str(&full[split..]);
         let records = drain_complete_records(&mut buf);
         assert_eq!(records.len(), 1);
-        assert!(matches!(dispatch_record(&records[0]), RecordAction::DeviceAction));
+        assert!(matches!(dispatch_record(&records[0], NO_SUBS), RecordAction::DeviceAction));
         assert!(buf.is_empty());
     }
 
@@ -439,21 +487,50 @@ mod tests {
         buf.push_str(&format!("{{\"type\":6}}{RS}{{\"type\":1,\"tar"));
         let records = drain_complete_records(&mut buf);
         assert_eq!(records.len(), 1);
-        assert!(matches!(dispatch_record(&records[0]), RecordAction::Pong));
+        assert!(matches!(dispatch_record(&records[0], NO_SUBS), RecordAction::Pong));
         // The unterminated second record is retained for the next frame.
         assert_eq!(buf, "{\"type\":1,\"tar");
     }
 
     #[test]
     fn dispatch_classifies_frame_types() {
-        assert!(matches!(dispatch_record(r#"{"type":7}"#), RecordAction::Close));
-        // A type-1 invocation for a different target is ignored.
+        assert!(matches!(dispatch_record(r#"{"type":7}"#, NO_SUBS), RecordAction::Close));
+        // A type-1 invocation for an unsubscribed target is ignored.
         assert!(matches!(
-            dispatch_record(r#"{"type":1,"target":"other"}"#),
+            dispatch_record(r#"{"type":1,"target":"other"}"#, NO_SUBS),
             RecordAction::Ignore
         ));
         // The Authorize completion (type 3) is ignored.
-        assert!(matches!(dispatch_record(r#"{"type":3,"invocationId":"auth-1"}"#), RecordAction::Ignore));
+        assert!(matches!(
+            dispatch_record(r#"{"type":3,"invocationId":"auth-1"}"#, NO_SUBS),
+            RecordAction::Ignore
+        ));
+    }
+
+    #[test]
+    fn dispatch_surfaces_subscribed_data_events_as_named() {
+        // Every data event the glucose path subscribes to must come through.
+        for event in DATA_EVENTS {
+            let record = format!(r#"{{"type":1,"target":"{event}","arguments":[{{}}]}}"#);
+            assert!(
+                matches!(dispatch_record(&record, &DATA_EVENTS), RecordAction::Named),
+                "expected Named for {event}"
+            );
+        }
+    }
+
+    #[test]
+    fn dispatch_ignores_unsubscribed_target_even_with_subscriptions() {
+        // An unknown broadcast target must not surface just because a subscription set exists.
+        assert!(matches!(
+            dispatch_record(r#"{"type":1,"target":"somethingElse"}"#, &DATA_EVENTS),
+            RecordAction::Ignore
+        ));
+        // Device targets stay on their typed variants regardless of the set.
+        assert!(matches!(
+            dispatch_record(r#"{"type":1,"target":"device_action"}"#, &DATA_EVENTS),
+            RecordAction::DeviceAction
+        ));
     }
 
     #[test]
@@ -462,7 +539,7 @@ mod tests {
             {"userId":"user-1","notification":{"id":"n1","type":"info","category":"System",
              "urgency":"Warn","title":"Sync complete","subtitle":"3 devices updated"}}
         ]}"#;
-        match dispatch_record(frame) {
+        match dispatch_record(frame, NO_SUBS) {
             RecordAction::DeviceNotification(m) => {
                 assert_eq!(m.user_id, "user-1");
                 assert_eq!(m.notification.id, "n1");
@@ -477,7 +554,7 @@ mod tests {
     fn dispatch_ignores_device_notification_without_arguments() {
         // A malformed frame (no arguments) is dropped, not a panic.
         assert!(matches!(
-            dispatch_record(r#"{"type":1,"target":"device_notification"}"#),
+            dispatch_record(r#"{"type":1,"target":"device_notification"}"#, NO_SUBS),
             RecordAction::Ignore
         ));
     }

@@ -16,7 +16,6 @@ mod alert_actuation;
 mod auth;
 mod client_devices;
 mod glucose_file;
-mod glucose_hub;
 mod glucose_poll;
 mod http;
 mod install_id;
@@ -491,9 +490,10 @@ async fn poll_glucose(client: &reqwest::Client, app: &tauri::AppHandle) {
 }
 
 /// Background poll loop. Polls before sleeping, so a launch (or a just-completed link) populates
-/// promptly; idles while unlinked. A SignalR hub (best-effort) nudges the loop to poll early on any
-/// data change; the timer remains the fallback whenever the hub is down.
-fn spawn_glucose_poller(app: tauri::AppHandle) {
+/// promptly; idles while unlinked. `refresh_rx` carries "data changed" nudges from the shared
+/// SignalR session (alert_actuation) to poll early; the timer remains the fallback whenever the
+/// hub is down.
+fn spawn_glucose_poller(app: tauri::AppHandle, mut refresh_rx: tokio::sync::mpsc::Receiver<()>) {
     tauri::async_runtime::spawn(async move {
         let client = match http_client() {
             Ok(c) => c,
@@ -502,10 +502,6 @@ fn spawn_glucose_poller(app: tauri::AppHandle) {
                 return;
             }
         };
-
-        // Capacity 1: a full channel means a refresh is already pending, so realtime nudges coalesce.
-        let (refresh_tx, mut refresh_rx) = tokio::sync::mpsc::channel::<()>(1);
-        glucose_hub::spawn(client.clone(), refresh_tx);
 
         loop {
             if auth::is_linked() {
@@ -561,14 +557,19 @@ fn main() {
                 }
             }
 
-            spawn_glucose_poller(handle.clone());
+            // Realtime "data changed" nudges flow from the shared SignalR session (owned by the
+            // actuation loop) to the glucose poll loop. Capacity 1: a full channel means a refresh
+            // is already pending, so nudges coalesce.
+            let (refresh_tx, refresh_rx) = tokio::sync::mpsc::channel::<()>(1);
+            spawn_glucose_poller(handle.clone(), refresh_rx);
 
             // Device-action actuation: register this install and toast on alerts (notify capability).
-            // Self-idles while unlinked, so it is safe to start unconditionally here.
+            // Also owns the SignalR connection that feeds `refresh_tx`. Self-idles while unlinked,
+            // so it is safe to start unconditionally here.
             {
                 let handle = handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    alert_actuation::run(handle).await;
+                    alert_actuation::run(handle, refresh_tx).await;
                 });
             }
             Ok(())

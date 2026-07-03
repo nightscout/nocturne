@@ -18,6 +18,11 @@
 //! Transport is the hand-rolled `signalr` client; if a connection attempt fails the loop falls back
 //! to pure periodic reconcile until the next reconnect succeeds, so actuation degrades to polling
 //! rather than stopping.
+//!
+//! The session here owns the app's only SignalR connection: besides the device targets it
+//! subscribes to the DataHub's data events and forwards each as a nudge on `refresh_tx`, which the
+//! glucose poll loop in `main.rs` consumes for low-latency refreshes. The 60s glucose poll remains
+//! the fallback whenever the hub is down, exactly like the reconcile interval is for actuation.
 
 use crate::auth::{self, TokenError};
 use crate::client_devices::{self, DeviceActionIntent};
@@ -139,7 +144,9 @@ fn reset_registration(app: &tauri::AppHandle) {
 
 /// Drives registration + actuation for as long as the app runs. Idles (retrying) while unlinked,
 /// resolving `(server, token)` via the same durable-OAuth path the glucose poller uses.
-pub async fn run(app: tauri::AppHandle) {
+/// `refresh_tx` nudges the glucose poll loop on every subscribed data event (a full channel means
+/// a refresh is already pending, so a dropped nudge coalesces harmlessly).
+pub async fn run(app: tauri::AppHandle, refresh_tx: mpsc::Sender<()>) {
     let mut install_id = crate::install_id::get_or_create();
     let label = machine_label();
     let runtime = tokio::runtime::Handle::current();
@@ -208,7 +215,16 @@ pub async fn run(app: tauri::AppHandle) {
         // device_action, and on the periodic tick. Returns when the session ages out, the connection
         // drops, or the registration/credential is invalidated. The pair just resolved above is
         // reused for the session's connect + first reconcile.
-        match run_session(&app, &client, (server, token), &session_device_id, &mut state, &runtime).await
+        match run_session(
+            &app,
+            &client,
+            (server, token),
+            &session_device_id,
+            &mut state,
+            &runtime,
+            &refresh_tx,
+        )
+        .await
         {
             SessionEnd::Recycle => {}
             SessionEnd::InvalidateRegistration => device_id = None,
@@ -296,6 +312,7 @@ async fn run_session(
     device_id: &str,
     state: &mut ActuationState,
     runtime: &tokio::runtime::Handle,
+    refresh_tx: &mpsc::Sender<()>,
 ) -> SessionEnd {
     // Channel the SignalR task uses to relay hub events to this loop.
     let (tx, mut rx) = mpsc::channel::<HubMessage>(16);
@@ -310,8 +327,15 @@ async fn run_session(
     // owned here, so `rx.recv()` parks and the session ends on the short fallback deadline, letting
     // the outer loop reconnect — pure periodic reconcile covers the gap (poll fallback).
     let (signalr_task, session_secs) =
-        match crate::signalr::HubConnection::connect(&server, &token).await {
-            Ok(conn) => (Some(spawn_signalr(conn, tx)), SESSION_SECS),
+        match crate::signalr::HubConnection::connect(&server, &token, &crate::signalr::DATA_EVENTS)
+            .await
+        {
+            Ok(conn) => {
+                // Catch up immediately: readings may have arrived while disconnected, before the
+                // Subscribe on this connection took effect.
+                let _ = refresh_tx.try_send(());
+                (Some(spawn_signalr(conn, tx, refresh_tx.clone())), SESSION_SECS)
+            }
             Err(e) => {
                 eprintln!("alert actuation: SignalR connect failed, falling back to polling: {e}");
                 (None, RECONNECT_SECS)
@@ -414,11 +438,14 @@ enum HubMessage {
     Notification(DeviceNotificationMirror),
 }
 
-/// Spawns the SignalR receive pump. Relays each hub event on `tx`; the task ends (and drops `tx`,
-/// which the session observes as `rx.recv() == None`) when the connection closes.
+/// Spawns the SignalR receive pump. Relays each device event on `tx`; a subscribed data event
+/// nudges `refresh_tx` directly (the session loop has nothing to do with it, and skipping the relay
+/// keeps the hub-event → glucose-refresh latency at one hop). The task ends (and drops `tx`, which
+/// the session observes as `rx.recv() == None`) when the connection closes.
 fn spawn_signalr(
     mut conn: crate::signalr::HubConnection,
     tx: mpsc::Sender<HubMessage>,
+    refresh_tx: mpsc::Sender<()>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
@@ -426,6 +453,10 @@ fn spawn_signalr(
                 Ok(crate::signalr::HubEvent::DeviceAction) => HubMessage::DeviceAction,
                 Ok(crate::signalr::HubEvent::DeviceNotification(mirror)) => {
                     HubMessage::Notification(mirror)
+                }
+                Ok(crate::signalr::HubEvent::Named) => {
+                    let _ = refresh_tx.try_send(());
+                    continue;
                 }
                 Ok(crate::signalr::HubEvent::Closed) => break,
                 Err(e) => {
