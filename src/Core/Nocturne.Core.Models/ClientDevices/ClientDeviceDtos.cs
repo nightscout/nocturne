@@ -12,6 +12,7 @@ public class RegisterDeviceRequest
     /// <summary>Stable install identifier (UUID) the app generates once and persists locally.</summary>
     [Required]
     [MaxLength(64)]
+    [RegularExpression("^[A-Za-z0-9_-]{1,64}$")]
     public string InstallId { get; set; } = string.Empty;
 
     /// <summary>Device kind (see <see cref="DeviceKinds"/>), e.g. <c>prelude</c> or <c>companion</c>.</summary>

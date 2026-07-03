@@ -42,7 +42,9 @@ internal sealed class DeviceActionProvider(
     {
         if (string.IsNullOrWhiteSpace(targetKind) || !DeviceKinds.IsValid(targetKind))
         {
-            logger.LogWarning("device_action channel has unknown target kind '{Kind}'; skipping.", targetKind);
+            // The only raw user string logged in this path; strip newlines to keep log records intact.
+            var sanitizedKind = targetKind?.ReplaceLineEndings(" ");
+            logger.LogWarning("device_action channel has unknown target kind '{Kind}'; skipping.", sanitizedKind);
             return Task.FromResult(false);
         }
 
