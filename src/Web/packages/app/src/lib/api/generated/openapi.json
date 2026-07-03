@@ -12869,7 +12869,7 @@
         "tags": [
           "Trackers"
         ],
-        "summary": "Acknowledge/snooze a tracker notification",
+        "summary": "Acknowledge a tracker notification. SnoozeMins is stored on the instance\n(pill display/legacy clients); the alert-engine side is a plain acknowledgement of\nthe managed rules' open excursions — re-notification is the threshold ladder's and\nalert_state escalation rules' job, not a snooze re-fire.",
         "operationId": "Trackers_AckInstance",
         "parameters": [
           {
@@ -42993,7 +42993,8 @@
           "installId": {
             "type": "string",
             "maxLength": 64,
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
           },
           "kind": {
             "type": "string",

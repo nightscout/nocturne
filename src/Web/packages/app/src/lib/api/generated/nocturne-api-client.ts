@@ -13969,7 +13969,10 @@ export class TrackersClient {
     }
 
     /**
-     * Acknowledge/snooze a tracker notification
+     * Acknowledge a tracker notification. SnoozeMins is stored on the instance
+    (pill display/legacy clients); the alert-engine side is a plain acknowledgement of
+    the managed rules' open excursions — re-notification is the threshold ladder's and
+    alert_state escalation rules' job, not a snooze re-fire.
      */
     ackInstance(id: string, request: AckTrackerRequest, signal?: AbortSignal): Promise<void> {
         let url_ = this.baseUrl + "/api/v4/trackers/instances/{id}/ack";

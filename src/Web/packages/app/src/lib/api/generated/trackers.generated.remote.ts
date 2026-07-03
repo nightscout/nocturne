@@ -247,7 +247,10 @@ export const completeInstance = command(z.object({ id: z.string(), request: Comp
   }
 });
 
-/** Acknowledge/snooze a tracker notification */
+/** Acknowledge a tracker notification. SnoozeMins is stored on the instance
+(pill display/legacy clients); the alert-engine side is a plain acknowledgement of
+the managed rules' open excursions — re-notification is the threshold ladder's and
+alert_state escalation rules' job, not a snooze re-fire. */
 export const ackInstance = command(z.object({ id: z.string(), request: AckTrackerRequestSchema }), async ({ id, request }) => {
   const apiClient = getRequestEvent().locals.apiClient;
   try {
