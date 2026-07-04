@@ -47,6 +47,7 @@
     History as HistoryIcon,
   } from "lucide-svelte";
   import { getSidebarReportItems } from "$lib/navigation/report-navigation";
+  import { tenantUrl } from "$lib/utils/tenant-host";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";
 
   interface Props {
@@ -124,8 +125,7 @@
         : (tenantTargets.find((t) => t.id === value)?.slug ?? null);
 
     if (targetSlug && targetSlug !== currentSlug) {
-      const host = `${targetSlug}.${baseDomain}`;
-      window.location.href = `${window.location.protocol}//${host}/`;
+      window.location.href = tenantUrl(targetSlug, baseDomain);
     }
   }
 
@@ -138,7 +138,7 @@
   // Use $effect (not onMount) so this also runs when `user` becomes available
   // after client-side login navigation.
   $effect(() => {
-    if (!user || !baseDomain || isGuestSession) return;
+    if (!user || isGuestSession) return;
     const tenants = myTenantsQuery.current;
     if (tenants === undefined) return;
 
@@ -210,6 +210,15 @@
     // Guest sessions only see read-only navigation
     if (isGuestSession) {
       return items.filter((i) => guestNavTitles.has(i.title));
+    }
+
+    // Cross-tenant overview: only meaningful when the user belongs to more than one tenant.
+    if (totalTenantCount > 1) {
+      items.push({
+        title: "Tenants",
+        href: "/tenants",
+        icon: Users,
+      });
     }
 
     items.push(
@@ -406,7 +415,7 @@
   {/if}
 
   <!-- Tenant switcher (only visible when multiple tenants are available, hidden for guests) -->
-  {#if totalTenantCount > 1 && tenantTargets.length > 0 && !isGuestSession}
+  {#if baseDomain && totalTenantCount > 1 && tenantTargets.length > 0 && !isGuestSession}
     <div class="border-b px-3 py-2 group-data-[collapsible=icon]:hidden">
       <p
         class="mb-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1.5"
