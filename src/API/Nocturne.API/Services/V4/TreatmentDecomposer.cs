@@ -77,6 +77,24 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     private static readonly V4Models.DeviceCategory[] TempBasalDeviceCategories =
         [V4Models.DeviceCategory.InsulinPump];
 
+    private static readonly V4Models.DeviceCategory[] PumpEventDeviceCategories =
+        [V4Models.DeviceCategory.InsulinPump];
+
+    private static readonly V4Models.DeviceCategory[] SensorEventDeviceCategories =
+        [V4Models.DeviceCategory.CGM];
+
+    /// <summary>
+    /// Sensor lifecycle events attribute to the CGM; every other device event is pump-originated.
+    /// </summary>
+    private static bool IsSensorEvent(DeviceEventType eventType) => eventType is
+        DeviceEventType.SensorStart or
+        DeviceEventType.SensorChange or
+        DeviceEventType.SensorStop or
+        DeviceEventType.TransmitterSensorInsert;
+
+    private static V4Models.DeviceCategory[] DeviceEventCategories(DeviceEventType eventType) =>
+        IsSensorEvent(eventType) ? SensorEventDeviceCategories : PumpEventDeviceCategories;
+
     /// <param name="dbContext">EF Core context used to look up treatment entity PKs and run bulk deletes.</param>
     /// <param name="bolusRepository">Repository for <see cref="V4Models.Bolus"/> records.</param>
     /// <param name="tempBasalRepository">Repository for <see cref="V4Models.TempBasal"/> records.</param>
@@ -622,6 +640,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         model.DeviceId = await _deviceService.ResolveAsync(
             V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
         model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
+        model.PatientDeviceId ??= existing?.PatientDeviceId;
+        await _patientDeviceStamper.StampAsync([model], DeviceEventCategories(model.EventType), model.DataSource, ct);
 
         if (existing != null)
         {
@@ -1363,6 +1383,15 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
             await _patientDeviceStamper.StampAsync(bolusList, BolusDeviceCategories, batchSource: null, ct);
         if (tempBasalList.Count > 0)
             await _patientDeviceStamper.StampAsync(tempBasalList, TempBasalDeviceCategories, batchSource: null, ct);
+        if (deviceEventList.Count > 0)
+        {
+            var sensorEvents = deviceEventList.Where(e => IsSensorEvent(e.EventType)).ToList();
+            var pumpEvents = deviceEventList.Where(e => !IsSensorEvent(e.EventType)).ToList();
+            if (sensorEvents.Count > 0)
+                await _patientDeviceStamper.StampAsync(sensorEvents, SensorEventDeviceCategories, batchSource: null, ct);
+            if (pumpEvents.Count > 0)
+                await _patientDeviceStamper.StampAsync(pumpEvents, PumpEventDeviceCategories, batchSource: null, ct);
+        }
 
         // Pre-pass: upsert profile switch StateSpans first (temp basals depend on them for insulin context)
         var batchInsulinTimeline = new SortedDictionary<long, V4Models.TreatmentInsulinContext>();
