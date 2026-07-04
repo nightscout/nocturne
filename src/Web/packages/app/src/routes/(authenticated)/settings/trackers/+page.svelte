@@ -15,6 +15,7 @@
   import {
     TrackerCompletionDialog,
     TrackerStartDialog,
+    ReservoirReportDialog,
     type TrackerNotification,
   } from "$lib/components/trackers";
   import ActiveTrackersTab from "$lib/components/trackers/ActiveTrackersTab.svelte";
@@ -157,6 +158,14 @@
     completingDefinition =
       definitions.find((d) => d.id === instance.definitionId) || null;
     isCompleteDialogOpen = true;
+  }
+
+  // Reservoir report dialog
+  let isReservoirReportDialogOpen = $state(false);
+
+  function openReservoirReportDialog() {
+    if (!requireAuth()) return;
+    isReservoirReportDialogOpen = true;
   }
 
   // Derived counts
@@ -511,6 +520,7 @@
         {activeInstances}
         {openStartDialog}
         {openCompleteDialog}
+        {openReservoirReportDialog}
         {openDeleteInstanceDialog}
         {getInstanceLevel}
         {getTimeRemaining}
@@ -604,6 +614,9 @@
     loadData();
   }}
 />
+
+<!-- Reservoir Report Dialog -->
+<ReservoirReportDialog bind:open={isReservoirReportDialogOpen} defaultKind="Fill" />
 
 <!-- Delete Definition Confirmation Dialog -->
 <AlertDialog.Root bind:open={isDeleteDefinitionDialogOpen}>
