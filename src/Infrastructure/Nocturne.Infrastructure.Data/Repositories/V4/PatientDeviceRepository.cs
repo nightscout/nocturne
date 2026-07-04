@@ -169,6 +169,33 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     }
 
     /// <inheritdoc />
+    public async Task<IEnumerable<PatientDevice>> ReorderAsync(
+        IReadOnlyList<(Guid Id, int Rank)> ranks, WriteOrigin origin, CancellationToken ct = default)
+    {
+        if (ranks.Count == 0) return [];
+
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var rankById = ranks.ToDictionary(r => r.Id, r => r.Rank);
+        var ids = rankById.Keys.ToList();
+        var entities = await ctx.PatientDevices
+            .Where(e => ids.Contains(e.Id))
+            .ToListAsync(ct);
+
+        var changed = new List<PatientDevice>();
+        foreach (var entity in entities)
+        {
+            var newRank = rankById[entity.Id];
+            if (entity.Rank == newRank) continue;
+            entity.Rank = newRank;
+            changed.Add(PatientDeviceMapper.ToDomainModel(entity));
+        }
+
+        if (changed.Count > 0)
+            await ctx.SaveChangesAsync(ct);
+        return changed;
+    }
+
+    /// <inheritdoc />
     public async Task<PatientDevice> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);

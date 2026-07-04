@@ -136,7 +136,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         int limit = 100, int offset = 0, bool descending = true,
         CancellationToken ct = default)
         => GetAsync(from, to, device, source, limit, offset, descending,
-            nativeOnly: false, afterTimestamp: null, afterId: null, ct);
+            nativeOnly: false, afterTimestamp: null, afterId: null, patientDeviceId: null, ct);
 
     /// <summary>
     /// Gets sensor glucose records based on filter criteria.
@@ -165,6 +165,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         bool nativeOnly = false,
         DateTime? afterTimestamp = null,
         Guid? afterId = null,
+        Guid? patientDeviceId = null,
         CancellationToken ct = default
     )
     {
@@ -178,6 +179,8 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
             query = query.Where(e => e.Device == device);
         if (source != null)
             query = query.Where(e => e.DataSource == source);
+        if (patientDeviceId.HasValue)
+            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
         if (nativeOnly)
             query = query.Where(e => e.LegacyId == null);
 
@@ -386,6 +389,55 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.AuditedSoftDeleteAsync(
             ctx.SensorGlucose.Where(e => e.DataSource == source), AuditContext, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DiscoveredSource>> GetDiscoveredSourcesAsync(DateTime since, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var grouped = await ctx.SensorGlucose
+            .AsNoTracking()
+            .Where(e => e.PatientDeviceId == null && e.Timestamp >= since)
+            .GroupBy(e => new { e.DataSource, e.Device })
+            .Select(g => new DiscoveredSource(
+                g.Key.DataSource,
+                g.Key.Device,
+                g.Count(),
+                g.Max(e => e.Timestamp)))
+            .OrderByDescending(d => d.LastSeen)
+            .ToListAsync(ct);
+        return grouped;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SensorGlucose>> GetUnattributedAsync(DateTime? from, DateTime? to, int limit, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ctx.SensorGlucose.AsNoTracking().Where(e => e.PatientDeviceId == null);
+        if (from.HasValue)
+            query = query.Where(e => e.Timestamp >= from.Value);
+        if (to.HasValue)
+            query = query.Where(e => e.Timestamp <= to.Value);
+
+        var entities = await query
+            .OrderByDescending(e => e.Timestamp)
+            .Take(limit)
+            .ToListAsync(ct);
+        return entities.Select(SensorGlucoseMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> SetPatientDeviceIdsAsync(IReadOnlyDictionary<Guid, Guid> patientDeviceIdByRecordId, CancellationToken ct = default)
+    {
+        if (patientDeviceIdByRecordId.Count == 0) return 0;
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var ids = patientDeviceIdByRecordId.Keys.ToList();
+        var entities = await ctx.SensorGlucose.Where(e => ids.Contains(e.Id)).ToListAsync(ct);
+        foreach (var entity in entities)
+            entity.PatientDeviceId = patientDeviceIdByRecordId[entity.Id];
+
+        return entities.Count > 0 ? await ctx.SaveChangesAsync(ct) : 0;
     }
 
     /// <summary>

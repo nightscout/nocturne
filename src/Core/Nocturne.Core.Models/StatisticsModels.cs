@@ -1731,6 +1731,29 @@ public class ReportAnalysisResult
 
     /// <summary>Time-of-day averaged statistics for AGP-style charts.</summary>
     public IEnumerable<AveragedStats> AveragedStats { get; set; } = [];
+
+    /// <summary>Registered devices that contributed readings within the requested window, for device-picker UIs.</summary>
+    [JsonPropertyName("contributingDevices")]
+    public List<ContributingDevice> ContributingDevices { get; set; } = new();
+}
+
+/// <summary>
+/// A registered device (or the unattributed pseudo-device) that contributed CGM readings
+/// within a statistics computation window.
+/// </summary>
+public sealed class ContributingDevice
+{
+    /// <summary>The registered <see cref="PatientDevice"/> id, or <c>null</c> for the unattributed bucket.</summary>
+    [JsonPropertyName("patientDeviceId")]
+    public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>Display name of the device, or "Unattributed" for readings with no <see cref="PatientDeviceId"/>.</summary>
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Number of readings attributed to this device within the requested window.</summary>
+    [JsonPropertyName("readingCount")]
+    public int ReadingCount { get; set; }
 }
 
 /// <summary>

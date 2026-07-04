@@ -519,6 +519,7 @@ public static class ServiceRegistrationExtensions
         // Device resolution
         services.AddScoped<IDeviceService, DeviceService>();
         services.AddScoped<IPatientDeviceStamper, PatientDeviceStamper>();
+        services.AddScoped<IDeviceReattributionService, DeviceReattributionService>();
 
         // Canonical glucose stream (single-stream view for v1/v3, alarms, unfiltered analytics)
         services.AddScoped<ICanonicalGlucoseService, CanonicalGlucoseService>();

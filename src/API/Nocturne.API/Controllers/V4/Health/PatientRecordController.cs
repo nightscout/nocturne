@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 
@@ -32,18 +34,27 @@ public class PatientRecordController : ControllerBase
     private readonly IPatientDeviceRepository _deviceRepo;
     private readonly IPatientInsulinRepository _insulinRepo;
     private readonly IDeviceService _deviceService;
+    private readonly ISensorGlucoseRepository _sensorGlucoseRepo;
+    private readonly IDeviceReattributionService _reattribution;
 
     public PatientRecordController(
         IPatientRecordRepository recordRepo,
         IPatientDeviceRepository deviceRepo,
         IPatientInsulinRepository insulinRepo,
-        IDeviceService deviceService)
+        IDeviceService deviceService,
+        ISensorGlucoseRepository sensorGlucoseRepo,
+        IDeviceReattributionService reattribution)
     {
         _recordRepo = recordRepo;
         _deviceRepo = deviceRepo;
         _insulinRepo = insulinRepo;
         _deviceService = deviceService;
+        _sensorGlucoseRepo = sensorGlucoseRepo;
+        _reattribution = reattribution;
     }
+
+    /// <summary>Window scanned for "discovered sources" — distinct unattributed streams seen recently.</summary>
+    private static readonly TimeSpan DiscoveredSourceWindow = TimeSpan.FromDays(30);
 
     #region Patient Record
 
@@ -90,10 +101,24 @@ public class PatientRecordController : ControllerBase
     }
 
     /// <summary>
+    /// Lists distinct <c>(DataSource, Device)</c> combinations seen in recent unattributed readings —
+    /// candidate streams the user can register as devices from the settings UI.
+    /// </summary>
+    [HttpGet("devices/discovered-sources")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(IReadOnlyList<DiscoveredSource>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<DiscoveredSource>>> GetDiscoveredSources(CancellationToken cancellationToken = default)
+    {
+        var since = DateTime.UtcNow - DiscoveredSourceWindow;
+        var sources = await _sensorGlucoseRepo.GetDiscoveredSourcesAsync(since, cancellationToken);
+        return Ok(sources);
+    }
+
+    /// <summary>
     /// Create a new patient device
     /// </summary>
     [HttpPost("devices")]
-    [RemoteForm(Invalidates = ["GetDevices"])]
+    [RemoteForm(Invalidates = ["GetDevices", "GetDiscoveredSources"])]
     [ProducesResponseType(typeof(PatientDevice), StatusCodes.Status201Created)]
     public async Task<ActionResult<PatientDevice>> CreateDevice(
         [FromBody] PatientDevice model,
@@ -101,6 +126,8 @@ public class PatientRecordController : ControllerBase
     {
         await ResolveDeviceIdAsync(model, cancellationToken);
         var created = await _deviceRepo.CreateAsync(model, WriteOrigin.Live, cancellationToken);
+        // Back-stamp existing unattributed readings this device now explains (glucose stream only).
+        await _reattribution.ReattributeForDeviceAsync(created, cancellationToken);
         return CreatedAtAction(nameof(GetDevices), created);
     }
 
@@ -130,6 +157,23 @@ public class PatientRecordController : ControllerBase
     {
         await _deviceRepo.DeleteAsync(id, WriteOrigin.Live, cancellationToken);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Reassigns device priority in a single batch. Drag-to-reorder in the UI sends the full ordered
+    /// list; each entry's position becomes its <see cref="PatientDevice.Rank"/>. One round trip instead
+    /// of one PUT per device.
+    /// </summary>
+    [HttpPut("devices/reorder")]
+    [RemoteForm(Invalidates = ["GetDevices"])]
+    [ProducesResponseType(typeof(IEnumerable<PatientDevice>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<PatientDevice>>> ReorderDevices(
+        [FromBody] IReadOnlyList<DeviceRankAssignment> ranks,
+        CancellationToken cancellationToken = default)
+    {
+        var changed = await _deviceRepo.ReorderAsync(
+            ranks.Select(r => (r.Id, r.Rank)).ToList(), WriteOrigin.Live, cancellationToken);
+        return Ok(changed);
     }
 
     private async Task ResolveDeviceIdAsync(PatientDevice model, CancellationToken ct)
@@ -208,3 +252,8 @@ public class PatientRecordController : ControllerBase
 
     #endregion
 }
+
+/// <summary>A single device→rank assignment in a <see cref="PatientRecordController.ReorderDevices"/> batch.</summary>
+/// <param name="Id">The patient device identifier.</param>
+/// <param name="Rank">Its new priority (lower = higher priority).</param>
+public sealed record DeviceRankAssignment(Guid Id, int Rank);

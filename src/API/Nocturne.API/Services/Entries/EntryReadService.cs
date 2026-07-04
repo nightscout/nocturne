@@ -162,7 +162,7 @@ public class EntryReadService : IEntryStore
 
         while (true)
         {
-            var results = (await _sgRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, false, null, null, ct)).ToList();
+            var results = (await _sgRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, false, null, null, null, ct)).ToList();
             var visible = ExcludeDemoIfNeeded(results, excludeDemo).ToList();
             var canonical = await _canonicalGlucose.SelectAsync(visible, ct);
 

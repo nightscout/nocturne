@@ -34,4 +34,11 @@ public interface IPatientDeviceRepository
 
     /// <summary>Deletes a patient device record by ID.</summary>
     Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Assigns <see cref="PatientDevice.Rank"/> in a single batch from an ordered id→rank list.
+    /// Ids absent for this tenant are ignored; devices not listed keep their current rank.
+    /// </summary>
+    /// <returns>The devices whose rank changed.</returns>
+    Task<IEnumerable<PatientDevice>> ReorderAsync(IReadOnlyList<(Guid Id, int Rank)> ranks, WriteOrigin origin, CancellationToken ct = default);
 }
