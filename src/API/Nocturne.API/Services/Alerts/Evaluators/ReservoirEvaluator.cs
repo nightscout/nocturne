@@ -33,6 +33,11 @@ public class ReservoirEvaluator : IConditionEvaluator
         if (condition is null)
             return Task.FromResult(false);
 
+        // A lower-bound reading ("50+") only proves the reservoir holds at least that much:
+        // > / >= can be confirmed against the bound; < / <= / == cannot.
+        if (context.ReservoirIsLowerBound && condition.Operator is not (">" or ">="))
+            return Task.FromResult(false);
+
         return Task.FromResult(ComparisonOps.Compare(context.ReservoirUnits.Value, condition.Operator, condition.Value));
     }
 }

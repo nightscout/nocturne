@@ -15,7 +15,14 @@ pub(super) fn cob(p: &ComparePayload, env: &Env) -> bool {
     compare_optional(p, env.ctx.cob_grams)
 }
 
+/// A lower-bound reading ("50+") only proves the reservoir holds at least that
+/// much: `>` / `>=` can be confirmed against the bound; `<` / `<=` / `==` cannot.
 pub(super) fn reservoir(p: &ComparePayload, env: &Env) -> bool {
+    if env.ctx.reservoir_is_lower_bound
+        && !matches!(p.operator.as_deref(), Some(">") | Some(">="))
+    {
+        return false;
+    }
     compare_optional(p, env.ctx.reservoir_units)
 }
 

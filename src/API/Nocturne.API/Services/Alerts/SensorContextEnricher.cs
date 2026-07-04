@@ -131,8 +131,8 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
 
         if (needs.NeedsReservoir)
         {
-            var reservoirUnits = await FetchReservoirAsync(isReplay ? now : null, ct);
-            enriched = enriched with { ReservoirUnits = reservoirUnits };
+            var (reservoirUnits, reservoirIsLowerBound) = await FetchReservoirAsync(isReplay ? now : null, ct);
+            enriched = enriched with { ReservoirUnits = reservoirUnits, ReservoirIsLowerBound = reservoirIsLowerBound };
         }
 
         if (needs.NeedsSiteAge)
@@ -638,7 +638,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         return points;
     }
 
-    private async Task<decimal?> FetchReservoirAsync(DateTime? asOf, CancellationToken ct)
+    private async Task<(decimal? Units, bool IsLowerBound)> FetchReservoirAsync(DateTime? asOf, CancellationToken ct)
     {
         // Pin the upper bound to `asOf` for replay; live path leaves both bounds null and gets
         // the absolute latest. `to: asOf` upper-bounds the read to the replay tick (inclusive).
@@ -646,8 +646,11 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             from: null, to: asOf, device: null, source: null,
             limit: 1, offset: 0, descending: true, ct: ct);
 
-        var reservoir = snapshots.FirstOrDefault()?.Reservoir;
-        return reservoir is null ? null : (decimal)reservoir.Value;
+        var snapshot = snapshots.FirstOrDefault();
+        if (snapshot?.Reservoir is not { } reservoir)
+            return (null, false);
+
+        return ((decimal)reservoir, ReservoirDisplayFormat.IsLowerBound(snapshot.ReservoirDisplay));
     }
 
     private async Task<DateTime?> FetchLatestEventAsync(DeviceEventType eventType, DateTime? asOf, CancellationToken ct)

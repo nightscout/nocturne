@@ -72,6 +72,24 @@ public static class ComparisonLeafScenarios
             }
         }
 
+        // A lower-bound reservoir reading ("50+") only proves the reservoir holds at
+        // least that much: > / >= compare against the bound; < / <= / == are false.
+        yield return Scenario(
+            "reservoir-lower-bound",
+            "reservoir_is_lower_bound gates < / <= / == to false while > and >= compare against the bound; exact readings are unaffected",
+            [
+                Rule(1, "reservoir", """{"operator": "<", "value": 60}"""),
+                Rule(2, "reservoir", """{"operator": "<=", "value": 60}"""),
+                Rule(3, "reservoir", """{"operator": "==", "value": 50}"""),
+                Rule(4, "reservoir", """{"operator": ">", "value": 40}"""),
+                Rule(5, "reservoir", """{"operator": ">=", "value": 50}"""),
+                Rule(6, "reservoir", """{"operator": ">", "value": 50}"""),
+            ],
+            [
+                Tick(T(0), Ctx(T(0)) with { ReservoirUnits = 50m, ReservoirIsLowerBound = true }),
+                Tick(T(5), Ctx(T(5)) with { ReservoirUnits = 42m }),
+            ]);
+
         // site_age compares HOURS since LastSiteChangeAt.
         yield return Scenario(
             "site-age-hours-boundaries",

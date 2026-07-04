@@ -39,6 +39,21 @@ public class ReservoirEvaluatorTests
         (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData("<", 60.0, false)]
+    [InlineData("<=", 60.0, false)]
+    [InlineData("==", 50.0, false)]
+    [InlineData(">", 40.0, true)]
+    [InlineData(">=", 50.0, true)]
+    [InlineData(">", 50.0, false)]
+    public async Task LowerBoundReading_OnlyConfirmsGreaterThanComparisons(string op, decimal threshold, bool expected)
+    {
+        var json = $$"""{"operator": "{{op}}", "value": {{threshold}}}""";
+        var context = MakeContext(reservoir: 50m) with { ReservoirIsLowerBound = true };
+
+        (await _sut.EvaluateAsync(json, context, CancellationToken.None)).Should().Be(expected);
+    }
+
     private static SensorContext MakeContext(decimal? reservoir) => new()
     {
         LatestValue = 100m,

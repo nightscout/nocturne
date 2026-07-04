@@ -57,6 +57,12 @@ public record SensorContext
     public decimal? ReservoirUnits { get; init; }
 
     /// <summary>
+    /// True when <see cref="ReservoirUnits"/> is a lower bound rather than an exact reading
+    /// (e.g. an Omnipod reports "50+" while the reservoir holds at least 50 units).
+    /// </summary>
+    public bool ReservoirIsLowerBound { get; init; }
+
+    /// <summary>
     /// Timestamp of the most recent infusion site change. Used by the site-age condition.
     /// </summary>
     [ReplayFact("site_age_hours", decimals: 1, conversion: ReplayFactConversion.HoursSinceNow)]

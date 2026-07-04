@@ -249,6 +249,21 @@ public class SensorContextEnricherTests
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
 
         enriched.ReservoirUnits.Should().Be(42.5m);
+        enriched.ReservoirIsLowerBound.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Reservoir_lower_bound_display_marks_value_as_lower_bound()
+    {
+        var enricher = BuildEnricher();
+        _pumpSnapshotRepository.Setup(r => r.GetAsync(null, null, null, null, 1, 0, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { new PumpSnapshot { Reservoir = 50, ReservoirDisplay = "50+U" } });
+        var rule = MakeRule(AlertConditionType.Reservoir, """{"operator":"<","value":50}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.ReservoirUnits.Should().Be(50m);
+        enriched.ReservoirIsLowerBound.Should().BeTrue();
     }
 
     [Fact]

@@ -68,6 +68,9 @@ pub struct SensorContext {
     pub iob_units: Option<Decimal>,
     pub cob_grams: Option<Decimal>,
     pub reservoir_units: Option<Decimal>,
+    /// True when `reservoir_units` is a lower bound rather than an exact reading
+    /// (e.g. an Omnipod reports "50+" while the reservoir holds at least 50 units).
+    pub reservoir_is_lower_bound: bool,
     pub last_site_change_at: Option<DateTime<Utc>>,
     pub last_sensor_start_at: Option<DateTime<Utc>>,
     pub predictions: Vec<PredictedPoint>,
@@ -122,6 +125,8 @@ struct WireContext {
     cob_grams: Option<Number>,
     #[serde(default)]
     reservoir_units: Option<Number>,
+    #[serde(default)]
+    reservoir_is_lower_bound: Option<bool>,
     #[serde(default)]
     last_site_change_at: Option<DateTime<Utc>>,
     #[serde(default)]
@@ -284,6 +289,7 @@ impl SensorContext {
             iob_units: opt_dec(w.iob_units.as_ref(), "iob_units")?,
             cob_grams: opt_dec(w.cob_grams.as_ref(), "cob_grams")?,
             reservoir_units: opt_dec(w.reservoir_units.as_ref(), "reservoir_units")?,
+            reservoir_is_lower_bound: w.reservoir_is_lower_bound.unwrap_or(false),
             last_site_change_at: w.last_site_change_at,
             last_sensor_start_at: w.last_sensor_start_at,
             predictions: w

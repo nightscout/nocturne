@@ -122,6 +122,7 @@ internal static class RustEnvelopeMapper
             IobUnits = ctx.IobUnits,
             CobGrams = ctx.CobGrams,
             ReservoirUnits = ctx.ReservoirUnits,
+            ReservoirIsLowerBound = ctx.ReservoirIsLowerBound ? true : null,
             LastSiteChangeAt = Utc(ctx.LastSiteChangeAt),
             LastSensorStartAt = Utc(ctx.LastSensorStartAt),
             Predictions = ctx.Predictions.Count == 0
@@ -253,6 +254,7 @@ internal static class RustEnvelopeMapper
         [JsonPropertyName("iob_units")] public decimal? IobUnits { get; init; }
         [JsonPropertyName("cob_grams")] public decimal? CobGrams { get; init; }
         [JsonPropertyName("reservoir_units")] public decimal? ReservoirUnits { get; init; }
+        [JsonPropertyName("reservoir_is_lower_bound")] public bool? ReservoirIsLowerBound { get; init; }
         [JsonPropertyName("last_site_change_at")] public DateTime? LastSiteChangeAt { get; init; }
         [JsonPropertyName("last_sensor_start_at")] public DateTime? LastSensorStartAt { get; init; }
         [JsonPropertyName("predictions")] public List<WirePrediction>? Predictions { get; init; }

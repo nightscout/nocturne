@@ -59,6 +59,7 @@ public static class ScenarioConversions
             IobUnits = ctx.IobUnits,
             CobGrams = ctx.CobGrams,
             ReservoirUnits = ctx.ReservoirUnits,
+            ReservoirIsLowerBound = ctx.ReservoirIsLowerBound ?? false,
             LastSiteChangeAt = Utc(ctx.LastSiteChangeAt),
             LastSensorStartAt = Utc(ctx.LastSensorStartAt),
             Predictions = ctx.Predictions?.Select(p => new PredictedGlucosePoint(p.OffsetMinutes, p.Mgdl)).ToList()

@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "name": "reservoir-lower-bound",
+  "description": "reservoir_is_lower_bound gates \u003C / \u003C= / == to false while \u003E and \u003E= compare against the bound; exact readings are unaffected",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003C",
+        "value": 60
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003C=",
+        "value": 60
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "rule-3",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "==",
+        "value": 50
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "rule-4",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003E",
+        "value": 40
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000005",
+      "name": "rule-5",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003E=",
+        "value": 50
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000006",
+      "name": "rule-6",
+      "condition_type": "reservoir",
+      "condition_params": {
+        "operator": "\u003E",
+        "value": 50
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "reservoir_units": 50,
+        "reservoir_is_lower_bound": true,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "reservoir_units": 42,
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    }
+  ]
+}
