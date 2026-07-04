@@ -5,6 +5,7 @@ import {
   type PatientDevice,
   type PatientInsulin,
   type InsulinFormulation,
+  type DiscoveredSource,
   DiabetesType,
 } from "$api";
 import { FormGuard } from "$lib/forms";
@@ -118,16 +119,32 @@ export class ClinicalState {
   }
 }
 
-/** Reactive device list state with CRUD */
+/** Reactive device list state with CRUD, discovered-source registration, and rank reordering */
 export class DeviceListState {
   readonly #devices = patientRemote.getDevices();
+  readonly #discovered = patientRemote.getDiscoveredSources();
   readonly createForm = patientRemote.createDevice;
   readonly updateForm = patientRemote.updateDevice;
 
   get items(): PatientDevice[] { return (this.#devices.current ?? []) as PatientDevice[]; }
 
+  /** Distinct (dataSource, device) combinations seen recently in unattributed readings. */
+  get discoveredSources(): DiscoveredSource[] {
+    return (this.#discovered.current ?? []) as DiscoveredSource[];
+  }
+
   remove = async (id: string): Promise<void> => {
     await patientRemote.deleteDevice(id);
+  };
+
+  /**
+   * Persist the given device order as {@link PatientDevice.rank} — each id's position becomes its
+   * rank. One request for the whole list.
+   */
+  reorder = async (orderedIds: string[]): Promise<void> => {
+    await patientRemote.reorderDevices(
+      orderedIds.map((id, index) => ({ id, rank: index })),
+    );
   };
 }
 

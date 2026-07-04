@@ -136,7 +136,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         int limit = 100, int offset = 0, bool descending = true,
         CancellationToken ct = default)
         => GetAsync(from, to, device, source, limit, offset, descending,
-            nativeOnly: false, afterTimestamp: null, afterId: null, patientDeviceId: null, ct);
+            nativeOnly: false, afterTimestamp: null, afterId: null, ct);
 
     /// <summary>
     /// Gets sensor glucose records based on filter criteria.
@@ -165,8 +165,8 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         bool nativeOnly = false,
         DateTime? afterTimestamp = null,
         Guid? afterId = null,
-        Guid? patientDeviceId = null,
-        CancellationToken ct = default
+        CancellationToken ct = default,
+        Guid? patientDeviceId = null
     )
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
@@ -395,18 +395,24 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
     public async Task<IReadOnlyList<DiscoveredSource>> GetDiscoveredSourcesAsync(DateTime since, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
+        // Project the aggregate into an anonymous type so it translates to SQL GROUP BY; the record
+        // is constructed client-side (EF can't translate a positional-record constructor projection).
         var grouped = await ctx.SensorGlucose
             .AsNoTracking()
             .Where(e => e.PatientDeviceId == null && e.Timestamp >= since)
             .GroupBy(e => new { e.DataSource, e.Device })
-            .Select(g => new DiscoveredSource(
+            .Select(g => new
+            {
                 g.Key.DataSource,
                 g.Key.Device,
-                g.Count(),
-                g.Max(e => e.Timestamp)))
-            .OrderByDescending(d => d.LastSeen)
+                Count = g.Count(),
+                LastSeen = g.Max(e => e.Timestamp),
+            })
             .ToListAsync(ct);
-        return grouped;
+        return grouped
+            .Select(g => new DiscoveredSource(g.DataSource, g.Device, g.Count, g.LastSeen))
+            .OrderByDescending(d => d.LastSeen)
+            .ToList();
     }
 
     /// <inheritdoc />

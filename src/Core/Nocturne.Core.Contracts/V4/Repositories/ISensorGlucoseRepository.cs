@@ -30,9 +30,11 @@ public interface ISensorGlucoseRepository : IV4Repository<SensorGlucose>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
     /// <param name="nativeOnly">When <c>true</c>, excludes records projected from legacy V1/V2/V3 entries.</param>
-    /// <param name="patientDeviceId">Optional filter restricting results to a single registered <see cref="PatientDevice"/>'s
-    /// attributed readings. Bypasses canonical stream selection at the caller — a filtered read returns that device raw.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="patientDeviceId">Optional filter restricting results to a single registered <see cref="PatientDevice"/>'s
+    /// attributed readings. Bypasses canonical stream selection at the caller — a filtered read returns that device raw.
+    /// Placed after <paramref name="ct"/> so it is additive: existing positional callers (which end at the token) are
+    /// unaffected.</param>
     Task<IEnumerable<SensorGlucose>> GetAsync(
         DateTime? from,
         DateTime? to,
@@ -44,15 +46,15 @@ public interface ISensorGlucoseRepository : IV4Repository<SensorGlucose>
         bool nativeOnly = false,
         DateTime? afterTimestamp = null,
         Guid? afterId = null,
-        Guid? patientDeviceId = null,
-        CancellationToken ct = default
+        CancellationToken ct = default,
+        Guid? patientDeviceId = null
     );
 
     // Explicit base-interface bridge — delegates to the extended overload
     Task<IEnumerable<SensorGlucose>> IV4Repository<SensorGlucose>.GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, CancellationToken ct)
-        => GetAsync(from, to, device, source, limit, offset, descending, false, null, null, null, ct);
+        => GetAsync(from, to, device, source, limit, offset, descending, false, null, null, ct);
 
     /// <summary>Returns a single <see cref="SensorGlucose"/> by its UUID v7, or <c>null</c> if not found.</summary>
     /// <param name="id">UUID v7 record identifier.</param>

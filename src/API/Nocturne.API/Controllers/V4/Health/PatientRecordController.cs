@@ -162,10 +162,10 @@ public class PatientRecordController : ControllerBase
     /// <summary>
     /// Reassigns device priority in a single batch. Drag-to-reorder in the UI sends the full ordered
     /// list; each entry's position becomes its <see cref="PatientDevice.Rank"/>. One round trip instead
-    /// of one PUT per device.
+    /// of one PUT per device. An imperative command (no HTML form), mirroring the delete/restore surface.
     /// </summary>
-    [HttpPut("devices/reorder")]
-    [RemoteForm(Invalidates = ["GetDevices"])]
+    [HttpPost("devices/reorder")]
+    [RemoteCommand(Invalidates = ["GetDevices"])]
     [ProducesResponseType(typeof(IEnumerable<PatientDevice>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<PatientDevice>>> ReorderDevices(
         [FromBody] IReadOnlyList<DeviceRankAssignment> ranks,

@@ -20,9 +20,12 @@
     Trash2,
     Save,
     Loader2,
+    ChevronUp,
+    ChevronDown,
   } from "lucide-svelte";
   import {
     type PatientDevice,
+    type DiscoveredSource,
     DeviceCategory,
     AidAlgorithm,
   } from "$api";
@@ -141,6 +144,37 @@
     if (!deleteId) return;
     await deviceList.remove(deleteId);
     deleteId = null;
+  }
+
+  // ── Rank reordering ─────────────────────────────────────────────
+
+  /** Moves the device at {@link index} one slot toward the front (-1) or back (+1) and persists the order. */
+  async function moveDevice(index: number, direction: -1 | 1) {
+    const ids = deviceList.items.map((d) => d.id).filter((id): id is string => !!id);
+    const target = index + direction;
+    if (target < 0 || target >= ids.length) return;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    await deviceList.reorder(ids);
+  }
+
+  // ── Discovered sources ──────────────────────────────────────────
+
+  function formatLastSeen(value: string | Date): string {
+    return new Date(value).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  /**
+   * Opens the device dialog pre-filled from a discovered source as a CGM. The user sets the usage
+   * dates before saving; registration back-stamps the source's readings within that window.
+   */
+  function registerDiscovered(source: DiscoveredSource) {
+    openDialog();
+    deviceCategory = DeviceCategory.CGM;
+    deviceModel = source.device ?? source.dataSource ?? "";
   }
 </script>
 
@@ -287,7 +321,7 @@
     </p>
   {:else}
     <div class="space-y-3">
-      {#each deviceList.items as device}
+      {#each deviceList.items as device, i}
         <div
           class="flex items-center justify-between rounded-lg border p-3"
         >
@@ -328,6 +362,30 @@
             </div>
           </div>
           <div class="flex items-center gap-1 ml-2">
+            {#if deviceList.items.length > 1}
+              <div class="flex flex-col">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-5 w-6"
+                  aria-label="Move device up in priority"
+                  disabled={i === 0}
+                  onclick={() => moveDevice(i, -1)}
+                >
+                  <ChevronUp class="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-5 w-6"
+                  aria-label="Move device down in priority"
+                  disabled={i === deviceList.items.length - 1}
+                  onclick={() => moveDevice(i, 1)}
+                >
+                  <ChevronDown class="h-4 w-4" />
+                </Button>
+              </div>
+            {/if}
             <Button
               variant="ghost"
               size="icon"
@@ -355,6 +413,47 @@
       Add Device
     </Button>
   </div>
+
+  <!-- Discovered sources: unattributed streams seen recently -->
+  {#if deviceList.discoveredSources.length > 0}
+    <div class="pt-4 space-y-2">
+      <div>
+        <h4 class="text-sm font-medium">Discovered sources</h4>
+        <p class="text-xs text-muted-foreground">
+          Streams seen in recent readings that aren't linked to a device yet. Register one to
+          attribute its readings.
+        </p>
+      </div>
+      <div class="space-y-2">
+        {#each deviceList.discoveredSources as source}
+          <div class="flex items-center justify-between rounded-lg border border-dashed p-3">
+            <div class="space-y-1 min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-medium text-sm">
+                  {source.device || source.dataSource || "Unknown source"}
+                </span>
+                {#if source.device && source.dataSource}
+                  <Badge variant="outline" class="text-xs font-mono">{source.dataSource}</Badge>
+                {/if}
+              </div>
+              <div class="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                <span>{source.readingCount} reading{source.readingCount === 1 ? "" : "s"}</span>
+                <span>Last seen {formatLastSeen(source.lastSeen)}</span>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              class="ml-2 shrink-0"
+              onclick={() => registerDiscovered(source)}
+            >
+              Register as device
+            </Button>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   <!-- Device Dialog -->
   <Dialog.Root bind:open={dialogOpen}>

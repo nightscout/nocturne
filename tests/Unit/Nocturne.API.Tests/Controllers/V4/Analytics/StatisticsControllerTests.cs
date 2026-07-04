@@ -204,9 +204,9 @@ public class StatisticsControllerTests
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
                 It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<DateTime?, DateTime?, string?, string?, int, int, bool, bool, DateTime?, Guid?, CancellationToken>(
-                (from, to, _, _, _, _, _, _, _, _, _) =>
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .Callback<DateTime?, DateTime?, string?, string?, int, int, bool, bool, DateTime?, Guid?, CancellationToken, Guid?>(
+                (from, to, _, _, _, _, _, _, _, _, _, _) =>
                 {
                     capturedFrom = from;
                     capturedTo = to;

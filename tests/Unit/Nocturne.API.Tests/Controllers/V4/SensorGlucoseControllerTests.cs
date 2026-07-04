@@ -7,6 +7,7 @@ using Nocturne.API.Controllers.V4.Glucose;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Xunit;
@@ -20,6 +21,7 @@ public class SensorGlucoseControllerTests
     private readonly Mock<ISensorGlucoseRepository> _repoMock = new();
     private readonly Mock<IGlucoseProcessingResolver> _glucoseResolverMock = new();
     private readonly Mock<ICanonicalAlertEvaluator> _alertEvaluatorMock = new();
+    private readonly Mock<IPatientDeviceStamper> _deviceStamperMock = new();
     private readonly Mock<ILogger<SensorGlucoseController>> _loggerMock = new();
 
     private SensorGlucoseController CreateController()
@@ -28,6 +30,7 @@ public class SensorGlucoseControllerTests
             _repoMock.Object,
             _glucoseResolverMock.Object,
             _alertEvaluatorMock.Object,
+            _deviceStamperMock.Object,
             _loggerMock.Object);
 
         controller.ControllerContext = new ControllerContext
@@ -128,5 +131,79 @@ public class SensorGlucoseControllerTests
         // Assert
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         okResult.Value.Should().Be(updated);
+    }
+
+    [Fact]
+    public async Task Create_StampsWithCgmCategory_AndPersistsAttribution()
+    {
+        var deviceId = Guid.NewGuid();
+        var input = new UpsertSensorGlucoseRequest { Timestamp = DateTimeOffset.UtcNow, Mgdl = 120 };
+
+        // Stamper attributes the model in place before it reaches the repository.
+        _deviceStamperMock
+            .Setup(s => s.StampAsync(
+                It.IsAny<IReadOnlyList<IDeviceAttributed>>(),
+                It.IsAny<IReadOnlyList<DeviceCategory>>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<IDeviceAttributed>, IReadOnlyList<DeviceCategory>, string?, CancellationToken>(
+                (records, _, _, _) => records[0].PatientDeviceId = deviceId)
+            .Returns(Task.CompletedTask);
+
+        SensorGlucose? persisted = null;
+        _repoMock
+            .Setup(r => r.CreateAsync(It.IsAny<SensorGlucose>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<SensorGlucose, WriteOrigin, CancellationToken>((m, _, _) => persisted = m)
+            .ReturnsAsync((SensorGlucose m, WriteOrigin _, CancellationToken _) => m);
+
+        var controller = CreateController();
+
+        await controller.Create(input);
+
+        _deviceStamperMock.Verify(s => s.StampAsync(
+            It.IsAny<IReadOnlyList<IDeviceAttributed>>(),
+            It.Is<IReadOnlyList<DeviceCategory>>(c => c.Contains(DeviceCategory.CGM)),
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        persisted.Should().NotBeNull();
+        persisted!.PatientDeviceId.Should().Be(deviceId);
+    }
+
+    [Fact]
+    public async Task CreateBulk_StampsWithCgmCategory_AndPersistsAttribution()
+    {
+        var deviceId = Guid.NewGuid();
+        var requests = new[]
+        {
+            new UpsertSensorGlucoseRequest { Timestamp = DateTimeOffset.UtcNow, Mgdl = 120 },
+        };
+
+        _deviceStamperMock
+            .Setup(s => s.StampAsync(
+                It.IsAny<IReadOnlyList<IDeviceAttributed>>(),
+                It.IsAny<IReadOnlyList<DeviceCategory>>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<IDeviceAttributed>, IReadOnlyList<DeviceCategory>, string?, CancellationToken>(
+                (records, _, _, _) => records[0].PatientDeviceId = deviceId)
+            .Returns(Task.CompletedTask);
+
+        IEnumerable<SensorGlucose>? persisted = null;
+        _repoMock
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((m, _, _) => persisted = m.ToList())
+            .ReturnsAsync((IEnumerable<SensorGlucose> m, WriteOrigin _, CancellationToken _) => m);
+
+        var controller = CreateController();
+
+        await controller.CreateSensorGlucoseBulk(requests);
+
+        _deviceStamperMock.Verify(s => s.StampAsync(
+            It.IsAny<IReadOnlyList<IDeviceAttributed>>(),
+            It.Is<IReadOnlyList<DeviceCategory>>(c => c.Contains(DeviceCategory.CGM)),
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        persisted.Should().NotBeNull();
+        persisted!.Single().PatientDeviceId.Should().Be(deviceId);
     }
 }
