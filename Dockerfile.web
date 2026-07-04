@@ -1,4 +1,7 @@
-FROM node:24-alpine AS builder
+# The builder output (SvelteKit/Vite build) is architecture-independent JS, so
+# run it natively on the build host instead of under QEMU emulation; only the
+# runtime stage below is per-target-arch.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
 WORKDIR /app
 # Increase Node.js heap size to avoid "JavaScript heap out of memory" in CI
 ENV NODE_OPTIONS="--max-old-space-size=8192"
