@@ -1,8 +1,11 @@
+using System.Text.Json.Serialization;
+
 namespace Nocturne.API.Models.Requests.V4;
 
 /// <summary>
 /// Kind of a manually reported reservoir value.
 /// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<ReservoirReportKind>))]
 public enum ReservoirReportKind
 {
     /// <summary>The current reservoir level as read from the pump (e.g. its on-screen display).</summary>
