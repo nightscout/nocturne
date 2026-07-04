@@ -135,4 +135,17 @@ public class PatientDeviceRepositoryReorderTests : IDisposable
         var reloaded = await _repo.GetByIdAsync(a);
         reloaded!.Rank.Should().Be(3);
     }
+
+    [Fact]
+    public async Task GetAllAsync_OrdersByRank_SoReorderIsStable()
+    {
+        // Insertion order deliberately differs from rank order; unranked device sorts last.
+        var high = SeedDevice(rank: 2);
+        var top = SeedDevice(rank: 0);
+        var unranked = SeedDevice(rank: null);
+
+        var ordered = (await _repo.GetAllAsync()).Select(d => d.Id).ToList();
+
+        ordered.Should().Equal(top, high, unranked);
+    }
 }
