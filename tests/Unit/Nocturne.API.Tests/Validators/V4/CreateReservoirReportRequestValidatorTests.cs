@@ -38,6 +38,26 @@ public class CreateReservoirReportRequestValidatorTests
     }
 
     [Fact]
+    public void FutureTimestamp_Fails()
+    {
+        var result = _validator.TestValidate(new CreateReservoirReportRequest
+        {
+            Units = 10,
+            Timestamp = DateTimeOffset.UtcNow.AddHours(1),
+        });
+        result.ShouldHaveValidationErrorFor(x => x.Timestamp);
+    }
+
+    [Fact]
+    public void PastAndOmittedTimestamps_Pass()
+    {
+        _validator.TestValidate(new CreateReservoirReportRequest { Units = 10, Timestamp = DateTimeOffset.UtcNow.AddHours(-1) })
+            .ShouldNotHaveValidationErrorFor(x => x.Timestamp);
+        _validator.TestValidate(new CreateReservoirReportRequest { Units = 10 })
+            .ShouldNotHaveValidationErrorFor(x => x.Timestamp);
+    }
+
+    [Fact]
     public void OverlongDevice_Fails()
     {
         var result = _validator.TestValidate(new CreateReservoirReportRequest { Units = 10, Device = new string('x', 501) });

@@ -41,8 +41,8 @@ public class ReservoirReportsControllerTests
 
         var result = await _controller.Create(request, CancellationToken.None);
 
-        var created = Assert.IsType<CreatedResult>(result.Result);
-        var snapshot = Assert.IsType<PumpSnapshot>(created.Value);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var snapshot = Assert.IsType<PumpSnapshot>(ok.Value);
         snapshot.Reservoir.Should().Be(62);
         snapshot.Timestamp.Should().Be(timestamp.UtcDateTime);
         snapshot.Device.Should().Be("ypsopump");
@@ -84,8 +84,8 @@ public class ReservoirReportsControllerTests
 
         var result = await _controller.Create(request, CancellationToken.None);
 
-        var created = Assert.IsType<CreatedResult>(result.Result);
-        var snapshot = Assert.IsType<PumpSnapshot>(created.Value);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var snapshot = Assert.IsType<PumpSnapshot>(ok.Value);
         snapshot.Timestamp.Should().BeOnOrAfter(before).And.BeOnOrBefore(DateTime.UtcNow);
     }
 }

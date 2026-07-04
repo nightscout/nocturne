@@ -45,7 +45,7 @@ public class ReservoirReportsController(
     /// <returns>The stored pump snapshot carrying the reported value.</returns>
     [HttpPost]
     [RemoteCommand]
-    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PumpSnapshot>> Create(
         [FromBody] CreateReservoirReportRequest request,
@@ -76,6 +76,6 @@ public class ReservoirReportsController(
             }, WriteOrigin.Live, ct);
         }
 
-        return Created($"api/v4/device-status/pump/{snapshot.Id}", snapshot);
+        return Ok(snapshot);
     }
 }
