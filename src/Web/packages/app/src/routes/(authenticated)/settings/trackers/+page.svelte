@@ -34,7 +34,7 @@
   } from "lucide-svelte";
   import { tick } from "svelte";
   import { goto } from "$app/navigation";
-  import { getAuthStore } from "$lib/stores/auth-store.svelte";
+  import { page } from "$app/state";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
   import {
     NotificationUrgency,
@@ -48,9 +48,11 @@
     type TrackerPresetDto,
   } from "$api";
 
-  // Auth state
-  const authStore = getAuthStore();
-  const isAuthenticated = $derived(authStore.isAuthenticated);
+  // Auth state from the server-resolved session. This route sits behind the
+  // authenticated + settings layout guards, so page.data.user is populated for
+  // every visitor. The client auth store is unauthenticated until its async
+  // session load resolves, so gating actions on it bounces fast clicks to login.
+  const isAuthenticated = $derived(!!page.data.user);
 
   // State
   let activeTab = $state("active");
