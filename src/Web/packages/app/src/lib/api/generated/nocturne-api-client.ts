@@ -32466,6 +32466,11 @@ export interface TrackerDefinitionDto {
     triggerEventTypes?: string[];
     triggerNotesContains?: string | undefined;
     lifespanHours?: number | undefined;
+    /** Reservoir category only: units level below which the synced managed reservoir
+rule fires. Null = no level rule. */
+    lowReservoirUnits?: number | undefined;
+    /** Urgency of the low-reservoir level rule. */
+    lowReservoirUrgency?: NotificationUrgency;
     notificationThresholds?: NotificationThresholdDto[];
     isFavorite?: boolean;
     /** Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent */
@@ -32536,6 +32541,11 @@ export interface CreateTrackerDefinitionRequest {
     triggerEventTypes?: string[] | undefined;
     triggerNotesContains?: string | undefined;
     lifespanHours?: number | undefined;
+    /** Reservoir category only: units level below which the synced managed reservoir
+rule fires. Null = no level rule. */
+    lowReservoirUnits?: number | undefined;
+    /** Urgency of the low-reservoir level rule. */
+    lowReservoirUrgency?: NotificationUrgency;
     notificationThresholds?: CreateNotificationThresholdRequest[] | undefined;
     isFavorite?: boolean;
     /** Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent */
@@ -32572,6 +32582,13 @@ export interface UpdateTrackerDefinitionRequest {
     triggerEventTypes?: string[] | undefined;
     triggerNotesContains?: string | undefined;
     lifespanHours?: number | undefined;
+    /** Reservoir category only: units level below which the synced managed reservoir
+rule fires. The tracker editor posts the whole definition, so for a Reservoir
+definition this value is applied as-is on every update — null clears the rule
+(null-means-keep cannot express clearing). */
+    lowReservoirUnits?: number | undefined;
+    /** Urgency of the low-reservoir level rule. Null keeps the current value. */
+    lowReservoirUrgency?: NotificationUrgency | undefined;
     notificationThresholds?: CreateNotificationThresholdRequest[] | undefined;
     isFavorite?: boolean | undefined;
     /** Dashboard visibility: Off, Always, Info, Warn, Hazard, Urgent */

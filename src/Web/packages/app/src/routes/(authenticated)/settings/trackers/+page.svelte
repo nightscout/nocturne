@@ -104,6 +104,10 @@
   let formCategory = $state<TrackerCategory>(TrackerCategory.Consumable);
   let formIcon = $state("activity");
   let formLifespanHours = $state<number | undefined>(undefined);
+  let formLowReservoirUnits = $state<number | undefined>(undefined);
+  let formLowReservoirUrgency = $state<NotificationUrgency>(
+    NotificationUrgency.Warn
+  );
   let formNotifications = $state<TrackerNotification[]>([]);
   let formIsFavorite = $state(false);
   let formDashboardVisibility = $state<DashboardVisibility>(
@@ -308,6 +312,8 @@
     formCategory = TrackerCategory.Consumable;
     formIcon = "activity";
     formLifespanHours = undefined;
+    formLowReservoirUnits = undefined;
+    formLowReservoirUrgency = NotificationUrgency.Warn;
     formNotifications = [];
     formIsFavorite = false;
     formDashboardVisibility = DashboardVisibility.Always;
@@ -328,6 +334,9 @@
     formCategory = def.category ?? TrackerCategory.Consumable;
     formIcon = def.icon || "activity";
     formLifespanHours = def.lifespanHours;
+    formLowReservoirUnits = def.lowReservoirUnits ?? undefined;
+    formLowReservoirUrgency =
+      def.lowReservoirUrgency ?? NotificationUrgency.Warn;
     formNotifications = definitionToNotifications(def);
     formIsFavorite = def.isFavorite ?? false;
     formDashboardVisibility =
@@ -573,6 +582,8 @@
   bind:formCategory
   bind:formIcon
   bind:formLifespanHours
+  bind:formLowReservoirUnits
+  bind:formLowReservoirUrgency
   bind:formNotifications
   bind:formIsFavorite
   bind:formDashboardVisibility
