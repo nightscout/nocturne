@@ -59,7 +59,9 @@ public record SensorContext
     /// <summary>
     /// True when <see cref="ReservoirUnits"/> is a lower bound rather than an exact reading
     /// (e.g. an Omnipod reports "50+" while the reservoir holds at least 50 units).
+    /// Replay emits this fact as 0/1.
     /// </summary>
+    [ReplayFact("reservoir_is_lower_bound", decimals: 0)]
     public bool ReservoirIsLowerBound { get; init; }
 
     /// <summary>

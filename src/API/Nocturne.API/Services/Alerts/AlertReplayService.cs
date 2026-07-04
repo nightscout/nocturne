@@ -440,7 +440,8 @@ internal sealed class AlertReplayService(
 
             var projected = binding.Conversion switch
             {
-                ReplayFactConversion.Direct => (decimal?)(decimal)raw,
+                // Direct takes decimal properties; bool flags are projected as 0/1.
+                ReplayFactConversion.Direct => raw is bool flag ? (flag ? 1m : 0m) : (decimal)raw,
                 ReplayFactConversion.MinutesSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalMinutes,
                 ReplayFactConversion.HoursSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalHours,
                 ReplayFactConversion.DaysSinceNow => (decimal)(tickUtc - (DateTime)raw).TotalDays,

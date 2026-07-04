@@ -34,7 +34,8 @@ public sealed class ReplayFactAttribute : Attribute
     public int Decimals { get; }
 
     /// <summary>How to project the property's stored value to the wire value. Direct for
-    /// numeric properties; the time-since variants take a <see cref="DateTime"/>? property
+    /// numeric properties (bool properties emit 0/1); the time-since variants take a
+    /// <see cref="DateTime"/>? property
     /// and emit minutes/hours/days between that timestamp and the current replay tick.</summary>
     public ReplayFactConversion Conversion { get; }
 
