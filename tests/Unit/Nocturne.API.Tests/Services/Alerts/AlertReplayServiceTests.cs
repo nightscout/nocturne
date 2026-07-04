@@ -83,6 +83,7 @@ public class AlertReplayServiceTests
         _sut = new AlertReplayService(
             _alertRepository.Object,
             _glucoseRepository.Object,
+            TestDoubles.CanonicalGlucosePassThrough.Create(),
             enricher,
             _tenantAccessor.Object,
             NullLogger<AlertReplayService>.Instance);

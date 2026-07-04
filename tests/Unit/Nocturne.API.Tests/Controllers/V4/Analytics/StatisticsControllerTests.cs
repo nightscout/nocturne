@@ -43,7 +43,8 @@ public class StatisticsControllerTests
             Mock.Of<IPatientDeviceRepository>(),
             Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IDeviceEventRepository>(),
-            Mock.Of<ITargetRangeScheduleRepository>());
+            Mock.Of<ITargetRangeScheduleRepository>(),
+            TestDoubles.CanonicalGlucosePassThrough.Create());
 
         controller.ControllerContext = new ControllerContext
         {

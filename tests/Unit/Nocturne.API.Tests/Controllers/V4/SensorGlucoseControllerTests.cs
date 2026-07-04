@@ -19,7 +19,7 @@ public class SensorGlucoseControllerTests
 {
     private readonly Mock<ISensorGlucoseRepository> _repoMock = new();
     private readonly Mock<IGlucoseProcessingResolver> _glucoseResolverMock = new();
-    private readonly Mock<IAlertOrchestrator> _alertOrchestratorMock = new();
+    private readonly Mock<ICanonicalAlertEvaluator> _alertEvaluatorMock = new();
     private readonly Mock<ILogger<SensorGlucoseController>> _loggerMock = new();
 
     private SensorGlucoseController CreateController()
@@ -27,7 +27,7 @@ public class SensorGlucoseControllerTests
         var controller = new SensorGlucoseController(
             _repoMock.Object,
             _glucoseResolverMock.Object,
-            _alertOrchestratorMock.Object,
+            _alertEvaluatorMock.Object,
             _loggerMock.Object);
 
         controller.ControllerContext = new ControllerContext

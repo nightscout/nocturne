@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -39,6 +40,7 @@ namespace Nocturne.API.Services.ChartData.Stages;
 /// <seealso cref="ChartDataContext"/>
 internal sealed class DataFetchStage(
     ISensorGlucoseRepository sensorGlucoseRepository,
+    ICanonicalGlucoseService canonicalGlucose,
     IBolusRepository bolusRepository,
     ICarbIntakeRepository carbIntakeRepository,
     IBGCheckRepository bgCheckRepository,
@@ -74,18 +76,21 @@ internal sealed class DataFetchStage(
         var treatmentLimit = (int)Math.Max(500, Math.Ceiling(treatmentRangeHours * 10));
         var displayRangeLimit = (int)Math.Max(500, Math.Ceiling(rangeHours * 10));
 
-        // Fetch glucose data from v4 SensorGlucose table
+        // Fetch glucose data from v4 SensorGlucose table; the dashboard renders the canonical
+        // stream, not blended concurrent CGMs.
         var sensorGlucoseList = (
-            await sensorGlucoseRepository.GetAsync(
-                from: MillsToDateTime(startTime),
-                to: MillsToDateTime(endTime),
-                device: null,
-                source: null,
-                limit: entryLimit,
-                offset: 0,
-                descending: true,
-                ct: cancellationToken
-            )
+            await canonicalGlucose.SelectAsync(
+                (await sensorGlucoseRepository.GetAsync(
+                    from: MillsToDateTime(startTime),
+                    to: MillsToDateTime(endTime),
+                    device: null,
+                    source: null,
+                    limit: entryLimit,
+                    offset: 0,
+                    descending: true,
+                    ct: cancellationToken
+                )).ToList(),
+                cancellationToken)
         ).ToList();
 
         // Fetch bolus data from v4 Bolus table — extended range for IOB calculation

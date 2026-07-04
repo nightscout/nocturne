@@ -20,7 +20,7 @@ public class EntriesControllerTests
     private readonly Mock<IEntryService> _mockEntryService;
     private readonly Mock<IDocumentProcessingService> _mockDocumentProcessingService;
     private readonly Mock<IProcessingStatusService> _mockProcessingStatusService;
-    private readonly Mock<IAlertOrchestrator> _mockAlertOrchestrator;
+    private readonly Mock<ICanonicalAlertEvaluator> _mockAlertEvaluator;
     private readonly Mock<ILogger<EntriesController>> _mockLogger;
     private readonly EntriesController _controller;
 
@@ -29,14 +29,14 @@ public class EntriesControllerTests
         _mockEntryService = new Mock<IEntryService>();
         _mockDocumentProcessingService = new Mock<IDocumentProcessingService>();
         _mockProcessingStatusService = new Mock<IProcessingStatusService>();
-        _mockAlertOrchestrator = new Mock<IAlertOrchestrator>();
+        _mockAlertEvaluator = new Mock<ICanonicalAlertEvaluator>();
         _mockLogger = new Mock<ILogger<EntriesController>>();
 
         _controller = new EntriesController(
             _mockEntryService.Object,
             _mockDocumentProcessingService.Object,
             _mockProcessingStatusService.Object,
-            _mockAlertOrchestrator.Object,
+            _mockAlertEvaluator.Object,
             _mockLogger.Object
         );
 

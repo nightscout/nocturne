@@ -15,12 +15,13 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 /// <summary>
 /// Controller for managing CGM sensor glucose readings.
 /// Provides CRUD operations and bulk creation for <see cref="SensorGlucose"/> records.
-/// After creation, evaluates glucose alerts via <see cref="IAlertOrchestrator"/>.
+/// After creation, evaluates glucose alerts against the canonical stream via
+/// <see cref="ICanonicalAlertEvaluator"/>.
 /// </summary>
 /// <seealso cref="ISensorGlucoseRepository"/>
 /// <seealso cref="SensorGlucose"/>
 /// <seealso cref="UpsertSensorGlucoseRequest"/>
-/// <seealso cref="IAlertOrchestrator"/>
+/// <seealso cref="ICanonicalAlertEvaluator"/>
 /// <seealso cref="V4CrudControllerBase{TModel, TCreateRequest, TUpdateRequest, TRepository}"/>
 [ApiController]
 [Tags("Glucose")]
@@ -30,7 +31,7 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 public class SensorGlucoseController(
     ISensorGlucoseRepository repo,
     IGlucoseProcessingResolver glucoseResolver,
-    IAlertOrchestrator alertOrchestrator,
+    ICanonicalAlertEvaluator alertEvaluator,
     ILogger<SensorGlucoseController> logger)
     : V4CrudControllerBase<SensorGlucose, UpsertSensorGlucoseRequest, UpsertSensorGlucoseRequest, ISensorGlucoseRepository>(repo)
 {
@@ -143,51 +144,17 @@ public class SensorGlucoseController(
         var created = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
         var createdArray = created.ToArray();
 
-        // Evaluate alerts for the most recent reading only (not every historical reading during backfill)
-        var mostRecent = createdArray.OrderByDescending(r => r.Timestamp).FirstOrDefault();
-        if (mostRecent is { Mgdl: > 0 })
-        {
-            try
-            {
-                var context = new SensorContext
-                {
-                    LatestValue = (decimal)mostRecent.Mgdl,
-                    LatestTimestamp = mostRecent.Timestamp,
-                    TrendRate = (decimal?)mostRecent.TrendRate,
-                    LastReadingAt = mostRecent.Timestamp,
-                };
-                await alertOrchestrator.EvaluateAsync(context, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Alert evaluation failed after bulk SensorGlucose creation");
-            }
-        }
+        // Alarms evaluate against the canonical stream, not the just-created batch.
+        if (createdArray.Any(r => r.Mgdl > 0))
+            await alertEvaluator.EvaluateAsync(ct);
 
         return StatusCode(201, createdArray);
     }
 
     protected override async Task<SensorGlucose> OnAfterCreateAsync(SensorGlucose created, CancellationToken ct)
     {
-        try
-        {
-            if (created.Mgdl > 0)
-            {
-                var context = new SensorContext
-                {
-                    LatestValue = (decimal)created.Mgdl,
-                    LatestTimestamp = created.Timestamp,
-                    TrendRate = (decimal?)created.TrendRate,
-                    LastReadingAt = created.Timestamp,
-                };
-
-                await alertOrchestrator.EvaluateAsync(context, ct);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Alert evaluation failed after V4 SensorGlucose creation");
-        }
+        if (created.Mgdl > 0)
+            await alertEvaluator.EvaluateAsync(ct);
 
         return created;
     }

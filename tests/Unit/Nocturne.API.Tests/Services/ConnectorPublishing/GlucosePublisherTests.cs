@@ -38,7 +38,7 @@ public class GlucosePublisherTests
             _mockPatientDeviceStamper.Object,
             Mock.Of<IDbContextFactory<NocturneDbContext>>(),
             Mock.Of<ITenantAccessor>(),
-            Mock.Of<IAlertOrchestrator>(),
+            Mock.Of<ICanonicalAlertEvaluator>(),
             Mock.Of<IAuditContext>(),
             NullLogger<GlucosePublisher>.Instance
         );

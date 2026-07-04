@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -59,6 +60,7 @@ public class StatisticsController : ControllerBase
     private readonly IApsSnapshotRepository _apsSnapshotRepository;
     private readonly IDeviceEventRepository _deviceEventRepository;
     private readonly ITargetRangeScheduleRepository _targetRangeScheduleRepository;
+    private readonly ICanonicalGlucoseService _canonicalGlucose;
 
     private string TenantCacheId =>
         _tenantAccessor.Context?.TenantId.ToString()
@@ -80,7 +82,8 @@ public class StatisticsController : ControllerBase
         IPatientDeviceRepository patientDeviceRepository,
         IApsSnapshotRepository apsSnapshotRepository,
         IDeviceEventRepository deviceEventRepository,
-        ITargetRangeScheduleRepository targetRangeScheduleRepository
+        ITargetRangeScheduleRepository targetRangeScheduleRepository,
+        ICanonicalGlucoseService canonicalGlucose
     )
     {
         _statisticsService = statisticsService;
@@ -99,6 +102,7 @@ public class StatisticsController : ControllerBase
         _apsSnapshotRepository = apsSnapshotRepository;
         _deviceEventRepository = deviceEventRepository;
         _targetRangeScheduleRepository = targetRangeScheduleRepository;
+        _canonicalGlucose = canonicalGlucose;
     }
 
     /// <summary>
@@ -356,7 +360,8 @@ public class StatisticsController : ControllerBase
 
             await Task.WhenAll(glucoseTask, bolusTask, carbTask);
 
-            var entries = (await glucoseTask).ToList();
+            // Unfiltered statistics compute over the canonical stream, never blended CGMs.
+            var entries = (await _canonicalGlucose.SelectAsync((await glucoseTask).ToList(), cancellationToken)).ToList();
             var boluses = await bolusTask;
             var carbs   = await carbTask;
 
@@ -673,7 +678,7 @@ public class StatisticsController : ControllerBase
 
                 await Task.WhenAll(glucoseTask, bolusTask, carbTask);
 
-                var filteredEntries = (await glucoseTask).ToList();
+                var filteredEntries = (await _canonicalGlucose.SelectAsync((await glucoseTask).ToList(), cancellationToken)).ToList();
                 var filteredBoluses = (await bolusTask).ToList();
                 var filteredCarbs   = (await carbTask).ToList();
 
@@ -956,7 +961,7 @@ public class StatisticsController : ControllerBase
 
             await Task.WhenAll(glucoseTask, bolusTask, carbTask, algoTask, tempBasalTask);
 
-            var glucoseData      = (await glucoseTask).ToList();
+            var glucoseData      = (await _canonicalGlucose.SelectAsync((await glucoseTask).ToList(), cancellationToken)).ToList();
             var manualBoluses    = (await bolusTask).ToList();
             var carbs            = (await carbTask).ToList();
             var algorithmBoluses = (await algoTask).ToList();
