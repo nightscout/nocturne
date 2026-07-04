@@ -10,7 +10,8 @@
 // Environment variables (optional):
 //   REGISTRY          Container registry       (default: ghcr.io)
 //   IMAGE_REPOSITORY  Image repository         (default: detected from git remote)
-//   CONTAINER_RID     .NET RID for API image   (default: linux-x64)
+//   CONTAINER_RID       .NET RID for API image     (default: host arch — linux-x64 or linux-arm64)
+//   CONTAINER_PLATFORM  Docker platform for Web    (default: host arch — linux/amd64 or linux/arm64)
 //   SKIP_API          Skip API container build (default: false)
 //   SKIP_WEB          Skip Web container build (default: false)
 
@@ -26,7 +27,9 @@ var registry = Environment.GetEnvironmentVariable("REGISTRY") ?? "ghcr.io";
 var imageRepository = Environment.GetEnvironmentVariable("IMAGE_REPOSITORY");
 var skipApi = Environment.GetEnvironmentVariable("SKIP_API") == "true";
 var skipWeb = Environment.GetEnvironmentVariable("SKIP_WEB") == "true";
-var containerRid = Environment.GetEnvironmentVariable("CONTAINER_RID") ?? "linux-x64";
+var hostIsArm64 = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64;
+var containerRid = Environment.GetEnvironmentVariable("CONTAINER_RID") ?? (hostIsArm64 ? "linux-arm64" : "linux-x64");
+var containerPlatform = Environment.GetEnvironmentVariable("CONTAINER_PLATFORM") ?? (hostIsArm64 ? "linux/arm64" : "linux/amd64");
 
 if (string.IsNullOrEmpty(imageRepository))
 {
@@ -116,7 +119,7 @@ if (!skipWeb)
     var dockerArgs = new List<string>
     {
         "buildx", "build",
-        "--platform", "linux/amd64",
+        "--platform", containerPlatform,
         "--tag", $"{registry}/{imageRepository}/nocturne-web:{version}",
         "--file", Path.Combine(repoRoot, "Dockerfile.web"),
     };
