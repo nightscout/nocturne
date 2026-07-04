@@ -60,7 +60,16 @@ public class CanonicalGlucoseServiceTests
         _deviceRepo.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync([primary, secondary]);
 
-        var readings = new List<SensorGlucose> { Reading(primary.Id, 0), Reading(secondary.Id, 1) };
+        // Pin both readings into the same aligned 5-minute bucket so the shared-bucket premise
+        // (primary outranks secondary within a bucket) doesn't depend on where the wall clock
+        // sits relative to a bucket boundary.
+        var bucketStart = new DateTime(Now.Ticks - Now.Ticks % TimeSpan.FromMinutes(5).Ticks, DateTimeKind.Utc)
+            .AddMinutes(-5);
+        var primaryReading = Reading(primary.Id, 0);
+        primaryReading.Timestamp = bucketStart.AddMinutes(1);
+        var secondaryReading = Reading(secondary.Id, 0);
+        secondaryReading.Timestamp = bucketStart.AddMinutes(2);
+        var readings = new List<SensorGlucose> { primaryReading, secondaryReading };
 
         var first = await _sut.SelectAsync(readings);
         var second = await _sut.SelectAsync(readings);
