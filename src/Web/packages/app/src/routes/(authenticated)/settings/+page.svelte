@@ -11,6 +11,7 @@
     ShieldCheck,
     Timer,
     Plug,
+    KeyRound,
     Users,
     HeartHandshake,
     Building2,
@@ -67,6 +68,12 @@
       description: "Alerts, reminders, and tracked events.",
       href: "/settings/trackers",
       icon: Timer,
+    },
+    {
+      title: "Active Access",
+      description: "Signed-in devices, guest links, and connected apps.",
+      href: "/settings/access",
+      icon: KeyRound,
     },
     {
       title: "Connectors & Apps",

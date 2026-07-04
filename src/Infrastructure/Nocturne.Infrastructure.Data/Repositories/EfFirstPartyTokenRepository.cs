@@ -96,6 +96,9 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
                     .SetProperty(t => t.RevokedAt, now)
                     .SetProperty(t => t.RevokedReason, "Rotated")
                     .SetProperty(t => t.ReplacedByTokenId, (Guid?)replacedByTokenId)
+                    // Rotation is the token being exchanged — stamp last use here since the
+                    // rotation path never reaches UpdateLastUsedAsync.
+                    .SetProperty(t => t.LastUsedAt, now)
                     .SetProperty(t => t.UpdatedAt, now),
                 ct);
 
@@ -149,6 +152,68 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
     }
 
     /// <inheritdoc />
+    public async Task<int> RevokeSessionForSubjectAsync(
+        Guid subjectId,
+        string sessionId,
+        string reason,
+        CancellationToken ct = default)
+    {
+        Guid.TryParse(sessionId, out var legacyTokenId);
+
+        var tokens = await _context.RefreshTokens
+            .Where(t => t.SubjectId == subjectId
+                && t.RevokedAt == null
+                && (t.OidcSessionId == sessionId
+                    || (t.OidcSessionId == null && t.Id == legacyTokenId)))
+            .ToListAsync(ct);
+
+        var now = DateTime.UtcNow;
+        foreach (var token in tokens)
+        {
+            token.RevokedAt = now;
+            token.RevokedReason = reason;
+            token.UpdatedAt = now;
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        return tokens.Count;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RevokeOtherSessionsForSubjectAsync(
+        Guid subjectId,
+        string currentSessionId,
+        string reason,
+        CancellationToken ct = default)
+    {
+        Guid.TryParse(currentSessionId, out var legacyTokenId);
+
+        var tokens = await _context.RefreshTokens
+            .Where(t => t.SubjectId == subjectId && t.RevokedAt == null)
+            .ToListAsync(ct);
+
+        var now = DateTime.UtcNow;
+        var count = 0;
+        foreach (var token in tokens)
+        {
+            var isCurrent = token.OidcSessionId == currentSessionId
+                || (token.OidcSessionId == null && token.Id == legacyTokenId);
+            if (isCurrent)
+                continue;
+
+            token.RevokedAt = now;
+            token.RevokedReason = reason;
+            token.UpdatedAt = now;
+            count++;
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        return count;
+    }
+
+    /// <inheritdoc />
     public async Task UpdateLastUsedAsync(string tokenHash, CancellationToken ct = default)
     {
         await _context.RefreshTokens
@@ -180,6 +245,7 @@ public class EfFirstPartyTokenRepository : IFirstPartyTokenRepository
             .Select(t => new RefreshTokenInfo
             {
                 Id = t.Id,
+                OidcSessionId = t.OidcSessionId,
                 DeviceDescription = t.DeviceDescription,
                 IpAddress = t.IpAddress,
                 IssuedAt = t.IssuedAt,

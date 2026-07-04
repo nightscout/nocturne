@@ -7,7 +7,16 @@
   import { Label } from "$lib/components/ui/label";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
-  import { Clock, Copy, Check, X, Loader2, Link, EyeOff } from "lucide-svelte";
+  import {
+    Clock,
+    Copy,
+    Check,
+    X,
+    Loader2,
+    Link,
+    EyeOff,
+    RotateCcw,
+  } from "lucide-svelte";
   import {
     getGuestLinks,
     createGuestLink,
@@ -138,6 +147,20 @@
     );
   }
 
+  /** The backend may report http behind a reverse proxy; use the browser's origin */
+  function normalizeCreatedUrl(url: string): string {
+    try {
+      const backendUrl = new URL(url);
+      const originUrl = new URL(window.location.origin);
+      backendUrl.protocol = originUrl.protocol;
+      backendUrl.host = originUrl.host;
+      return backendUrl.toString();
+    } catch {
+      // Fallback: treat as relative path
+      return url.startsWith("http") ? url : `${window.location.origin}${url}`;
+    }
+  }
+
   async function handleCreate() {
     if (!label.trim()) return;
     isCreating = true;
@@ -145,22 +168,7 @@
     try {
       const result = await createGuestLink({ label: label.trim() });
       createdCode = result.code ?? null;
-      createdUrl = result.fullUrl ?? null;
-      if (createdUrl) {
-        // The backend may report http behind a reverse proxy; use the browser's origin
-        try {
-          const backendUrl = new URL(createdUrl);
-          const originUrl = new URL(window.location.origin);
-          backendUrl.protocol = originUrl.protocol;
-          backendUrl.host = originUrl.host;
-          createdUrl = backendUrl.toString();
-        } catch {
-          // Fallback: treat as relative path
-          if (!createdUrl.startsWith("http")) {
-            createdUrl = `${window.location.origin}${createdUrl}`;
-          }
-        }
-      }
+      createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
       await guestLinksQuery?.refresh();
     } catch {
       createError = "Failed to create guest link. Please try again.";
@@ -197,6 +205,34 @@
     } catch {
       // Restore on failure
       removingIds = new Set([...removingIds].filter((x) => x !== id));
+    }
+  }
+
+  let reissuingId = $state<string | null>(null);
+
+  /**
+   * Issue a new code with the same label and scopes. Codes are single-use, so
+   * this is how a guest gets access on another device or after expiry.
+   */
+  async function handleReissue(link: GuestLinkInfo) {
+    reissuingId = link.id!;
+    createError = null;
+    try {
+      const result = await createGuestLink({
+        label: link.label || "Untitled",
+        scopes: link.scopes,
+      });
+      createdCode = result.code ?? null;
+      createdUrl = result.fullUrl ? normalizeCreatedUrl(result.fullUrl) : null;
+      showCreateForm = true;
+      await guestLinksQuery?.refresh();
+    } catch (err) {
+      createError =
+        (err as any)?.body?.message ??
+        "Failed to create a new code. Active links are limited to 5 at a time.";
+      showCreateForm = true;
+    } finally {
+      reissuingId = null;
     }
   }
 
@@ -245,8 +281,9 @@
         <Card.Header>
           <Card.Title class="text-lg">Create Guest Link</Card.Title>
           <Card.Description>
-            Generate a temporary link for read-only access to reports. It
-            expires in 48 hours and can only be used once.
+            Generate a temporary link for read-only access to reports. The
+            code works once: the first device to enter it stays signed in for
+            48 hours. For another device, issue a new code.
           </Card.Description>
         </Card.Header>
         <Card.Content>
@@ -315,8 +352,9 @@
               {/if}
 
               <p class="text-sm text-muted-foreground">
-                Share this code or link. It expires in 48 hours and can only be
-                used once.
+                Share this code or link. The code works once: the first device
+                to enter it stays signed in for 48 hours. Use "New code" on the
+                link below to add another device.
               </p>
 
               <Button variant="outline" class="w-full" onclick={handleDone}>
@@ -422,6 +460,22 @@
                     {/if}
                   </div>
                 </div>
+                {#if link.status === GuestLinkStatus.Active || (isTerminal(link) && !link.dismissedAt)}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="text-muted-foreground hover:text-foreground shrink-0"
+                    disabled={reissuingId === link.id}
+                    onclick={() => handleReissue(link)}
+                  >
+                    {#if reissuingId === link.id}
+                      <Loader2 class="mr-1 h-3.5 w-3.5 animate-spin" />
+                    {:else}
+                      <RotateCcw class="mr-1 h-3.5 w-3.5" />
+                    {/if}
+                    New code
+                  </Button>
+                {/if}
                 {#if canRevoke(link)}
                   <Button
                     variant="ghost"

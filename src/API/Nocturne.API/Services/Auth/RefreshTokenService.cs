@@ -321,7 +321,69 @@ public class RefreshTokenService : IRefreshTokenService
     /// <inheritdoc />
     public async Task<List<RefreshTokenInfo>> GetActiveSessionsForSubjectAsync(Guid subjectId)
     {
-        return await _repository.GetActiveSessionsAsync(subjectId);
+        var tokens = await _repository.GetActiveSessionsAsync(subjectId);
+
+        // A rotation chain shares one OIDC session ID, and the rotation grace window means a
+        // session briefly has several live tokens. Group per session so each login/device
+        // appears once. Legacy tokens without a session ID each stand as their own session,
+        // keyed by token ID.
+        return tokens
+            .GroupBy(t => t.OidcSessionId ?? t.Id.ToString())
+            .Select(g =>
+            {
+                var newest = g.OrderByDescending(t => t.IssuedAt).First();
+                return new RefreshTokenInfo
+                {
+                    Id = newest.Id,
+                    OidcSessionId = g.Key,
+                    DeviceDescription = newest.DeviceDescription,
+                    IpAddress = newest.IpAddress,
+                    IssuedAt = g.Min(t => t.IssuedAt),
+                    LastUsedAt = g.Max(t => t.LastUsedAt ?? t.IssuedAt),
+                    ExpiresAt = g.Max(t => t.ExpiresAt),
+                    IsCurrent = false,
+                };
+            })
+            .OrderByDescending(s => s.LastUsedAt)
+            .ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> GetSessionIdForTokenAsync(string refreshToken)
+    {
+        var tokenHash = _jwtService.HashRefreshToken(refreshToken);
+
+        var record = await _repository.FindByHashAsync(tokenHash);
+        if (record == null)
+        {
+            return null;
+        }
+
+        return record.OidcSessionId ?? record.Id.ToString();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RevokeSessionForSubjectAsync(Guid subjectId, string sessionId, string reason)
+    {
+        var count = await _repository.RevokeSessionForSubjectAsync(subjectId, sessionId, reason);
+
+        _logger.LogInformation(
+            "Revoked {Count} refresh tokens for session {SessionId} of subject {SubjectId}. Reason: {Reason}",
+            count, sessionId, subjectId, reason);
+
+        return count;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RevokeOtherSessionsForSubjectAsync(Guid subjectId, string currentSessionId, string reason)
+    {
+        var count = await _repository.RevokeOtherSessionsForSubjectAsync(subjectId, currentSessionId, reason);
+
+        _logger.LogInformation(
+            "Revoked {Count} refresh tokens across other sessions of subject {SubjectId}. Reason: {Reason}",
+            count, subjectId, reason);
+
+        return count;
     }
 
     /// <inheritdoc />

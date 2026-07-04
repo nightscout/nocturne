@@ -43,6 +43,7 @@
     Shield,
     Eye,
     Users,
+    KeyRound,
     PlayCircle,
     History as HistoryIcon,
   } from "lucide-svelte";
@@ -284,6 +285,7 @@
           href: "/settings/trackers",
           icon: Timer,
         },
+        { title: "Active Access", href: "/settings/access", icon: KeyRound },
         { title: "Connectors & Apps", href: "/settings/connectors", icon: Plug },
         { title: "Sharing & Privacy", href: "/settings/members", icon: Users },
         {
