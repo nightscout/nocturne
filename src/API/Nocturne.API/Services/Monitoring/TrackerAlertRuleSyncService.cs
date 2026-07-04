@@ -198,6 +198,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             }
         }
 
+        SyncReservoirLevelRule(db, tenantId, definition, tag, managedRules, keptRuleIds);
+
         var orphaned = managedRules.Values.Where(r => !keptRuleIds.Contains(r.Id)).ToList();
         var removed = await RemoveOrDisableAsync(db, orphaned, ct);
 
@@ -257,6 +259,73 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         }
 
         return removed;
+    }
+
+    /// <summary>
+    /// Synthesises the single reservoir-level rule for a Reservoir-category definition
+    /// with <see cref="TrackerDefinitionEntity.LowReservoirUnits"/> set. The rule is
+    /// identified within the definition's managed set by its Reservoir condition type
+    /// (there is at most one), so edits adopt the existing rule and preserve user edits
+    /// exactly like the tracker_age rules. When the units are cleared — or the category
+    /// changes away from Reservoir — the rule is not marked kept, so the shared orphan
+    /// pass removes it.
+    /// </summary>
+    private void SyncReservoirLevelRule(
+        NocturneDbContext db,
+        Guid tenantId,
+        TrackerDefinitionEntity definition,
+        string tag,
+        IReadOnlyDictionary<Guid, AlertRuleEntity> managedRules,
+        HashSet<Guid> keptRuleIds)
+    {
+        if (definition.Category != TrackerCategory.Reservoir || definition.LowReservoirUnits is not { } units)
+            return;
+
+        // Snake_case to match the evaluators' shared JSON options (ReservoirCondition).
+        var conditionParams = JsonSerializer.Serialize(new { @operator = "<", value = units });
+        var name = Truncate($"{definition.Name}: below {units} U", 128);
+        var severity = MapSeverity(definition.LowReservoirUrgency);
+        var scopeClass = _scopeClassifier.Classify(AlertConditionType.Reservoir, conditionParams);
+
+        var existing = managedRules.Values
+            .FirstOrDefault(r => r.ConditionType == AlertConditionType.Reservoir);
+        if (existing is not null)
+        {
+            existing.Name = name;
+            existing.ConditionParams = conditionParams;
+            existing.ScopeClass = scopeClass;
+            existing.Severity = severity;
+            existing.UpdatedAt = DateTime.UtcNow;
+            keptRuleIds.Add(existing.Id);
+            return;
+        }
+
+        var created = new AlertRuleEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            Name = name,
+            ConditionType = AlertConditionType.Reservoir,
+            ConditionParams = conditionParams,
+            ScopeClass = scopeClass,
+            Severity = severity,
+            ManagedBy = tag,
+            IsEnabled = true,
+            ClientConfiguration = "{}",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        created.Channels.Add(new AlertRuleChannelEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            AlertRuleId = created.Id,
+            ChannelType = ChannelType.InApp,
+            SortOrder = 0,
+            CreatedAt = DateTime.UtcNow,
+        });
+        db.AlertRules.Add(created);
+        keptRuleIds.Add(created.Id);
     }
 
     /// <summary>

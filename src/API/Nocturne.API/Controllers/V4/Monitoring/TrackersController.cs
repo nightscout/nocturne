@@ -112,6 +112,19 @@ public class TrackersController : ControllerBase
     }
 
     /// <summary>
+    /// Validate the low-reservoir level threshold for a definition
+    /// </summary>
+    private static string? ValidateLowReservoirUnits(double? units, TrackerCategory category)
+    {
+        if (units is not { } value) return null;
+        if (category != TrackerCategory.Reservoir)
+            return "Low reservoir units apply only to Reservoir category trackers";
+        if (value <= 0)
+            return "Low reservoir units must be greater than zero";
+        return null;
+    }
+
+    /// <summary>
     /// Acknowledges every open, unacknowledged excursion belonging to the managed alert
     /// rules synthesised from <paramref name="definitionId"/>'s thresholds.
     /// </summary>
@@ -227,6 +240,10 @@ public class TrackersController : ControllerBase
         if (request.Mode == TrackerMode.Event && request.LifespanHours.HasValue)
             return Problem(detail: "Event mode trackers should not have a lifespan", statusCode: 400, title: "Bad Request");
 
+        var lowReservoirError = ValidateLowReservoirUnits(request.LowReservoirUnits, request.Category);
+        if (lowReservoirError != null)
+            return Problem(detail: lowReservoirError, statusCode: 400, title: "Bad Request");
+
         var entity = new TrackerDefinitionEntity
         {
             UserId = userId,
@@ -237,6 +254,8 @@ public class TrackersController : ControllerBase
             TriggerEventTypes = JsonSerializer.Serialize(request.TriggerEventTypes ?? []),
             TriggerNotesContains = request.TriggerNotesContains,
             LifespanHours = request.LifespanHours,
+            LowReservoirUnits = request.LowReservoirUnits,
+            LowReservoirUrgency = request.LowReservoirUrgency,
             IsFavorite = request.IsFavorite,
             DashboardVisibility = request.DashboardVisibility,
             Visibility = request.Visibility,
@@ -324,6 +343,11 @@ public class TrackersController : ControllerBase
         if (mode == TrackerMode.Event && lifespan.HasValue)
             return Problem(detail: "Event mode trackers should not have a lifespan", statusCode: 400, title: "Bad Request");
 
+        var category = request.Category ?? existing.Category;
+        var lowReservoirError = ValidateLowReservoirUnits(request.LowReservoirUnits, category);
+        if (lowReservoirError != null)
+            return Problem(detail: lowReservoirError, statusCode: 400, title: "Bad Request");
+
         existing.Name = request.Name ?? existing.Name;
         existing.Description = request.Description ?? existing.Description;
         existing.Category = request.Category ?? existing.Category;
@@ -335,6 +359,12 @@ public class TrackersController : ControllerBase
         existing.TriggerNotesContains =
             request.TriggerNotesContains ?? existing.TriggerNotesContains;
         existing.LifespanHours = request.LifespanHours ?? existing.LifespanHours;
+        // Applied as-is (not null-means-keep): the tracker editor posts the whole
+        // definition, and null must clear the level rule. Forced null for any
+        // non-Reservoir category.
+        existing.LowReservoirUnits =
+            category == TrackerCategory.Reservoir ? request.LowReservoirUnits : null;
+        existing.LowReservoirUrgency = request.LowReservoirUrgency ?? existing.LowReservoirUrgency;
         existing.IsFavorite = request.IsFavorite ?? existing.IsFavorite;
         existing.DashboardVisibility = request.DashboardVisibility ?? existing.DashboardVisibility;
         existing.Visibility = request.Visibility ?? existing.Visibility;
@@ -822,6 +852,17 @@ public class TrackerDefinitionDto
     public string? TriggerNotesContains { get; set; }
     public int? LifespanHours { get; set; }
 
+    /// <summary>
+    /// Reservoir category only: units level below which the synced managed reservoir
+    /// rule fires. Null = no level rule.
+    /// </summary>
+    public double? LowReservoirUnits { get; set; }
+
+    /// <summary>
+    /// Urgency of the low-reservoir level rule.
+    /// </summary>
+    public NotificationUrgency LowReservoirUrgency { get; set; } = NotificationUrgency.Warn;
+
     // Notification thresholds (many-to-one relationship)
     public List<NotificationThresholdDto> NotificationThresholds { get; set; } = [];
 
@@ -867,6 +908,8 @@ public class TrackerDefinitionDto
                 JsonSerializer.Deserialize<List<string>>(entity.TriggerEventTypes) ?? [],
             TriggerNotesContains = entity.TriggerNotesContains,
             LifespanHours = entity.LifespanHours,
+            LowReservoirUnits = entity.LowReservoirUnits,
+            LowReservoirUrgency = entity.LowReservoirUrgency,
             // Notification thresholds
             NotificationThresholds =
                 entity
@@ -961,6 +1004,17 @@ public class CreateTrackerDefinitionRequest
     public string? TriggerNotesContains { get; set; }
     public int? LifespanHours { get; set; }
 
+    /// <summary>
+    /// Reservoir category only: units level below which the synced managed reservoir
+    /// rule fires. Null = no level rule.
+    /// </summary>
+    public double? LowReservoirUnits { get; set; }
+
+    /// <summary>
+    /// Urgency of the low-reservoir level rule.
+    /// </summary>
+    public NotificationUrgency LowReservoirUrgency { get; set; } = NotificationUrgency.Warn;
+
     // Notification thresholds (many-to-one relationship)
     public List<CreateNotificationThresholdRequest>? NotificationThresholds { get; set; }
     public bool IsFavorite { get; set; }
@@ -1000,6 +1054,19 @@ public class UpdateTrackerDefinitionRequest
     public List<string>? TriggerEventTypes { get; set; }
     public string? TriggerNotesContains { get; set; }
     public int? LifespanHours { get; set; }
+
+    /// <summary>
+    /// Reservoir category only: units level below which the synced managed reservoir
+    /// rule fires. The tracker editor posts the whole definition, so for a Reservoir
+    /// definition this value is applied as-is on every update — null clears the rule
+    /// (null-means-keep cannot express clearing).
+    /// </summary>
+    public double? LowReservoirUnits { get; set; }
+
+    /// <summary>
+    /// Urgency of the low-reservoir level rule. Null keeps the current value.
+    /// </summary>
+    public NotificationUrgency? LowReservoirUrgency { get; set; }
 
     // Notification thresholds (if provided, replaces all existing thresholds)
     public List<CreateNotificationThresholdRequest>? NotificationThresholds { get; set; }

@@ -56,6 +56,9 @@ public class TrackerAlertRuleSyncServiceTests
     private async Task<TrackerDefinitionEntity> SeedDefinitionAsync(
         TrackerMode mode = TrackerMode.Duration,
         int? lifespanHours = 240,
+        TrackerCategory category = TrackerCategory.Consumable,
+        double? lowReservoirUnits = null,
+        NotificationUrgency lowReservoirUrgency = NotificationUrgency.Warn,
         params TrackerNotificationThresholdEntity[] thresholds)
     {
         await using var db = Db();
@@ -67,6 +70,9 @@ public class TrackerAlertRuleSyncServiceTests
             Name = "Sensor",
             Mode = mode,
             LifespanHours = lifespanHours,
+            Category = category,
+            LowReservoirUnits = lowReservoirUnits,
+            LowReservoirUrgency = lowReservoirUrgency,
         };
         foreach (var threshold in thresholds)
         {
@@ -368,6 +374,153 @@ public class TrackerAlertRuleSyncServiceTests
             rule.Id.Should().Be(ruleId);
             rule.IsEnabled.Should().BeFalse();
         }
+    }
+
+    [Fact]
+    public async Task Sync_reservoir_definition_with_units_creates_level_rule_alongside_age_rules()
+    {
+        var definition = await SeedDefinitionAsync(
+            category: TrackerCategory.Reservoir,
+            lowReservoirUnits: 20,
+            lowReservoirUrgency: NotificationUrgency.Urgent,
+            thresholds: [Threshold(48)]);
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using var db = Db();
+        var rules = await db.AlertRules.Include(r => r.Channels).ToListAsync();
+        rules.Should().HaveCount(2);
+        rules.Should().OnlyContain(r => r.ManagedBy == $"tracker:{definition.Id}" && r.IsEnabled);
+
+        var level = rules.Single(r => r.ConditionType == AlertConditionType.Reservoir);
+        var p = Params(level);
+        p.GetProperty("operator").GetString().Should().Be("<");
+        p.GetProperty("value").GetDouble().Should().Be(20);
+        level.Severity.Should().Be(AlertRuleSeverity.Critical);
+        level.Channels.Select(c => c.ChannelType).Should().Equal(ChannelType.InApp);
+
+        rules.Should().ContainSingle(r => r.ConditionType == AlertConditionType.TrackerAge);
+    }
+
+    [Fact]
+    public async Task Resync_edited_units_updates_level_rule_in_place()
+    {
+        var definition = await SeedDefinitionAsync(
+            category: TrackerCategory.Reservoir,
+            lowReservoirUnits: 20);
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        Guid ruleId;
+        await using (var db = Db())
+        {
+            var rule = await db.AlertRules.SingleAsync();
+            ruleId = rule.Id;
+            rule.IsEnabled = false;
+
+            var def = await db.TrackerDefinitions.SingleAsync();
+            def.LowReservoirUnits = 15.5;
+            await db.SaveChangesAsync();
+        }
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using (var db = Db())
+        {
+            var rule = await db.AlertRules.SingleAsync();
+            rule.Id.Should().Be(ruleId);
+            Params(rule).GetProperty("value").GetDouble().Should().Be(15.5);
+            // User-edited enabled state survives the resync.
+            rule.IsEnabled.Should().BeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task Resync_cleared_units_removes_level_rule_but_keeps_age_rules()
+    {
+        var definition = await SeedDefinitionAsync(
+            category: TrackerCategory.Reservoir,
+            lowReservoirUnits: 20,
+            thresholds: [Threshold(48)]);
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using (var db = Db())
+        {
+            (await db.TrackerDefinitions.SingleAsync()).LowReservoirUnits = null;
+            await db.SaveChangesAsync();
+        }
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using (var db2 = Db())
+        {
+            var rules = await db2.AlertRules.ToListAsync();
+            rules.Should().ContainSingle().Which.ConditionType.Should().Be(AlertConditionType.TrackerAge);
+        }
+    }
+
+    [Fact]
+    public async Task Sync_non_reservoir_category_ignores_units()
+    {
+        var definition = await SeedDefinitionAsync(
+            category: TrackerCategory.Sensor,
+            lowReservoirUnits: 20);
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using var db = Db();
+        (await db.AlertRules.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Sync_adopts_preexisting_managed_reservoir_rule()
+    {
+        var definition = await SeedDefinitionAsync(
+            category: TrackerCategory.Reservoir,
+            lowReservoirUnits: 10);
+
+        Guid preexistingId;
+        await using (var db = Db())
+        {
+            var rule = new AlertRuleEntity
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                Name = "old name",
+                ConditionType = AlertConditionType.Reservoir,
+                ConditionParams = """{"operator":"<","value":25}""",
+                Severity = AlertRuleSeverity.Info,
+                ManagedBy = $"tracker:{definition.Id}",
+                IsEnabled = true,
+            };
+            preexistingId = rule.Id;
+            db.AlertRules.Add(rule);
+            await db.SaveChangesAsync();
+        }
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await using (var db = Db())
+        {
+            var rule = await db.AlertRules.SingleAsync();
+            rule.Id.Should().Be(preexistingId);
+            Params(rule).GetProperty("value").GetDouble().Should().Be(10);
+            rule.Severity.Should().Be(AlertRuleSeverity.Warning);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteRulesForDefinition_removes_level_rule_too()
+    {
+        var definition = await SeedDefinitionAsync(
+            category: TrackerCategory.Reservoir,
+            lowReservoirUnits: 20,
+            thresholds: [Threshold(48)]);
+        await _sut.SyncDefinitionAsync(definition.Id);
+
+        await _sut.DeleteRulesForDefinitionAsync(definition.Id);
+
+        await using var db = Db();
+        (await db.AlertRules.CountAsync()).Should().Be(0);
     }
 
     private sealed class TestTenantDbContextFactory(
