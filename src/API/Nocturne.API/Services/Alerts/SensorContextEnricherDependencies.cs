@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
@@ -39,4 +40,5 @@ internal sealed record SensorContextEnricherDependencies(
     IActiveProfileResolver ActiveProfileResolver,
     ITherapySettingsResolver TherapySettings,
     ITrackerRepository Trackers,
+    IReservoirEstimationService Reservoir,
     IOptions<AlertEvaluationOptions> Options);

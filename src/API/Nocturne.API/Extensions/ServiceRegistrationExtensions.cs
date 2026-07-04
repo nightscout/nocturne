@@ -738,6 +738,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.Configure<AlertEvaluationOptions>(
             configuration.GetSection(AlertEvaluationOptions.SectionName));
+        services.AddScoped<IReservoirEstimationService, ReservoirEstimationService>();
         // Bundles the enricher's data-source dependencies; resolved positionally from DI.
         services.AddScoped<SensorContextEnricherDependencies>();
         services.AddScoped<ISensorContextEnricher, SensorContextEnricher>();

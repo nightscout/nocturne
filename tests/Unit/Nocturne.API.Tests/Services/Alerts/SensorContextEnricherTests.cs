@@ -7,6 +7,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
@@ -41,6 +42,7 @@ public class SensorContextEnricherTests
     private readonly Mock<ITherapySettingsResolver> _therapySettingsResolver = new();
     private readonly Mock<Nocturne.Infrastructure.Data.Abstractions.ITrackerRepository> _trackerRepository = new();
     private readonly Mock<IPredictionService> _predictionService = new();
+    private readonly Mock<IReservoirEstimationService> _reservoirEstimator = new();
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 3, 22, 12, 0, 0, TimeSpan.Zero));
     private readonly Guid _tenantId = Guid.NewGuid();
 
@@ -239,11 +241,11 @@ public class SensorContextEnricherTests
     }
 
     [Fact]
-    public async Task Reservoir_pulls_latest_pump_snapshot()
+    public async Task Reservoir_rule_pulls_estimate()
     {
         var enricher = BuildEnricher();
-        _pumpSnapshotRepository.Setup(r => r.GetAsync(null, null, null, null, 1, 0, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { new PumpSnapshot { Reservoir = 42.5 } });
+        _reservoirEstimator.Setup(e => e.GetEstimateAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ReservoirEstimate(42.5m, IsLowerBound: false, IsEstimated: true));
         var rule = MakeRule(AlertConditionType.Reservoir, """{"operator":"<","value":50}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
@@ -253,17 +255,31 @@ public class SensorContextEnricherTests
     }
 
     [Fact]
-    public async Task Reservoir_lower_bound_display_marks_value_as_lower_bound()
+    public async Task Reservoir_lower_bound_estimate_flows_to_context()
     {
         var enricher = BuildEnricher();
-        _pumpSnapshotRepository.Setup(r => r.GetAsync(null, null, null, null, 1, 0, true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { new PumpSnapshot { Reservoir = 50, ReservoirDisplay = "50+U" } });
+        _reservoirEstimator.Setup(e => e.GetEstimateAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ReservoirEstimate(50m, IsLowerBound: true, IsEstimated: false));
         var rule = MakeRule(AlertConditionType.Reservoir, """{"operator":"<","value":50}""");
 
         var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
 
         enriched.ReservoirUnits.Should().Be(50m);
         enriched.ReservoirIsLowerBound.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Reservoir_missing_estimate_leaves_context_null()
+    {
+        var enricher = BuildEnricher();
+        _reservoirEstimator.Setup(e => e.GetEstimateAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ReservoirEstimate?)null);
+        var rule = MakeRule(AlertConditionType.Reservoir, """{"operator":"<","value":50}""");
+
+        var enriched = await enricher.EnrichAsync(BaseContext(), new[] { rule }, _tenantId, CancellationToken.None);
+
+        enriched.ReservoirUnits.Should().BeNull();
+        enriched.ReservoirIsLowerBound.Should().BeFalse();
     }
 
     [Fact]
@@ -502,6 +518,7 @@ public class SensorContextEnricherTests
             _activeProfileResolver.Object,
             _therapySettingsResolver.Object,
             _trackerRepository.Object,
+            _reservoirEstimator.Object,
             Options.Create(new AlertEvaluationOptions()));
         var enricher2 = new SensorContextEnricher(
             deps2,
@@ -777,6 +794,7 @@ public class SensorContextEnricherTests
             _activeProfileResolver.Object,
             _therapySettingsResolver.Object,
             _trackerRepository.Object,
+            _reservoirEstimator.Object,
             Options.Create(options ?? new AlertEvaluationOptions()));
 
         return new SensorContextEnricher(
