@@ -29161,6 +29161,7 @@ export interface BasalInjection {
     syncIdentifier?: string | undefined;
     correlationId?: string | undefined;
     legacyId?: string | undefined;
+    patientDeviceId?: string | undefined;
     createdAt?: Date;
     modifiedAt?: Date;
     units?: number;
@@ -32988,6 +32989,7 @@ export interface PatientDevice {
     startDate?: Date | undefined;
     endDate?: Date | undefined;
     isCurrent?: boolean;
+    rank?: number | undefined;
     notes?: string | undefined;
     createdAt?: Date;
     modifiedAt?: Date;
@@ -33187,6 +33189,7 @@ export interface MeterGlucose {
     dataSource?: string | undefined;
     correlationId?: string | undefined;
     legacyId?: string | undefined;
+    patientDeviceId?: string | undefined;
     createdAt?: Date;
     modifiedAt?: Date;
     mgdl?: number;

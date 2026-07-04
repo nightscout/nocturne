@@ -57,7 +57,9 @@ public class PatientDeviceRepository : IPatientDeviceRepository
         var entities = await ctx.PatientDevices
             .AsNoTracking()
             .Where(e => e.IsCurrent)
-            .OrderByDescending(e => e.StartDate)
+            .OrderBy(e => e.Rank == null)
+            .ThenBy(e => e.Rank)
+            .ThenByDescending(e => e.StartDate)
             .ToListAsync(ct);
 
         return entities.Select(PatientDeviceMapper.ToDomainModel);
@@ -84,7 +86,9 @@ public class PatientDeviceRepository : IPatientDeviceRepository
             .Where(e =>
                 (e.StartDate == null || e.StartDate <= toDate) &&
                 (e.EndDate == null || e.EndDate >= fromDate))
-            .OrderByDescending(e => e.StartDate)
+            .OrderBy(e => e.Rank == null)
+            .ThenBy(e => e.Rank)
+            .ThenByDescending(e => e.StartDate)
             .ToListAsync(ct);
 
         return entities.Select(PatientDeviceMapper.ToDomainModel);

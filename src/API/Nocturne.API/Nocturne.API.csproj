@@ -11,6 +11,10 @@
     <NoWarn>$(NoWarn);1591;NU1608;NU1701</NoWarn>
     <!-- Container publishing configuration for Aspire -->
     <EnableSdkContainerSupport>true</EnableSdkContainerSupport>
+    <!-- Restore RID-specific assets for both container architectures so a
+         multi-arch publish (ContainerRuntimeIdentifiers) can run inner
+         per-RID publishes without a separate restore. -->
+    <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
     <ContainerRepository>nocturne-api</ContainerRepository>
     <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
     <ContainerWorkingDirectory>/app/</ContainerWorkingDirectory>

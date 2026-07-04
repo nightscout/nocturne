@@ -23,7 +23,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="BolusType"/>
 /// <seealso cref="ApsSnapshot"/>
 /// <seealso cref="TempBasal"/>
-public class Bolus : IV4Record
+public class Bolus : IV4Record, IDeviceAttributed
 {
     /// <summary>
     /// UUID v7 primary key

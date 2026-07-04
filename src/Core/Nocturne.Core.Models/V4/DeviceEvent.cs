@@ -14,7 +14,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="DeviceEventType"/>
 /// <seealso cref="Device"/>
 /// <seealso cref="Note"/>
-public class DeviceEvent : IV4Record
+public class DeviceEvent : IV4Record, IDeviceAttributed
 {
     /// <summary>
     /// UUID v7 primary key

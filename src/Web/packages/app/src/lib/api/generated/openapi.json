@@ -28231,6 +28231,11 @@
             "type": "string",
             "nullable": true
           },
+          "patientDeviceId": {
+            "type": "string",
+            "format": "guid",
+            "nullable": true
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -40119,6 +40124,11 @@
           "isCurrent": {
             "type": "boolean"
           },
+          "rank": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
           "notes": {
             "type": "string",
             "nullable": true
@@ -40731,6 +40741,11 @@
           },
           "legacyId": {
             "type": "string",
+            "nullable": true
+          },
+          "patientDeviceId": {
+            "type": "string",
+            "format": "guid",
             "nullable": true
           },
           "createdAt": {

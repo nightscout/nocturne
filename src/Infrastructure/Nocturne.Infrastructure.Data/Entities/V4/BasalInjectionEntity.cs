@@ -78,6 +78,12 @@ public class BasalInjectionEntity : ITenantScoped, IAuditable, ISoftDeletable, I
     public string? LegacyId { get; set; }
 
     /// <summary>
+    /// FK to the PatientDevice (pen) this injection is attributed to
+    /// </summary>
+    [Column("patient_device_id")]
+    public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>
     /// System tracking: when record was inserted
     /// </summary>
     [AuditIgnored]

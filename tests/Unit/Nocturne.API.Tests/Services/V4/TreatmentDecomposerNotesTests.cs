@@ -57,6 +57,7 @@ public class TreatmentDecomposerNotesTests : IDisposable
             stateSpanServiceMock.Object,
             treatmentFoodServiceMock.Object,
             deviceServiceMock.Object,
+            Mock.Of<IPatientDeviceStamper>(),
             profileDecomposerMock.Object,
             activeProfileResolverMock.Object,
             insulinRepoMock.Object,

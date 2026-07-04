@@ -518,6 +518,7 @@ public static class ServiceRegistrationExtensions
 
         // Device resolution
         services.AddScoped<IDeviceService, DeviceService>();
+        services.AddScoped<IPatientDeviceStamper, PatientDeviceStamper>();
 
         // Coach marks
         services.AddScoped<ICoachMarkService, CoachMarkService>();

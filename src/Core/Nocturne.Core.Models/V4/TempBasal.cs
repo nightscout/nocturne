@@ -22,8 +22,13 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="ApsSnapshot"/>
 /// <seealso cref="BasalSchedule"/>
 /// <seealso cref="Device"/>
-public class TempBasal
+public class TempBasal : IDeviceAttributed
 {
+    /// <summary>
+    /// Attribution timestamp for device matching — the span start.
+    /// </summary>
+    DateTime IDeviceAttributed.Timestamp => StartTimestamp;
+
     /// <summary>
     /// UUID v7 primary key
     /// </summary>

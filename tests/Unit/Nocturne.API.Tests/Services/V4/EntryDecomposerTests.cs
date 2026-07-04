@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
@@ -36,7 +37,7 @@ public class EntryDecomposerTests : IDisposable
             .ReturnsAsync((GlucoseProcessing?)null);
         var glucoseResolver = new GlucoseProcessingResolver(mockConfigProvider.Object);
 
-        _decomposer = new EntryDecomposer(_context, sgRepo, mgRepo, calRepo, glucoseResolver, Mock.Of<IAuditContext>(), NullLogger<EntryDecomposer>.Instance);
+        _decomposer = new EntryDecomposer(_context, sgRepo, mgRepo, calRepo, glucoseResolver, Mock.Of<IPatientDeviceStamper>(), Mock.Of<IAuditContext>(), NullLogger<EntryDecomposer>.Instance);
     }
 
     public void Dispose()
