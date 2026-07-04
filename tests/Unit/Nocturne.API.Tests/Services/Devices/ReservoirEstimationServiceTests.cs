@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Nocturne.API.Services.Devices;
@@ -19,6 +20,7 @@ public class ReservoirEstimationServiceTests
     private readonly Mock<IBolusRepository> _boluses = new();
     private readonly Mock<ITempBasalRepository> _tempBasals = new();
     private readonly Mock<IBasalSegmentService> _basalSegments = new();
+    private readonly CapturingLogger _logger = new();
     private readonly ReservoirEstimationService _sut;
 
     public ReservoirEstimationServiceTests()
@@ -29,7 +31,7 @@ public class ReservoirEstimationServiceTests
         SetupSegments();
         _sut = new ReservoirEstimationService(
             _pumpSnapshots.Object, _boluses.Object, _tempBasals.Object, _basalSegments.Object,
-            new FakeTimeProvider(new DateTimeOffset(Now)));
+            new FakeTimeProvider(new DateTimeOffset(Now)), _logger);
     }
 
     [Fact]
@@ -145,6 +147,71 @@ public class ReservoirEstimationServiceTests
         var estimate = await _sut.GetEstimateAsync(null);
 
         estimate.Should().Be(new ReservoirEstimate(0m, IsLowerBound: false, IsEstimated: true));
+    }
+
+    /// <summary>Records warning-level messages. Moq cannot proxy
+    /// <c>ILogger&lt;ReservoirEstimationService&gt;</c> because the generic argument is internal.</summary>
+    private sealed class CapturingLogger : ILogger<ReservoirEstimationService>
+    {
+        public List<string> Warnings { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning)
+                Warnings.Add(formatter(state, exception));
+        }
+    }
+
+    [Fact]
+    public async Task SnapshotFetchAtScanLimit_LogsTruncationWarning()
+    {
+        // 200 snapshots (the scan limit) — the fetch was likely truncated.
+        var snapshots = Enumerable.Range(0, 200)
+            .Select(i => new PumpSnapshot { Reservoir = i == 0 ? 42.0 : null, Timestamp = Now.AddMinutes(-i) })
+            .ToArray();
+        SetupSnapshots(snapshots);
+
+        await _sut.GetEstimateAsync(null);
+
+        _logger.Warnings.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task BolusFetchAtRecordLimit_LogsTruncationWarning()
+    {
+        SetupSnapshots(new PumpSnapshot { Reservoir = 50, Timestamp = Now.AddHours(-10) });
+        SetupBoluses(Enumerable.Range(0, 5000).Select(_ => MakeBolus(0.001)).ToArray());
+
+        await _sut.GetEstimateAsync(null);
+
+        _logger.Warnings.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task TempBasalFetchAtRecordLimit_LogsTruncationWarning()
+    {
+        SetupSnapshots(new PumpSnapshot { Reservoir = 50, Timestamp = Now.AddHours(-10) });
+        SetupTempBasals(Enumerable.Range(0, 5000)
+            .Select(i => MakeTempBasal(rate: 0.1, start: Now.AddHours(-9).AddSeconds(i), end: Now.AddHours(-9).AddSeconds(i + 1)))
+            .ToArray());
+
+        await _sut.GetEstimateAsync(null);
+
+        _logger.Warnings.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task FetchesBelowLimits_LogNoWarning()
+    {
+        SetupSnapshots(new PumpSnapshot { Reservoir = 50, Timestamp = Now.AddHours(-10) });
+        SetupBoluses(MakeBolus(4));
+        SetupTempBasals(MakeTempBasal(rate: 1.0, start: Now.AddHours(-8), end: Now.AddHours(-6)));
+
+        await _sut.GetEstimateAsync(null);
+
+        _logger.Warnings.Should().BeEmpty();
     }
 
     private static long Mills(DateTime at) => new DateTimeOffset(at, TimeSpan.Zero).ToUnixTimeMilliseconds();

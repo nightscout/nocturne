@@ -50,7 +50,8 @@ internal sealed class ReservoirEstimationService(
     IBolusRepository boluses,
     ITempBasalRepository tempBasals,
     IBasalSegmentService basalSegments,
-    TimeProvider timeProvider) : IReservoirEstimationService
+    TimeProvider timeProvider,
+    ILogger<ReservoirEstimationService> logger) : IReservoirEstimationService
 {
     private static readonly TimeSpan MaxAnchorAge = TimeSpan.FromDays(14);
 
@@ -69,9 +70,16 @@ internal sealed class ReservoirEstimationService(
         var now = asOf ?? timeProvider.GetUtcNow().UtcDateTime;
         var windowStart = now - MaxAnchorAge;
 
-        var snapshots = await pumpSnapshots.GetAsync(
+        var snapshots = (await pumpSnapshots.GetAsync(
             from: windowStart, to: asOf, device: null, source: null,
-            limit: SnapshotScanLimit, offset: 0, descending: true, ct: ct);
+            limit: SnapshotScanLimit, offset: 0, descending: true, ct: ct)).ToList();
+        if (snapshots.Count == SnapshotScanLimit)
+        {
+            logger.LogWarning(
+                "Pump snapshot fetch returned exactly the scan limit ({Limit}) for window {From:o}..{To:o}; " +
+                "older snapshots were likely truncated and the reservoir estimate may be skewed",
+                SnapshotScanLimit, windowStart, now);
+        }
 
         PumpSnapshot? anchor = null;
         PumpSnapshot? newestBound = null;
@@ -119,9 +127,23 @@ internal sealed class ReservoirEstimationService(
         var bolusRecords = (await boluses.GetAsync(
             from: from.AddMilliseconds(1), to: to, device: null, source: null,
             limit: RecordFetchLimit, offset: 0, descending: false, ct: ct)).ToList();
+        if (bolusRecords.Count == RecordFetchLimit)
+        {
+            logger.LogWarning(
+                "Bolus fetch returned exactly the fetch limit ({Limit}) for window {From:o}..{To:o}; " +
+                "records were likely truncated and the reservoir estimate may be skewed",
+                RecordFetchLimit, from, to);
+        }
         var tempBasalRecords = (await tempBasals.GetAsync(
             from: from - TempBasalStraddleLookback, to: to, device: null, source: null,
             limit: RecordFetchLimit, offset: 0, descending: false, ct: ct)).ToList();
+        if (tempBasalRecords.Count == RecordFetchLimit)
+        {
+            logger.LogWarning(
+                "Temp basal fetch returned exactly the fetch limit ({Limit}) for window {From:o}..{To:o}; " +
+                "records were likely truncated and the reservoir estimate may be skewed",
+                RecordFetchLimit, from - TempBasalStraddleLookback, to);
+        }
 
         var total = bolusRecords.Sum(b => b.Insulin);
 
