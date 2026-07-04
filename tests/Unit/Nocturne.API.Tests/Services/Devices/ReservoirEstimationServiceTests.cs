@@ -111,6 +111,32 @@ public class ReservoirEstimationServiceTests
     }
 
     [Fact]
+    public async Task TempBasalDeclaredEndInFuture_CountsOnlyDeliveredPortion()
+    {
+        SetupSnapshots(new PumpSnapshot { Reservoir = 50, Timestamp = Now.AddHours(-2) });
+        // 2 U/hr declared until 1h from now; only the elapsed 1h (2U) has been delivered
+        SetupTempBasals(MakeTempBasal(rate: 2.0, start: Now.AddHours(-1), end: Now.AddHours(1)));
+
+        var estimate = await _sut.GetEstimateAsync(null);
+
+        estimate.Should().Be(new ReservoirEstimate(48m, IsLowerBound: false, IsEstimated: true));
+    }
+
+    [Fact]
+    public async Task TempBasalStraddlingWindowStart_CountsInWindowPortion_AndSuppressesScheduledFallback()
+    {
+        SetupSnapshots(new PumpSnapshot { Reservoir = 50, Timestamp = Now.AddHours(-2) });
+        // Started 3h before the anchor; 1 U/hr, ends 1h after the anchor → 1U in-window
+        SetupTempBasals(MakeTempBasal(rate: 1.0, start: Now.AddHours(-5), end: Now.AddHours(-1)));
+        // Scheduled profile must NOT be added on top: a temp basal was running
+        SetupSegments(new BasalSegment(Mills(Now.AddHours(-2)), Mills(Now), 5.0, 5.0, "Default"));
+
+        var estimate = await _sut.GetEstimateAsync(null);
+
+        estimate.Should().Be(new ReservoirEstimate(49m, IsLowerBound: false, IsEstimated: true));
+    }
+
+    [Fact]
     public async Task DeliveryExceedingAnchor_ClampsToZero()
     {
         SetupSnapshots(new PumpSnapshot { Reservoir = 5, Timestamp = Now.AddHours(-10) });

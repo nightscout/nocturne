@@ -107,30 +107,45 @@ internal sealed class ReservoirEstimationService(
             IsEstimated: delivered >= EstimationEpsilon);
     }
 
+    /// <summary>How far before the window a temp basal may start and still deliver into
+    /// it; fetches reach back this far so straddling records aren't missed.</summary>
+    private static readonly TimeSpan TempBasalStraddleLookback = TimeSpan.FromHours(24);
+
     private async Task<double> GetInsulinDeliveredAsync(DateTime from, DateTime to, CancellationToken ct)
     {
+        // The anchor reading already reflects a bolus stamped at the same instant
+        // (uploaders write device status after treatments), so the window opens
+        // just past it.
         var bolusRecords = (await boluses.GetAsync(
-            from: from, to: to, device: null, source: null,
+            from: from.AddMilliseconds(1), to: to, device: null, source: null,
             limit: RecordFetchLimit, offset: 0, descending: false, ct: ct)).ToList();
         var tempBasalRecords = (await tempBasals.GetAsync(
-            from: from, to: to, device: null, source: null,
+            from: from - TempBasalStraddleLookback, to: to, device: null, source: null,
             limit: RecordFetchLimit, offset: 0, descending: false, ct: ct)).ToList();
 
         var total = bolusRecords.Sum(b => b.Insulin);
 
+        var fromMs = new DateTimeOffset(DateTime.SpecifyKind(from, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+        var toMs = new DateTimeOffset(DateTime.SpecifyKind(to, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+
+        // Count only the delivery that falls inside [from, to]: records fetched from
+        // the lookback may straddle the window start, and the newest record's declared
+        // end usually lies in the future — insulin not yet delivered.
+        var anyTempBasalDelivery = false;
         foreach (var (tb, effectiveEndMills) in StatisticsService.ClipOverlappingTempBasals(tempBasalRecords))
         {
-            var insulin = StatisticsService.GetTempBasalInsulin(tb, effectiveEndMills);
-            if (insulin > 0)
-                total += insulin;
+            var start = Math.Max(tb.StartMills, fromMs);
+            var end = Math.Min(effectiveEndMills, toMs);
+            if (end <= start)
+                continue;
+            anyTempBasalDelivery = true;
+            total += tb.Rate * ((end - start) / (1000.0 * 60 * 60));
         }
 
-        // No temp basals and no algorithm boluses means basal isn't recorded as
-        // discrete deliveries (non-AID pump) — count the scheduled profile instead.
-        if (tempBasalRecords.Count == 0 && !bolusRecords.Any(b => b.Kind == BolusKind.Algorithm))
+        // No temp basal delivery and no algorithm boluses means basal isn't recorded
+        // as discrete deliveries (non-AID pump) — count the scheduled profile instead.
+        if (!anyTempBasalDelivery && !bolusRecords.Any(b => b.Kind == BolusKind.Algorithm))
         {
-            var fromMs = new DateTimeOffset(DateTime.SpecifyKind(from, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
-            var toMs = new DateTimeOffset(DateTime.SpecifyKind(to, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
             total += await basalSegments.GetSegmentsAsync(fromMs, toMs, ct).SumUnitsAsync(ct);
         }
 
