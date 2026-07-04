@@ -259,6 +259,28 @@ public class DeviceStatusDecomposerTests : IDisposable
         uploader.IsCharging.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task DecomposeAsync_NestedUploaderIsCharging_MapsToSnapshot()
+    {
+        // Trio sends isCharging inside the uploader object, not top-level
+        var json = """
+            {
+                "_id": "trio-ischarging",
+                "mills": 1700000000000,
+                "device": "Trio",
+                "uploader": { "battery": 75, "batteryVoltage": 4.0, "isCharging": true }
+            }
+            """;
+        var ds = System.Text.Json.JsonSerializer.Deserialize<DeviceStatus>(json)!;
+
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        result.CreatedRecords.Should().HaveCount(1);
+        var uploader = result.CreatedRecords[0].Should().BeOfType<V4Models.UploaderSnapshot>().Subject;
+        uploader.Battery.Should().Be(75);
+        uploader.IsCharging.Should().BeTrue();
+    }
+
     #endregion
 
     #region UploaderBattery fallback → UploaderSnapshot

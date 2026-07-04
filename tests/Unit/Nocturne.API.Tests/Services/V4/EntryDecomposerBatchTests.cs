@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -54,6 +55,7 @@ public class EntryDecomposerBatchTests : IDisposable
             _mgRepoMock.Object,
             _calRepoMock.Object,
             glucoseResolver,
+            Mock.Of<IPatientDeviceStamper>(),
             Mock.Of<IAuditContext>(),
             NullLogger<EntryDecomposer>.Instance);
     }

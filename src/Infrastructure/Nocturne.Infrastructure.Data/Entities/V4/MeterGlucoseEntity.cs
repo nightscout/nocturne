@@ -71,6 +71,12 @@ public class MeterGlucoseEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4
     public string? LegacyId { get; set; }
 
     /// <summary>
+    /// FK to the PatientDevice (meter) this reading is attributed to
+    /// </summary>
+    [Column("patient_device_id")]
+    public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>
     /// System tracking: when record was inserted
     /// </summary>
     [Column("sys_created_at")]

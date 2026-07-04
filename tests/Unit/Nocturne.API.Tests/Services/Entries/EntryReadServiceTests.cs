@@ -27,6 +27,7 @@ public class EntryReadServiceTests
             _sgRepo.Object,
             _mgRepo.Object,
             _calRepo.Object,
+            TestDoubles.CanonicalGlucosePassThrough.Create(),
             _demoMode.Object,
             Mock.Of<ILogger<EntryReadService>>());
     }
@@ -135,39 +136,42 @@ public class EntryReadServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task QueryAsync_SingleType_PushesLimitAndOffsetToRepo()
+    public async Task QueryAsync_SingleType_OverFetchesForCanonicalSelectionThenPages()
     {
-        // Single-type queries push limit/offset directly to the database
-        var entries = Enumerable.Range(0, 2)
+        // Canonical stream selection runs after the DB query, so sgv fetches over-fetch
+        // (count+skip)×3 from offset 0 and page in memory.
+        var entries = Enumerable.Range(0, 4)
             .Select(i => MakeSg(Now.AddMinutes(-i), 100 + i))
             .ToArray();
 
         _sgRepo.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                2, 1, true, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                9, 0, true, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(entries);
 
         var result = await _sut.QueryAsync(new EntryQuery { Type = "sgv", Count = 2, Skip = 1 });
 
         Assert.Equal(2, result.Count);
-        // Verify the repo was called with limit=count, offset=skip (not count+skip, 0)
+        // Page starts after the skipped newest reading
+        Assert.Equal(entries[1].Mgdl, result[0].Sgv);
         _sgRepo.Verify(r => r.GetAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-            2, 1, true, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+            9, 0, true, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
     public async Task QueryAsync_AllTypes_OverFetchesForMergePagination()
     {
-        // Multi-type merge still needs count+skip from each repo
+        // Multi-type merge needs count+skip from each repo (sgv over-fetches ×3 on top for
+        // canonical selection)
         var sg = MakeSg(Now, 120);
         var mg = MakeMg(Now.AddMinutes(-1), 150);
         var cal = MakeCal(Now.AddMinutes(-2));
 
         _sgRepo.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                3, 0, true, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                9, 0, true, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { sg });
         _mgRepo.Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
@@ -182,10 +186,9 @@ public class EntryReadServiceTests
 
         // Skip 1, take 2 from the merged 3
         Assert.Equal(2, result.Count);
-        // Verify repos were called with fetchCount = count+skip = 3, offset = 0
         _sgRepo.Verify(r => r.GetAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-            3, 0, true, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+            9, 0, true, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     #endregion
@@ -382,6 +385,7 @@ public class EntryReadServiceTests
         _demoMode.Setup(d => d.IsEnabled).Returns(true);
         var sut = new EntryReadService(
             _sgRepo.Object, _mgRepo.Object, _calRepo.Object,
+            TestDoubles.CanonicalGlucosePassThrough.Create(),
             _demoMode.Object, Mock.Of<ILogger<EntryReadService>>());
 
         var demoSg = MakeSg(Now, 100, dataSource: "demo-service");

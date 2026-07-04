@@ -46,6 +46,7 @@ public class DataFetchStageTests
 
         _stage = new DataFetchStage(
             _mockSensorGlucoseRepo.Object,
+            TestDoubles.CanonicalGlucosePassThrough.Create(),
             _mockBolusRepo.Object,
             _mockCarbIntakeRepo.Object,
             _mockBgCheckRepo.Object,

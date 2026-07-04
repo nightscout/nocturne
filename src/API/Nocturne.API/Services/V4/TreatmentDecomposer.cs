@@ -50,6 +50,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     private readonly IStateSpanService _stateSpanService;
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IDeviceService _deviceService;
+    private readonly IPatientDeviceStamper _patientDeviceStamper;
     private readonly IProfileDecomposer _profileDecomposer;
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly IPatientInsulinRepository _insulinRepo;
@@ -66,6 +67,34 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         "TempBasal"
     ];
 
+    /// <summary>
+    /// Categories eligible for fallback attribution when the upload carries no pump serial
+    /// (serial-based DeviceId → PatientDevice resolution takes precedence).
+    /// </summary>
+    private static readonly V4Models.DeviceCategory[] BolusDeviceCategories =
+        [V4Models.DeviceCategory.InsulinPump, V4Models.DeviceCategory.SmartPen];
+
+    private static readonly V4Models.DeviceCategory[] TempBasalDeviceCategories =
+        [V4Models.DeviceCategory.InsulinPump];
+
+    private static readonly V4Models.DeviceCategory[] PumpEventDeviceCategories =
+        [V4Models.DeviceCategory.InsulinPump];
+
+    private static readonly V4Models.DeviceCategory[] SensorEventDeviceCategories =
+        [V4Models.DeviceCategory.CGM];
+
+    /// <summary>
+    /// Sensor lifecycle events attribute to the CGM; every other device event is pump-originated.
+    /// </summary>
+    private static bool IsSensorEvent(DeviceEventType eventType) => eventType is
+        DeviceEventType.SensorStart or
+        DeviceEventType.SensorChange or
+        DeviceEventType.SensorStop or
+        DeviceEventType.TransmitterSensorInsert;
+
+    private static V4Models.DeviceCategory[] DeviceEventCategories(DeviceEventType eventType) =>
+        IsSensorEvent(eventType) ? SensorEventDeviceCategories : PumpEventDeviceCategories;
+
     /// <param name="dbContext">EF Core context used to look up treatment entity PKs and run bulk deletes.</param>
     /// <param name="bolusRepository">Repository for <see cref="V4Models.Bolus"/> records.</param>
     /// <param name="tempBasalRepository">Repository for <see cref="V4Models.TempBasal"/> records.</param>
@@ -77,6 +106,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     /// <param name="stateSpanService">Service used to upsert state spans for TempBasal, ProfileSwitch, Override, and TemporaryTarget treatments.</param>
     /// <param name="treatmentFoodService">Service for preserving legacy <see cref="Treatment.FoodType"/> as a <see cref="TreatmentFood"/> entry.</param>
     /// <param name="deviceService">Service that resolves or creates canonical device references.</param>
+    /// <param name="patientDeviceStamper">Fallback attribution for records whose upload carries no pump serial.</param>
     /// <param name="profileDecomposer">Decomposes inline profile JSON from profile switch treatments into V4 schedule records.</param>
     /// <param name="activeProfileResolver">Resolves insulin context from profile switches active at a given timestamp.</param>
     /// <param name="insulinRepo">Repository for patient insulin records, used as fallback for insulin context resolution.</param>
@@ -93,6 +123,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         IStateSpanService stateSpanService,
         ITreatmentFoodService treatmentFoodService,
         IDeviceService deviceService,
+        IPatientDeviceStamper patientDeviceStamper,
         IProfileDecomposer profileDecomposer,
         IActiveProfileResolver activeProfileResolver,
         IPatientInsulinRepository insulinRepo,
@@ -110,6 +141,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         _stateSpanService = stateSpanService;
         _treatmentFoodService = treatmentFoodService;
         _deviceService = deviceService;
+        _patientDeviceStamper = patientDeviceStamper;
         _profileDecomposer = profileDecomposer;
         _activeProfileResolver = activeProfileResolver;
         _insulinRepo = insulinRepo;
@@ -465,6 +497,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         model.DeviceId = await _deviceService.ResolveAsync(
             V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
         model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
+        model.PatientDeviceId ??= existing?.PatientDeviceId;
+        await _patientDeviceStamper.StampAsync([model], BolusDeviceCategories, model.DataSource, ct);
 
         if (existing != null)
         {
@@ -493,6 +527,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         model.DeviceId = await _deviceService.ResolveAsync(
             V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
         model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
+        model.PatientDeviceId ??= existing?.PatientDeviceId;
+        await _patientDeviceStamper.StampAsync([model], BolusDeviceCategories, model.DataSource, ct);
 
         if (existing != null)
         {
@@ -604,6 +640,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         model.DeviceId = await _deviceService.ResolveAsync(
             V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
         model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
+        model.PatientDeviceId ??= existing?.PatientDeviceId;
+        await _patientDeviceStamper.StampAsync([model], DeviceEventCategories(model.EventType), model.DataSource, ct);
 
         if (existing != null)
         {
@@ -712,6 +750,8 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         model.DeviceId = await _deviceService.ResolveAsync(
             V4Models.DeviceCategory.InsulinPump, treatment.PumpType, treatment.PumpSerial, treatment.Mills, ct);
         model.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, treatment.Mills, ct);
+        model.PatientDeviceId ??= existing?.PatientDeviceId;
+        await _patientDeviceStamper.StampAsync([model], TempBasalDeviceCategories, model.DataSource, ct);
 
         // Resolve insulin context: active profile switch → primary insulin → null
         model.InsulinContext = await _activeProfileResolver.GetActiveInsulinContextAsync(treatment.Mills, ct);
@@ -1336,6 +1376,21 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
                     "Unknown event type '{EventType}' for treatment {Id} with no insulin/carbs, skipping decomposition",
                     treatment.EventType, treatment.Id);
             }
+        }
+
+        // Fallback attribution for records the serial-based DeviceId resolution left unattributed.
+        if (bolusList.Count > 0)
+            await _patientDeviceStamper.StampAsync(bolusList, BolusDeviceCategories, batchSource: null, ct);
+        if (tempBasalList.Count > 0)
+            await _patientDeviceStamper.StampAsync(tempBasalList, TempBasalDeviceCategories, batchSource: null, ct);
+        if (deviceEventList.Count > 0)
+        {
+            var sensorEvents = deviceEventList.Where(e => IsSensorEvent(e.EventType)).ToList();
+            var pumpEvents = deviceEventList.Where(e => !IsSensorEvent(e.EventType)).ToList();
+            if (sensorEvents.Count > 0)
+                await _patientDeviceStamper.StampAsync(sensorEvents, SensorEventDeviceCategories, batchSource: null, ct);
+            if (pumpEvents.Count > 0)
+                await _patientDeviceStamper.StampAsync(pumpEvents, PumpEventDeviceCategories, batchSource: null, ct);
         }
 
         // Pre-pass: upsert profile switch StateSpans first (temp basals depend on them for insulin context)

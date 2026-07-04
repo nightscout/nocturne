@@ -911,7 +911,7 @@ public class DeviceStatusDecomposer : IDeviceStatusDecomposer, IDecomposer<Devic
             Name = ds.Uploader?.Name,
             Battery = ds.Uploader?.Battery ?? ds.UploaderBattery,
             BatteryVoltage = ds.Uploader?.BatteryVoltage,
-            IsCharging = ds.IsCharging,
+            IsCharging = ds.IsCharging ?? ds.Uploader?.IsCharging,
             Temperature = ds.Uploader?.Temperature,
             Type = ds.Uploader?.Type,
         };

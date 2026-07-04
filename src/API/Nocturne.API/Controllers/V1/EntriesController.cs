@@ -31,7 +31,7 @@ public class EntriesController : ControllerBase
     private readonly IEntryService _entryService;
     private readonly IDocumentProcessingService _documentProcessingService;
     private readonly IProcessingStatusService _processingStatusService;
-    private readonly IAlertOrchestrator _alertOrchestrator;
+    private readonly ICanonicalAlertEvaluator _alertEvaluator;
     private readonly ILogger<EntriesController> _logger;
 
     /// <summary>
@@ -40,20 +40,20 @@ public class EntriesController : ControllerBase
     /// <param name="entryService">Service handling glucose entry operations.</param>
     /// <param name="documentProcessingService">Service for async document processing and ingestion.</param>
     /// <param name="processingStatusService">Service for querying async processing status.</param>
-    /// <param name="alertOrchestrator">Orchestrator for evaluating and dispatching alerts.</param>
+    /// <param name="alertEvaluator">Evaluates alert rules against the canonical stream after writes.</param>
     /// <param name="logger">Logger instance.</param>
     public EntriesController(
         IEntryService entryService,
         IDocumentProcessingService documentProcessingService,
         IProcessingStatusService processingStatusService,
-        IAlertOrchestrator alertOrchestrator,
+        ICanonicalAlertEvaluator alertEvaluator,
         ILogger<EntriesController> logger
     )
     {
         _entryService = entryService;
         _documentProcessingService = documentProcessingService;
         _processingStatusService = processingStatusService;
-        _alertOrchestrator = alertOrchestrator;
+        _alertEvaluator = alertEvaluator;
         _logger = logger;
     }
 
@@ -1260,28 +1260,9 @@ public class EntriesController : ControllerBase
 
     private async Task EvaluateAlertsAsync(Entry[] entries, CancellationToken ct)
     {
-        try
-        {
-            var latest = entries
-                .Where(e => e.Sgv.HasValue && e.Sgv.Value > 0)
-                .OrderByDescending(e => e.Mills)
-                .FirstOrDefault();
-
-            if (latest is null) return;
-
-            var context = new SensorContext
-            {
-                LatestValue = (decimal?)latest.Sgv,
-                LatestTimestamp = latest.Date ?? DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills).UtcDateTime,
-                TrendRate = (decimal?)latest.TrendRate,
-                LastReadingAt = latest.Date ?? DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills).UtcDateTime,
-            };
-
-            await _alertOrchestrator.EvaluateAsync(context, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Alert evaluation failed after V1 entry creation");
-        }
+        // Alarms evaluate against the canonical stream, not the just-uploaded batch — a losing
+        // CGM's readings must not trigger or suppress an alarm.
+        if (entries.Any(e => e.Sgv is > 0))
+            await _alertEvaluator.EvaluateAsync(ct);
     }
 }

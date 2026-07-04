@@ -80,6 +80,7 @@ import {
   ProcessingClient,
   ProfileClient,
   PumpSnapshotClient,
+  ReservoirReportsClient,
   RetrospectiveClient,
   RoleClient,
   SensorGlucoseClient,
@@ -191,6 +192,7 @@ export class ApiClient {
   public readonly processing: ProcessingClient;
   public readonly profile: ProfileClient;
   public readonly pumpSnapshot: PumpSnapshotClient;
+  public readonly reservoirReports: ReservoirReportsClient;
   public readonly retrospective: RetrospectiveClient;
   public readonly role: RoleClient;
   public readonly sensorGlucose: SensorGlucoseClient;
@@ -302,6 +304,7 @@ export class ApiClient {
     this.processing = new ProcessingClient(apiBaseUrl, http);
     this.profile = new ProfileClient(apiBaseUrl, http);
     this.pumpSnapshot = new PumpSnapshotClient(apiBaseUrl, http);
+    this.reservoirReports = new ReservoirReportsClient(apiBaseUrl, http);
     this.retrospective = new RetrospectiveClient(apiBaseUrl, http);
     this.role = new RoleClient(apiBaseUrl, http);
     this.sensorGlucose = new SensorGlucoseClient(apiBaseUrl, http);

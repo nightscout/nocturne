@@ -1,8 +1,9 @@
 name: Native release (alerts)
 
-# Builds the nocturne_alerts cdylib (crates/nocturne-alerts-ffi) for linux-x64
-# and win-x64 on a tag push like `alerts-v0.1.0` and attaches the artifacts to
-# the GitHub release for that tag (creating the release if it doesn't exist).
+# Builds the nocturne_alerts cdylib (crates/nocturne-alerts-ffi) for linux-x64,
+# linux-arm64, win-x64, and osx-arm64 on a tag push like `alerts-v0.1.0` and
+# attaches the artifacts to the GitHub release for that tag (creating the
+# release if it doesn't exist).
 
 on:
   push:
@@ -20,10 +21,18 @@ jobs:
             rid: linux-x64
             artifact: libnocturne_alerts.so
             asset: libnocturne_alerts-linux-x64.so
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+            artifact: libnocturne_alerts.so
+            asset: libnocturne_alerts-linux-arm64.so
           - os: windows-latest
             rid: win-x64
             artifact: nocturne_alerts.dll
             asset: nocturne_alerts-win-x64.dll
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: libnocturne_alerts.dylib
+            asset: libnocturne_alerts-osx-arm64.dylib
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -36,7 +45,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             crates/target
-          key: cargo-release-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock') }}
+          key: cargo-release-${{ matrix.rid }}-${{ hashFiles('crates/Cargo.lock') }}
       - name: Build cdylib
         working-directory: crates
         run: cargo build --release -p nocturne-alerts-ffi

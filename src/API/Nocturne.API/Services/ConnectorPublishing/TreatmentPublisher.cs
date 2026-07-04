@@ -1,6 +1,7 @@
 using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -33,6 +34,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
     private readonly IPatientInsulinRepository _patientInsulinRepository;
     private readonly IBasalRateResolver _basalRateResolver;
     private readonly ITherapySettingsResolver _therapySettingsResolver;
+    private readonly IPatientDeviceStamper _patientDeviceStamper;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<TreatmentPublisher> _logger;
 
@@ -50,6 +52,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         IPatientInsulinRepository patientInsulinRepository,
         IBasalRateResolver basalRateResolver,
         ITherapySettingsResolver therapySettingsResolver,
+        IPatientDeviceStamper patientDeviceStamper,
         IAuditContext auditContext,
         ILogger<TreatmentPublisher> logger)
     {
@@ -66,6 +69,7 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         _patientInsulinRepository = patientInsulinRepository ?? throw new ArgumentNullException(nameof(patientInsulinRepository));
         _basalRateResolver = basalRateResolver ?? throw new ArgumentNullException(nameof(basalRateResolver));
         _therapySettingsResolver = therapySettingsResolver ?? throw new ArgumentNullException(nameof(therapySettingsResolver));
+        _patientDeviceStamper = patientDeviceStamper ?? throw new ArgumentNullException(nameof(patientDeviceStamper));
         _auditContext = auditContext;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -99,6 +103,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             if (recordList.Count == 0) return true;
 
             await ResolvePatientInsulinsForBolusesAsync(recordList, origin, cancellationToken);
+            await _patientDeviceStamper.StampAsync(
+                recordList, [DeviceCategory.InsulinPump, DeviceCategory.SmartPen], source, cancellationToken);
             using (SystemAuditScope.Push(_auditContext))
                 await _bolusRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             _logger.LogDebug("Published {Count} Bolus records for {Source}", recordList.Count, source);
@@ -190,6 +196,9 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
         {
             var recordList = records.ToList();
             if (recordList.Count == 0) return true;
+
+            await _patientDeviceStamper.StampAsync(
+                recordList, [DeviceCategory.InsulinPump], source, cancellationToken);
 
             var minTimestamp = recordList.Min(r => r.StartTimestamp);
             var maxTimestamp = recordList.Max(r => r.StartTimestamp);
@@ -292,6 +301,8 @@ internal sealed class TreatmentPublisher : ITreatmentPublisher
             if (recordList.Count == 0) return true;
 
             await ResolvePatientInsulinsForBasalInjectionsAsync(recordList, origin, cancellationToken);
+            await _patientDeviceStamper.StampAsync(
+                recordList, [DeviceCategory.InsulinPen, DeviceCategory.SmartPen], source, cancellationToken);
             using (SystemAuditScope.Push(_auditContext))
                 await _basalInjectionRepository.BulkCreateAsync(recordList, origin, cancellationToken);
 

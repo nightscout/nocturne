@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Infrastructure;
@@ -50,6 +51,65 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
 
     /// <inheritdoc />
     protected override Entry? ProjectToLegacyEntry(SensorGlucose model) => EntryProjection.FromSensorGlucose(model);
+
+    /// <summary>
+    /// Canonical-stream gate for the legacy entries projection: a live write only reaches v1/v3
+    /// realtime clients if it survives <see cref="CanonicalGlucoseStream"/> selection over the
+    /// recent window plus the just-written batch. Single-stream tenants pass through unchanged
+    /// (the selector's fast path). Failures fail open — a broadcast is better than a silent drop.
+    /// </summary>
+    protected override async Task<IReadOnlyList<SensorGlucose>> FilterLegacyProjectionAsync(
+        IReadOnlyList<SensorGlucose> models, CancellationToken ct)
+    {
+        try
+        {
+            await using var ctx = await ContextFactory.CreateAsync(ct);
+
+            var windowStart = DateTime.UtcNow - TimeSpan.FromMinutes(15);
+            var recentEntities = await ctx.Set<SensorGlucoseEntity>()
+                .AsNoTracking()
+                .Where(e => e.Timestamp >= windowStart)
+                .OrderByDescending(e => e.Timestamp)
+                .Take(500)
+                .ToListAsync(ct);
+
+            var batchIds = models.Select(m => m.Id).ToHashSet();
+            var pool = recentEntities
+                .Where(e => !batchIds.Contains(e.Id))
+                .Select(ToDomain)
+                .Where(m => !DataSources.IsEphemeral(m.DataSource))
+                .Concat(models)
+                .ToList();
+
+            // Devices are only needed when streams actually compete — skip the second query on
+            // the overwhelmingly common single-stream write.
+            if (pool.Select(CanonicalGlucoseStream.StreamKey).Distinct(StringComparer.Ordinal).Skip(1).Any() == false)
+                return models;
+
+            var deviceEntities = await ctx.PatientDevices.AsNoTracking().ToListAsync(ct);
+            var devices = deviceEntities.Select(PatientDeviceMapper.ToDomainModel).ToList();
+
+            var survivors = CanonicalGlucoseStream.Select(pool, devices);
+            var survivorIds = survivors.Select(s => s.Id).ToHashSet();
+            return models.Where(m => survivorIds.Contains(m.Id)).ToList();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            return models;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            return models;
+        }
+        catch (TimeoutException ex)
+        {
+            _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            return models;
+        }
+    }
 
     /// <inheritdoc />
     protected override SensorGlucoseEntity ToEntity(SensorGlucose model) => SensorGlucoseMapper.ToEntity(model);

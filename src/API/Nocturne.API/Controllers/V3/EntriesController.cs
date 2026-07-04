@@ -27,18 +27,18 @@ namespace Nocturne.API.Controllers.V3;
 public class EntriesController : BaseV3Controller<Entry>
 {
     private readonly IEntryService _entryService;
-    private readonly IAlertOrchestrator _alertOrchestrator;
+    private readonly ICanonicalAlertEvaluator _alertEvaluator;
 
     public EntriesController(
         IDocumentProcessingService documentProcessingService,
         IEntryService entryService,
-        IAlertOrchestrator alertOrchestrator,
+        ICanonicalAlertEvaluator alertEvaluator,
         ILogger<EntriesController> logger
     )
         : base(documentProcessingService, logger)
     {
         _entryService = entryService;
-        _alertOrchestrator = alertOrchestrator;
+        _alertEvaluator = alertEvaluator;
     }
 
     /// <summary>
@@ -663,29 +663,10 @@ public class EntriesController : BaseV3Controller<Entry>
 
     private async Task EvaluateAlertsAsync(Entry[] entries, CancellationToken ct)
     {
-        try
-        {
-            var latest = entries
-                .Where(e => e.Sgv.HasValue && e.Sgv.Value > 0)
-                .OrderByDescending(e => e.Mills)
-                .FirstOrDefault();
-
-            if (latest is null) return;
-
-            var context = new SensorContext
-            {
-                LatestValue = (decimal?)latest.Sgv,
-                LatestTimestamp = latest.Date ?? DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills).UtcDateTime,
-                TrendRate = (decimal?)latest.TrendRate,
-                LastReadingAt = latest.Date ?? DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills).UtcDateTime,
-            };
-
-            await _alertOrchestrator.EvaluateAsync(context, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Alert evaluation failed after V3 entry creation");
-        }
+        // Alarms evaluate against the canonical stream, not the just-uploaded batch — a losing
+        // CGM's readings must not trigger or suppress an alarm.
+        if (entries.Any(e => e.Sgv is > 0))
+            await _alertEvaluator.EvaluateAsync(ct);
     }
 
     #endregion

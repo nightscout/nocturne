@@ -19662,6 +19662,51 @@
         "x-remote-type": "query"
       }
     },
+    "/api/v4/reservoir/reports": {
+      "post": {
+        "tags": [
+          "Reservoir Reports"
+        ],
+        "summary": "Report a known reservoir value: a spot reading of the pump's current level,\nor the amount just filled into a fresh reservoir/pod.",
+        "operationId": "ReservoirReports_Create",
+        "requestBody": {
+          "x-name": "request",
+          "description": "The reservoir report.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReservoirReportRequest"
+              }
+            }
+          },
+          "required": true,
+          "x-position": 1
+        },
+        "responses": {
+          "200": {
+            "description": "The stored pump snapshot carrying the reported value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PumpSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "x-remote-type": "command"
+      }
+    },
     "/api/v4/device-status/uploader": {
       "get": {
         "tags": [
@@ -28229,6 +28274,11 @@
           },
           "legacyId": {
             "type": "string",
+            "nullable": true
+          },
+          "patientDeviceId": {
+            "type": "string",
+            "format": "guid",
             "nullable": true
           },
           "createdAt": {
@@ -40119,6 +40169,11 @@
           "isCurrent": {
             "type": "boolean"
           },
+          "rank": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
           "notes": {
             "type": "string",
             "nullable": true
@@ -40731,6 +40786,11 @@
           },
           "legacyId": {
             "type": "string",
+            "nullable": true
+          },
+          "patientDeviceId": {
+            "type": "string",
+            "format": "guid",
             "nullable": true
           },
           "createdAt": {
@@ -42625,6 +42685,60 @@
             "additionalProperties": {}
           }
         }
+      },
+      "CreateReservoirReportRequest": {
+        "type": "object",
+        "description": "Request body for reporting a known reservoir value via the V4 API.",
+        "additionalProperties": false,
+        "properties": {
+          "units": {
+            "type": "number",
+            "description": "Insulin in the reservoir, in units.",
+            "format": "double"
+          },
+          "kind": {
+            "description": "Whether this is a spot reading of the current level or a fresh fill.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReservoirReportKind"
+              }
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "When the value was observed. Defaults to the current time when omitted.",
+            "format": "date-time",
+            "nullable": true
+          },
+          "utcOffset": {
+            "type": "integer",
+            "description": "UTC offset in minutes at the time of the observation, for local-time display.",
+            "format": "int32",
+            "nullable": true
+          },
+          "device": {
+            "type": "string",
+            "description": "Identifier of the pump the value belongs to.",
+            "nullable": true
+          },
+          "app": {
+            "type": "string",
+            "description": "Name of the application that submitted this record.",
+            "nullable": true
+          }
+        }
+      },
+      "ReservoirReportKind": {
+        "type": "string",
+        "description": "Kind of a manually reported reservoir value.",
+        "x-enumNames": [
+          "Reading",
+          "Fill"
+        ],
+        "enum": [
+          "Reading",
+          "Fill"
+        ]
       },
       "PaginatedResponseOfUploaderSnapshot": {
         "type": "object",

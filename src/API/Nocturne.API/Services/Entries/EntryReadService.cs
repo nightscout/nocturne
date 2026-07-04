@@ -1,6 +1,7 @@
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Entries;
@@ -10,12 +11,21 @@ namespace Nocturne.API.Services.Entries;
 /// <summary>
 /// Read-only <see cref="IEntryStore"/> that queries V4 repositories exclusively and projects
 /// results into legacy <see cref="Entry"/> shape via <see cref="EntryProjection"/>.
+/// Sgv reads serve the canonical glucose stream: legacy clients get one coherent series even
+/// when multiple CGMs report concurrently.
 /// </summary>
 public class EntryReadService : IEntryStore
 {
+    /// <summary>
+    /// Canonical selection drops losing-stream rows after the DB query, so limit-based sgv
+    /// fetches over-fetch by this factor before selection to keep pages filled.
+    /// </summary>
+    private const int CanonicalOverFetchFactor = 3;
+
     private readonly ISensorGlucoseRepository _sgRepo;
     private readonly IMeterGlucoseRepository _mgRepo;
     private readonly ICalibrationRepository _calRepo;
+    private readonly ICanonicalGlucoseService _canonicalGlucose;
     private readonly IDemoModeService _demoMode;
     private readonly ILogger<EntryReadService> _logger;
 
@@ -26,12 +36,14 @@ public class EntryReadService : IEntryStore
         ISensorGlucoseRepository sgRepo,
         IMeterGlucoseRepository mgRepo,
         ICalibrationRepository calRepo,
+        ICanonicalGlucoseService canonicalGlucose,
         IDemoModeService demoMode,
         ILogger<EntryReadService> logger)
     {
         _sgRepo = sgRepo;
         _mgRepo = mgRepo;
         _calRepo = calRepo;
+        _canonicalGlucose = canonicalGlucose;
         _demoMode = demoMode;
         _logger = logger;
     }
@@ -58,15 +70,17 @@ public class EntryReadService : IEntryStore
     {
         var (source, excludeDemo) = ResolveDemoFilter();
 
-        // When excluding demo data, over-fetch to account for filtered-out demo rows
-        var fetchLimit = excludeDemo ? 10 : 1;
+        // Over-fetch to survive demo filtering and canonical selection dropping the newest rows
+        // when a losing stream reported last — a 1-minute losing cadence can outnumber the
+        // winner five to one on a descending page.
+        const int fetchLimit = 60;
         var results = await _sgRepo.GetAsync(
             from: null, to: null, device: null, source: source,
             limit: fetchLimit, offset: 0, descending: true, nativeOnly: false, ct: ct);
 
-        var sg = excludeDemo
-            ? results.FirstOrDefault(r => !DataSources.IsEphemeral(r.DataSource))
-            : results.FirstOrDefault();
+        var visible = ExcludeDemoIfNeeded(results, excludeDemo).ToList();
+        var canonical = await _canonicalGlucose.SelectAsync(visible, ct);
+        var sg = canonical.FirstOrDefault();
         return sg is null ? null : EntryProjection.FromSensorGlucose(sg);
     }
 
@@ -125,9 +139,39 @@ public class EntryReadService : IEntryStore
         DateTime? from, DateTime? to, string? source, bool excludeDemo,
         int count, int skip, bool descending, CancellationToken ct)
     {
-        // Single-type query: push limit/offset directly to the database
-        var results = await _sgRepo.GetAsync(from, to, device: null, source, count, skip, descending, false, null, null, ct);
-        return ExcludeDemoIfNeeded(results, excludeDemo).Select(EntryProjection.FromSensorGlucose).ToList();
+        // Canonical selection happens after the DB query, so paging cannot be pushed down:
+        // over-fetch from offset 0, select, then page.
+        var canonical = await FetchCanonicalSgvAsync(from, to, source, excludeDemo, (long)count + skip, descending, ct);
+        return canonical.Skip(skip).Take(count).Select(EntryProjection.FromSensorGlucose).ToList();
+    }
+
+    /// <summary>
+    /// Fetches sgv readings with demo filtering and canonical stream selection applied,
+    /// over-fetching so at least <paramref name="needed"/> canonical rows survive when a
+    /// losing stream contributed to the raw page. A losing stream can outnumber the winner by
+    /// cadence (1-minute vs 5-minute), so the fetch grows geometrically until the page fills
+    /// or the raw window is exhausted.
+    /// </summary>
+    private async Task<IReadOnlyList<Core.Models.V4.SensorGlucose>> FetchCanonicalSgvAsync(
+        DateTime? from, DateTime? to, string? source, bool excludeDemo,
+        long needed, bool descending, CancellationToken ct)
+    {
+        const int maxFetch = 100_000;
+        var target = Math.Max(1, needed);
+        var fetchCount = (int)Math.Min(target * CanonicalOverFetchFactor, maxFetch);
+
+        while (true)
+        {
+            var results = (await _sgRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, false, null, null, ct)).ToList();
+            var visible = ExcludeDemoIfNeeded(results, excludeDemo).ToList();
+            var canonical = await _canonicalGlucose.SelectAsync(visible, ct);
+
+            var exhausted = results.Count < fetchCount || fetchCount >= maxFetch;
+            if (canonical.Count >= target || exhausted)
+                return canonical;
+
+            fetchCount = (int)Math.Min((long)fetchCount * CanonicalOverFetchFactor, maxFetch);
+        }
     }
 
     private async Task<IReadOnlyList<Entry>> QueryMbgAsync(
@@ -153,14 +197,14 @@ public class EntryReadService : IEntryStore
         int count, int skip, bool descending, CancellationToken ct)
     {
         // Multi-type merge requires over-fetching because we interleave across repos before paginating
-        var fetchCount = count + skip;
+        var fetchCount = (int)Math.Min((long)count + skip, 100_000);
 
         // Sequential to avoid DbContext thread-safety issues with scoped lifetime
-        var sgResults = await _sgRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, false, null, null, ct);
+        var sgResults = await FetchCanonicalSgvAsync(from, to, source, excludeDemo, (long)fetchCount, descending, ct);
         var mgResults = await _mgRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, ct);
         var calResults = await _calRepo.GetAsync(from, to, device: null, source, fetchCount, 0, descending, ct);
 
-        var entries = ExcludeDemoIfNeeded(sgResults, excludeDemo).Select(EntryProjection.FromSensorGlucose)
+        var entries = sgResults.Select(EntryProjection.FromSensorGlucose)
             .Concat(ExcludeDemoIfNeeded(mgResults, excludeDemo).Select(EntryProjection.FromMeterGlucose))
             .Concat(ExcludeDemoIfNeeded(calResults, excludeDemo).Select(EntryProjection.FromCalibration));
 

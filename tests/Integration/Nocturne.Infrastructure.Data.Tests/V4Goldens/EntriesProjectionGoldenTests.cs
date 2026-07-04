@@ -134,6 +134,41 @@ public class EntriesProjectionGoldenTests
     }
 
     [Fact]
+    public async Task LiveMultiStreamCreate_ProjectsOnlyTheCanonicalStream()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        var deviceRepo = scope.ServiceProvider.GetRequiredService<IPatientDeviceRepository>();
+
+        var primary = await deviceRepo.CreateAsync(
+            new PatientDevice { DeviceCategory = DeviceCategory.CGM, Manufacturer = "Dexcom", Model = "G7", Rank = 1 },
+            WriteOrigin.Live, CancellationToken.None);
+        var secondary = await deviceRepo.CreateAsync(
+            new PatientDevice { DeviceCategory = DeviceCategory.CGM, Manufacturer = "Abbott", Model = "Libre 3", Rank = 2 },
+            WriteOrigin.Live, CancellationToken.None);
+        _fx.EntryCapture.Clear();
+
+        // Two CGMs report in the same 5-minute bucket: only the rank-1 device's reading reaches
+        // the legacy entries feed; both rows persist.
+        await repo.BulkCreateAsync(
+            new[]
+            {
+                new SensorGlucose { Timestamp = T0, Mgdl = 120, DataSource = "dexcom-connector", LegacyId = "ep-mc-p1", PatientDeviceId = primary.Id },
+                new SensorGlucose { Timestamp = T0.AddMinutes(1), Mgdl = 145, DataSource = "libre-connector", LegacyId = "ep-mc-s1", PatientDeviceId = secondary.Id },
+            },
+            WriteOrigin.Live, CancellationToken.None);
+
+        var ev = _fx.EntryCapture.Snapshot().Should().ContainSingle(e => e.Kind == "created").Which;
+        var entry = ev.Entries.Should().ContainSingle().Which;
+        entry.Id.Should().Be("ep-mc-p1");
+
+        var rowCount = await _fx.QueryAsync(tenant, ctx =>
+            ctx.SensorGlucose.AsNoTracking().Where(g => g.LegacyId == "ep-mc-p1" || g.LegacyId == "ep-mc-s1").CountAsync());
+        rowCount.Should().Be(2, "the gate filters the broadcast, never the data");
+    }
+
+    [Fact]
     public async Task LiveSgvSingleCreate_ProjectsEntriesCreate()
     {
         var tenant = Guid.NewGuid();

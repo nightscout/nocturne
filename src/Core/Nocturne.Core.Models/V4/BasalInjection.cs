@@ -9,7 +9,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="PatientInsulin"/>
 /// <seealso cref="TreatmentInsulinContext"/>
 /// <seealso cref="IV4Record"/>
-public class BasalInjection : IV4Record
+public class BasalInjection : IV4Record, IDeviceAttributed
 {
     public Guid Id { get; set; }
     public DateTime Timestamp { get; set; }
@@ -23,6 +23,11 @@ public class BasalInjection : IV4Record
 
     public Guid? CorrelationId { get; set; }
     public string? LegacyId { get; set; }
+
+    /// <summary>
+    /// Foreign key to the <see cref="PatientDevice"/> (pen) this injection is attributed to.
+    /// </summary>
+    public Guid? PatientDeviceId { get; set; }
 
     public DateTime CreatedAt { get; set; }
     public DateTime ModifiedAt { get; set; }

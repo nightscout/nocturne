@@ -28,6 +28,7 @@ public static class PatientDeviceMapper
             StartDate = model.StartDate,
             EndDate = model.EndDate,
             IsCurrent = model.IsCurrent,
+            Rank = model.Rank,
             Notes = model.Notes,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
@@ -59,6 +60,7 @@ public static class PatientDeviceMapper
             StartDate = entity.StartDate,
             EndDate = entity.EndDate,
             IsCurrent = entity.IsCurrent,
+            Rank = entity.Rank,
             Notes = entity.Notes,
             CreatedAt = entity.SysCreatedAt,
             ModifiedAt = entity.SysUpdatedAt,
@@ -82,6 +84,7 @@ public static class PatientDeviceMapper
         entity.StartDate = model.StartDate;
         entity.EndDate = model.EndDate;
         entity.IsCurrent = model.IsCurrent;
+        entity.Rank = model.Rank;
         entity.Notes = model.Notes;
         entity.SysUpdatedAt = DateTime.UtcNow;
     }

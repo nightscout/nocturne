@@ -32,6 +32,7 @@ public static class BasalInjectionMapper
             SyncIdentifier = model.SyncIdentifier,
             CorrelationId = model.CorrelationId,
             LegacyId = model.LegacyId,
+            PatientDeviceId = model.PatientDeviceId,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
             Units = model.Units,
@@ -65,6 +66,7 @@ public static class BasalInjectionMapper
             SyncIdentifier = entity.SyncIdentifier,
             CorrelationId = entity.CorrelationId,
             LegacyId = entity.LegacyId,
+            PatientDeviceId = entity.PatientDeviceId,
             CreatedAt = entity.SysCreatedAt,
             ModifiedAt = entity.SysUpdatedAt,
             Units = entity.Units,
@@ -95,6 +97,7 @@ public static class BasalInjectionMapper
         entity.SyncIdentifier = model.SyncIdentifier;
         entity.CorrelationId = model.CorrelationId;
         entity.LegacyId = model.LegacyId;
+        entity.PatientDeviceId = model.PatientDeviceId;
         entity.SysUpdatedAt = DateTime.UtcNow;
         entity.Units = model.Units;
         entity.Notes = model.Notes;

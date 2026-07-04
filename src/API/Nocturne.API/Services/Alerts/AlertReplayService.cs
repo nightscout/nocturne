@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -27,6 +28,7 @@ namespace Nocturne.API.Services.Alerts;
 internal sealed class AlertReplayService(
     IAlertRepository alertRepository,
     ISensorGlucoseRepository glucoseRepository,
+    ICanonicalGlucoseService canonicalGlucose,
     ISensorContextEnricher enricher,
     ITenantAccessor tenantAccessor,
     ILogger<AlertReplayService> logger)
@@ -84,9 +86,12 @@ internal sealed class AlertReplayService(
         // by AlertReferenceService) would short-circuit to insertion order.
         var ordered = TopologicallySort(rules);
 
-        var readings = (await glucoseRepository.GetAsync(
-                from: windowStart, to: windowEnd, device: null, source: null,
-                limit: int.MaxValue, offset: 0, descending: false, nativeOnly: false, ct: ct))
+        // Replay walks the canonical stream — the same series the live engine alarms on.
+        var readings = (await canonicalGlucose.SelectAsync(
+                (await glucoseRepository.GetAsync(
+                    from: windowStart, to: windowEnd, device: null, source: null,
+                    limit: int.MaxValue, offset: 0, descending: false, nativeOnly: false, ct: ct)).ToList(),
+                ct))
             .OrderBy(r => r.Timestamp)
             .ToList();
 

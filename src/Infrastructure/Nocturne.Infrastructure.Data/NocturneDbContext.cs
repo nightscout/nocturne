@@ -2333,6 +2333,32 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder
+            .Entity<BasalInjectionEntity>()
+            .HasOne<PatientDeviceEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.PatientDeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
+            .Entity<BasalInjectionEntity>()
+            .HasIndex(e => e.PatientDeviceId)
+            .HasDatabaseName("ix_basal_injections_patient_device_id")
+            .HasFilter("patient_device_id IS NOT NULL");
+
+        modelBuilder
+            .Entity<MeterGlucoseEntity>()
+            .HasOne<PatientDeviceEntity>()
+            .WithMany()
+            .HasForeignKey(e => e.PatientDeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder
+            .Entity<MeterGlucoseEntity>()
+            .HasIndex(e => e.PatientDeviceId)
+            .HasDatabaseName("ix_meter_glucose_patient_device_id")
+            .HasFilter("patient_device_id IS NOT NULL");
+
+        modelBuilder
             .Entity<UploaderSnapshotEntity>()
             .HasOne<DeviceEntity>()
             .WithMany()

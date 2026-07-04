@@ -75,6 +75,16 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     protected virtual Entry? ProjectToLegacyEntry(TModel model) => null;
 
     /// <summary>
+    /// Filters the models that reach the legacy <see cref="Entry"/> projection. The legacy surface
+    /// is single-stream: SensorGlucose overrides this with canonical stream selection so a losing
+    /// CGM's live writes don't interleave into v1/v3 clients' dataUpdate feed. Deletes are never
+    /// filtered — a previously-broadcast record must always emit its removal. The native V4
+    /// broadcast is unaffected (multi-stream access is a V4 concern).
+    /// </summary>
+    protected virtual Task<IReadOnlyList<TModel>> FilterLegacyProjectionAsync(
+        IReadOnlyList<TModel> models, CancellationToken ct) => Task.FromResult(models);
+
+    /// <summary>
     /// Fires the native V4 broadcast for a just-committed write — but only for <see cref="WriteOrigin.Live"/>
     /// writes (backfill imports stay silent so clients aren't flooded). The single gate every mutating
     /// method routes through, so the origin rule lives in exactly one place.
@@ -106,11 +116,13 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         if (origin != WriteOrigin.Live || _entrySink is null)
             return;
 
-        var createdEntries = created.Select(ProjectToLegacyEntry).OfType<Entry>().ToList();
+        var visibleCreated = created.Count > 0 ? await FilterLegacyProjectionAsync(created, ct) : created;
+        var createdEntries = visibleCreated.Select(ProjectToLegacyEntry).OfType<Entry>().ToList();
         if (createdEntries.Count > 0)
             await _entrySink.OnCreatedAsync(createdEntries, ct);
 
-        foreach (var m in updated)
+        var visibleUpdated = updated.Count > 0 ? await FilterLegacyProjectionAsync(updated, ct) : updated;
+        foreach (var m in visibleUpdated)
             if (ProjectToLegacyEntry(m) is { } e)
                 await _entrySink.OnUpdatedAsync(e, ct);
 

@@ -65,6 +65,7 @@ export * from './stepCounts.generated.remote';
 export * from './batteries.generated.remote';
 // './deviceEvents.generated.remote' - all exports collide, import directly
 // './pumpSnapshots.generated.remote' - all exports collide, import directly
+// './reservoirReports.generated.remote' - all exports collide, import directly
 // './uploaderSnapshots.generated.remote' - all exports collide, import directly
 export * from './careLinkConnects.generated.remote';
 export * from './configurations.generated.remote';

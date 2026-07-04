@@ -20,7 +20,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="GlucoseTrend"/>
 /// <seealso cref="MeterGlucose"/>
 /// <seealso cref="BGCheck"/>
-public class SensorGlucose : IV4Record
+public class SensorGlucose : IV4Record, IDeviceAttributed
 {
     /// <summary>
     /// UUID v7 primary key
