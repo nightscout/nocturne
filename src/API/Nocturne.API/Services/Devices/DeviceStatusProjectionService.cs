@@ -438,6 +438,7 @@ public class DeviceStatusProjectionService
             Temperature = uploaderSnapshot.Temperature,
             Name = uploaderSnapshot.Name,
             Type = uploaderSnapshot.Type,
+            IsCharging = uploaderSnapshot.IsCharging,
         };
 
         ds.IsCharging = uploaderSnapshot.IsCharging;

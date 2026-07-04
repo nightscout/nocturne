@@ -183,6 +183,13 @@ public class UploaderStatus
     public double? BatteryVoltage { get; set; }
 
     /// <summary>
+    /// Gets or sets whether the uploader device is charging.
+    /// Trio nests this in the uploader object; xDrip-style uploaders send it top-level.
+    /// </summary>
+    [JsonPropertyName("isCharging")]
+    public bool? IsCharging { get; set; }
+
+    /// <summary>
     /// Gets or sets the device temperature
     /// </summary>
     [JsonPropertyName("temperature")]
