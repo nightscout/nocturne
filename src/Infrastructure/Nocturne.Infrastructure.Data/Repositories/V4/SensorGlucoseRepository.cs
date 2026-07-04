@@ -94,7 +94,17 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
             return models.Where(m => survivorIds.Contains(m.Id)).ToList();
         }
         catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (DbUpdateException ex)
+        {
+            _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            return models;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            return models;
+        }
+        catch (TimeoutException ex)
         {
             _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
             return models;
