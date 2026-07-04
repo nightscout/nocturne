@@ -105,6 +105,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
             _stateSpanServiceMock.Object,
             _treatmentFoodServiceMock.Object,
             _deviceServiceMock.Object,
+            Mock.Of<IPatientDeviceStamper>(),
             _profileDecomposerMock.Object,
             _activeProfileResolverMock.Object,
             _insulinRepoMock.Object,

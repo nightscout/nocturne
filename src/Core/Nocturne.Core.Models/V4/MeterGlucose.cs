@@ -18,7 +18,7 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="IV4Record"/>
 /// <seealso cref="BGCheck"/>
 /// <seealso cref="SensorGlucose"/>
-public class MeterGlucose : IV4Record
+public class MeterGlucose : IV4Record, IDeviceAttributed
 {
     /// <summary>
     /// UUID v7 primary key
@@ -64,6 +64,11 @@ public class MeterGlucose : IV4Record
     /// Original v1/v3 record ID for migration traceability
     /// </summary>
     public string? LegacyId { get; set; }
+
+    /// <summary>
+    /// Foreign key to the <see cref="PatientDevice"/> (meter) this reading is attributed to.
+    /// </summary>
+    public Guid? PatientDeviceId { get; set; }
 
     /// <summary>
     /// When this record was created

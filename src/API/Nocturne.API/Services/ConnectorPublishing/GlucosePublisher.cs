@@ -3,6 +3,7 @@ using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -24,7 +25,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
 {
     private readonly IEntryService _entryService;
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
-    private readonly IPatientDeviceRepository _patientDeviceRepository;
+    private readonly IPatientDeviceStamper _patientDeviceStamper;
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly IAlertOrchestrator _alertOrchestrator;
@@ -34,7 +35,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
     public GlucosePublisher(
         IEntryService entryService,
         ISensorGlucoseRepository sensorGlucoseRepository,
-        IPatientDeviceRepository patientDeviceRepository,
+        IPatientDeviceStamper patientDeviceStamper,
         IDbContextFactory<NocturneDbContext> contextFactory,
         ITenantAccessor tenantAccessor,
         IAlertOrchestrator alertOrchestrator,
@@ -43,7 +44,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
     {
         _entryService = entryService ?? throw new ArgumentNullException(nameof(entryService));
         _sensorGlucoseRepository = sensorGlucoseRepository ?? throw new ArgumentNullException(nameof(sensorGlucoseRepository));
-        _patientDeviceRepository = patientDeviceRepository ?? throw new ArgumentNullException(nameof(patientDeviceRepository));
+        _patientDeviceStamper = patientDeviceStamper ?? throw new ArgumentNullException(nameof(patientDeviceStamper));
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
         _alertOrchestrator = alertOrchestrator ?? throw new ArgumentNullException(nameof(alertOrchestrator));
@@ -82,7 +83,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
             var recordList = records.ToList();
             if (recordList.Count == 0) return true;
 
-            await StampPatientDeviceIdsAsync(recordList, source, cancellationToken);
+            await _patientDeviceStamper.StampAsync(recordList, [DeviceCategory.CGM], source, cancellationToken);
             using (SystemAuditScope.Push(_auditContext))
                 await _sensorGlucoseRepository.BulkCreateAsync(recordList, origin, cancellationToken);
             await UpdateLastReadingAtAsync(cancellationToken);
@@ -183,67 +184,6 @@ internal sealed class GlucosePublisher : IGlucosePublisher
             _logger.LogWarning(ex, "Alert evaluation failed after entry publish");
         }
     }
-
-    /// <summary>
-    /// Resolves the patient's current CGM device and stamps <see cref="SensorGlucose.PatientDeviceId"/>
-    /// on each record whose <see cref="SensorGlucose.DataSource"/> matches the device's manufacturer.
-    /// Falls back to matching on the <paramref name="source"/> parameter when records lack a DataSource.
-    /// Failures are logged and swallowed — records proceed without a device link.
-    /// </summary>
-    private async Task StampPatientDeviceIdsAsync(
-        List<SensorGlucose> records,
-        string source,
-        CancellationToken ct)
-    {
-        try
-        {
-            var currentDevices = await _patientDeviceRepository.GetCurrentAsync(ct);
-            var cgmDevices = currentDevices.Where(d => d.DeviceCategory == DeviceCategory.CGM).ToList();
-            if (cgmDevices.Count == 0) return;
-
-            // Build connector-source → PatientDevice.Id lookup from current CGM devices.
-            var lookup = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-            foreach (var device in cgmDevices)
-            {
-                // Prefer CatalogId-based manufacturer, fall back to device's own Manufacturer field.
-                var manufacturer = device.CatalogId is not null
-                    ? DeviceCatalog.GetById(device.CatalogId)?.Manufacturer ?? device.Manufacturer
-                    : device.Manufacturer;
-
-                var connectorSource = ResolveConnectorSource(manufacturer);
-                if (connectorSource is not null)
-                    lookup.TryAdd(connectorSource, device.Id);
-            }
-
-            if (lookup.Count == 0) return;
-
-            foreach (var record in records)
-            {
-                // Skip records that already have a device assigned.
-                if (record.PatientDeviceId.HasValue) continue;
-
-                // Try matching on the record's own DataSource first, then the batch source.
-                var recordSource = record.DataSource ?? source;
-                if (recordSource is not null && lookup.TryGetValue(recordSource, out var deviceId))
-                    record.PatientDeviceId = deviceId;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to resolve PatientDeviceId for SensorGlucose batch from {Source}", source);
-        }
-    }
-
-    /// <summary>
-    /// Maps a device manufacturer name to the corresponding connector data source identifier.
-    /// </summary>
-    private static string? ResolveConnectorSource(string? manufacturer) => manufacturer?.ToLowerInvariant() switch
-    {
-        "dexcom" => DataSources.DexcomConnector,
-        "abbott" => DataSources.LibreConnector,
-        "medtronic" => DataSources.MiniMedConnector,
-        _ => null,
-    };
 
     /// <summary>
     /// Build a SensorContext from the most recent SensorGlucose record and evaluate alert rules.

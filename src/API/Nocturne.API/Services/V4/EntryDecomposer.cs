@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.API.Services.Audit;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -28,6 +29,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
     private readonly ICalibrationRepository _calibrationRepository;
     private readonly IGlucoseProcessingResolver _glucoseResolver;
+    private readonly IPatientDeviceStamper _patientDeviceStamper;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<EntryDecomposer> _logger;
 
@@ -36,6 +38,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
     /// <param name="meterGlucoseRepository">Repository for <see cref="MeterGlucose"/> records.</param>
     /// <param name="calibrationRepository">Repository for <see cref="Calibration"/> records.</param>
     /// <param name="glucoseResolver">Resolves glucose processing type and smoothed/unsmoothed values from v1/v3 hints or source defaults.</param>
+    /// <param name="patientDeviceStamper">Attributes decomposed records to the patient device active at their timestamp.</param>
     /// <param name="logger">Logger instance for this decomposer.</param>
     public EntryDecomposer(
         NocturneDbContext dbContext,
@@ -43,6 +46,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         IMeterGlucoseRepository meterGlucoseRepository,
         ICalibrationRepository calibrationRepository,
         IGlucoseProcessingResolver glucoseResolver,
+        IPatientDeviceStamper patientDeviceStamper,
         IAuditContext auditContext,
         ILogger<EntryDecomposer> logger)
     {
@@ -51,6 +55,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         _meterGlucoseRepository = meterGlucoseRepository;
         _calibrationRepository = calibrationRepository;
         _glucoseResolver = glucoseResolver;
+        _patientDeviceStamper = patientDeviceStamper;
         _auditContext = auditContext;
         _logger = logger;
     }
@@ -108,6 +113,10 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         }
 
         await _glucoseResolver.ResolveAsync(model, gpHint, smoothedHint, unsmoothedHint, ct);
+        // Carry an earlier attribution forward on re-upload: the rebuilt model starts null and a
+        // later ambiguous stamp (e.g. a second device registered since) must not wipe the stored FK.
+        model.PatientDeviceId = existing?.PatientDeviceId;
+        await _patientDeviceStamper.StampAsync([model], [DeviceCategory.CGM], model.DataSource, ct);
 
         if (existing != null)
         {
@@ -131,6 +140,8 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
             : null;
 
         var model = MapToMeterGlucose(entry, result.CorrelationId);
+        model.PatientDeviceId = existing?.PatientDeviceId;
+        await _patientDeviceStamper.StampAsync([model], [DeviceCategory.GlucoseMeter], model.DataSource, ct);
 
         if (existing != null)
         {
@@ -221,6 +232,11 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
                     break;
             }
         }
+
+        if (sgvList.Count > 0)
+            await _patientDeviceStamper.StampAsync(sgvList, [DeviceCategory.CGM], batchSource: null, ct);
+        if (mbgList.Count > 0)
+            await _patientDeviceStamper.StampAsync(mbgList, [DeviceCategory.GlucoseMeter], batchSource: null, ct);
 
         using (SystemAuditScope.Push(_auditContext))
         {

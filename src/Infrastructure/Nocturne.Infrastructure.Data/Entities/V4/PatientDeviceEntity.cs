@@ -91,6 +91,12 @@ public class PatientDeviceEntity : ITenantScoped, ISoftDeletable, ISystemTimesta
     public bool IsCurrent { get; set; }
 
     /// <summary>
+    /// Explicit priority among overlapping devices of the same category (lower = higher priority, null = unranked)
+    /// </summary>
+    [Column("rank")]
+    public int? Rank { get; set; }
+
+    /// <summary>
     /// Free-text notes about the device
     /// </summary>
     [Column("notes")]

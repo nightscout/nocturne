@@ -26,6 +26,7 @@ public static class MeterGlucoseMapper
             DataSource = model.DataSource,
             CorrelationId = model.CorrelationId,
             LegacyId = model.LegacyId,
+            PatientDeviceId = model.PatientDeviceId,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
             Mgdl = model.Mgdl,
@@ -52,6 +53,7 @@ public static class MeterGlucoseMapper
             DataSource = entity.DataSource,
             CorrelationId = entity.CorrelationId,
             LegacyId = entity.LegacyId,
+            PatientDeviceId = entity.PatientDeviceId,
             CreatedAt = entity.SysCreatedAt,
             ModifiedAt = entity.SysUpdatedAt,
             Mgdl = entity.Mgdl,
@@ -75,6 +77,7 @@ public static class MeterGlucoseMapper
         entity.DataSource = model.DataSource;
         entity.CorrelationId = model.CorrelationId;
         entity.LegacyId = model.LegacyId;
+        entity.PatientDeviceId = model.PatientDeviceId;
         entity.SysUpdatedAt = DateTime.UtcNow;
         entity.Mgdl = model.Mgdl;
         entity.AdditionalPropertiesJson = model.AdditionalProperties is { Count: > 0 }
