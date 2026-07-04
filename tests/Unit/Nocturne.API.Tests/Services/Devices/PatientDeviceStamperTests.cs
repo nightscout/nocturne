@@ -3,7 +3,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -13,6 +15,7 @@ namespace Nocturne.API.Tests.Services.Devices;
 public class PatientDeviceStamperTests
 {
     private readonly Mock<IPatientDeviceRepository> _mockRepository;
+    private readonly Mock<ITimezoneTimelineService> _mockTimezoneTimeline;
     private readonly PatientDeviceStamper _stamper;
 
     private static readonly DateTime Now = new(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
@@ -20,7 +23,13 @@ public class PatientDeviceStamperTests
     public PatientDeviceStamperTests()
     {
         _mockRepository = new Mock<IPatientDeviceRepository>();
-        _stamper = new PatientDeviceStamper(_mockRepository.Object, NullLogger<PatientDeviceStamper>.Instance);
+        _mockTimezoneTimeline = new Mock<ITimezoneTimelineService>();
+        // Empty timeline: records without a UtcOffset resolve to their UTC date.
+        _mockTimezoneTimeline
+            .Setup(s => s.GetResolverAsync(It.IsAny<double?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimezoneTimeline([]));
+        _stamper = new PatientDeviceStamper(
+            _mockRepository.Object, _mockTimezoneTimeline.Object, NullLogger<PatientDeviceStamper>.Instance);
     }
 
     private void SetupDevices(params PatientDevice[] devices)
@@ -51,12 +60,13 @@ public class PatientDeviceStamperTests
         IsCurrent = end is null,
     };
 
-    private static SensorGlucose Reading(string? dataSource = null, string? device = null, DateTime? timestamp = null) => new()
+    private static SensorGlucose Reading(string? dataSource = null, string? device = null, DateTime? timestamp = null, int? utcOffset = null) => new()
     {
         Mgdl = 120,
         Timestamp = timestamp ?? Now,
         DataSource = dataSource,
         Device = device,
+        UtcOffset = utcOffset,
     };
 
     [Fact]
@@ -271,6 +281,44 @@ public class PatientDeviceStamperTests
         await _stamper.StampAsync([record], [DeviceCategory.CGM], DataSources.DexcomConnector);
 
         record.PatientDeviceId.Should().Be(right.Id);
+    }
+
+    [Fact]
+    public async Task UtcOffset_MatchesOnWearerLocalDate_AcrossUtcDayBoundary()
+    {
+        // Device starts 2026-06-15 (wearer-local). 21:00Z on the 14th is already 07:00 on the
+        // 15th at UTC+10, so the offset-carrying record attributes and the UTC one doesn't.
+        var device = Cgm("Dexcom", start: new DateOnly(2026, 6, 15));
+        SetupDevices(device);
+        var beforeMidnightUtc = new DateTime(2026, 6, 14, 21, 0, 0, DateTimeKind.Utc);
+
+        var localRecord = Reading(dataSource: DataSources.DexcomConnector, timestamp: beforeMidnightUtc, utcOffset: 600);
+        var utcRecord = Reading(dataSource: DataSources.DexcomConnector, timestamp: beforeMidnightUtc, utcOffset: 0);
+
+        await _stamper.StampAsync([localRecord, utcRecord], [DeviceCategory.CGM], DataSources.DexcomConnector);
+
+        localRecord.PatientDeviceId.Should().Be(device.Id);
+        utcRecord.PatientDeviceId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task MissingUtcOffset_FallsBackToTenantTimezoneTimeline()
+    {
+        _mockTimezoneTimeline
+            .Setup(s => s.GetResolverAsync(It.IsAny<double?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimezoneTimeline([
+                new TimezoneTimelineEntry { Timezone = "Australia/Brisbane", EffectiveFrom = new DateTime(2020, 1, 1) },
+            ]));
+
+        var device = Cgm("Dexcom", start: new DateOnly(2026, 6, 15));
+        SetupDevices(device);
+        var record = Reading(
+            dataSource: DataSources.DexcomConnector,
+            timestamp: new DateTime(2026, 6, 14, 21, 0, 0, DateTimeKind.Utc));
+
+        await _stamper.StampAsync([record], [DeviceCategory.CGM], DataSources.DexcomConnector);
+
+        record.PatientDeviceId.Should().Be(device.Id);
     }
 
     [Fact]

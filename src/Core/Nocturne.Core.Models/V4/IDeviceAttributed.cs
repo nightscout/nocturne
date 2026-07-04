@@ -17,6 +17,12 @@ public interface IDeviceAttributed
     /// <summary>Timestamp used to match the record against a device's usage window.</summary>
     DateTime Timestamp { get; }
 
+    /// <summary>
+    /// UTC offset in minutes from the originating device's local time. Used to compare against the
+    /// wearer's local date, since device usage windows are user-entered local dates.
+    /// </summary>
+    int? UtcOffset { get; }
+
     /// <summary>Device identifier string that produced or uploaded this record.</summary>
     string? Device { get; }
 

@@ -146,4 +146,30 @@ public class TimezoneTimelineTests
         var timeline = new TimezoneTimeline([Entry("America/Toronto", new DateTime(2026, 6, 1))], fallbackOffsetHours: 0);
         timeline.ToUtc(FakeUtc(2026, 1, 1, 7, 0)).Should().Be(Utc(2026, 1, 1, 7, 0));
     }
+
+    // ── ToLocal (UTC → wearer wall-clock) ────────────────────────────────────
+
+    [Fact]
+    public void ToLocal_ConvertsUtcToZoneWallClock_WithDstForTheDate()
+    {
+        var timeline = new TimezoneTimeline([Origin("Australia/Sydney")]);
+
+        // Jan = AEDT (UTC+11); Jun = AEST (UTC+10).
+        timeline.ToLocal(Utc(2026, 1, 9, 13, 0)).Should().Be(new DateTime(2026, 1, 10, 0, 0, 0));
+        timeline.ToLocal(Utc(2026, 6, 5, 14, 0)).Should().Be(new DateTime(2026, 6, 6, 0, 0, 0));
+    }
+
+    [Fact]
+    public void ToLocal_EmptyTimeline_NoOffset_ReturnsUtcUnchanged()
+    {
+        var timeline = new TimezoneTimeline([]);
+        timeline.ToLocal(Utc(2026, 3, 5, 7, 0)).Should().Be(Utc(2026, 3, 5, 7, 0));
+    }
+
+    [Fact]
+    public void ToLocal_NoCoveringEntry_UsesFallbackOffset()
+    {
+        var timeline = new TimezoneTimeline([Entry("America/Toronto", new DateTime(2026, 6, 1))], fallbackOffsetHours: 10);
+        timeline.ToLocal(Utc(2026, 1, 1, 21, 0)).Should().Be(new DateTime(2026, 1, 2, 7, 0, 0));
+    }
 }

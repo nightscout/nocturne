@@ -1,6 +1,8 @@
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Timezones;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Devices;
@@ -22,6 +24,7 @@ namespace Nocturne.API.Services.Devices;
 internal sealed class PatientDeviceStamper : IPatientDeviceStamper
 {
     private readonly IPatientDeviceRepository _patientDeviceRepository;
+    private readonly ITimezoneTimelineService _timezoneTimelineService;
     private readonly ILogger<PatientDeviceStamper> _logger;
 
     /// <summary>
@@ -46,9 +49,11 @@ internal sealed class PatientDeviceStamper : IPatientDeviceStamper
 
     public PatientDeviceStamper(
         IPatientDeviceRepository patientDeviceRepository,
+        ITimezoneTimelineService timezoneTimelineService,
         ILogger<PatientDeviceStamper> logger)
     {
         _patientDeviceRepository = patientDeviceRepository ?? throw new ArgumentNullException(nameof(patientDeviceRepository));
+        _timezoneTimelineService = timezoneTimelineService ?? throw new ArgumentNullException(nameof(timezoneTimelineService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -79,17 +84,29 @@ internal sealed class PatientDeviceStamper : IPatientDeviceStamper
         var unstamped = records.Where(r => !r.PatientDeviceId.HasValue).ToList();
         if (unstamped.Count == 0) return;
 
-        var min = unstamped.Min(r => r.Timestamp);
-        var max = unstamped.Max(r => r.Timestamp);
+        // Device usage windows are user-entered local dates, so records match on the wearer's local
+        // day. Pad the candidate fetch by a day in each direction: a record's local date can differ
+        // from its UTC date by up to a day either way.
+        var min = unstamped.Min(r => r.Timestamp).AddDays(-1);
+        var max = unstamped.Max(r => r.Timestamp).AddDays(1);
         var candidates = (await _patientDeviceRepository.GetByDateRangeAsync(min, max, ct))
             .Where(d => categories.Contains(d.DeviceCategory))
             .ToList();
         if (candidates.Count == 0) return;
 
+        // Records missing a UtcOffset fall back to the tenant's timezone timeline; an empty
+        // timeline resolves to UTC unchanged.
+        TimezoneTimeline? timeline = null;
+        if (unstamped.Any(r => r.UtcOffset is null))
+            timeline = await _timezoneTimelineService.GetResolverAsync(fallbackOffsetHours: null, ct);
+
         var unresolved = 0;
         foreach (var record in unstamped)
         {
-            var date = DateOnly.FromDateTime(record.Timestamp);
+            var local = record.UtcOffset is { } offsetMinutes
+                ? record.Timestamp.AddMinutes(offsetMinutes)
+                : timeline!.ToLocal(record.Timestamp);
+            var date = DateOnly.FromDateTime(local);
             var active = candidates
                 .Where(d =>
                     (d.StartDate is null || d.StartDate <= date) &&
