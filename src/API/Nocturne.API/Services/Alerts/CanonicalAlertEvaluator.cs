@@ -44,7 +44,11 @@ internal sealed class CanonicalAlertEvaluator : ICanonicalAlertEvaluator
             await _alertOrchestrator.EvaluateAsync(context, ct);
         }
         catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Alert evaluation against the canonical stream failed");
+        }
+        catch (TimeoutException ex)
         {
             _logger.LogWarning(ex, "Alert evaluation against the canonical stream failed");
         }
