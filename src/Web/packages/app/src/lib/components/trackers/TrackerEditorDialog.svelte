@@ -177,7 +177,8 @@
         <Input
           id="lowReservoirUnits"
           type="number"
-          min="0"
+          min="0.5"
+          max="1000"
           step="0.5"
           bind:value={formLowReservoirUnits}
           placeholder="e.g., 20"

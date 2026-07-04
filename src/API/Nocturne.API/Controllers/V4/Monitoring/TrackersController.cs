@@ -121,6 +121,8 @@ public class TrackersController : ControllerBase
             return "Low reservoir units apply only to Reservoir category trackers";
         if (value <= 0)
             return "Low reservoir units must be greater than zero";
+        if (value > 1000)
+            return "Low reservoir units must be at most 1000";
         return null;
     }
 

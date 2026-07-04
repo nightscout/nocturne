@@ -21,7 +21,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 table: "tracker_definitions",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                // Warn: matches the TrackerDefinitionEntity initializer so pre-existing rows
+                // read back the same urgency a new definition gets.
+                defaultValue: 1);
         }
 
         /// <inheritdoc />
