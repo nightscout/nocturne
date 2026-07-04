@@ -168,7 +168,7 @@ jobs:
           dotnet publish \
             -c Release \
             -p:PublishProfile=DefaultContainer \
-            "-p:ContainerRuntimeIdentifiers=linux-x64%3Blinux-arm64" \
+            '-p:ContainerRuntimeIdentifiers="linux-x64;linux-arm64"' \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-api \
             "-p:ContainerImageTags=${{ steps.version.outputs.dotnet_tags }}" \
@@ -182,7 +182,7 @@ jobs:
           dotnet publish \
             -c Release \
             -p:PublishProfile=DefaultContainer \
-            "-p:ContainerRuntimeIdentifiers=linux-x64%3Blinux-arm64" \
+            '-p:ContainerRuntimeIdentifiers="linux-x64;linux-arm64"' \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-demo \
             "-p:ContainerImageTags=${{ steps.version.outputs.dotnet_tags }}"
