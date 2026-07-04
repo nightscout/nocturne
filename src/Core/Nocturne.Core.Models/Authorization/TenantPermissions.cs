@@ -158,6 +158,7 @@ public static class TenantPermissions
         public const string Owner = "owner";
         public const string Admin = "admin";
         public const string Caretaker = "caretaker";
+        public const string Caregiver = "caregiver";
         public const string Viewer = "viewer";
         public const string Clinician = "clinician";
         public const string Denied = "denied";
@@ -195,6 +196,15 @@ public static class TenantPermissions
             TherapyRead, AlertsReadWrite,
             DeviceNotify, DeviceActuate,
         ],
+        // Remote monitoring without record editing: read glucose/treatments, see and
+        // acknowledge alerts (acknowledgement requires the alerts write atom — there is
+        // no separate acknowledge atom).
+        [SeedRoles.Caregiver] =
+        [
+            GlucoseRead, TreatmentsRead,
+            AlertsReadWrite,
+            DeviceNotify, DeviceActuate,
+        ],
         [SeedRoles.Clinician] =
         [
             GlucoseRead, TreatmentsRead, DevicesRead,
@@ -215,6 +225,7 @@ public static class TenantPermissions
         [SeedRoles.Owner] = "Owner",
         [SeedRoles.Admin] = "Administrator",
         [SeedRoles.Caretaker] = "Caretaker",
+        [SeedRoles.Caregiver] = "Caregiver",
         [SeedRoles.Viewer] = "Viewer",
         [SeedRoles.Clinician] = "Clinician",
         [SeedRoles.Denied] = "Denied",

@@ -49,6 +49,10 @@ public class TenantResolutionMiddleware
         "/ready",
         "/api/v4/status",
         "/api/v4/me/tenants/validate-slug",
+        // Cross-tenant caregiver overview: aggregates across the subject's tenants,
+        // so it must be reachable from the apex in multi-tenant deployments. The
+        // service pins each tenant itself and never uses the request-scoped context.
+        "/api/v4/me/tenants/overview",
         "/api/v4/admin/tenants/validate-slug",
         "/api/metadata",
         "/api/v4/chat-identity/directory/resolve",

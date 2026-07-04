@@ -4,6 +4,8 @@ using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
+using Nocturne.API.Extensions;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 
@@ -25,13 +27,16 @@ namespace Nocturne.API.Controllers.V4.Identity;
 public class MyTenantsController : ControllerBase
 {
     private readonly ITenantService _tenantService;
+    private readonly ITenantOverviewService _overviewService;
     private readonly OperatorConfiguration _config;
 
     public MyTenantsController(
         ITenantService tenantService,
+        ITenantOverviewService overviewService,
         IOptions<OperatorConfiguration> config)
     {
         _tenantService = tenantService;
+        _overviewService = overviewService;
         _config = config.Value;
     }
 
@@ -47,6 +52,31 @@ public class MyTenantsController : ControllerBase
 
         var tenants = await _tenantService.GetTenantsForSubjectAsync(authContext.SubjectId.Value, ct);
         return Ok(tenants);
+    }
+
+    /// <inheritdoc cref="ITenantOverviewService.GetOverviewAsync"/>
+    [HttpGet("overview")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(TenantOverviewResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<TenantOverviewResponse>> GetOverview(CancellationToken ct)
+    {
+        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        if (authContext?.SubjectId == null)
+            return Unauthorized();
+
+        // Per-tenant data is gated on membership permissions intersected with the auth token's
+        // granted scopes (as resolved by AuthenticationMiddleware). This endpoint is tenantless,
+        // so MemberScopeMiddleware has not applied the membership restriction here — the service
+        // mirrors it per tenant. InstanceKey/PlatformAccess are superuser auth types, matching
+        // MemberScopeMiddleware's handling.
+        IReadOnlySet<string> tokenScopes =
+            authContext.AuthType is AuthType.InstanceKey or AuthType.PlatformAccess
+                ? new HashSet<string> { OAuthScopes.FullAccess }
+                : HttpContext.GetGrantedScopes();
+
+        var overview = await _overviewService.GetOverviewAsync(
+            authContext.SubjectId.Value, tokenScopes, ct);
+        return Ok(overview);
     }
 
     /// <inheritdoc cref="ITenantService.CreateAsync"/>
