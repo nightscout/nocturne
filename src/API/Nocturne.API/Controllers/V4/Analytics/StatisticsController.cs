@@ -374,12 +374,23 @@ public class StatisticsController : ControllerBase
             var carbs   = await carbTask;
             var devices = await devicesTask;
 
-            // Registered devices that contributed readings, for the UI's device picker.
+            // Registered devices that contributed readings, for the UI's device picker. Count in a
+            // single pass over the raw readings rather than re-scanning per device. The unattributed
+            // bucket is tracked separately — a null key can't live in a Dictionary.
+            var countByDevice = new Dictionary<Guid, int>();
+            var unattributedCount = 0;
+            foreach (var r in rawGlucose)
+            {
+                if (r.PatientDeviceId is { } id)
+                    countByDevice[id] = countByDevice.GetValueOrDefault(id) + 1;
+                else
+                    unattributedCount++;
+            }
+
             var contributingDevices = new List<ContributingDevice>();
             foreach (var d in devices.Where(d => d.DeviceCategory == DeviceCategory.CGM))
             {
-                var readingCount = rawGlucose.Count(r => r.PatientDeviceId == d.Id);
-                if (readingCount == 0) continue;
+                if (!countByDevice.TryGetValue(d.Id, out var readingCount) || readingCount == 0) continue;
 
                 var name = (d.CatalogId != null ? DeviceCatalog.GetById(d.CatalogId)?.Name : null)
                     ?? d.Model ?? d.Manufacturer ?? "Unknown device";
@@ -391,7 +402,6 @@ public class StatisticsController : ControllerBase
                 });
             }
 
-            var unattributedCount = rawGlucose.Count(r => r.PatientDeviceId == null);
             if (unattributedCount > 0)
             {
                 contributingDevices.Add(new ContributingDevice

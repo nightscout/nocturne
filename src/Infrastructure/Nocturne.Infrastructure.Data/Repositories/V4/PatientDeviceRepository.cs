@@ -37,9 +37,14 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     public async Task<IEnumerable<PatientDevice>> GetAllAsync(CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
+        // Rank leads the sort so the management list's order IS the priority order — otherwise
+        // drag/arrow reordering (which persists rank = list index) would snap back on refresh.
+        // Unranked devices fall back to the previous current-then-recent ordering.
         var entities = await ctx.PatientDevices
             .AsNoTracking()
-            .OrderByDescending(e => e.IsCurrent)
+            .OrderBy(e => e.Rank == null)
+            .ThenBy(e => e.Rank)
+            .ThenByDescending(e => e.IsCurrent)
             .ThenByDescending(e => e.StartDate)
             .ToListAsync(ct);
 

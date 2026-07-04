@@ -25,7 +25,8 @@ internal sealed class DeviceReattributionService : IDeviceReattributionService
     /// <summary>
     /// Upper bound on readings re-stamped per registration. A multi-year CGM window can hold hundreds
     /// of thousands of rows; capping keeps the registration request bounded. Newest-first, so the most
-    /// relevant history is covered; any remainder is picked up as new data arrives.
+    /// recent history is attributed; readings beyond the cap in the same window stay unattributed
+    /// (consistent with the deliberate no-global-migration design).
     /// </summary>
     private const int MaxReattributeReadings = 50_000;
 
