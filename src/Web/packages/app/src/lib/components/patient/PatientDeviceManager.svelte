@@ -159,7 +159,8 @@
 
   // ── Discovered sources ──────────────────────────────────────────
 
-  function formatLastSeen(value: string | Date): string {
+  function formatLastSeen(value: string | Date | null | undefined): string {
+    if (!value) return "";
     return new Date(value).toLocaleDateString(undefined, {
       year: "numeric",
       month: "short",
