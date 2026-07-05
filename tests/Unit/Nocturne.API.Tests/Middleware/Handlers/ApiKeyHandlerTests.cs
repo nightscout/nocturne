@@ -139,6 +139,73 @@ public class ApiKeyHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task AuthenticateAsync_UppercaseSha1Hash_StillMatchesLowercaseStoredHash()
+    {
+        // The stored LegacySecretHash is canonical lowercase (HashUtils.Sha1Hex). Some clients
+        // (e.g. Android) send the SHA-1 hex uppercased; the handler must normalize before the
+        // case-sensitive column comparison, or authentication fails despite a valid secret.
+        var legacySecret = "myplaintextsecret";
+        var storedHash = HashUtils.Sha1Hex(legacySecret); // lowercase
+
+        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        {
+            ctx.OAuthGrants.Add(new OAuthGrantEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = _subjectId,
+                TenantId = _testTenantId,
+                GrantType = OAuthGrantTypes.Direct,
+                LegacySecretHash = storedHash,
+                Scopes = ["glucose.read"],
+                CreatedAt = DateTime.UtcNow,
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        var context = CreateHttpContext();
+        context.Request.Headers["api-secret"] = storedHash.ToUpperInvariant();
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
+        Assert.Contains("glucose.read", result.AuthContext.Scopes);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_UnderscoreApiSecretHeader_IsAccepted()
+    {
+        // Some legacy Nightscout clients send the underscore spelling "api_secret" rather than
+        // the canonical "api-secret"; the handler accepts both.
+        var legacySecret = "underscoresecret";
+        var sha1Hash = HashUtils.Sha1Hex(legacySecret);
+
+        await using (var ctx = new NocturneDbContext(_dbOptions) { TenantId = _testTenantId })
+        {
+            ctx.OAuthGrants.Add(new OAuthGrantEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = _subjectId,
+                TenantId = _testTenantId,
+                GrantType = OAuthGrantTypes.Direct,
+                LegacySecretHash = sha1Hash,
+                Scopes = ["glucose.read"],
+                CreatedAt = DateTime.UtcNow,
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        var context = CreateHttpContext();
+        context.Request.Headers["api_secret"] = sha1Hash;
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(_subjectId, result.AuthContext!.SubjectId);
+        Assert.Contains("glucose.read", result.AuthContext.Scopes);
+    }
+
+    [Fact]
     public async Task AuthenticateAsync_MintedTokenSentPreHashed_AuthenticatesAndDoesNotNudge()
     {
         // A minted noc_ token carries both a SHA-256 TokenHash (verbatim clients) and a SHA-1

@@ -33,8 +33,14 @@ public class ApiKeyHandler : IAuthHandler
 
     public async Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
-        // 1. Extract value from api-secret header or ?secret= query param
+        // 1. Extract value from the api-secret header or ?secret= query param.
+        //    Accept the api_secret (underscore) spelling too — some legacy Nightscout
+        //    clients send it, and the V1 OpenAPI docs advertise it as accepted.
         var apiKey = context.Request.Headers["api-secret"].FirstOrDefault();
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            apiKey = context.Request.Headers["api_secret"].FirstOrDefault();
+        }
         if (string.IsNullOrEmpty(apiKey))
         {
             apiKey = context.Request.Query["secret"].FirstOrDefault();
@@ -62,8 +68,11 @@ public class ApiKeyHandler : IAuthHandler
         else
         {
             // Legacy path: the value sent in the header is already a SHA-1 hex hash
-            // (Nightscout clients pre-hash secrets before sending)
-            legacySecretHash = apiKey;
+            // (Nightscout clients pre-hash secrets before sending). Normalize to lowercase
+            // to match the canonical stored form (HashUtils.Sha1Hex is lowercase) — some
+            // clients (e.g. Android) emit uppercase hex, which the case-sensitive column
+            // comparison would otherwise miss.
+            legacySecretHash = apiKey.ToLowerInvariant();
         }
 
         // 5. Query for matching grant
