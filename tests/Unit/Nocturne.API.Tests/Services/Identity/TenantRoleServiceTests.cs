@@ -30,15 +30,14 @@ public class TenantRoleServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SeedRolesForTenantAsync_CreatesAllSevenSeedRoles()
+    public async Task SeedRolesForTenantAsync_CreatesAllSixSeedRoles()
     {
         await _service.SeedRolesForTenantAsync(_tenantId);
         var roles = await _context.TenantRoles.Where(r => r.TenantId == _tenantId).ToListAsync();
-        roles.Should().HaveCount(7);
+        roles.Should().HaveCount(6);
         roles.Should().Contain(r => r.Slug == "owner" && r.IsSystem);
         roles.Should().Contain(r => r.Slug == "admin" && r.IsSystem);
         roles.Should().Contain(r => r.Slug == "caretaker" && r.IsSystem);
-        roles.Should().Contain(r => r.Slug == "caregiver" && r.IsSystem);
         roles.Should().Contain(r => r.Slug == "viewer" && r.IsSystem);
         roles.Should().Contain(r => r.Slug == "clinician" && r.IsSystem);
         roles.Should().Contain(r => r.Slug == "denied" && r.IsSystem);
