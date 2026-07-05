@@ -451,13 +451,21 @@ class Program
 
             ConfigureWebEnvironment(dockerWeb);
 
-            // SvelteKit needs ORIGIN when running behind a reverse proxy so SSR
-            // constructs URLs with the public domain instead of the container hostname.
-            // Derive from BaseDomain (bare host or host:port).
-            dockerWeb.WithEnvironment(
-                "ORIGIN",
-                ReferenceExpression.Create($"https://{baseDomain}")
-            );
+            // SvelteKit (adapter-node) needs to reconstruct the public origin when
+            // running behind a reverse proxy. Derive it per-request from the edge's
+            // forwarded headers rather than pinning a single static ORIGIN.
+            //
+            // A static ORIGIN=https://{baseDomain} is used unconditionally by
+            // adapter-node, so its remote-function CSRF guard rejects any POST whose
+            // browser Origin differs from that exact value — every tenant subdomain
+            // (*.{baseDomain}) and any http/localhost/port access — with a 403
+            // "Cross-site remote requests are forbidden" surfaced in the UI as
+            // "Failed to execute remote function". Reading x-forwarded-proto/host
+            // (set by Caddy and required of byo-proxy operators) makes the origin
+            // match the actual host for the apex and every tenant subdomain alike.
+            dockerWeb
+                .WithEnvironment("PROTOCOL_HEADER", "x-forwarded-proto")
+                .WithEnvironment("HOST_HEADER", "x-forwarded-host");
 
             // Operator-supplied OTLP export, mirroring the API. The web's Node
             // SDK (instrumentation.server.ts) starts only when the endpoint is
