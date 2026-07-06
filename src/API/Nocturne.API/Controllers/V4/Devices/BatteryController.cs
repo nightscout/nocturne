@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Devices;
@@ -30,6 +31,7 @@ namespace Nocturne.API.Controllers.V4.Devices;
 [ApiController]
 [Tags("Devices")]
 [Route("api/v4/[controller]")]
+[Authorize]
 public class BatteryController : ControllerBase
 {
     private readonly IBatteryService _batteryService;

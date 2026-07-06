@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Services.Alerts.Webhooks;
 using Nocturne.Core.Models.Configuration;
@@ -19,6 +20,7 @@ namespace Nocturne.API.Controllers.V4.Connectors;
 [ApiController]
 [Tags("Connectors")]
 [Route("api/v4/ui-settings/notifications/webhooks")]
+[Authorize]
 public class WebhookSettingsController(
     WebhookRequestSender requestSender,
     ILogger<WebhookSettingsController> logger)

@@ -14,6 +14,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 [ApiController]
 [Tags("Profiles")]
 [Route("api/v4/user/preferences")]
+[Authorize]
 public class UserPreferencesController : ControllerBase
 {
     private readonly NocturneDbContext _dbContext;

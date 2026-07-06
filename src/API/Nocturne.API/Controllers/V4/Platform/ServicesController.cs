@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenApi.Remote.Attributes;
@@ -22,6 +23,7 @@ namespace Nocturne.API.Controllers.V4.Platform;
 [ApiController]
 [Route("api/v4/services")]
 [Produces("application/json")]
+[Authorize]
 public class ServicesController : ControllerBase
 {
     private readonly IDataSourceService _dataSourceService;

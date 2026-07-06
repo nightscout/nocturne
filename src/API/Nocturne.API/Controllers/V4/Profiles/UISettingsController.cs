@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.Connectors.Core.Services;
@@ -17,6 +18,7 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 [Tags("Profiles")]
 [Route("api/v4/ui-settings")]
 [ClientPropertyName("uiSettings")]
+[Authorize]
 public class UISettingsController : ControllerBase
 {
     private readonly ILogger<UISettingsController> _logger;

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -17,6 +18,7 @@ namespace Nocturne.API.Controllers.V4.Identity;
 [Tags("Identity")]
 [Route("api/v4/roles")]
 [Produces("application/json")]
+[Authorize]
 public class RoleController : ControllerBase
 {
     private readonly ITenantRoleService _roleService;

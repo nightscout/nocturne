@@ -49,6 +49,7 @@ public class CompatibilityController : ControllerBase
     /// Get current proxy configuration
     /// </summary>
     [HttpGet("config")]
+    [RequireAdmin]
     [ProducesResponseType(typeof(ProxyConfigurationDto), StatusCodes.Status200OK)]
     public ActionResult<ProxyConfigurationDto> GetConfiguration()
     {

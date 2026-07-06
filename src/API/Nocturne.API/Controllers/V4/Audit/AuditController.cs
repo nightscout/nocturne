@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
@@ -19,6 +20,7 @@ namespace Nocturne.API.Controllers.V4.Audit;
 [Tags("Platform")]
 [Route("api/v4/audit")]
 [Produces("application/json")]
+[Authorize]
 public class AuditController : ControllerBase
 {
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;

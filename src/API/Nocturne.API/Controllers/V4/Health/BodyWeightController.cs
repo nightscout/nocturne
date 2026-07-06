@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Health;
@@ -16,6 +17,7 @@ namespace Nocturne.API.Controllers.V4.Health;
 [ApiController]
 [Tags("Health")]
 [Route("api/v4/body-weight")]
+[Authorize]
 public class BodyWeightController : ControllerBase
 {
     private readonly IBodyWeightService _bodyWeightService;
