@@ -280,15 +280,20 @@ builder
 
 builder.Services.AddNocturneAuthorization();
 
-// Configure CORS for frontend with credentials support
-// Note: AllowAnyOrigin() cannot be combined with AllowCredentials() per CORS spec
-// Using SetIsOriginAllowed to dynamically allow origins while supporting cookies
+// Configure CORS for frontend with credentials support.
+// AllowAnyOrigin() cannot be combined with AllowCredentials() per the CORS spec, and a
+// static allow-list can't cover the open-ended per-tenant wildcard subdomains
+// ({slug}.{BaseDomain}) or public shares ({token}.share.{BaseDomain}). Instead validate the
+// origin against the configured base domain: apex + any subdomain are allowed, loopback
+// origins only in development. See CorsOriginPolicy.
+var corsBaseDomain = builder.Configuration[BaseDomainOptions.ConfigKey] ?? "";
+var corsAllowLocalhost = builder.Environment.IsDevelopment();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
         policy
-            .SetIsOriginAllowed(_ => true) // Allow any origin (development-friendly, restrict in production)
+            .SetIsOriginAllowed(origin => CorsOriginPolicy.IsAllowed(origin, corsBaseDomain, corsAllowLocalhost))
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials(); // Required for cookies/auth to work cross-origin
