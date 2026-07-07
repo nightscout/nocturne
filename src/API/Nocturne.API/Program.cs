@@ -286,8 +286,16 @@ builder.Services.AddNocturneAuthorization();
 // ({slug}.{BaseDomain}) or public shares ({token}.share.{BaseDomain}). Instead validate the
 // origin against the configured base domain: apex + any subdomain are allowed, loopback
 // origins only in development. See CorsOriginPolicy.
-var corsBaseDomain = builder.Configuration[BaseDomainOptions.ConfigKey] ?? "";
+// Normalize the configured base domain once (strip scheme/path/port/stray dots) so
+// misformatted values like "https://nocturne.run" or "nocturne.run/" still resolve to
+// a matchable host instead of silently disabling cross-origin CORS. See CorsOriginPolicy.
+var rawCorsBaseDomain = builder.Configuration[BaseDomainOptions.ConfigKey] ?? "";
+var corsBaseDomain = CorsOriginPolicy.NormalizeBaseHost(rawCorsBaseDomain);
 var corsAllowLocalhost = builder.Environment.IsDevelopment();
+// A credentialed CORS base must be a real multi-label domain; a bare suffix ("com") or
+// single-label/empty value would either widen the allow-list or disable it. The predicate
+// already fails closed on such values — validity is surfaced at startup below.
+var corsBaseDomainIsValid = corsBaseDomain.Length > 0 && corsBaseDomain.Contains('.');
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -311,6 +319,29 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 var app = builder.Build();
+
+// Surface the effective credentialed-CORS base domain so operators can see what's active.
+// An invalid base (bare suffix, single-label, or empty) fails closed: cross-origin CORS is
+// disabled and only same-origin (plus loopback in Development) requests are admitted.
+if (corsBaseDomainIsValid)
+{
+    app.Logger.LogInformation("CORS base domain: {CorsBaseDomain}", corsBaseDomain);
+}
+else if (app.Environment.IsDevelopment())
+{
+    app.Logger.LogInformation(
+        "CORS base domain '{RawCorsBaseDomain}' is not a multi-label host; cross-origin CORS is "
+        + "disabled (loopback origins are still allowed in Development).",
+        rawCorsBaseDomain);
+}
+else
+{
+    app.Logger.LogError(
+        "CORS base domain '{RawCorsBaseDomain}' is not a valid multi-label host ({ConfigKey}). "
+        + "Cross-origin CORS is disabled (fail closed) — tenant and share subdomains will be "
+        + "rejected until this is corrected.",
+        rawCorsBaseDomain, BaseDomainOptions.ConfigKey);
+}
 
 // Configure middleware pipeline
 app.UseExceptionHandler();

@@ -54,7 +54,7 @@ public sealed class CorsOriginPolicyTests
     public void Ignores_a_port_on_the_configured_base_domain()
     {
         // BaseDomain carries a port for local URL construction; the origin host never does.
-        CorsOriginPolicy.IsAllowed("http://acme.localhost", "localhost:1612", allowLocalhost: false)
+        CorsOriginPolicy.IsAllowed("https://acme.nocturne.run", "nocturne.run:1612", allowLocalhost: false)
             .Should().BeTrue();
     }
 
@@ -62,6 +62,68 @@ public sealed class CorsOriginPolicyTests
     public void Rejects_everything_when_the_base_domain_is_empty_and_localhost_is_disallowed()
     {
         CorsOriginPolicy.IsAllowed("https://acme.nocturne.run", "", allowLocalhost: false)
+            .Should().BeFalse();
+    }
+
+    [Theory]
+    // Userinfo spoof: the parsed host is evil.com and userinfo is present — reject.
+    [InlineData("http://nocturne.run@evil.com")]
+    // Backslash authority: some parsers fold "\" to "/", stranding a path — reject.
+    [InlineData("http://nocturne.run\\@evil.com")]
+    // Fragment/query smuggling: the base domain only appears after "#"/"?" — reject.
+    [InlineData("https://evil.com#.nocturne.run")]
+    [InlineData("https://evil.com?.nocturne.run")]
+    [InlineData("https://evil.com/.nocturne.run")]
+    // Non-http(s) schemes are never real CORS origins — reject.
+    [InlineData("file:///etc/passwd")]
+    [InlineData("data:text/html;base64,PHNjcmlwdD4=")]
+    [InlineData("blob:https://acme.nocturne.run/1234")]
+    public void Rejects_spoofed_or_non_origin_urls(string origin)
+    {
+        CorsOriginPolicy.IsAllowed(origin, BaseDomain, allowLocalhost: false).Should().BeFalse();
+    }
+
+    [Theory]
+    // A trailing dot on the origin host is a distinct (absolute-DNS) label and does not
+    // match the configured base domain. Documenting current behavior: these are rejected.
+    [InlineData("https://app.nocturne.run.")]   // trailing-dot subdomain
+    [InlineData("https://nocturne.run.")]        // trailing-dot apex
+    public void Rejects_trailing_dot_origins(string origin)
+    {
+        CorsOriginPolicy.IsAllowed(origin, BaseDomain, allowLocalhost: false).Should().BeFalse();
+    }
+
+    [Theory]
+    // A bare public suffix (or any single-label / empty value) must NOT be usable as a
+    // credentialed-CORS base: it would otherwise trust every "*.com" origin.
+    [InlineData("https://evil.com", "com")]
+    [InlineData("https://anything.com", "com")]
+    [InlineData("https://evil.org", "org")]
+    [InlineData("https://acme.nocturne.run", "localhost")]  // single-label, no loopback in prod
+    public void Rejects_when_the_base_domain_is_a_bare_suffix_or_single_label(string origin, string baseDomain)
+    {
+        CorsOriginPolicy.IsAllowed(origin, baseDomain, allowLocalhost: false).Should().BeFalse();
+    }
+
+    [Theory]
+    // Misformatted but well-intentioned base-domain values must normalize to the real host
+    // and still admit genuine subdomains (not silently disable cross-origin CORS).
+    [InlineData("https://nocturne.run")]   // leading scheme
+    [InlineData("http://nocturne.run")]    // leading scheme (http)
+    [InlineData("nocturne.run/")]          // trailing slash
+    [InlineData("nocturne.run/path")]      // stray path
+    [InlineData(".nocturne.run")]          // leading dot
+    [InlineData("nocturne.run.")]          // trailing dot
+    [InlineData("*.nocturne.run")]         // wildcard prefix
+    [InlineData("nocturne.run:1612")]      // port
+    public void Normalizes_misformatted_base_domains_and_admits_real_subdomains(string baseDomain)
+    {
+        CorsOriginPolicy.IsAllowed("https://acme.nocturne.run", baseDomain, allowLocalhost: false)
+            .Should().BeTrue();
+        CorsOriginPolicy.IsAllowed("https://nocturne.run", baseDomain, allowLocalhost: false)
+            .Should().BeTrue();
+        // Look-alikes are still rejected after normalization.
+        CorsOriginPolicy.IsAllowed("https://evilnocturne.run", baseDomain, allowLocalhost: false)
             .Should().BeFalse();
     }
 }
