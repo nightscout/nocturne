@@ -46,6 +46,16 @@ public class PostgreSqlConfiguration
     public int CommandTimeoutSeconds { get; set; } = 30;
 
     /// <summary>
+    /// Server-side hard cap on how long any single statement may run, in seconds, applied as a
+    /// PostgreSQL <c>statement_timeout</c> on the runtime connection pool. Backstops the
+    /// client-side <see cref="CommandTimeoutSeconds"/>: a slow or expensive query is reaped by
+    /// the server itself rather than merely abandoned client-side. Not applied to the migrator
+    /// pool, whose DDL (e.g. a large index build) may legitimately run for minutes. A
+    /// non-positive value leaves the server default (no cap).
+    /// </summary>
+    public int StatementTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>
     /// Maximum number of physical connections in the Npgsql connection pool.
     /// Increase alongside Postgres max_connections when deploying at high concurrency.
     /// </summary>

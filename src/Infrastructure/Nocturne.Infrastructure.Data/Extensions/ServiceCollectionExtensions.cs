@@ -62,6 +62,9 @@ public static class ServiceCollectionExtensions
             postgreSqlConfig.ConnectionString
         );
         dataSourceBuilder.ConnectionStringBuilder.MaxPoolSize = postgreSqlConfig.MaxPoolSize;
+        PostgresRuntimeOptions.ApplyStatementTimeout(
+            dataSourceBuilder.ConnectionStringBuilder,
+            postgreSqlConfig.StatementTimeoutSeconds);
         var dataSource = dataSourceBuilder.Build();
         services.AddSingleton(dataSource);
 
@@ -220,6 +223,7 @@ public static class ServiceCollectionExtensions
             options.MaxRetryCount = config.MaxRetryCount;
             options.MaxRetryDelaySeconds = config.MaxRetryDelaySeconds;
             options.CommandTimeoutSeconds = config.CommandTimeoutSeconds;
+            options.StatementTimeoutSeconds = config.StatementTimeoutSeconds;
             options.MaxPoolSize = config.MaxPoolSize;
         });
 
@@ -233,6 +237,9 @@ public static class ServiceCollectionExtensions
         // Register NpgsqlDataSource as a singleton - this manages the connection pool
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(config.ConnectionString);
         dataSourceBuilder.ConnectionStringBuilder.MaxPoolSize = config.MaxPoolSize;
+        PostgresRuntimeOptions.ApplyStatementTimeout(
+            dataSourceBuilder.ConnectionStringBuilder,
+            config.StatementTimeoutSeconds);
         var dataSource = dataSourceBuilder.Build();
         services.AddSingleton(dataSource);
 
