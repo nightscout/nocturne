@@ -446,14 +446,31 @@ public partial class TenantService : ITenantService
                 // Seed bundled known OAuth clients (Trio, xDrip+, etc.)
                 await SeedKnownOAuthClientsAsync(context, tenant.Id, ct);
 
-                // 2. Find or create subject by email
-                var subjectId = credential?.SubjectId ?? oidcIdentity?.SubjectId ?? Guid.CreateVersion7();
-                var subject = await context.Subjects.FirstOrDefaultAsync(s => s.Email == ownerEmail, ct);
-                if (subject == null)
+                // 2. Resolve the owner subject.
+                // An OAuth account maps to a single subject reused across tenants, so if
+                // this OIDC identity is already linked (a prior signup with the same
+                // account), that subject IS the owner — even when the checkout email
+                // differs from the OAuth email (e.g. a differing Apple Pay email).
+                // Resolving by email first would create a fresh, credential-less owner
+                // and leave the tenant inaccessible. Fall back to an existing subject
+                // with the owner email, then to a new subject.
+                var normalizedIssuer = oidcIdentity?.Issuer.TrimEnd('/');
+                var existingIdentity = oidcIdentity is null
+                    ? null
+                    : await context.SubjectOidcIdentities.FirstOrDefaultAsync(x =>
+                        x.OidcSubjectId == oidcIdentity.OidcSubjectId
+                        && x.Issuer == normalizedIssuer, ct);
+
+                var identitySubject = existingIdentity is null
+                    ? null
+                    : await context.Subjects.FirstOrDefaultAsync(s => s.Id == existingIdentity.SubjectId, ct);
+                var emailSubject = await context.Subjects.FirstOrDefaultAsync(s => s.Email == ownerEmail, ct);
+                var subject = ChooseOwnerSubject(identitySubject, emailSubject);
+                if (subject is null)
                 {
                     subject = new SubjectEntity
                     {
-                        Id = subjectId,
+                        Id = credential?.SubjectId ?? oidcIdentity?.SubjectId ?? Guid.CreateVersion7(),
                         Name = ownerUsername,
                         Username = ownerUsername.ToLowerInvariant(),
                         Email = ownerEmail,
@@ -480,51 +497,42 @@ public partial class TenantService : ITenantService
                 }
                 else if (oidcIdentity is not null)
                 {
-                    // Normalize issuer URL to match OidcProviderService storage format
-                    var normalizedIssuer = oidcIdentity.Issuer.TrimEnd('/');
-
-                    // Ensure the OIDC provider row exists (config-managed providers
-                    // use deterministic GUIDs but may not have DB rows yet).
-                    var provider = await context.OidcProviders
-                        .FirstOrDefaultAsync(p => p.IssuerUrl == normalizedIssuer, ct);
-
-                    if (provider == null)
-                    {
-                        provider = new OidcProviderEntity
-                        {
-                            Id = OidcProviderService.CreateDeterministicGuid(normalizedIssuer),
-                            Name = oidcIdentity.Provider,
-                            IssuerUrl = normalizedIssuer,
-                            ClientId = string.Empty, // Populated by config on next startup
-                            IsEnabled = true,
-                        };
-                        context.OidcProviders.Add(provider);
-                        await context.SaveChangesAsync(ct);
-                    }
-
-                    // Re-use existing OIDC identity if one already exists for this
-                    // (oidc_subject_id, issuer) pair — the subject may have signed up
-                    // for a previous tenant with the same OAuth account.
-                    var existingIdentity = await context.SubjectOidcIdentities
-                        .FirstOrDefaultAsync(x =>
-                            x.OidcSubjectId == oidcIdentity.OidcSubjectId
-                            && x.Issuer == normalizedIssuer, ct);
-
                     if (existingIdentity is null)
                     {
+                        // Ensure the OIDC provider row exists (config-managed providers
+                        // use deterministic GUIDs but may not have DB rows yet).
+                        var provider = await context.OidcProviders
+                            .FirstOrDefaultAsync(p => p.IssuerUrl == normalizedIssuer, ct);
+
+                        if (provider == null)
+                        {
+                            provider = new OidcProviderEntity
+                            {
+                                Id = OidcProviderService.CreateDeterministicGuid(normalizedIssuer!),
+                                Name = oidcIdentity.Provider,
+                                IssuerUrl = normalizedIssuer!,
+                                ClientId = string.Empty, // Populated by config on next startup
+                                IsEnabled = true,
+                            };
+                            context.OidcProviders.Add(provider);
+                            await context.SaveChangesAsync(ct);
+                        }
+
                         context.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
                         {
                             Id = Guid.CreateVersion7(),
                             SubjectId = subject.Id,
                             ProviderId = provider.Id,
                             OidcSubjectId = oidcIdentity.OidcSubjectId,
-                            Issuer = normalizedIssuer,
+                            Issuer = normalizedIssuer!,
                             Email = oidcIdentity.Email,
                             LinkedAt = DateTime.UtcNow,
                         });
                     }
                     else
                     {
+                        // Identity already links to the owner subject resolved above;
+                        // just record the reuse.
                         existingIdentity.LastUsedAt = DateTime.UtcNow;
                     }
                 }
@@ -596,6 +604,21 @@ public partial class TenantService : ITenantService
     /// the context's TenantId (so the connection interceptor fires on new
     /// connections) and the PostgreSQL GUC on the current connection.
     /// </summary>
+    /// <summary>
+    /// Chooses the owner subject for a provision from the candidates already resolved
+    /// from the database. An OAuth account maps to a single subject reused across
+    /// tenants, so a subject that already owns the incoming OIDC identity wins over one
+    /// merely matching the owner email — the two can differ (e.g. the checkout uses an
+    /// Apple Pay email while the OAuth account uses another). Preferring the email match
+    /// here would make the tenant owner a fresh, credential-less subject and lock the
+    /// user out of their own instance. Returns null when neither exists, i.e. the caller
+    /// must create a new subject.
+    /// </summary>
+    public static SubjectEntity? ChooseOwnerSubject(
+        SubjectEntity? existingOidcIdentitySubject,
+        SubjectEntity? existingEmailSubject)
+        => existingOidcIdentitySubject ?? existingEmailSubject;
+
     private static async Task SetTenantGuc(NocturneDbContext context, Guid tenantId)
     {
         context.TenantId = tenantId;
