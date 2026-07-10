@@ -208,38 +208,40 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
             newSubject
         );
 
-        if (createResponse.IsSuccessStatusCode)
-        {
-            var subject = await createResponse.Content.ReadFromJsonAsync<SubjectResponse>();
+        // Every step asserts: silent early-outs previously masked a broken exchange
+        // (the anonymous-exchange 401 fixed in #473, and the exchanged JWT failing all
+        // subsequent requests through LegacyJwtHandler claim mapping, #474).
+        Assert.True(
+            createResponse.IsSuccessStatusCode,
+            $"Subject creation failed: {createResponse.StatusCode}"
+        );
+        var subject = await createResponse.Content.ReadFromJsonAsync<SubjectResponse>();
+        Assert.NotNull(subject?.AccessToken);
 
-            if (subject?.AccessToken != null)
-            {
-                // Exchange access token for JWT
-                var exchangeClient = ApiClient;
-                var exchangeResponse = await exchangeClient.GetAsync(
-                    $"/api/v2/authorization/request/{subject.AccessToken}"
-                );
+        // Exchange access token for JWT anonymously — the access token in the URL is
+        // the caller's only credential (the NSClientV3/AAPS bootstrap).
+        var exchangeClient = ApiClient;
+        var exchangeResponse = await exchangeClient.GetAsync(
+            $"/api/v2/authorization/request/{subject!.AccessToken}"
+        );
 
-                if (exchangeResponse.IsSuccessStatusCode)
-                {
-                    var tokenResponse =
-                        await exchangeResponse.Content.ReadFromJsonAsync<TokenExchangeResponse>();
+        Assert.True(
+            exchangeResponse.IsSuccessStatusCode,
+            $"Token exchange failed: {exchangeResponse.StatusCode}"
+        );
+        var tokenResponse =
+            await exchangeResponse.Content.ReadFromJsonAsync<TokenExchangeResponse>();
+        Assert.NotNull(tokenResponse?.Token);
 
-                    if (tokenResponse?.Token != null)
-                    {
-                        // Use JWT for authentication
-                        var jwtClient = ApiClient;
-                        jwtClient.DefaultRequestHeaders.Authorization =
-                            new AuthenticationHeaderValue("Bearer", tokenResponse.Token);
+        // Use JWT for authentication
+        var jwtClient = ApiClient;
+        jwtClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", tokenResponse!.Token);
 
-                        var response = await jwtClient.GetAsync("/api/v1/entries/current");
+        var response = await jwtClient.GetAsync("/api/v1/entries/current");
 
-                        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
-                        Output.WriteLine($"JWT auth returned: {response.StatusCode}");
-                    }
-                }
-            }
-        }
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Output.WriteLine($"JWT auth returned: {response.StatusCode}");
     }
 
     [Fact]

@@ -1,3 +1,6 @@
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -6,6 +9,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
 using AuthSubjectModel = Nocturne.Core.Models.Authorization.Subject;
 using AuthRoleModel = Nocturne.Core.Models.Authorization.Role;
 using LegacySubject = Nocturne.Core.Models.Subject;
@@ -17,13 +21,15 @@ namespace Nocturne.API.Tests.Services.Identity;
 /// <summary>
 /// Tests for authorization service CRUD operations
 /// </summary>
-public class AuthorizationServiceCrudTests
+public class AuthorizationServiceCrudTests : IDisposable
 {
     private readonly Mock<IConfiguration> _mockConfiguration;
     private readonly Mock<ILogger<AuthorizationService>> _mockLogger;
     private readonly Mock<ISubjectService> _mockSubjectService;
     private readonly Mock<IRoleService> _mockRoleService;
     private readonly Mock<IJwtService> _mockJwtService;
+    private readonly SqliteConnection _connection;
+    private readonly NocturneDbContext _dbContext;
     private readonly AuthorizationService _authorizationService;
 
     public AuthorizationServiceCrudTests()
@@ -33,6 +39,15 @@ public class AuthorizationServiceCrudTests
         _mockSubjectService = new Mock<ISubjectService>();
         _mockRoleService = new Mock<IRoleService>();
         _mockJwtService = new Mock<IJwtService>();
+
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+        var dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseSqlite(_connection)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+        _dbContext = new NocturneDbContext(dbOptions);
+        _dbContext.Database.EnsureCreated();
 
         // Setup configuration
         _mockConfiguration
@@ -44,8 +59,15 @@ public class AuthorizationServiceCrudTests
             _mockLogger.Object,
             _mockSubjectService.Object,
             _mockRoleService.Object,
-            _mockJwtService.Object
+            _mockJwtService.Object,
+            _dbContext
         );
+    }
+
+    public void Dispose()
+    {
+        _dbContext.Dispose();
+        _connection.Dispose();
     }
 
     #region Subject CRUD Tests

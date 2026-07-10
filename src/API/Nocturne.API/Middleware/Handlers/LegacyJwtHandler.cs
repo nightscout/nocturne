@@ -1,21 +1,27 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Text;
-using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.API.Middleware.Handlers;
 
 /// <summary>
 /// Authentication handler for legacy Nightscout JWT tokens.
 /// These are self-issued JWTs exchanged from access tokens via
-/// /api/v2/authorization/request/:accessToken
+/// /api/v2/authorization/request/:accessToken. Runs after
+/// <see cref="OAuthAccessTokenHandler"/>, so it only sees JWTs without OAuth
+/// claims (scope/client_id).
 /// </summary>
+/// <remarks>
+/// Validation and claim extraction are delegated to <see cref="IJwtService"/>.
+/// Claim lookups must not use literal JWT claim names: JwtSecurityTokenHandler's
+/// inbound claim-type map rewrites <c>sub</c> to <c>ClaimTypes.NameIdentifier</c>
+/// and <c>role</c> to <c>ClaimTypes.Role</c> during validation, and permissions
+/// are emitted as repeated singular <c>permission</c> claims. IJwtService owns
+/// that mapping in one place.
+/// </remarks>
 public class LegacyJwtHandler : IAuthHandler
 {
     /// <summary>
-    /// Handler priority (200 - after OIDC, before access token)
+    /// Handler priority (200 - after OIDC and OAuth access tokens)
     /// </summary>
     public int Priority => 200;
 
@@ -24,47 +30,21 @@ public class LegacyJwtHandler : IAuthHandler
     /// </summary>
     public string Name => "LegacyJwtHandler";
 
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<LegacyJwtHandler> _logger;
-    private readonly TokenValidationParameters? _validationParameters;
 
     /// <summary>
     /// Creates a new instance of LegacyJwtHandler
     /// </summary>
-    public LegacyJwtHandler(IOptions<JwtOptions> jwtOptions, ILogger<LegacyJwtHandler> logger)
+    public LegacyJwtHandler(IServiceScopeFactory scopeFactory, ILogger<LegacyJwtHandler> logger)
     {
+        _scopeFactory = scopeFactory;
         _logger = logger;
-
-        var secretKey = jwtOptions.Value.SecretKey;
-        if (!string.IsNullOrEmpty(secretKey))
-        {
-            var jwtKey = Encoding.UTF8.GetBytes(secretKey);
-            _validationParameters = new TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(jwtKey),
-                ValidateIssuer = false,
-                ValidateAudience = false,
-                ValidateLifetime = true,
-                ClockSkew = TimeSpan.FromMinutes(1),
-            };
-        }
-        else
-        {
-            _logger.LogWarning(
-                "JWT secret key not configured - legacy JWT authentication will be disabled"
-            );
-        }
     }
 
     /// <inheritdoc />
     public Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
-        // If no JWT secret is configured, skip this handler
-        if (_validationParameters is null)
-        {
-            return Task.FromResult(AuthResult.Skip());
-        }
-
         // Check for Bearer token in Authorization header
         var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
 
@@ -86,106 +66,54 @@ public class LegacyJwtHandler : IAuthHandler
             return Task.FromResult(AuthResult.Skip());
         }
 
-        try
+        using var scope = _scopeFactory.CreateScope();
+        var jwtService = scope.ServiceProvider.GetRequiredService<IJwtService>();
+
+        var validationResult = jwtService.ValidateAccessToken(token);
+
+        if (!validationResult.IsValid || validationResult.Claims is null)
         {
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var principal = tokenHandler.ValidateToken(
-                token,
-                _validationParameters,
-                out var validatedToken
-            );
-
-            if (validatedToken is not JwtSecurityToken jwtToken)
-            {
-                return Task.FromResult(AuthResult.Failure("Invalid JWT token format"));
-            }
-
-            // Extract claims
-            var subjectId = principal.FindFirst("sub")?.Value;
-            var subjectName = principal.FindFirst("name")?.Value ?? subjectId;
-            var permissionsClaim = principal.FindFirst("permissions")?.Value;
-            var rolesClaim = principal.FindFirst("roles")?.Value;
-
-            if (string.IsNullOrEmpty(subjectId))
-            {
-                _logger.LogWarning("JWT token missing 'sub' claim");
-                return Task.FromResult(AuthResult.Failure("JWT token missing subject claim"));
-            }
-
-            // Parse permissions (comma-separated or JSON array)
-            var permissions = ParseListClaim(permissionsClaim);
-            var roles = ParseListClaim(rolesClaim);
-
-            // Extract OAuth scopes if present (space-delimited per RFC 6749)
-            var scopeClaim = principal.FindFirst("scope")?.Value;
-            var scopes = string.IsNullOrEmpty(scopeClaim)
-                ? new List<string>()
-                : scopeClaim
-                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                    .ToList();
-
-            // Create auth context
-            var authContext = new AuthContext
-            {
-                IsAuthenticated = true,
-                AuthType = AuthType.LegacyJwt,
-                SubjectId = Guid.TryParse(subjectId, out var guid) ? guid : null,
-                SubjectName = subjectName,
-                Permissions = permissions,
-                Roles = roles,
-                Scopes = scopes,
-                RawToken = token,
-                ExpiresAt = jwtToken.ValidTo,
-            };
-
             _logger.LogDebug(
-                "Legacy JWT authentication successful for subject {SubjectName}",
-                subjectName
+                "Legacy JWT validation failed: {Error}",
+                validationResult.Error
             );
-            return Task.FromResult(AuthResult.Success(authContext));
+            return Task.FromResult(
+                AuthResult.Failure(validationResult.Error ?? "Invalid token")
+            );
         }
-        catch (SecurityTokenExpiredException)
-        {
-            _logger.LogDebug("JWT token has expired");
-            return Task.FromResult(AuthResult.Failure("Token has expired"));
-        }
-        catch (SecurityTokenValidationException ex)
-        {
-            _logger.LogWarning(ex, "JWT token validation failed");
-            return Task.FromResult(AuthResult.Failure("Invalid token"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error validating JWT token");
-            return Task.FromResult(AuthResult.Failure("Token validation error"));
-        }
-    }
 
-    /// <summary>
-    /// Parse a claim that may be comma-separated or JSON array format
-    /// </summary>
-    private static List<string> ParseListClaim(string? claimValue)
-    {
-        if (string.IsNullOrEmpty(claimValue))
-            return [];
+        var claims = validationResult.Claims;
 
-        // Try JSON array format first
-        if (claimValue.StartsWith('['))
+        // Enforce tenant pin: reject tokens issued for a different tenant
+        if (claims.TenantId.HasValue)
         {
-            try
+            var tenantCtx = context.Items["TenantContext"] as TenantContext;
+            if (tenantCtx is null || tenantCtx.TenantId != claims.TenantId.Value)
             {
-                var parsed = System.Text.Json.JsonSerializer.Deserialize<List<string>>(claimValue);
-                return parsed ?? [];
-            }
-            catch
-            {
-                // Fall through to comma-separated parsing
+                _logger.LogWarning(
+                    "Legacy JWT tenant mismatch: token tenant {TokenTenant}, request tenant {RequestTenant}",
+                    claims.TenantId, tenantCtx?.TenantId);
+                return Task.FromResult(AuthResult.Failure("Token is not valid for this tenant"));
             }
         }
 
-        // Comma-separated format
-        return claimValue
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList();
+        var authContext = new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.LegacyJwt,
+            SubjectId = claims.SubjectId,
+            SubjectName = claims.Name ?? claims.SubjectId.ToString(),
+            Permissions = claims.Permissions,
+            Roles = claims.Roles,
+            Scopes = claims.Scopes,
+            RawToken = token,
+            ExpiresAt = claims.ExpiresAt,
+        };
+
+        _logger.LogDebug(
+            "Legacy JWT authentication successful for subject {SubjectName}",
+            authContext.SubjectName
+        );
+        return Task.FromResult(AuthResult.Success(authContext));
     }
 }

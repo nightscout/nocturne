@@ -46,6 +46,10 @@ public class AuthorizationController : ControllerBase
     /// class-level <c>[Authorize]</c> would otherwise reject the request with 401 before the
     /// method can validate the token. The action validates the token itself and returns 401
     /// when it is missing or invalid.
+    ///
+    /// Accepts both legacy subject access tokens (<c>name-hexstring</c>, resolved against
+    /// subjects) and <c>noc_</c> direct-grant tokens (resolved against oauth_grants; the
+    /// minted JWT carries the grant's scopes and tenant pin).
     /// </remarks>
     [AllowAnonymous]
     [HttpGet("request/{accessToken}")]
