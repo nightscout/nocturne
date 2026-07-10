@@ -20,15 +20,18 @@ public sealed class ShareTokenCacheService
 {
     private readonly IMemoryCache _cache;
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
+    private readonly ILogger<ShareTokenCacheService> _logger;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(2);
 
     public ShareTokenCacheService(
         IMemoryCache cache,
-        IDbContextFactory<NocturneDbContext> dbContextFactory)
+        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        ILogger<ShareTokenCacheService> logger)
     {
         _cache = cache;
         _dbContextFactory = dbContextFactory;
+        _logger = logger;
     }
 
     /// <summary>
@@ -55,9 +58,21 @@ public sealed class ShareTokenCacheService
 
         // Stamp last-accessed on the database-hit path only: successful resolutions are
         // cached for CacheTtl, so the write is debounced to at most once per TTL per token.
-        await dbContext.Tenants
-            .Where(t => t.Id == tenant.Id)
-            .ExecuteUpdateAsync(s => s.SetProperty(t => t.ShareLastAccessedAt, DateTime.UtcNow));
+        // Skipped for inactive tenants (the middleware rejects those requests, so nothing was
+        // accessed), and non-fatal: the stamp is bookkeeping and must not fail the resolve.
+        if (tenant.IsActive)
+        {
+            try
+            {
+                await dbContext.Tenants
+                    .Where(t => t.Id == tenant.Id)
+                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.ShareLastAccessedAt, DateTime.UtcNow));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to stamp share_last_accessed_at for tenant {TenantId}", tenant.Id);
+            }
+        }
 
         var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo);
         _cache.Set(cacheKey, tenantContext, CacheTtl);

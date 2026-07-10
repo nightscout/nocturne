@@ -89,7 +89,7 @@ public static class ShareDataCategories
             ["heart_rates"] = "timestamp",
             ["step_counts"] = "timestamp",
             ["foods"] = null,
-            ["connector_food_entries"] = null,
+            ["connector_food_entries"] = "consumed_at",
         };
 
     private static readonly IReadOnlyDictionary<string, string> TableToScope = BuildTableToScope();

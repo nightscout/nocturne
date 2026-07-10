@@ -46,6 +46,7 @@ public sealed class TenantResolutionMiddlewareShareTokenTests : IDisposable
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
         services.AddScoped<ICategoryReadContext, CategoryReadContext>();
         services.AddMemoryCache();
+        services.AddLogging();
         services.AddSingleton<ShareTokenCacheService>();
         _root = services.BuildServiceProvider();
 

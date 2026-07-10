@@ -13,6 +13,7 @@ using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
@@ -110,6 +111,73 @@ public sealed class AuthenticationMiddlewareShareAccessTests
 
         var csv = ctx.RequestServices.GetRequiredService<ICategoryReadContext>().VisibleCategoriesCsv;
         csv.Should().Contain("glucose.read").And.Contain("treatments.read");
+    }
+
+    [Fact]
+    public async Task Share_access_never_grants_beyond_the_shareable_read_scopes()
+    {
+        // The Clinician role also carries therapy.read and alerts.read; a superuser or
+        // readwrite grant on the Public membership is possible via the member-permissions
+        // API. None of that may reach an anonymous visitor: the share host resolves to at
+        // most the shareable read scopes.
+        SetPublicDirectPermissions(["*"]);
+
+        var ctx = ContextFor(shareAccess: true);
+
+        await Build().InvokeAsync(ctx);
+
+        var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
+        scopes.Should().NotBeNull();
+        scopes.Should().BeSubsetOf(TenantPermissions.PublicShareScopes,
+            "a superuser grant on the Public membership must degrade to public read access");
+        scopes.Should().Contain(OAuthScopes.GlucoseRead);
+    }
+
+    [Fact]
+    public async Task Share_with_only_heartrate_and_stepcount_still_carries_a_nonempty_trie()
+    {
+        // heartrate.read/stepcount.read have no legacy api:* equivalent, so a trie derived
+        // purely from ScopeTranslator.ToPermissions would be empty and the fallback
+        // HasPermissions policy would 401 the whole share despite valid grants.
+        SetPublicDirectPermissions([OAuthScopes.HeartRateRead, OAuthScopes.StepCountRead]);
+
+        var ctx = ContextFor(shareAccess: true);
+
+        await Build().InvokeAsync(ctx);
+
+        var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
+        scopes.Should().BeEquivalentTo([OAuthScopes.HeartRateRead, OAuthScopes.StepCountRead]);
+        var trie = ctx.Items["PermissionTrie"] as PermissionTrie;
+        trie!.IsEmpty.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Share_access_accepts_legacy_trie_vocabulary_grants()
+    {
+        // Pre-scope-era Public memberships (and anything written through the unvalidated
+        // member-permissions API) may carry legacy api:* strings; they resolved before the
+        // scope-vocabulary fix and must keep resolving after it.
+        SetPublicDirectPermissions(["api:entries:read"]);
+
+        var ctx = ContextFor(shareAccess: true);
+
+        await Build().InvokeAsync(ctx);
+
+        var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
+        scopes.Should().Contain(OAuthScopes.GlucoseRead);
+        ctx.RequestServices.GetRequiredService<ICategoryReadContext>().VisibleCategoriesCsv
+            .Should().Contain("glucose.read");
+    }
+
+    private void SetPublicDirectPermissions(List<string> permissions)
+    {
+        using var db = TestDbContextFactory.CreateInMemoryContext(_dbName);
+        var member = db.TenantMembers
+            .Include(m => m.MemberRoles)
+            .Single(m => m.SubjectId == TestDatabaseSeeder.PublicSubjectId);
+        db.TenantMemberRoles.RemoveRange(member.MemberRoles);
+        member.DirectPermissions = permissions;
+        db.SaveChanges();
     }
 
     [Fact]

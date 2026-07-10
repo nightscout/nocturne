@@ -78,6 +78,7 @@ public class ShareDataCategoriesTests
     {
         ShareDataCategories.RecencyColumnFor("boluses").Should().Be("timestamp");
         ShareDataCategories.RecencyColumnFor("temp_basals").Should().Be("start_timestamp");
+        ShareDataCategories.RecencyColumnFor("connector_food_entries").Should().Be("consumed_at");
     }
 
     [Fact]

@@ -232,17 +232,28 @@ public class AuthenticationMiddleware
 
                 // The Public subject's effective permissions are stored in the OAuth scope
                 // vocabulary (glucose.read, ...) — the same vocabulary member grants use — so
-                // normalize them the way MemberScopeMiddleware does for members.
-                // ScopeTranslator.FromPermissions translates legacy api:* trie strings and
-                // silently drops scope-shaped input, which would empty the grant.
-                var publicScopes = OAuthScopes.Normalize(publicAccess.EffectivePermissions);
-                context.Items["GrantedScopes"] = publicScopes;
+                // normalize them the way MemberScopeMiddleware does for members; the
+                // FromPermissions union also accepts legacy api:* trie strings on old rows.
+                // Then narrow to the shareable read scopes: the share host can never resolve
+                // to more than public read access, so a broader grant on the Public membership
+                // (readwrite, superuser) degrades to its read counterpart via SatisfiesScope.
+                var resolvedGrants = OAuthScopes.Normalize(publicAccess.EffectivePermissions)
+                    .Union(ScopeTranslator.FromPermissions(publicAccess.EffectivePermissions))
+                    .ToHashSet();
+                var publicScopes = TenantPermissions.PublicShareScopes
+                    .Where(scope => OAuthScopes.SatisfiesScope(resolvedGrants, scope))
+                    .ToHashSet();
+                context.Items["GrantedScopes"] = (IReadOnlySet<string>)publicScopes;
 
                 // Legacy (HasPermissions-gated) endpoints check the trie, so derive it from the
-                // normalized scopes; a share that resolves to zero scopes gets an empty trie and
+                // narrowed scopes; a share that resolves to zero scopes gets an empty trie and
                 // is rejected by the policy instead of passing authorization and reading nothing.
+                // The scope atoms are added alongside because heartrate.read/stepcount.read have
+                // no legacy api:* equivalent — without them a share granting only those
+                // categories would carry an empty trie and be rejected outright.
                 var publicPermissionTrie = new PermissionTrie();
                 publicPermissionTrie.Add(ScopeTranslator.ToPermissions(publicScopes));
+                publicPermissionTrie.Add(publicScopes);
                 context.Items["PermissionTrie"] = publicPermissionTrie;
 
                 // Carry the share's visible categories and history window to the DbContext

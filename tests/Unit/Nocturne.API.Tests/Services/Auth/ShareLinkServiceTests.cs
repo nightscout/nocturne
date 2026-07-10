@@ -53,7 +53,8 @@ public sealed class ShareLinkServiceTests : IDisposable
         _service = new ShareLinkService(
             _db,
             new ShareTokenGenerator(),
-            new ShareTokenCacheService(new MemoryCache(new MemoryCacheOptions()), factory.Object),
+            new ShareTokenCacheService(
+                new MemoryCache(new MemoryCacheOptions()), factory.Object, NullLogger<ShareTokenCacheService>.Instance),
             new PublicAccessCacheService(
                 new MemoryCache(new MemoryCacheOptions()), factory.Object, NullLogger<PublicAccessCacheService>.Instance),
             Options.Create(new BaseDomainOptions { BaseDomain = "nocturne.run" }));

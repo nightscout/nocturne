@@ -47,7 +47,8 @@ public sealed class ShareTokenCacheServiceTests : IDisposable
         _connection.Dispose();
     }
 
-    private ShareTokenCacheService Service() => new(_cache, _factory);
+    private ShareTokenCacheService Service() =>
+        new(_cache, _factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<ShareTokenCacheService>.Instance);
 
     [Fact]
     public async Task ResolveByTokenAsync_returns_the_owning_tenant()
@@ -89,6 +90,22 @@ public sealed class ShareTokenCacheServiceTests : IDisposable
 
         using (var db = _factory.CreateDbContext())
             db.Tenants.Single(t => t.Id == _tenantId).ShareLastAccessedAt.Should().Be(first);
+    }
+
+    [Fact]
+    public async Task ResolveByTokenAsync_does_not_stamp_an_inactive_tenant()
+    {
+        using (var db = _factory.CreateDbContext())
+        {
+            db.Tenants.Single(t => t.Id == _tenantId).IsActive = false;
+            db.SaveChanges();
+        }
+
+        await Service().ResolveByTokenAsync(Token);
+
+        using var check = _factory.CreateDbContext();
+        check.Tenants.Single(t => t.Id == _tenantId).ShareLastAccessedAt.Should().BeNull(
+            "the middleware rejects inactive-tenant share requests, so nothing was accessed");
     }
 
     [Fact]
