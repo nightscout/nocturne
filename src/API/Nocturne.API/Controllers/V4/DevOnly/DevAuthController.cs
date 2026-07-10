@@ -172,10 +172,10 @@ public class DevAuthController : ControllerBase
             tenant = tenants[0];
         }
 
-        // tenant_roles is RLS-scoped; pin the tenant before joining member roles.
-        await _db.Database.ExecuteSqlRawAsync(
-            "SELECT set_config('app.current_tenant_id', {0}, false)",
-            [tenant.Id.ToString()], ct);
+        // tenant_members/tenant_roles carry no RLS policies today, but set the
+        // context's TenantId so the connection interceptor pins the GUC on every
+        // open (a raw set_config would be reset when EF closes the connection).
+        _db.TenantId = tenant.Id;
 
         var members = await _db.TenantMembers
             .AsNoTracking()

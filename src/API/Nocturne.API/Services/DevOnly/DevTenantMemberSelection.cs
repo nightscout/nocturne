@@ -7,7 +7,7 @@ namespace Nocturne.API.Services.DevOnly;
 /// Shared member-picking rules for the dev-only endpoints: which memberships
 /// count as usable identities, and which one to act on when the caller didn't
 /// name one. Callers must have loaded Subject and MemberRoles.TenantRole
-/// navigations (with the tenant GUC pinned — tenant_roles is RLS-scoped).
+/// navigations.
 /// </summary>
 public static class DevTenantMemberSelection
 {
