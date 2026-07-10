@@ -230,18 +230,27 @@ public class AuthenticationMiddleware
                 };
                 context.Items["AuthContext"] = publicAuthContext;
 
-                var publicPermissionTrie = new PermissionTrie();
-                publicPermissionTrie.Add(publicAccess.EffectivePermissions);
-                context.Items["PermissionTrie"] = publicPermissionTrie;
-
-                var publicScopes = ScopeTranslator.FromPermissions(publicAccess.EffectivePermissions);
+                // The Public subject's effective permissions are stored in the OAuth scope
+                // vocabulary (glucose.read, ...) — the same vocabulary member grants use — so
+                // normalize them the way MemberScopeMiddleware does for members.
+                // ScopeTranslator.FromPermissions translates legacy api:* trie strings and
+                // silently drops scope-shaped input, which would empty the grant.
+                var publicScopes = OAuthScopes.Normalize(publicAccess.EffectivePermissions);
                 context.Items["GrantedScopes"] = publicScopes;
 
-                // Carry the share's visible categories to the DbContext factory for
-                // per-category RLS. Resolved here (post-auth); a share whose CSV is never
-                // set is denied all categorized data by the policy (fail-closed).
-                context.RequestServices.GetService<ICategoryReadContext>()
-                    ?.SetVisibleCategories(ShareDataCategories.ComputeVisibleCategoriesCsv(publicScopes));
+                // Legacy (HasPermissions-gated) endpoints check the trie, so derive it from the
+                // normalized scopes; a share that resolves to zero scopes gets an empty trie and
+                // is rejected by the policy instead of passing authorization and reading nothing.
+                var publicPermissionTrie = new PermissionTrie();
+                publicPermissionTrie.Add(ScopeTranslator.ToPermissions(publicScopes));
+                context.Items["PermissionTrie"] = publicPermissionTrie;
+
+                // Carry the share's visible categories and history window to the DbContext
+                // factory for the share RLS policies. Resolved here (post-auth); a share whose
+                // CSV is never set is denied all categorized data by the policy (fail-closed).
+                var categoryReadContext = context.RequestServices.GetService<ICategoryReadContext>();
+                categoryReadContext?.SetVisibleCategories(ShareDataCategories.ComputeVisibleCategoriesCsv(publicScopes));
+                categoryReadContext?.SetFullHistory(!publicAccess.LimitTo24Hours);
 
                 context.Items["AuthenticationContext"] = MapToLegacyContext(publicAuthContext);
 

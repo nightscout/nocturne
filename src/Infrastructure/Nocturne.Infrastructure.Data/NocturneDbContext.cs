@@ -55,6 +55,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public string? VisibleCategories { get; set; }
 
     /// <summary>
+    /// True when a public share may see full history instead of the last 24 hours. Set only
+    /// on the factory-created context (post-auth, alongside <see cref="VisibleCategories"/>);
+    /// carried to the <c>app.share_full_history</c> GUC. A share context that never sets it
+    /// is clamped to 24 hours (fail-closed). Meaningless for non-shares — the clamp only
+    /// applies when <c>app.is_share</c> is 'true'.
+    /// </summary>
+    public bool ShareFullHistory { get; set; }
+
+    /// <summary>
     /// Gets or sets the Foods table for food database
     /// </summary>
     public DbSet<FoodEntity> Foods { get; set; }

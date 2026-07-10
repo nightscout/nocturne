@@ -125,6 +125,40 @@ public class RlsShareCategoryTests
     }
 
     [Fact]
+    public async Task Share_WithoutFullHistory_IsClampedTo24Hours()
+    {
+        var tenant = Guid.NewGuid();
+        await SeedAsync(tenant);
+        await SeedOldGovernedRowAsync(tenant);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+
+        // No app.share_full_history set — the clamp must apply (fail-closed).
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: GovernedScope);
+        (await CountAsync(conn, GovernedTable, tenant)).Should().Be(1,
+            "a share without full history sees only rows from the last 24 hours");
+
+        await SetShareContextAsync(conn, tenant, isShare: false, visibleCategories: string.Empty);
+        (await CountAsync(conn, GovernedTable, tenant)).Should().Be(2,
+            "the owner is never clamped");
+    }
+
+    [Fact]
+    public async Task Share_WithFullHistory_SeesOldRows()
+    {
+        var tenant = Guid.NewGuid();
+        await SeedAsync(tenant);
+        await SeedOldGovernedRowAsync(tenant);
+
+        await using var conn = await _fx.OpenAppConnectionAsync();
+        await SetShareContextAsync(conn, tenant, isShare: true, visibleCategories: GovernedScope,
+            fullHistory: true);
+
+        (await CountAsync(conn, GovernedTable, tenant)).Should().Be(2,
+            "a full-history share sees rows older than 24 hours");
+    }
+
+    [Fact]
     public async Task EveryTenantScopedTable_HasCorrectRestrictiveSelectSharePolicy()
     {
         await using var conn = await _fx.OpenMigratorConnectionAsync();
@@ -160,6 +194,16 @@ public class RlsShareCategoryTests
             else
             {
                 usingExpr.Should().Contain($"'{scope}'", $"{table} must gate on its governing scope {scope}");
+                if (ShareDataCategories.RecencyColumnFor(table) is not null)
+                {
+                    usingExpr.Should().Contain("share_full_history",
+                        $"{table} is time-series data, so its policy must clamp shares without full history to 24 hours");
+                }
+                else
+                {
+                    usingExpr.Should().NotContain("share_full_history",
+                        $"{table} is deliberately unclamped (no per-row time), so its policy must not carry the clamp");
+                }
             }
         }
     }
@@ -202,6 +246,15 @@ public class RlsShareCategoryTests
             "VALUES (gen_random_uuid(), @tid, now(), 1.0, false, 'Manual', now(), now())", tenantId);
     }
 
+    private async Task SeedOldGovernedRowAsync(Guid tenantId)
+    {
+        await using var conn = await _fx.OpenMigratorConnectionAsync();
+        await SetCurrentTenantAsync(conn, tenantId);
+        await ExecuteAsync(conn,
+            $"INSERT INTO {GovernedTable} (id, tenant_id, timestamp, metric, source, sys_created_at, sys_updated_at) " +
+            "VALUES (gen_random_uuid(), @tid, now() - interval '30 hours', 0, 0, now(), now())", tenantId);
+    }
+
     private static async Task InsertTenantAsync(NpgsqlConnection conn, Guid tenantId)
     {
         await using var cmd = conn.CreateCommand();
@@ -231,16 +284,18 @@ public class RlsShareCategoryTests
     }
 
     private static async Task SetShareContextAsync(
-        NpgsqlConnection conn, Guid tenantId, bool isShare, string visibleCategories)
+        NpgsqlConnection conn, Guid tenantId, bool isShare, string visibleCategories, bool fullHistory = false)
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "SELECT set_config('app.current_tenant_id', @tid, false), " +
             "set_config('app.is_share', @share, false), " +
-            "set_config('app.visible_categories', @cats, false)";
+            "set_config('app.visible_categories', @cats, false), " +
+            "set_config('app.share_full_history', @full_history, false)";
         AddParam(cmd, "@tid", tenantId.ToString());
         AddParam(cmd, "@share", isShare ? "true" : "false");
         AddParam(cmd, "@cats", visibleCategories);
+        AddParam(cmd, "@full_history", fullHistory ? "true" : "false");
         await cmd.ExecuteNonQueryAsync();
     }
 

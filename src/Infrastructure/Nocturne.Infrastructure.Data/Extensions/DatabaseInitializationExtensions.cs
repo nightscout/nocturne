@@ -143,13 +143,14 @@ public static class DatabaseInitializationExtensions
             foreach (var table in tables)
             {
                 var governingScope = ShareDataCategories.GoverningScopeFor(table);
+                var recencyColumn = ShareDataCategories.RecencyColumnFor(table);
                 // Wrap each table's DROP+CREATE in a transaction so the "RLS enabled, no
                 // restrictive policy" state is never observable to a concurrent reader.
                 await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
                 await using (var command = connection.CreateCommand())
                 {
                     command.Transaction = transaction;
-                    command.CommandText = ShareRlsPolicy.BuildPolicySql(table, governingScope);
+                    command.CommandText = ShareRlsPolicy.BuildPolicySql(table, governingScope, recencyColumn);
                     await command.ExecuteNonQueryAsync(cancellationToken);
                 }
                 await transaction.CommitAsync(cancellationToken);

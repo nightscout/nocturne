@@ -64,6 +64,33 @@ public class ShareRlsPolicyTests
     }
 
     [Fact]
+    public void BuildPolicySql_RecencyColumn_AddsThe24HourClampBehindFullHistory()
+    {
+        var sql = ShareRlsPolicy.BuildPolicySql("boluses", OAuthScopes.TreatmentsRead, "timestamp");
+
+        sql.Should().Contain("current_setting('app.share_full_history', true) = 'true'");
+        sql.Should().Contain("\"timestamp\" >= now() - interval '24 hours'");
+        // The clamp narrows the category unlock; it must never widen the is_share gate.
+        sql.Should().Contain("current_setting('app.is_share', true) IS DISTINCT FROM 'true'");
+    }
+
+    [Fact]
+    public void BuildPolicySql_NoRecencyColumn_HasNoClamp()
+    {
+        var sql = ShareRlsPolicy.BuildPolicySql("foods", OAuthScopes.FoodRead);
+
+        sql.Should().NotContain("share_full_history");
+        sql.Should().NotContain("interval");
+    }
+
+    [Fact]
+    public void BuildPolicySql_UnsafeRecencyColumn_Throws()
+    {
+        var act = () => ShareRlsPolicy.BuildPolicySql("boluses", OAuthScopes.TreatmentsRead, "timestamp\"; DROP TABLE x");
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void TenantScopedTableNames_IncludesTenantScoped_ExcludesGlobal()
     {
         var tables = ShareRlsPolicy.TenantScopedTableNames(Model());

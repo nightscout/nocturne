@@ -158,10 +158,16 @@ see only the categories the tenant's Public subject was granted. On top of the
 **RESTRICTIVE FOR SELECT** policy (`share_category_read`) gating reads by category:
 
     USING ( current_setting('app.is_share', true) IS DISTINCT FROM 'true'
-         OR '<governing_scope>' = ANY(string_to_array(current_setting('app.visible_categories', true), ',')) )
+         OR ( '<governing_scope>' = ANY(string_to_array(current_setting('app.visible_categories', true), ','))
+              AND ( current_setting('app.share_full_history', true) = 'true'
+                    OR "<recency_column>" >= now() - interval '24 hours' ) ) )
 
-Two extra GUCs carry the request state to the connection (set by
-`TenantConnectionInterceptor` from two `NocturneDbContext` properties):
+(The 24-hour clamp appears only on tables with a recency column in
+`ShareDataCategories.RecencyColumns`; catalog tables with no per-row time, e.g.
+`foods`, carry just the category gate.)
+
+Three extra GUCs carry the request state to the connection (set by
+`TenantConnectionInterceptor` from `NocturneDbContext` properties):
 
 - **`app.is_share`** — `'true'` for a public share, else `'false'`. Known
   **pre-auth** (at tenant resolution), so it is set wherever `TenantId` is set
@@ -172,6 +178,10 @@ Two extra GUCs carry the request state to the connection (set by
   **only on the `ITenantDbContextFactory` path** (`TenantDbContextFactory.CreateAsync`).
   Share-reachable PHI reads must go through the factory; a share that reads PHI on
   a directly-injected scoped context carries no CSV and is **denied** (fail-closed).
+- **`app.share_full_history`** — `'true'` when the share's Public membership has
+  `limit_to_24_hours = false`. Same post-auth, factory-only carriage as the CSV; a
+  share connection that never sets it is **clamped to the last 24 hours** of every
+  time-series category (fail-closed).
 
 Design notes:
 

@@ -72,4 +72,42 @@ public class ShareDataCategoriesTests
         var allTables = ShareDataCategories.GovernedTables.Values.SelectMany(t => t).ToList();
         allTables.Should().OnlyHaveUniqueItems();
     }
+
+    [Fact]
+    public void RecencyColumnFor_TimeSeriesTable_ReturnsItsColumn()
+    {
+        ShareDataCategories.RecencyColumnFor("boluses").Should().Be("timestamp");
+        ShareDataCategories.RecencyColumnFor("temp_basals").Should().Be("start_timestamp");
+    }
+
+    [Fact]
+    public void RecencyColumnFor_CatalogTable_ReturnsNull()
+    {
+        // The food database is catalog data with no per-row time — deliberately unclamped.
+        ShareDataCategories.RecencyColumnFor("foods").Should().BeNull();
+    }
+
+    [Fact]
+    public void RecencyColumnFor_UngovernedTable_ReturnsNull()
+    {
+        ShareDataCategories.RecencyColumnFor("therapy_settings").Should().BeNull();
+    }
+
+    [Fact]
+    public void EveryGovernedTable_HasARecencyClassification()
+    {
+        // The type initializer enforces this too; the test states the invariant where a
+        // reviewer will see it: a governed table must decide its clamp column (or opt out
+        // with an explicit null) — it cannot be forgotten.
+        var governed = ShareDataCategories.GovernedTables.Values.SelectMany(t => t);
+        governed.Should().OnlyContain(t => ShareDataCategories.RecencyColumns.ContainsKey(t));
+    }
+
+    [Fact]
+    public void RecencyColumns_ReferenceOnlyGovernedTables()
+    {
+        var governed = ShareDataCategories.GovernedTables.Values.SelectMany(t => t).ToHashSet();
+        ShareDataCategories.RecencyColumns.Keys.Should().OnlyContain(t => governed.Contains(t),
+            "a recency entry for an ungoverned table is stale and would mislead");
+    }
 }

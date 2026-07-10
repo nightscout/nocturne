@@ -38,6 +38,7 @@ internal sealed class CarrierResettingDbContextFactory(IDbContextFactory<Nocturn
         context.AuditContext = null;
         context.IsShareContext = false;
         context.VisibleCategories = null;
+        context.ShareFullHistory = false;
         return context;
     }
 }

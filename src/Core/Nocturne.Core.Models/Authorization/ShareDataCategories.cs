@@ -61,6 +61,37 @@ public static class ShareDataCategories
             },
         };
 
+    /// <summary>
+    /// Recency column per governed table, driving the share 24-hour clamp: a share without
+    /// full history sees only rows whose recency column is within the last 24 hours. An
+    /// explicit <c>null</c> marks a table as deliberately unclamped (catalog data with no
+    /// per-row time, e.g. the food database). Every governed table must appear here — the
+    /// type initializer throws on a missing entry, so a new governed table cannot silently
+    /// skip the clamp decision.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string?> RecencyColumns =
+        new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["sensor_glucose"] = "timestamp",
+            ["bg_checks"] = "timestamp",
+            ["meter_glucose"] = "timestamp",
+            ["calibrations"] = "timestamp",
+            ["boluses"] = "timestamp",
+            ["carb_intakes"] = "timestamp",
+            ["temp_basals"] = "start_timestamp",
+            ["basal_injections"] = "timestamp",
+            ["bolus_calculations"] = "timestamp",
+            ["device_events"] = "timestamp",
+            ["device_status_extras"] = "timestamp",
+            ["pump_snapshots"] = "timestamp",
+            ["uploader_snapshots"] = "timestamp",
+            ["aps_snapshots"] = "timestamp",
+            ["heart_rates"] = "timestamp",
+            ["step_counts"] = "timestamp",
+            ["foods"] = null,
+            ["connector_food_entries"] = null,
+        };
+
     private static readonly IReadOnlyDictionary<string, string> TableToScope = BuildTableToScope();
 
     /// <summary>The governing scopes that have at least one table (the shareable, table-backed categories).</summary>
@@ -72,6 +103,13 @@ public static class ShareDataCategories
     /// </summary>
     public static string? GoverningScopeFor(string table) =>
         TableToScope.TryGetValue(table, out var scope) ? scope : null;
+
+    /// <summary>
+    /// Returns the recency column the share 24-hour clamp applies to a governed table, or
+    /// <c>null</c> when the table is not governed or is deliberately unclamped.
+    /// </summary>
+    public static string? RecencyColumnFor(string table) =>
+        RecencyColumns.TryGetValue(table, out var column) ? column : null;
 
     /// <summary>
     /// Computes the value for the <c>app.visible_categories</c> GUC carried by a
@@ -98,6 +136,12 @@ public static class ShareDataCategories
             foreach (var table in tables)
             {
                 map.Add(table, scope); // throws on a duplicate table across scopes — a map authoring error
+                if (!RecencyColumns.ContainsKey(table))
+                {
+                    throw new InvalidOperationException(
+                        $"Governed table '{table}' has no entry in {nameof(RecencyColumns)}. " +
+                        "Declare its recency column, or an explicit null to exempt it from the share 24-hour clamp.");
+                }
             }
         }
 

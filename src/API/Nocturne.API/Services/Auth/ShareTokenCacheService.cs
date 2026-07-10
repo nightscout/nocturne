@@ -53,6 +53,12 @@ public sealed class ShareTokenCacheService
         if (tenant == null)
             return null;
 
+        // Stamp last-accessed on the database-hit path only: successful resolutions are
+        // cached for CacheTtl, so the write is debounced to at most once per TTL per token.
+        await dbContext.Tenants
+            .Where(t => t.Id == tenant.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.ShareLastAccessedAt, DateTime.UtcNow));
+
         var tenantContext = new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.IsDemo);
         _cache.Set(cacheKey, tenantContext, CacheTtl);
         return tenantContext;

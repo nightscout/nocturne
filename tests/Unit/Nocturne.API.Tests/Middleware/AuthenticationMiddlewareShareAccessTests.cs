@@ -31,18 +31,19 @@ namespace Nocturne.API.Tests.Middleware;
 public sealed class AuthenticationMiddlewareShareAccessTests
 {
     private readonly PublicAccessCacheService _publicAccess;
+    private readonly string _dbName;
 
     public AuthenticationMiddlewareShareAccessTests()
     {
-        var dbName = $"share_gate_{Guid.NewGuid()}";
-        using (var seed = TestDbContextFactory.CreateInMemoryContext(dbName))
+        _dbName = $"share_gate_{Guid.NewGuid()}";
+        using (var seed = TestDbContextFactory.CreateInMemoryContext(_dbName))
         {
             TestDatabaseSeeder.Seed(seed);
         }
 
         var factory = new Mock<IDbContextFactory<NocturneDbContext>>();
         factory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(dbName));
+            .ReturnsAsync(() => TestDbContextFactory.CreateInMemoryContext(_dbName));
 
         _publicAccess = new PublicAccessCacheService(
             new MemoryCache(new MemoryCacheOptions()), factory.Object, NullLogger<PublicAccessCacheService>.Instance);
@@ -87,6 +88,55 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         // The post-auth CSV set-point ran: the share carries a (possibly empty) visible-categories
         // value, never null — null on a share would fail-open at the policy.
         ctx.RequestServices.GetRequiredService<ICategoryReadContext>().VisibleCategoriesCsv.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Share_access_resolves_scope_vocabulary_grants_into_scopes_and_categories()
+    {
+        // Regression: the Public subject's grants are stored in the OAuth scope vocabulary
+        // (glucose.read, ...), the same vocabulary member grants use. Translating them with
+        // ScopeTranslator.FromPermissions (which understands only legacy api:* trie strings)
+        // silently dropped every grant — GrantedScopes and the visible-categories CSV came out
+        // empty, and the share RLS policy denied every row: the whole share dashboard rendered
+        // empty while every request returned 200.
+        var ctx = ContextFor(shareAccess: true);
+
+        await Build().InvokeAsync(ctx);
+
+        var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
+        scopes.Should().Contain(OAuthScopes.GlucoseRead,
+            "the seeded Public membership grants glucose.read via the Clinician role");
+
+        var csv = ctx.RequestServices.GetRequiredService<ICategoryReadContext>().VisibleCategoriesCsv;
+        csv.Should().Contain("glucose.read").And.Contain("treatments.read");
+    }
+
+    [Fact]
+    public async Task Share_access_stays_clamped_to_24_hours_when_limited()
+    {
+        var ctx = ContextFor(shareAccess: true);
+
+        await Build().InvokeAsync(ctx);
+
+        ctx.RequestServices.GetRequiredService<ICategoryReadContext>().FullHistory.Should().BeFalse(
+            "the seeded Public membership has LimitTo24Hours=true");
+    }
+
+    [Fact]
+    public async Task Share_access_carries_full_history_when_not_limited()
+    {
+        using (var db = TestDbContextFactory.CreateInMemoryContext(_dbName))
+        {
+            var member = db.TenantMembers.Single(m => m.SubjectId == TestDatabaseSeeder.PublicSubjectId);
+            member.LimitTo24Hours = false;
+            db.SaveChanges();
+        }
+
+        var ctx = ContextFor(shareAccess: true);
+
+        await Build().InvokeAsync(ctx);
+
+        ctx.RequestServices.GetRequiredService<ICategoryReadContext>().FullHistory.Should().BeTrue();
     }
 
     [Fact]

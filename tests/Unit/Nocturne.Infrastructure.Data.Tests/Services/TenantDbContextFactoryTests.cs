@@ -28,11 +28,12 @@ public class TenantDbContextFactoryTests
         return accessor;
     }
 
-    private static Mock<ICategoryReadContext> Category(bool isShare, string? csv)
+    private static Mock<ICategoryReadContext> Category(bool isShare, string? csv, bool fullHistory = false)
     {
         var category = new Mock<ICategoryReadContext>();
         category.Setup(c => c.IsShare).Returns(isShare);
         category.Setup(c => c.VisibleCategoriesCsv).Returns(csv);
+        category.Setup(c => c.FullHistory).Returns(fullHistory);
         return category;
     }
 
@@ -68,6 +69,29 @@ public class TenantDbContextFactoryTests
 
         result.IsShareContext.Should().BeTrue();
         result.VisibleCategories.Should().Be("glucose.read");
+        result.ShareFullHistory.Should().BeFalse("a share whose window was never resolved stays clamped to 24 hours");
+    }
+
+    [Fact]
+    public async Task CreateAsync_CarriesFullHistory_WhenShareAllowsIt()
+    {
+        var factory = new TenantDbContextFactory(
+            NewPool().Object, ResolvedAccessor(Guid.NewGuid()).Object,
+            Category(isShare: true, csv: "glucose.read", fullHistory: true).Object);
+        await using var result = await factory.CreateAsync();
+
+        result.ShareFullHistory.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CreateAsync_NonShare_DoesNotCarryFullHistory()
+    {
+        var factory = new TenantDbContextFactory(
+            NewPool().Object, ResolvedAccessor(Guid.NewGuid()).Object,
+            Category(isShare: false, csv: null, fullHistory: true).Object);
+        await using var result = await factory.CreateAsync();
+
+        result.ShareFullHistory.Should().BeFalse();
     }
 
     [Fact]
@@ -117,6 +141,7 @@ public class TenantDbContextFactoryTests
         {
             IsShareContext = true,
             VisibleCategories = "glucose.read,treatments.read",
+            ShareFullHistory = true,
         };
         var pool = new Mock<IDbContextFactory<NocturneDbContext>>();
         pool.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(pooled);
@@ -127,5 +152,6 @@ public class TenantDbContextFactoryTests
 
         result.IsShareContext.Should().BeFalse("a non-share lease must clear a prior share's marker");
         result.VisibleCategories.Should().BeNull("a non-share lease must clear a prior share's CSV");
+        result.ShareFullHistory.Should().BeFalse("a non-share lease must clear a prior share's history window");
     }
 }

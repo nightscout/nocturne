@@ -65,6 +65,33 @@ public sealed class ShareTokenCacheServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveByTokenAsync_stamps_last_accessed_on_a_database_hit()
+    {
+        var before = DateTime.UtcNow;
+
+        await Service().ResolveByTokenAsync(Token);
+
+        using var db = _factory.CreateDbContext();
+        db.Tenants.Single(t => t.Id == _tenantId).ShareLastAccessedAt
+            .Should().NotBeNull().And.BeOnOrAfter(before);
+    }
+
+    [Fact]
+    public async Task ResolveByTokenAsync_cached_hit_does_not_stamp_again()
+    {
+        var service = Service();
+        await service.ResolveByTokenAsync(Token);
+        DateTime? first;
+        using (var db = _factory.CreateDbContext())
+            first = db.Tenants.Single(t => t.Id == _tenantId).ShareLastAccessedAt;
+
+        await service.ResolveByTokenAsync(Token); // served from cache — no write
+
+        using (var db = _factory.CreateDbContext())
+            db.Tenants.Single(t => t.Id == _tenantId).ShareLastAccessedAt.Should().Be(first);
+    }
+
+    [Fact]
     public async Task Evict_makes_a_rotated_token_stop_resolving()
     {
         var service = Service();

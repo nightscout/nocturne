@@ -249,6 +249,7 @@ public class TenantResolutionMiddleware
         // pre-auth) and leaves the CSV null, so a share reading PHI on this path is denied.
         db.IsShareContext = context.RequestServices.GetService<ICategoryReadContext>()?.IsShare == true;
         db.VisibleCategories = null;
+        db.ShareFullHistory = false;
     }
 
     private const string ShareSubdomainLabel = "share";

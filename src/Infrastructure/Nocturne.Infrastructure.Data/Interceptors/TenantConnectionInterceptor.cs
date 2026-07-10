@@ -48,7 +48,7 @@ public class TenantConnectionInterceptor : DbConnectionInterceptor
         }
 
         await using var cmd = connection.CreateCommand();
-        var clauses = new List<string>(3);
+        var clauses = new List<string>(4);
 
         if (ctx.TenantId != Guid.Empty)
         {
@@ -56,15 +56,19 @@ public class TenantConnectionInterceptor : DbConnectionInterceptor
             AddParameter(cmd, "tenant_id", ctx.TenantId.ToString());
         }
 
-        // app.is_share and app.visible_categories gate the per-category public-share RLS
-        // policies. is_share is set on every open so a pooled connection never inherits a
-        // previous lessee's share flag; for a share, a missing/empty visible_categories
-        // denies all categorized data (fail-closed).
+        // app.is_share, app.visible_categories and app.share_full_history gate the
+        // public-share RLS policies. All are set on every open so a pooled connection never
+        // inherits a previous lessee's share state; for a share, a missing/empty
+        // visible_categories denies all categorized data and a missing share_full_history
+        // clamps reads to the last 24 hours (fail-closed).
         clauses.Add("set_config('app.is_share', @is_share, false)");
         AddParameter(cmd, "is_share", ctx.IsShareContext ? "true" : "false");
 
         clauses.Add("set_config('app.visible_categories', @visible_categories, false)");
         AddParameter(cmd, "visible_categories", ctx.VisibleCategories ?? string.Empty);
+
+        clauses.Add("set_config('app.share_full_history', @share_full_history, false)");
+        AddParameter(cmd, "share_full_history", ctx.ShareFullHistory ? "true" : "false");
 
         cmd.CommandText = "SELECT " + string.Join(", ", clauses);
         await cmd.ExecuteNonQueryAsync(cancellationToken);
@@ -97,7 +101,8 @@ public class TenantConnectionInterceptor : DbConnectionInterceptor
         {
             await using var cmd = connection.CreateCommand();
             cmd.CommandText =
-                "RESET app.current_tenant_id; RESET app.is_share; RESET app.visible_categories";
+                "RESET app.current_tenant_id; RESET app.is_share; RESET app.visible_categories; " +
+                "RESET app.share_full_history";
             await cmd.ExecuteNonQueryAsync();
         }
         catch

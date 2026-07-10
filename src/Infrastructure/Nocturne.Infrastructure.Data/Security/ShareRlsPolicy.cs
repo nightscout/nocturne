@@ -42,24 +42,40 @@ public static class ShareRlsPolicy
     /// Idempotent DDL that enables RLS on the table and (re)creates the share-category policy.
     /// A non-share connection (<c>app.is_share</c> ≠ 'true') is unaffected; a public share sees
     /// the table's rows only when <paramref name="governingScope"/> is present in
-    /// <c>app.visible_categories</c>. A table with no governing scope is hidden from shares
-    /// entirely. The policy is FOR SELECT only, so writes (background ingest) are unaffected.
+    /// <c>app.visible_categories</c> — and, when <paramref name="recencyColumn"/> is given, only
+    /// rows from the last 24 hours unless <c>app.share_full_history</c> is 'true' (fail-closed:
+    /// a share connection that never sets the GUC gets the clamp). A table with no governing
+    /// scope is hidden from shares entirely. The policy is FOR SELECT only, so writes
+    /// (background ingest) are unaffected.
     /// </summary>
     /// <param name="table">The snake_case table name.</param>
     /// <param name="governingScope">The OAuth read scope that unlocks the table for a share,
     /// or <c>null</c> when the table is hidden from shares.</param>
-    public static string BuildPolicySql(string table, string? governingScope)
+    /// <param name="recencyColumn">The timestamp column the 24-hour clamp applies to, or
+    /// <c>null</c> when the table is exempt (catalog data with no per-row time).</param>
+    public static string BuildPolicySql(string table, string? governingScope, string? recencyColumn = null)
     {
         if (!TableNamePattern.IsMatch(table))
             throw new ArgumentException($"Unsafe table identifier '{table}'.", nameof(table));
         if (governingScope is not null && !ScopePattern.IsMatch(governingScope))
             throw new ArgumentException($"Unsafe scope identifier '{governingScope}'.", nameof(governingScope));
+        if (recencyColumn is not null && !TableNamePattern.IsMatch(recencyColumn))
+            throw new ArgumentException($"Unsafe column identifier '{recencyColumn}'.", nameof(recencyColumn));
 
         var usingExpr = "current_setting('app.is_share', true) IS DISTINCT FROM 'true'";
         if (governingScope is not null)
         {
-            usingExpr +=
-                $" OR '{governingScope}' = ANY(string_to_array(current_setting('app.visible_categories', true), ','))";
+            var shareExpr =
+                $"'{governingScope}' = ANY(string_to_array(current_setting('app.visible_categories', true), ','))";
+            if (recencyColumn is not null)
+            {
+                // "timestamp" is quoted: it is a type keyword in PostgreSQL.
+                shareExpr =
+                    $"({shareExpr} AND (current_setting('app.share_full_history', true) = 'true'" +
+                    $" OR \"{recencyColumn}\" >= now() - interval '24 hours'))";
+            }
+
+            usingExpr += $" OR {shareExpr}";
         }
 
         return $"""
