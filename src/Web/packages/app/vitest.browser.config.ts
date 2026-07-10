@@ -6,6 +6,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [svelte(), tailwindcss()],
   resolve: { dedupe: ["@internationalized/date", "bits-ui"] },
+  // pnpm 11's global links store lives outside the workspace root, so vite's strict fs
+  // allow-list blocks serving vitest-browser-svelte to the browser runner.
+  server: { fs: { strict: false } },
   test: {
     include: ["src/**/*.svelte.test.ts"],
     setupFiles: ["vitest-browser-svelte", "./vitest.browser.setup.ts"],
