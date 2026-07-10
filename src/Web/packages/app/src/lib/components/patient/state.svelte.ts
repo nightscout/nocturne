@@ -172,10 +172,11 @@ user can freely retype; `save()` only fires on explicit commit (e.g. the clinica
 button) and only inserts a new history entry when the value actually changed, so typing "75",
 backspacing, and retyping "75" doesn't create a run of spurious same-day weight changes. */
 export class WeightState {
-  weightKg = $state("");
+  /** Bound to a `type="number"` input — null when the field is empty. */
+  weightKg = $state<number | null>(null);
   saving = $state(false);
   saveError = $state<string | null>(null);
-  #initialWeightKg = $state("");
+  #initialWeightKg = $state<number | null>(null);
 
   readonly #existing = getBodyWeights({ count: 1, skip: 0 });
 
@@ -183,7 +184,7 @@ export class WeightState {
     $effect(() => {
       const records = this.#existing.current;
       if (records && records.length > 0) {
-        const kg = String(records[0].weightKg ?? "");
+        const kg = records[0].weightKg ?? null;
         this.weightKg = kg;
         this.#initialWeightKg = kg;
       }
@@ -191,16 +192,16 @@ export class WeightState {
   }
 
   get dirty(): boolean {
-    return this.weightKg.trim() !== this.#initialWeightKg;
+    return this.weightKg !== this.#initialWeightKg;
   }
 
   save = async (): Promise<boolean> => {
-    if (!this.dirty || !this.weightKg) return true;
+    if (!this.dirty || this.weightKg == null) return true;
     this.saving = true;
     this.saveError = null;
     try {
       await createBodyWeight({
-        weightKg: Number(this.weightKg),
+        weightKg: this.weightKg,
         mills: Date.now(),
       });
       this.#initialWeightKg = this.weightKg;
