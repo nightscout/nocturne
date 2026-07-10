@@ -104,7 +104,8 @@ public sealed class AuthenticationMiddlewareShareAccessTests
         await Build().InvokeAsync(ctx);
 
         var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
-        scopes.Should().Contain(OAuthScopes.GlucoseRead,
+        scopes.Should().NotBeNull();
+        scopes!.Should().Contain(OAuthScopes.GlucoseRead,
             "the seeded Public membership grants glucose.read via the Clinician role");
 
         var csv = ctx.RequestServices.GetRequiredService<ICategoryReadContext>().VisibleCategoriesCsv;
