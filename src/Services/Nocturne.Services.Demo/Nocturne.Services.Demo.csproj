@@ -23,6 +23,7 @@
         <ProjectReference Include="..\..\Core\Nocturne.Core.Contracts\Nocturne.Core.Contracts.csproj"/>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj"/>
         <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj"/>
+        <ProjectReference Include="..\Nocturne.Services.Demo.Generation\Nocturne.Services.Demo.Generation.csproj"/>
         <ProjectReference Include="..\..\Aspire\Nocturne.Aspire.ServiceDefaults\Nocturne.Aspire.ServiceDefaults.csproj"/>
     </ItemGroup>
 </Project>

@@ -28,6 +28,15 @@ dotnet test --filter "Category=Integration"
 # Frontend type checking
 cd src/Web/packages/app && pnpm run check
 
+# Seed a loginable tenant with sample data (stack must be running; see README
+# "Multitenancy and Passkeys"). Response has url + loginLink (browser session).
+curl -X POST http://localhost:1610/api/v4/dev-only/admin/seed-tenant \
+  -H "Content-Type: application/json" \
+  -d '{"slug":"sleepy","displayName":"Sleepy","ownerUsername":"dev","sampleData":true}'
+
+# End-to-end smoke of the local stack (seed -> data -> login link -> tenant UI)
+dotnet run scripts/dev-smoke.cs
+
 # Regenerate just the NSwag TypeScript client (force, e.g. during `aspire start` hot loop)
 dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true
 
@@ -58,7 +67,7 @@ The `--skip-worktree` bits may be cleared by git during branch switches that tou
 
 ### Worktrees
 
-Git worktrees are supported. In the main checkout, `aspire start` uses persistent Postgres (named volume, pgAdmin) and binds the gateway to `https://localhost:1612`. In a worktree, Postgres is automatically ephemeral (anonymous volume, no pgAdmin) and ports are dynamic.
+Git worktrees are supported. In the main checkout, `aspire start` uses persistent Postgres (named volume, pgAdmin), binds the gateway to `https://nocturne.localhost:1612` (tenants at `https://<slug>.nocturne.localhost:1612`), and pins nocturne-api to `http://localhost:1610`. In a worktree, Postgres is automatically ephemeral (anonymous volume, no pgAdmin) and ports are dynamic.
 
 **Always use `--isolated` when running Aspire from a worktree** to avoid dashboard port collisions with the main instance:
 

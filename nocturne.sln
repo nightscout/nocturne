@@ -165,6 +165,7 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.Tandem.Tests", "tests\Unit\Nocturne.Connectors.Tandem.Tests\Nocturne.Connectors.Tandem.Tests.csproj", "{DA658CE9-C71F-42DC-8353-8FEB98441800}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.Twiist.Tests", "tests\Unit\Nocturne.Connectors.Twiist.Tests\Nocturne.Connectors.Twiist.Tests.csproj", "{1D50A73A-914F-487E-BC7C-7A58619A51D4}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Parity", "Parity", "{B894CC6B-1533-CC50-3E2E-2BCC4EC32D58}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Alerts.ParityCorpus.Generator", "tests\Parity\Nocturne.Alerts.ParityCorpus.Generator\Nocturne.Alerts.ParityCorpus.Generator.csproj", "{F3A26250-F21F-4C7B-B4F2-D30E0381FEBD}"
@@ -172,6 +173,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Core.Alerts.Native", "src\Core\Nocturne.Core.Alerts.Native\Nocturne.Core.Alerts.Native.csproj", "{A7A23EBB-850C-41DF-9FC9-8002DC06157F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Alerts.Native.Tests", "tests\Unit\Nocturne.Alerts.Native.Tests\Nocturne.Alerts.Native.Tests.csproj", "{E34250B8-0520-4A11-B55E-272681FAB007}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Services.Demo.Generation", "src\Services\Nocturne.Services.Demo.Generation\Nocturne.Services.Demo.Generation.csproj", "{9C974379-4C52-46C8-8281-E574C5142B48}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -891,6 +894,18 @@ Global
 		{E34250B8-0520-4A11-B55E-272681FAB007}.Release|x64.Build.0 = Release|Any CPU
 		{E34250B8-0520-4A11-B55E-272681FAB007}.Release|x86.ActiveCfg = Release|Any CPU
 		{E34250B8-0520-4A11-B55E-272681FAB007}.Release|x86.Build.0 = Release|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Debug|x64.Build.0 = Debug|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Debug|x86.Build.0 = Debug|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Release|x64.ActiveCfg = Release|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Release|x64.Build.0 = Release|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Release|x86.ActiveCfg = Release|Any CPU
+		{9C974379-4C52-46C8-8281-E574C5142B48}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -967,5 +982,6 @@ Global
 		{F3A26250-F21F-4C7B-B4F2-D30E0381FEBD} = {B894CC6B-1533-CC50-3E2E-2BCC4EC32D58}
 		{A7A23EBB-850C-41DF-9FC9-8002DC06157F} = {B1C2D3E4-F5A6-7B8C-9D0E-1F2A3B4C5D6E}
 		{E34250B8-0520-4A11-B55E-272681FAB007} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
+		{9C974379-4C52-46C8-8281-E574C5142B48} = {984BB9B3-3FA3-BE33-9484-CAC21695A33C}
 	EndGlobalSection
 EndGlobal

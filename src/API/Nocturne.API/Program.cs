@@ -11,6 +11,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.API.Services.DevOnly;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Extensions;
 using Nocturne.API.Filters;
@@ -149,6 +150,10 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddHostedService<AuditRetentionService>();
 builder.Services.AddHostedService<SoftDeleteCleanupService>();
+
+// Consumed only by the dev-only admin controllers, which are stripped from
+// controller discovery outside Development.
+builder.Services.AddScoped<DevSampleDataService>();
 
 // Add native API services for strangler pattern
 // Note: NightscoutJsonFilter is added globally to apply null-omission and
@@ -566,6 +571,17 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         var bootstrap = new PlatformAdminBootstrapService(db, platformOptions);
         await bootstrap.BootstrapAsync(CancellationToken.None);
     }
+}
+
+// Development only: re-seed the committed dev identity fixture (real WebAuthn
+// public keys) so a database wipe doesn't cost developers their passkey login.
+if (app.Environment.IsDevelopment() && !isNSwagGeneration)
+{
+    using var devSeedScope = app.Services.CreateScope();
+    var devSeedDb = devSeedScope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+    var devSeedLogger = devSeedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    await DevIdentityFixtureSeeder.SeedAsync(
+        devSeedDb, app.Configuration, devSeedLogger, CancellationToken.None);
 }
 
 await app.RunAsync();

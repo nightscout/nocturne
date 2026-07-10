@@ -65,52 +65,55 @@ Aspire will automatically:
 - Launch any configured data connectors
 - Set up service discovery, health checks, and a YARP gateway
 
-Once running, open the Aspire dashboard link from the console output to see all services. Access the app at `https://localhost:1612`.
+Once running, open the Aspire dashboard link from the console output to see all services. Access the app at `https://nocturne.localhost:1612`.
 
-## Multitenancy (Custom Local Domain)
+In run mode the AppHost pins two host ports (main checkout; worktrees stay dynamic):
 
-By default, Aspire serves the app at `https://localhost:1612`. This works for single-tenant development but **WebAuthn passkeys fail on tenant subdomains** because browsers reject `localhost` as a passkey Relying Party ID for subdomain origins.
+- **`https://nocturne.localhost:1612`** — the YARP gateway (the app; tenants at `https://<slug>.nocturne.localhost:1612`)
+- **`http://localhost:1610`** — nocturne-api directly (stable target for scripts and the dev-only admin API)
 
-To test multitenancy with passkeys locally:
+The API always runs with `ASPNETCORE_ENVIRONMENT=Development` under `aspire start`, so the dev-only surface (`/api/v4/dev-only/*`) exists locally and never in published images.
 
-**1. Install mkcert**
+## Multitenancy and Passkeys (Local Domains)
+
+The default local base domain is **`nocturne.localhost`**. Browsers resolve every `*.localhost` name to loopback themselves, so tenant subdomains (`sleepy.nocturne.localhost`) need no DNS or hosts-file setup, and WebAuthn accepts `nocturne.localhost` as the passkey Relying Party ID — unlike bare `localhost`, which browsers reject on subdomain origins as a public suffix.
+
+TLS: if [mkcert](https://github.com/FiloSottile/mkcert) is installed (`winget install FiloSottile.mkcert` / `brew install mkcert`), the AppHost generates a trusted wildcard certificate for `*.nocturne.localhost` automatically — note this runs `mkcert -install`, which adds the mkcert root CA to your system trust store. Without mkcert, the gateway falls back to the ASP.NET dev certificate and tenant subdomains show a browser certificate warning (functional, just noisy).
+
+Migrating from an older checkout: the local base domain used to be bare `localhost`, and passkeys are scoped to the WebAuthn RP ID derived from it — credentials registered under the old domain won't assert under `nocturne.localhost`. Register a fresh passkey once (then export it as a fixture, below).
+
+### Seed a loginable tenant with data in one call
 
 ```bash
-# Windows
-winget install FiloSottile.mkcert
-
-# macOS
-brew install mkcert
-
-# Linux — use your distro's package manager
+curl -X POST http://localhost:1610/api/v4/dev-only/admin/seed-tenant \
+  -H "Content-Type: application/json" \
+  -d '{ "slug": "sleepy", "displayName": "Sleepy", "ownerUsername": "dev", "sampleData": true }'
 ```
 
-**2. Set the custom domain**
+The response includes `url` and `loginLink` — open the `loginLink` in a browser and you're signed in as the owner, looking at realistic CGM data. `GET /api/v4/dev-only/auth/login?tenant=<slug>&format=json` (or POST) returns a token pair for headless clients instead. `scripts/dev-smoke.cs` runs the whole path end to end: `dotnet run scripts/dev-smoke.cs`.
+
+Other one-call dev endpoints: `POST /api/v4/dev-only/admin/tenants/{id}/seed-sample-data` (populate an existing tenant) and `POST /api/v4/dev-only/admin/tenants/{id}/recovery-mode` (orphan a member's credentials to exercise the break-glass flow).
+
+### Log in with your real passkey everywhere
+
+Register a passkey once (any tenant's normal setup/login flow), then export it as a committed fixture:
+
+```bash
+curl http://localhost:1610/api/v4/dev-only/auth/passkey-fixture > docs/seed/dev-identities.json
+```
+
+WebAuthn public keys are not secret, and subjects are global rather than tenant-scoped, so the fixture is safe to commit. On every Development startup the API re-inserts the fixture's subjects and credentials (surviving DB wipes), and `seed-tenant` adds each fixture subject as an owner of new tenants — your authenticator signs in to all of them. The fixture only works while the base domain (and thus the RP ID) stays the same, which the `nocturne.localhost` default guarantees.
+
+### Custom local domain (optional)
+
+To use a dedicated domain on port 443 instead:
 
 ```bash
 cd src/Aspire/Nocturne.Aspire.Host
 dotnet user-secrets set "LocalDev:Domain" "nocturne.test"
 ```
 
-**3. Add hosts file entries**
-
-Add lines to your hosts file (`C:\Windows\System32\drivers\etc\hosts` on Windows, `/etc/hosts` on macOS/Linux):
-
-```
-127.0.0.1  nocturne.test
-127.0.0.1  demo.nocturne.test
-127.0.0.1  riley.nocturne.test
-```
-
-Add one line per tenant slug you want to use. Hosts files don't support wildcards.
-
-**4. Start Aspire**
-
-```bash
-aspire start
-```
-
-Aspire will automatically generate a wildcard TLS certificate for `*.nocturne.test`, install the mkcert CA into your system trust store, and configure the YARP gateway to use it. Access the app at `https://nocturne.test`.
+This requires mkcert and one hosts-file line per tenant slug (`127.0.0.1 sleepy.nocturne.test` — hosts files don't support wildcards). The app is then at `https://nocturne.test` with no port.
 
 ## Production Deployment (Docker Compose)
 

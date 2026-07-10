@@ -280,14 +280,19 @@ class Program
         // Nocturne API
         // ------------------------------------------------------------------
         var api = builder
-            // Run mode: no port → Aspire assigns a dynamic one. Publish mode:
-            // pin the in-container listen port so the generated compose bakes a
+            // Run mode: pin host port 1610 (main checkout only — worktrees stay
+            // dynamic) so dev tooling and docs can target a stable
+            // http://localhost:1610 across restarts. Publish mode: pin the
+            // in-container listen port so the generated compose bakes a
             // concrete http://nocturne-api:8080 (mirrors the web service's fixed
             // internal port) instead of an empty NOCTURNE_API_PORT placeholder.
-            // This port is never host-published — YARP is the only entry point.
+            // In publish mode this port is never host-published — YARP is the
+            // only entry point.
             .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
             .WithHttpEndpoint(
                 name: "http",
+                port: builder.ExecutionContext.IsRunMode
+                    && persistence == PersistenceMode.Persistent ? 1610 : null,
                 targetPort: builder.ExecutionContext.IsPublishMode ? 8080 : null)
             .PublishAsDockerComposeService((_, _) => { })
             .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
@@ -296,6 +301,17 @@ class Program
                 imageLabel: "API image",
                 imageDefault: "ghcr.io/nightscout/nocturne/nocturne-api:latest")
             .WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
+
+        // Run mode is a dev tool: force Development so the dev-only surface
+        // (api/v4/dev-only/*, seed-tenant, dashboard tenant commands) exists
+        // regardless of shell environment. launchProfileName: null skips
+        // launchSettings.json, and shell env propagation to the child process
+        // is unreliable across restarts. Publish mode (production images) is
+        // untouched and defaults to Production.
+        if (builder.ExecutionContext.IsRunMode)
+        {
+            api.WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+        }
 
         // Operator-supplied OTLP export (publish mode only — run mode uses
         // Aspire's auto-injected dashboard endpoint). Empty endpoint = disabled.
@@ -509,24 +525,53 @@ class Program
             gateway.WithExternalHttpEndpoints();
         }
 
+        // Local base domain. An explicitly configured LocalDev:Domain (user-secret)
+        // keeps its dedicated behavior: mkcert required, gateway on port 443, bare
+        // domain in URLs. When unset, run mode falls back to nocturne.localhost on
+        // the normal gateway port: browsers resolve *.localhost subdomains to
+        // loopback without DNS or hosts-file setup, and the resulting WebAuthn
+        // rp.id "nocturne.localhost" is valid on tenant subdomains — unlike
+        // "localhost" itself, which browsers reject as a public suffix. That makes
+        // tenant subdomains and passkey login work on a clean checkout.
         var customDomain = builder.Configuration["LocalDev:Domain"];
+        var hasExplicitDomain = !string.IsNullOrEmpty(customDomain);
+        if (!hasExplicitDomain && builder.ExecutionContext.IsRunMode)
+        {
+            customDomain = "nocturne.localhost";
+        }
 
         if (builder.ExecutionContext.IsRunMode)
         {
-            if (!string.IsNullOrEmpty(customDomain))
+            if (hasExplicitDomain)
             {
-                var cert = MkcertHelper.EnsureCertificate(customDomain);
+                var cert = MkcertHelper.EnsureCertificate(customDomain!);
                 gateway.WithHttpsCertificate(cert);
             }
             else
             {
-                gateway.WithHttpsDeveloperCertificate();
+                // Default domain: use mkcert when available (trusted cert covering
+                // *.nocturne.localhost); otherwise fall back to the ASP.NET dev
+                // certificate, which only names localhost — tenant subdomains then
+                // show a browser name-mismatch warning but remain functional.
+                var cert = MkcertHelper.TryEnsureCertificate(customDomain!);
+                if (cert != null)
+                {
+                    gateway.WithHttpsCertificate(cert);
+                }
+                else
+                {
+                    Console.WriteLine(
+                        "[Nocturne.Aspire] mkcert not found — using the ASP.NET developer "
+                        + $"certificate. Tenant subdomains (*.{customDomain}) will show a "
+                        + "certificate warning; install mkcert for a trusted local cert.");
+                    gateway.WithHttpsDeveloperCertificate();
+                }
             }
 
             if (!isWorktree)
             {
-                // Custom domain → port 443 so URLs work without a port number.
-                gateway.WithHttpsEndpoint(port: !string.IsNullOrEmpty(customDomain) ? 443 : 1612);
+                // Explicit custom domain → port 443 so URLs work without a port number.
+                gateway.WithHttpsEndpoint(port: hasExplicitDomain ? 443 : 1612);
             }
         }
         else if (!enableCaddy)
@@ -679,11 +724,15 @@ class Program
 
         if (builder.ExecutionContext.IsRunMode)
         {
+            // Explicit domain runs on 443, so URLs omit the port; the default
+            // local domain keeps the gateway port and must carry it in
+            // BASE_DOMAIN — consumers build URLs (and strip the port for the
+            // WebAuthn rp.id) from it.
             var gatewayEndpoint = gateway.GetEndpoint("https");
-            var baseDomainExpr = !string.IsNullOrEmpty(customDomain)
+            var baseDomainExpr = hasExplicitDomain
                 ? ReferenceExpression.Create($"{customDomain}")
                 : ReferenceExpression.Create(
-                    $"{gatewayEndpoint.Property(EndpointProperty.Host)}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
+                    $"{customDomain}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
                 );
 
             // Single source of truth for both API and web
@@ -704,7 +753,7 @@ class Program
 
             // Show the gateway URL on the web resource in the Aspire dashboard
             // so users can click through to the app via the HTTPS gateway.
-            if (!string.IsNullOrEmpty(customDomain))
+            if (hasExplicitDomain)
             {
                 web.WithUrl($"https://{customDomain}", customDomain);
             }
@@ -712,16 +761,17 @@ class Program
             {
                 web.WithUrl(
                     ReferenceExpression.Create(
-                        $"https://{gatewayEndpoint.Property(EndpointProperty.Host)}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
+                        $"https://{customDomain}:{gatewayEndpoint.Property(EndpointProperty.Port)}"
                     ),
                     "Gateway"
                 );
             }
 
-            // Warn if custom domain doesn't resolve
+            // Warn if custom domain doesn't resolve (no-op for *.localhost,
+            // which browsers resolve themselves).
             if (!string.IsNullOrEmpty(customDomain))
             {
-                var port = isWorktree ? 0 : 1612;
+                var port = isWorktree ? 0 : hasExplicitDomain ? 443 : 1612;
                 MkcertHelper.WarnIfDomainUnresolvable(customDomain, port);
             }
         }

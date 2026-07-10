@@ -90,6 +90,7 @@
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Twiist\Nocturne.Connectors.Twiist.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.CareLink\Nocturne.Connectors.CareLink.csproj" />
     <ProjectReference Include="..\..\Connectors\Nocturne.Connectors.Tandem\Nocturne.Connectors.Tandem.csproj" />
+    <ProjectReference Include="..\..\Services\Nocturne.Services.Demo.Generation\Nocturne.Services.Demo.Generation.csproj" />
   </ItemGroup>
   <!-- Diagram sources — published to wwwroot/diagrams/ so the OpenAPI document
        transformers can find them in Docker (where the source tree isn't available). -->

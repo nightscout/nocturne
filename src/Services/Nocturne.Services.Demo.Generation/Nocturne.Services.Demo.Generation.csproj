@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Description>Realistic CGM/treatment data generation (oref pharmacokinetic models) shared by the demo service and the dev-only sample-data seeder</Description>
+        <Company>Nocturne</Company>
+        <Product>Nocturne Services</Product>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The generator sources were extracted from the Web-SDK demo service,
+             whose implicit usings include Microsoft.Extensions.Logging. -->
+        <Using Include="Microsoft.Extensions.Logging"/>
+        <!-- The demo service's hosted service drives DemoDataGenerator.IsRunning
+             via its internal setter. -->
+        <InternalsVisibleTo Include="Nocturne.Services.Demo"/>
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+        <PackageReference Include="Microsoft.Extensions.Options"/>
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Contracts\Nocturne.Core.Contracts.csproj"/>
+        <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj"/>
+    </ItemGroup>
+</Project>
