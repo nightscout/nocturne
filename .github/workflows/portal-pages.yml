@@ -47,6 +47,21 @@ jobs:
         working-directory: src/Web
         run: pnpm install --frozen-lockfile
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build bridge package
+        working-directory: src/Web/packages/bridge
+        run: pnpm run build
+
+      # The portal imports @nocturne/app constants that re-export from the
+      # generated API client, which is not tracked in git — generate it.
+      - name: Generate API client
+        working-directory: src/API/Nocturne.API
+        run: dotnet build -c Release
+
       - name: Sync SvelteKit packages
         working-directory: src/Web
         run: |
