@@ -68,7 +68,11 @@ public sealed class ShareTokenCacheService
                     .Where(t => t.Id == tenant.Id)
                     .ExecuteUpdateAsync(s => s.SetProperty(t => t.ShareLastAccessedAt, DateTime.UtcNow));
             }
-            catch (Exception ex)
+            catch (DbUpdateException ex)
+            {
+                _logger.LogWarning(ex, "Failed to stamp share_last_accessed_at for tenant {TenantId}", tenant.Id);
+            }
+            catch (InvalidOperationException ex)
             {
                 _logger.LogWarning(ex, "Failed to stamp share_last_accessed_at for tenant {TenantId}", tenant.Id);
             }
