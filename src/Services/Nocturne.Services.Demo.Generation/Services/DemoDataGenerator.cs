@@ -203,7 +203,8 @@ public class DemoDataGenerator : IDemoDataGenerator
 
     public (List<Entry> Entries, List<Treatment> Treatments) GenerateHistoricalData()
     {
-        var endDate = DateTime.UtcNow;
+        // Local-time day iteration — see GenerateHistoricalEntries.
+        var endDate = DateTime.Now;
         var startDate = endDate.AddDays(-_config.BackfillDays);
 
         var entries = new List<Entry>();
@@ -252,7 +253,11 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// </summary>
     public IEnumerable<Entry> GenerateHistoricalEntries()
     {
-        var endDate = DateTime.UtcNow;
+        // Local-time day iteration: meals land at local wall-clock mealtimes,
+        // and the per-date DayScenario key matches the sleep/activity/device
+        // generators, which anchor on local dates. Timestamps convert to UTC
+        // at the point of storage (DateTimeOffset respects Kind).
+        var endDate = DateTime.Now;
         var startDate = endDate.AddDays(-_config.BackfillDays);
 
         _logger.LogInformation(
@@ -406,7 +411,8 @@ public class DemoDataGenerator : IDemoDataGenerator
     /// </summary>
     public IEnumerable<Treatment> GenerateHistoricalTreatments()
     {
-        var endDate = DateTime.UtcNow;
+        // Local-time day iteration — see GenerateHistoricalEntries.
+        var endDate = DateTime.Now;
         var startDate = endDate.AddDays(-_config.BackfillDays);
 
         _logger.LogInformation(
@@ -685,8 +691,9 @@ public class DemoDataGenerator : IDemoDataGenerator
         }
 
         var currentTime = date;
-        // Cap endTime to now on the final day to prevent generating future data
-        var now = DateTime.UtcNow;
+        // Cap endTime to now on the final day to prevent generating future
+        // data. Local basis, matching the day iteration.
+        var now = DateTime.Now;
         var endTime = date.Date == now.Date
             ? now
             : date.AddDays(1);

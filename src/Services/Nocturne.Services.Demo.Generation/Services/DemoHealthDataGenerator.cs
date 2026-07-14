@@ -65,7 +65,10 @@ public static class DemoHealthDataGenerator
                 Device = WearableDevice,
                 EnteredBy = dataSource,
                 DataSource = dataSource,
-                SyncIdentifier = $"{dataSource}:hr:{utc:yyyyMMddTHHmmss}",
+                // Keyed on local wall-clock, which the generation loop never
+                // repeats — a UTC key would collide across a DST spring-forward
+                // hour and silently drop samples via the sync-id upsert.
+                SyncIdentifier = $"{dataSource}:hr:{t:yyyyMMddTHHmmss}",
                 CreatedAt = utc.ToString("o"),
             });
         }

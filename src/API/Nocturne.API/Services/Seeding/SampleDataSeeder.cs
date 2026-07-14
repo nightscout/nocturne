@@ -192,8 +192,18 @@ public class SampleDataSeeder
 
         // Device changes as treatments: the decomposer turns them into
         // DeviceEvents, which drive the dashboard age pills (SAGE/CAGE/…).
+        // The schedule is deterministic, so filter out changes whose
+        // DeviceEvent already exists — a re-seed would otherwise insert exact
+        // duplicates (treatments have no sync key).
         var deviceSchedule = DemoDeviceLifecycle.GenerateSchedule(localToday, days);
+        var existingDeviceEventTimes = (await _db.DeviceEvents
+                .AsNoTracking()
+                .Where(d => d.DataSource == dataSource)
+                .Select(d => d.Timestamp)
+                .ToListAsync(ct))
+            .ToHashSet();
         var deviceTreatments = deviceSchedule
+            .Where(e => !existingDeviceEventTimes.Contains(e.TimestampUtc))
             .Select(e => DemoDeviceLifecycle.ToTreatment(e, dataSource))
             .ToList();
         if (deviceTreatments.Count > 0)
@@ -236,8 +246,14 @@ public class SampleDataSeeder
         {
             // Night ending on the morning of (today - d + 1).
             var localMorning = localToday.AddDays(-(d - 1));
-            await _sleepService.UpsertSessionAsync(
-                DemoHealthDataGenerator.GenerateSleepSession(localMorning, sourceApp), ct);
+            var session = DemoHealthDataGenerator.GenerateSleepSession(localMorning, sourceApp);
+
+            // Seeding before ~08:00 local would otherwise write last night's
+            // session with an EndTime still in the future.
+            if (session.EndTime > DateTime.UtcNow)
+                continue;
+
+            await _sleepService.UpsertSessionAsync(session, ct);
             count++;
         }
 
@@ -435,7 +451,8 @@ public class SampleDataSeeder
                 Status = "resolved",
                 TriggeredAt = episode.StartUtc,
                 ResolvedAt = episode.EndUtc,
-                ResolutionReason = "auto",
+                // The engine's wire reason for a threshold clearing naturally.
+                ResolutionReason = "hysteresis",
             });
             _db.AlertExcursions.Add(excursion);
             excursionsCreated++;

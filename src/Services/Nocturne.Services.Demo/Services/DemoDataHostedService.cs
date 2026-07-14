@@ -340,13 +340,18 @@ public class DemoDataHostedService : BackgroundService
         // Non-glucose sample set (device changes, sleep, activity, trackers,
         // alert rules + alarm history) seeds server-side against the data just
         // posted. Failure is non-fatal — the demo still has glucose/treatments.
+        // The filter keeps real shutdown cancellation propagating, but an
+        // HttpClient timeout (TaskCanceledException with an uncancelled
+        // stoppingToken) must not fault ExecuteAsync or be mistaken for
+        // shutdown by the reset loop's OperationCanceledException handler.
         try
         {
             await _apiClient.SeedExtrasAsync(_config.BackfillDays, cancellationToken);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (
+            ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            _logger.LogWarning(ex, "Failed to seed demo extras (endpoint may not exist yet)");
+            _logger.LogWarning(ex, "Failed to seed demo extras (endpoint may not exist yet or timed out)");
         }
 
         var duration = DateTime.UtcNow - startTime;
