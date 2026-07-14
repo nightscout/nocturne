@@ -50,6 +50,13 @@ export default defineConfig(({ mode }) => {
       // Node can't resolve from pnpm's isolated store, so bundle them for SSR.
       noExternal: ["@resend/chat-sdk-adapter", "layerchart", /^@layerstack\//],
     },
+    optimizeDeps: {
+      // sveltekit-search-params is only imported by the dashboard's
+      // date-range-picker, so Vite doesn't discover it during startup crawl
+      // and re-optimizes mid-navigation on first dashboard load — a multi-second
+      // stall followed by a forced full reload. Pre-bundle it at server start.
+      include: ["sveltekit-search-params"],
+    },
     plugins: [
       tailwindcss(),
       sveltekit(),
