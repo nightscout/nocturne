@@ -14,8 +14,10 @@ export const load: PageServerLoad = async ({ url, locals }) => {
   if (env.NOCTURNE_DEV_AUTO_LOGIN !== "true") return;
 
   const raw = url.searchParams.get("returnUrl") || "/";
-  // Same-origin paths only, mirroring the endpoint's own IsLocalUrl guard.
-  const returnUrl = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+  // Same-origin paths only, mirroring the endpoint's IsLocalUrl guard: a
+  // second "/" or "\" would be a protocol-relative URL (browsers normalize
+  // "/\" to "//" in Location headers).
+  const returnUrl = /^\/(?![/\\])/.test(raw) ? raw : "/";
 
   if (locals.isAuthenticated) {
     redirect(303, returnUrl);
