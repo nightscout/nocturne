@@ -12,6 +12,7 @@ using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.DevOnly;
+using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Extensions;
 using Nocturne.API.Filters;
@@ -151,9 +152,9 @@ builder.Services.AddScoped<IAuditContext, AuditContext>();
 builder.Services.AddHostedService<AuditRetentionService>();
 builder.Services.AddHostedService<SoftDeleteCleanupService>();
 
-// Consumed only by the dev-only admin controllers, which are stripped from
-// controller discovery outside Development.
-builder.Services.AddScoped<DevSampleDataService>();
+// Consumed by the dev-only admin controllers (Development) and the demo admin
+// controller's seed-extras endpoint (demo container, all environments).
+builder.Services.AddScoped<SampleDataSeeder>();
 
 // Add native API services for strangler pattern
 // Note: NightscoutJsonFilter is added globally to apply null-omission and

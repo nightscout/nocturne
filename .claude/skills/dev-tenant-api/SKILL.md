@@ -25,7 +25,15 @@ curl -s -X POST http://localhost:1610/api/v4/dev-only/admin/seed-tenant \
 ```
 
 Response: `{tenantId, subjectId, accessToken, refreshToken, expiresInSeconds,
-url, loginLink, entriesSeeded, treatmentsSeeded}`.
+url, loginLink, entriesSeeded, treatmentsSeeded, seeded}`.
+
+Sample data covers every dashboard, correlated by a per-date day scenario
+(exercise days pair the glucose dip with a step/heart-rate spike, etc.):
+CGM entries + treatments, device-change events (SAGE/CAGE age pills), sleep
+sessions, heart rate, step counts, consumable trackers (sensor/site/reservoir/
+battery, owned by the seeded owner), and alert rules (urgent low/low/high/
+signal loss) with alarm history derived from the generated glucose. `seeded`
+carries the per-type counts.
 
 - **`loginLink`** — navigate a browser/Playwright there: sets real session
   cookies and redirects to the dashboard. The primitive for UI verification and
@@ -82,8 +90,10 @@ domain (rp.id `nocturne.localhost`) is unchanged.
 ## Other one-call operations
 
 - `POST /api/v4/dev-only/admin/tenants/{id}/seed-sample-data` `{"days":7}` —
-  populate an existing tenant (oref-simulated entries/treatments through the
-  real ingestion pipeline; data carries `DataSource: dev-sample`).
+  populate an existing tenant with the full sample set (entries/treatments,
+  device changes, sleep, heart rate, steps, trackers, alert rules + alarm
+  history) through the real ingestion pipeline; data carries
+  `DataSource: dev-sample`. Idempotent except entries/treatments, which append.
 - `POST /api/v4/dev-only/admin/tenants/{id}/recovery-mode` `{"subjectId":null}` —
   strip a member's credentials (default: the owner) and keep/create a
   credentialed keeper so the tenant reports `recovery_mode_active`. Credential

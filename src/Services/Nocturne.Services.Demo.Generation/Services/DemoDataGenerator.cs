@@ -78,17 +78,6 @@ public class DemoDataGenerator : IDemoDataGenerator
     private int _trendStepsRemaining;
     private DateTime? _lastTempBasalIssuedAt;
 
-    private enum DayScenario
-    {
-        Normal,
-        HighDay,
-        LowDay,
-        Exercise,
-        SickDay,
-        StressDay,
-        PoorSleep,
-    }
-
     public bool IsRunning { get; internal set; }
 
     public DemoDataGenerator(
@@ -651,37 +640,12 @@ public class DemoDataGenerator : IDemoDataGenerator
         _logger.LogInformation("Streamed {TreatmentCount} treatments", totalTreatments);
     }
 
-    private DayScenario SelectDayScenario(DateTime date)
-    {
-        var roll = _random.Next(100);
-        var isWeekend = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday;
-
-        // T1D management with modern AID - more normal days than challenging days
-        if (isWeekend)
-        {
-            return roll switch
-            {
-                < 40 => DayScenario.Normal, // 40% normal weekends
-                < 55 => DayScenario.HighDay, // 15% high
-                < 70 => DayScenario.Exercise, // 15% exercise
-                < 80 => DayScenario.PoorSleep, // 10% poor sleep
-                < 90 => DayScenario.LowDay, // 10% low
-                < 97 => DayScenario.StressDay, // 7% stress
-                _ => DayScenario.SickDay, // 3% sick
-            };
-        }
-
-        return roll switch
-        {
-            < 50 => DayScenario.Normal, // 50% truly "normal" days with AID
-            < 65 => DayScenario.HighDay, // 15% high days
-            < 78 => DayScenario.LowDay, // 13% low days
-            < 88 => DayScenario.Exercise, // 10% exercise
-            < 94 => DayScenario.StressDay, // 6% stress
-            < 98 => DayScenario.PoorSleep, // 4% poor sleep
-            _ => DayScenario.SickDay, // 2% sick
-        };
-    }
+    /// <summary>
+    /// Deterministic per-date selection (see <see cref="DayScenarios"/>): the
+    /// entry and treatment streams iterate days independently, so a random roll
+    /// here would give the same date different scenarios in each stream.
+    /// </summary>
+    private static DayScenario SelectDayScenario(DateTime date) => DayScenarios.For(date);
 
     private (
         List<Entry> Entries,

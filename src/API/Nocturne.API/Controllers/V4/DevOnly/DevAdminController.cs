@@ -9,6 +9,7 @@ using Nocturne.API.Models.DevOnly;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.DevOnly;
+using Nocturne.API.Services.Seeding;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
@@ -941,8 +942,10 @@ public class DevAdminController : ControllerBase
     /// check so the returned session can immediately call tenant APIs.
     /// Subjects from the committed dev identity fixture (docs/seed/dev-identities.json)
     /// are added as additional owners, so a developer's real passkey signs in too.
-    /// With sampleData: true the tenant is populated with realistic glucose/treatment
-    /// history, making the returned loginLink a browser tab with visible data.
+    /// With sampleData: true the tenant is populated with realistic history across
+    /// the board — glucose/treatments, device changes, sleep, heart rate, steps,
+    /// consumable trackers, and alert rules with alarm history — making the
+    /// returned loginLink a browser tab with visible data on every dashboard.
     /// Used by E2E tests and headless dev tooling to bypass passkey/OIDC ceremonies.
     /// </summary>
     [HttpPost("seed-tenant")]
@@ -950,7 +953,7 @@ public class DevAdminController : ControllerBase
         [FromBody] DevSeedTenantRequest request,
         [FromServices] ISessionService sessionService,
         [FromServices] ISubjectService subjectService,
-        [FromServices] DevSampleDataService sampleDataService,
+        [FromServices] SampleDataSeeder sampleDataService,
         [FromServices] IConfiguration configuration,
         [FromServices] IOptions<BaseDomainOptions> baseDomainOptions,
         CancellationToken ct)
@@ -1023,15 +1026,14 @@ public class DevAdminController : ControllerBase
         await _db.SaveChangesAsync(ct);
 
         // 7. Sample data
-        var entriesSeeded = 0;
-        var treatmentsSeeded = 0;
-        var sleepSessionsSeeded = 0;
+        SampleDataSeedResult? seeded = null;
         if (request.SampleData)
         {
-            (entriesSeeded, treatmentsSeeded, sleepSessionsSeeded) = await sampleDataService.SeedAsync(
+            seeded = await sampleDataService.SeedAsync(
                 new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive),
                 request.SampleDataDays,
-                ct);
+                subjectResult.Subject.Id,
+                ct: ct);
         }
 
         // 8. Session
@@ -1059,35 +1061,51 @@ public class DevAdminController : ControllerBase
             tokens.ExpiresInSeconds,
             url,
             loginLink,
-            entriesSeeded,
-            treatmentsSeeded,
-            sleepSessionsSeeded));
+            seeded?.Entries ?? 0,
+            seeded?.Treatments ?? 0,
+            seeded?.SleepSessions ?? 0,
+            seeded));
     }
 
     // ── Sample data ─────────────────────────────────────────────────────────
 
     /// <summary>
     /// Populate an existing tenant with realistic sample data (oref-simulated
-    /// CGM entries and treatments), written through the normal ingestion
-    /// services so device attribution and the v4 canonical stream are correct.
+    /// CGM entries and treatments, device changes, sleep, heart rate, steps,
+    /// trackers, and alert rules with alarm history), written through the
+    /// normal ingestion services so device attribution and the v4 canonical
+    /// stream are correct. Trackers are owned by the first owner-role member.
     /// </summary>
     [HttpPost("tenants/{id:guid}/seed-sample-data")]
-    public async Task<ActionResult> SeedSampleData(
+    public async Task<ActionResult<SampleDataSeedResult>> SeedSampleData(
         Guid id,
         [FromBody] DevSeedSampleDataRequest? request,
-        [FromServices] DevSampleDataService sampleDataService,
+        [FromServices] SampleDataSeeder sampleDataService,
         CancellationToken ct)
     {
         var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
         if (tenant is null)
             return NotFound(new { error = $"Tenant {id} not found" });
 
-        var (entries, treatments, sleepSessions) = await sampleDataService.SeedAsync(
+        await SetTenantGuc(tenant.Id, ct);
+        var members = await _db.TenantMembers
+            .AsNoTracking()
+            .Include(m => m.Subject)
+            .Include(m => m.MemberRoles).ThenInclude(mr => mr.TenantRole)
+            .Where(m => m.TenantId == tenant.Id)
+            .ToListAsync(ct);
+        var candidates = DevTenantMemberSelection.Candidates(members);
+        var owner = candidates.Count > 0
+            ? DevTenantMemberSelection.PickOwnerOrFirst(candidates)
+            : null;
+
+        var seeded = await sampleDataService.SeedAsync(
             new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive),
             request?.Days ?? 7,
-            ct);
+            owner?.SubjectId,
+            ct: ct);
 
-        return Ok(new { entries, treatments, sleepSessions });
+        return Ok(seeded);
     }
 
     // ── Recovery mode ───────────────────────────────────────────────────────
@@ -1246,7 +1264,8 @@ public record DevSeedTenantResponse(
     string? LoginLink = null,
     int EntriesSeeded = 0,
     int TreatmentsSeeded = 0,
-    int SleepSessionsSeeded = 0);
+    int SleepSessionsSeeded = 0,
+    SampleDataSeedResult? Seeded = null);
 
 public record DevSeedSampleDataRequest(int Days = 7);
 

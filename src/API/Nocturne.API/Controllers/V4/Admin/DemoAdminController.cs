@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -208,7 +209,57 @@ public class DemoAdminController : ControllerBase
         deleted += await db.StateSpans.Where(s => s.Source == DataSources.DemoService).ExecuteDeleteAsync(ct);
         deleted += await db.ApsSnapshots.Where(a => a.Device == DataSources.DemoService).ExecuteDeleteAsync(ct);
 
+        // Seed-extras data (sleep stages/samples cascade from their session).
+        // Tracker definitions and alert rules are configuration, not data —
+        // seed-extras re-upserts them, so only their instances/history go.
+        deleted += await db.HeartRates.Where(h => h.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
+        deleted += await db.StepCounts.Where(s => s.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
+        deleted += await db.SleepSessions.Where(s => s.SourceApp == DataSources.DemoService).ExecuteDeleteAsync(ct);
+        deleted += await db.TrackerInstances.ExecuteDeleteAsync(ct);
+        deleted += await db.AlertInstances.ExecuteDeleteAsync(ct);
+        deleted += await db.AlertExcursions.ExecuteDeleteAsync(ct);
+
         return Ok(new DemoDeleteResultDto(deleted));
+    }
+
+    /// <summary>
+    /// Seeds the demo tenant with the non-glucose sample set: device changes,
+    /// sleep sessions, heart rate, step counts, consumable trackers, and alert
+    /// rules with alarm history. Called by the demo background service after
+    /// each regenerate; entries/treatments arrive separately via the streaming
+    /// v1 posts. Idempotent — trackers, sleep, activity, and alarm history
+    /// upsert or rebuild rather than duplicate. Trackers are owned by the demo
+    /// tenant's Public subject, which anonymous visitors browse as.
+    /// </summary>
+    [HttpPost("seed-extras")]
+    [ProducesResponseType(typeof(SampleDataSeedResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SeedExtras(
+        [FromBody] DemoSeedExtrasDto? request,
+        [FromServices] SampleDataSeeder seeder,
+        CancellationToken ct)
+    {
+        await using var db = await _factory.CreateDbContextAsync(ct);
+
+        var tenant = await db.Set<TenantEntity>().FirstOrDefaultAsync(t => t.IsDemo, ct);
+        if (tenant is null)
+            return NotFound();
+
+        db.TenantId = tenant.Id;
+        var publicSubjectId = await db.TenantMembers
+            .Where(m => m.TenantId == tenant.Id && m.Subject!.IsSystemSubject && m.Subject.Name == "Public")
+            .Select(m => (Guid?)m.SubjectId)
+            .FirstOrDefaultAsync(ct);
+
+        var seeded = await seeder.SeedAsync(
+            new TenantContext(tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive),
+            request?.Days ?? 7,
+            publicSubjectId,
+            DataSources.DemoService,
+            includeGlucose: false,
+            ct);
+
+        return Ok(seeded);
     }
 
     /// <summary>
@@ -327,3 +378,5 @@ public record DemoStatusPatchDto(
     bool? IsActive = null);
 
 public record DemoDeleteResultDto(long DeletedCount);
+
+public record DemoSeedExtrasDto(int Days = 7);

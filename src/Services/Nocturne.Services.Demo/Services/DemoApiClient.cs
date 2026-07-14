@@ -151,6 +151,20 @@ public sealed class DemoApiClient
         response.EnsureSuccessStatusCode();
         _logger.LogDebug("Ensured demo PatientInsulin record exists");
     }
+
+    /// <summary>
+    /// Seeds the non-glucose sample set (device changes, sleep, heart rate,
+    /// steps, trackers, alert rules + alarm history) via the admin endpoint.
+    /// Runs server-side against the entries/treatments already posted.
+    /// </summary>
+    public async Task SeedExtrasAsync(int days, CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient("DemoAdmin");
+        var response = await client.PostAsJsonAsync(
+            "api/v4/admin/demo/seed-extras", new { days }, SerializerOptions, ct);
+        response.EnsureSuccessStatusCode();
+        _logger.LogInformation("Seeded demo extras (sleep/activity/trackers/alerts) via API");
+    }
 }
 
 /// <summary>
