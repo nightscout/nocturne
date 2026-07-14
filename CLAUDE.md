@@ -37,6 +37,11 @@ curl -X POST http://localhost:1610/api/v4/dev-only/admin/seed-tenant \
 # End-to-end smoke of the local stack (seed -> data -> login link -> tenant UI)
 dotnet run scripts/dev-smoke.cs
 
+# Auto-login: start with NOCTURNE_DEV_AUTO_LOGIN=true and the web login page
+# signs in as the tenant's first owner instead of showing the passkey UI
+# (leave off when testing auth itself). See the dev-tenant-api skill.
+NOCTURNE_DEV_AUTO_LOGIN=true aspire start
+
 # Regenerate just the NSwag TypeScript client (force, e.g. during `aspire start` hot loop)
 dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true
 

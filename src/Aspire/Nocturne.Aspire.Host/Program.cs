@@ -440,6 +440,18 @@ class Program
                 .WithReference(bridge);
 
             ConfigureWebEnvironment(viteWeb);
+
+            // Dev auto-login opt-in: when the host environment sets
+            // NOCTURNE_DEV_AUTO_LOGIN=true (e.g. `NOCTURNE_DEV_AUTO_LOGIN=true
+            // aspire start`), the web login page redirects through
+            // /api/v4/dev-only/auth/login instead of the passkey UI. Run mode
+            // only — the backing controller exists only in Development.
+            var devAutoLogin = Environment.GetEnvironmentVariable("NOCTURNE_DEV_AUTO_LOGIN");
+            if (!string.IsNullOrEmpty(devAutoLogin))
+            {
+                viteWeb.WithEnvironment("NOCTURNE_DEV_AUTO_LOGIN", devAutoLogin);
+            }
+
             if (postgresServer != null && postgresWebPassword != null)
             {
                 viteWeb.WithNocturneWebDatabase(postgresServer, dbName, postgresWebPassword);

@@ -55,6 +55,21 @@ mkcert the dev cert doesn't name tenant subdomains).
   `{"tenant":"<slug>","username":null}` → token pair JSON. `username` picks a
   specific member; default is the first owner.
 
+## Auto-login (skip the login page entirely)
+
+Start the stack with `NOCTURNE_DEV_AUTO_LOGIN=true` in the AppHost's
+environment (e.g. `NOCTURNE_DEV_AUTO_LOGIN=true aspire start`) and the web
+login page redirects through the dev login endpoint instead of rendering the
+passkey UI. Every auth guard funnels to `/auth/login`, so any tenant URL —
+`https://<slug>.nocturne.localhost:1612/` included — lands signed in as the
+first owner member, with real session cookies. A torn-down-and-reseeded tenant
+re-authenticates transparently on the next navigation.
+
+Leave the flag **off when testing auth itself** (passkey ceremony, logout,
+recovery mode, share links' anonymous view of the login page) — with it on,
+the unauthenticated login UI is unreachable. It only affects browser
+navigation; headless/bearer flows are unchanged.
+
 ## Dev passkey fixture (real authenticator across DB wipes)
 
 `GET /api/v4/dev-only/auth/passkey-fixture` exports registered passkeys
