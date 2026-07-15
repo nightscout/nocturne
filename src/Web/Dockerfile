@@ -5,7 +5,7 @@
 # Build: docker build -t nocturne-web:local -f src/Web/Dockerfile .
 
 FROM node:24-alpine AS build
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@11.5.0 --activate
 WORKDIR /app
 
 # Install dependencies (layer cached when lockfile unchanged)
@@ -29,7 +29,7 @@ RUN NODE_OPTIONS="--max-old-space-size=7168" pnpm --filter @nocturne/app run bui
 
 # -- Production --
 FROM node:24-alpine AS runtime
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@11.5.0 --activate
 WORKDIR /app
 ENV NODE_ENV=production
 
