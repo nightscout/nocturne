@@ -393,62 +393,16 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: src/Web
       - name: Publish @nightscout/glucose-chart
-        run: pnpm publish --access public --no-git-checks
         working-directory: src/Web/packages/glucose-chart
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  publish-ui:
-    needs: [build-and-push]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@nocturne'
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-        working-directory: src/Web
-      - name: Publish @nocturne/ui
-        run: pnpm publish --access public --no-git-checks
-        working-directory: src/Web/packages/ui
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  publish-cms:
-    needs: [build-and-push]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@nocturne'
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-        working-directory: src/Web
-      - name: Publish @nocturne/cms
-        run: pnpm publish --access public --no-git-checks
-        working-directory: src/Web/packages/cms
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "@nightscout/glucose-chart@${version}" version > /dev/null 2>&1; then
+            echo "@nightscout/glucose-chart@${version} already published; skipping."
+          else
+            pnpm publish --access public --no-git-checks
+          fi
 
   create-release:
     needs: [build-and-push]
