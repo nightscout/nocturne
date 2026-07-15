@@ -536,5 +536,18 @@ const shareHostSecurityHandle: Handle = async ({ event, resolve }) => {
   return response;
 };
 
+/**
+ * Liveness probe for the Aspire health check. Answers before any auth or
+ * session work: probes carry no cookies and no forwarded tenant host, so
+ * letting them fall through to the app would auto-login (dev) and render the
+ * full dashboard SSR on every probe.
+ */
+const healthHandle: Handle = async ({ event, resolve }) => {
+  if (event.url.pathname === "/health") {
+    return new Response("ok", { headers: { "content-type": "text/plain" } });
+  }
+  return resolve(event);
+};
+
 // Chain the auth handler, site security handler, proxy handler, and API client handler
-export const handle: Handle = sequence(shareHostSecurityHandle, resetBitsId, authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);
+export const handle: Handle = sequence(healthHandle, shareHostSecurityHandle, resetBitsId, authHandle, siteSecurityHandle, proxyHandle, apiClientHandle, locale);
