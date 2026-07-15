@@ -375,7 +375,7 @@ jobs:
   publish-glucose-chart:
     needs: [build-and-push]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
@@ -401,7 +401,7 @@ jobs:
   publish-ui:
     needs: [build-and-push]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
@@ -427,7 +427,7 @@ jobs:
   publish-cms:
     needs: [build-and-push]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
