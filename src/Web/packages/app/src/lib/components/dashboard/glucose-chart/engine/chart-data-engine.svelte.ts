@@ -288,11 +288,18 @@ export function createChartDataEngine(
   const isBrowser = typeof window !== "undefined";
 
   // ---- Mutable state ----
+  // `$state.raw`, not `$state`: serverChartData holds large arrays of glucose
+  // points, markers, and spans that are only ever reassigned wholesale (never
+  // deep-mutated). Deep-proxying them makes every $derived scan register a
+  // per-element dependency, turning reaction-graph reconciliation O(N^2). The
+  // realtime store uses `.raw` on its arrays for the same reason.
   // svelte-ignore state_referenced_locally
-  let serverChartData = $state<TransformedChartData | null>(
+  let serverChartData = $state.raw<TransformedChartData | null>(
     options.initialChartData ?? null
   );
-  let predictionData = $state<PredictionData | null>(null);
+  // `.raw` for the same reason as serverChartData: prediction series are
+  // reassigned wholesale, never deep-mutated.
+  let predictionData = $state.raw<PredictionData | null>(null);
   let predictionError = $state<string | null>(null);
   let predictionServiceAvailable = $state(false);
   let processedHistoricalPromise =
