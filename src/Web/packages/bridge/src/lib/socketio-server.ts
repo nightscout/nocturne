@@ -264,7 +264,7 @@ class SocketIOServer {
     if (!target) return;
 
     const clientCount = this.clients.size;
-    logger.info(`Broadcasting storage ${eventType} event to ${clientCount} connected clients${tenantSlug ? ` (tenant: ${tenantSlug})` : ''}`);
+    logger.debug(`Broadcasting storage ${eventType} event to ${clientCount} connected clients${tenantSlug ? ` (tenant: ${tenantSlug})` : ''}`);
 
     if (clientCount === 0) {
       logger.warn('No Socket.IO clients connected - events will not be delivered to frontend');
