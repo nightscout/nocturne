@@ -55,7 +55,12 @@ export default defineConfig(({ mode }) => {
       // date-range-picker, so Vite doesn't discover it during startup crawl
       // and re-optimizes mid-navigation on first dashboard load — a multi-second
       // stall followed by a forced full reload. Pre-bundle it at server start.
-      include: ["sveltekit-search-params"],
+      //
+      // layerchart is the glucose chart's rendering library and only loads once
+      // the dashboard mounts. Left to on-demand discovery it re-optimizes the
+      // client graph mid-navigation on first dashboard load. Pre-bundle it (and
+      // its transitive @layerstack/* utilities come with it) at server start.
+      include: ["sveltekit-search-params", "layerchart"],
     },
     plugins: [
       tailwindcss(),
