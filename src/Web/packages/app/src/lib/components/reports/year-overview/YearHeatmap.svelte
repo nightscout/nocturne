@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Chart, Calendar, Layer, Rect, Tooltip } from "layerchart";
+  import { Chart, Calendar, Layer, Tooltip } from "layerchart";
   import { scaleThreshold } from "d3-scale";
   import { timeWeek, timeMonths } from "d3-time";
   import { Loader2 } from "lucide-svelte";
@@ -132,17 +132,25 @@
                       </text>
                     </a>
                   {/each}
+                  <!-- Native <rect> per cell: layerchart marks each call
+                       registerMark() on mount and every registration re-runs the
+                       chart's mark deriveds over all marks, so ~365 cells/year
+                       (x multiple stacked years) cost O(N^2) and stalled the page.
+                       Cells carry pre-scaled pixel coords and per-cell handlers,
+                       so native <rect> keeps behaviour while registering nothing. -->
                   {#each cells as cell}
                     {@const padding = 1}
                     {@const cellDate = cell.data?.dateString}
-                    <Rect
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <rect
                       x={cell.x + padding}
                       y={cell.y + padding}
                       width={cellSize[0] - padding * 2}
                       height={cellSize[1] - padding * 2}
                       rx={4}
                       fill={getCellFill(cell.data)}
-                      onpointermove={(e) =>
+                      onpointermove={(e: PointerEvent) =>
                         context.tooltip?.show(e, cell.data)}
                       onpointerleave={() => context.tooltip?.hide()}
                       onclick={() => {

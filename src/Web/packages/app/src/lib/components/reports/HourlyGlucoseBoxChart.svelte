@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Chart, Axis, Svg, Tooltip, Line, Rect, Group } from "layerchart";
+  import { Chart, Axis, Svg, Tooltip } from "layerchart";
   import { bgValue, bgLabel } from "$lib/utils/formatting";
 
   interface HourlyBoxPlotData {
@@ -70,6 +70,10 @@
 
     return [Math.max(0, minVal - padding), maxVal + padding];
   });
+
+  // Box occupies 0.8 of an hour slot; whisker caps are ~1.5% of the plot width.
+  const BOX_HALF_HOURS = 0.4;
+  const CAP_WIDTH_FRACTION = 0.015;
 </script>
 
 <div class="w-full h-96">
@@ -81,171 +85,162 @@
       {yDomain}
       xDomain={[0, 23]}
       padding={{ top: 20, right: 30, bottom: 60, left: 60 }}
+      tooltipContext={{ mode: "bisect-x" }}
     >
-      <Svg>
-        <!-- Y-axis with glucose threshold Lines -->
-        <Axis placement="left" rule grid label={`Glucose (${bgLabel()})`} />
-        <Axis
-          placement="bottom"
-          rule
-          label="Hour of Day"
-          format={formatHour}
-          ticks={[0, 3, 6, 9, 12, 15, 18, 21]}
-        />
-        <!-- Target range background -->
-        <Group class="target-ranges">
-          <!-- Target range (70-180 mg/dL, plotted in display units) -->
-          <Rect
-            x={-0.5}
-            y={bgValue(70)}
-            width={24}
-            height={bgValue(180) - bgValue(70)}
-            fill="hsl(var(--success))"
-            fill-opacity="0.1"
-          />
-          <!-- High Line (180) -->
-          <Line
-            {...{
-              x1: "0%",
-              x2: "100%",
-              y1: bgValue(180),
-              y2: bgValue(180),
-              stroke: "hsl(var(--destructive))",
-              "stroke-width": "1",
-              "stroke-dasharray": "5,5",
-              opacity: 0.7,
-            } as any}
+      {#snippet children({ context })}
+        {@const boxHalfWidth = Math.abs(
+          context.xScale(BOX_HALF_HOURS) - context.xScale(0),
+        )}
+        {@const capHalfWidth = context.width * CAP_WIDTH_FRACTION}
+        <Svg>
+          <!-- Y-axis with glucose threshold reference -->
+          <Axis placement="left" rule grid label={`Glucose (${bgLabel()})`} />
+          <Axis
+            placement="bottom"
+            rule
+            label="Hour of Day"
+            format={formatHour}
+            ticks={[0, 3, 6, 9, 12, 15, 18, 21]}
           />
 
-          <!-- Low line (70) -->
-          <Line
-            {...{
-              x1: "0%",
-              x2: "100%",
-              y1: bgValue(70),
-              y2: bgValue(70),
-              stroke: "hsl(var(--destructive))",
-              "stroke-width": "1",
-              "stroke-dasharray": "5,5",
-              opacity: 0.7,
-            } as any}
-          />
-        </Group>
-        <!-- Custom box plots -->
-        <Group class="box-plots">
-          {#each chartData as data}
-            {@const boxWidth = 0.8}
-            {@const xPosition = (data.hour / 23) * 100}
-            {@const boxWidthPercent = (boxWidth / 24) * 100}
-
-            <!-- Box (IQR) -->
-            <Rect
-              {...{
-                x: `${xPosition - boxWidthPercent / 2}%`,
-                y: data.q1,
-                width: `${boxWidthPercent}%`,
-                height: data.q3 - data.q1,
-                fill: "hsl(var(--primary))",
-                "fill-opacity": "0.3",
-                stroke: "hsl(var(--primary))",
-                "stroke-width": "2",
-              } as any}
+          <!-- Target range + threshold lines. Native SVG positioned through the
+               chart scales: layerchart marks each call registerMark() on mount and
+               every registration re-runs the chart's mark deriveds over all marks,
+               so the box-plot geometry (7 marks x 24 hours) cost O(N^2). Native
+               elements register nothing. (The prior <Rect>/<Line> also passed
+               percentage-string coords, which silently forced data mode.) -->
+          <g class="target-ranges">
+            <rect
+              x={0}
+              y={context.yScale(bgValue(180))}
+              width={context.width}
+              height={context.yScale(bgValue(70)) - context.yScale(bgValue(180))}
+              fill="hsl(var(--success))"
+              fill-opacity="0.1"
             />
-
-            <!-- Median line -->
-            <Line
-              {...{
-                x1: `${xPosition - boxWidthPercent / 2}%`,
-                x2: `${xPosition + boxWidthPercent / 2}%`,
-                y1: data.median,
-                y2: data.median,
-                stroke: "hsl(var(--primary))",
-                "stroke-width": "3",
-              } as any}
+            <line
+              x1={0}
+              x2={context.width}
+              y1={context.yScale(bgValue(180))}
+              y2={context.yScale(bgValue(180))}
+              stroke="hsl(var(--destructive))"
+              stroke-width="1"
+              stroke-dasharray="5,5"
+              opacity="0.7"
             />
-
-            <!-- Upper whisker -->
-            <Line
-              {...{
-                x1: `${xPosition}%`,
-                x2: `${xPosition}%`,
-                y1: data.q3,
-                y2: data.max,
-                stroke: "hsl(var(--primary))",
-                "stroke-width": "1",
-              } as any}
+            <line
+              x1={0}
+              x2={context.width}
+              y1={context.yScale(bgValue(70))}
+              y2={context.yScale(bgValue(70))}
+              stroke="hsl(var(--destructive))"
+              stroke-width="1"
+              stroke-dasharray="5,5"
+              opacity="0.7"
             />
+          </g>
 
-            <!-- Lower whisker -->
-            <Line
-              {...{
-                x1: `${xPosition}%`,
-                x2: `${xPosition}%`,
-                y1: data.q1,
-                y2: data.min,
-                stroke: "hsl(var(--primary))",
-                "stroke-width": "1",
-              } as any}
-            />
+          <!-- Box plots -->
+          <g class="box-plots">
+            {#each chartData as data (data.hour)}
+              {@const cx = context.xScale(data.hour)}
+              {@const yQ1 = context.yScale(data.q1)}
+              {@const yQ3 = context.yScale(data.q3)}
+              {@const yMedian = context.yScale(data.median)}
+              {@const yMin = context.yScale(data.min)}
+              {@const yMax = context.yScale(data.max)}
 
-            <!-- Whisker caps -->
-            <Line
-              {...{
-                x1: `${xPosition - 1.5}%`,
-                x2: `${xPosition + 1.5}%`,
-                y1: data.max,
-                y2: data.max,
-                stroke: "hsl(var(--primary))",
-                "stroke-width": "1",
-              } as any}
-            />
-
-            <Line
-              {...{
-                x1: `${xPosition - 1.5}%`,
-                x2: `${xPosition + 1.5}%`,
-                y1: data.min,
-                y2: data.min,
-                stroke: "hsl(var(--primary))",
-                "stroke-width": "1",
-              } as any}
-            />
-
-            <!-- Outliers -->
-            {#each data.outliers as outlier}
-              <circle
-                cx={`${xPosition}%`}
-                cy={outlier}
-                r="2"
-                fill="hsl(var(--destructive))"
-                stroke="hsl(var(--destructive))"
+              <!-- Box (IQR) -->
+              <rect
+                x={cx - boxHalfWidth}
+                y={yQ3}
+                width={boxHalfWidth * 2}
+                height={yQ1 - yQ3}
+                fill="hsl(var(--primary))"
+                fill-opacity="0.3"
+                stroke="hsl(var(--primary))"
+                stroke-width="2"
+              />
+              <!-- Median line -->
+              <line
+                x1={cx - boxHalfWidth}
+                x2={cx + boxHalfWidth}
+                y1={yMedian}
+                y2={yMedian}
+                stroke="hsl(var(--primary))"
+                stroke-width="3"
+              />
+              <!-- Upper whisker -->
+              <line
+                x1={cx}
+                x2={cx}
+                y1={yQ3}
+                y2={yMax}
+                stroke="hsl(var(--primary))"
                 stroke-width="1"
               />
+              <!-- Lower whisker -->
+              <line
+                x1={cx}
+                x2={cx}
+                y1={yQ1}
+                y2={yMin}
+                stroke="hsl(var(--primary))"
+                stroke-width="1"
+              />
+              <!-- Whisker caps -->
+              <line
+                x1={cx - capHalfWidth}
+                x2={cx + capHalfWidth}
+                y1={yMax}
+                y2={yMax}
+                stroke="hsl(var(--primary))"
+                stroke-width="1"
+              />
+              <line
+                x1={cx - capHalfWidth}
+                x2={cx + capHalfWidth}
+                y1={yMin}
+                y2={yMin}
+                stroke="hsl(var(--primary))"
+                stroke-width="1"
+              />
+              <!-- Outliers -->
+              {#each data.outliers as outlier}
+                <circle
+                  cx={cx}
+                  cy={context.yScale(outlier)}
+                  r="2"
+                  fill="hsl(var(--destructive))"
+                  stroke="hsl(var(--destructive))"
+                  stroke-width="1"
+                />
+              {/each}
             {/each}
-          {/each}
-        </Group>
+          </g>
 
-        <!-- Tooltip -->
-        <Tooltip.Root
-          class="bg-popover text-popover-foreground p-3 rounded-md shadow-lg border"
-        >
-          {#snippet children({ data })}
-            <div class="space-y-1">
-              <div class="font-semibold">{formatHour(data.hour)}</div>
-              <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                <div>Max: {data.max}</div>
-                <div>Q3: {data.q3}</div>
-                <div>Median: {data.median}</div>
-                <div>Q1: {data.q1}</div>
-                <div>Min: {data.min}</div>
-                {#if data.outliers.length > 0}
-                  <div class="col-span-2">Outliers: {data.outliers.length}</div>
-                {/if}
+          <!-- Tooltip -->
+          <Tooltip.Root
+            class="bg-popover text-popover-foreground p-3 rounded-md shadow-lg border"
+          >
+            {#snippet children({ data })}
+              <div class="space-y-1">
+                <div class="font-semibold">{formatHour(data.hour)}</div>
+                <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                  <div>Max: {data.max}</div>
+                  <div>Q3: {data.q3}</div>
+                  <div>Median: {data.median}</div>
+                  <div>Q1: {data.q1}</div>
+                  <div>Min: {data.min}</div>
+                  {#if data.outliers.length > 0}
+                    <div class="col-span-2">Outliers: {data.outliers.length}</div>
+                  {/if}
+                </div>
               </div>
-            </div>
-          {/snippet}
-        </Tooltip.Root>
-      </Svg>
+            {/snippet}
+          </Tooltip.Root>
+        </Svg>
+      {/snippet}
     </Chart>
   {:else}
     <div class="flex items-center justify-center h-full text-muted-foreground">
@@ -265,11 +260,11 @@
     pointer-events: none;
   }
 
-  :global(.box-plots Rect:hover) {
+  :global(.box-plots rect:hover) {
     fill-opacity: 0.5;
   }
 
-  :global(.box-plots Line:hover) {
+  :global(.box-plots line:hover) {
     stroke-width: 2;
   }
 </style>

@@ -1,8 +1,12 @@
 <script lang="ts">
-  import { Rect, Text, Group, ChartClipPath, getChartContext } from "layerchart";
+  import { ChartClipPath, getChartContext } from "layerchart";
   import { PumpModeIcon, ActivityCategoryIcon } from "$lib/components/icons";
   import { getGlucoseChartContext } from "../chart-context.svelte";
 
+  // Native SVG throughout: every span already carries pre-scaled pixel
+  // coordinates, and layerchart marks each call registerMark() on mount, so one
+  // <Rect>/<Text> per span cost O(N^2) across the chart's mark deriveds. Native
+  // <rect>/<text>/<g> register nothing while rendering identically.
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext();
 
@@ -18,7 +22,7 @@
   {@const lane = swimLanePositions.pumpMode}
   <ChartClipPath>
     <!-- Lane background -->
-    <Rect
+    <rect
       x={0}
       y={lane.top}
       width={chartCtx.width}
@@ -27,17 +31,18 @@
       class="opacity-20"
     />
     <!-- Lane label -->
-    <Text
+    <text
       x={4}
       y={lane.top + (lane.bottom - lane.top) / 2 + 3}
+      dy="-0.355em"
       class="text-[7px] fill-muted-foreground font-medium"
     >
       MODE
-    </Text>
+    </text>
     <!-- Pump mode spans -->
     {#each pumpModeSpans as span (span.id)}
       {@const spanXPos = chartCtx.xScale(span.displayStart)}
-      <Rect
+      <rect
         x={spanXPos}
         y={lane.top + 1}
         width={chartCtx.xScale(span.displayEnd) - spanXPos}
@@ -47,13 +52,13 @@
         rx="2"
       />
       <!-- Icon at start of span -->
-      <Group x={spanXPos} y={lane.top + (lane.bottom - lane.top) / 2}>
+      <g transform="translate({spanXPos}, {lane.top + (lane.bottom - lane.top) / 2})">
         <foreignObject x="2" y="-6" width="12" height="12">
           <div class="flex items-center justify-center w-full h-full">
             <PumpModeIcon state={span.state ?? ""} size={10} color={span.color} />
           </div>
         </foreignObject>
-      </Group>
+      </g>
     {/each}
   </ChartClipPath>
 {/if}
@@ -63,7 +68,7 @@
   {@const lane = swimLanePositions.override}
   <ChartClipPath>
     <!-- Lane background -->
-    <Rect
+    <rect
       x={0}
       y={lane.top}
       width={chartCtx.width}
@@ -72,17 +77,18 @@
       class="opacity-20"
     />
     <!-- Lane label -->
-    <Text
+    <text
       x={4}
       y={lane.top + (lane.bottom - lane.top) / 2 + 3}
+      dy="-0.355em"
       class="text-[7px] fill-muted-foreground font-medium"
     >
       OVERRIDE
-    </Text>
+    </text>
     <!-- Override spans -->
     {#each overrideSpans as span (span.id)}
       {@const spanXPos = chartCtx.xScale(span.displayStart)}
-      <Rect
+      <rect
         x={spanXPos}
         y={lane.top + 1}
         width={chartCtx.xScale(span.displayEnd) - spanXPos}
@@ -92,13 +98,14 @@
         rx="2"
       />
       <!-- State label -->
-      <Text
+      <text
         x={spanXPos + 4}
         y={lane.top + (lane.bottom - lane.top) / 2 + 3}
+        dy="-0.355em"
         class="text-[6px] fill-foreground font-medium"
       >
         {span.state}
-      </Text>
+      </text>
     {/each}
   </ChartClipPath>
 {/if}
@@ -108,7 +115,7 @@
   {@const lane = swimLanePositions.profile}
   <ChartClipPath>
     <!-- Lane background -->
-    <Rect
+    <rect
       x={0}
       y={lane.top}
       width={chartCtx.width}
@@ -117,17 +124,18 @@
       class="opacity-20"
     />
     <!-- Lane label -->
-    <Text
+    <text
       x={4}
       y={lane.top + (lane.bottom - lane.top) / 2 + 3}
+      dy="-0.355em"
       class="text-[7px] fill-muted-foreground font-medium"
     >
       PROFILE
-    </Text>
+    </text>
     <!-- Profile spans -->
     {#each profileSpans as span (span.id)}
       {@const spanXPos = chartCtx.xScale(span.displayStart)}
-      <Rect
+      <rect
         x={spanXPos}
         y={lane.top + 1}
         width={chartCtx.xScale(span.displayEnd) - spanXPos}
@@ -137,13 +145,14 @@
         rx="2"
       />
       <!-- Profile name label -->
-      <Text
+      <text
         x={spanXPos + 4}
         y={lane.top + (lane.bottom - lane.top) / 2 + 3}
+        dy="-0.355em"
         class="text-[6px] fill-foreground font-medium"
       >
         {span.profileName}
-      </Text>
+      </text>
     {/each}
   </ChartClipPath>
 {/if}
@@ -153,7 +162,7 @@
   {@const lane = swimLanePositions.activity}
   <ChartClipPath>
     <!-- Lane background -->
-    <Rect
+    <rect
       x={0}
       y={lane.top}
       width={chartCtx.width}
@@ -162,17 +171,18 @@
       class="opacity-10"
     />
     <!-- Lane label -->
-    <Text
+    <text
       x={4}
       y={lane.top + (lane.bottom - lane.top) / 2 + 3}
+      dy="-0.355em"
       class="text-[7px] fill-muted-foreground font-medium"
     >
       ACTIVITY
-    </Text>
+    </text>
     <!-- All activity spans rendered in the same lane -->
     {#each activitySpans as span (span.id)}
       {@const spanXPos = chartCtx.xScale(span.displayStart)}
-      <Rect
+      <rect
         x={spanXPos}
         y={lane.top + 1}
         width={chartCtx.xScale(span.displayEnd) - spanXPos}
@@ -182,13 +192,13 @@
         rx="2"
       />
       <!-- Icon at start -->
-      <Group x={spanXPos} y={lane.top + (lane.bottom - lane.top) / 2}>
+      <g transform="translate({spanXPos}, {lane.top + (lane.bottom - lane.top) / 2})">
         <foreignObject x="2" y="-6" width="12" height="12">
           <div class="flex items-center justify-center w-full h-full">
             <ActivityCategoryIcon kind={span.kind} category={span.category} size={10} color={span.color} />
           </div>
         </foreignObject>
-      </Group>
+      </g>
     {/each}
   </ChartClipPath>
 {/if}

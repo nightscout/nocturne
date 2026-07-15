@@ -5,7 +5,7 @@
    * calendar day across the full selected range (gaps for days with no
    * recorded night), plus a compact stage-composition reference panel.
    */
-  import { Chart, Svg, Axis, Rect, Tooltip } from "layerchart";
+  import { Chart, Svg, Axis, Tooltip } from "layerchart";
   import { scaleBand, scaleLinear, type ScaleBand } from "d3-scale";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -162,13 +162,17 @@
                 format={(v: number) => `${Math.round(v / 60)}h`}
               />
               <Axis placement="bottom" rule ticks={xTickKeys} format={formatDayTick} />
-              <!-- Stacked stage segments -->
+              <!-- Stacked stage segments. Native SVG: layerchart marks each call
+                   registerMark() on mount and every registration re-runs the
+                   chart's mark deriveds over all marks, so days x segments rects
+                   cost O(N^2). Coordinates are already pixel-space, so native
+                   <rect> renders identically and registers nothing. -->
               {#each dayRows as row (row.dayKey)}
                 {@const xPos = xBandScale(row.dayKey) ?? 0}
                 {@const bandwidth = xBandScale.bandwidth()}
                 {#each row.segments as segment (segment.key)}
                   {#if segment.minutes > 0}
-                    <Rect
+                    <rect
                       x={xPos}
                       y={context.yScale(segment.y1)}
                       width={bandwidth}
@@ -182,11 +186,14 @@
               {/each}
 
               <!-- Interaction overlay per day, on top of the bars: manual hover
-                   tooltip + click / keyboard drill-through to the night. -->
+                   tooltip + click / keyboard drill-through to the night. Native
+                   <rect> keeps per-day focusability (a11y) and event handlers
+                   without registering a mark. -->
               {#each dayRows as row (row.dayKey)}
                 {@const xPos = xBandScale(row.dayKey) ?? 0}
                 {@const bandwidth = xBandScale.bandwidth()}
-                <Rect
+                <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                <rect
                   x={xPos}
                   y={0}
                   width={bandwidth}

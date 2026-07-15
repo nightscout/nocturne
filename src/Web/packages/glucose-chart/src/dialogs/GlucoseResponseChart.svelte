@@ -4,7 +4,7 @@
     Svg,
     Spline,
     Rule,
-    Points,
+    Circle,
     Text,
     Axis,
     ChartClipPath,
@@ -169,17 +169,17 @@
             curve={curveMonotoneX}
           />
 
-          <!-- Glucose points -->
-          {#each glucoseData as point}
-            <Points
-              data={[point]}
-              x={(d: GlucoseDataPoint) => d.time}
-              y="sgv"
-              r={3}
-              fill={point.color}
-              class="opacity-90"
-            />
-          {/each}
+          <!-- Glucose points: one data-mode Circle for the whole series (single
+               mark registration) instead of one <Points> per reading (O(N^2)). -->
+          <Circle
+            data={glucoseData}
+            key={(d: GlucoseDataPoint) => d.time.getTime()}
+            cx={(d: GlucoseDataPoint) => d.time}
+            cy="sgv"
+            r={3}
+            fill={(d: GlucoseDataPoint) => d.color}
+            class="opacity-90"
+          />
 
           <!-- Prediction curves (main only for mini chart) -->
           {#if predictionData && predictionCurveData.length > 0}

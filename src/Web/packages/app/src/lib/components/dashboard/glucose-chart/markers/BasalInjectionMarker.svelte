@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Group, Rect, Text } from "layerchart";
+  import { Group } from "layerchart";
   import { Syringe } from "lucide-svelte";
 
   interface Props {
@@ -15,25 +15,26 @@
   const lineHeight = $derived(lineBottom - lineTop);
 </script>
 
-<!-- Dashed vertical line spanning the chart height -->
+<!-- Native SVG throughout: layerchart 2.x marks each call registerMark(), and this
+     marker renders once per basal injection, so a per-segment Rect loop cost O(N^2).
+     A single dashed <line> plus native pill/label/hit-area register nothing. -->
 <Group x={xPos} y={lineTop}>
-  {#each { length: Math.floor(lineHeight / 8) } as _, i (i)}
-    {#if i % 2 === 0}
-      <Rect
-        x={-0.75}
-        y={i * 8}
-        width={1.5}
-        height={4}
-        class="fill-indigo-500/60 dark:fill-indigo-400/60"
-      />
-    {/if}
-  {/each}
+  <!-- Dashed vertical line spanning the chart height -->
+  <line
+    x1={0}
+    y1={0}
+    x2={0}
+    y2={lineHeight}
+    stroke-width={1.5}
+    stroke-dasharray="4 4"
+    class="stroke-indigo-500/60 dark:stroke-indigo-400/60"
+  />
 </Group>
 
 <!-- Icon and label at the top -->
 <Group x={xPos} y={lineTop - 2}>
   <!-- Background pill -->
-  <Rect
+  <rect
     x={-26}
     y={-9}
     width={52}
@@ -51,21 +52,21 @@
     </div>
   </foreignObject>
   <!-- Units label -->
-  <Text
+  <text
     x={2}
     y={0}
-    textAnchor="start"
+    text-anchor="start"
     class="text-[8px] font-medium"
     fill="var(--color-indigo-600)"
     dy="0.35em"
   >
     {units.toFixed(1)}U
-  </Text>
+  </text>
 </Group>
 
 <!-- Tooltip-style hover area -->
 <Group x={xPos} y={lineTop}>
-  <Rect
+  <rect
     x={-8}
     y={0}
     width={16}
@@ -77,5 +78,5 @@
     {:else}
       <title>{units.toFixed(1)}U basal injection</title>
     {/if}
-  </Rect>
+  </rect>
 </Group>
