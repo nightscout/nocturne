@@ -121,7 +121,7 @@ public class MemberInviteServiceTests : IDisposable
             [_followerRoleId]);
 
         result.Token.Should().Be(FakeToken);
-        result.InviteUrl.Should().Be($"{BaseUrl}/invite/{FakeToken}");
+        result.InviteUrl.Should().Be($"{BaseUrl}/join?token={FakeToken}");
         result.Id.Should().NotBeEmpty();
         result.ExpiresAt.Should().BeAfter(DateTime.UtcNow);
 

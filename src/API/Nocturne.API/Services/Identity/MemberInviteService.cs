@@ -86,7 +86,7 @@ public class MemberInviteService : IMemberInviteService
 
         // Build invite URL
         var baseUrl = _configuration[ServiceNames.ConfigKeys.BaseUrl]?.TrimEnd('/') ?? "";
-        var inviteUrl = $"{baseUrl}/invite/{token}";
+        var inviteUrl = $"{baseUrl}/join?token={token}";
 
         return new MemberInviteResult(
             entity.Id,
