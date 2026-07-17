@@ -260,9 +260,10 @@ public class GitHubIssueServiceTests
 
         var service = CreateService(handler);
         var imageBytes = "fake-png-bytes"u8.ToArray();
+        using var imageStream = new MemoryStream(imageBytes);
         var images = new List<(string, string, Stream)>
         {
-            ("Screenshot 2026-07-16 at 15.54.43.png", "image/png", new MemoryStream(imageBytes)),
+            ("Screenshot 2026-07-16 at 15.54.43.png", "image/png", imageStream),
         };
 
         var result = await service.CreateIssueAsync(BugRequest(), images, CancellationToken.None);
@@ -299,9 +300,10 @@ public class GitHubIssueServiceTests
         });
 
         var service = CreateService(handler, opts => opts.AssetsBranch = null);
+        using var imageStream = new MemoryStream([1, 2, 3]);
         var images = new List<(string, string, Stream)>
         {
-            ("shot.png", "image/png", new MemoryStream([1, 2, 3])),
+            ("shot.png", "image/png", imageStream),
         };
 
         var result = await service.CreateIssueAsync(BugRequest(), images, CancellationToken.None);
@@ -326,9 +328,10 @@ public class GitHubIssueServiceTests
         });
 
         var service = CreateService(handler);
+        using var imageStream = new MemoryStream([1, 2, 3]);
         var images = new List<(string, string, Stream)>
         {
-            ("shot.png", "image/png", new MemoryStream([1, 2, 3])),
+            ("shot.png", "image/png", imageStream),
         };
 
         var result = await service.CreateIssueAsync(BugRequest(), images, CancellationToken.None);

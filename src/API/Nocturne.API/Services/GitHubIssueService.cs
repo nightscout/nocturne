@@ -177,9 +177,10 @@ public class GitHubIssueService(
                 Branch = opts.AssetsBranch,
             });
 
-            var response = await client.PutAsync(
+            using var payloadContent = new StringContent(payload, Encoding.UTF8, "application/json");
+            using var response = await client.PutAsync(
                 $"/repos/{opts.Owner}/{opts.Repo}/contents/{path}",
-                new StringContent(payload, Encoding.UTF8, "application/json"),
+                payloadContent,
                 ct);
 
             if (response.IsSuccessStatusCode)
