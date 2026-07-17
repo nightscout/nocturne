@@ -201,16 +201,26 @@ public abstract class V4RepositoryBase<TModel, TEntity>
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.UpdateAsync" />
+    /// <remarks>
+    /// Broadcasts only when the update is materially changed (same <see cref="HasMaterialChange"/>
+    /// predicate <see cref="BulkCreateAsync"/> applies to its upsert split), captured before
+    /// <see cref="Microsoft.EntityFrameworkCore.DbContext.SaveChangesAsync(CancellationToken)"/>
+    /// clears the change tracker's modified flags. This is the single-record twin of the bulk path's
+    /// gate: decomposers idempotently re-upsert by LegacyId on every re-poll of a connector's catch-up
+    /// overlap window, and without this gate a byte-identical re-send broadcasts as if it were a real
+    /// change.
+    /// </remarks>
     public async Task<TModel> UpdateAsync(Guid id, TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>().FindAsync([id], ct)
             ?? throw new KeyNotFoundException($"{typeof(TModel).Name} {id} not found");
         ApplyUpdate(entity, model);
+        var materiallyChanged = HasMaterialChange(ctx, entity);
         await ctx.SaveChangesAsync(ct);
         var updated = ToDomain(entity);
-        // A single explicit update is always a material change worth broadcasting.
-        await RaiseBroadcastAsync([], [updated], [], origin, ct);
+        if (materiallyChanged)
+            await RaiseBroadcastAsync([], [updated], [], origin, ct);
         return updated;
     }
 
