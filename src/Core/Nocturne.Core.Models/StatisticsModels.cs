@@ -2171,6 +2171,76 @@ public class BasalAnalysisResponse
 }
 
 /// <summary>
+/// Average insulin delivered during one hour of the day, split by delivery kind.
+/// Values are units per day, averaged over the days that have delivery data.
+/// </summary>
+public class HourlyInsulinDeliveryPoint
+{
+    /// <summary>
+    /// Hour of day (0-23) in the user's profile timezone
+    /// </summary>
+    public int Hour { get; set; }
+
+    /// <summary>
+    /// Average insulin from scheduled-rate basal delivery (Scheduled/Inferred origin)
+    /// </summary>
+    public double ScheduledBasal { get; set; }
+
+    /// <summary>
+    /// Average insulin from temp adjustments (Algorithm/Manual/Suspended origin)
+    /// and algorithm micro-boluses
+    /// </summary>
+    public double TempBasal { get; set; }
+
+    /// <summary>
+    /// Average total basal insulin (scheduled + temp)
+    /// </summary>
+    public double Basal { get; set; }
+
+    /// <summary>
+    /// Average insulin from user boluses
+    /// </summary>
+    public double Bolus { get; set; }
+
+    /// <summary>
+    /// Average total insulin delivered during this hour
+    /// </summary>
+    public double Total { get; set; }
+
+    /// <summary>
+    /// Number of delivery records contributing to this hour
+    /// </summary>
+    public int Count { get; set; }
+}
+
+/// <summary>
+/// Hourly insulin delivery pattern for a period, computed from pump-confirmed
+/// delivery records (TempBasals + boluses) only
+/// </summary>
+public class HourlyInsulinDeliveryResponse
+{
+    /// <summary>
+    /// One entry per hour of day (0-23)
+    /// </summary>
+    public List<HourlyInsulinDeliveryPoint> Hours { get; set; } = new();
+
+    /// <summary>
+    /// Number of distinct days with delivery data the averages are taken over
+    /// </summary>
+    public int DayCount { get; set; }
+
+    /// <summary>
+    /// Start date of the analysis period
+    /// </summary>
+    public string StartDate { get; set; } = string.Empty;
+
+    /// <summary>
+    /// End date of the analysis period
+    /// </summary>
+    public string EndDate { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// Complete site change impact analysis result
 /// </summary>
 public class SiteChangeImpactAnalysis

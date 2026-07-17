@@ -2201,6 +2201,139 @@ public class StatisticsService : IStatisticsService
         };
     }
 
+    /// <inheritdoc />
+    public HourlyInsulinDeliveryResponse CalculateHourlyInsulinDelivery(
+        IEnumerable<TempBasal> tempBasals,
+        IEnumerable<Bolus> boluses,
+        IEnumerable<Bolus> algorithmBoluses,
+        DateTime startDate,
+        DateTime endDate,
+        TimeZoneInfo? userTimeZone = null)
+    {
+        var tz = userTimeZone ?? TimeZoneInfo.Utc;
+
+        var scheduledBasal = new double[24];
+        var tempBasal = new double[24];
+        var bolus = new double[24];
+        var counts = new int[24];
+
+        // Basal and bolus averages get separate denominators: profile-derived
+        // scheduled segments can tile the whole requested window, and dividing
+        // the (much sparser) bolus days by that span would understate them.
+        var basalDays = new HashSet<DateOnly>();
+        var bolusDays = new HashSet<DateOnly>();
+
+        foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
+        {
+            if (effectiveEndMills <= tb.StartMills)
+                continue;
+
+            // Categorize whole segments by origin: what was delivered while a
+            // temp adjustment was active counts as temp, the rest as scheduled.
+            var target = tb.Origin is TempBasalOrigin.Scheduled or TempBasalOrigin.Inferred
+                ? scheduledBasal
+                : tempBasal;
+
+            DistributeInsulinAcrossHourOfDay(
+                tb.StartMills, effectiveEndMills, tb.Rate, tz, target, basalDays);
+            counts[LocalHourOfDay(tb.StartMills, tz)]++;
+        }
+
+        foreach (var b in boluses)
+        {
+            if (b.Insulin <= 0)
+                continue;
+            var hour = LocalHourOfDay(b.Mills, tz);
+            bolus[hour] += b.Insulin;
+            counts[hour]++;
+            bolusDays.Add(LocalDay(b.Mills, tz));
+        }
+
+        // Algorithm micro-boluses are basal-replacement doses above schedule
+        foreach (var ab in algorithmBoluses)
+        {
+            if (ab.Insulin <= 0)
+                continue;
+            var hour = LocalHourOfDay(ab.Mills, tz);
+            tempBasal[hour] += ab.Insulin;
+            counts[hour]++;
+            basalDays.Add(LocalDay(ab.Mills, tz));
+        }
+
+        // Average each component over the days that actually have its data, not
+        // the requested window: a period extending before the first record must
+        // not dilute (or, combined with gap-fill, distort) the daily pattern.
+        var basalDayCount = Math.Max(1, basalDays.Count);
+        var bolusDayCount = Math.Max(1, bolusDays.Count);
+
+        var hours = new List<HourlyInsulinDeliveryPoint>(24);
+        for (int hour = 0; hour < 24; hour++)
+        {
+            var avgScheduled = Math.Round(scheduledBasal[hour] / basalDayCount * 100) / 100;
+            var avgTemp = Math.Round(tempBasal[hour] / basalDayCount * 100) / 100;
+            var avgBolus = Math.Round(bolus[hour] / bolusDayCount * 100) / 100;
+            hours.Add(new HourlyInsulinDeliveryPoint
+            {
+                Hour = hour,
+                ScheduledBasal = avgScheduled,
+                TempBasal = avgTemp,
+                Basal = Math.Round((avgScheduled + avgTemp) * 100) / 100,
+                Bolus = avgBolus,
+                Total = Math.Round((avgScheduled + avgTemp + avgBolus) * 100) / 100,
+                Count = counts[hour],
+            });
+        }
+
+        var allDays = new HashSet<DateOnly>(basalDays);
+        allDays.UnionWith(bolusDays);
+
+        return new HourlyInsulinDeliveryResponse
+        {
+            Hours = hours,
+            DayCount = allDays.Count,
+            StartDate = startDate.ToString("yyyy-MM-dd"),
+            EndDate = endDate.ToString("yyyy-MM-dd"),
+        };
+    }
+
+    /// <summary>
+    /// Adds a constant-rate delivery interval's insulin into per-local-hour-of-day
+    /// buckets, splitting on the timezone's local hour boundaries so each hour
+    /// receives exactly the insulin delivered during it. Also records the local
+    /// days the interval touches.
+    /// </summary>
+    private static void DistributeInsulinAcrossHourOfDay(
+        long startMills,
+        long endMills,
+        double rate,
+        TimeZoneInfo tz,
+        double[] insulinBuckets,
+        HashSet<DateOnly> localDays)
+    {
+        if (endMills <= startMills) return;
+        const long HourMs = 3_600_000L;
+        long cursor = startMills;
+        while (cursor < endMills)
+        {
+            var utcDt = DateTimeOffset.FromUnixTimeMilliseconds(cursor);
+            var offsetMs = (long)tz.GetUtcOffset(utcDt).TotalMilliseconds;
+            long nextLocalHourBoundary = ((cursor + offsetMs) / HourMs + 1) * HourMs - offsetMs;
+            long sliceEnd = Math.Min(nextLocalHourBoundary, endMills);
+            var localDt = TimeZoneInfo.ConvertTimeFromUtc(utcDt.UtcDateTime, tz);
+            insulinBuckets[localDt.Hour] += rate * (sliceEnd - cursor) / HourMs;
+            localDays.Add(DateOnly.FromDateTime(localDt));
+            cursor = sliceEnd;
+        }
+    }
+
+    private static int LocalHourOfDay(long mills, TimeZoneInfo tz) =>
+        TimeZoneInfo.ConvertTimeFromUtc(
+            DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime, tz).Hour;
+
+    private static DateOnly LocalDay(long mills, TimeZoneInfo tz) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+            DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime, tz));
+
     /// <summary>
     /// Walks a [startMills, endMills) interval and adds (rate, overlapMs) entries to each
     /// <paramref name="tz"/>-local hour-of-day bucket the interval crosses. A 30-minute interval

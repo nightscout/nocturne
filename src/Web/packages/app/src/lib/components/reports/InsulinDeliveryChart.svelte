@@ -1,28 +1,16 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
-  import type { Bolus, BasalPoint } from "$lib/api";
-  import { BasalDeliveryOrigin } from "$lib/api";
+  import type { HourlyInsulinDeliveryPoint } from "$lib/api";
   import { Syringe } from "lucide-svelte";
   import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
 
-  interface HourlyInsulinData {
-    hour: number;
-    timeLabel: string;
-    scheduledBasal: number;
-    tempBasal: number;
-    basal: number; // Total basal (scheduled + temp adjustment)
-    bolus: number;
-    total: number;
-    count: number;
-  }
-
   interface Props {
-    boluses: Bolus[];
-    basalSeries?: BasalPoint[];
+    /** Backend-computed hourly delivery averages (24 entries, hour 0-23) */
+    data: HourlyInsulinDeliveryPoint[];
     showStacked?: boolean;
   }
 
-  let { boluses, basalSeries = [], showStacked = true }: Props = $props();
+  let { data, showStacked = true }: Props = $props();
 
   // Format hour for display
   function formatHour(hour: number): string {
@@ -32,132 +20,36 @@
     return `${hour - 12} PM`;
   }
 
-  // Process boluses and basal series to get hourly insulin delivery
-  function processInsulinData(boluses: Bolus[], basalPoints: BasalPoint[]): HourlyInsulinData[] {
-    // Initialize hourly buckets
-    const hourlyData: Map<
-      number,
-      {
-        scheduledBasal: number;
-        tempBasal: number;
-        bolus: number;
-        count: number;
-      }
-    > = new Map();
-    for (let h = 0; h < 24; h++) {
-      hourlyData.set(h, {
-        scheduledBasal: 0,
-        tempBasal: 0,
-        bolus: 0,
-        count: 0,
-      });
-    }
+  const chartData = $derived(data ?? []);
 
-    // Count number of days for averaging
-    const uniqueDays = new Set<string>();
-
-    // Process boluses
-    for (const bolus of boluses) {
-      const date = new Date(bolus.mills ?? Date.now());
-      if (isNaN(date.getTime())) continue;
-
-      uniqueDays.add(date.toISOString().split("T")[0]);
-
-      const hour = date.getHours();
-      const hourData = hourlyData.get(hour)!;
-      hourData.bolus += bolus.insulin ?? 0;
-      hourData.count++;
-    }
-
-    // Process basal series from chart data API
-    // Each BasalPoint represents a rate at a timestamp - we need to calculate insulin delivered
-    const sortedBasal = [...basalPoints].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
-
-    for (let i = 0; i < sortedBasal.length; i++) {
-      const point = sortedBasal[i];
-      const timestamp = point.timestamp ?? 0;
-      const rate = point.rate ?? 0;
-      const origin = point.origin;
-
-      // Calculate duration until next point (or assume 5 min if last point)
-      const nextTimestamp = sortedBasal[i + 1]?.timestamp ?? (timestamp + 5 * 60 * 1000);
-      const durationMs = nextTimestamp - timestamp;
-      const durationHours = durationMs / (1000 * 60 * 60);
-
-      // Calculate insulin delivered during this period
-      const insulinDelivered = rate * durationHours;
-
-      if (insulinDelivered <= 0) continue;
-
-      const date = new Date(timestamp);
-      if (isNaN(date.getTime())) continue;
-
-      uniqueDays.add(date.toISOString().split("T")[0]);
-      const hour = date.getHours();
-      const hourData = hourlyData.get(hour)!;
-
-      // Categorize by origin
-      if (origin === BasalDeliveryOrigin.Scheduled || origin === BasalDeliveryOrigin.Inferred) {
-        hourData.scheduledBasal += insulinDelivered;
-      } else {
-        // Algorithm, Manual, Suspended all count as "temp" adjustments
-        hourData.tempBasal += insulinDelivered;
-      }
-      hourData.count++;
-    }
-
-    const numDays = Math.max(1, uniqueDays.size);
-
-    // Convert to array with averaged values
-    const data: HourlyInsulinData[] = [];
-    for (let hour = 0; hour < 24; hour++) {
-      const hourData = hourlyData.get(hour)!;
-      const avgScheduledBasal = hourData.scheduledBasal / numDays;
-      const avgTempBasal = hourData.tempBasal / numDays;
-      const avgBolus = hourData.bolus / numDays;
-      const avgBasal = avgScheduledBasal + avgTempBasal;
-      data.push({
-        hour,
-        timeLabel: formatHour(hour),
-        scheduledBasal: Math.round(avgScheduledBasal * 100) / 100,
-        tempBasal: Math.round(avgTempBasal * 100) / 100,
-        basal: Math.round(avgBasal * 100) / 100,
-        bolus: Math.round(avgBolus * 100) / 100,
-        total: Math.round((avgBasal + avgBolus) * 100) / 100,
-        count: hourData.count,
-      });
-    }
-
-    return data;
-  }
-
-  // Use derived values instead of effect to avoid infinite loops
-  const chartData = $derived(
-    (boluses && boluses.length > 0) || (basalSeries && basalSeries.length > 0)
-      ? processInsulinData(boluses, basalSeries)
-      : []
+  // The non-stacked variant plots basal only (used by the basal analysis
+  // report); the stacked variant plots the full delivery split.
+  const displayValue = $derived(
+    showStacked
+      ? (d: HourlyInsulinDeliveryPoint) => d.total ?? 0
+      : (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0
   );
 
   const maxInsulin = $derived.by(() => {
     if (chartData.length === 0) return 5;
-    const maxTotal = Math.max(...chartData.map((d) => d.total));
-    return Math.max(2, Math.ceil(maxTotal * 1.2));
+    const maxValue = Math.max(...chartData.map(displayValue));
+    return Math.max(2, Math.ceil(maxValue * 1.2));
   });
 
   // Check if we have both scheduled and temp basal data
   const hasScheduledBasalData = $derived(
-    chartData.some((d) => d.scheduledBasal > 0)
+    chartData.some((d) => (d.scheduledBasal ?? 0) > 0)
   );
-  const hasTempBasalData = $derived(chartData.some((d) => d.tempBasal > 0));
+  const hasTempBasalData = $derived(chartData.some((d) => (d.tempBasal ?? 0) > 0));
 </script>
 
 <div class="w-full">
-  {#if chartData.length > 0 && chartData.some((d) => d.total > 0)}
+  {#if chartData.length > 0 && chartData.some((d) => displayValue(d) > 0)}
     <div class="h-[350px] w-full">
       <AreaChart
         data={chartData}
         x={(d) => d.hour}
-        y={(d) => d.total}
+        y={displayValue}
         series={showStacked
           ? [
               // Show scheduled basal, temp basal adjustments, and bolus as stacked
@@ -165,7 +57,7 @@
                 ? [
                     {
                       key: "scheduledBasal",
-                      value: (d: HourlyInsulinData) => d.scheduledBasal,
+                      value: (d: HourlyInsulinDeliveryPoint) => d.scheduledBasal ?? 0,
                       color: "var(--insulin-scheduled-basal)",
                       label: "Scheduled Basal",
                       props: { class: categoryPatternClass(1) },
@@ -176,7 +68,7 @@
                 ? [
                     {
                       key: "tempBasal",
-                      value: (d: HourlyInsulinData) => d.tempBasal,
+                      value: (d: HourlyInsulinDeliveryPoint) => d.tempBasal ?? 0,
                       color: "var(--insulin-additional-basal)",
                       label: "Temp Basal",
                       props: { class: categoryPatternClass(2) },
@@ -188,7 +80,7 @@
                 ? [
                     {
                       key: "basal",
-                      value: (d: HourlyInsulinData) => d.basal,
+                      value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
                       color: "var(--insulin-scheduled-basal)",
                       label: "Basal",
                       props: { class: categoryPatternClass(1) },
@@ -197,7 +89,7 @@
                 : []),
               {
                 key: "bolus",
-                value: (d: HourlyInsulinData) => d.bolus,
+                value: (d: HourlyInsulinDeliveryPoint) => d.bolus ?? 0,
                 color: "var(--insulin-bolus)",
                 label: "Bolus",
                 props: { class: categoryPatternClass(3) },
@@ -205,10 +97,10 @@
             ]
           : [
               {
-                key: "total",
-                value: (d: HourlyInsulinData) => d.total,
+                key: "basal",
+                value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
                 color: "var(--chart-1)",
-                label: "Total Insulin",
+                label: "Basal Insulin",
               },
             ]}
         xDomain={[0, 23]}
@@ -229,13 +121,13 @@
 
     <!-- Time period insights -->
     {#if chartData.length >= 24}
-      {@const morning = chartData.slice(6, 12).reduce((s, d) => s + d.total, 0)}
+      {@const morning = chartData.slice(6, 12).reduce((s, d) => s + displayValue(d), 0)}
       {@const afternoon = chartData
         .slice(12, 18)
-        .reduce((s, d) => s + d.total, 0)}
+        .reduce((s, d) => s + displayValue(d), 0)}
       {@const evening =
-        chartData.slice(18, 24).reduce((s, d) => s + d.total, 0) +
-        chartData.slice(0, 6).reduce((s, d) => s + d.total, 0)}
+        chartData.slice(18, 24).reduce((s, d) => s + displayValue(d), 0) +
+        chartData.slice(0, 6).reduce((s, d) => s + displayValue(d), 0)}
       {@const totalDaily = morning + afternoon + evening}
       <div class="mt-4 grid grid-cols-3 gap-3 text-center">
         <div class="rounded-lg border bg-card p-3">
@@ -267,8 +159,14 @@
     >
       <div class="text-center">
         <Syringe class="mx-auto h-10 w-10 opacity-30" />
-        <p class="mt-2 font-medium">No insulin delivery data</p>
-        <p class="text-sm">No treatments found in this period</p>
+        <p class="mt-2 font-medium">
+          {showStacked ? "No insulin delivery data" : "No basal delivery data"}
+        </p>
+        <p class="text-sm">
+          {showStacked
+            ? "No treatments found in this period"
+            : "No basal records found in this period"}
+        </p>
       </div>
     </div>
   {/if}

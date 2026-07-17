@@ -23,28 +23,26 @@
   import BasalRatePercentileChart from "$lib/components/reports/BasalRatePercentileChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
-  import { getBasalReportData } from "$api/reports.remote";
-  import { getBasalAnalysis } from "$api/generated/statistics.generated.remote";
-  import type { DateRangeInput } from "$lib/hooks/date-params.svelte";
+  import {
+    getBasalAnalysis,
+    getHourlyInsulinDelivery,
+  } from "$api/generated/statistics.generated.remote";
 
   interface Props {
-    rangeInput: DateRangeInput | undefined;
     analysisDates: { startDate: Date; endDate: Date };
     dateInfo: { from: Date; to: Date; dayCount: number };
   }
-  let { rangeInput, analysisDates, dateInfo }: Props = $props();
+  let { analysisDates, dateInfo }: Props = $props();
 
   // Query instances are created once per component instance (the parent remounts
   // this component via {#key} when the date range changes). Creating a query
   // inside $derived and polling .loading/.current can strand the resolved
-  // response on a superseded instance (sveltejs/kit#14915) — with this report's
-  // large getBasalReportData payload that reliably left .loading stuck at true
-  // and the page blank. Component-level instances avoid the race.
-  const reportsQuery = getBasalReportData(rangeInput);
+  // response on a superseded instance (sveltejs/kit#14915), leaving .loading
+  // stuck at true and the page blank. Component-level instances avoid the race.
+  const hourlyDeliveryQuery = getHourlyInsulinDelivery(analysisDates);
   const analysisQuery = getBasalAnalysis(analysisDates);
 
-  const boluses = $derived(reportsQuery.current?.boluses ?? []);
-  const basalSeries = $derived(reportsQuery.current?.basalSeries ?? []);
+  const hourlyDelivery = $derived(hourlyDeliveryQuery.current?.hours ?? []);
 
   const basalStats = $derived.by(() => {
     const s = analysisQuery.current?.stats;
@@ -71,7 +69,7 @@
   const hourlyPercentiles = $derived(analysisQuery.current?.hourlyPercentiles ?? []);
 </script>
 
-{#if reportsQuery.error || analysisQuery.error}
+{#if hourlyDeliveryQuery.error || analysisQuery.error}
   <div class="@container container mx-auto max-w-7xl p-3 @md:p-6">
     <Card
       class="border-2 border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30"
@@ -85,11 +83,11 @@
         </CardTitle>
       </CardHeader>
       <CardContent class="text-sm text-muted-foreground">
-        {String(reportsQuery.error ?? analysisQuery.error)}
+        {String(hourlyDeliveryQuery.error ?? analysisQuery.error)}
       </CardContent>
     </Card>
   </div>
-{:else if !reportsQuery.current}
+{:else if !hourlyDeliveryQuery.current}
   <ReportsSkeleton />
 {:else}
   <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
@@ -264,7 +262,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <InsulinDeliveryChart {boluses} {basalSeries} showStacked={false} />
+        <InsulinDeliveryChart data={hourlyDelivery} showStacked={false} />
       </CardContent>
     </Card>
 
@@ -394,7 +392,7 @@
     <!-- Footer -->
     <div class="space-y-1 text-center text-xs text-muted-foreground">
       <p>
-        Report generated from {boluses.length.toLocaleString()} boluses between
+        Report generated from {basalStats.count.toLocaleString()} basal events between
         {dateInfo.from.toLocaleDateString()} and {dateInfo.to.toLocaleDateString()}
       </p>
       <p class="text-muted-foreground/60">

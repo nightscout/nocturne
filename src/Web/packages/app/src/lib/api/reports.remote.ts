@@ -232,33 +232,6 @@ export const getReportsAnalysis = query(
 );
 
 /**
- * Boluses and basal series for a date range, for the basal-analysis and
- * insulin-delivery reports.
- */
-export const getBasalReportData = query(
-  DateRangeSchema.optional(),
-  async (input) => {
-    const { locals } = getRequestEvent();
-    const { apiClient } = locals;
-    const { startDate, endDate } = calculateDateRange(input);
-
-    const [bolusResult, basalSeries] = await Promise.all([
-      apiClient.bolus.getAll(startDate, endDate, 10000),
-      apiClient.chartData.getBasalSeries(startDate.getTime(), endDate.getTime()),
-    ]);
-
-    return {
-      boluses: bolusResult.data ?? [],
-      basalSeries: basalSeries ?? [],
-      dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString(),
-      },
-    };
-  }
-);
-
-/**
  * Sensor data-quality / integrity report for a date range: the raw glucose trace plus the
  * server-computed sensor-integrity analysis (noise clusters + cluster-linked hypo events).
  * The frontend renders this verbatim — all detection and scoring happens backend-side.

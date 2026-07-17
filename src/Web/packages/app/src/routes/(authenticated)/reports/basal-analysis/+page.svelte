@@ -39,9 +39,5 @@
 </svelte:head>
 
 {#key rangeKey}
-  <BasalAnalysisContent
-    rangeInput={reportsParams.dateRangeInput}
-    {analysisDates}
-    {dateInfo}
-  />
+  <BasalAnalysisContent {analysisDates} {dateInfo} />
 {/key}

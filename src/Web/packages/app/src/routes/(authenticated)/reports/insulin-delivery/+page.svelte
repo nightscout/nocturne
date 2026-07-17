@@ -25,8 +25,11 @@
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
-  import { getBasalReportData } from "$api/reports.remote";
-  import { getMultiPeriodStatistics, getDailyBasalBolusRatios } from "$api/generated/statistics.generated.remote";
+  import {
+    getMultiPeriodStatistics,
+    getDailyBasalBolusRatios,
+    getHourlyInsulinDelivery,
+  } from "$api/generated/statistics.generated.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
@@ -34,23 +37,13 @@
   // Default: 30 days for insulin delivery analysis (TDD and ratios benefit from more data)
   const reportsParams = requireDateParamsContext(30);
 
-  // Create primary resource with automatic layout registration
-  const reportsResource = contextResource(
-    () => getBasalReportData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Insulin Delivery Data" }
-  );
+  const dateRange = $derived.by(() => {
+    const range = reportsParams.getDateRange();
+    return { from: range.start.toISOString(), to: range.end.toISOString() };
+  });
 
-  const boluses = $derived(reportsResource.current?.boluses ?? []);
-  const basalSeries = $derived(reportsResource.current?.basalSeries ?? []);
-  const dateRange = $derived(
-    reportsResource.current?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-    }
-  );
-
-  // Daily basal/bolus breakdown for the chart
-  const dailyRatiosDates = $derived.by(() => {
+  // Date args shared by the statistics queries
+  const statisticsDates = $derived.by(() => {
     const input = reportsParams.dateRangeInput;
     const endDate = input?.to ? new Date(input.to) : new Date();
     endDate.setHours(23, 59, 59, 999);
@@ -73,7 +66,15 @@
       endDate: endDate.toISOString() as unknown as Date,
     };
   });
-  const dailyRatiosResource = $derived(getDailyBasalBolusRatios(dailyRatiosDates));
+  const dailyRatiosResource = $derived(getDailyBasalBolusRatios(statisticsDates));
+
+  // Hourly delivery pattern with automatic layout registration. Computed
+  // backend-side from pump-confirmed records, bucketed by the user's timezone.
+  const hourlyDeliveryResource = contextResource(
+    () => getHourlyInsulinDelivery(statisticsDates),
+    { errorTitle: "Error Loading Insulin Delivery Data" }
+  );
+  const hourlyDelivery = $derived(hourlyDeliveryResource.current?.hours ?? []);
 
   // Secondary resource for multi-period statistics
   const multiPeriodStatsResource = $derived(getMultiPeriodStatistics());
@@ -154,7 +155,7 @@
   />
 </svelte:head>
 
-{#if reportsResource.current || multiPeriodStatsResource.current}
+{#if hourlyDeliveryResource.current || multiPeriodStatsResource.current}
 <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
   <!-- Header -->
   <div class="space-y-4">
@@ -348,7 +349,7 @@
       </CardDescription>
     </CardHeader>
     <CardContent>
-      <InsulinDeliveryChart {boluses} {basalSeries} showStacked={true} />
+      <InsulinDeliveryChart data={hourlyDelivery} showStacked={true} />
     </CardContent>
   </Card>
 
@@ -518,7 +519,7 @@
   <!-- Footer -->
   <div class="space-y-1 text-center text-xs text-muted-foreground">
     <p>
-      Report generated from {boluses.length.toLocaleString()} boluses between
+      Report generated from {(insulinStats.bolusCount ?? 0).toLocaleString()} boluses between
       {startDate.toLocaleDateString()} and {endDate.toLocaleDateString()}
     </p>
     <p class="text-muted-foreground/60">

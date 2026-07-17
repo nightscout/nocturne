@@ -397,4 +397,20 @@ public interface IStatisticsService
         DateTime startDate,
         DateTime endDate,
         TimeZoneInfo? userTimeZone = null);
+
+    /// <summary>
+    /// Calculate the average insulin delivered per hour of day, from pump-confirmed
+    /// delivery records only. Basal insulin is duration-weighted across the
+    /// <paramref name="userTimeZone"/>-local hours each TempBasal overlaps; averages
+    /// divide by the number of distinct local days that have delivery data, so a
+    /// period that extends beyond the available data does not distort the pattern.
+    /// Defaults to UTC hour-of-day when <paramref name="userTimeZone"/> is null.
+    /// </summary>
+    HourlyInsulinDeliveryResponse CalculateHourlyInsulinDelivery(
+        IEnumerable<TempBasal> tempBasals,
+        IEnumerable<Bolus> boluses,
+        IEnumerable<Bolus> algorithmBoluses,
+        DateTime startDate,
+        DateTime endDate,
+        TimeZoneInfo? userTimeZone = null);
 }

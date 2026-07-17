@@ -1268,8 +1268,10 @@ public class StatisticsController : ControllerBase
 
             // Fetch TempBasals and algorithm boluses
             // Deduplicate by 30s window + rate to eliminate duplicates from multiple connectors
-            var tempBasalTask = _tempBasalRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, 10000, descending: false);
-            var algoTask      = _bolusRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, 10000, descending: false, kind: BolusKind.Algorithm);
+            // No practical fetch cap — see GetHourlyInsulinDelivery: a 10k cap
+            // silently truncates ~5-minute AID records past ~35 days.
+            var tempBasalTask = _tempBasalRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false);
+            var algoTask      = _bolusRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false, kind: BolusKind.Algorithm);
 
             await Task.WhenAll(tempBasalTask, algoTask);
 
@@ -1301,6 +1303,84 @@ public class StatisticsController : ControllerBase
 
             var result = _statisticsService.CalculateBasalAnalysis(
                 tempBasals,
+                algorithmBoluses,
+                startUtc,
+                endUtc,
+                userTz
+            );
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Calculates the average insulin delivered per hour of day, split by scheduled
+    /// basal, temp adjustments, and boluses, from pump-confirmed delivery records.
+    /// Basal insulin is duration-weighted across the user-local hours each TempBasal
+    /// overlaps, and averages are taken over the days that have delivery data — a
+    /// window that extends before the first record does not distort the pattern.
+    /// </summary>
+    /// <param name="startDate">Start date of the analysis period (UTC)</param>
+    /// <param name="endDate">End date of the analysis period (UTC)</param>
+    /// <returns>24 hourly averages plus the number of days with data</returns>
+    [HttpGet("hourly-insulin-delivery")]
+    [RemoteQuery]
+    public async Task<ActionResult<HourlyInsulinDeliveryResponse>> GetHourlyInsulinDelivery(
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null
+    )
+    {
+        try
+        {
+            if (startDate is null || endDate is null)
+                return BadRequest(new { error = "startDate and endDate are required." });
+
+            var startUtc = DateTime.SpecifyKind(startDate.Value, DateTimeKind.Utc);
+            var endUtc = DateTime.SpecifyKind(endDate.Value, DateTimeKind.Utc);
+
+            // No practical fetch cap: AID pumps write a TempBasal (and often an
+            // SMB) every ~5 minutes, so 90 days is ~26k records per type — a
+            // 10k cap would silently truncate to the oldest ~35 days and
+            // understate every average.
+            var tempBasalTask = _tempBasalRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false);
+            var bolusTask     = _bolusRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false, kind: BolusKind.Manual);
+            var algoTask      = _bolusRepository.GetAsync((DateTime?)startUtc, (DateTime?)endUtc, null, null, int.MaxValue, descending: false, kind: BolusKind.Algorithm);
+
+            await Task.WhenAll(tempBasalTask, bolusTask, algoTask);
+
+            var tempBasals       = (await tempBasalTask).ToList();
+            var boluses          = await bolusTask;
+            var algorithmBoluses = await algoTask;
+
+            // Fall back to profile-based scheduled rates when no TempBasals exist,
+            // mirroring GetBasalAnalysis: each segment becomes one synthetic
+            // TempBasal that gets duration-weighted across the hours it overlaps.
+            var hasTherapyData = await _therapySettingsResolver.HasDataAsync(HttpContext.RequestAborted);
+            if (tempBasals.Count == 0 && hasTherapyData)
+            {
+                var fromMs = new DateTimeOffset(startUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                var toMs = new DateTimeOffset(endUtc, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                await foreach (var seg in _basalSegments.GetSegmentsAsync(fromMs, toMs, HttpContext.RequestAborted))
+                {
+                    tempBasals.Add(new TempBasal
+                    {
+                        StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.StartMills).UtcDateTime,
+                        EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(seg.EndMills).UtcDateTime,
+                        Rate = seg.UnitsPerHour,
+                        Origin = TempBasalOrigin.Scheduled,
+                    });
+                }
+            }
+
+            var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: HttpContext.RequestAborted);
+            var userTz = string.IsNullOrEmpty(tzId) ? null : TimeZoneHelper.GetTimeZoneInfoFromId(tzId);
+
+            var result = _statisticsService.CalculateHourlyInsulinDelivery(
+                tempBasals,
+                boluses,
                 algorithmBoluses,
                 startUtc,
                 endUtc,
