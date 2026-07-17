@@ -1388,7 +1388,13 @@ public class StatisticsController : ControllerBase
             );
             return Ok(result);
         }
-        catch (Exception ex)
+        // Input-shaped failures only; anything else propagates to the global
+        // handler as a 5xx instead of masquerading as a client error.
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
         }

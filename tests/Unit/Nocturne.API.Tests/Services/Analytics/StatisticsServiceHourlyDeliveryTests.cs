@@ -196,7 +196,7 @@ public class StatisticsServiceHourlyDeliveryTests
 
         result.Hours.Should().HaveCount(24);
         result.DayCount.Should().Be(0);
-        result.Hours.Should().OnlyContain(h => h.Total == 0);
+        result.Hours.Should().OnlyContain(h => Math.Abs(h.Total) < 1e-9);
     }
 
     private static DateTime Utc(int year, int month, int day, int hour, int minute) =>

@@ -2239,10 +2239,8 @@ public class StatisticsService : IStatisticsService
             counts[LocalHourOfDay(tb.StartMills, tz)]++;
         }
 
-        foreach (var b in boluses)
+        foreach (var b in boluses.Where(b => b.Insulin > 0))
         {
-            if (b.Insulin <= 0)
-                continue;
             var hour = LocalHourOfDay(b.Mills, tz);
             bolus[hour] += b.Insulin;
             counts[hour]++;
@@ -2250,10 +2248,8 @@ public class StatisticsService : IStatisticsService
         }
 
         // Algorithm micro-boluses are basal-replacement doses above schedule
-        foreach (var ab in algorithmBoluses)
+        foreach (var ab in algorithmBoluses.Where(ab => ab.Insulin > 0))
         {
-            if (ab.Insulin <= 0)
-                continue;
             var hour = LocalHourOfDay(ab.Mills, tz);
             tempBasal[hour] += ab.Insulin;
             counts[hour]++;
