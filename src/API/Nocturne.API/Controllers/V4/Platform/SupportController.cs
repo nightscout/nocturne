@@ -23,8 +23,10 @@ public class SupportController(
     private const long MaxImageBytes = 10 * 1024 * 1024; // 10 MB per image
     private const long MaxTotalBytes = 40 * 1024 * 1024; // 40 MB total
 
+    // No [RemoteCommand]: command arguments are devalue-serialised and cannot
+    // carry File objects. The frontend submits through the hand-maintained
+    // form remote in support.remote.ts, which models the multipart upload.
     [HttpPost("issues")]
-    [RemoteCommand]
     [EnableRateLimiting("support-issues")]
     [RequestSizeLimit(MaxTotalBytes)]
     [ProducesResponseType(typeof(CreateIssueResponse), StatusCodes.Status201Created)]

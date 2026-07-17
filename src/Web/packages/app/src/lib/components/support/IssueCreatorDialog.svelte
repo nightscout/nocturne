@@ -21,7 +21,7 @@
     ArrowLeft,
     Copy,
   } from "lucide-svelte";
-  import { createIssue, createOperatorIssue, getFallbackUrl } from "$lib/api/support.remote";
+  import { submitIssue, getFallbackUrl } from "$lib/api/support.remote";
   import type { CreateIssueResponse } from "$api-clients";
 
   interface Props {
@@ -123,6 +123,18 @@
       description.trim().length > 0,
   );
 
+  // The file input is the single source the browser submits; keep it in sync
+  // with the `images` state (drag-drop additions, removals, remounts).
+  function syncInputFiles(input: HTMLInputElement) {
+    const dataTransfer = new DataTransfer();
+    for (const file of images) dataTransfer.items.add(file);
+    input.files = dataTransfer.files;
+  }
+
+  $effect(() => {
+    if (fileInput) syncInputFiles(fileInput);
+  });
+
   function resetState() {
     title = "";
     description = "";
@@ -151,7 +163,14 @@
   }
 
   function handleClose() {
-    resetState();
+    // Keep the draft (fields + screenshots) unless the issue was submitted, so
+    // a failed attempt can be retried without retyping everything.
+    if (formState === "success") {
+      resetState();
+    } else {
+      formState = "idle";
+      isDragging = false;
+    }
     open = false;
   }
 
@@ -197,15 +216,16 @@
     const input = e.currentTarget;
     if (input.files) {
       addFiles(input.files);
-      input.value = "";
+      // A browse pick replaces input.files with the raw selection; restore the
+      // validated list unconditionally — when every picked file was rejected,
+      // `images` didn't change and the sync effect won't rerun.
+      syncInputFiles(input);
     }
   }
 
-  function generatePreviewMarkdown(): string {
+  function generateBodyMarkdown(): string {
     const lines: string[] = [];
 
-    lines.push(`# ${title}`);
-    lines.push("");
     lines.push("## Description");
     lines.push("");
     lines.push(description);
@@ -260,6 +280,10 @@
     return lines.join("\n");
   }
 
+  function generatePreviewMarkdown(): string {
+    return `# ${title}\n\n${generateBodyMarkdown()}`;
+  }
+
   async function copyPreview() {
     try {
       await navigator.clipboard.writeText(generatePreviewMarkdown());
@@ -272,51 +296,22 @@
     }
   }
 
-  async function handleSubmit() {
-    if (!isValid || formState === "submitting") return;
-
-    formState = "submitting";
-
+  async function openFallback() {
     try {
-      const params = {
+      const fallback = await getFallbackUrl({
         template,
         title,
-        description,
-        stepsToReproduce: template === "bug" ? stepsToReproduce || undefined : undefined,
-        expectedBehavior: template === "bug" ? expectedBehavior || undefined : undefined,
-        actualBehavior: template === "bug" ? actualBehavior || undefined : undefined,
-        cgmSource: template === "data-issue" ? cgmSource || undefined : undefined,
-        timeRange: template === "data-issue" ? timeRange || undefined : undefined,
-        diagnosticInfo,
-        images,
-      };
-
-      if (useOperatorSupport) {
-        await createOperatorIssue(params);
-        formState = "success";
-      } else {
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- remote command result is typed `unknown`; narrow to the generated response shape
-        const result = (await createIssue(params)) as CreateIssueResponse;
-        issueUrl = result.issueUrl ?? "";
-        issueNumber = result.issueNumber ?? 0;
-        formState = "success";
+        body: generateBodyMarkdown(),
+      }).run();
+      if (fallback?.url) {
+        window.open(fallback.url, "_blank");
       }
     } catch {
-      formState = "error";
-      // Open fallback URL
-      try {
-        const body = `## Description\n\n${description}`;
-        const fallback = await getFallbackUrl({ template, title, body }).run();
-        if (fallback?.url) {
-          window.open(fallback.url, "_blank");
-        }
-      } catch {
-        // Last resort: open generic issue page
-        window.open(
-          "https://github.com/nightscout/nocturne/issues/new",
-          "_blank",
-        );
-      }
+      // Last resort: open generic issue page
+      window.open(
+        "https://github.com/nightscout/nocturne/issues/new",
+        "_blank",
+      );
     }
   }
 </script>
@@ -324,7 +319,15 @@
 <Dialog.Root
   bind:open
   onOpenChange={(isOpen) => {
-    if (!isOpen) handleClose();
+    if (!isOpen) {
+      if (formState === "submitting") {
+        // A submission is in flight; keep the dialog up until it settles so
+        // its outcome (issue created or not) is visible.
+        open = true;
+        return;
+      }
+      handleClose();
+    }
   }}
 >
   <Dialog.Content class="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
@@ -366,326 +369,396 @@
         <h3 class="text-lg font-semibold">Couldn't Create Issue</h3>
         <p class="text-sm text-muted-foreground text-center">
           We've opened a pre-filled GitHub issue form in a new tab as a
-          fallback. You can paste your screenshots there manually.
+          fallback. You can paste your screenshots there manually. Your entries
+          are kept here if you'd like to try again.
         </p>
-        <Button variant="ghost" onclick={handleClose}>Close</Button>
-      </div>
-    {:else if formState === "idle"}
-      <div class="flex-1 overflow-y-auto space-y-4 pr-1">
-        <!-- Title -->
-        <div class="space-y-2">
-          <Label for="issue-title">Title *</Label>
-          <Input
-            id="issue-title"
-            bind:value={title}
-            placeholder="Brief summary of the issue"
-            maxlength={256}
-          />
-          <p class="text-xs text-muted-foreground text-right">
-            {title.length}/256
-          </p>
-        </div>
-
-        <!-- Description -->
-        <div class="space-y-2">
-          <Label for="issue-description">Description *</Label>
-          <Textarea
-            id="issue-description"
-            bind:value={description}
-            placeholder={template === "feature"
-              ? "Describe the feature and why it would be useful..."
-              : "Describe the issue in detail..."}
-            rows={4}
-          />
-        </div>
-
-        <!-- Bug-specific fields -->
-        {#if template === "bug"}
-          <div class="space-y-2">
-            <Label for="issue-steps">Steps to Reproduce</Label>
-            <Textarea
-              id="issue-steps"
-              bind:value={stepsToReproduce}
-              placeholder="1. Go to...&#10;2. Click on...&#10;3. Observe..."
-              rows={3}
-            />
-          </div>
-
-          <div class="grid grid-cols-2 gap-4">
-            <div class="space-y-2">
-              <Label for="issue-expected">Expected Behavior</Label>
-              <Textarea
-                id="issue-expected"
-                bind:value={expectedBehavior}
-                placeholder="What should happen..."
-                rows={2}
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="issue-actual">Actual Behavior</Label>
-              <Textarea
-                id="issue-actual"
-                bind:value={actualBehavior}
-                placeholder="What actually happens..."
-                rows={2}
-              />
-            </div>
-          </div>
-        {/if}
-
-        <!-- Data issue-specific fields -->
-        {#if template === "data-issue"}
-          <div class="grid grid-cols-2 gap-4">
-            <div class="space-y-2">
-              <Label for="issue-cgm">CGM Source</Label>
-              <Input
-                id="issue-cgm"
-                bind:value={cgmSource}
-                placeholder="e.g., Dexcom G7, Libre 3..."
-              />
-            </div>
-            <div class="space-y-2">
-              <Label for="issue-timerange">Time Range Affected</Label>
-              <Input
-                id="issue-timerange"
-                bind:value={timeRange}
-                placeholder="e.g., Last 24 hours, April 25..."
-              />
-            </div>
-          </div>
-        {/if}
-
-        <Separator />
-
-        <!-- Image Drop Zone -->
-        <div class="space-y-2">
-          <Label>Screenshots ({images.length}/4)</Label>
-          <button
-            type="button"
-            class="w-full border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer {isDragging
-              ? 'border-primary bg-primary/5'
-              : 'border-muted-foreground/25 hover:border-primary/50'}"
-            ondrop={handleDrop}
-            ondragover={handleDragOver}
-            ondragleave={handleDragLeave}
-            onclick={() => fileInput?.click()}
+        <div class="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onclick={() => {
+              formState = "preview";
+            }}
           >
-            <Upload class="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-            <p class="text-sm text-muted-foreground">
-              Drop images here or click to browse
-            </p>
-            <p class="text-xs text-muted-foreground mt-1">
-              PNG, JPEG, WebP, GIF - max 10 MB each
-            </p>
-          </button>
-          <input
-            bind:this={fileInput}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            multiple
-            class="hidden"
-            onchange={handleFileInput}
-          />
-
-          {#if imagePreviews.length > 0}
-            <div class="flex gap-2 flex-wrap">
-              {#each imagePreviews as preview, i (preview)}
-                <div class="relative group">
-                  <img
-                    src={preview}
-                    alt="Screenshot {i + 1}"
-                    class="h-20 w-20 object-cover rounded-md border"
-                  />
-                  <button
-                    type="button"
-                    class="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    onclick={() => removeImage(i)}
-                  >
-                    <X class="h-3 w-3" />
-                  </button>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-
-        <Separator />
-
-        <!-- Debug Info Toggles -->
-        <div class="space-y-3">
-          <Label class="text-sm font-medium">Diagnostic Info (included automatically)</Label>
-          <p class="text-xs text-muted-foreground">
-            Browser, screen size, route, and locale are always included. Toggle
-            additional info below:
-          </p>
-
-          <div class="space-y-3">
-            <div class="flex items-center justify-between">
-              <div class="space-y-0.5">
-                <Label class="text-sm">Tenant slug</Label>
-                <p class="text-xs text-muted-foreground">
-                  Your instance identifier
-                </p>
-              </div>
-              <Switch bind:checked={includeTenantSlug} />
-            </div>
-
-            <div class="flex items-center justify-between">
-              <div class="space-y-0.5">
-                <Label class="text-sm">CGM source</Label>
-                <p class="text-xs text-muted-foreground">
-                  Your connector type
-                </p>
-              </div>
-              <Switch bind:checked={includeCgmSource} />
-            </div>
-
-            <div class="flex items-center justify-between">
-              <div class="space-y-0.5">
-                <Label class="text-sm">Recent logs</Label>
-                <p class="text-xs text-muted-foreground">
-                  API calls and debug information
-                </p>
-              </div>
-              <Switch bind:checked={includeRecentLogs} />
-            </div>
-
-            <div class="flex items-center justify-between">
-              <div class="space-y-0.5">
-                <Label class="text-sm">Settings</Label>
-                <p class="text-xs text-muted-foreground">
-                  Your configuration (no passwords/tokens)
-                </p>
-              </div>
-              <Switch bind:checked={includeSettings} />
-            </div>
-          </div>
+            <ArrowLeft class="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          <Button variant="ghost" onclick={handleClose}>Close</Button>
         </div>
       </div>
+    {:else}
+      <form
+        class="contents"
+        enctype="multipart/form-data"
+        {...submitIssue.enhance(async ({ submit }) => {
+          if (formState === "idle") {
+            // Enter in a field advances to the preview step; actual
+            // submission only happens from the preview footer.
+            if (isValid) formState = "preview";
+            return;
+          }
 
-      <Dialog.Footer class="pt-4 border-t mt-4">
-        <Button variant="outline" onclick={handleClose}>Cancel</Button>
-        <Button
-          onclick={() => { formState = "preview"; }}
-          disabled={!isValid}
-        >
-          <Eye class="h-4 w-4 mr-2" />
-          Preview Issue
-        </Button>
-      </Dialog.Footer>
-    {:else if formState === "preview" || formState === "submitting"}
-      <div class="flex-1 overflow-y-auto space-y-4 pr-1">
-        <div class="space-y-1">
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Title</p>
-          <h3 class="text-lg font-semibold">{title}</h3>
-        </div>
+          formState = "submitting";
+          try {
+            await submit();
+            const result = submitIssue.result as CreateIssueResponse | undefined;
+            if (!result) {
+              // A redirect (e.g. expired session -> login) resolves submit()
+              // without a result; the navigation is already underway.
+              formState = "preview";
+              return;
+            }
+            issueUrl = result.issueUrl ?? "";
+            issueNumber = result.issueNumber ?? 0;
+            formState = "success";
+          } catch {
+            formState = "error";
+            await openFallback();
+          }
+        })}
+      >
+        <!-- Submitted alongside the named fields; also serves as the browse picker -->
+        <input
+          bind:this={fileInput}
+          type="file"
+          name="images[]"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          multiple
+          class="hidden"
+          onchange={handleFileInput}
+        />
 
-        <Separator />
-
-        <div class="space-y-1">
-          <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</p>
-          <p class="text-sm whitespace-pre-wrap">{description}</p>
-        </div>
-
-        {#if template === "bug"}
-          {#if stepsToReproduce.trim()}
-            <Separator />
-            <div class="space-y-1">
-              <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Steps to Reproduce</p>
-              <p class="text-sm whitespace-pre-wrap">{stepsToReproduce}</p>
+        {#if formState === "idle"}
+          <div class="flex-1 overflow-y-auto space-y-4 pr-1">
+            <!-- Title -->
+            <div class="space-y-2">
+              <Label for="issue-title">Title *</Label>
+              <Input
+                id="issue-title"
+                bind:value={title}
+                placeholder="Brief summary of the issue"
+                maxlength={256}
+              />
+              <p class="text-xs text-muted-foreground text-right">
+                {title.length}/256
+              </p>
             </div>
-          {/if}
 
-          {#if expectedBehavior.trim() || actualBehavior.trim()}
-            <Separator />
-            <div class="grid grid-cols-2 gap-4">
-              {#if expectedBehavior.trim()}
-                <div class="space-y-1">
-                  <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Expected Behavior</p>
-                  <p class="text-sm whitespace-pre-wrap">{expectedBehavior}</p>
-                </div>
-              {/if}
-              {#if actualBehavior.trim()}
-                <div class="space-y-1">
-                  <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Actual Behavior</p>
-                  <p class="text-sm whitespace-pre-wrap">{actualBehavior}</p>
-                </div>
-              {/if}
+            <!-- Description -->
+            <div class="space-y-2">
+              <Label for="issue-description">Description *</Label>
+              <Textarea
+                id="issue-description"
+                bind:value={description}
+                placeholder={template === "feature"
+                  ? "Describe the feature and why it would be useful..."
+                  : "Describe the issue in detail..."}
+                rows={4}
+              />
             </div>
-          {/if}
-        {/if}
 
-        {#if template === "data-issue" && (cgmSource.trim() || timeRange.trim())}
-          <Separator />
-          <div class="grid grid-cols-2 gap-4">
-            {#if cgmSource.trim()}
-              <div class="space-y-1">
-                <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">CGM Source</p>
-                <p class="text-sm">{cgmSource}</p>
-              </div>
-            {/if}
-            {#if timeRange.trim()}
-              <div class="space-y-1">
-                <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Time Range</p>
-                <p class="text-sm">{timeRange}</p>
-              </div>
-            {/if}
-          </div>
-        {/if}
-
-        {#if imagePreviews.length > 0}
-          <Separator />
-          <div class="space-y-1">
-            <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Screenshots ({images.length})</p>
-            <div class="flex gap-2 flex-wrap">
-              {#each imagePreviews as preview, i (preview)}
-                <img
-                  src={preview}
-                  alt="Screenshot {i + 1}"
-                  class="h-20 w-20 object-cover rounded-md border"
+            <!-- Bug-specific fields -->
+            {#if template === "bug"}
+              <div class="space-y-2">
+                <Label for="issue-steps">Steps to Reproduce</Label>
+                <Textarea
+                  id="issue-steps"
+                  bind:value={stepsToReproduce}
+                  placeholder="1. Go to...&#10;2. Click on...&#10;3. Observe..."
+                  rows={3}
                 />
-              {/each}
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                  <Label for="issue-expected">Expected Behavior</Label>
+                  <Textarea
+                    id="issue-expected"
+                    bind:value={expectedBehavior}
+                    placeholder="What should happen..."
+                    rows={2}
+                  />
+                </div>
+                <div class="space-y-2">
+                  <Label for="issue-actual">Actual Behavior</Label>
+                  <Textarea
+                    id="issue-actual"
+                    bind:value={actualBehavior}
+                    placeholder="What actually happens..."
+                    rows={2}
+                  />
+                </div>
+              </div>
+            {/if}
+
+            <!-- Data issue-specific fields -->
+            {#if template === "data-issue"}
+              <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                  <Label for="issue-cgm">CGM Source</Label>
+                  <Input
+                    id="issue-cgm"
+                    bind:value={cgmSource}
+                    placeholder="e.g., Dexcom G7, Libre 3..."
+                  />
+                </div>
+                <div class="space-y-2">
+                  <Label for="issue-timerange">Time Range Affected</Label>
+                  <Input
+                    id="issue-timerange"
+                    bind:value={timeRange}
+                    placeholder="e.g., Last 24 hours, April 25..."
+                  />
+                </div>
+              </div>
+            {/if}
+
+            <Separator />
+
+            <!-- Image Drop Zone -->
+            <div class="space-y-2">
+              <Label>Screenshots ({images.length}/4)</Label>
+              <button
+                type="button"
+                class="w-full border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer {isDragging
+                  ? 'border-primary bg-primary/5'
+                  : 'border-muted-foreground/25 hover:border-primary/50'}"
+                ondrop={handleDrop}
+                ondragover={handleDragOver}
+                ondragleave={handleDragLeave}
+                onclick={() => fileInput?.click()}
+              >
+                <Upload class="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <p class="text-sm text-muted-foreground">
+                  Drop images here or click to browse
+                </p>
+                <p class="text-xs text-muted-foreground mt-1">
+                  PNG, JPEG, WebP, GIF - max 10 MB each
+                </p>
+              </button>
+
+              {#if imagePreviews.length > 0}
+                <div class="flex gap-2 flex-wrap">
+                  {#each imagePreviews as preview, i (preview)}
+                    <div class="relative group">
+                      <img
+                        src={preview}
+                        alt="Screenshot {i + 1}"
+                        class="h-20 w-20 object-cover rounded-md border"
+                      />
+                      <button
+                        type="button"
+                        class="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        onclick={() => removeImage(i)}
+                      >
+                        <X class="h-3 w-3" />
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+
+            <Separator />
+
+            <!-- Debug Info Toggles -->
+            <div class="space-y-3">
+              <Label class="text-sm font-medium">Diagnostic Info (included automatically)</Label>
+              <p class="text-xs text-muted-foreground">
+                Browser, screen size, route, and locale are always included. Toggle
+                additional info below:
+              </p>
+
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <div class="space-y-0.5">
+                    <Label class="text-sm">Tenant slug</Label>
+                    <p class="text-xs text-muted-foreground">
+                      Your instance identifier
+                    </p>
+                  </div>
+                  <Switch bind:checked={includeTenantSlug} />
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <div class="space-y-0.5">
+                    <Label class="text-sm">CGM source</Label>
+                    <p class="text-xs text-muted-foreground">
+                      Your connector type
+                    </p>
+                  </div>
+                  <Switch bind:checked={includeCgmSource} />
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <div class="space-y-0.5">
+                    <Label class="text-sm">Recent logs</Label>
+                    <p class="text-xs text-muted-foreground">
+                      API calls and debug information
+                    </p>
+                  </div>
+                  <Switch bind:checked={includeRecentLogs} />
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <div class="space-y-0.5">
+                    <Label class="text-sm">Settings</Label>
+                    <p class="text-xs text-muted-foreground">
+                      Your configuration (no passwords/tokens)
+                    </p>
+                  </div>
+                  <Switch bind:checked={includeSettings} />
+                </div>
+              </div>
             </div>
           </div>
+
+          <Dialog.Footer class="pt-4 border-t mt-4">
+            <Button type="button" variant="outline" onclick={handleClose}>Cancel</Button>
+            <Button
+              type="button"
+              onclick={() => { formState = "preview"; }}
+              disabled={!isValid}
+            >
+              <Eye class="h-4 w-4 mr-2" />
+              Preview Issue
+            </Button>
+          </Dialog.Footer>
+        {:else if formState === "preview" || formState === "submitting"}
+          <!-- Named fields the form submits; mirrors the state edited in the idle step -->
+          <input type="hidden" name="channel" value={useOperatorSupport ? "operator" : "github"} />
+          <input type="hidden" name="template" value={template} />
+          <input type="hidden" name="title" value={title} />
+          <input type="hidden" name="description" value={description} />
+          {#if template === "bug"}
+            <input type="hidden" name="stepsToReproduce" value={stepsToReproduce} />
+            <input type="hidden" name="expectedBehavior" value={expectedBehavior} />
+            <input type="hidden" name="actualBehavior" value={actualBehavior} />
+          {/if}
+          {#if template === "data-issue"}
+            <input type="hidden" name="cgmSource" value={cgmSource} />
+            <input type="hidden" name="timeRange" value={timeRange} />
+          {/if}
+          <input type="hidden" name="diagnosticInfo" value={diagnosticInfo} />
+
+          <div class="flex-1 overflow-y-auto space-y-4 pr-1">
+            <div class="space-y-1">
+              <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Title</p>
+              <h3 class="text-lg font-semibold">{title}</h3>
+            </div>
+
+            <Separator />
+
+            <div class="space-y-1">
+              <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Description</p>
+              <p class="text-sm whitespace-pre-wrap">{description}</p>
+            </div>
+
+            {#if template === "bug"}
+              {#if stepsToReproduce.trim()}
+                <Separator />
+                <div class="space-y-1">
+                  <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Steps to Reproduce</p>
+                  <p class="text-sm whitespace-pre-wrap">{stepsToReproduce}</p>
+                </div>
+              {/if}
+
+              {#if expectedBehavior.trim() || actualBehavior.trim()}
+                <Separator />
+                <div class="grid grid-cols-2 gap-4">
+                  {#if expectedBehavior.trim()}
+                    <div class="space-y-1">
+                      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Expected Behavior</p>
+                      <p class="text-sm whitespace-pre-wrap">{expectedBehavior}</p>
+                    </div>
+                  {/if}
+                  {#if actualBehavior.trim()}
+                    <div class="space-y-1">
+                      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Actual Behavior</p>
+                      <p class="text-sm whitespace-pre-wrap">{actualBehavior}</p>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            {/if}
+
+            {#if template === "data-issue" && (cgmSource.trim() || timeRange.trim())}
+              <Separator />
+              <div class="grid grid-cols-2 gap-4">
+                {#if cgmSource.trim()}
+                  <div class="space-y-1">
+                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">CGM Source</p>
+                    <p class="text-sm">{cgmSource}</p>
+                  </div>
+                {/if}
+                {#if timeRange.trim()}
+                  <div class="space-y-1">
+                    <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Time Range</p>
+                    <p class="text-sm">{timeRange}</p>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
+            {#if imagePreviews.length > 0}
+              <Separator />
+              <div class="space-y-1">
+                <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Screenshots ({images.length})</p>
+                <div class="flex gap-2 flex-wrap">
+                  {#each imagePreviews as preview, i (preview)}
+                    <img
+                      src={preview}
+                      alt="Screenshot {i + 1}"
+                      class="h-20 w-20 object-cover rounded-md border"
+                    />
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            <Separator />
+
+            <details class="group">
+              <summary class="text-xs font-medium text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground transition-colors">
+                Diagnostic Info
+              </summary>
+              <pre class="mt-2 text-xs bg-muted rounded-md p-3 overflow-x-auto">{diagnosticInfo}</pre>
+            </details>
+          </div>
+
+          <Dialog.Footer class="pt-4 border-t mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={formState === "submitting"}
+              onclick={() => { formState = "idle"; }}
+            >
+              <ArrowLeft class="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <div class="flex-1"></div>
+            <Button type="button" variant="outline" onclick={copyPreview}>
+              {#if previewCopied}
+                <CheckCircle class="h-4 w-4 mr-2" />
+                Copied
+              {:else}
+                <Copy class="h-4 w-4 mr-2" />
+                Copy
+              {/if}
+            </Button>
+            <Button
+              type="submit"
+              disabled={formState === "submitting"}
+            >
+              {#if formState === "submitting"}
+                <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+                Creating Issue...
+              {:else}
+                Submit Issue
+              {/if}
+            </Button>
+          </Dialog.Footer>
         {/if}
-
-        <Separator />
-
-        <details class="group">
-          <summary class="text-xs font-medium text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground transition-colors">
-            Diagnostic Info
-          </summary>
-          <pre class="mt-2 text-xs bg-muted rounded-md p-3 overflow-x-auto">{diagnosticInfo}</pre>
-        </details>
-      </div>
-
-      <Dialog.Footer class="pt-4 border-t mt-4">
-        <Button variant="outline" onclick={() => { formState = "idle"; }}>
-          <ArrowLeft class="h-4 w-4 mr-2" />
-          Back
-        </Button>
-        <div class="flex-1"></div>
-        <Button variant="outline" onclick={copyPreview}>
-          {#if previewCopied}
-            <CheckCircle class="h-4 w-4 mr-2" />
-            Copied
-          {:else}
-            <Copy class="h-4 w-4 mr-2" />
-            Copy
-          {/if}
-        </Button>
-        <Button
-          onclick={handleSubmit}
-          disabled={formState === "submitting"}
-        >
-          {#if formState === "submitting"}
-            <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-            Creating Issue...
-          {:else}
-            Submit Issue
-          {/if}
-        </Button>
-      </Dialog.Footer>
+      </form>
     {/if}
   </Dialog.Content>
 </Dialog.Root>

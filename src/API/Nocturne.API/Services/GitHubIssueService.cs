@@ -12,6 +12,17 @@ public class GitHubIssueOptions
     public string RelayUrl { get; set; } = "https://nocturne.run/api/v4/support/issues";
     public string Owner { get; set; } = "nightscout";
     public string Repo { get; set; } = "nocturne";
+
+    /// <summary>
+    /// Branch of <see cref="Repo"/> that screenshot attachments are committed
+    /// to via the contents API, then embedded in the issue body by raw URL.
+    /// GitHub has no API for uploading images directly into an issue, so this
+    /// is the only way to make screenshots render inline. The branch must
+    /// exist (an orphan branch keeps the history separate) and the PAT needs
+    /// contents write access. When empty, screenshots are not uploaded and the
+    /// issue body notes how many were attached.
+    /// </summary>
+    public string? AssetsBranch { get; set; } = "support-assets";
 }
 
 public record CreateIssueRequest
@@ -71,7 +82,7 @@ public class GitHubIssueService(
         CancellationToken ct)
     {
         var imageUrls = await UploadImagesAsync(images, ct);
-        var body = BuildIssueBody(request, imageUrls);
+        var body = BuildIssueBody(request, imageUrls, images.Count);
         var label = TemplateLabels.GetValueOrDefault(request.Template, "bug");
 
         using var client = CreateGitHubClient();
@@ -127,6 +138,14 @@ public class GitHubIssueService(
             ?? throw new InvalidOperationException("Failed to deserialize relay response");
     }
 
+    /// <summary>
+    /// Commits each image to the assets branch of the issues repo via the
+    /// GitHub contents API and returns the resulting raw URLs for embedding.
+    /// GitHub has no API for uploading images directly into an issue, so this
+    /// is the only way to make screenshots render inline. Returns an empty
+    /// list when no assets branch is configured; the issue body then records
+    /// the attachment count.
+    /// </summary>
     private async Task<List<string>> UploadImagesAsync(
         IReadOnlyList<(string FileName, string ContentType, Stream Content)> images,
         CancellationToken ct)
@@ -134,39 +153,73 @@ public class GitHubIssueService(
         var urls = new List<string>();
         if (images.Count == 0) return urls;
 
-        using var client = CreateGitHubClient();
         var opts = options.Value;
-
-        foreach (var (fileName, contentType, imageContent) in images)
+        if (string.IsNullOrEmpty(opts.AssetsBranch))
         {
-            var uploadContent = new MultipartFormDataContent();
-            var streamContent = new StreamContent(imageContent);
-            streamContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
-            uploadContent.Add(streamContent, "file", fileName);
+            logger.LogWarning(
+                "GitHub:AssetsBranch is not configured; {Count} screenshot(s) will not be uploaded",
+                images.Count);
+            return urls;
+        }
 
-            var uploadUrl = $"https://uploads.github.com/repos/{opts.Owner}/{opts.Repo}/upload/assets";
-            var response = await client.PostAsync(uploadUrl, uploadContent, ct);
+        using var client = CreateGitHubClient();
+
+        foreach (var (fileName, _, imageContent) in images)
+        {
+            using var buffer = new MemoryStream();
+            await imageContent.CopyToAsync(buffer, ct);
+
+            var path = $"screenshots/{DateTime.UtcNow:yyyy-MM}/{Guid.NewGuid():N}-{SanitizeFileName(fileName)}";
+            var payload = JsonSerializer.Serialize(new GitHubCreateContentRequest
+            {
+                Message = $"Add support issue screenshot {fileName}",
+                Content = Convert.ToBase64String(buffer.ToArray()),
+                Branch = opts.AssetsBranch,
+            });
+
+            var response = await client.PutAsync(
+                $"/repos/{opts.Owner}/{opts.Repo}/contents/{path}",
+                new StringContent(payload, Encoding.UTF8, "application/json"),
+                ct);
 
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadAsStringAsync(ct);
                 using var doc = JsonDocument.Parse(result);
-                if (doc.RootElement.TryGetProperty("browser_download_url", out var urlProp))
+                if (doc.RootElement.TryGetProperty("content", out var contentProp)
+                    && contentProp.TryGetProperty("download_url", out var urlProp)
+                    && urlProp.GetString() is { Length: > 0 } url)
                 {
-                    urls.Add(urlProp.GetString() ?? "");
+                    urls.Add(url);
                 }
             }
             else
             {
-                logger.LogWarning("Failed to upload image {FileName}: {Status}",
-                    fileName, response.StatusCode);
+                var error = await response.Content.ReadAsStringAsync(ct);
+                logger.LogWarning("Failed to upload image {FileName}: {Status} {Error}",
+                    fileName, response.StatusCode, error);
             }
         }
 
         return urls;
     }
 
-    internal static string BuildIssueBody(CreateIssueRequest request, List<string> imageUrls)
+    /// <summary>
+    /// Restricts a client-supplied file name to characters that are safe in a
+    /// repository path (the unique prefix comes from the caller's GUID).
+    /// </summary>
+    internal static string SanitizeFileName(string fileName)
+    {
+        var sanitized = new string(fileName
+            .Where(c => char.IsLetterOrDigit(c) || c is '.' or '-' or '_')
+            .ToArray());
+        return string.IsNullOrEmpty(sanitized.Trim('.')) ? "screenshot" : sanitized;
+    }
+
+    internal static string BuildIssueBody(
+        CreateIssueRequest request,
+        List<string> imageUrls,
+        int attachedImageCount = 0)
     {
         var sb = new StringBuilder();
 
@@ -218,6 +271,13 @@ public class GitHubIssueService(
             }
         }
 
+        if (attachedImageCount > imageUrls.Count)
+        {
+            var missing = attachedImageCount - imageUrls.Count;
+            sb.AppendLine($"*{missing} screenshot(s) were attached but could not be uploaded.*");
+            sb.AppendLine();
+        }
+
         sb.AppendLine("---");
         sb.AppendLine();
         sb.AppendLine("<details>");
@@ -262,5 +322,15 @@ public class GitHubIssueService(
         public int Number { get; init; }
         [JsonPropertyName("html_url")]
         public string HtmlUrl { get; init; } = "";
+    }
+
+    private record GitHubCreateContentRequest
+    {
+        [JsonPropertyName("message")]
+        public string Message { get; init; } = "";
+        [JsonPropertyName("content")]
+        public string Content { get; init; } = "";
+        [JsonPropertyName("branch")]
+        public string? Branch { get; init; }
     }
 }
