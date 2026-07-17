@@ -39,6 +39,10 @@ public class PumpSnapshotController(IPumpSnapshotRepository repo)
     /// `dataSource` and `syncIdentifier` updates the row already matched by that pair; all others
     /// insert. Validation failures reject the whole request with `400 Bad Request` before anything
     /// is persisted. Omit `reservoir` when the level is unknown rather than sending a sentinel.
+    ///
+    /// Device attribution is a deliberate scope cut: unlike the legacy decomposer path, records
+    /// written here carry no Device/PatientDevice link (snapshots are not <c>IDeviceAttributed</c>,
+    /// so the stamper can't take them). Reads that join by <c>correlationId</c> are unaffected.
     /// </remarks>
     [HttpPost]
     [RequireScope(OAuthScopes.DevicesReadWrite)]

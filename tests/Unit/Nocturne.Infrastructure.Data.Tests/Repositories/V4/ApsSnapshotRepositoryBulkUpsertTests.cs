@@ -149,4 +149,41 @@ public class ApsSnapshotRepositoryBulkUpsertTests : IDisposable
         result.Should().BeEmpty();
         _context.ApsSnapshots.Count().Should().Be(0);
     }
+
+    private sealed class RecordingBroadcaster : Core.Contracts.Events.IV4RecordBroadcaster<ApsSnapshot>
+    {
+        public List<ApsSnapshot> Created { get; } = [];
+        public List<ApsSnapshot> Updated { get; } = [];
+
+        public Task BroadcastCreatedAsync(IReadOnlyList<ApsSnapshot> items, CancellationToken ct = default)
+        {
+            Created.AddRange(items);
+            return Task.CompletedTask;
+        }
+
+        public Task BroadcastUpdatedAsync(IReadOnlyList<ApsSnapshot> items, CancellationToken ct = default)
+        {
+            Updated.AddRange(items);
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task BulkUpsertAsync_ByteIdenticalRetry_DoesNotBroadcastUpdates()
+    {
+        var broadcaster = new RecordingBroadcaster();
+        var repository = new ApsSnapshotRepository(
+            new TestTenantDbContextFactory(_context), NullLogger<ApsSnapshotRepository>.Instance, broadcaster);
+
+        await repository.BulkUpsertAsync([CreateSnapshot("sync-1", iob: 1.0)], WriteOrigin.Live);
+        broadcaster.Created.Should().HaveCount(1);
+
+        // Byte-identical retry: matched in place, but nothing materially changed.
+        await repository.BulkUpsertAsync([CreateSnapshot("sync-1", iob: 1.0)], WriteOrigin.Live);
+        broadcaster.Updated.Should().BeEmpty();
+
+        // A real change does broadcast as an update.
+        await repository.BulkUpsertAsync([CreateSnapshot("sync-1", iob: 2.0)], WriteOrigin.Live);
+        broadcaster.Updated.Should().HaveCount(1);
+    }
 }

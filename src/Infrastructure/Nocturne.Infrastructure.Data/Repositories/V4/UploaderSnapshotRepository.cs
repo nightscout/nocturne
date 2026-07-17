@@ -363,6 +363,7 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
             // Soft-deleted rows are excluded: the partial unique index ignores them, so a
             // re-upload after a delete inserts a fresh row instead of writing into the deleted one.
             var updatedEntities = new List<UploaderSnapshotEntity>();
+            var materiallyChanged = new List<UploaderSnapshotEntity>();
             var toInsert = entities;
             var syncKeyed = entities
                 .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
@@ -391,6 +392,9 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
                     {
                         UploaderSnapshotMapper.UpdateEntity(existing, UploaderSnapshotMapper.ToDomainModel(entity));
                         updatedEntities.Add(existing);
+                        // Capture material changes now, before SaveChanges clears the modified flags.
+                        if (V4MaterialChange.HasMaterialChange(ctx.Entry(existing)))
+                            materiallyChanged.Add(existing);
                     }
                     else
                     {
@@ -428,7 +432,9 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
 
             var updated = updatedEntities.Select(UploaderSnapshotMapper.ToDomainModel).ToList();
             var created = toInsert.Select(UploaderSnapshotMapper.ToDomainModel).ToList();
-            await RaiseBroadcastAsync(created, updated, [], origin, ct);
+            // Broadcast only materially changed updates: a byte-identical retry of the same
+            // batch must not push update events to every client (the #513 broadcast-storm shape).
+            await RaiseBroadcastAsync(created, materiallyChanged.Select(UploaderSnapshotMapper.ToDomainModel).ToList(), [], origin, ct);
             return updated.Concat(created).ToList();
         });
     }
