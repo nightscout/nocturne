@@ -1867,6 +1867,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_temp_basals_tenant_start_timestamp")
             .IsDescending(false, true);
 
+        // TempBasal gains a SyncIdentifier upsert key (mirrors boluses) so uploader
+        // retries of the same pump event update in place instead of duplicating.
+        modelBuilder
+            .Entity<TempBasalEntity>()
+            .HasIndex(e => new { e.TenantId, e.DataSource, e.SyncIdentifier })
+            .HasDatabaseName("ix_temp_basals_tenant_source_sync_id")
+            .IsUnique()
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
         // Devices unique index (scoped to live records, per tenant).
         // TenantId must be part of the key: devices are tenant-owned (FindByCategoryTypeAndSerialAsync
         // is RLS-scoped to the current tenant) and the type/serial often carry shared, non-unique

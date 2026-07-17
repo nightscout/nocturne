@@ -53,6 +53,17 @@ public class CreateCarbIntakeRequest
     public int? AbsorptionTime { get; set; }
 
     /// <summary>
+    /// Fat consumed in grams, when the source reports macros. Native fields replace the
+    /// synthesized FPU fake-carb series legacy uploaders emit for Nightscout.
+    /// </summary>
+    public double? FatGrams { get; set; }
+
+    /// <summary>
+    /// Protein consumed in grams, when the source reports macros.
+    /// </summary>
+    public double? ProteinGrams { get; set; }
+
+    /// <summary>
     /// Correlation identifier for grouping related events (e.g. a meal bolus and carb intake).
     /// </summary>
     public Guid? CorrelationId { get; set; }

@@ -115,27 +115,62 @@ public class NutritionController : ControllerBase
         if (request.Timestamp == default)
             return Problem(detail: "Timestamp must be set", statusCode: 400, title: "Bad Request");
 
-        // Records split from one source share a correlation_id; it is a free-standing
-        // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
-        var correlationId = request.CorrelationId ?? Guid.CreateVersion7();
-
-        var model = new CarbIntake
-        {
-            Timestamp = request.Timestamp.UtcDateTime,
-            UtcOffset = request.UtcOffset,
-            Device = request.Device,
-            App = request.App,
-            DataSource = request.DataSource,
-            Carbs = request.Carbs,
-            SyncIdentifier = request.SyncIdentifier,
-            CarbTime = request.CarbTime,
-            AbsorptionTime = request.AbsorptionTime,
-            CorrelationId = correlationId,
-        };
+        var model = MapCreateToModel(request);
 
         var created = await _carbIntakeRepo.CreateAsync(model, WriteOrigin.Live, ct);
         return CreatedAtAction(nameof(GetCarbIntakeById), new { id = created.Id }, created);
     }
+
+    /// <summary>
+    /// Create or update carb intakes in bulk (max 1000).
+    /// </summary>
+    /// <remarks>
+    /// Array semantics are per-item upsert, not all-or-nothing: each intake carrying both
+    /// `dataSource` and `syncIdentifier` updates the row already matched by that pair; all others
+    /// insert. Validation failures reject the whole request with `400 Bad Request` before anything
+    /// is persisted.
+    /// </remarks>
+    [HttpPost("carbs/bulk")]
+    [ProducesResponseType(typeof(CarbIntake[]), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CarbIntake[]>> CreateCarbIntakesBulk(
+        [FromBody] CreateCarbIntakeRequest[] requests,
+        CancellationToken ct = default)
+    {
+        if (requests is not { Length: > 0 })
+            return Problem(detail: "Carb intake data is required", statusCode: 400, title: "Bad Request");
+
+        if (requests.Length > 1000)
+            return Problem(detail: "Bulk operations are limited to 1000 intakes per request", statusCode: 400, title: "Bad Request");
+
+        if (requests.Any(r => r.Timestamp == default))
+            return Problem(detail: "Timestamp must be set on every intake", statusCode: 400, title: "Bad Request");
+
+        if (requests.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
+            return Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
+
+        var models = requests.Select(MapCreateToModel).ToList();
+        var persisted = await _carbIntakeRepo.BulkCreateAsync(models, WriteOrigin.Live, ct);
+        return StatusCode(201, persisted.ToArray());
+    }
+
+    private static CarbIntake MapCreateToModel(CreateCarbIntakeRequest request) => new()
+    {
+        Timestamp = request.Timestamp.UtcDateTime,
+        UtcOffset = request.UtcOffset,
+        Device = request.Device,
+        App = request.App,
+        DataSource = request.DataSource,
+        Carbs = request.Carbs,
+        SyncIdentifier = request.SyncIdentifier,
+        CarbTime = request.CarbTime,
+        AbsorptionTime = request.AbsorptionTime,
+        FatGrams = request.FatGrams,
+        ProteinGrams = request.ProteinGrams,
+        // Records split from one source share a correlation_id; it is a free-standing
+        // grouping value (no batch row to persist), so honour a client-supplied id or mint one.
+        CorrelationId = request.CorrelationId ?? Guid.CreateVersion7(),
+    };
 
     /// <summary>
     /// Update an existing carb intake
@@ -166,6 +201,8 @@ public class NutritionController : ControllerBase
             SyncIdentifier = request.SyncIdentifier,
             CarbTime = request.CarbTime,
             AbsorptionTime = request.AbsorptionTime,
+            FatGrams = request.FatGrams,
+            ProteinGrams = request.ProteinGrams,
             CorrelationId = request.CorrelationId ?? existing.CorrelationId,
             LegacyId = existing.LegacyId,
             CreatedAt = existing.CreatedAt,

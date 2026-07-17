@@ -134,6 +134,52 @@ public class BasalInjectionController(
         CreatedAt = existing.CreatedAt,
     };
 
+    /// <summary>
+    /// Create or update basal injections in bulk (max 1000).
+    /// </summary>
+    /// <remarks>
+    /// Array semantics are per-item upsert, not all-or-nothing: each injection carrying both
+    /// `dataSource` and `syncIdentifier` updates the row already matched by that pair; all others
+    /// insert. Every item is validated with the same rules as the single create; validation
+    /// failures reject the whole request with `400 Bad Request` before anything is persisted.
+    /// </remarks>
+    [HttpPost("bulk")]
+    [ProducesResponseType(typeof(BasalInjection[]), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BasalInjection[]>> CreateBasalInjectionsBulk(
+        [FromBody] CreateBasalInjectionRequest[] requests,
+        CancellationToken ct = default)
+    {
+        if (requests is not { Length: > 0 })
+            return Problem(detail: "Basal injection data is required", statusCode: 400, title: "Bad Request");
+
+        if (requests.Length > 1000)
+            return Problem(detail: "Bulk operations are limited to 1000 injections per request", statusCode: 400, title: "Bad Request");
+
+        if (requests.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
+            return Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
+
+        var models = new List<BasalInjection>(requests.Length);
+        foreach (var request in requests)
+        {
+            if (ValidateUnitsAndTimestamp(request.Units, request.Timestamp) is { } unitsOrTsProblem)
+                return unitsOrTsProblem;
+
+            // Resolved per item: the active-at-injection-time window check depends on each
+            // item's timestamp, so a per-insulin cache would skip it.
+            var (insulin, insulinProblem) = await ResolveInsulinAsync(request.PatientInsulinId, request.Timestamp, ct);
+            if (insulinProblem is not null)
+                return insulinProblem;
+
+            var model = MapCreateToModel(request);
+            model.InsulinContext = BuildContext(insulin!);
+            models.Add(model);
+        }
+
+        var persisted = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
+        return StatusCode(201, persisted.ToArray());
+    }
+
     private ObjectResult? ValidateUnitsAndTimestamp(double units, DateTimeOffset timestamp)
     {
         if (units <= 0 || units > UnitsHardCeiling)

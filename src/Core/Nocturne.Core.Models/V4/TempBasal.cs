@@ -128,6 +128,12 @@ public class TempBasal : IDeviceAttributed
     public string? PumpRecordId { get; set; }
 
     /// <summary>
+    /// Stable per-source identifier. Records matched on (DataSource, SyncIdentifier) are updated in
+    /// place on re-upload instead of duplicated, so uploader retries are idempotent.
+    /// </summary>
+    public string? SyncIdentifier { get; set; }
+
+    /// <summary>
     /// FK to the <see cref="ApsSnapshot"/> whose algorithm decision set this temp basal.
     /// </summary>
     public Guid? ApsSnapshotId { get; set; }

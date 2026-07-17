@@ -123,6 +123,15 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Ent
     public Guid? PatientDeviceId { get; set; }
 
     /// <summary>
+    /// Stable per-source identifier for synchronization. Unlike <see cref="LegacyId"/> (insert-only),
+    /// a record matched by (DataSource, SyncIdentifier) is updated in place on re-upload — required so
+    /// uploader retries of the same pump event don't duplicate the span.
+    /// </summary>
+    [Column("sync_identifier")]
+    [MaxLength(256)]
+    public string? SyncIdentifier { get; set; }
+
+    /// <summary>
     /// Pump-specific record identifier for deduplication
     /// </summary>
     [Column("pump_record_id")]

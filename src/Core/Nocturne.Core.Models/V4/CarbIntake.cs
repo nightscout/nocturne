@@ -97,6 +97,17 @@ public class CarbIntake : IV4Record
     public int? AbsorptionTime { get; set; }
 
     /// <summary>
+    /// Fat consumed in grams, when the source reports macros. Native fields replace the
+    /// synthesized FPU fake-carb series legacy uploaders emit for Nightscout.
+    /// </summary>
+    public double? FatGrams { get; set; }
+
+    /// <summary>
+    /// Protein consumed in grams, when the source reports macros.
+    /// </summary>
+    public double? ProteinGrams { get; set; }
+
+    /// <summary>
     /// Catch-all for fields not mapped to dedicated columns
     /// </summary>
     public Dictionary<string, object?>? AdditionalProperties { get; set; }

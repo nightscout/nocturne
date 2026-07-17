@@ -111,6 +111,18 @@ public class CarbIntakeEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Ti
     public int? AbsorptionTime { get; set; }
 
     /// <summary>
+    /// Fat consumed in grams, when the source reports macros
+    /// </summary>
+    [Column("fat_grams")]
+    public double? FatGrams { get; set; }
+
+    /// <summary>
+    /// Protein consumed in grams, when the source reports macros
+    /// </summary>
+    [Column("protein_grams")]
+    public double? ProteinGrams { get; set; }
+
+    /// <summary>
     /// Catch-all JSONB column for fields not mapped to dedicated columns
     /// </summary>
     [Column("additional_properties", TypeName = "jsonb")]

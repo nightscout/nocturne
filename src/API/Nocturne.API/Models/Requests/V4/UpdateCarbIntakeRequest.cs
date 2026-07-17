@@ -54,6 +54,16 @@ public class UpdateCarbIntakeRequest
     public int? AbsorptionTime { get; set; }
 
     /// <summary>
+    /// Fat consumed in grams, when the source reports macros.
+    /// </summary>
+    public double? FatGrams { get; set; }
+
+    /// <summary>
+    /// Protein consumed in grams, when the source reports macros.
+    /// </summary>
+    public double? ProteinGrams { get; set; }
+
+    /// <summary>
     /// Correlation identifier for grouping related events.
     /// </summary>
     public Guid? CorrelationId { get; set; }

@@ -98,6 +98,48 @@ public class SleepController : ControllerBase
     }
 
     /// <summary>
+    /// Create or upsert sleep sessions in bulk (max 100)
+    /// </summary>
+    /// <remarks>
+    /// Sessions are upserted one by one with the same dedup semantics as the single create, so a
+    /// retried batch is idempotent. On a concurrent-insert conflict the request stops with `409
+    /// Conflict`; sessions upserted before the conflict remain persisted, and retrying the whole
+    /// batch is safe.
+    /// </remarks>
+    [HttpPost("bulk")]
+    [RequireScope(OAuthScopes.SleepReadWrite)]
+    [ProducesResponseType(typeof(SleepSession[]), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<SleepSession[]>> CreateSessionsBulk(
+        [FromBody] SleepSession[] sessions,
+        CancellationToken cancellationToken = default)
+    {
+        if (sessions is not { Length: > 0 })
+            return Problem(detail: "Sleep session data is required", statusCode: 400, title: "Bad Request");
+
+        // Sessions embed stage intervals and biometric samples, so the cap is lower than the
+        // 1000-item flat-record bulks.
+        if (sessions.Length > 100)
+            return Problem(detail: "Bulk operations are limited to 100 sessions per request", statusCode: 400, title: "Bad Request");
+
+        var results = new List<SleepSession>(sessions.Length);
+        try
+        {
+            foreach (var session in sessions)
+                results.Add(await _sleepService.UpsertSessionAsync(session, cancellationToken));
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent request inserted a session with the same key between
+            // the upsert's dedup lookup and its insert.
+            return Problem(detail: "A sleep session with the same identifier was created concurrently.", statusCode: 409, title: "Conflict");
+        }
+
+        return StatusCode(201, results.ToArray());
+    }
+
+    /// <summary>
     /// Update an existing sleep session
     /// </summary>
     [HttpPut("{id:guid}")]

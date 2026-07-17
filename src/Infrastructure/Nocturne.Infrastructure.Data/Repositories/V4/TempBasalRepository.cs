@@ -133,14 +133,34 @@ public class TempBasalRepository : ITempBasalRepository
     }
 
     /// <summary>
-    /// Creates a new temporary basal record.
+    /// Creates a new temporary basal record. When <c>DataSource</c> and <c>SyncIdentifier</c>
+    /// match an existing live row for this tenant, the record is updated in place rather than
+    /// inserted — making the operation idempotent for uploader retries. Tenant scoping is
+    /// implicit via the DbContext's RLS-equivalent query filter. Mirrors SensorGlucoseRepository.
     /// </summary>
     /// <param name="model">The temporary basal record to create.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The created temporary basal record.</returns>
+    /// <returns>The created or updated temporary basal record.</returns>
     public async Task<TempBasal> CreateAsync(TempBasal model, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
+        if (!string.IsNullOrEmpty(model.DataSource) && !string.IsNullOrEmpty(model.SyncIdentifier))
+        {
+            var existing = await ctx.TempBasals
+                .FirstOrDefaultAsync(
+                    e => e.DataSource == model.DataSource && e.SyncIdentifier == model.SyncIdentifier,
+                    ct);
+            if (existing != null)
+            {
+                TempBasalMapper.UpdateEntity(existing, model);
+                await ctx.SaveChangesAsync(ct);
+                var upserted = TempBasalMapper.ToDomainModel(existing);
+                // A single explicit upsert always broadcasts (no material-change gate on the single path).
+                await RaiseBroadcastAsync([], [upserted], [], origin, ct);
+                return upserted;
+            }
+        }
+
         var entity = TempBasalMapper.ToEntity(model);
         ctx.TempBasals.Add(entity);
         await ctx.SaveChangesAsync(ct);

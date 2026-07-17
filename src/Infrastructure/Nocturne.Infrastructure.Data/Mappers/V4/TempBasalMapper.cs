@@ -35,6 +35,7 @@ public static class TempBasalMapper
             DeviceId = model.DeviceId,
             PatientDeviceId = model.PatientDeviceId,
             PumpRecordId = model.PumpRecordId,
+            SyncIdentifier = model.SyncIdentifier,
             ApsSnapshotId = model.ApsSnapshotId,
             InsulinContextJson = model.InsulinContext is not null
                 ? JsonSerializer.Serialize(model.InsulinContext)
@@ -73,6 +74,7 @@ public static class TempBasalMapper
             DeviceId = entity.DeviceId,
             PatientDeviceId = entity.PatientDeviceId,
             PumpRecordId = entity.PumpRecordId,
+            SyncIdentifier = entity.SyncIdentifier,
             ApsSnapshotId = entity.ApsSnapshotId,
             InsulinContext = !string.IsNullOrEmpty(entity.InsulinContextJson)
                 ? JsonSerializer.Deserialize<TreatmentInsulinContext>(entity.InsulinContextJson)
@@ -104,6 +106,7 @@ public static class TempBasalMapper
         entity.DeviceId = model.DeviceId;
         entity.PatientDeviceId = model.PatientDeviceId;
         entity.PumpRecordId = model.PumpRecordId;
+        entity.SyncIdentifier = model.SyncIdentifier;
         entity.ApsSnapshotId = model.ApsSnapshotId;
         entity.InsulinContextJson = model.InsulinContext is not null
             ? JsonSerializer.Serialize(model.InsulinContext)

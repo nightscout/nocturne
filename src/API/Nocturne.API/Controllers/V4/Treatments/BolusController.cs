@@ -143,6 +143,46 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
     };
 
     /// <summary>
+    /// Create or update boluses in bulk (max 1000).
+    /// </summary>
+    /// <remarks>
+    /// Array semantics are per-item upsert, not all-or-nothing: each bolus carrying both
+    /// `dataSource` and `syncIdentifier` updates the row already matched by that pair; all others
+    /// insert. Validation failures reject the whole request with `400 Bad Request` before anything
+    /// is persisted.
+    /// </remarks>
+    [HttpPost("bulk")]
+    [ProducesResponseType(typeof(Bolus[]), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<Bolus[]>> CreateBolusesBulk(
+        [FromBody] CreateBolusRequest[] requests,
+        CancellationToken ct = default)
+    {
+        if (requests is not { Length: > 0 })
+            return Problem(detail: "Bolus data is required", statusCode: 400, title: "Bad Request");
+
+        if (requests.Length > 1000)
+            return Problem(detail: "Bulk operations are limited to 1000 boluses per request", statusCode: 400, title: "Bad Request");
+
+        if (requests.Any(r => r.Timestamp == default))
+            return Problem(detail: "Timestamp must be set on every bolus", statusCode: 400, title: "Bad Request");
+
+        if (requests.Any(r => !string.IsNullOrEmpty(r.SyncIdentifier) && string.IsNullOrEmpty(r.DataSource)))
+            return Problem(detail: "DataSource is required when SyncIdentifier is supplied", statusCode: 400, title: "Bad Request");
+
+        var models = new List<Bolus>(requests.Length);
+        foreach (var request in requests)
+        {
+            var model = MapCreateToModel(request);
+            await EnrichInsulinContextAsync(model, request.PatientInsulinId, ct);
+            models.Add(model);
+        }
+
+        var persisted = await Repository.BulkCreateAsync(models, WriteOrigin.Live, ct);
+        return StatusCode(201, persisted.ToArray());
+    }
+
+    /// <summary>
     /// Delete a bolus by its external sync identifier (dataSource + syncIdentifier pair).
     /// </summary>
     [HttpDelete("by-sync-id")]
