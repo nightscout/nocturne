@@ -98,7 +98,7 @@ jobs:
           path: sdk/
 
       - name: Generate C# SDK
-        uses: docker://openapitools/openapi-generator-cli:latest
+        uses: docker://openapitools/openapi-generator-cli:v7.21.0
         with:
           args: >-
             generate
@@ -149,7 +149,7 @@ jobs:
           path: sdk/
 
       - name: Generate TypeScript SDK
-        uses: docker://openapitools/openapi-generator-cli:latest
+        uses: docker://openapitools/openapi-generator-cli:v7.21.0
         with:
           args: >-
             generate
@@ -196,7 +196,7 @@ jobs:
           path: sdk/
 
       - name: Generate Kotlin SDK
-        uses: docker://openapitools/openapi-generator-cli:latest
+        uses: docker://openapitools/openapi-generator-cli:v7.21.0
         with:
           args: >-
             generate
@@ -267,12 +267,23 @@ jobs:
           name: openapi-v4-spec
           path: sdk/
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # brew's openapi-generator formula always installs latest, unlike the
+      # pinned :v7.21.0 Docker image the other SDK targets use (Docker isn't
+      # available on GitHub-hosted macOS runners). Pin the same version here
+      # via the jar directly, so all seven targets generate from one
+      # reproducible generator version.
       - name: Install OpenAPI Generator
-        run: brew install openapi-generator
+        run: curl -L -o openapi-generator-cli.jar https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.21.0/openapi-generator-cli-7.21.0.jar
 
       - name: Generate Swift SDK
         run: |
-          openapi-generator generate \
+          java -jar openapi-generator-cli.jar generate \
             -i sdk/openapi-v4.json \
             -c sdk/swift/config.yaml \
             -o sdk/swift/out \
@@ -339,7 +350,7 @@ jobs:
           path: sdk/
 
       - name: Generate Python SDK
-        uses: docker://openapitools/openapi-generator-cli:latest
+        uses: docker://openapitools/openapi-generator-cli:v7.21.0
         with:
           args: >-
             generate
@@ -388,7 +399,7 @@ jobs:
           path: sdk/
 
       - name: Generate Java SDK
-        uses: docker://openapitools/openapi-generator-cli:latest
+        uses: docker://openapitools/openapi-generator-cli:v7.21.0
         with:
           args: >-
             generate
@@ -464,7 +475,7 @@ jobs:
           path: sdk/
 
       - name: Generate Rust SDK
-        uses: docker://openapitools/openapi-generator-cli:latest
+        uses: docker://openapitools/openapi-generator-cli:v7.21.0
         with:
           args: >-
             generate
