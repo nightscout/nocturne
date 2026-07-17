@@ -97,6 +97,34 @@ for (const schema of Object.values(filteredSchemas)) {
   }
 }
 
+// Collapse NSwag's nullable-enum-ref query parameter idiom down to a plain
+// $ref. NSwag emits optional enum query params as a doubly-nested oneOf
+// ({ oneOf: [{ nullable: true, oneOf: [{ $ref }] }] }) instead of a plain
+// $ref. openapi-generator's swift6 target treats that shape as a oneOf
+// composition and generates a wrapper enum with no `asParameter`
+// conformance, so every such parameter fails to compile. The wrapper is
+// unnecessary here: the param is already optional (no `required: true`), so
+// nullability adds nothing and the $ref can stand alone.
+function unwrapNullableEnumParam(schema) {
+  if (schema?.oneOf?.length === 1) {
+    const inner = schema.oneOf[0];
+    if (inner?.nullable === true && inner.oneOf?.length === 1 && inner.oneOf[0]['$ref']) {
+      return { '$ref': inner.oneOf[0]['$ref'] };
+    }
+  }
+  return schema;
+}
+
+for (const operations of Object.values(filteredPaths)) {
+  for (const operation of Object.values(operations)) {
+    for (const param of operation.parameters ?? []) {
+      if (param.schema) {
+        param.schema = unwrapNullableEnumParam(param.schema);
+      }
+    }
+  }
+}
+
 const output = {
   openapi: spec.openapi,
   info: {
