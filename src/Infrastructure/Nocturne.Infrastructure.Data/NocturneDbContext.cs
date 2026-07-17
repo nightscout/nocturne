@@ -1760,6 +1760,24 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => e.LegacyId)
             .HasDatabaseName("ix_aps_snapshots_legacy_id");
 
+        // ApsSnapshot gains a SyncIdentifier upsert key (mirrors boluses) so uploader
+        // retries of the same loop cycle update in place instead of duplicating.
+        modelBuilder
+            .Entity<ApsSnapshotEntity>()
+            .HasIndex(e => new { e.TenantId, e.DataSource, e.SyncIdentifier })
+            .HasDatabaseName("ix_aps_snapshots_tenant_source_sync_id")
+            .IsUnique()
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
+        // Keep the conventional TenantId index: the partial sync-id index above starts with
+        // tenant_id, which makes EF drop the auto-created one as redundant, but a filtered
+        // index can't serve general tenant-scoped scans (all pre-existing rows have NULL
+        // sync_identifier).
+        modelBuilder
+            .Entity<ApsSnapshotEntity>()
+            .HasIndex(e => e.TenantId)
+            .HasDatabaseName("IX_aps_snapshots_tenant_id");
+
         // PumpSnapshot indexes
         modelBuilder
             .Entity<PumpSnapshotEntity>()
@@ -1772,6 +1790,20 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => e.LegacyId)
             .HasDatabaseName("ix_pump_snapshots_legacy_id");
 
+        // PumpSnapshot gains a SyncIdentifier upsert key (mirrors boluses).
+        modelBuilder
+            .Entity<PumpSnapshotEntity>()
+            .HasIndex(e => new { e.TenantId, e.DataSource, e.SyncIdentifier })
+            .HasDatabaseName("ix_pump_snapshots_tenant_source_sync_id")
+            .IsUnique()
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
+        // Keep the conventional TenantId index (see ApsSnapshot note above).
+        modelBuilder
+            .Entity<PumpSnapshotEntity>()
+            .HasIndex(e => e.TenantId)
+            .HasDatabaseName("IX_pump_snapshots_tenant_id");
+
         // UploaderSnapshot indexes
         modelBuilder
             .Entity<UploaderSnapshotEntity>()
@@ -1783,6 +1815,20 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<UploaderSnapshotEntity>()
             .HasIndex(e => e.LegacyId)
             .HasDatabaseName("ix_uploader_snapshots_legacy_id");
+
+        // UploaderSnapshot gains a SyncIdentifier upsert key (mirrors boluses).
+        modelBuilder
+            .Entity<UploaderSnapshotEntity>()
+            .HasIndex(e => new { e.TenantId, e.DataSource, e.SyncIdentifier })
+            .HasDatabaseName("ix_uploader_snapshots_tenant_source_sync_id")
+            .IsUnique()
+            .HasFilter("sync_identifier IS NOT NULL AND deleted_at IS NULL");
+
+        // Keep the conventional TenantId index (see ApsSnapshot note above).
+        modelBuilder
+            .Entity<UploaderSnapshotEntity>()
+            .HasIndex(e => e.TenantId)
+            .HasDatabaseName("IX_uploader_snapshots_tenant_id");
 
 
         // DeviceStatusExtras indexes

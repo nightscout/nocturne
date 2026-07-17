@@ -64,6 +64,22 @@ public class ApsSnapshotEntity : ITenantScoped, ISoftDeletable, IV4Entity, ISyst
     public string? DataSource { get; set; }
 
     /// <summary>
+    /// Application that uploaded this snapshot
+    /// </summary>
+    [Column("app")]
+    [MaxLength(256)]
+    public string? App { get; set; }
+
+    /// <summary>
+    /// Stable per-source identifier for synchronization. Unlike <see cref="LegacyId"/> (insert-only),
+    /// a record matched by (DataSource, SyncIdentifier) is updated in place on re-upload — required so
+    /// uploader retries of the same loop cycle don't duplicate the snapshot.
+    /// </summary>
+    [Column("sync_identifier")]
+    [MaxLength(256)]
+    public string? SyncIdentifier { get; set; }
+
+    /// <summary>
     /// System tracking: when record was inserted
     /// </summary>
     [AuditIgnored]

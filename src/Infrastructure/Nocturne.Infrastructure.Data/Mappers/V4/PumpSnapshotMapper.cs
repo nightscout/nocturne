@@ -25,6 +25,8 @@ public static class PumpSnapshotMapper
             CorrelationId = model.CorrelationId,
             LegacyId = model.LegacyId,
             DataSource = model.DataSource,
+            App = model.App,
+            SyncIdentifier = model.SyncIdentifier,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
             Manufacturer = model.Manufacturer,
@@ -64,6 +66,8 @@ public static class PumpSnapshotMapper
             CorrelationId = entity.CorrelationId,
             LegacyId = entity.LegacyId,
             DataSource = entity.DataSource,
+            App = entity.App,
+            SyncIdentifier = entity.SyncIdentifier,
             CreatedAt = entity.SysCreatedAt,
             ModifiedAt = entity.SysUpdatedAt,
             Manufacturer = entity.Manufacturer,
@@ -100,6 +104,8 @@ public static class PumpSnapshotMapper
         entity.CorrelationId = model.CorrelationId;
         entity.LegacyId = model.LegacyId;
         entity.DataSource = model.DataSource;
+        entity.App = model.App;
+        entity.SyncIdentifier = model.SyncIdentifier;
         entity.Manufacturer = model.Manufacturer;
         entity.Model = model.Model;
         entity.Reservoir = model.Reservoir;

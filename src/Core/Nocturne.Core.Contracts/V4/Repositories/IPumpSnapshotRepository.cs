@@ -117,4 +117,16 @@ public interface IPumpSnapshotRepository : IV4Repository<PumpSnapshot>
     Task<IEnumerable<PumpSnapshot>> BulkCreateAsync(
         IEnumerable<PumpSnapshot> records,
         WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk create-or-update by (DataSource, SyncIdentifier): rows matched by that key are updated
+    /// in place, so uploader retries of the same loop cycle stay idempotent. Everything else inserts
+    /// through the LegacyId-dedup path of <see cref="BulkCreateAsync"/>.
+    /// </summary>
+    /// <param name="records">Records to upsert.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>All persisted records: updated rows first, then inserted rows.</returns>
+    Task<IEnumerable<PumpSnapshot>> BulkUpsertAsync(
+        IEnumerable<PumpSnapshot> records,
+        WriteOrigin origin, CancellationToken ct = default);
 }

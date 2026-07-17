@@ -339,4 +339,107 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
             return created;
         });
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Mirrors the (DataSource, SyncIdentifier) upsert split in <c>SensorGlucoseRepository</c> /
+    /// <c>BolusRepository</c>: intra-batch keep-last per key, DB-matched rows update in place,
+    /// the rest insert through the LegacyId-dedup path.
+    /// </remarks>
+    public async Task<IEnumerable<PumpSnapshot>> BulkUpsertAsync(
+        IEnumerable<PumpSnapshot> records,
+        WriteOrigin origin, CancellationToken ct = default)
+    {
+        var entities = records.Select(PumpSnapshotMapper.ToEntity).ToList();
+        if (entities.Count == 0)
+            return [];
+
+        // Intra-batch dedup: keep the last occurrence per (DataSource, SyncIdentifier).
+        // Records without both keys keep a unique grouping key so they're not collapsed.
+        entities = entities
+            .GroupBy(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier)
+                ? $"sync|{e.DataSource}|{e.SyncIdentifier}"
+                : $"id|{e.Id}")
+            .Select(g => g.Last())
+            .ToList();
+
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var strategy = ctx.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
+
+            // DB-level upsert: rows matched by (DataSource, SyncIdentifier) are updated in place.
+            // Soft-deleted rows are excluded: the partial unique index ignores them, so a
+            // re-upload after a delete inserts a fresh row instead of writing into the deleted one.
+            var updatedEntities = new List<PumpSnapshotEntity>();
+            var toInsert = entities;
+            var syncKeyed = entities
+                .Where(e => !string.IsNullOrEmpty(e.DataSource) && !string.IsNullOrEmpty(e.SyncIdentifier))
+                .ToList();
+
+            if (syncKeyed.Count > 0)
+            {
+                var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
+                var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
+
+                var existingRows = await ctx.PumpSnapshots.IgnoreQueryFilters()
+                    .Where(e => e.TenantId == ctx.TenantId && e.DeletedAt == null)
+                    .Where(e => sources.Contains(e.DataSource!) && syncIds.Contains(e.SyncIdentifier!))
+                    .ToListAsync(ct);
+
+                var existingByKey = existingRows
+                    .GroupBy(e => $"{e.DataSource}|{e.SyncIdentifier}")
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                toInsert = [];
+                foreach (var entity in entities)
+                {
+                    var hasKey = !string.IsNullOrEmpty(entity.DataSource)
+                        && !string.IsNullOrEmpty(entity.SyncIdentifier);
+                    if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
+                    {
+                        PumpSnapshotMapper.UpdateEntity(existing, PumpSnapshotMapper.ToDomainModel(entity));
+                        updatedEntities.Add(existing);
+                    }
+                    else
+                    {
+                        toInsert.Add(entity);
+                    }
+                }
+
+                if (updatedEntities.Count > 0)
+                    await ctx.SaveChangesAsync(ct);
+            }
+
+            // Insert path: LegacyId dedup as in BulkCreateAsync.
+            var legacyIds = toInsert
+                .Where(e => !string.IsNullOrEmpty(e.LegacyId))
+                .Select(e => e.LegacyId!)
+                .ToHashSet();
+
+            if (legacyIds.Count > 0)
+            {
+                var blockedLegacyIds = await ctx.GetBlockingLegacyIdsAsync<PumpSnapshotEntity>(legacyIds, ct);
+                toInsert = toInsert
+                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
+                    .ToList();
+            }
+
+            const int batchSize = 500;
+            foreach (var batch in toInsert.Chunk(batchSize))
+            {
+                ctx.PumpSnapshots.AddRange(batch);
+                await ctx.SaveChangesAsync(ct);
+                ctx.ChangeTracker.Clear();
+            }
+
+            await tx.CommitAsync(ct);
+
+            var updated = updatedEntities.Select(PumpSnapshotMapper.ToDomainModel).ToList();
+            var created = toInsert.Select(PumpSnapshotMapper.ToDomainModel).ToList();
+            await RaiseBroadcastAsync(created, updated, [], origin, ct);
+            return updated.Concat(created).ToList();
+        });
+    }
 }

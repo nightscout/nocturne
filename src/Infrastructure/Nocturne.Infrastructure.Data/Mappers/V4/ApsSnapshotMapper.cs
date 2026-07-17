@@ -27,6 +27,8 @@ public static class ApsSnapshotMapper
             CorrelationId = model.CorrelationId,
             LegacyId = model.LegacyId,
             DataSource = model.DataSource,
+            App = model.App,
+            SyncIdentifier = model.SyncIdentifier,
             SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
             AidAlgorithm = model.AidAlgorithm.ToString(),
@@ -77,6 +79,8 @@ public static class ApsSnapshotMapper
             CorrelationId = entity.CorrelationId,
             LegacyId = entity.LegacyId,
             DataSource = entity.DataSource,
+            App = entity.App,
+            SyncIdentifier = entity.SyncIdentifier,
             CreatedAt = entity.SysCreatedAt,
             ModifiedAt = entity.SysUpdatedAt,
             AidAlgorithm = Enum.TryParse<AidAlgorithm>(entity.AidAlgorithm, out var sys) ? sys : AidAlgorithm.Unknown,
@@ -124,6 +128,8 @@ public static class ApsSnapshotMapper
         entity.CorrelationId = model.CorrelationId;
         entity.LegacyId = model.LegacyId;
         entity.DataSource = model.DataSource;
+        entity.App = model.App;
+        entity.SyncIdentifier = model.SyncIdentifier;
         entity.AidAlgorithm = model.AidAlgorithm.ToString();
         entity.Iob = model.Iob;
         entity.BasalIob = model.BasalIob;

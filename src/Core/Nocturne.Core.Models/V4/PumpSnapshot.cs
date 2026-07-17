@@ -37,6 +37,12 @@ public class PumpSnapshot : IV4Record
     /// <inheritdoc />
     public string? DataSource { get; set; }
 
+    /// <summary>
+    /// Stable per-source identifier. Records matched on (DataSource, SyncIdentifier) are updated in
+    /// place on re-upload instead of duplicated, so uploader retries are idempotent.
+    /// </summary>
+    public string? SyncIdentifier { get; set; }
+
     /// <inheritdoc />
     public Guid? CorrelationId { get; set; }
 
