@@ -94,4 +94,61 @@ public class ProfileDecomposerTests
             a.AuthType.Should().Be("ApiKey");
         });
     }
+
+    [Theory]
+    [InlineData("mmol")]
+    [InlineData("mmol/L")]
+    [InlineData("MMOL")]
+    public void MergeTargets_ConvertsMmolProfilesToMgdl(string units)
+    {
+        // A mmol profile stores targets like low=5.0 / high=8.0; the TargetRangeEntry contract
+        // is mg/dL, so they must be converted at write time (5 * 18.0182 -> 90, 8 * 18.0182 -> 144).
+        var lows = new List<TimeValue> { new() { Time = "00:00", Value = 5.0 } };
+        var highs = new List<TimeValue> { new() { Time = "00:00", Value = 8.0 } };
+
+        var result = ProfileDecomposer.MergeTargets(lows, highs, units);
+
+        result.Should().ContainSingle();
+        result[0].Low.Should().Be(90);
+        result[0].High.Should().Be(144);
+    }
+
+    [Theory]
+    [InlineData("mg/dl")]
+    [InlineData(null)]
+    public void MergeTargets_LeavesMgdlProfilesUnchanged(string? units)
+    {
+        var lows = new List<TimeValue> { new() { Time = "00:00", Value = 80.0 } };
+        var highs = new List<TimeValue> { new() { Time = "00:00", Value = 160.0 } };
+
+        var result = ProfileDecomposer.MergeTargets(lows, highs, units);
+
+        result.Should().ContainSingle();
+        result[0].Low.Should().Be(80);
+        result[0].High.Should().Be(160);
+    }
+
+    [Fact]
+    public void ConvertSensitivityValues_ConvertsMmolProfilesToMgdlPerUnit()
+    {
+        // A mmol profile stores ISF as mmol/L per unit (e.g. 2.8); the schedule contract is
+        // mg/dL per unit, so it must be converted (2.8 * 18.0182 -> 50).
+        var sens = new List<TimeValue> { new() { Time = "00:00", Value = 2.8 } };
+
+        var result = ProfileDecomposer.ConvertSensitivityValues(sens, "mmol");
+
+        result.Should().ContainSingle();
+        result[0].Value.Should().Be(50);
+    }
+
+    [Fact]
+    public void ConvertSensitivityValues_LeavesMgdlProfilesUnchanged()
+    {
+        var sens = new List<TimeValue> { new() { Time = "00:00", Value = 50.0 } };
+
+        var result = ProfileDecomposer.ConvertSensitivityValues(sens, "mg/dl");
+
+        result.Should().ContainSingle();
+        result[0].Value.Should().Be(50);
+    }
 }

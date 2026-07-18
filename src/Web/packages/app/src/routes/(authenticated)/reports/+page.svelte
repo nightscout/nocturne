@@ -115,6 +115,29 @@
   const variability = $derived(analysis?.glycemicVariability);
   const stats = $derived(analysis?.basicStats);
 
+  // Personal target range schedule, shown as an overlay on the clinical TIR chart alongside —
+  // not instead of — the ATTD consensus bands. Absent when the tenant has no schedule
+  // configured or the window has no readings. Markers are only drawn for single-entry
+  // schedules: with a time-of-day-varying range, cumulative-time positions don't correspond
+  // to glucose boundaries on the value-sorted bar, so those get the caption only.
+  const personalRangeOverlay = $derived.by(() => {
+    const personalRange = queryData?.personalRange;
+    if (!personalRange?.entries?.length) return undefined;
+    const [firstEntry] = personalRange.entries;
+    const singleEntry =
+      personalRange.entries.length === 1 &&
+      firstEntry.low !== undefined &&
+      firstEntry.high !== undefined;
+    const rangeLabel = singleEntry
+      ? formatGlucoseRange(firstEntry.low!, firstEntry.high!, units)
+      : "your schedule";
+    return {
+      belowPercent: singleEntry ? personalRange.belowRangePercent : undefined,
+      abovePercent: singleEntry ? personalRange.aboveRangePercent : undefined,
+      label: `Your range: ${rangeLabel} · ${Math.round(personalRange.inRangePercent ?? 0)}% of time`,
+    };
+  });
+
   // Status helpers
   function getTIRStatus(tirValue: number): ScoreCardStatus {
     if (tirValue >= 70) return "excellent";
@@ -249,7 +272,7 @@
               ></div>
 
               <div
-                class="grid items-center gap-6 @3xl:grid-cols-[1fr_auto_1fr] @3xl:gap-8"
+                class="grid items-center gap-6 @3xl:grid-cols-[1fr_1.3fr_1fr] @3xl:gap-8"
               >
                 <!-- Left: Time in Range highlight -->
                 <div class="text-center @3xl:text-left">
@@ -287,7 +310,7 @@
                     easing: elasticOut,
                   }}
                 >
-                  <TIRStackedChart percentages={tir} />
+                  <TIRStackedChart percentages={tir} personalRange={personalRangeOverlay} showThresholds />
                 </div>
 
                 <!-- Right: Secondary metrics -->

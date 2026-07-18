@@ -123,6 +123,15 @@ public class TreatmentReadService : ITreatmentStore
                 else
                     results.Add(treatment);
             }
+            catch (OperationCanceledException)
+            {
+                // A canceled request (client disconnect, shutdown) is control flow,
+                // not a bad treatment. Let it abort the batch — swallowing it here
+                // turns one cancellation into a per-record "failure" logged for every
+                // remaining treatment, since each subsequent DB call on the canceled
+                // token throws too.
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to decompose treatment {Id}", treatment.Id);
@@ -143,6 +152,11 @@ public class TreatmentReadService : ITreatmentStore
         {
             await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
             return await GetByIdAsync(id, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Canceled request is control flow, not an update failure — propagate.
+            throw;
         }
         catch (Exception ex)
         {

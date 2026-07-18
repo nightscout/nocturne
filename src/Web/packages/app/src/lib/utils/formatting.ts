@@ -140,6 +140,16 @@ export function bgThresholds(): {
 // Time Formatting (auto-detect format from global preference)
 // =============================================================================
 
+/**
+ * Parse a schedule time string ("HH:mm" or "HH:mm:ss") into seconds from midnight.
+ * Missing or malformed components fall back to 0.
+ */
+export function timeStringToSeconds(time: string | undefined): number {
+  if (!time) return 0;
+  const [h = 0, m = 0, s = 0] = time.split(":").map((p) => parseInt(p, 10) || 0);
+  return h * 3600 + m * 60 + s;
+}
+
 /** The user's preferred locale for Intl formatting */
 function locale(): string {
   return preferredLanguage.current;

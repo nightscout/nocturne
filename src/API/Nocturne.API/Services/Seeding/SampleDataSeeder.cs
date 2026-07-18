@@ -151,8 +151,8 @@ public class SampleDataSeeder
 
             foreach (var batch in entries.Chunk(BatchSize))
             {
-                await _entryService.CreateEntriesAsync(batch, ct);
-                entryCount += batch.Length;
+                var created = await _entryService.CreateEntriesAsync(batch, ct);
+                entryCount += created.Count();
             }
 
             // "Scheduled Basal" is a demo-service event type the treatment
@@ -166,10 +166,27 @@ public class SampleDataSeeder
                     return t;
                 });
 
+            var requestedTreatments = 0;
             foreach (var batch in treatments.Chunk(BatchSize))
             {
-                await _treatmentService.CreateTreatmentsAsync(batch, ct);
-                treatmentCount += batch.Length;
+                requestedTreatments += batch.Length;
+                var created = await _treatmentService.CreateTreatmentsAsync(batch, ct);
+                treatmentCount += created.Count();
+            }
+
+            // CreateTreatmentsAsync decomposes each treatment into its v4 canonical
+            // records and swallows per-record decomposition failures, returning only
+            // the ones that persisted. A shortfall means treatments threw and were
+            // dropped, leaving a tenant that looks seeded but carries no bolus/carb/
+            // basal history. Fail loudly rather than report a hollow success — the
+            // demo generator's shapes all decompose cleanly, so any drop is a real
+            // fault (e.g. a poisoned DB connection), not expected data.
+            if (treatmentCount < requestedTreatments)
+            {
+                throw new InvalidOperationException(
+                    $"Sample-data seeding persisted only {treatmentCount} of {requestedTreatments} "
+                    + $"treatments; {requestedTreatments - treatmentCount} were dropped during "
+                    + "decomposition (see preceding 'Failed to decompose treatment' errors).");
             }
         }
         else

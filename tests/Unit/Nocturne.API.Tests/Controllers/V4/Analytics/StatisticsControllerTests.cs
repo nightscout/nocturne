@@ -24,6 +24,8 @@ public class StatisticsControllerTests
     private readonly Mock<ICarbIntakeRepository> _carbIntakeRepoMock = new();
     private readonly Mock<ITempBasalRepository> _tempBasalRepoMock = new();
     private readonly Mock<ITherapySettingsResolver> _therapySettingsResolverMock = new();
+    private readonly Mock<ITargetRangeScheduleRepository> _targetRangeScheduleRepoMock = new();
+    private readonly Mock<IActiveProfileResolver> _activeProfileResolverMock = new();
 
     private StatisticsController CreateController()
     {
@@ -43,7 +45,8 @@ public class StatisticsControllerTests
             Mock.Of<IPatientDeviceRepository>(),
             Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IDeviceEventRepository>(),
-            Mock.Of<ITargetRangeScheduleRepository>(),
+            _targetRangeScheduleRepoMock.Object,
+            _activeProfileResolverMock.Object,
             TestDoubles.CanonicalGlucosePassThrough.Create());
 
         controller.ControllerContext = new ControllerContext
@@ -181,6 +184,86 @@ public class StatisticsControllerTests
             It.IsAny<IEnumerable<CarbIntake>>(),
             DiabetesPopulation.Type1Adult,
             It.IsAny<ExtendedAnalysisConfig?>()), Times.Once);
+    }
+
+    private void SetupAnalysis()
+    {
+        _statsServiceMock
+            .Setup(s => s.AnalyzeGlucoseDataExtended(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<IEnumerable<Bolus>>(),
+                It.IsAny<IEnumerable<CarbIntake>>(),
+                It.IsAny<DiabetesPopulation>(),
+                It.IsAny<ExtendedAnalysisConfig?>()))
+            .Returns(new ExtendedGlucoseAnalytics());
+        _statsServiceMock
+            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>()))
+            .Returns(new List<AveragedStats>());
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_WithTargetRangeSchedule_PopulatesPersonalRange()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        SetupEmptyTreatments();
+        SetupAnalysis();
+
+        var scheduleEntries = new List<TargetRangeEntry>
+        {
+            new() { Time = "00:00", TimeAsSeconds = 0, Low = 80, High = 160 },
+        };
+        _activeProfileResolverMock
+            .Setup(r => r.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Default");
+        _targetRangeScheduleRepoMock
+            .Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TargetRangeSchedule { Entries = scheduleEntries });
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("UTC");
+
+        var personalRange = new PersonalRangeTimeInRange { InRangePercent = 42, Entries = scheduleEntries };
+        _statsServiceMock
+            .Setup(s => s.CalculatePersonalRangeTime(
+                It.IsAny<IEnumerable<SensorGlucose>>(), scheduleEntries, TimeZoneInfo.Utc))
+            .Returns(personalRange);
+
+        var controller = CreateController();
+
+        var result = await controller.GetRangeAnalytics(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var payload = ok.Value.Should().BeOfType<ReportAnalysisResult>().Subject;
+        payload.PersonalRange.Should().BeSameAs(personalRange);
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_WhenTargetRangeFetchFails_StillReturnsBaseAnalytics()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        SetupEmptyTreatments();
+        SetupAnalysis();
+
+        _activeProfileResolverMock
+            .Setup(r => r.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Default");
+        _targetRangeScheduleRepoMock
+            .Setup(r => r.GetActiveAtAsync(It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        var controller = CreateController();
+
+        var result = await controller.GetRangeAnalytics(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        // The personal range is optional garnish — its failure must not 400 the report.
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var payload = ok.Value.Should().BeOfType<ReportAnalysisResult>().Subject;
+        payload.PersonalRange.Should().BeNull();
+        payload.Analysis.Should().NotBeNull();
     }
 
     [Fact]

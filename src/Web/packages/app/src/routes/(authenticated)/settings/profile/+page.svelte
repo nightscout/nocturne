@@ -13,7 +13,6 @@
     User,
     Activity,
     Droplet,
-    Target,
     TrendingUp,
     Clock,
     Settings,
@@ -25,6 +24,7 @@
   import { getProfileSummary, setDefaultProfile } from "$api/generated/profiles.generated.remote";
   import { coachmark } from "@nocturne/coach";
   import ScheduleView from "$lib/components/schedule/ScheduleView.svelte";
+  import TargetRangeCard from "$lib/components/schedule/TargetRangeCard.svelte";
 
   type Summary = Awaited<ReturnType<typeof getProfileSummary>>;
 
@@ -39,8 +39,14 @@
     }
   }
 
-  // Query for profile summary data
+  // Query for profile summary data. Read reactively via .current/.loading/.error
+  // rather than an `{#await}` block: only the data-property getters seed the SSR
+  // hydration cache. A query consumed solely through its thenable renders on the
+  // server but serializes no hydratable, so the client throws
+  // hydratable_missing_but_required and falls into the error state.
   const summaryQuery = getProfileSummary(undefined);
+  const data = $derived(summaryQuery.current);
+  const loadError = $derived(summaryQuery.error);
 
   // Selected profile name from URL or default
   const urlProfileName = $derived(page.url.searchParams.get("name"));
@@ -78,8 +84,16 @@
     return ((data?.sensitivitySchedules ?? []) as any[]).find((s: any) => s.profileName === profileName) ?? null;
   }
 
+  // Newest record wins: manual edits create new timestamped records (history-preserving),
+  // and reports/alerts also evaluate against the most recent schedule.
   function getTargetRangeForProfile(data: Summary, profileName: string) {
-    return ((data?.targetRangeSchedules ?? []) as any[]).find((t: any) => t.profileName === profileName) ?? null;
+    const matches = ((data?.targetRangeSchedules ?? []) as any[]).filter(
+      (t: any) => t.profileName === profileName
+    );
+    if (matches.length === 0) return null;
+    return matches.reduce((newest: any, t: any) =>
+      new Date(t.timestamp ?? 0) > new Date(newest.timestamp ?? 0) ? t : newest
+    );
   }
 
   function formatRelativeTime(dateString: string | undefined): string {
@@ -110,13 +124,29 @@
   />
 </svelte:head>
 
-{#await summaryQuery}
+{#if loadError}
+  <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
+    <Card class="border-destructive">
+      <CardContent class="py-8">
+        <div class="text-center space-y-2">
+          <p class="text-destructive font-medium">Failed to load profiles</p>
+          <p class="text-sm text-muted-foreground">
+            {loadError instanceof Error ? loadError.message : "An error occurred"}
+          </p>
+          <Button variant="outline" onclick={() => window.location.reload()}>
+            Try again
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  </div>
+{:else if summaryQuery.loading && !data}
   <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
     <div class="flex items-center justify-center h-64">
       <div class="animate-pulse text-muted-foreground">Loading profiles...</div>
     </div>
   </div>
-{:then data}
+{:else if data}
   {@const profileNames = getProfileNames(data)}
   {@const defaultProfileName = getDefaultProfileName(data)}
   {@const selectedProfileName = urlProfileName ?? defaultProfileName ?? profileNames[0] ?? null}
@@ -377,21 +407,15 @@
               icon={TrendingUp}
               iconClass="text-purple-600"
               entries={sensitivity.entries}
-              sourceUnits={therapy.units}
+              sourceUnits="mg/dl"
             />
           {/if}
 
-          {#if targetRange?.entries && targetRange.entries.length > 0}
-            <ScheduleView
-              title="Target Range"
-              description="Desired blood glucose range"
-              unit={bgLabel()}
-              icon={Target}
-              iconClass="text-amber-600"
-              entries={targetRange.entries}
-              sourceUnits={therapy.units}
-            />
-          {/if}
+          <TargetRangeCard
+            profileName={selectedProfileName}
+            schedule={targetRange}
+            readOnly={!!therapy.isExternallyManaged}
+          />
         </div>
 
         <!-- Additional Therapy Metadata -->
@@ -436,21 +460,5 @@
       {/if}
     {/if}
   </div>
-{:catch error}
-  <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
-    <Card class="border-destructive">
-      <CardContent class="py-8">
-        <div class="text-center space-y-2">
-          <p class="text-destructive font-medium">Failed to load profiles</p>
-          <p class="text-sm text-muted-foreground">
-            {error instanceof Error ? error.message : "An error occurred"}
-          </p>
-          <Button variant="outline" onclick={() => window.location.reload()}>
-            Try again
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
-{/await}
+{/if}
 

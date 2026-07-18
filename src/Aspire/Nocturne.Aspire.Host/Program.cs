@@ -362,6 +362,7 @@ class Program
             postgresServer.WithDevSnapshotCommands(api);
             postgresServer.WithListTenantsCommand(api);
             postgresServer.WithCreateTenantCommand(api);
+            postgresServer.WithSeedTenantCommand(api);
             postgresServer.WithDeleteTenantCommand(api);
         }
 
@@ -434,22 +435,22 @@ class Program
             var viteWeb = JavaScriptHostingExtensions
                 .AddViteApp(builder, ServiceNames.NocturneWeb, webPackagePath)
                 .WithPnpm()
-                .WithHttpHealthCheck("/")
+                .WithHttpHealthCheck("/health")
                 .WaitFor(api)
                 .WaitFor(bridge)
                 .WithReference(bridge);
 
             ConfigureWebEnvironment(viteWeb);
 
-            // Dev auto-login opt-in: when the host environment sets
-            // NOCTURNE_DEV_AUTO_LOGIN=true (e.g. `NOCTURNE_DEV_AUTO_LOGIN=true
-            // aspire start`), the web login page redirects through
-            // /api/v4/dev-only/auth/login instead of the passkey UI. Run mode
-            // only — the backing controller exists only in Development.
-            var devAutoLogin = Environment.GetEnvironmentVariable("NOCTURNE_DEV_AUTO_LOGIN");
-            if (!string.IsNullOrEmpty(devAutoLogin))
+            // Dev auto-login opt-in: when NOCTURNE_DEV_AUTO_LOGIN is true — set
+            // in apphost appsettings or the host environment (e.g.
+            // `NOCTURNE_DEV_AUTO_LOGIN=true aspire start`) — the web login page
+            // redirects through /api/v4/dev-only/auth/login instead of the
+            // passkey UI. Run mode only — the backing controller exists only in
+            // Development.
+            if (builder.Configuration.GetValue("NOCTURNE_DEV_AUTO_LOGIN", false))
             {
-                viteWeb.WithEnvironment("NOCTURNE_DEV_AUTO_LOGIN", devAutoLogin);
+                viteWeb.WithEnvironment("NOCTURNE_DEV_AUTO_LOGIN", "true");
             }
 
             if (postgresServer != null && postgresWebPassword != null)

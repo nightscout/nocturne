@@ -214,4 +214,41 @@ public class BroadcastGoldenTests
             .Should().ContainSingle(e => e.Kind == "created" && e.ModelType == typeof(SensorGlucose))
             .Which.Count.Should().Be(1);
     }
+
+    /// <summary>
+    /// Regression for nocturne#500: decomposers (EntryDecomposer, TreatmentDecomposer,
+    /// DeviceStatusDecomposer) match an incoming record by LegacyId and route the "already exists"
+    /// branch through the single-record <see cref="Core.Contracts.V4.Repositories.IV4Repository{T}.UpdateAsync"/>,
+    /// not <c>BulkCreateAsync</c>'s upsert split. A connector's catch-up overlap window re-decomposes
+    /// the same already-stored records every poll cycle, so this path — not the bulk path — is what
+    /// chronically re-broadcasts byte-identical rows if it isn't gated on material change too.
+    /// </summary>
+    [Fact]
+    public async Task IdenticalReupload_ViaSingleUpdateAsync_DoesNotBroadcast()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+
+        var created = await repo.CreateAsync(
+            new SensorGlucose { Timestamp = T0, Mgdl = 150, DataSource = "dexcom", LegacyId = "upd-1" },
+            WriteOrigin.Live, CancellationToken.None);
+
+        // Decomposer-style idempotent upsert: re-match by LegacyId, then UpdateAsync with a CHANGED value.
+        _fx.Capture.Clear();
+        var changed = new SensorGlucose { Id = created.Id, Timestamp = T0, Mgdl = 155, DataSource = "dexcom", LegacyId = "upd-1" };
+        await repo.UpdateAsync(created.Id, changed, WriteOrigin.Live, CancellationToken.None);
+
+        _fx.Capture.Snapshot()
+            .Should().ContainSingle(e => e.Kind == "updated" && e.ModelType == typeof(SensorGlucose))
+            .Which.Count.Should().Be(1);
+
+        // Re-decomposing the SAME already-stored row (a connector's overlap-window re-poll) must not
+        // re-broadcast: nothing material changed.
+        _fx.Capture.Clear();
+        var identical = new SensorGlucose { Id = created.Id, Timestamp = T0, Mgdl = 155, DataSource = "dexcom", LegacyId = "upd-1" };
+        await repo.UpdateAsync(created.Id, identical, WriteOrigin.Live, CancellationToken.None);
+
+        _fx.Capture.Snapshot().Should().BeEmpty("an identical re-decomposed row changes nothing");
+    }
 }

@@ -36,11 +36,23 @@ internal static class ScheduleTimeHelper
             timezone = therapy?.Timezone;
         }
 
-        var dto = DateTimeOffset.FromUnixTimeMilliseconds(timeMills);
+        return GetSecondsFromMidnight(
+            timeMills,
+            TimeZoneHelper.GetTimeZoneInfoFromId(timezone)
+        );
+    }
 
-        if (!string.IsNullOrEmpty(timezone))
-            dto = TimeZoneInfo.ConvertTime(dto, TimeZoneHelper.GetTimeZoneInfoFromId(timezone));
-
+    /// <summary>
+    /// Converts Unix milliseconds to seconds-from-midnight in the given timezone. Synchronous
+    /// core of <see cref="GetSecondsFromMidnightAsync"/> for callers that have already resolved
+    /// the tenant timezone (e.g. per-reading loops).
+    /// </summary>
+    public static int GetSecondsFromMidnight(long timeMills, TimeZoneInfo timeZone)
+    {
+        var dto = TimeZoneInfo.ConvertTime(
+            DateTimeOffset.FromUnixTimeMilliseconds(timeMills),
+            timeZone
+        );
         return (int)dto.TimeOfDay.TotalSeconds;
     }
 }

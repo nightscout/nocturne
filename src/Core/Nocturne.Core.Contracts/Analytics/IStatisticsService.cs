@@ -204,6 +204,21 @@ public interface IStatisticsService
         GlycemicThresholds? thresholds = null
     );
 
+    /// <summary>
+    /// Calculate time below / within / above a personal target range schedule. Each reading is
+    /// evaluated against the schedule entry active at that reading's local time of day in
+    /// <paramref name="tenantTimeZone"/>.
+    /// </summary>
+    /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
+    /// <param name="scheduleEntries">The tenant's target range schedule entries.</param>
+    /// <param name="tenantTimeZone">The tenant's local timezone.</param>
+    /// <returns>The three-way split, or null when there are no valid readings or no schedule entries.</returns>
+    PersonalRangeTimeInRange? CalculatePersonalRangeTime(
+        IEnumerable<SensorGlucose> entries,
+        List<TargetRangeEntry> scheduleEntries,
+        TimeZoneInfo tenantTimeZone
+    );
+
     // Glucose Distribution
 
     /// <summary>

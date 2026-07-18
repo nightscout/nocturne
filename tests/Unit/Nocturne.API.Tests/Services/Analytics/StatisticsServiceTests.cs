@@ -295,6 +295,76 @@ public class StatisticsServiceTests
         result.Durations.Target.Should().Be(0);
     }
 
+    [Fact]
+    public void CalculatePersonalRangeTime_WithTimeOfDaySchedule_SplitsReadingsByActiveEntry()
+    {
+        // Arrange — midnight entry targets 100-180, 06:00 entry targets 80-160.
+        var schedule = new List<TargetRangeEntry>
+        {
+            new() { Time = "00:00", TimeAsSeconds = 0, Low = 100, High = 180 },
+            new() { Time = "06:00", TimeAsSeconds = 6 * 3600, Low = 80, High = 160 },
+        };
+        var day = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            // 03:00 — active entry is midnight's 100-180
+            new SensorGlucose { Mgdl = 90, Timestamp = day.AddHours(3) }, // below (90 < 100)
+            new SensorGlucose { Mgdl = 150, Timestamp = day.AddHours(3.1) }, // within
+            // 09:00 — active entry is 06:00's 80-160
+            new SensorGlucose { Mgdl = 170, Timestamp = day.AddHours(9) }, // above (170 > 160)
+            new SensorGlucose { Mgdl = 100, Timestamp = day.AddHours(9.1) }, // within
+        };
+
+        // Act
+        var result = _statisticsService.CalculatePersonalRangeTime(entries, schedule, TimeZoneInfo.Utc);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.BelowRangePercent.Should().BeApproximately(25.0, 0.1);
+        result.InRangePercent.Should().BeApproximately(50.0, 0.1);
+        result.AboveRangePercent.Should().BeApproximately(25.0, 0.1);
+        result.Entries.Should().BeSameAs(schedule);
+    }
+
+    [Fact]
+    public void CalculatePersonalRangeTime_RespectsTenantTimezone()
+    {
+        // Arrange — a reading at 02:00 UTC is 12:00 in UTC+10, so it must be evaluated
+        // against the 06:00 entry, not the midnight one.
+        var schedule = new List<TargetRangeEntry>
+        {
+            new() { Time = "00:00", TimeAsSeconds = 0, Low = 100, High = 180 },
+            new() { Time = "06:00", TimeAsSeconds = 6 * 3600, Low = 80, High = 160 },
+        };
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 170, Timestamp = new DateTime(2026, 1, 1, 2, 0, 0, DateTimeKind.Utc) },
+        };
+        var plusTen = TimeZoneInfo.CreateCustomTimeZone("UTC+10", TimeSpan.FromHours(10), "UTC+10", "UTC+10");
+
+        // Act
+        var result = _statisticsService.CalculatePersonalRangeTime(entries, schedule, plusTen);
+
+        // Assert — 170 is above the 06:00 entry's 160, but within the midnight entry's 180.
+        result.Should().NotBeNull();
+        result!.AboveRangePercent.Should().Be(100);
+    }
+
+    [Fact]
+    public void CalculatePersonalRangeTime_WithNoValidReadingsOrNoSchedule_ReturnsNull()
+    {
+        var schedule = new List<TargetRangeEntry> { new() { Time = "00:00", TimeAsSeconds = 0, Low = 80, High = 160 } };
+        var invalidEntries = new[]
+        {
+            new SensorGlucose { Mgdl = 0, Timestamp = DateTime.UtcNow },
+            new SensorGlucose { Mgdl = 700, Timestamp = DateTime.UtcNow },
+        };
+        var validEntries = new[] { new SensorGlucose { Mgdl = 100, Timestamp = DateTime.UtcNow } };
+
+        _statisticsService.CalculatePersonalRangeTime(invalidEntries, schedule, TimeZoneInfo.Utc).Should().BeNull();
+        _statisticsService.CalculatePersonalRangeTime(validEntries, [], TimeZoneInfo.Utc).Should().BeNull();
+    }
+
     #endregion
 
     #region Glucose Distribution Tests

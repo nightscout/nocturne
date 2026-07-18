@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Nocturne.API.Services.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -1293,6 +1294,51 @@ public class StatisticsService : IStatisticsService
             Durations = durations,
             Episodes = episodes,
             RangeStats = rangeStats,
+        };
+    }
+
+    /// <inheritdoc/>
+    public PersonalRangeTimeInRange? CalculatePersonalRangeTime(
+        IEnumerable<SensorGlucose> entries,
+        List<TargetRangeEntry> scheduleEntries,
+        TimeZoneInfo tenantTimeZone
+    )
+    {
+        if (scheduleEntries.Count == 0)
+            return null;
+
+        // The active entry is a pure function of local minute-of-day (entry times are HH:mm),
+        // so each of the at-most-1440 minutes is resolved once instead of per reading.
+        var rangeByMinute = new (double Low, double High)?[1440];
+
+        int below = 0, within = 0, above = 0;
+        foreach (var entry in entries)
+        {
+            var value = entry.Mgdl;
+            if (value <= 0 || value >= 600)
+                continue;
+
+            var minute =
+                ScheduleTimeHelper.GetSecondsFromMidnight(entry.Mills, tenantTimeZone) / 60;
+            var range = rangeByMinute[minute] ??= ScheduleResolution
+                .FindRangeAtTime(scheduleEntries, minute * 60)!
+                .Value;
+
+            if (value < range.Low) below++;
+            else if (value > range.High) above++;
+            else within++;
+        }
+
+        var total = below + within + above;
+        if (total == 0)
+            return null;
+
+        return new PersonalRangeTimeInRange
+        {
+            BelowRangePercent = (double)below / total * 100,
+            InRangePercent = (double)within / total * 100,
+            AboveRangePercent = (double)above / total * 100,
+            Entries = scheduleEntries,
         };
     }
 

@@ -188,7 +188,7 @@ export const getReportsData = query(
     const { apiClient } = locals;
     const { startDate, endDate } = calculateDateRange(input);
 
-    const [entries, { analysis, averagedStats }] = await Promise.all([
+    const [entries, { analysis, averagedStats, personalRange }] = await Promise.all([
       fetchAllGlucose(apiClient, startDate, endDate),
       apiClient.statistics.getRangeAnalytics(startDate, endDate),
     ]);
@@ -197,6 +197,7 @@ export const getReportsData = query(
       entries,
       analysis,
       averagedStats,
+      personalRange,
       dateRange: {
         from: startDate.toISOString(),
         to: endDate.toISOString(),
@@ -217,12 +218,13 @@ export const getReportsAnalysis = query(
     const { apiClient } = locals;
     const { startDate, endDate } = calculateDateRange(input);
 
-    const { analysis, averagedStats } =
+    const { analysis, averagedStats, personalRange } =
       await apiClient.statistics.getRangeAnalytics(startDate, endDate);
 
     return {
       analysis,
       averagedStats,
+      personalRange,
       dateRange: {
         from: startDate.toISOString(),
         to: endDate.toISOString(),

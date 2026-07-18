@@ -177,6 +177,45 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_WhenDecompositionCanceled_PropagatesWithoutTouchingRemaining()
+    {
+        var canceled = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var next = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+
+        _decomposer
+            .Setup(d => d.DecomposeAsync(canceled, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        var act = () => _service.CreateAsync([canceled, next]);
+
+        // Cancellation must abort the batch, not be swallowed as a per-record failure.
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        _decomposer.Verify(
+            d => d.DecomposeAsync(next, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenDecompositionFailsForOneRecord_SkipsItAndContinues()
+    {
+        var bad = new Treatment { Id = "t1", Mills = 1000, EventType = "Note" };
+        var good = new Treatment { Id = "t2", Mills = 2000, EventType = "Note" };
+
+        _decomposer
+            .Setup(d => d.DecomposeAsync(bad, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("boom"));
+        _decomposer
+            .Setup(d => d.DecomposeAsync(good, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult { CorrelationId = Guid.NewGuid() });
+
+        var result = await _service.CreateAsync([bad, good]);
+
+        // A genuine per-record failure is still isolated: the bad record is dropped,
+        // the good one is kept.
+        result.Should().ContainSingle().Which.Id.Should().Be("t2");
+    }
+
+    [Fact]
     public async Task DeleteAsync_CallsPipelineAndChecksTemp()
     {
         _pipeline

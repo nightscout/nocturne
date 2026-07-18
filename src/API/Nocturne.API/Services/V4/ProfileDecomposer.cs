@@ -386,7 +386,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
             LegacyId = legacyId,
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
             ProfileName = storeName,
-            Entries = ConvertTimeValues(profileData.Sens),
+            Entries = ConvertSensitivityValues(profileData.Sens, profileData.Units ?? profile.Units),
             Device = profile.EnteredBy,
             CorrelationId = correlationId,
         };
@@ -404,7 +404,7 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
             LegacyId = legacyId,
             Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(profile.Mills).UtcDateTime,
             ProfileName = storeName,
-            Entries = MergeTargets(profileData.TargetLow, profileData.TargetHigh),
+            Entries = MergeTargets(profileData.TargetLow, profileData.TargetHigh, profileData.Units ?? profile.Units),
             Device = profile.EnteredBy,
             CorrelationId = correlationId,
         };
@@ -435,15 +435,61 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
     }
 
     /// <summary>
+    /// Converts insulin sensitivity (ISF) time-values into v4 <see cref="V4Models.ScheduleEntry"/>
+    /// records, normalising mmol profiles to mg/dL per unit.
+    /// </summary>
+    /// <remarks>
+    /// Unlike basal (U/hr) and carb-ratio (g/U), ISF is glucose-unit-dependent: a mmol profile
+    /// stores it as mmol/L per unit. <see cref="Services.Profiles.Resolvers.SensitivityResolver"/>
+    /// and its consumers treat the schedule as mg/dL per unit (its default is 50), so mmol values
+    /// are converted here at write time rather than each reader guessing.
+    /// </remarks>
+    /// <param name="timeValues">The sensitivity time-value entries from the profile store.</param>
+    /// <param name="units">The profile's glucose units ("mg/dl" or "mmol"); mmol values are converted to mg/dL.</param>
+    /// <returns>A list of <see cref="V4Models.ScheduleEntry"/> with <c>Value</c> in mg/dL per unit.</returns>
+    internal static List<V4Models.ScheduleEntry> ConvertSensitivityValues(List<TimeValue> timeValues, string? units)
+    {
+        var toMgdl = IsMmol(units)
+            ? (Func<double, double>)(value => Math.Round(value * MgdlPerMmol))
+            : value => value;
+
+        return timeValues.Select(tv =>
+        {
+            tv.EnsureTimeAsSeconds();
+            return new V4Models.ScheduleEntry
+            {
+                Time = tv.Time,
+                Value = toMgdl(tv.Value),
+                TimeAsSeconds = tv.TimeAsSeconds,
+            };
+        }).ToList();
+    }
+
+    /// <summary>
+    /// mg/dL per mmol/L. Matches the factor the V4 glucose models use (<see cref="V4Models.SensorGlucose"/> et al.).
+    /// </summary>
+    private const double MgdlPerMmol = 18.0182;
+
+    /// <summary>
     /// Merges separate low- and high-target <see cref="TimeValue"/> lists into a single list of
     /// <see cref="V4Models.TargetRangeEntry"/> records. When a matching high entry is not found for a
     /// given time slot, the low value is used as the high value as a safe fallback.
     /// </summary>
+    /// <remarks>
+    /// Nightscout profile target ranges are stored in the profile's display units, but the V4
+    /// <see cref="V4Models.TargetRangeEntry"/> contract is mg/dL — every reader (alert engine,
+    /// <c>TargetRangeResolver</c>, report statistics) compares against mg/dL. mmol profiles are
+    /// therefore normalised to mg/dL here at write time, so no reader has to know the source units.
+    /// </remarks>
     /// <param name="lows">The low-target time-value entries from the profile store.</param>
     /// <param name="highs">The high-target time-value entries from the profile store.</param>
-    /// <returns>A merged list of <see cref="V4Models.TargetRangeEntry"/> with <c>Low</c> and <c>High</c> fields set.</returns>
-    internal static List<V4Models.TargetRangeEntry> MergeTargets(List<TimeValue> lows, List<TimeValue> highs)
+    /// <param name="units">The profile's glucose units ("mg/dl" or "mmol"); mmol values are converted to mg/dL.</param>
+    /// <returns>A merged list of <see cref="V4Models.TargetRangeEntry"/> with <c>Low</c> and <c>High</c> fields in mg/dL.</returns>
+    internal static List<V4Models.TargetRangeEntry> MergeTargets(List<TimeValue> lows, List<TimeValue> highs, string? units)
     {
+        var toMgdl = IsMmol(units)
+            ? (Func<double, double>)(value => Math.Round(value * MgdlPerMmol))
+            : value => value;
         var highLookup = highs.ToDictionary(h => h.Time, h => h.Value);
 
         return lows.Select(low =>
@@ -452,12 +498,20 @@ public class ProfileDecomposer : IProfileDecomposer, IDecomposer<Profile>
             return new V4Models.TargetRangeEntry
             {
                 Time = low.Time,
-                Low = low.Value,
-                High = highLookup.TryGetValue(low.Time, out var high) ? high : low.Value,
+                Low = toMgdl(low.Value),
+                High = toMgdl(highLookup.TryGetValue(low.Time, out var high) ? high : low.Value),
                 TimeAsSeconds = low.TimeAsSeconds,
             };
         }).ToList();
     }
+
+    /// <summary>
+    /// Whether a profile's units string denotes mmol/L (matching the forms Nightscout profiles use).
+    /// </summary>
+    internal static bool IsMmol(string? units) =>
+        units is not null
+        && (units.Equals("mmol", StringComparison.OrdinalIgnoreCase)
+            || units.Equals("mmol/l", StringComparison.OrdinalIgnoreCase));
 
     #endregion
 

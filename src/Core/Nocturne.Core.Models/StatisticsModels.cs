@@ -1735,6 +1735,37 @@ public class ReportAnalysisResult
     /// <summary>Registered devices that contributed readings within the requested window, for device-picker UIs.</summary>
     [JsonPropertyName("contributingDevices")]
     public List<ContributingDevice> ContributingDevices { get; set; } = new();
+
+    /// <summary>
+    /// Time in the tenant's personal target range schedule, alongside the clinical-consensus
+    /// TIR in <see cref="Analysis"/>. Null when the tenant has no target range schedule
+    /// configured or the window has no readings.
+    /// </summary>
+    public PersonalRangeTimeInRange? PersonalRange { get; set; }
+}
+
+/// <summary>
+/// Time spent below / within / above a personal target range schedule. A personal range is a
+/// below/within/above split, not the 6-band clinical breakdown — the schedule's Low/High are the
+/// only boundaries. Evaluated per reading against the schedule entry active at that reading's
+/// tenant-local time of day.
+/// </summary>
+public class PersonalRangeTimeInRange
+{
+    /// <summary>Percentage of readings below the active entry's Low bound.</summary>
+    public double BelowRangePercent { get; set; }
+
+    /// <summary>Percentage of readings within the active entry's [Low, High] bounds.</summary>
+    public double InRangePercent { get; set; }
+
+    /// <summary>Percentage of readings above the active entry's High bound.</summary>
+    public double AboveRangePercent { get; set; }
+
+    /// <summary>
+    /// The schedule entries the percentages were computed against, so callers can label the
+    /// result (e.g. "Your range: 80-160") without a second call.
+    /// </summary>
+    public List<TargetRangeEntry> Entries { get; set; } = [];
 }
 
 /// <summary>

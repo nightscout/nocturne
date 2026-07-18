@@ -49,9 +49,16 @@
   let dialogOpen = $state(false);
   let selectedTemplate = $state("bug");
 
+  // Read results via .current rather than an `{#await}` block: consuming a remote
+  // query through its thenable reads the hydration cache during hydration and throws
+  // hydratable_missing_but_required. .current defers the fetch past hydration. The
+  // inner `{#if}` guards already handle the undefined-until-loaded value.
   const servicesOverviewQuery = getServicesOverview();
   const supportConfigQuery = getSupportConfig();
   const statusQuery = getStatus();
+  const supportConfig = $derived(supportConfigQuery.current);
+  const services = $derived(servicesOverviewQuery.current);
+  const status = $derived(statusQuery.current);
 
   let useOperatorSupport = $state(false);
 
@@ -248,43 +255,46 @@
     </CardHeader>
     <CardContent class="space-y-4">
       <div class="grid gap-4 @xl:grid-cols-2">
-        {#await supportConfigQuery then supportConfig}
-          {#each supportOptions as option}
-            {#if option.template === "account" && supportConfig?.accountBilling?.mode === "redirect"}
-              <a
-                href={supportConfig.accountBilling.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
+        {#each supportOptions as option}
+          {#if option.template === "account" && supportConfig?.accountBilling?.mode === "redirect"}
+            <a
+              href={supportConfig.accountBilling.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
+            >
+              <div
+                class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
               >
-                <div
-                  class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
-                >
-                  <ExternalLink class="h-6 w-6 text-primary" />
-                </div>
-                <span class="font-medium">{supportConfig.accountBilling.label ?? option.name}</span>
-                <p class="text-sm text-muted-foreground mt-1">
-                  {option.description}
-                </p>
-              </a>
-            {:else}
-              <button
-                class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors"
-                onclick={() => handleSupportAction(option.template, supportConfig?.accountBilling?.mode)}
+                <ExternalLink class="h-6 w-6 text-primary" />
+              </div>
+              <span class="font-medium">{supportConfig.accountBilling.label ?? option.name}</span>
+              <p class="text-sm text-muted-foreground mt-1">
+                {option.description}
+              </p>
+            </a>
+          {:else}
+            <!-- The account tile's routing depends on the operator config; keep it inert until
+                 the config resolves so a click during the fetch window can't misroute a
+                 redirect/api-mode tenant to the generic community dialog. Other templates route
+                 the same regardless of config, so they stay interactive. -->
+            <button
+              class="flex flex-col items-center text-center p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors disabled:pointer-events-none disabled:opacity-60"
+              disabled={option.template === "account" && supportConfig === undefined}
+              onclick={() => handleSupportAction(option.template, supportConfig?.accountBilling?.mode)}
+            >
+              <div
+                class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
               >
-                <div
-                  class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3"
-                >
-                  <option.icon class="h-6 w-6 text-primary" />
-                </div>
-                <span class="font-medium">{option.name}</span>
-                <p class="text-sm text-muted-foreground mt-1">
-                  {option.description}
-                </p>
-              </button>
-            {/if}
-          {/each}
-        {/await}
+                <option.icon class="h-6 w-6 text-primary" />
+              </div>
+              <span class="font-medium">{option.name}</span>
+              <p class="text-sm text-muted-foreground mt-1">
+                {option.description}
+              </p>
+            </button>
+          {/if}
+        {/each}
       </div>
 
       <div class="flex justify-center pt-2">
@@ -445,36 +455,32 @@
       <CardTitle>About Nocturne</CardTitle>
     </CardHeader>
     <CardContent class="space-y-4">
-      {#await servicesOverviewQuery then services}
-        {#if services?.apiEndpoint?.baseUrl}
-          <div class="flex items-center justify-between py-2 border-b">
-            <span class="text-muted-foreground">API Endpoint</span>
-            <span class="font-mono text-sm">{services.apiEndpoint.baseUrl}</span>
-          </div>
-        {/if}
-      {/await}
-      {#await statusQuery then status}
-        {#if status?.head && status.head !== "unknown" && status.head !== "nocturne-dev"}
-          <div class="flex items-center justify-between py-2 border-b">
-            <span class="text-muted-foreground">Commit</span>
-            <a
-              href={`https://github.com/nightscout/nocturne/commit/${status.head}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="font-mono text-sm inline-flex items-center gap-1 hover:text-primary hover:underline"
-            >
-              {status.head.slice(0, 7)}
-              <ExternalLink class="h-3 w-3" />
-            </a>
-          </div>
-        {/if}
-        {#if status?.build}
-          <div class="flex items-center justify-between py-2 border-b">
-            <span class="text-muted-foreground">Built</span>
-            <span class="font-mono text-sm">{formatDateTime(status.build)}</span>
-          </div>
-        {/if}
-      {/await}
+      {#if services?.apiEndpoint?.baseUrl}
+        <div class="flex items-center justify-between py-2 border-b">
+          <span class="text-muted-foreground">API Endpoint</span>
+          <span class="font-mono text-sm">{services.apiEndpoint.baseUrl}</span>
+        </div>
+      {/if}
+      {#if status?.head && status.head !== "unknown" && status.head !== "nocturne-dev"}
+        <div class="flex items-center justify-between py-2 border-b">
+          <span class="text-muted-foreground">Commit</span>
+          <a
+            href={`https://github.com/nightscout/nocturne/commit/${status.head}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="font-mono text-sm inline-flex items-center gap-1 hover:text-primary hover:underline"
+          >
+            {status.head.slice(0, 7)}
+            <ExternalLink class="h-3 w-3" />
+          </a>
+        </div>
+      {/if}
+      {#if status?.build}
+        <div class="flex items-center justify-between py-2 border-b">
+          <span class="text-muted-foreground">Built</span>
+          <span class="font-mono text-sm">{formatDateTime(status.build)}</span>
+        </div>
+      {/if}
       <div class="flex items-center justify-between py-2 border-b">
         <span class="text-muted-foreground">License</span>
         <span>AGPL-3.0</span>

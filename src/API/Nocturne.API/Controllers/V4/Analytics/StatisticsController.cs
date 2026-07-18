@@ -60,6 +60,7 @@ public class StatisticsController : ControllerBase
     private readonly IApsSnapshotRepository _apsSnapshotRepository;
     private readonly IDeviceEventRepository _deviceEventRepository;
     private readonly ITargetRangeScheduleRepository _targetRangeScheduleRepository;
+    private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ICanonicalGlucoseService _canonicalGlucose;
 
     private string TenantCacheId =>
@@ -83,6 +84,7 @@ public class StatisticsController : ControllerBase
         IApsSnapshotRepository apsSnapshotRepository,
         IDeviceEventRepository deviceEventRepository,
         ITargetRangeScheduleRepository targetRangeScheduleRepository,
+        IActiveProfileResolver activeProfileResolver,
         ICanonicalGlucoseService canonicalGlucose
     )
     {
@@ -102,6 +104,7 @@ public class StatisticsController : ControllerBase
         _apsSnapshotRepository = apsSnapshotRepository;
         _deviceEventRepository = deviceEventRepository;
         _targetRangeScheduleRepository = targetRangeScheduleRepository;
+        _activeProfileResolver = activeProfileResolver;
         _canonicalGlucose = canonicalGlucose;
     }
 
@@ -417,12 +420,60 @@ public class StatisticsController : ControllerBase
                 Analysis = _statisticsService.AnalyzeGlucoseDataExtended(entries, boluses, carbs, population),
                 AveragedStats = _statisticsService.CalculateAveragedStats(entries).ToList(),
                 ContributingDevices = contributingDevices,
+                PersonalRange = await CalculatePersonalRangeAsync(entries, cancellationToken),
             };
             return Ok(result);
         }
         catch (Exception ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Returns the target range schedule active for the tenant's active profile right now, or null
+    /// when none is configured. Shared selection policy for report statistics and AID metrics, kept
+    /// in step with the alert engine and <c>TargetRangeResolver</c> (active profile, newest schedule
+    /// at the point in time) so reports evaluate the same range alerts fire against — rather than the
+    /// globally-newest record, which could belong to a different, inactive profile.
+    /// </summary>
+    private async Task<TargetRangeSchedule?> GetActiveTargetRangeScheduleAsync(CancellationToken ct)
+    {
+        var nowMills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var profileName = await _activeProfileResolver.GetActiveProfileNameAsync(nowMills, ct) ?? "Default";
+        return await _targetRangeScheduleRepository.GetActiveAtAsync(profileName, DateTime.UtcNow, ct);
+    }
+
+    /// <summary>
+    /// Computes time in the tenant's personal target range for the report window. Failure-isolated:
+    /// the personal range is optional garnish on the report, so a missing schedule or a failed
+    /// fetch returns null rather than failing the base analytics.
+    /// </summary>
+    private async Task<PersonalRangeTimeInRange?> CalculatePersonalRangeAsync(
+        List<SensorGlucose> entries,
+        CancellationToken ct
+    )
+    {
+        try
+        {
+            var schedule = await GetActiveTargetRangeScheduleAsync(ct);
+            if (schedule is null || schedule.Entries.Count == 0)
+                return null;
+
+            var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: ct);
+            return _statisticsService.CalculatePersonalRangeTime(
+                entries,
+                schedule.Entries,
+                TimeZoneHelper.GetTimeZoneInfoFromId(tzId)
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -1453,19 +1504,11 @@ public class StatisticsController : ControllerBase
             double? targetHigh = null;
             try
             {
-                var targetSchedules = await _targetRangeScheduleRepository.GetAsync(
-                    from: null,
-                    to: null,
-                    device: null,
-                    source: null,
-                    limit: 10,
-                    descending: true
-                );
-                var firstSchedule = targetSchedules.FirstOrDefault();
-                if (firstSchedule?.Entries.Count > 0)
+                var activeSchedule = await GetActiveTargetRangeScheduleAsync(HttpContext.RequestAborted);
+                if (activeSchedule?.Entries.Count > 0)
                 {
-                    targetLow = firstSchedule.Entries.Min(e => e.Low);
-                    targetHigh = firstSchedule.Entries.Max(e => e.High);
+                    targetLow = activeSchedule.Entries.Min(e => e.Low);
+                    targetHigh = activeSchedule.Entries.Max(e => e.High);
                 }
             }
             catch

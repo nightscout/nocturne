@@ -1,322 +1,293 @@
-<script lang="ts">
-  import { Chart, Svg, Bars, Bar, Spline, Text, Tooltip } from "layerchart";
-  import { scaleBand, scaleLinear } from "d3-scale";
-  import { bg } from "$lib/utils/formatting";
-  import {
-    glucosePatternClass,
-    glucoseBgPatternClass,
-    type GlucoseRange,
-  } from "$lib/components/charts/print/chart-print-patterns";
+<script lang="ts" module>
+  import type { GlucoseRange } from "$lib/components/charts/print/chart-print-patterns";
 
-  // Minimum percentage to render as filled bar (below this = outline only)
+  type BandKey = "veryLow" | "low" | "target" | "high" | "veryHigh";
 
-  // Minimum bar height in percentage points for tiny values
-  const MIN_BAR_PERCENT = 5;
-
-  interface TimeInRangePercentages {
-    veryLow?: number;
-    low?: number;
-    target?: number;
-    high?: number;
-    veryHigh?: number;
+  interface BandMeta {
+    key: BandKey;
+    label: string;
+    color: string;
+    pattern: GlucoseRange;
   }
+
+  // Stacking order: bottom-to-top in vertical mode, left-to-right in horizontal mode
+  // (lowest glucose first). Labels render top-down (highest first).
+  const BANDS_STACK_ORDER: BandMeta[] = [
+    { key: "veryLow", label: "Very Low", color: "var(--glucose-very-low)", pattern: "very-low" },
+    { key: "low", label: "Low", color: "var(--glucose-low)", pattern: "low" },
+    { key: "target", label: "In Range", color: "var(--glucose-in-range)", pattern: "in-range" },
+    { key: "high", label: "High", color: "var(--glucose-high)", pattern: "high" },
+    { key: "veryHigh", label: "Very High", color: "var(--glucose-very-high)", pattern: "very-high" },
+  ];
+  const BANDS_TOP_DOWN = BANDS_STACK_ORDER.toReversed();
+</script>
+
+<script lang="ts">
+  import { Chart, Svg, Bars, Bar, Text, Tooltip } from "layerchart";
+  import { scaleBand, scaleLinear, type ScaleBand } from "d3-scale";
+  import { bgRange } from "$lib/utils/formatting";
+  import { glucosePatternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import type { TimeInRangePercentages } from "$api-clients";
 
   interface Props {
     /** Pre-computed percentages - required to avoid reactive API calls */
     percentages?: TimeInRangePercentages;
-    /** Thresholds for the glucose ranges in mg/dL */
-    thresholds?: {
-      veryLow: number;
-      low: number;
-      high: number;
-      veryHigh: number;
-    };
+    /** Target range bounds in mg/dL for the caption below the chart */
+    thresholds?: { low: number; high: number };
     /** Chart orientation - 'vertical' (default) or 'horizontal' */
     orientation?: "vertical" | "horizontal";
-    /** Whether to show threshold labels (default: true for vertical, false for horizontal) */
+    /** Whether to show the "Target Range" caption below the chart (default: false) */
     showThresholds?: boolean;
-    /** Whether to show percentage labels (default: true) */
+    /** Whether to show band labels beside the bar (vertical mode only; default: true) */
     showLabels?: boolean;
-    /** Whether to show connector lines to labels (default: true for vertical) */
-    showConnectors?: boolean;
     /** Compact mode - smaller text and tighter spacing */
     compact?: boolean;
+    /**
+     * Overlay marking where the tenant's personal target range falls, alongside the clinical
+     * bands. Unlike tightTarget, a personal range isn't a subset of any single clinical band
+     * (it can straddle boundaries), so it's drawn as two markers across the whole bar. Markers
+     * are omitted when belowPercent/abovePercent are absent (e.g. time-of-day schedules, where
+     * cumulative-time positions don't correspond to glucose boundaries on a value-sorted bar).
+     */
+    personalRange?: {
+      /** % of time below the personal range (0-100); marker drawn at this cumulative offset */
+      belowPercent?: number;
+      /** % of time above the personal range (0-100); marker drawn at 100 minus this offset */
+      abovePercent?: number;
+      /** Caption shown under the chart, e.g. "Your range: 80-160 - 74% of time" */
+      label: string;
+    };
   }
 
   let {
     percentages,
-    thresholds = { veryLow: 54, low: 70, high: 180, veryHigh: 250 },
+    thresholds = { low: 70, high: 180 },
     orientation = "vertical",
-    showThresholds,
+    showThresholds = false,
     showLabels = true,
-    showConnectors,
     compact = false,
+    personalRange,
   }: Props = $props();
 
-  // Default showThresholds and showConnectors based on orientation
-  const effectiveShowThresholds = $derived(showThresholds ?? orientation === "vertical");
-  const effectiveShowConnectors = $derived(showConnectors ?? orientation === "vertical");
+  const vertical = $derived(orientation === "vertical");
 
-  // Range keys in stacking order (bottom to top for vertical, left to right for horizontal)
-  const rangeKeys = [
-    "veryLow",
-    "low",
-    "target",
-    "high",
-    "veryHigh",
-  ] as const;
-  type RangeKey = (typeof rangeKeys)[number];
-
-  // Color, label, and print-pattern bucket for each range.
-  const rangeMeta: Record<RangeKey, { color: string; label: string; pattern: GlucoseRange }> = {
-    veryLow: { color: "var(--glucose-very-low)", label: "Very Low", pattern: "very-low" },
-    low: { color: "var(--glucose-low)", label: "Low", pattern: "low" },
-    target: { color: "var(--glucose-in-range)", label: "In Range", pattern: "in-range" },
-    high: { color: "var(--glucose-high)", label: "High", pattern: "high" },
-    veryHigh: { color: "var(--glucose-very-high)", label: "Very High", pattern: "very-high" },
-  };
-
-  // Normalized percentages
   const pct = $derived({
     veryLow: percentages?.veryLow ?? 0,
     low: percentages?.low ?? 0,
     target: percentages?.target ?? 0,
+    tightTarget: percentages?.tightTarget ?? 0,
     high: percentages?.high ?? 0,
     veryHigh: percentages?.veryHigh ?? 0,
   });
 
-  // Transform data for stacked bar chart - one row per range with cumulative positions.
-  // In vertical mode, tiny (<MIN) and empty (0%) segments get a minimum visible height;
-  // empty segments are rendered as a dotted outline to signal they aren't included.
+  // Cumulative stacking positions in true percentage space (no minimum-size expansion:
+  // 0% bands render nothing in the bar; their labels still print "0%").
   const stackedData = $derived.by(() => {
     let cumulative = 0;
-    return rangeKeys.map((key) => {
-      const value = pct[key];
-      const isEmpty = orientation === "vertical" && value === 0;
-      const isTiny = orientation === "vertical" && value > 0 && value < MIN_BAR_PERCENT;
-      const displaySize = isEmpty || isTiny ? MIN_BAR_PERCENT : value;
+    return BANDS_STACK_ORDER.map((band) => {
+      const value = pct[band.key];
       const start = cumulative;
-      cumulative += displaySize;
-      const color = rangeMeta[key].color;
-
+      cumulative += value;
       return {
+        ...band,
         category: "TIR",
-        range: key,
         value,
         start,
         end: cumulative,
-        // For layerchart compatibility
-        y0: start,
-        y1: cumulative,
-        x0: start,
-        x1: cumulative,
-        color,
-        label: rangeMeta[key].label,
-        isTiny,
-        isEmpty,
       };
-    });
+    }).filter((segment) => segment.value > 0);
   });
 
-  // Summary data for labels
-  const rangeData = $derived(
-    rangeKeys.map((key) => ({
-      key,
-      value: pct[key],
-      color: rangeMeta[key].color,
-      label: rangeMeta[key].label,
-    }))
+  // Tight-target (70-140 mg/dL) is a subset of target, not a sibling band, so it renders as a
+  // centered inset within the target segment rather than its own stacked segment.
+  const tightInset = $derived.by(() => {
+    const targetSeg = stackedData.find((s) => s.key === "target");
+    if (!targetSeg || pct.tightTarget <= 0) return null;
+    const size = Math.min(pct.tightTarget / targetSeg.value, 1) * (targetSeg.end - targetSeg.start);
+    const start = targetSeg.start + (targetSeg.end - targetSeg.start - size) / 2;
+    return { start, end: start + size };
+  });
+
+  // Personal-range marker positions on the cumulative axis (from the start of the stack).
+  const personalMarkers = $derived.by(() => {
+    if (personalRange?.belowPercent === undefined || personalRange.abovePercent === undefined)
+      return null;
+    return [personalRange.belowPercent, 100 - personalRange.abovePercent];
+  });
+
+  const labelRows = $derived(
+    BANDS_TOP_DOWN.map((band) => ({ ...band, value: pct[band.key] }))
   );
-
-  // Total display size (may exceed 100 if tiny values are expanded in vertical mode)
-  const totalDisplaySize = $derived(
-    stackedData.length > 0 ? stackedData[stackedData.length - 1].end : 100
-  );
-
-  // Calculate positions for threshold labels (using display positions from stackedData)
-  const thresholdPositions = $derived.by(() => {
-    const thresholdValues = [
-      thresholds.veryLow,
-      thresholds.low,
-      thresholds.high,
-      thresholds.veryHigh,
-    ];
-    // Use the end of each segment (except the last) as the position
-    return stackedData.slice(0, -1).map((segment, i) => ({
-      key: segment.range,
-      position: segment.end,
-      threshold: thresholdValues[i],
-    }));
-  });
-
-  /**
-   * Spreads label Y positions apart so adjacent labels are at least minGap px
-   * apart. Input positions are in SVG Y coords (larger Y = lower on screen),
-   * ordered bottom-to-top: [veryLow, low, target, high, veryHigh].
-   */
-  function spreadLabelPositions(rawYs: number[], minGap: number, height: number): number[] {
-    const ys = [...rawYs];
-    for (let pass = 0; pass < 10; pass++) {
-      for (let i = 1; i < ys.length; i++) {
-        if (ys[i - 1] - ys[i] < minGap) {
-          const center = (ys[i - 1] + ys[i]) / 2;
-          ys[i - 1] = center + minGap / 2;
-          ys[i] = center - minGap / 2;
-        }
-      }
-      for (let i = ys.length - 2; i >= 0; i--) {
-        if (ys[i] - ys[i + 1] < minGap) {
-          const center = (ys[i] + ys[i + 1]) / 2;
-          ys[i] = center + minGap / 2;
-          ys[i + 1] = center - minGap / 2;
-        }
-      }
-    }
-    const margin = 6;
-    for (let i = 0; i < ys.length; i++) {
-      ys[i] = Math.max(margin, Math.min(height - margin, ys[i]));
-    }
-    return ys;
-  }
-
-  // Padding based on orientation and options
-  const chartPadding = $derived.by(() => {
-    if (orientation === "horizontal") {
-      return { top: 0, bottom: 0, left: 0, right: 0 };
-    }
-    return { top: 8, bottom: 8, left: 0, right: effectiveShowThresholds || showLabels ? 100 : 0 };
-  });
 </script>
 
-<div class={orientation === "horizontal" ? "relative w-full" : "relative h-full w-full"}>
-  {#if orientation === "horizontal"}
-    <!-- Horizontal stacked bar (simple CSS-based for better control) -->
-    <div class={["flex rounded overflow-hidden", compact ? "h-4" : "h-6"].join(" ")}>
-      {#each stackedData as segment}
-        {#if segment.value > 0}
-          <div
-            class={["h-full transition-all duration-200", glucoseBgPatternClass(rangeMeta[segment.range].pattern)].join(" ")}
-            style="width: {segment.value}%; background-color: {segment.color};"
-            title="{segment.label}: {segment.value.toFixed(1)}%"
-          ></div>
-        {/if}
-      {/each}
-    </div>
-  {:else}
-    <!-- Vertical stacked bar (layerchart-based) -->
-    <Chart
-      data={stackedData}
-      x="category"
-      xScale={scaleBand().paddingInner(0.4).paddingOuter(0.2)}
-      y={["y0", "y1"]}
-      yScale={scaleLinear()}
-      yDomain={[0, totalDisplaySize]}
-      c="range"
-      cDomain={[...rangeKeys]}
-      cRange={rangeKeys.map((k) => rangeMeta[k].color)}
-      padding={chartPadding}
-      tooltipContext={{ mode: "band" }}
-    >
-      {#snippet children({ context })}
-        {@const rawLabelYs = rangeKeys.map((key) => {
-          const seg = stackedData.find((s) => s.range === key)!;
-          const midpoint = (seg.y0 + seg.y1) / 2;
-          return context.height - (midpoint / totalDisplaySize) * context.height;
-        })}
-        {@const spreadYs = spreadLabelPositions(rawLabelYs, compact ? 16 : 20, context.height)}
-        {@const labelYByRange = Object.fromEntries(rangeKeys.map((key, i) => [key, spreadYs[i]])) as Record<RangeKey, number>}
-        <Svg>
-          <!-- Bar segments: filled for value > 0, dotted outline for 0% -->
+{#snippet marks(context: { xScale: unknown; yScale: unknown; width: number; height: number })}
+  {@const bandScale = (vertical ? context.xScale : context.yScale) as ScaleBand<string>}
+  {@const bandPos = bandScale("TIR") ?? 0}
+  {@const bandSize = bandScale.bandwidth()}
+  {@const valueScale = (vertical ? context.yScale : context.xScale) as (v: number) => number}
+  <Svg>
           <Bars>
-            {#each stackedData as segment (segment.range)}
+            <!-- Round only the outer ends of the stack: the first segment's outer edge and
+                 the last segment's outer edge. stackedData is filtered to value > 0, so the
+                 last entry is the last band with data (a 0% top band never steals the cap).
+                 Internal segment boundaries stay square so neighbours meet flush. -->
+            {#each stackedData as segment, i (segment.key)}
               <Bar
                 data={segment}
-                radius={4}
-                strokeWidth={2}
-                stroke={segment.color}
-                fill={segment.isEmpty ? "transparent" : segment.color}
-                stroke-dasharray={segment.isEmpty ? "4 3" : undefined}
-                class={segment.isEmpty ? undefined : glucosePatternClass(rangeMeta[segment.range].pattern)}
+                radius={vertical ? 4 : 2}
+                rounded={stackedData.length === 1
+                  ? "all"
+                  : i === 0
+                    ? vertical ? "bottom" : "left"
+                    : i === stackedData.length - 1
+                      ? vertical ? "top" : "right"
+                      : "none"}
+                fill={segment.color}
+                class={glucosePatternClass(segment.pattern)}
               />
             {/each}
           </Bars>
 
-          <!-- Threshold labels at boundaries (on the bar) -->
-          {#if effectiveShowThresholds}
-            {#each thresholdPositions as tp}
-              {@const yPos =
-                context.height -
-                (tp.position / totalDisplaySize) * context.height}
+          <!-- Tight-target inset: a centered sub-region within the target bar, not its own
+               stacked segment (it's a subset of target, not a sibling range). -->
+          {#if tightInset}
+            {@const a = valueScale(tightInset.start)}
+            {@const b = valueScale(tightInset.end)}
+            <rect
+              x={vertical ? bandPos : Math.min(a, b)}
+              y={vertical ? Math.min(a, b) : bandPos}
+              width={vertical ? bandSize : Math.abs(b - a)}
+              height={vertical ? Math.abs(b - a) : bandSize}
+              rx={2}
+              class={["fill-[var(--glucose-tight-range)]", glucosePatternClass("tight-range")].join(" ")}
+              data-testid="tight-range-inset"
+            />
+          {/if}
 
-              <Text
-                x={context.width - 64}
-                y={yPos}
-                textAnchor="end"
-                verticalAnchor="middle"
-                class="fill-muted-foreground text-xs tabular-nums"
-                value={`${bg(tp.threshold)}`}
+          <!-- Personal target range markers: dashed lines spanning the bar, since a personal
+               range can straddle clinical band boundaries (unlike tightTarget). -->
+          {#if personalMarkers}
+            {@const lineMax = vertical ? context.height : context.width}
+            {#each personalMarkers as marker, i (i)}
+              {@const pos = Math.min(Math.max(valueScale(marker), 1), lineMax - 1)}
+              <line
+                x1={vertical ? bandPos - 4 : pos}
+                x2={vertical ? bandPos + bandSize + 4 : pos}
+                y1={vertical ? pos : bandPos - 2}
+                y2={vertical ? pos : bandPos + bandSize + 2}
+                stroke="var(--foreground)"
+                stroke-width={2}
+                stroke-dasharray="3 2"
+                data-testid="personal-range-marker"
               />
             {/each}
           {/if}
 
-          <!-- Stepped connectors (right-down-right) from bar midpoint to offset label -->
-          {#if effectiveShowConnectors && showLabels}
-            {#each stackedData as segment (segment.range)}
-              {@const midpoint = (segment.y0 + segment.y1) / 2}
-              {@const segMidY =
-                context.height - (midpoint / totalDisplaySize) * context.height}
-              {@const labelY = labelYByRange[segment.range]}
-              {@const segEdgeX = context.width - 12}
-              {@const labelStubX = context.width - 82}
-              {@const elbowX = (segEdgeX + labelStubX) / 2}
-              <Spline
-                pathData={`M ${segEdgeX} ${segMidY} L ${elbowX} ${segMidY} L ${elbowX} ${labelY} L ${labelStubX} ${labelY}`}
-                fill="none"
-                stroke={segment.color}
-                strokeWidth={1}
-                stroke-dasharray="2 2"
-              />
-            {/each}
-          {/if}
-
-          <!-- Percentage labels on the right side, offset toward center -->
-          {#if showLabels}
-            {#each stackedData as segment (segment.range)}
-              {@const labelY = labelYByRange[segment.range]}
-
+          <!-- Evenly-spaced band labels beside the bar, highest range first; 0% bands
+               print their 0 here even though they render no segment. -->
+          {#if vertical && showLabels}
+            {#each labelRows as row, i (row.key)}
+              {@const y = ((i + 0.5) / labelRows.length) * context.height}
               <Text
-                x={context.width - 8}
-                y={labelY}
+                x={context.width + 10}
+                {y}
                 textAnchor="start"
                 verticalAnchor="middle"
                 class={[
                   "tabular-nums",
-                  segment.range === "target"
-                    ? compact ? "fill-foreground text-lg font-bold" : "fill-foreground text-2xl font-bold"
+                  row.key === "target"
+                    ? compact ? "fill-foreground text-base font-bold" : "fill-foreground text-xl font-bold"
                     : compact ? "fill-muted-foreground text-xs" : "fill-muted-foreground text-sm",
                 ].join(" ")}
-                value={`${Math.round(segment.value)}%`}
+                value={`${Math.round(row.value)}% ${row.label}`}
               />
+              {#if row.key === "target" && pct.tightTarget > 0 && !compact}
+                <Text
+                  x={context.width + 10}
+                  y={y + 18}
+                  textAnchor="start"
+                  verticalAnchor="middle"
+                  class="fill-muted-foreground text-xs"
+                  value={`${Math.round(pct.tightTarget)}% in tight range`}
+                />
+              {/if}
             {/each}
           {/if}
-        </Svg>
+  </Svg>
 
-        <!-- Tooltip -->
-        <Tooltip.Root>
-          {#snippet children({ data: _data })}
-            <Tooltip.List>
-              {#each rangeData.toReversed() as range}
-                <Tooltip.Item
-                  label={range.label}
-                  format="percent"
-                  value={range.value / 100}
-                  color={range.color}
-                />
-              {/each}
-            </Tooltip.List>
-          {/snippet}
-        </Tooltip.Root>
-      {/snippet}
-    </Chart>
+  <Tooltip.Root>
+    {#snippet children({ data: _data })}
+      <Tooltip.List>
+        {#each labelRows as row (row.key)}
+          <Tooltip.Item
+            label={row.label}
+            format="percent"
+            value={row.value / 100}
+            color={row.color}
+          />
+          {#if row.key === "target" && pct.tightTarget > 0}
+            <Tooltip.Item
+              label="Tight Range"
+              format="percent"
+              value={pct.tightTarget / 100}
+              color="var(--glucose-tight-range)"
+            />
+          {/if}
+        {/each}
+      </Tooltip.List>
+    {/snippet}
+  </Tooltip.Root>
+{/snippet}
+
+<div class={vertical ? "flex h-full w-full flex-col" : "w-full"}>
+  <div class={vertical ? "min-h-0 flex-1" : compact ? "h-4" : "h-6"}>
+    {#if vertical}
+      <Chart
+        data={stackedData}
+        x="category"
+        xScale={scaleBand().paddingInner(0.4).paddingOuter(0.2)}
+        y={["start", "end"]}
+        yScale={scaleLinear()}
+        yDomain={[0, 100]}
+        c="key"
+        cDomain={stackedData.map((s) => s.key)}
+        cRange={stackedData.map((s) => s.color)}
+        padding={{ top: 4, bottom: 4, left: 0, right: showLabels ? (compact ? 96 : 130) : 0 }}
+        tooltipContext={{ mode: "band" }}
+      >
+        {#snippet children({ context })}
+          {@render marks(context)}
+        {/snippet}
+      </Chart>
+    {:else}
+      <Chart
+        data={stackedData}
+        x={["start", "end"]}
+        xScale={scaleLinear()}
+        xDomain={[0, 100]}
+        y="category"
+        yScale={scaleBand()}
+        c="key"
+        cDomain={stackedData.map((s) => s.key)}
+        cRange={stackedData.map((s) => s.color)}
+        padding={{ top: 0, bottom: 0, left: 0, right: 0 }}
+        tooltipContext={{ mode: "band" }}
+      >
+        {#snippet children({ context })}
+          {@render marks(context)}
+        {/snippet}
+      </Chart>
+    {/if}
+  </div>
+
+  {#if showThresholds || personalRange}
+    <div class={["mt-2 shrink-0 text-center text-muted-foreground", compact ? "text-[10px]" : "text-xs"].join(" ")}>
+      {#if showThresholds}
+        <p><span class="font-semibold text-foreground">Target Range:</span> {bgRange(thresholds.low, thresholds.high)}</p>
+      {/if}
+      {#if personalRange}
+        <p>{personalRange.label}</p>
+      {/if}
+    </div>
   {/if}
 </div>

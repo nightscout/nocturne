@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Icon } from "lucide-svelte";
+  import type { Snippet } from "svelte";
   import {
     Card,
     CardContent,
@@ -36,6 +37,8 @@
     /** Numeric input constraints (edit mode only) */
     step?: number;
     min?: number;
+    /** Rendered on the right of the read-mode card header (e.g. an Edit button) */
+    actions?: Snippet;
   }
 
   let {
@@ -49,6 +52,7 @@
     onchange,
     step = 0.1,
     min = 0,
+    actions,
   }: Props = $props();
 
   /** Whether this is a range schedule (has low/high) vs single-value */
@@ -207,7 +211,7 @@
         </Table.Row>
       </Table.Header>
       <Table.Body>
-        {#each entries as entry, i}
+        {#each entries as entry, i (i)}
           <Table.Row>
             <Table.Cell>
               <Input
@@ -280,19 +284,22 @@
   <!-- Read-only mode: Card with icon, title, description, and table -->
   <Card>
     <CardHeader class="pb-3">
-      <div class="flex items-center gap-3">
-        {#if icon}
-          {@const Icon = icon}
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Icon class="h-5 w-5 {iconClass}" />
-          </div>
-        {/if}
-        <div>
-          <CardTitle class="text-base">{title}</CardTitle>
-          {#if description}
-            <CardDescription class="text-xs">{description}</CardDescription>
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          {#if icon}
+            {@const Icon = icon}
+            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Icon class="h-5 w-5 {iconClass}" />
+            </div>
           {/if}
+          <div>
+            <CardTitle class="text-base">{title}</CardTitle>
+            {#if description}
+              <CardDescription class="text-xs">{description}</CardDescription>
+            {/if}
+          </div>
         </div>
+        {@render actions?.()}
       </div>
     </CardHeader>
     <CardContent>
@@ -309,7 +316,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each entries as entry}
+          {#each entries as entry, i (i)}
             <Table.Row>
               <Table.Cell class="font-mono text-sm">
                 {entry.time ?? "\u2013"}
