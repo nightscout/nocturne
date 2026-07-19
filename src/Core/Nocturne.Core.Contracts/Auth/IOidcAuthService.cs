@@ -1,4 +1,5 @@
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.Core.Contracts.Auth;
 
@@ -365,6 +366,11 @@ public class OidcUserInfo
     /// User's preferred language code (e.g., "en", "fr", "de")
     /// </summary>
     public string? PreferredLanguage { get; set; }
+
+    /// <summary>
+    /// Per-user display preferences (units, time format, theme, chart style, etc.).
+    /// </summary>
+    public UserDisplayPreferences? Preferences { get; set; }
 
     /// <summary>
     /// URL to the subject's uploaded avatar image

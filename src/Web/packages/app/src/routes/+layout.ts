@@ -5,8 +5,11 @@ import { browser } from '$app/environment'
 import {
     preferredLanguage,
     isSupportedLocale,
+    registerPreferencesWriteThrough,
+    reconcilePreferences,
     type SupportedLocale,
 } from '$lib/stores/appearance-store.svelte'
+import { updateDisplayPreferences } from '$lib/api/user-preferences.remote'
 // so that the loaders are registered, only here, not required in nested ones (below)
 // import '../../../../locales/main.loader.svelte.js'
 // import '../../../../locales/js.loader.js'
@@ -35,6 +38,16 @@ export const load: LayoutLoad = async ({ url, data }) => {
             locale = userPreference
             // Also update the cookie
             document.cookie = `nocturne-language=${userPreference};path=/;max-age=31536000;SameSite=Lax`
+        }
+    }
+
+    // Wire up per-user display-preference sync (units, time format, theme, chart style).
+    // Registering the backend write-through here keeps the store free of server-remote imports.
+    if (browser) {
+        registerPreferencesWriteThrough((prefs) => updateDisplayPreferences(prefs))
+        if (data?.isAuthenticated) {
+            // Server preferences win across devices; an empty server blob seeds from local once.
+            reconcilePreferences(data?.user?.preferences)
         }
     }
 

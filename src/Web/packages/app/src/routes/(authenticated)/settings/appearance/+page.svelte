@@ -492,7 +492,8 @@
           Units & Formats
         </CardTitle>
         <CardDescription>
-          Configure measurement units and display formats
+          Configure measurement units and display formats. These preferences sync
+          across your devices.
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">

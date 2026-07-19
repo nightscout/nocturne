@@ -818,6 +818,7 @@ public class SubjectService : ISubjectService
             LastLoginAt = entity.LastLoginAt,
             Notes = entity.Notes,
             PreferredLanguage = entity.PreferredLanguage,
+            Preferences = entity.Preferences,
             AvatarUrl = entity.AvatarUrl,
             Roles = new List<Role>(),
             Permissions = new List<string>(),

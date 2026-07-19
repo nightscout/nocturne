@@ -78,6 +78,12 @@ public class Subject
     /// User's preferred language code (e.g., "en", "fr", "de")
     /// </summary>
     public string? PreferredLanguage { get; set; }
+
+    /// <summary>
+    /// Per-user display preferences serialized as a JSON blob (see
+    /// <see cref="Configuration.UserDisplayPreferences"/>). Null until first saved.
+    /// </summary>
+    public string? Preferences { get; set; }
 }
 
 /// <summary>

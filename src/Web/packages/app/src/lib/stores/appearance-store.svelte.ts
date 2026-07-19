@@ -1,14 +1,24 @@
 /**
  * Appearance Store - Unified store for all appearance settings
  *
- * Uses runed's PersistedState for automatic localStorage persistence with
- * instant reactivity and cross-tab sync. Consolidates:
- * - Color theme (Nocturne vs Trio)
- * - Color scheme (light/dark/system mode via mode-watcher)
- * - Glucose units (mg/dL vs mmol/L)
- * - Time format (12h vs 24h)
- * - Night mode schedule
- * - Language preference
+ * Per-user display preferences (units, time format, theme, prediction, chart
+ * style, widgets) are backed by a `SyncedPref`: it keeps the reactive `.current`
+ * API of runed's PersistedState, but additionally
+ *  - hydrates from the `nocturne-prefs` cookie / legacy per-key localStorage,
+ *  - mirrors every change into one `nocturne-prefs` cookie so a returning device
+ *    hydrates synchronously at module load (before first paint), avoiding a wait
+ *    on the session/API round-trip, and
+ *  - writes through to the backend user-preferences endpoint (injected callback)
+ *    so a user's choices follow them across devices and tenants.
+ *
+ * SSR note: this module's `$state` is shared across requests on the server, so it
+ * is NEVER mutated server-side — the cookie is read and applied only in the browser
+ * (`if (browser)` at module load). SSR therefore renders defaults and the client
+ * corrects on hydration; server-side rendering of preference-dependent text is a
+ * known limitation of the synchronous `bg()`-style accessors.
+ *
+ * Language keeps its own dedicated cookie + backend path (used by SSR locale
+ * resolution). The halo-dial config stays device-local.
  */
 
 import { browser } from "$app/environment";
@@ -16,6 +26,7 @@ import { PersistedState } from "runed";
 import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
 import { WidgetId } from "../api/generated/nocturne-api-client";
+import type { UserDisplayPreferences } from "$lib/api";
 import { type HaloDialConfig, defaultHaloDialConfig } from "../components/dashboard/halo-dial/config";
 
 // ==========================================
@@ -41,6 +52,102 @@ export type SidebarWidget = "graph" | "halo-dial";
 export type SupportedLocale = (typeof supportedLocales)[number];
 
 // ==========================================
+// Synced preference infrastructure
+// ==========================================
+
+/** Cookie mirroring the per-user synced preferences, written and read client-side for synchronous hydration. */
+export const PREFS_COOKIE_NAME = "nocturne-prefs";
+const PREFS_COOKIE_MAX_AGE = 31536000; // 1 year
+
+/** Registry of synced prefs by their localStorage key — powers cross-tab sync. */
+const syncedRegistry = new Map<string, SyncedPref<unknown>>();
+
+/**
+ * Backend write-through callback, injected by the app (kept out of this module so
+ * the store never imports a server remote directly — mirrors setLanguage's design).
+ */
+let writeThrough: ((prefs: UserDisplayPreferences) => unknown) | null = null;
+
+/** Register the backend write-through used to persist synced preferences per-user. */
+export function registerPreferencesWriteThrough(
+  fn: (prefs: UserDisplayPreferences) => unknown
+): void {
+  writeThrough = fn;
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Mirror to cookie immediately and debounce the backend write-through. */
+function schedulePersist(): void {
+  if (!browser) return;
+  const prefs = collectPreferences();
+  writePrefsCookie(prefs);
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    writeThrough?.(prefs);
+  }, 400);
+}
+
+function readInitial<T>(key: string, fallback: T): T {
+  if (!browser) return fallback;
+  const raw = localStorage.getItem(key);
+  if (raw === null) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistLocal<T>(key: string, value: T): void {
+  if (!browser) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore quota / disabled-storage errors — the cookie + backend remain sources of truth.
+  }
+}
+
+/**
+ * A per-user preference with the same reactive `.current` surface as runed's
+ * PersistedState, so no consumer changes. Writes propagate to localStorage (cache),
+ * the shared cookie, and the backend. `hydrate` sets the value without a
+ * backend/cookie echo (used when applying server- or cross-tab-sourced values).
+ */
+class SyncedPref<T> {
+  private _value = $state<T>(undefined as T);
+  private _key: string;
+
+  constructor(key: string, initial: T) {
+    this._key = key;
+    this._value = readInitial(key, initial);
+    syncedRegistry.set(key, this as SyncedPref<unknown>);
+  }
+
+  get current(): T {
+    return this._value;
+  }
+
+  set current(value: T) {
+    this._value = value;
+    persistLocal(this._key, value);
+    schedulePersist();
+  }
+
+  /**
+   * Apply an externally-sourced value (server/cross-tab) without re-persisting outward.
+   * INVARIANT: browser-only. Callers (reconcilePreferences, module-load cookie hydration,
+   * the storage listener) are all `if (browser)`-gated; never call this during SSR — the
+   * `$state` is shared across requests and would leak one user's value into another's render.
+   */
+  hydrate(value: T): void {
+    this._value = value;
+    persistLocal(this._key, value);
+  }
+}
+
+// ==========================================
 // Persisted State Instances
 // ==========================================
 
@@ -48,59 +155,42 @@ export type SupportedLocale = (typeof supportedLocales)[number];
  * Color theme preference (Nocturne vs Trio)
  * Controls the CSS class applied to the document root
  */
-export const colorTheme = new PersistedState<ColorTheme>(
-  "nocturne-color-theme",
-  "nocturne"
-);
+export const colorTheme = new SyncedPref<ColorTheme>("nocturne-color-theme", "nocturne");
 
 /**
- * Blood glucose units preference
- * Automatically persists to localStorage and syncs across tabs
+ * Blood glucose units preference. Per-user: syncs across devices/tenants.
  */
-export const glucoseUnits = new PersistedState<GlucoseUnits>(
-  "nocturne-glucose-units",
-  "mg/dl"
-);
+export const glucoseUnits = new SyncedPref<GlucoseUnits>("nocturne-glucose-units", "mg/dl");
 
 /**
  * Time format preference (12-hour or 24-hour)
  */
-export const timeFormat = new PersistedState<TimeFormat>(
-  "nocturne-time-format",
-  "12"
-);
+export const timeFormat = new SyncedPref<TimeFormat>("nocturne-time-format", "12");
 
 /**
  * Night mode schedule toggle
  * When enabled, automatically switches to dark mode at night
  */
-export const nightModeSchedule = new PersistedState<boolean>(
-  "nocturne-night-mode-schedule",
-  false
-);
+export const nightModeSchedule = new SyncedPref<boolean>("nocturne-night-mode-schedule", false);
 
 /**
  * Dashboard top widgets configuration
  * Stores the ordered list of widget IDs displayed in the top widget grid
- * Default: BgDelta (includes connection + last updated), TirChart, Tdd
  */
-export const dashboardTopWidgets = new PersistedState<WidgetId[]>(
-  "nocturne-dashboard-top-widgets",
-  [WidgetId.BgDelta, WidgetId.TirChart, WidgetId.Tdd]
-);
+export const dashboardTopWidgets = new SyncedPref<WidgetId[]>("nocturne-dashboard-top-widgets", [
+  WidgetId.BgDelta,
+  WidgetId.TirChart,
+  WidgetId.Tdd,
+]);
 
 /**
  * Sidebar widget preference — graph or halo dial
  * Default: graph (compact glucose chart)
  */
-export const sidebarWidget = new PersistedState<SidebarWidget>(
-  "nocturne-sidebar-widget",
-  "graph"
-);
+export const sidebarWidget = new SyncedPref<SidebarWidget>("nocturne-sidebar-widget", "graph");
 
 /**
- * Halo dial configuration
- * Full config for the halo dial sidebar widget
+ * Halo dial configuration — device-local (not part of the per-user synced set).
  */
 export const haloDialConfig = new PersistedState<HaloDialConfig>(
   "nocturne-halo-dial-config",
@@ -220,19 +310,13 @@ export function setGlucoseUnits(units: GlucoseUnits): void {
  * Prediction time horizon in minutes
  * Controls how far into the future predictions are shown
  */
-export const predictionMinutes = new PersistedState<number>(
-  "nocturne-prediction-minutes",
-  30
-);
+export const predictionMinutes = new SyncedPref<number>("nocturne-prediction-minutes", 30);
 
 /**
  * Prediction enabled state
  * Controls whether prediction lines are shown on charts
  */
-export const predictionEnabled = new PersistedState<boolean>(
-  "nocturne-prediction-enabled",
-  true
-);
+export const predictionEnabled = new SyncedPref<boolean>("nocturne-prediction-enabled", true);
 
 /**
  * Get current prediction minutes
@@ -254,10 +338,6 @@ export function getPredictionEnabled(): boolean {
 export function setPredictionMinutes(minutes: number): void {
   predictionMinutes.current = minutes;
 }
-
-/**
- * Set prediction enabled state
- */
 
 /**
  * Set prediction enabled state
@@ -285,7 +365,7 @@ export type AreaMode = "off" | "baseline" | "deviation";
 /**
  * Prediction display mode preference
  */
-export const predictionDisplayMode = new PersistedState<PredictionDisplayMode>(
+export const predictionDisplayMode = new SyncedPref<PredictionDisplayMode>(
   "nocturne-prediction-display-mode",
   "cone"
 );
@@ -301,10 +381,7 @@ export type TimeRangeOption = "2" | "4" | "6" | "12" | "24" | "48";
  * This controls the span of time shown, always ending at "now"
  * Can be a preset value or a custom number from brush selection
  */
-export const glucoseChartLookback = new PersistedState<number>(
-  "nocturne-glucose-chart-lookback",
-  12
-);
+export const glucoseChartLookback = new SyncedPref<number>("nocturne-glucose-chart-lookback", 12);
 
 /**
  * Default fetch range in hours for glucose chart data
@@ -316,50 +393,205 @@ export const GLUCOSE_CHART_FETCH_HOURS = 48;
 // Glucose Chart Visual Style
 // ==========================================
 
-export const chartLineColorMode = new PersistedState<LineColorMode>(
+export const chartLineColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-line-color-mode",
   "threshold"
 );
 
-export const chartLineColor = new PersistedState<string>(
-  "nocturne-chart-line-color",
-  "#22c55e"
-);
+export const chartLineColor = new SyncedPref<string>("nocturne-chart-line-color", "#22c55e");
 
-export const chartPointColorMode = new PersistedState<LineColorMode>(
+export const chartPointColorMode = new SyncedPref<LineColorMode>(
   "nocturne-chart-point-color-mode",
   "threshold"
 );
 
-export const chartPointColor = new PersistedState<string>(
-  "nocturne-chart-point-color",
-  "#22c55e"
-);
+export const chartPointColor = new SyncedPref<string>("nocturne-chart-point-color", "#22c55e");
 
-export const chartShowPoints = new PersistedState<boolean>(
-  "nocturne-chart-show-points",
-  true
-);
+export const chartShowPoints = new SyncedPref<boolean>("nocturne-chart-show-points", true);
 
-export const chartAreaMode = new PersistedState<AreaMode>(
-  "nocturne-chart-area-mode",
-  "off"
-);
+export const chartAreaMode = new SyncedPref<AreaMode>("nocturne-chart-area-mode", "off");
 
-export const chartAreaOpacity = new PersistedState<number>(
-  "nocturne-chart-area-opacity",
-  0.5
-);
+export const chartAreaOpacity = new SyncedPref<number>("nocturne-chart-area-opacity", 0.5);
 
 /**
  * Always render chart range/category patterns on screen, not just in print.
  * An accessibility aid for colour-blind and low-vision users — textures
  * distinguish series that otherwise rely on colour alone.
  */
-export const chartAlwaysShowPatterns = new PersistedState<boolean>(
+export const chartAlwaysShowPatterns = new SyncedPref<boolean>(
   "nocturne-chart-always-show-patterns",
   false
 );
+
+// ==========================================
+// Collect / apply the synced preference set
+// ==========================================
+
+/**
+ * Assemble the full per-user preference payload from the current store values.
+ * Shape mirrors the backend `UserDisplayPreferences` (nested prediction/chart).
+ */
+export function collectPreferences(): UserDisplayPreferences {
+  return {
+    glucoseUnits: glucoseUnits.current,
+    timeFormat: timeFormat.current,
+    colorTheme: colorTheme.current,
+    nightModeSchedule: nightModeSchedule.current,
+    dashboardTopWidgets: dashboardTopWidgets.current,
+    sidebarWidget: sidebarWidget.current,
+    prediction: {
+      enabled: predictionEnabled.current,
+      minutes: predictionMinutes.current,
+      displayMode: predictionDisplayMode.current,
+    },
+    chart: {
+      lineColorMode: chartLineColorMode.current,
+      lineColor: chartLineColor.current,
+      pointColorMode: chartPointColorMode.current,
+      pointColor: chartPointColor.current,
+      showPoints: chartShowPoints.current,
+      areaMode: chartAreaMode.current,
+      areaOpacity: chartAreaOpacity.current,
+      alwaysShowPatterns: chartAlwaysShowPatterns.current,
+      lookback: glucoseChartLookback.current,
+    },
+  } as UserDisplayPreferences;
+}
+
+/**
+ * Apply a server- (or cookie-) sourced preference payload to the store without
+ * echoing back to the backend. Only fields present in `prefs` are applied.
+ * Optionally refreshes the cookie mirror so it matches the applied state.
+ */
+export function applyPreferences(
+  prefs: UserDisplayPreferences | null | undefined,
+  options: { refreshCookie?: boolean } = {}
+): void {
+  if (!prefs) return;
+
+  hydrateIfPresent(glucoseUnits, prefs.glucoseUnits as GlucoseUnits | undefined);
+  hydrateIfPresent(timeFormat, prefs.timeFormat as TimeFormat | undefined);
+  hydrateIfPresent(colorTheme, prefs.colorTheme as ColorTheme | undefined);
+  hydrateIfPresent(nightModeSchedule, prefs.nightModeSchedule ?? undefined);
+  hydrateIfPresent(dashboardTopWidgets, prefs.dashboardTopWidgets ?? undefined);
+  hydrateIfPresent(sidebarWidget, prefs.sidebarWidget as SidebarWidget | undefined);
+
+  if (prefs.prediction) {
+    hydrateIfPresent(predictionEnabled, prefs.prediction.enabled ?? undefined);
+    hydrateIfPresent(predictionMinutes, prefs.prediction.minutes ?? undefined);
+    hydrateIfPresent(
+      predictionDisplayMode,
+      prefs.prediction.displayMode as PredictionDisplayMode | undefined
+    );
+  }
+
+  if (prefs.chart) {
+    hydrateIfPresent(chartLineColorMode, prefs.chart.lineColorMode as LineColorMode | undefined);
+    hydrateIfPresent(chartLineColor, prefs.chart.lineColor ?? undefined);
+    hydrateIfPresent(chartPointColorMode, prefs.chart.pointColorMode as LineColorMode | undefined);
+    hydrateIfPresent(chartPointColor, prefs.chart.pointColor ?? undefined);
+    hydrateIfPresent(chartShowPoints, prefs.chart.showPoints ?? undefined);
+    hydrateIfPresent(chartAreaMode, prefs.chart.areaMode as AreaMode | undefined);
+    hydrateIfPresent(chartAreaOpacity, prefs.chart.areaOpacity ?? undefined);
+    hydrateIfPresent(chartAlwaysShowPatterns, prefs.chart.alwaysShowPatterns ?? undefined);
+    hydrateIfPresent(glucoseChartLookback, prefs.chart.lookback ?? undefined);
+  }
+
+  if (browser) applyColorTheme(colorTheme.current);
+  if (options.refreshCookie) writePrefsCookie(collectPreferences());
+}
+
+function hydrateIfPresent<T>(pref: SyncedPref<T>, value: T | undefined): void {
+  if (value !== undefined && value !== null) pref.hydrate(value);
+}
+
+/** True when a server preference payload carries at least one saved value. */
+export function hasStoredPreferences(prefs: UserDisplayPreferences | null | undefined): boolean {
+  if (!prefs) return false;
+  return Object.values(prefs).some((v) => v !== undefined && v !== null);
+}
+
+/** Ensures reconciliation happens once per document load, not on every client navigation. */
+let preferencesReconciled = false;
+
+/**
+ * Reconcile the store against the authenticated user's server preferences on load.
+ * - server has values -> apply them (server wins across devices)
+ * - server empty AND this device has customizations -> seed the backend from them once
+ * Generalizes the language reconciliation previously inlined in +layout.ts.
+ *
+ * Runs at most once per document load: `+layout.ts`'s universal `load` re-runs on every
+ * client navigation, but `data.user` is derived only from `locals` (no url/params dependency),
+ * so it stays frozen at the initial snapshot. Re-applying it on each navigation would revert a
+ * preference the user just changed in-session, so we guard with `preferencesReconciled`.
+ */
+export function reconcilePreferences(serverPrefs: UserDisplayPreferences | null | undefined): void {
+  if (!browser || preferencesReconciled) return;
+  preferencesReconciled = true;
+
+  if (hasStoredPreferences(serverPrefs)) {
+    applyPreferences(serverPrefs, { refreshCookie: true });
+  } else if (hasAnyLocalPreference()) {
+    // No server blob yet, but this device carries customizations (existing user or a device
+    // that already synced): seed the backend from them once. Gated on local customization so an
+    // uncustomized device never seeds all-defaults over another device's real preferences.
+    const prefs = collectPreferences();
+    writePrefsCookie(prefs);
+    writeThrough?.(prefs);
+  }
+}
+
+/** True if any synced preference has a stored value on this device (legacy localStorage / prior sync). */
+function hasAnyLocalPreference(): boolean {
+  if (!browser) return false;
+  for (const key of syncedRegistry.keys()) {
+    if (localStorage.getItem(key) !== null) return true;
+  }
+  return false;
+}
+
+// ==========================================
+// Preference cookie helpers
+// ==========================================
+
+function writePrefsCookie(prefs: UserDisplayPreferences): void {
+  if (!browser) return;
+  const value = encodeURIComponent(JSON.stringify(prefs));
+  document.cookie = `${PREFS_COOKIE_NAME}=${value};path=/;max-age=${PREFS_COOKIE_MAX_AGE};SameSite=Lax`;
+}
+
+function readPrefsCookie(): UserDisplayPreferences | null {
+  if (!browser) return null;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${PREFS_COOKIE_NAME}=`));
+  if (!match) return null;
+  try {
+    return JSON.parse(decodeURIComponent(match.slice(PREFS_COOKIE_NAME.length + 1)));
+  } catch {
+    return null;
+  }
+}
+
+// Hydrate synchronously from the cookie on load (before first paint) so a known
+// device renders the user's units/theme immediately; server reconciliation
+// (via reconcilePreferences in +layout) then confirms/corrects.
+if (browser) {
+  applyPreferences(readPrefsCookie());
+
+  // Cross-tab sync: mirror another tab's change into this tab's store.
+  window.addEventListener("storage", (event) => {
+    if (!event.key || event.newValue === null) return;
+    const pref = syncedRegistry.get(event.key);
+    if (!pref) return;
+    try {
+      pref.hydrate(JSON.parse(event.newValue));
+    } catch {
+      // Ignore malformed cross-tab payloads.
+    }
+    if (event.key === "nocturne-color-theme") applyColorTheme(colorTheme.current);
+  });
+}
 
 // ==========================================
 // Language Preference
@@ -369,7 +601,9 @@ export const chartAlwaysShowPatterns = new PersistedState<boolean>(
 export { supportedLocales };
 
 /**
- * Language preference - stored in localStorage and synced to cookie for SSR
+ * Language preference - stored in localStorage and synced to cookie for SSR.
+ * Kept as a dedicated PersistedState (not part of the display-preferences blob)
+ * because server-side locale resolution reads its own cookie + subject column.
  */
 export const preferredLanguage = new PersistedState<SupportedLocale>(
   "nocturne-language",

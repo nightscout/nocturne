@@ -512,6 +512,7 @@ public class OidcAuthService : IOidcAuthService
             ProviderName = providerName,
             LastLoginAt = subject.LastLoginAt,
             PreferredLanguage = subject.PreferredLanguage,
+            Preferences = UserDisplayPreferences.Deserialize(subject.Preferences),
             AvatarUrl = subject.AvatarUrl,
         };
     }

@@ -103,6 +103,15 @@ public class SubjectEntity : IEntityTimestamped
     public string? PreferredLanguage { get; set; }
 
     /// <summary>
+    /// Per-user display preferences (glucose units, time format, theme, chart style, etc.)
+    /// serialized as a JSONB blob (<see cref="Core.Models.Configuration.UserDisplayPreferences"/>).
+    /// Stored on the subject so preferences follow the user across devices and tenants.
+    /// Null until the user first saves a preference.
+    /// </summary>
+    [Column("preferences")]
+    public string? Preferences { get; set; }
+
+    /// <summary>
     /// Approval status for access requests (e.g., "Approved", "Pending", "Denied")
     /// Defaults to "Approved" for existing subjects
     /// </summary>

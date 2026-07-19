@@ -2646,6 +2646,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .ValueGeneratedOnAddOrUpdate();
 
+            // Per-user display preferences stored as a JSONB blob (semantic comparison is
+            // applied by the relational jsonb-string value-comparer configured above).
+            entity.Property(e => e.Preferences).HasColumnType("jsonb");
         });
 
         modelBuilder.Entity<SubjectAvatarEntity>(entity =>

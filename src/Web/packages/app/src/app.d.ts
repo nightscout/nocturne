@@ -1,6 +1,6 @@
 // See https://svelte.dev/docs/kit/types#app
 // for information about these interfaces
-import { ApiClient } from "$lib/api";
+import { ApiClient, UserDisplayPreferences } from "$lib/api";
 
 
 export interface ServerSettings {
@@ -25,6 +25,8 @@ export interface AuthUser {
 	expiresAt?: Date;
 	/** User's preferred language code (e.g., "en", "fr", "de") */
 	preferredLanguage?: string;
+	/** Per-user display preferences (units, time format, theme, chart style, etc.) */
+	preferences?: UserDisplayPreferences;
 	/** URL to the subject's avatar image */
 	avatarUrl?: string;
 }

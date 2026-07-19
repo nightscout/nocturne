@@ -644,6 +644,7 @@ public class OidcController : ControllerBase
                 Permissions = authContext.Permissions,
                 ExpiresAt = authContext.ExpiresAt,
                 PreferredLanguage = userInfo?.PreferredLanguage,
+                Preferences = userInfo?.Preferences,
                 IsPlatformAdmin = authContext.IsPlatformAdmin,
                 IsPlatformAccessGrant = authContext.AuthType == AuthType.PlatformAccess,
                 AvatarUrl = userInfo?.AvatarUrl,
@@ -954,6 +955,12 @@ public class SessionInfo
     /// User's preferred language code (e.g., "en", "fr", "de")
     /// </summary>
     public string? PreferredLanguage { get; set; }
+
+    /// <summary>
+    /// Per-user display preferences (units, time format, theme, chart style, etc.).
+    /// Used for server-side hydration so first paint matches the user's saved choices.
+    /// </summary>
+    public UserDisplayPreferences? Preferences { get; set; }
 
     /// <summary>
     /// Whether this subject has platform-level admin access
