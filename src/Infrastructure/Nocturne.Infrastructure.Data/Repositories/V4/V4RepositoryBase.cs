@@ -193,6 +193,7 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.Set<TEntity>()
             .Where(e => e.Id >= low && e.Id <= high)
+            .OrderBy(e => e.Id)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : ToDomain(entity);
     }

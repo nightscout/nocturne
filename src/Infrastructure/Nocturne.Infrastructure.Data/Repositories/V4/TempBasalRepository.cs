@@ -125,6 +125,7 @@ public class TempBasalRepository : ITempBasalRepository
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.TempBasals
             .Where(e => e.Id >= low && e.Id <= high)
+            .OrderBy(e => e.Id)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : TempBasalMapper.ToDomainModel(entity);
     }

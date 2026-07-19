@@ -113,6 +113,7 @@ public class BasalInjectionRepository : IBasalInjectionRepository
     {
         var entity = await _context.BasalInjections
             .Where(e => e.Id >= low && e.Id <= high)
+            .OrderBy(e => e.Id)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : BasalInjectionMapper.ToDomainModel(entity);
     }

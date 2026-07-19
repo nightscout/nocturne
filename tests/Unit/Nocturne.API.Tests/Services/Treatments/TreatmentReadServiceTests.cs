@@ -230,4 +230,55 @@ public class TreatmentReadServiceTests
         result.Should().BeTrue();
         _pipeline.Verify(p => p.DeleteByLegacyIdAsync<Treatment>("t1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task DeleteAsync_ByDerivedObjectId_DeletesViaLegacyIdToRemoveSiblings()
+    {
+        // A meal bolus + its carb share one LegacyId; deleting by the derived wire ObjectId must
+        // route through DeleteByLegacyId (removes both) rather than the single-row range delete
+        // (which would orphan the carb into a phantom correction).
+        var uuid = Guid.CreateVersion7();
+        var wireId = MongoObjectId.FromGuid(uuid);
+        var bolus = new Bolus { Id = uuid, LegacyId = "syn-meal-1" };
+
+        _pipeline
+            .Setup(p => p.DeleteByLegacyIdAsync<Treatment>(wireId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0); // the ObjectId is not a stored LegacyId
+        _bolusRepo
+            .Setup(r => r.GetByGuidRangeAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(bolus);
+        _pipeline
+            .Setup(p => p.DeleteByLegacyIdAsync<Treatment>("syn-meal-1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2); // both siblings
+
+        var result = await _service.DeleteAsync(wireId);
+
+        result.Should().BeTrue();
+        _pipeline.Verify(
+            p => p.DeleteByLegacyIdAsync<Treatment>("syn-meal-1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ResolveCanonicalIdAsync_BackfillsNullLegacyId_SoUpdateUpsertsInPlace()
+    {
+        // A native V4 row (LegacyId == null) resolved by a derived ObjectId must be backfilled with
+        // that ObjectId so the decomposer upserts it in place instead of inserting a duplicate.
+        var uuid = Guid.CreateVersion7();
+        var wireId = MongoObjectId.FromGuid(uuid);
+        var note = new Note { Id = uuid, LegacyId = null };
+
+        _noteRepo
+            .Setup(r => r.GetByGuidRangeAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(note);
+
+        var canonical = await _service.ResolveCanonicalIdAsync(wireId);
+
+        canonical.Should().Be(wireId);
+        // The backfill goes through IV4Repository<Note>.UpdateAsync (the base slot the generic
+        // helper is typed against), which INoteRepository new-shadows — verify the base slot.
+        _noteRepo.As<IV4Repository<Note>>().Verify(
+            r => r.UpdateAsync(uuid, It.Is<Note>(n => n.LegacyId == wireId), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
 }

@@ -94,6 +94,7 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = await ctx.ApsSnapshots
             .Where(e => e.Id >= low && e.Id <= high)
+            .OrderBy(e => e.Id)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : ApsSnapshotMapper.ToDomainModel(entity);
     }

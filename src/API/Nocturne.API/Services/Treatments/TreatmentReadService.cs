@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Entries;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Treatments;
@@ -202,9 +203,20 @@ public class TreatmentReadService : ITreatmentStore
         }
 
         // A 24-hex ObjectId AAPS derived from the record's UUID: resolve it via the uuid prefix
-        // range and delete the underlying record by its real UUID.
+        // range. Prefer deleting by the resolved record's LegacyId so correlated siblings (e.g. a
+        // meal bolus's carb, a bolus wizard's calculation) are removed together — DeleteByGuidRange
+        // only deletes the single matched row, which would orphan the sibling into a phantom.
         if (deleted == 0 && MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
         {
+            var legacyId = await FindLegacyIdByGuidRangeAsync(low, high, ct);
+            if (!string.IsNullOrEmpty(legacyId))
+            {
+                deleted = await _pipeline.DeleteByLegacyIdAsync<Treatment>(legacyId, WriteOrigin.Live, ct);
+                if (deleted > 0)
+                    return true;
+            }
+
+            // Native row with no LegacyId (no correlated sibling to worry about): delete by UUID.
             if (await DeleteByGuidRangeAsync(low, high, ct))
                 return true;
         }
@@ -330,10 +342,45 @@ public class TreatmentReadService : ITreatmentStore
         if (Guid.TryParse(id, out _))
             return null;
 
-        if (MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
-            return await FindLegacyIdByGuidRangeAsync(low, high, ct);
+        if (!MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+            return null;
 
-        return null;
+        // Return the decomposer's upsert key (LegacyId). A native V4 row has no LegacyId, so the
+        // decomposer can't match it and would insert a duplicate; backfill it with the derived
+        // ObjectId (which is what the wire already shows for this record) so the update lands in
+        // place. Short-circuits on the first repo that owns the record.
+        return await ResolveOrBackfillLegacyIdAsync(_bolusRepo, low, high, ct)
+            ?? await ResolveOrBackfillLegacyIdAsync(_carbIntakeRepo, low, high, ct)
+            ?? await ResolveOrBackfillLegacyIdAsync(_bgCheckRepo, low, high, ct)
+            ?? await ResolveOrBackfillLegacyIdAsync(_noteRepo, low, high, ct)
+            ?? await ResolveOrBackfillLegacyIdAsync(_deviceEventRepo, low, high, ct)
+            ?? await ResolveOrBackfillLegacyIdAsync(_bolusCalcRepo, low, high, ct)
+            ?? await ResolveOrBackfillTempBasalLegacyIdAsync(low, high, ct);
+    }
+
+    private static async Task<string?> ResolveOrBackfillLegacyIdAsync<T>(
+        IV4Repository<T> repo, Guid low, Guid high, CancellationToken ct) where T : class, IV4Record
+    {
+        var entity = await repo.GetByGuidRangeAsync(low, high, ct);
+        if (entity is null) return null;
+        if (!string.IsNullOrEmpty(entity.LegacyId)) return entity.LegacyId;
+
+        var objectId = MongoObjectId.FromGuid(entity.Id);
+        entity.LegacyId = objectId;
+        await repo.UpdateAsync(entity.Id, entity, WriteOrigin.Live, ct);
+        return objectId;
+    }
+
+    private async Task<string?> ResolveOrBackfillTempBasalLegacyIdAsync(Guid low, Guid high, CancellationToken ct)
+    {
+        var tempBasal = await _tempBasalRepo.GetByGuidRangeAsync(low, high, ct);
+        if (tempBasal is null) return null;
+        if (!string.IsNullOrEmpty(tempBasal.LegacyId)) return tempBasal.LegacyId;
+
+        var objectId = MongoObjectId.FromGuid(tempBasal.Id);
+        tempBasal.LegacyId = objectId;
+        await _tempBasalRepo.UpdateAsync(tempBasal.Id, tempBasal, WriteOrigin.Live, ct);
+        return objectId;
     }
 
     private async Task<string?> FindLegacyIdByGuidRangeAsync(Guid low, Guid high, CancellationToken ct)
