@@ -29,6 +29,15 @@ public interface ITreatmentStore
     Task<Treatment?> GetByIdAsync(string id, CancellationToken ct = default);
 
     /// <summary>
+    /// Maps a wire identifier (a 24-hex ObjectId derived from a record's UUID) to the stored
+    /// <c>LegacyId</c> the decomposer upserts on. Returns null when the id is a raw UUID or already
+    /// the stored key. Used by update paths to re-decompose the existing record in place.
+    /// </summary>
+    /// <param name="id">The identifier as received from the client.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<string?> ResolveCanonicalIdAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns treatments whose <see cref="Treatment.Mills"/> falls within
     /// <c>[fromMills, toMills]</c>, for the current tenant. Stable window read used by
     /// replay/point-in-time evaluation; not bounded by an arbitrary "newest N" page size.

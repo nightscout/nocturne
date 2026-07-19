@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.Serializers;
 
 namespace Nocturne.Core.Models.Extensions;
 
@@ -88,6 +89,7 @@ public class EntryV1Response
     }
 
     [JsonPropertyName("_id")]
+    [JsonConverter(typeof(ObjectIdJsonConverter))]
     public string? Id => _entry.Id;
 
     [JsonPropertyName("date")]
@@ -230,6 +232,7 @@ public class EntryV3Response
 
     // V3-specific computed fields
     [JsonPropertyName("identifier")]
+    [JsonConverter(typeof(ObjectIdJsonConverter))]
     public string? Identifier => _entry.Identifier;
 
     [JsonPropertyName("srvModified")]
@@ -246,6 +249,7 @@ public class EntryV3Response
 
     // Core fields (same as V1)
     [JsonPropertyName("_id")]
+    [JsonConverter(typeof(ObjectIdJsonConverter))]
     public string? Id => _entry.Id;
 
     [JsonPropertyName("date")]

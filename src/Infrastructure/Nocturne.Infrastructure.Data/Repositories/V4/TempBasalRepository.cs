@@ -119,6 +119,16 @@ public class TempBasalRepository : ITempBasalRepository
         return entity is null ? null : TempBasalMapper.ToDomainModel(entity);
     }
 
+    /// <inheritdoc />
+    public async Task<TempBasal?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entity = await ctx.TempBasals
+            .Where(e => e.Id >= low && e.Id <= high)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : TempBasalMapper.ToDomainModel(entity);
+    }
+
     /// <summary>
     /// Gets a temporary basal record by its legacy (MongoDB) identifier.
     /// </summary>

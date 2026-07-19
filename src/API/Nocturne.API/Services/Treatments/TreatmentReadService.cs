@@ -78,7 +78,17 @@ public class TreatmentReadService : ITreatmentStore
         if (Guid.TryParse(id, out var guid))
             return await GetByGuidAsync(guid, ct);
 
-        return await GetByLegacyIdAsync(id, ct);
+        // A non-UUID id is either a legacy/AAPS-supplied ObjectId (stored as LegacyId) or a 24-hex
+        // ObjectId we derived from the record's UUID for the wire. Try the exact LegacyId match
+        // first, then resolve a derived ObjectId via its uuid prefix range.
+        var byLegacy = await GetByLegacyIdAsync(id, ct);
+        if (byLegacy != null)
+            return byLegacy;
+
+        if (MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+            return await ResolveByGuidRangeAsync(low, high, ct);
+
+        return null;
     }
 
     /// <inheritdoc />
@@ -147,7 +157,9 @@ public class TreatmentReadService : ITreatmentStore
         var existing = await GetByIdAsync(id, ct);
         if (existing == null) return null;
 
-        treatment.Id = id;
+        // Re-key to the stored LegacyId so the decomposer upserts the existing record in place
+        // rather than creating a duplicate when the client sends a derived ObjectId.
+        treatment.Id = await ResolveCanonicalIdAsync(id, ct) ?? id;
         try
         {
             await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
@@ -187,6 +199,14 @@ public class TreatmentReadService : ITreatmentStore
                 _logger.LogError(ex, "Failed to delete TempBasal record {Id}", tempBasal.Id);
                 return false;
             }
+        }
+
+        // A 24-hex ObjectId AAPS derived from the record's UUID: resolve it via the uuid prefix
+        // range and delete the underlying record by its real UUID.
+        if (deleted == 0 && MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+        {
+            if (await DeleteByGuidRangeAsync(low, high, ct))
+                return true;
         }
 
         return deleted > 0;
@@ -259,6 +279,114 @@ public class TreatmentReadService : ITreatmentStore
             return TempBasalToTreatmentMapper.ToTreatment(tempBasal);
 
         return null;
+    }
+
+    /// <summary>
+    /// Resolves a UUID prefix range (from a derived 24-hex ObjectId) to a projected treatment by
+    /// finding which V4 table holds the record, then reusing the by-UUID projection logic so meal
+    /// pairing and temp-basal mapping are handled identically to a normal lookup.
+    /// </summary>
+    private async Task<Treatment?> ResolveByGuidRangeAsync(Guid low, Guid high, CancellationToken ct)
+    {
+        var bolus = await _bolusRepo.GetByGuidRangeAsync(low, high, ct);
+        if (bolus != null)
+            return await GetByGuidAsync(bolus.Id, ct);
+
+        var carbIntake = await _carbIntakeRepo.GetByGuidRangeAsync(low, high, ct);
+        if (carbIntake != null)
+            return await GetByGuidAsync(carbIntake.Id, ct);
+
+        var bgCheck = await _bgCheckRepo.GetByGuidRangeAsync(low, high, ct);
+        if (bgCheck != null)
+            return await GetByGuidAsync(bgCheck.Id, ct);
+
+        var note = await _noteRepo.GetByGuidRangeAsync(low, high, ct);
+        if (note != null)
+            return await GetByGuidAsync(note.Id, ct);
+
+        var deviceEvent = await _deviceEventRepo.GetByGuidRangeAsync(low, high, ct);
+        if (deviceEvent != null)
+            return await GetByGuidAsync(deviceEvent.Id, ct);
+
+        var bolusCalc = await _bolusCalcRepo.GetByGuidRangeAsync(low, high, ct);
+        if (bolusCalc != null)
+            return await GetByGuidAsync(bolusCalc.Id, ct);
+
+        var tempBasal = await _tempBasalRepo.GetByGuidRangeAsync(low, high, ct);
+        if (tempBasal != null)
+            return TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Maps a wire id (a 24-hex ObjectId derived from a record's UUID) to the <c>LegacyId</c> the
+    /// decomposer upserts on, so an update re-decomposes the existing record in place instead of
+    /// creating a duplicate. Returns null for a raw UUID or an id that is already the stored key
+    /// (the caller falls back to the existing id in that case).
+    /// </summary>
+    public async Task<string?> ResolveCanonicalIdAsync(string id, CancellationToken ct = default)
+    {
+        if (Guid.TryParse(id, out _))
+            return null;
+
+        if (MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+            return await FindLegacyIdByGuidRangeAsync(low, high, ct);
+
+        return null;
+    }
+
+    private async Task<string?> FindLegacyIdByGuidRangeAsync(Guid low, Guid high, CancellationToken ct)
+    {
+        var bolus = await _bolusRepo.GetByGuidRangeAsync(low, high, ct);
+        if (bolus != null) return bolus.LegacyId;
+
+        var carbIntake = await _carbIntakeRepo.GetByGuidRangeAsync(low, high, ct);
+        if (carbIntake != null) return carbIntake.LegacyId;
+
+        var bgCheck = await _bgCheckRepo.GetByGuidRangeAsync(low, high, ct);
+        if (bgCheck != null) return bgCheck.LegacyId;
+
+        var note = await _noteRepo.GetByGuidRangeAsync(low, high, ct);
+        if (note != null) return note.LegacyId;
+
+        var deviceEvent = await _deviceEventRepo.GetByGuidRangeAsync(low, high, ct);
+        if (deviceEvent != null) return deviceEvent.LegacyId;
+
+        var bolusCalc = await _bolusCalcRepo.GetByGuidRangeAsync(low, high, ct);
+        if (bolusCalc != null) return bolusCalc.LegacyId;
+
+        var tempBasal = await _tempBasalRepo.GetByGuidRangeAsync(low, high, ct);
+        if (tempBasal != null) return tempBasal.LegacyId;
+
+        return null;
+    }
+
+    /// <summary>Deletes the record inside a UUID prefix range (derived ObjectId) by its real UUID.</summary>
+    private async Task<bool> DeleteByGuidRangeAsync(Guid low, Guid high, CancellationToken ct)
+    {
+        var bolus = await _bolusRepo.GetByGuidRangeAsync(low, high, ct);
+        if (bolus != null) { await _bolusRepo.DeleteAsync(bolus.Id, WriteOrigin.Live, ct); return true; }
+
+        var carbIntake = await _carbIntakeRepo.GetByGuidRangeAsync(low, high, ct);
+        if (carbIntake != null) { await _carbIntakeRepo.DeleteAsync(carbIntake.Id, WriteOrigin.Live, ct); return true; }
+
+        var bgCheck = await _bgCheckRepo.GetByGuidRangeAsync(low, high, ct);
+        if (bgCheck != null) { await _bgCheckRepo.DeleteAsync(bgCheck.Id, WriteOrigin.Live, ct); return true; }
+
+        var note = await _noteRepo.GetByGuidRangeAsync(low, high, ct);
+        if (note != null) { await _noteRepo.DeleteAsync(note.Id, WriteOrigin.Live, ct); return true; }
+
+        var deviceEvent = await _deviceEventRepo.GetByGuidRangeAsync(low, high, ct);
+        if (deviceEvent != null) { await _deviceEventRepo.DeleteAsync(deviceEvent.Id, WriteOrigin.Live, ct); return true; }
+
+        var bolusCalc = await _bolusCalcRepo.GetByGuidRangeAsync(low, high, ct);
+        if (bolusCalc != null) { await _bolusCalcRepo.DeleteAsync(bolusCalc.Id, WriteOrigin.Live, ct); return true; }
+
+        var tempBasal = await _tempBasalRepo.GetByGuidRangeAsync(low, high, ct);
+        if (tempBasal != null) { await _tempBasalRepo.DeleteAsync(tempBasal.Id, WriteOrigin.Live, ct); return true; }
+
+        return false;
     }
 
     private async Task<Treatment?> GetByLegacyIdAsync(string legacyId, CancellationToken ct)

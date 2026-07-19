@@ -187,6 +187,16 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return entity is null ? null : ToDomain(entity);
     }
 
+    /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetByGuidRangeAsync" />
+    public async Task<TModel?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await ctx.Set<TEntity>()
+            .Where(e => e.Id >= low && e.Id <= high)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : ToDomain(entity);
+    }
+
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CreateAsync" />
     /// <remarks>Virtual: SyncId-upsert types (Bolus, CarbIntake) override to upsert in place.</remarks>
     public virtual async Task<TModel> CreateAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)

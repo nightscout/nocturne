@@ -41,6 +41,18 @@ public interface IV4Repository<T> where T : class, IV4Record
     Task<T?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
+    /// Retrieve the first record whose UUID falls within <c>[low, high]</c>. Used to resolve a
+    /// 24-hex Mongo ObjectId (the first 24 hex of a UUID, emitted on the legacy API) back to its
+    /// record via a uuid prefix range. Postgres orders <c>uuid</c> byte-wise, so the range selects
+    /// exactly the UUIDs sharing that hex prefix.
+    /// </summary>
+    /// <param name="low">Inclusive lower bound (objectId + <c>00000000</c>).</param>
+    /// <param name="high">Inclusive upper bound (objectId + <c>ffffffff</c>).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The matching record, or <c>null</c>.</returns>
+    Task<T?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default);
+
+    /// <summary>
     /// Persist a new record and return the saved entity with any server-assigned fields populated.
     /// </summary>
     /// <param name="model">Record to create.</param>

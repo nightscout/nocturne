@@ -700,7 +700,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             ["created_at"] = status.CreatedAt,
             ["uploaderBattery"] = status.Uploader?.Battery,
             ["utcOffset"] = status.UtcOffset,
-            ["identifier"] = status.Id,
+            // 24-hex ObjectId so AAPS's isObjectId() passes; resolved back via GetByIdAsync.
+            ["identifier"] = MongoObjectId.Coerce(status.Id),
             ["srvModified"] = status.Mills,
             ["srvCreated"] = status.Mills,
         };

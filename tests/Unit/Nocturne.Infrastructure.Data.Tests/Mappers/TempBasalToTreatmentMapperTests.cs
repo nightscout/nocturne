@@ -161,17 +161,32 @@ public class TempBasalToTreatmentMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void ToTreatment_UsesLegacyIdWhenPresent()
+    public void ToTreatment_UsesLegacyIdWhenItIsAnObjectId()
     {
-        // Arrange
+        // A caller-supplied 24-hex ObjectId round-trips via an exact LegacyId lookup, so it is
+        // emitted verbatim.
         var tempBasal = CreateTempBasal(TempBasalOrigin.Algorithm, 1.0);
-        tempBasal.LegacyId = "legacy-treatment-abc";
+        tempBasal.LegacyId = "507f1f77bcf86cd799439011";
 
-        // Act
         var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
 
-        // Assert
-        result.Id.Should().Be("legacy-treatment-abc");
+        result.Id.Should().Be("507f1f77bcf86cd799439011");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToTreatment_FallsBackToGuidForNonObjectIdLegacyId()
+    {
+        // A non-ObjectId legacy string (e.g. a synthetic id) would serialize to an unresolvable
+        // hash; emit the UUID instead so the wire ObjectId resolves via a uuid prefix range.
+        var id = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef");
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Algorithm, 1.0);
+        tempBasal.Id = id;
+        tempBasal.LegacyId = "legacy-treatment-abc";
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.Id.Should().Be(id.ToString());
     }
 
     [Fact]

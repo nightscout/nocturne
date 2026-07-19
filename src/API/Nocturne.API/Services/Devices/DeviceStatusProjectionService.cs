@@ -179,6 +179,17 @@ public class DeviceStatusProjectionService
                 uploader = await _uploaderRepo.GetByLegacyIdAsync(id, ct);
         }
 
+        // Fallback to a 24-hex ObjectId derived from the record's UUID (resolved via prefix range).
+        if (aps == null && pump == null && uploader == null
+            && MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+        {
+            aps = await _apsRepo.GetByGuidRangeAsync(low, high, ct);
+            if (aps == null)
+                pump = await _pumpRepo.GetByGuidRangeAsync(low, high, ct);
+            if (aps == null && pump == null)
+                uploader = await _uploaderRepo.GetByGuidRangeAsync(low, high, ct);
+        }
+
         if (aps == null && pump == null && uploader == null)
             return null;
 

@@ -23,7 +23,12 @@ public static class TempBasalToTreatmentMapper
 
         var treatment = new Treatment
         {
-            Id = tempBasal.LegacyId ?? tempBasal.Id.ToString(),
+            // Emit a resolvable id: a caller-supplied ObjectId round-trips via LegacyId; otherwise
+            // the UUID, which serializes to a range-resolvable ObjectId. Update paths re-key to the
+            // stored LegacyId before re-decomposing, so PATCH updates in place.
+            Id = MongoObjectId.IsObjectId(tempBasal.LegacyId)
+                ? tempBasal.LegacyId
+                : tempBasal.Id.ToString(),
             Mills = tempBasal.StartMills,
             EventType = "Temp Basal",
             Duration = durationMinutes,

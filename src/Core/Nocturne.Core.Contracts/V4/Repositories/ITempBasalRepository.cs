@@ -50,6 +50,16 @@ public interface ITempBasalRepository
     /// <returns>The matching record, or <c>null</c> if not found.</returns>
     Task<TempBasal?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Retrieve the first <see cref="TempBasal"/> whose UUID falls within <c>[low, high]</c>,
+    /// resolving a 24-hex ObjectId (the first 24 hex of a UUID) back to its record via a uuid
+    /// prefix range.
+    /// </summary>
+    /// <param name="low">Inclusive lower bound.</param>
+    /// <param name="high">Inclusive upper bound.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<TempBasal?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default);
+
     /// <summary>Persist a new <see cref="TempBasal"/> and return the saved entity.</summary>
     /// <param name="model">Record to create.</param>
     /// <param name="ct">Cancellation token.</param>

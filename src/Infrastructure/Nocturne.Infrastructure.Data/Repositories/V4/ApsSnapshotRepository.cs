@@ -88,6 +88,16 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
         return entity is null ? null : ApsSnapshotMapper.ToDomainModel(entity);
     }
 
+    /// <inheritdoc />
+    public async Task<ApsSnapshot?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entity = await ctx.ApsSnapshots
+            .Where(e => e.Id >= low && e.Id <= high)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : ApsSnapshotMapper.ToDomainModel(entity);
+    }
+
     /// <summary>
     /// Gets an APS snapshot by its legacy identifier.
     /// </summary>

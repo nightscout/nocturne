@@ -108,6 +108,15 @@ public class BasalInjectionRepository : IBasalInjectionRepository
         return entity is null ? null : BasalInjectionMapper.ToDomainModel(entity);
     }
 
+    /// <inheritdoc />
+    public async Task<BasalInjection?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default)
+    {
+        var entity = await _context.BasalInjections
+            .Where(e => e.Id >= low && e.Id <= high)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : BasalInjectionMapper.ToDomainModel(entity);
+    }
+
     /// <summary>
     /// Creates a new basal injection record. When <c>DataSource</c> and <c>SyncIdentifier</c>
     /// match an existing row for this tenant, the record is updated in place (upsert) rather

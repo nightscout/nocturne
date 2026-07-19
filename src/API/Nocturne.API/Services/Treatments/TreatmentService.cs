@@ -187,6 +187,10 @@ public class TreatmentService : ITreatmentService
         var existing = await _store.GetByIdAsync(id, cancellationToken);
         if (existing is null) return null;
 
+        // Re-key to the stored LegacyId so re-decomposition upserts this record in place instead
+        // of creating a duplicate when AAPS patches by a derived ObjectId.
+        existing.Id = await _store.ResolveCanonicalIdAsync(id, cancellationToken) ?? existing.Id;
+
         // Apply patch fields to existing treatment
         ApplyJsonPatch(existing, patchData);
 
@@ -201,6 +205,11 @@ public class TreatmentService : ITreatmentService
 
     private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)
     {
+        // The identity used to upsert (LegacyId matching) must survive the round-trip. Serializing
+        // rewrites _id to its 24-hex ObjectId form, so capture the real Id and restore it after the
+        // merge unless the patch explicitly changes _id.
+        var originalId = treatment.Id;
+
         // JSON merge-patch: serialize existing, overlay patch properties, deserialize back
         var existingJson = JsonSerializer.Serialize(treatment);
         using var existingDoc = JsonDocument.Parse(existingJson);
@@ -226,6 +235,11 @@ public class TreatmentService : ITreatmentService
             }
             catch { /* skip computed properties that throw on set */ }
         }
+
+        // A PATCH updates the record identified by the URL; it never changes identity. Restore the
+        // upsert key even if the client echoed an _id in the body (AAPS sends the derived ObjectId,
+        // which would otherwise defeat the re-key and duplicate the record).
+        treatment.Id = originalId;
     }
 
     /// <inheritdoc />

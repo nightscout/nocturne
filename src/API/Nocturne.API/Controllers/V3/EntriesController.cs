@@ -234,13 +234,14 @@ public class EntriesController : BaseV3Controller<Entry>
                 );
                 if (existingEntry != null)
                 {
+                    var existingIdentifier = MongoObjectId.Coerce(existingEntry.Id);
                     return Ok(
                         new
                         {
                             status = 200,
-                            identifier = existingEntry.Id,
+                            identifier = existingIdentifier,
                             isDeduplication = true,
-                            deduplicatedIdentifier = existingEntry.Id,
+                            deduplicatedIdentifier = existingIdentifier,
                         }
                     );
                 }
@@ -267,12 +268,10 @@ public class EntriesController : BaseV3Controller<Entry>
 
             await EvaluateAlertsAsync(new[] { createdEntry }, cancellationToken);
 
-            // Set location header for created resource
-            Response.Headers["Location"] = $"/api/v3/entries/{createdEntry.Id}";
-
+            // Location resolves to the 24-hex ObjectId that matches the response body identifier.
             return CreatedAtAction(
                 nameof(GetEntry),
-                new { id = createdEntry.Id },
+                new { id = MongoObjectId.Coerce(createdEntry.Id) },
                 createdEntry.ToV3Response()
             );
         }

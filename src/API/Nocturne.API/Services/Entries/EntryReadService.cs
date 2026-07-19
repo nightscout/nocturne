@@ -90,7 +90,16 @@ public class EntryReadService : IEntryStore
         if (Guid.TryParse(id, out var guid))
             return await GetByGuidAsync(guid, ct);
 
-        return await GetByLegacyIdAsync(id, ct);
+        // A non-UUID id is either a legacy/AAPS-supplied ObjectId (stored as LegacyId) or a 24-hex
+        // ObjectId we derived from the record's UUID; resolve the latter via its uuid prefix range.
+        var byLegacy = await GetByLegacyIdAsync(id, ct);
+        if (byLegacy != null)
+            return byLegacy;
+
+        if (MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high))
+            return await GetByGuidRangeAsync(low, high, ct);
+
+        return null;
     }
 
     /// <inheritdoc />
@@ -247,6 +256,23 @@ public class EntryReadService : IEntryStore
             return EntryProjection.FromMeterGlucose(mg);
 
         var cal = await _calRepo.GetByLegacyIdAsync(legacyId, ct);
+        if (cal is not null)
+            return EntryProjection.FromCalibration(cal);
+
+        return null;
+    }
+
+    private async Task<Entry?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct)
+    {
+        var sg = await _sgRepo.GetByGuidRangeAsync(low, high, ct);
+        if (sg is not null)
+            return EntryProjection.FromSensorGlucose(sg);
+
+        var mg = await _mgRepo.GetByGuidRangeAsync(low, high, ct);
+        if (mg is not null)
+            return EntryProjection.FromMeterGlucose(mg);
+
+        var cal = await _calRepo.GetByGuidRangeAsync(low, high, ct);
         if (cal is not null)
             return EntryProjection.FromCalibration(cal);
 

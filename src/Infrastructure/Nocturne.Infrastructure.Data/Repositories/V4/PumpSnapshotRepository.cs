@@ -88,6 +88,16 @@ public class PumpSnapshotRepository : IPumpSnapshotRepository
         return entity is null ? null : PumpSnapshotMapper.ToDomainModel(entity);
     }
 
+    /// <inheritdoc />
+    public async Task<PumpSnapshot?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entity = await ctx.PumpSnapshots
+            .Where(e => e.Id >= low && e.Id <= high)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : PumpSnapshotMapper.ToDomainModel(entity);
+    }
+
     /// <summary>
     /// Gets a pump snapshot record by its legacy identifier.
     /// </summary>

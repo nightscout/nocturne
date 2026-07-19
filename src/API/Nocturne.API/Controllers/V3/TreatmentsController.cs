@@ -222,13 +222,14 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 );
                 if (existingTreatment != null)
                 {
+                    var existingIdentifier = MongoObjectId.Coerce(existingTreatment.Id);
                     return Ok(
                         new
                         {
                             status = 200,
-                            identifier = existingTreatment.Id,
+                            identifier = existingIdentifier,
                             isDeduplication = true,
-                            deduplicatedIdentifier = existingTreatment.Id,
+                            deduplicatedIdentifier = existingIdentifier,
                         }
                     );
                 }
@@ -255,12 +256,10 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
             _logger.LogDebug("Successfully created V3 treatment {Id}", createdTreatment.Id);
 
-            // Set location header for created resource
-            Response.Headers["Location"] = $"/api/v3/treatments/{Uri.EscapeDataString(createdTreatment.Id ?? string.Empty)}";
-
+            // Location resolves to the 24-hex ObjectId that matches the response body identifier.
             return CreatedAtAction(
                 nameof(GetTreatment),
-                new { id = createdTreatment.Id },
+                new { id = MongoObjectId.Coerce(createdTreatment.Id) },
                 createdTreatment
             );
         }
@@ -564,7 +563,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 {
                     status = 200,
                     result,
-                    identifier = result.Id,
+                    identifier = MongoObjectId.Coerce(result.Id),
                 }
             );
         }

@@ -88,6 +88,16 @@ public class UploaderSnapshotRepository : IUploaderSnapshotRepository
         return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
     }
 
+    /// <inheritdoc />
+    public async Task<UploaderSnapshot?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        var entity = await ctx.UploaderSnapshots
+            .Where(e => e.Id >= low && e.Id <= high)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : UploaderSnapshotMapper.ToDomainModel(entity);
+    }
+
     /// <summary>
     /// Gets an uploader snapshot record by its legacy identifier.
     /// </summary>
