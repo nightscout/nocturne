@@ -239,14 +239,15 @@ public class Treatment : ProcessableDocumentBase
     /// </summary>
     [JsonPropertyName("duration")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    // Serializes rounded to whole minutes (AAPS parses duration as a Long); the getter keeps the
+    // exact value so in-memory duration math (e.g. temp-basal cutting) is not corrupted.
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? Duration
     {
         get
         {
-            // AAPS parses duration as a Long and throws NumberFormatException on a
-            // fractional value, so round to whole minutes in every branch.
             if (_duration.HasValue)
-                return Math.Round(_duration.Value);
+                return _duration;
 
             // Try to calculate from Insulin / Rate
             // resolving synonyms
@@ -255,7 +256,7 @@ public class Treatment : ProcessableDocumentBase
 
             if (i.HasValue && r.HasValue && r.Value > 0)
             {
-                return Math.Round((i.Value / r.Value) * 60.0);
+                return (i.Value / r.Value) * 60.0;
             }
             // Nightscout returns 0 for duration when not set
             return 0;

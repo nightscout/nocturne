@@ -194,6 +194,58 @@ public class FlexibleNullableDoubleConverter : JsonConverter<double?>
 }
 
 /// <summary>
+/// Reads a nullable double flexibly (number or string, like <see cref="FlexibleNullableDoubleConverter"/>)
+/// but writes it rounded to a whole number. Nightscout's <c>duration</c> is integer minutes on the wire;
+/// AAPS parses it as a Long and throws <c>NumberFormatException</c> on a fractional value. Rounding lives
+/// here — at serialization — rather than in the model getter, so in-memory calculations that rely on
+/// sub-minute precision (e.g. temp-basal duration cutting) keep the exact value.
+/// </summary>
+/// <seealso cref="FlexibleNullableDoubleConverter"/>
+public class RoundedNullableDoubleConverter : JsonConverter<double?>
+{
+    public override double? Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options
+    )
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.Number:
+                return reader.GetDouble();
+
+            case JsonTokenType.String:
+                var stringValue = reader.GetString();
+                if (string.IsNullOrWhiteSpace(stringValue))
+                    return null;
+
+                if (double.TryParse(stringValue, out var result))
+                    return result;
+
+                return null;
+
+            case JsonTokenType.Null:
+                return null;
+
+            default:
+                return null;
+        }
+    }
+
+    public override void Write(Utf8JsonWriter writer, double? value, JsonSerializerOptions options)
+    {
+        if (value.HasValue)
+        {
+            writer.WriteNumberValue(Math.Round(value.Value));
+        }
+        else
+        {
+            writer.WriteNullValue();
+        }
+    }
+}
+
+/// <summary>
 /// JSON converter that handles flexible decimal serialization for Nightscout compatibility.
 /// Nightscout may send numeric values as either numbers or strings depending on the context.
 /// </summary>
