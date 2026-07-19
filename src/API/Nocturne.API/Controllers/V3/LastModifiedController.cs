@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
+using System.Linq;
 
 namespace Nocturne.API.Controllers.V3;
 
@@ -93,11 +94,10 @@ public class LastModifiedController : ControllerBase
         Add("settings", lastModified.Settings);
         Add("activity", lastModified.Activity);
 
-        foreach (var kvp in lastModified.Additional)
+        foreach (var kvp in lastModified.Additional.Where(kvp => kvp.Key != "auth"))
         {
             // Exclude internal keys (e.g. auth) that are not sync collections.
-            if (kvp.Key != "auth")
-                Add(kvp.Key, kvp.Value);
+            Add(kvp.Key, kvp.Value);
         }
 
         return new
