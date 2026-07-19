@@ -273,4 +273,23 @@ public class ApsSnapshotRepositoryTests : IDisposable
 
         result.Should().BeNull();
     }
+
+    [Fact]
+    public async Task GetModifiedSinceAsync_FiltersOnEventTimestampNotWriteClock()
+    {
+        // AAPS advances its devicestatus history cursor on the event Timestamp (the V3 DTO's
+        // srvModified), so the query must filter on Timestamp, not the write clock SysUpdatedAt.
+        // SeedAsync stamps SysUpdatedAt = UtcNow (now), so filtering on SysUpdatedAt would return
+        // both rows for any past cursor and re-loop the sync.
+        var cursor = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(TenantA,
+            (cursor, false, null),                 // exactly at the cursor -> excluded
+            (cursor.AddMinutes(1), false, null));  // strictly newer -> returned
+
+        var cursorMills = new DateTimeOffset(cursor).ToUnixTimeMilliseconds();
+        var result = (await _repository.GetModifiedSinceAsync(cursorMills)).ToList();
+
+        result.Should().ContainSingle()
+            .Which.Timestamp.Should().Be(cursor.AddMinutes(1));
+    }
 }

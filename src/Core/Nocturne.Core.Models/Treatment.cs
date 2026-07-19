@@ -243,8 +243,10 @@ public class Treatment : ProcessableDocumentBase
     {
         get
         {
+            // AAPS parses duration as a Long and throws NumberFormatException on a
+            // fractional value, so round to whole minutes in every branch.
             if (_duration.HasValue)
-                return _duration;
+                return Math.Round(_duration.Value);
 
             // Try to calculate from Insulin / Rate
             // resolving synonyms
@@ -253,7 +255,7 @@ public class Treatment : ProcessableDocumentBase
 
             if (i.HasValue && r.HasValue && r.Value > 0)
             {
-                return (i.Value / r.Value) * 60.0;
+                return Math.Round((i.Value / r.Value) * 60.0);
             }
             // Nightscout returns 0 for duration when not set
             return 0;

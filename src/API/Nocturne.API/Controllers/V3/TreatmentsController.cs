@@ -501,7 +501,14 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 limit,
                 cancellationToken
             );
-            return CreateV3SuccessResponse(treatments);
+
+            var treatmentsList = treatments.ToList();
+            if (treatmentsList.Count > 0)
+            {
+                SetHistoryCursorHeaders(treatmentsList.Max(t => t.SrvModified ?? t.Mills));
+            }
+
+            return CreateV3SuccessResponse(treatmentsList);
         }
         catch (Exception ex)
         {

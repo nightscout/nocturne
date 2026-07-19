@@ -507,11 +507,17 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         {
             limit = Math.Min(Math.Max(limit, 1), 1000);
 
-            var deviceStatuses = await _projection.GetModifiedSinceAsync(
+            var deviceStatuses = (await _projection.GetModifiedSinceAsync(
                 lastModified,
                 limit,
                 cancellationToken
-            );
+            )).ToList();
+
+            if (deviceStatuses.Count > 0)
+            {
+                SetHistoryCursorHeaders(deviceStatuses.Max(d => d.Mills));
+            }
+
             var mappedData = deviceStatuses.Select(MapToV3Dto);
             return CreateV3SuccessResponse(mappedData);
         }

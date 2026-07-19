@@ -231,10 +231,17 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var since = DateTimeOffset.FromUnixTimeMilliseconds(lastModifiedMills).UtcDateTime;
+        // Filter and order on the event Timestamp: it is the clock the V3 devicestatus DTO
+        // reports as srvModified and the AAPS history cursor advances on, and it is the
+        // indexed column. Filtering on the write clock (SysUpdatedAt) instead sets the cursor
+        // below the returned rows' write time, so every poll re-matches them (an incremental-
+        // sync loop). Strictly-greater (not >=) so the cursor record AAPS already holds is not
+        // re-returned; the boundary record's sub-millisecond remainder is deduplicated by AAPS
+        // rather than dropped (a >= cursor+1ms bound would silently skip sub-ms page splits).
         var entities = await ctx.ApsSnapshots
             .AsNoTracking()
-            .Where(e => e.SysUpdatedAt >= since)
-            .OrderBy(e => e.SysUpdatedAt)
+            .Where(e => e.Timestamp > since)
+            .OrderBy(e => e.Timestamp)
             .Take(limit)
             .ToListAsync(ct);
 

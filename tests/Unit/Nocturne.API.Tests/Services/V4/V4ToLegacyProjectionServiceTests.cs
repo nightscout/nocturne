@@ -8,6 +8,8 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -33,6 +35,7 @@ public class V4ToLegacyProjectionServiceTests
     private readonly Mock<ITempBasalRepository> _tempBasalRepo = new();
     private readonly Mock<IBolusCalculationRepository> _bolusCalcRepo = new();
     private readonly Mock<ITreatmentFoodService> _treatmentFoodService = new();
+    private readonly NocturneDbContext _dbContext;
     private readonly V4ToLegacyProjectionService _service;
 
     public V4ToLegacyProjectionServiceTests()
@@ -87,7 +90,7 @@ public class V4ToLegacyProjectionServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Enumerable.Empty<BolusCalculation>());
 
-        var dbContext = TestDbContextFactory.CreateInMemoryContext();
+        _dbContext = TestDbContextFactory.CreateInMemoryContext();
 
         _service = new V4ToLegacyProjectionService(
             _sensorGlucoseRepo.Object,
@@ -99,7 +102,7 @@ public class V4ToLegacyProjectionServiceTests
             _tempBasalRepo.Object,
             _bolusCalcRepo.Object,
             _treatmentFoodService.Object,
-            dbContext,
+            _dbContext,
             NullLogger<V4ToLegacyProjectionService>.Instance
         );
     }
@@ -306,5 +309,47 @@ public class V4ToLegacyProjectionServiceTests
         var leftover1 = result1.Single(t => t.EventType == TreatmentTypes.CarbCorrection);
         var leftover2 = result2.Single(t => t.EventType == TreatmentTypes.CarbCorrection);
         leftover1.Id.Should().Be(leftover2.Id).And.Be(highId.ToString());
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsModifiedSince_ExcludesRecordAtCursor()
+    {
+        // AAPS passes the timestamp of the newest record it already holds as the cursor.
+        // The history query must be strictly-greater (>), so the record AT the cursor is
+        // not re-returned; an inclusive bound loops AAPS re-requesting the same page.
+        var cursor = new DateTime(2025, 01, 01, 12, 0, 0, DateTimeKind.Utc);
+        var tenantId = Guid.CreateVersion7();
+        _dbContext.TenantId = tenantId; // satisfy the tenant query filter
+
+        var atCursor = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            Timestamp = cursor,
+            Insulin = 1.0,
+        };
+        var newer = Guid.CreateVersion7();
+        var afterCursor = new BolusEntity
+        {
+            Id = newer,
+            TenantId = tenantId,
+            Timestamp = cursor.AddMinutes(1),
+            Insulin = 2.0,
+        };
+        _dbContext.Boluses.Add(atCursor);
+        _dbContext.Boluses.Add(afterCursor);
+        await _dbContext.SaveChangesAsync();
+
+        // SaveChanges stamps SysUpdatedAt = UtcNow on insert; a second save that touches only
+        // SysUpdatedAt keeps the assigned value, letting us pin the two rows either side of the cursor.
+        atCursor.SysUpdatedAt = cursor; // exactly at the cursor -> must be excluded
+        afterCursor.SysUpdatedAt = cursor.AddMilliseconds(1); // strictly newer -> must be returned
+        await _dbContext.SaveChangesAsync();
+
+        var cursorMills = new DateTimeOffset(cursor).ToUnixTimeMilliseconds();
+        var result = (await _service.GetProjectedTreatmentsModifiedSinceAsync(cursorMills, 100)).ToList();
+
+        result.Should().ContainSingle();
+        result[0].Id.Should().Be(newer.ToString());
     }
 }

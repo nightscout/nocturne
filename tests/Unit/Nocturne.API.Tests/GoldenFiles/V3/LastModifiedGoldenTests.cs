@@ -18,7 +18,7 @@ public class LastModifiedGoldenTests : GoldenFileTestBase
         var captured = await CaptureResponse(response);
 
         await Verify(captured)
-            .ScrubMembers("serverTime");
+            .ScrubMembers("srvDate");
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public class LastModifiedGoldenTests : GoldenFileTestBase
         var captured = await CaptureResponse(response);
 
         await Verify(captured)
-            .ScrubMembers("serverTime");
+            .ScrubMembers("srvDate");
     }
 
     #endregion

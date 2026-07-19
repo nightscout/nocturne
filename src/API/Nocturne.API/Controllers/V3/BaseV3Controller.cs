@@ -369,6 +369,19 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
+    /// Set <c>Last-Modified</c> and <c>ETag</c> on a V3 <c>history/{lastModified}</c> response.
+    /// AAPS advances its incremental-sync cursor from these headers; without them the cursor
+    /// stays put and the same page is requested repeatedly.
+    /// </summary>
+    /// <param name="maxMills">Highest record timestamp in the response, in Unix milliseconds.</param>
+    protected void SetHistoryCursorHeaders(long maxMills)
+    {
+        var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(maxMills).UtcDateTime;
+        Response.Headers["Last-Modified"] = lastModified.ToString("R");
+        Response.Headers["ETag"] = $"W/\"{maxMills}\"";
+    }
+
+    /// <summary>
     /// Create a standardized V3 success response with metadata including pagination headers.
     /// Returns the Nightscout V3-compatible envelope: <c>{"status": 200, "result": [...]}</c>.
     /// </summary>

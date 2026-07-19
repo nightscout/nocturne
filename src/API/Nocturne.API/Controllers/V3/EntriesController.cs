@@ -509,17 +509,28 @@ public class EntriesController : BaseV3Controller<Entry>
         {
             limit = Math.Min(Math.Max(limit, 1), 1000);
 
-            // Build a find query for entries since the given timestamp
-            var findQuery = $"{{\"date\":{{\"$gte\":{lastModified}}}}}";
-            var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
+            // Build a find query for entries strictly newer than the cursor. Strictly-greater
+            // (not $gte) so the cursor record AAPS already holds is not re-returned, which
+            // would otherwise loop the incremental sync.
+            var findQuery = $"{{\"date\":{{\"$gt\":{lastModified}}}}}";
+            // Page oldest-first (reverseResults: true -> ascending) so a backlog larger than one
+            // page advances the cursor forward record by record. Newest-first would set the
+            // cursor to the newest of the first page and skip every older unsynced entry.
+            var entries = (await _entryService.GetEntriesWithAdvancedFilterAsync(
                 type: null,
                 count: limit,
                 skip: 0,
                 findQuery: findQuery,
                 dateString: null,
-                reverseResults: false,
+                reverseResults: true,
                 cancellationToken: cancellationToken
-            );
+            )).ToList();
+
+            if (entries.Count > 0)
+            {
+                SetHistoryCursorHeaders(entries.Max(e => e.Mills));
+            }
+
             var v3Entries = entries.ToV3Responses().ToList();
             return CreateV3SuccessResponse(v3Entries);
         }

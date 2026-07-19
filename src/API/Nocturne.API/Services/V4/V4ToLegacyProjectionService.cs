@@ -379,10 +379,13 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         var threshold = DateTimeOffset.FromUnixTimeMilliseconds(lastModifiedMills).UtcDateTime;
         var treatments = new List<Treatment>();
 
+        // Strictly-greater (not >=) so the cursor record AAPS already holds is not
+        // re-returned; an inclusive bound makes AAPS re-request the same page in a loop.
+
         // Query each V4 entity table by ModifiedAt, map to domain, then project to Treatment.
         // Sequential to avoid DbContext thread-safety issues.
         var boluses = await _dbContext.Boluses.AsNoTracking()
-            .Where(e => e.SysUpdatedAt >= threshold)
+            .Where(e => e.SysUpdatedAt > threshold)
             .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
@@ -390,7 +393,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             treatments.Add(WithSrvModified(ProjectCorrectionBolus(BolusMapper.ToDomainModel(entity)), entity.SysUpdatedAt));
 
         var carbIntakes = await _dbContext.CarbIntakes.AsNoTracking()
-            .Where(e => e.SysUpdatedAt >= threshold)
+            .Where(e => e.SysUpdatedAt > threshold)
             .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
@@ -398,7 +401,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             treatments.Add(WithSrvModified(ProjectCarbCorrection(CarbIntakeMapper.ToDomainModel(entity), []), entity.SysUpdatedAt));
 
         var bgChecks = await _dbContext.BGChecks.AsNoTracking()
-            .Where(e => e.SysUpdatedAt >= threshold)
+            .Where(e => e.SysUpdatedAt > threshold)
             .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
@@ -406,7 +409,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             treatments.Add(WithSrvModified(ProjectBgCheck(BGCheckMapper.ToDomainModel(entity)), entity.SysUpdatedAt));
 
         var notes = await _dbContext.Notes.AsNoTracking()
-            .Where(e => e.SysUpdatedAt >= threshold)
+            .Where(e => e.SysUpdatedAt > threshold)
             .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
@@ -414,7 +417,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             treatments.Add(WithSrvModified(ProjectNote(NoteMapper.ToDomainModel(entity)), entity.SysUpdatedAt));
 
         var deviceEvents = await _dbContext.DeviceEvents.AsNoTracking()
-            .Where(e => e.SysUpdatedAt >= threshold)
+            .Where(e => e.SysUpdatedAt > threshold)
             .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
@@ -422,7 +425,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             treatments.Add(WithSrvModified(ProjectDeviceEvent(DeviceEventMapper.ToDomainModel(entity)), entity.SysUpdatedAt));
 
         var tempBasals = await _dbContext.TempBasals.AsNoTracking()
-            .Where(e => e.SysUpdatedAt >= threshold)
+            .Where(e => e.SysUpdatedAt > threshold)
             .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
@@ -430,7 +433,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             treatments.Add(WithSrvModified(TempBasalToTreatmentMapper.ToTreatment(TempBasalMapper.ToDomainModel(entity)), entity.SysUpdatedAt));
 
         var bolusCalcs = await _dbContext.BolusCalculations.AsNoTracking()
-            .Where(e => e.SysUpdatedAt >= threshold)
+            .Where(e => e.SysUpdatedAt > threshold)
             .OrderBy(static e => e.SysUpdatedAt)
             .Take(limit)
             .ToListAsync(ct);
