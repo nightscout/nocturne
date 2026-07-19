@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * Filters the full Nocturne OpenAPI spec down to V4 endpoints only.
+ * Filters the full Nocturne OpenAPI spec down to the SDK surface:
+ * the V4 endpoints plus the OAuth endpoints (/api/oauth/**) that native
+ * clients need for Dynamic Client Registration and the device flow.
  * Usage: node filter-v4-spec.js <input-openapi.json> <output-openapi-v4.json>
  */
 import { readFileSync, writeFileSync } from 'fs';
@@ -13,10 +15,12 @@ if (!inputPath || !outputPath) {
 
 const spec = JSON.parse(readFileSync(inputPath, 'utf8'));
 
-// Filter paths to only /api/v4/**
+// Filter paths to /api/v4/** plus the OAuth endpoints (RFC 7591 dynamic
+// client registration, RFC 8628 device flow, token/revoke) so generated
+// SDKs can drive the full connect flow, not just the data API
 const filteredPaths = {};
 for (const [path, operations] of Object.entries(spec.paths)) {
-  if (path.startsWith('/api/v4/')) {
+  if (path.startsWith('/api/v4/') || path.startsWith('/api/oauth/')) {
     filteredPaths[path] = operations;
   }
 }

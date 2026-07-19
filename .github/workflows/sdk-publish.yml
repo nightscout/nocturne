@@ -71,7 +71,7 @@ jobs:
             echo "version=0.0.0-dev.${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Filter spec to V4 endpoints
+      - name: Filter spec to SDK endpoints (V4 + OAuth)
         run: node sdk/filter-v4-spec.js src/Web/packages/app/src/lib/api/generated/openapi.json sdk/openapi-v4.json
 
       - name: Upload V4 OpenAPI spec
@@ -406,6 +406,7 @@ jobs:
             -i sdk/openapi-v4.json
             -c sdk/java/config.yaml
             -o sdk/java/out
+            --ignore-file-override sdk/java/.openapi-generator-ignore
             --additional-properties=artifactVersion=${{ needs.generate-spec.outputs.sdk_version }}
 
       - name: Fix file permissions
@@ -413,18 +414,35 @@ jobs:
           sudo chown -R $USER:$USER sdk/java/out
           chmod +x sdk/java/out/gradlew
 
-      - name: Apply publish overlay
-        run: |
-          cat sdk/java/publish.gradle >> sdk/java/out/build.gradle
-          # Remove API files with multipart upload bugs (OpenAPI Generator native library issue)
-          rm -f sdk/java/out/src/main/java/org/nightscoutfoundation/nocturne/api/AlertCustomSoundsApi.java
-          rm -f sdk/java/out/src/test/java/org/nightscoutfoundation/nocturne/api/AlertCustomSoundsApiTest.java
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+
+      - name: Verify OkHttp 3.12 floor compatibility
+        working-directory: sdk/java/out
+        run: |
+          # Android consumers (xDrip) exclude this SDK's OkHttp 4.x/gson transitives and
+          # supply OkHttp 3.12.x / gson 2.8.x. The ApiClient template override in
+          # sdk/java/templates keeps the generated code compatible with both OkHttp majors;
+          # this compile gate stops a generator upgrade from silently regressing that.
+          mkdir -p /tmp/floor
+          for dep in \
+            com/squareup/okhttp3/okhttp/3.12.13/okhttp-3.12.13.jar \
+            com/squareup/okhttp3/logging-interceptor/3.12.13/logging-interceptor-3.12.13.jar \
+            com/squareup/okio/okio/1.15.0/okio-1.15.0.jar \
+            com/google/code/gson/gson/2.8.6/gson-2.8.6.jar \
+            io/gsonfire/gson-fire/1.9.0/gson-fire-1.9.0.jar \
+            com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar \
+            org/openapitools/jackson-databind-nullable/0.2.9/jackson-databind-nullable-0.2.9.jar \
+            jakarta/annotation/jakarta.annotation-api/1.3.5/jakarta.annotation-api-1.3.5.jar; do
+            curl -sfL -o "/tmp/floor/$(basename "$dep")" "https://repo1.maven.org/maven2/$dep"
+          done
+          find src/main/java -name '*.java' > /tmp/floor-files.txt
+          javac -nowarn -proc:none -d /tmp/floor-classes \
+            -cp "$(ls /tmp/floor/*.jar | paste -sd:)" @/tmp/floor-files.txt
+          echo "Generated sources compile against the OkHttp 3.12.13 / gson 2.8.6 floor"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
