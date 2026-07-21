@@ -23,6 +23,10 @@
     donate: "https://www.nightscoutfoundation.org/donate",
     githubLabel: "https://github.com/nightscout/nocturne/labels/get-involved",
     github: "https://github.com/nightscout/nocturne",
+    facebook: "https://www.facebook.com/groups/cgminthecloud",
+    hackDiabetes: "https://hackdiabetes.io",
+    testimonials: "mailto:testimonials@nocturne.run",
+    researchData: "mailto:research-data@nocturne.run",
   };
 
   const STATS = [
@@ -82,7 +86,7 @@
       title: "Improve the docs",
       desc: "Spotted a gap, a stale screenshot, or a typo? Clear docs save everyone hours. Fix a page or write a guide for the setup you wish you'd had.",
       cta: "Browse the docs",
-      href: "#tasks",
+      href: "/docs",
     },
     {
       id: "peer",
@@ -90,17 +94,29 @@
       accent: "oklch(0.66 0.15 70)",
       title: "Peer support",
       desc: 'Plenty of people start in the "CGM in the Cloud" Facebook group and community forums. Share what you\'ve learned where newcomers actually ask.',
-      cta: "Visit the forums",
-      href: "#tasks",
+      cta: "Open CGM in the Cloud",
+      href: LINKS.facebook,
+      external: true,
     },
     {
       id: "spread",
       icon: Megaphone,
       accent: "oklch(0.68 0.16 40)",
       title: "Spread the word",
-      desc: "Write up your setup, post your time-in-range win, give a talk at your clinic. Word of mouth is how most people find Nightscout in the first place.",
-      cta: "Share your story",
-      href: "#tasks",
+      desc: "Write up your setup, post your time-in-range win, give a talk at your clinic. Word of mouth is how most people find Nightscout in the first place. Send us your story and we'll help share it.",
+      cta: "Email testimonials@nocturne.run",
+      href: LINKS.testimonials,
+      external: true,
+    },
+    {
+      id: "sponsor",
+      icon: HeartHandshake,
+      accent: "oklch(0.64 0.19 330)",
+      title: "Sponsor Hack Diabetes",
+      desc: "Hack Diabetes brings the open-source diabetes community together to build and test tools like Nocturne. Sponsors fund the events and get their name in front of the people who build this software.",
+      cta: "Sponsor an event",
+      href: LINKS.hackDiabetes,
+      external: true,
     },
     {
       id: "data",
@@ -108,8 +124,9 @@
       accent: "oklch(0.6 0.13 200)",
       title: "Donate anonymized data",
       desc: "Opt in to share de-identified glucose data so connectors and reports can be tested against real-world patterns — not just synthetic samples.",
-      cta: "Learn how it works",
-      href: "#tasks",
+      cta: "Email research-data@nocturne.run",
+      href: LINKS.researchData,
+      external: true,
     },
   ];
 
@@ -292,7 +309,7 @@
         Ways to help
       </p>
       <h2 class="text-[28px] font-bold tracking-tight">
-        Seven ways to contribute
+        {LANES.length} ways to contribute
       </h2>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
