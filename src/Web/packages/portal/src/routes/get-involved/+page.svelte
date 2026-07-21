@@ -15,19 +15,9 @@
     HeartHandshake,
   } from "@lucide/svelte";
   import { onMount } from "svelte";
+  import { LINKS } from "$lib/data/links";
 
   const ACCENT = "oklch(0.6 0.118 184.704)";
-
-  const LINKS = {
-    discord: "https://discord.gg/sKEhtHeb2z",
-    donate: "https://www.nightscoutfoundation.org/donate",
-    githubLabel: "https://github.com/nightscout/nocturne/labels/get-involved",
-    github: "https://github.com/nightscout/nocturne",
-    facebook: "https://www.facebook.com/groups/cgminthecloud",
-    hackDiabetes: "https://hackdiabetes.io",
-    testimonials: "mailto:testimonials@nocturne.run",
-    researchData: "mailto:research-data@nocturne.run",
-  };
 
   const STATS = [
     { value: "100%", label: "Built by volunteers" },
@@ -230,8 +220,9 @@
     return `${Math.floor(days / 30)}mo`;
   }
 
-  function resolveHref(href: string): string {
-    return (LINKS as Record<string, string>)[href] || href;
+  // mailto: hands off to the mail client, so a new tab would just be left orphaned.
+  function opensNewTab(lane: Lane): boolean {
+    return Boolean(lane.external) && !lane.href.startsWith("mailto:");
   }
 </script>
 
@@ -309,15 +300,15 @@
         Ways to help
       </p>
       <h2 class="text-[28px] font-bold tracking-tight">
-        {LANES.length} ways to contribute
+        Ways to contribute
       </h2>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
       {#each LANES as lane}
         <a
-          href={resolveHref(lane.href)}
-          target={lane.external ? "_blank" : undefined}
-          rel={lane.external ? "noopener noreferrer" : undefined}
+          href={lane.href}
+          target={opensNewTab(lane) ? "_blank" : undefined}
+          rel={opensNewTab(lane) ? "noopener noreferrer" : undefined}
           class="gi-lane-card flex flex-row items-start gap-4 bg-card border border-border rounded-xl p-5 transition-[border-color,transform] duration-200 no-underline text-inherit"
           class:gi-lane-highlight={lane.highlight}
           style="--lane-accent: {lane.accent}"

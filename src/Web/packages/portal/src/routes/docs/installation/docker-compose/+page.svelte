@@ -110,5 +110,5 @@
     <h2 class="text-2xl font-bold mt-8 mb-4">Next Steps</h2>
     <NextSteps />
 
-    <SupportNocturne class="mt-12 pt-8 border-t border-border/60" />
+    <SupportNocturne />
 </div>

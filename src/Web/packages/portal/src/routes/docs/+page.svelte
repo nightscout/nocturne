@@ -123,7 +123,7 @@
         </a>
     </div>
 
-    <SupportNocturne class="mt-12" />
+    <SupportNocturne />
 
     <div class="mt-12 p-6 rounded-xl border border-amber-500/30 bg-amber-500/5">
         <div class="flex items-start gap-3">

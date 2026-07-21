@@ -108,5 +108,5 @@
         </li>
     </ul>
 
-    <SupportNocturne class="mt-12 pt-8 border-t border-border/60" />
+    <SupportNocturne />
 </div>

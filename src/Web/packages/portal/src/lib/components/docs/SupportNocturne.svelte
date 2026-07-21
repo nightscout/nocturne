@@ -1,52 +1,48 @@
 <script lang="ts">
     import { Heart, ArrowUpRight } from "@lucide/svelte";
+    import { LINKS } from "$lib/data/links";
 
-    type Props = {
-        /** Heading above the tiers. Pass null to render the tiers on their own. */
-        title?: string | null;
-        blurb?: string;
-        class?: string;
-    };
+    // Matches the portal accent used on the get-involved page. Not the
+    // --glucose-in-range token, which theme packs swap to green.
+    const ACCENT = "oklch(0.6 0.118 184.704)";
 
-    let {
-        title = "Support Nocturne",
-        blurb = "Nocturne is free, open source, and run by volunteers under the Nightscout Foundation, a registered non-profit. A monthly subscription covers servers, test devices, and the maintenance that keeps self-hosting working.",
-        class: className = "",
-    }: Props = $props();
+    let { class: className = "" }: { class?: string } = $props();
 
     const TIERS = [
         {
-            amount: "$10",
+            amount: "US$10",
             name: "Supporter",
             desc: "Covers the hosting behind the docs, the container registry, and the release pipeline.",
-            href: "https://buy.stripe.com/14A9AV4Gm9Dh1ribpXgIo02",
+            href: LINKS.subscribe10,
             featured: false,
         },
         {
-            amount: "$20",
+            amount: "US$20",
             name: "Sustainer",
             desc: "Adds test hardware — pumps, CGM transmitters, and phones the connectors are verified against.",
-            href: "https://buy.stripe.com/cNifZj4Gm3eT3zqeC9gIo01",
+            href: LINKS.subscribe20,
             featured: true,
         },
         {
-            amount: "$50",
+            amount: "US$50",
             name: "Patron",
             desc: "Funds sustained maintainer time on connectors, security updates, and support.",
-            href: "https://buy.stripe.com/4gMcN78WC8zdda01PngIo00",
+            href: LINKS.subscribe50,
             featured: false,
         },
     ];
 </script>
 
-<section class="not-prose {className}">
-    {#if title}
-        <h2 class="text-2xl font-bold mb-3 flex items-center gap-2.5">
-            <Heart class="w-5 h-5 text-primary shrink-0" />
-            {title}
-        </h2>
-    {/if}
-    <p class="text-muted-foreground mb-5">{blurb}</p>
+<section class="not-prose mt-12 pt-8 border-t border-border/60 {className}">
+    <h2 class="text-2xl font-bold mb-3 flex items-center gap-2.5">
+        <Heart class="w-5 h-5 shrink-0" color={ACCENT} aria-hidden="true" />
+        Support Nocturne
+    </h2>
+    <p class="text-muted-foreground mb-5">
+        Nocturne is free and always will be. A monthly subscription to the
+        Nightscout Foundation covers servers, test devices, and the maintenance
+        that keeps self-hosting working.
+    </p>
 
     <div class="grid gap-4 sm:grid-cols-3">
         {#each TIERS as tier (tier.name)}
@@ -55,8 +51,9 @@
                 target="_blank"
                 rel="noopener noreferrer"
                 class="group flex flex-col p-5 rounded-xl border transition-colors {tier.featured
-                    ? 'border-primary/40 bg-primary/5 hover:border-primary/60'
-                    : 'border-border/60 bg-card/50 hover:bg-card hover:border-primary/30'}"
+                    ? 'sn-featured'
+                    : 'border-border/60 bg-card/50 hover:bg-card'}"
+                style="--sn-accent: {ACCENT}"
             >
                 <div class="flex items-baseline gap-1.5">
                     <span class="text-3xl font-bold tracking-tight tabular-nums"
@@ -65,9 +62,10 @@
                     <span class="text-sm text-muted-foreground">/ month</span>
                 </div>
                 <div
-                    class="mt-1 text-xs font-semibold tracking-[0.08em] uppercase {tier.featured
-                        ? 'text-primary'
-                        : 'text-muted-foreground'}"
+                    class="mt-1 text-xs font-semibold tracking-[0.08em] uppercase"
+                    style={tier.featured
+                        ? `color: ${ACCENT}`
+                        : "color: var(--muted-foreground)"}
                 >
                     {tier.name}
                 </div>
@@ -75,25 +73,44 @@
                     {tier.desc}
                 </p>
                 <span
-                    class="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary"
+                    class="sn-cta mt-4 inline-flex items-center gap-1.5 text-sm font-semibold"
+                    style="color: {ACCENT}"
                 >
                     Subscribe
-                    <ArrowUpRight
-                        class="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-                    />
+                    <ArrowUpRight class="w-4 h-4" aria-hidden="true" />
                 </span>
             </a>
         {/each}
     </div>
 
     <p class="mt-4 text-xs text-muted-foreground">
-        Secure checkout via Stripe &middot; Cancel any time &middot; One-off donations go
-        through the
+        Secure checkout via Stripe &middot; Cancel any time &middot; One-off
+        donations go through the
         <a
-            href="https://www.nightscoutfoundation.org/donate"
+            href={LINKS.donate}
             target="_blank"
             rel="noopener noreferrer"
-            class="text-primary hover:underline">Nightscout Foundation</a
+            class="font-semibold hover:underline"
+            style="color: {ACCENT}">Nightscout Foundation</a
         >.
     </p>
 </section>
+
+<style>
+    .sn-featured {
+        border-color: color-mix(in oklch, var(--sn-accent), transparent 45%);
+        background: color-mix(in oklch, var(--sn-accent), var(--card) 88%);
+    }
+
+    a:hover:not(.sn-featured) {
+        border-color: color-mix(in oklch, var(--sn-accent), transparent 55%);
+    }
+
+    .sn-cta :global(svg) {
+        transition: transform 0.15s;
+    }
+
+    a:hover .sn-cta :global(svg) {
+        transform: translate(2px, -2px);
+    }
+</style>
