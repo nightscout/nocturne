@@ -22,7 +22,6 @@ public class CobCalculator(
 ) : ICobCalculator
 {
     // Constants from legacy implementation - exact values required
-    public const long RECENCY_THRESHOLD = 30 * 60 * 1000; // 30 minutes in milliseconds
     private const double LIVER_SENS_RATIO = 8.0; // Legacy: var liverSensRatio = 8;
     private const int DELAY_MINUTES = 20; // Legacy: const delay = 20;
 
@@ -69,12 +68,14 @@ public class CobCalculator(
         // Get COB from APS snapshot (prioritized source)
         var deviceCob = await GetLatestDeviceCobAsync(currentTime, ct);
 
-        // Legacy logic: if device COB exists and is recent (within 10 minutes), use it
-        if (deviceCob != null && deviceCob.Cob > 0 && deviceCob.Mills.HasValue)
+        // Prefer the device's own COB when it is recent. A reported COB of exactly zero is a
+        // real value ("no carbs on board"), not a missing one, so it is accepted like any other.
+        // Age is measured against currentTime so historical queries resolve against the requested
+        // instant rather than the wall clock.
+        if (deviceCob != null && deviceCob.Mills.HasValue)
         {
-            var deviceAge =
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - deviceCob.Mills.Value;
-            if (deviceAge <= 10 * 60 * 1000)
+            var deviceAge = currentTime - deviceCob.Mills.Value;
+            if (deviceAge <= DeviceReportedValues.RecencyThresholdMs)
             {
                 return AddDisplay(deviceCob);
             }
@@ -393,8 +394,8 @@ public class CobCalculator(
     /// </summary>
     internal async Task<CobResult?> GetLatestDeviceCobAsync(long time, CancellationToken ct = default)
     {
-        var futureMills = time + 5 * 60 * 1000; // Allow for clocks to be a little off
-        var recentMills = time - RECENCY_THRESHOLD;
+        var futureMills = time + DeviceReportedValues.FutureSkewToleranceMs;
+        var recentMills = time - DeviceReportedValues.RecencyThresholdMs;
 
         var recentTime = DateTimeOffset.FromUnixTimeMilliseconds(recentMills).UtcDateTime;
         var futureTime = DateTimeOffset.FromUnixTimeMilliseconds(futureMills).UtcDateTime;
@@ -411,7 +412,8 @@ public class CobCalculator(
         );
 
         var apsSnapshot = apsSnapshots.FirstOrDefault();
-        if (apsSnapshot?.Cob is > 0)
+        // A reported COB of exactly zero is a real value ("no carbs on board"), not a missing one.
+        if (apsSnapshot?.Cob is not null)
         {
             var source = apsSnapshot.AidAlgorithm switch
             {

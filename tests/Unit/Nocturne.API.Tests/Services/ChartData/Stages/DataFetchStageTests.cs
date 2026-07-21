@@ -29,6 +29,7 @@ public class DataFetchStageTests
     private readonly Mock<IBGCheckRepository> _mockBgCheckRepo = new();
     private readonly Mock<IDeviceEventRepository> _mockDeviceEventRepo = new();
     private readonly Mock<ITempBasalRepository> _mockTempBasalRepo = new();
+    private readonly Mock<IApsSnapshotRepository> _mockApsSnapshotRepo = new();
     private readonly Mock<IStateSpanRepository> _mockStateSpanRepo;
     private readonly Mock<ISystemEventRepository> _mockSystemEventRepo;
     private readonly Mock<ITrackerRepository> _mockTrackerRepo;
@@ -54,6 +55,7 @@ public class DataFetchStageTests
             _mockBgCheckRepo.Object,
             _mockDeviceEventRepo.Object,
             _mockTempBasalRepo.Object,
+            _mockApsSnapshotRepo.Object,
             _mockStateSpanRepo.Object,
             _mockSystemEventRepo.Object,
             _mockTrackerRepo.Object,
@@ -120,6 +122,15 @@ public class DataFetchStageTests
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<TempBasal>());
+
+        // IApsSnapshotRepository.GetAsync
+        _mockApsSnapshotRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<ApsSnapshot>());
 
         // IBasalInjectionRepository.GetAsync
         _mockBasalInjectionRepo

@@ -307,8 +307,14 @@ public class CobCalculatorParityTests
         Assert.Equal("Care Portal", result.Source);
     }
 
+    /// <summary>
+    /// Deliberate divergence from legacy: the JS cob plugin's <c>if (devicestatusCOB)</c> treats a
+    /// reported COB of 0 as missing and falls back to treatment-derived COB. A device reporting 0
+    /// means "no carbs on board" — the value the AID system acted on — so it is accepted like any
+    /// other reading instead of being overridden by a local recomputation.
+    /// </summary>
     [Fact]
-    public async Task CobTotal_FallsBackToCarbIntakes_WhenApsSnapshotHasZeroCob()
+    public async Task CobTotal_AcceptsApsSnapshotWithZeroCob()
     {
         var time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var carbIntakes = new List<CarbIntake> { MakeCarbIntake(time - 1, 20) };
@@ -327,8 +333,8 @@ public class CobCalculatorParityTests
 
         var result = await _calculator.CalculateTotalAsync(carbIntakes, time: time);
 
-        Assert.Equal("Care Portal", result.Source);
-        Assert.True(result.Cob > 0);
+        Assert.Equal("OpenAPS", result.Source);
+        Assert.Equal(0.0, result.Cob);
     }
 
     #endregion

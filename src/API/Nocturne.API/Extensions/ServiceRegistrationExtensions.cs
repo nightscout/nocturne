@@ -103,10 +103,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IPropertiesService, PropertiesService>();
         services.AddScoped<ISummaryService, SummaryService>();
         // Prediction service — configurable via Predictions:Source (None, DeviceStatus, OrefWasm)
-        var predictionSource = configuration.GetValue<PredictionSource>(
-            "Predictions:Source",
-            PredictionSource.None
-        );
+        var predictionSource = PredictionOptions.ResolveSource(configuration);
         switch (predictionSource)
         {
             case PredictionSource.DeviceStatus:

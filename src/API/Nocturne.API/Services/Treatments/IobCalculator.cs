@@ -24,7 +24,6 @@ public class IobCalculator(
 ) : IIobCalculator
 {
     // Constants from legacy implementation (identical to IobService)
-    private const long RECENCY_THRESHOLD = 30 * 60 * 1000; // 30 minutes in milliseconds
     private const double DEFAULT_DIA = 3.0;
     private const double SCALE_FACTOR_BASE = 3.0;
     private const double PEAK_MINUTES = 75.0;
@@ -74,11 +73,12 @@ public class IobCalculator(
                 result.TreatmentIob = RoundToThreeDecimals(bolusResult.Iob);
             }
 
-            // Add bolus basal IOB to device status basal IOB if available
-            if (bolusResult.BasalIob.HasValue)
+            // A device that reports basal IOB has already accounted for its own temp basals;
+            // adding the locally-computed value on top would count that insulin twice. Only
+            // substitute the local estimate when the device reported no basal IOB of its own.
+            if (!result.BasalIob.HasValue && bolusResult.BasalIob.HasValue)
             {
-                result.BasalIob = (result.BasalIob ?? 0) + bolusResult.BasalIob.Value;
-                result.BasalIob = RoundToThreeDecimals(result.BasalIob.Value);
+                result.BasalIob = RoundToThreeDecimals(bolusResult.BasalIob.Value);
             }
         }
 
@@ -348,8 +348,8 @@ public class IobCalculator(
     /// </summary>
     internal async Task<IobResult> GetLatestDeviceIobAsync(long time, CancellationToken ct = default)
     {
-        var futureMills = time + 5 * 60 * 1000;
-        var recentMills = time - RECENCY_THRESHOLD;
+        var futureMills = time + DeviceReportedValues.FutureSkewToleranceMs;
+        var recentMills = time - DeviceReportedValues.RecencyThresholdMs;
 
         var recentTime = DateTimeOffset.FromUnixTimeMilliseconds(recentMills).UtcDateTime;
         var futureTime = DateTimeOffset.FromUnixTimeMilliseconds(futureMills).UtcDateTime;

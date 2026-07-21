@@ -47,6 +47,7 @@ internal sealed class DataFetchStage(
     IBGCheckRepository bgCheckRepository,
     IDeviceEventRepository deviceEventRepository,
     ITempBasalRepository tempBasalRepository,
+    IApsSnapshotRepository apsSnapshotRepository,
     IStateSpanRepository stateSpanRepository,
     ISystemEventRepository systemEventRepository,
     ITrackerRepository trackerRepository,
@@ -177,6 +178,20 @@ internal sealed class DataFetchStage(
             ct: cancellationToken
         )).ToList();
 
+        // Fetch APS snapshots (ascending) so the IOB/COB series can prefer the values the AID
+        // system actually acted on. The buffer start is used so a tick at the very left edge of
+        // the window can still resolve a snapshot uploaded just before it.
+        var apsSnapshotList = (await apsSnapshotRepository.GetAsync(
+            from: MillsToDateTime(bufferStartTime),
+            to: MillsToDateTime(endTime),
+            device: null,
+            source: null,
+            limit: treatmentLimit,
+            offset: 0,
+            descending: false,
+            ct: cancellationToken
+        )).ToList();
+
         // Fetch all state spans in a single batched query
         var stateSpanCategories = new[]
         {
@@ -274,6 +289,7 @@ internal sealed class DataFetchStage(
             BgCheckList = bgCheckList,
             DeviceEventList = deviceEventList,
             TempBasalList = tempBasalList,
+            ApsSnapshotList = apsSnapshotList,
             BasalInjectionList = basalInjectionList,
             StateSpans = stateSpansReadOnly,
             SystemEvents = systemEventsResult?.ToList() ?? [],

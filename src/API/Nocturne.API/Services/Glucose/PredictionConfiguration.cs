@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+
 namespace Nocturne.API.Services.Glucose;
 
 /// <summary>
@@ -9,9 +11,27 @@ public class PredictionOptions
     public const string SectionName = "Predictions";
 
     /// <summary>
-    /// The source for glucose predictions.
+    /// The source for glucose predictions. Defaults to <see cref="PredictionSource.DeviceStatus"/>
+    /// so prediction curves uploaded by an AID system render without per-deployment configuration;
+    /// tenants with no uploaded curves get an empty forecast rather than an error.
     /// </summary>
-    public PredictionSource Source { get; set; } = PredictionSource.None;
+    public PredictionSource Source { get; set; } = DefaultSource;
+
+    /// <summary>
+    /// The source used when <c>Predictions:Source</c> is absent from configuration.
+    /// </summary>
+    public const PredictionSource DefaultSource = PredictionSource.DeviceStatus;
+
+    /// <summary>
+    /// Reads <c>Predictions:Source</c>, falling back to <see cref="DefaultSource"/>.
+    /// </summary>
+    /// <remarks>
+    /// Service registration and <c>PredictionController</c> both need the resolved source and must
+    /// agree: registration decides whether an <see cref="IPredictionService"/> exists at all, and a
+    /// disagreement would leave the controller returning 404 with a service registered, or vice versa.
+    /// </remarks>
+    public static PredictionSource ResolveSource(IConfiguration configuration) =>
+        configuration.GetValue($"{SectionName}:{nameof(Source)}", DefaultSource);
 }
 
 /// <summary>

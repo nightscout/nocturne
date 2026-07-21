@@ -41,7 +41,7 @@ public class PredictionController : ControllerBase
     {
         _predictionService = predictionService;
         _profileSnapshotService = profileSnapshotService;
-        _source = configuration.GetValue<PredictionSource>("Predictions:Source", PredictionSource.None);
+        _source = PredictionOptions.ResolveSource(configuration);
         _logger = logger;
     }
 
