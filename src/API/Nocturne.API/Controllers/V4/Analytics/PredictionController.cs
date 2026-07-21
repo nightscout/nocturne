@@ -77,8 +77,10 @@ public class PredictionController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Invalid operation for predictions");
-            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
+            // No recent device-status prediction data — the normal state for care-portal-only
+            // tenants now that DeviceStatus is the default source, so not a client fault.
+            _logger.LogWarning(ex, "No prediction data available");
+            return Problem(detail: ex.Message, statusCode: 404, title: "Not Found");
         }
         catch (Exception ex)
         {

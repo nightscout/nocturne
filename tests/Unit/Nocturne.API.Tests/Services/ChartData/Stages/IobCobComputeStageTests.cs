@@ -303,15 +303,11 @@ public class IobCobComputeStageTests
         var endTime = TestMills + 30 * 60 * 1000;
         const int intervalMinutes = 5;
 
-        var snapshots = new List<ApsSnapshot>();
+        var snapshots = new List<ApsIobCobPoint>();
         for (var t = startTime; t <= endTime; t += 5 * 60 * 1000)
         {
-            snapshots.Add(new ApsSnapshot
-            {
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime,
-                Iob = 1.25,
-                Cob = 18.0,
-            });
+            snapshots.Add(new ApsIobCobPoint(
+                DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime, 1.25, 18.0));
         }
 
         var context = new ChartDataContext
@@ -381,12 +377,8 @@ public class IobCobComputeStageTests
                 Carbs = 45.0,
             }],
             TempBasalList = [],
-            ApsSnapshotList = [new ApsSnapshot
-            {
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(startTime - 45 * 60 * 1000).UtcDateTime,
-                Iob = 9.99,
-                Cob = 99.0,
-            }],
+            ApsSnapshotList = [new ApsIobCobPoint(
+                DateTimeOffset.FromUnixTimeMilliseconds(startTime - 45 * 60 * 1000).UtcDateTime, 9.99, 99.0)],
         };
 
         var result = await _stage.ExecuteAsync(context, CancellationToken.None);
@@ -421,12 +413,8 @@ public class IobCobComputeStageTests
                 Carbs = 45.0,
             }],
             TempBasalList = [],
-            ApsSnapshotList = [new ApsSnapshot
-            {
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(startTime - 60 * 1000).UtcDateTime,
-                Iob = 1.5,
-                Cob = null,
-            }],
+            ApsSnapshotList = [new ApsIobCobPoint(
+                DateTimeOffset.FromUnixTimeMilliseconds(startTime - 60 * 1000).UtcDateTime, 1.5, null)],
         };
 
         var result = await _stage.ExecuteAsync(context, CancellationToken.None);
@@ -468,11 +456,8 @@ public class IobCobComputeStageTests
 
         var second = await _stage.ExecuteAsync(baseContext with
         {
-            ApsSnapshotList = [new ApsSnapshot
-            {
-                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(startTime - 60 * 1000).UtcDateTime,
-                Iob = 1.5,
-            }],
+            ApsSnapshotList = [new ApsIobCobPoint(
+                DateTimeOffset.FromUnixTimeMilliseconds(startTime - 60 * 1000).UtcDateTime, 1.5, null)],
         }, CancellationToken.None);
 
         second.IobSeries.Should().ContainSingle().Which.Value.Should().Be(1.5);

@@ -123,14 +123,12 @@ public class DataFetchStageTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<TempBasal>());
 
-        // IApsSnapshotRepository.GetAsync
+        // IApsSnapshotRepository.GetIobCobPointsAsync
         _mockApsSnapshotRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
-                It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+            .Setup(r => r.GetIobCobPointsAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<ApsSnapshot>());
+            .ReturnsAsync(Array.Empty<ApsIobCobPoint>());
 
         // IBasalInjectionRepository.GetAsync
         _mockBasalInjectionRepo

@@ -116,7 +116,7 @@ internal sealed class IobCobComputeStage(
         int intervalMinutes,
         List<TempBasal>? tempBasals,
         TherapyTimeline timeline,
-        IReadOnlyList<ApsSnapshot>? apsSnapshots = null,
+        IReadOnlyList<ApsIobCobPoint>? apsSnapshots = null,
         CancellationToken ct = default
     )
     {
@@ -177,7 +177,7 @@ internal sealed class IobCobComputeStage(
         // at-or-before t with a single advancing pointer.
         var sortedSnapshots = (apsSnapshots ?? [])
             .Select(s => (
-                Mills: new DateTimeOffset(s.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                Mills: new DateTimeOffset(DateTime.SpecifyKind(s.Timestamp, DateTimeKind.Utc), TimeSpan.Zero).ToUnixTimeMilliseconds(),
                 s.Iob,
                 s.Cob
             ))
@@ -308,7 +308,7 @@ internal sealed class IobCobComputeStage(
         long endTime,
         int intervalMinutes,
         List<TempBasal>? tempBasals = null,
-        IReadOnlyList<ApsSnapshot>? apsSnapshots = null
+        IReadOnlyList<ApsIobCobPoint>? apsSnapshots = null
     )
     {
         // Round start/end times to interval boundaries for better cache hits
@@ -341,16 +341,18 @@ internal sealed class IobCobComputeStage(
             }
         }
 
-        // Include APS snapshot data in cache key — a new snapshot changes the series
+        // Include APS snapshot data in cache key — a new snapshot changes the series. Null and 0
+        // fingerprint differently ("~" vs "0"): null falls back to computed while 0 is a device
+        // value, and sync-id upserts can flip one to the other without changing the timestamp.
         if (apsSnapshots != null)
         {
             foreach (var s in apsSnapshots)
             {
                 sb.Append(s.Timestamp.Ticks)
                     .Append(':')
-                    .Append(s.Iob ?? 0)
+                    .Append(s.Iob?.ToString() ?? "~")
                     .Append(':')
-                    .Append(s.Cob ?? 0)
+                    .Append(s.Cob?.ToString() ?? "~")
                     .Append('|');
             }
         }

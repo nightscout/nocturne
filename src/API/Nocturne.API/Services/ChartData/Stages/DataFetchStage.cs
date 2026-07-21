@@ -178,19 +178,16 @@ internal sealed class DataFetchStage(
             ct: cancellationToken
         )).ToList();
 
-        // Fetch APS snapshots (ascending) so the IOB/COB series can prefer the values the AID
-        // system actually acted on. The buffer start is used so a tick at the very left edge of
-        // the window can still resolve a snapshot uploaded just before it.
-        var apsSnapshotList = (await apsSnapshotRepository.GetAsync(
-            from: MillsToDateTime(bufferStartTime),
-            to: MillsToDateTime(endTime),
-            device: null,
-            source: null,
-            limit: treatmentLimit,
-            offset: 0,
-            descending: false,
+        // Fetch APS snapshot IOB/COB points (ascending) so the IOB/COB series can prefer the
+        // values the AID system actually acted on. The buffer start is used so a tick at the very
+        // left edge of the window can still resolve a snapshot uploaded just before it. The slim
+        // projection is deliberate: full snapshots carry multi-KB JSON blob columns, and a limit
+        // heuristic would truncate the newest rows for high-cadence uploaders.
+        var apsSnapshotList = await apsSnapshotRepository.GetIobCobPointsAsync(
+            from: MillsToDateTime(bufferStartTime)!.Value,
+            to: MillsToDateTime(endTime)!.Value,
             ct: cancellationToken
-        )).ToList();
+        );
 
         // Fetch all state spans in a single batched query
         var stateSpanCategories = new[]

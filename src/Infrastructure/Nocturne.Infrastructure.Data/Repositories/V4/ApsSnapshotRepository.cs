@@ -75,6 +75,18 @@ public class ApsSnapshotRepository : IApsSnapshotRepository
         return entities.Select(ApsSnapshotMapper.ToDomainModel);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ApsIobCobPoint>> GetIobCobPointsAsync(
+        DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await using var ctx = await _contextFactory.CreateAsync(ct);
+        return await ctx.ApsSnapshots.AsNoTracking()
+            .Where(e => e.Timestamp >= from && e.Timestamp <= to)
+            .OrderBy(e => e.Timestamp)
+            .Select(e => new ApsIobCobPoint(e.Timestamp, e.Iob, e.Cob))
+            .ToListAsync(ct);
+    }
+
     /// <summary>
     /// Gets an APS snapshot by its unique identifier.
     /// </summary>

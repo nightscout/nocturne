@@ -12,8 +12,9 @@ public class PredictionOptions
 
     /// <summary>
     /// The source for glucose predictions. Defaults to <see cref="PredictionSource.DeviceStatus"/>
-    /// so prediction curves uploaded by an AID system render without per-deployment configuration;
-    /// tenants with no uploaded curves get an empty forecast rather than an error.
+    /// so prediction curves uploaded by an AID system render without per-deployment configuration.
+    /// Tenants with no recent uploaded curves get a 404 from the predictions endpoint (which the
+    /// web client renders as no curve) and an empty forecast in alert evaluation.
     /// </summary>
     public PredictionSource Source { get; set; } = DefaultSource;
 

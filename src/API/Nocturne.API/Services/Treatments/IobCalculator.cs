@@ -39,8 +39,10 @@ public class IobCalculator(
     {
         var currentTime = time ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        // Get IOB from device snapshots (APS, pump) - prioritized source
-        var result = await GetLatestDeviceIobAsync(currentTime, ct);
+        // Get IOB from device snapshots (APS, pump) - prioritized source. Null means no recent
+        // snapshot carried an IOB at all; a reported IOB of zero (or negative, after a long
+        // low-temp) is a real device value and is kept.
+        var deviceResult = await GetLatestDeviceIobAsync(currentTime, ct);
 
         // Calculate IOB from boluses
         var bolusResult =
@@ -61,12 +63,14 @@ public class IobCalculator(
             bolusResult.Activity = (bolusResult.Activity ?? 0) + (tempBasalResult.Activity ?? 0);
         }
 
-        if (IsEmpty(result))
+        IobResult result;
+        if (deviceResult is null)
         {
             result = bolusResult;
         }
         else
         {
+            result = deviceResult;
             // Add bolus IOB as separate property for device status sources
             if (bolusResult.Iob > 0)
             {
@@ -344,9 +348,11 @@ public class IobCalculator(
 
     /// <summary>
     /// Query <see cref="IApsSnapshotRepository"/> and <see cref="IPumpSnapshotRepository"/>
-    /// for the most recent device-reported IOB within the staleness window.
+    /// for the most recent device-reported IOB within the staleness window. Returns <c>null</c>
+    /// when no recent snapshot carries an IOB value — a reported zero is a real value, not an
+    /// absence, so "device said 0" and "device said nothing" are distinct results.
     /// </summary>
-    internal async Task<IobResult> GetLatestDeviceIobAsync(long time, CancellationToken ct = default)
+    internal async Task<IobResult?> GetLatestDeviceIobAsync(long time, CancellationToken ct = default)
     {
         var futureMills = time + DeviceReportedValues.FutureSkewToleranceMs;
         var recentMills = time - DeviceReportedValues.RecencyThresholdMs;
@@ -367,9 +373,9 @@ public class IobCalculator(
         );
 
         var apsSnapshot = apsSnapshots.FirstOrDefault();
-        if (apsSnapshot != null)
+        if (apsSnapshot is { Iob: not null } or { BasalIob: not null })
         {
-            var source = apsSnapshot.AidAlgorithm switch
+            var source = apsSnapshot!.AidAlgorithm switch
             {
                 AidAlgorithm.Loop => "Loop",
                 _ => "OpenAPS",
@@ -398,27 +404,25 @@ public class IobCalculator(
         );
 
         var pumpSnapshot = pumpSnapshots.FirstOrDefault();
-        if (pumpSnapshot != null)
+        if (pumpSnapshot is { Iob: not null } or { BolusIob: not null })
         {
-            var iobValue = pumpSnapshot.Iob ?? pumpSnapshot.BolusIob ?? 0.0;
-
             return new IobResult
             {
-                Iob = iobValue,
+                Iob = pumpSnapshot!.Iob ?? pumpSnapshot.BolusIob ?? 0.0,
                 Source = "Pump",
                 Device = pumpSnapshot.Device,
                 Mills = new DateTimeOffset(pumpSnapshot.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             };
         }
 
-        return new IobResult();
+        return null;
     }
 
     #region Helper Methods
 
     private static IobResult AddDisplay(IobResult iob)
     {
-        if (IsEmpty(iob) || iob.Iob <= 0)
+        if (iob.Iob <= 0)
         {
             return iob;
         }
@@ -428,11 +432,6 @@ public class IobCalculator(
         iob.DisplayLine = $"IOB: {display}U";
 
         return iob;
-    }
-
-    private static bool IsEmpty(IobResult? iob)
-    {
-        return iob == null || (iob.Iob <= 0 && !iob.BasalIob.HasValue && !iob.Activity.HasValue);
     }
 
     private static double RoundToThreeDecimals(double num)

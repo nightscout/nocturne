@@ -28,6 +28,19 @@ public interface IApsSnapshotRepository : IV4Repository<ApsSnapshot>
     /// <returns>Matching <see cref="ApsSnapshot"/> records.</returns>
     new Task<IEnumerable<ApsSnapshot>> GetAsync(DateTime? from, DateTime? to, string? device, string? source, int limit = 100, int offset = 0, bool descending = true, CancellationToken ct = default);
 
+    /// <summary>
+    /// Retrieve <see cref="ApsIobCobPoint"/> projections within a time window, ordered oldest-first.
+    /// </summary>
+    /// <remarks>
+    /// Unlimited within the window and projected server-side: the chart pipeline needs every
+    /// snapshot's IOB/COB (uploaders post every 1-5 minutes, so any per-hour limit heuristic
+    /// eventually truncates the newest rows) but none of the JSON blob columns.
+    /// </remarks>
+    /// <param name="from">Inclusive start of the time window.</param>
+    /// <param name="to">Inclusive end of the time window.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<ApsIobCobPoint>> GetIobCobPointsAsync(DateTime from, DateTime to, CancellationToken ct = default);
+
     /// <summary>Returns a single <see cref="ApsSnapshot"/> by its UUID v7, or <c>null</c> if not found.</summary>
     /// <param name="id">UUID v7 record identifier.</param>
     /// <param name="ct">Cancellation token.</param>

@@ -295,6 +295,7 @@ builder.Services.AddNocturneAuthorization();
 // Normalize the configured base domain once (strip scheme/path/port/stray dots) so
 // misformatted values like "https://nocturne.run" or "nocturne.run/" still resolve to
 // a matchable host instead of silently disabling cross-origin CORS. See CorsOriginPolicy.
+const string PublicDocsCorsPolicy = "PublicDocs";
 var rawCorsBaseDomain = builder.Configuration[BaseDomainOptions.ConfigKey] ?? "";
 var corsBaseDomain = CorsOriginPolicy.NormalizeBaseHost(rawCorsBaseDomain);
 var corsAllowLocalhost = builder.Environment.IsDevelopment();
@@ -311,6 +312,19 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials(); // Required for cookies/auth to work cross-origin
+    });
+
+    // The OpenAPI specs and Scalar assets are tenantless, unauthenticated, and already
+    // readable by anyone, so they're served to any origin — this is what lets docs sites
+    // hosted off the base domain (getnocturne.dev) embed the reference. Kept as a separate
+    // policy because the default one allows credentials, which the CORS spec forbids
+    // combining with AllowAnyOrigin. No credentials here, so no tenant data is reachable.
+    options.AddPolicy(PublicDocsCorsPolicy, policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader();
     });
 });
 
@@ -352,7 +366,13 @@ else
 // Configure middleware pipeline
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-app.UseCors();
+// Documentation paths get the any-origin policy, everything else the credentialed default.
+// The two branches are complementary so exactly one CORS middleware ever runs per request —
+// chaining both would emit conflicting Access-Control-Allow-Origin headers. Both sit ahead of
+// UseStaticFiles so the Scalar assets under wwwroot/scalar are covered, and ahead of
+// UseRouting so preflights short-circuit.
+app.UseWhen(IsPublicDocsPath, branch => branch.UseCors(PublicDocsCorsPolicy));
+app.UseWhen(context => !IsPublicDocsPath(context), branch => branch.UseCors());
 app.UseStaticFiles();
 app.UseForwardedHeaders();
 
@@ -376,9 +396,7 @@ app.UseRouting();
 // middleware stack — they're tenantless and publicly accessible.
 app.Use(async (context, next) =>
 {
-    var path = context.Request.Path.Value ?? "";
-    if (path.StartsWith("/scalar", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith("/openapi", StringComparison.OrdinalIgnoreCase))
+    if (IsPublicDocsPath(context))
     {
         // Jump straight to the endpoint (MapOpenApi / MapScalarApiReference)
         var endpoint = context.GetEndpoint();
@@ -586,6 +604,16 @@ if (app.Environment.IsDevelopment() && !isNSwagGeneration)
 }
 
 await app.RunAsync();
+
+// Documentation paths: the OpenAPI specs and the Scalar UI plus its wwwroot assets.
+// These are tenantless and publicly accessible, so they both bypass the tenant/auth
+// middleware stack and get the any-origin CORS policy.
+static bool IsPublicDocsPath(HttpContext context)
+{
+    var path = context.Request.Path.Value ?? "";
+    return path.StartsWith("/scalar", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/openapi", StringComparison.OrdinalIgnoreCase);
+}
 
 // Detects if the application is being run by NSwag for OpenAPI document generation.
 // NSwag uses its AspNetCore.Launcher to load and introspect the app without actually running it.

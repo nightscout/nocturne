@@ -354,6 +354,40 @@ public class IobCalculatorTests
     #region CalculateTotalAsync device-value merge
 
     [Fact]
+    public async Task CalculateTotalAsync_DeviceReportsZeroIob_ZeroIsAccepted()
+    {
+        // IOB of exactly zero from the device is a real value (e.g. after a long suspend) and
+        // must win over a local recomputation that still sees recent boluses decaying.
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        _apsSnapshotRepo
+            .Setup(r => r.GetAsync(It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new ApsSnapshot
+                {
+                    Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 2 * 60 * 1000).UtcDateTime,
+                    Iob = 0.0,
+                },
+            });
+
+        var boluses = new List<Bolus>
+        {
+            new()
+            {
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now - 30 * 60 * 1000).UtcDateTime,
+                Insulin = 2.0,
+            },
+        };
+
+        var result = await _calculator.CalculateTotalAsync(boluses, time: now);
+
+        Assert.Equal(0.0, result.Iob);
+        Assert.Equal("OpenAPS", result.Source);
+        Assert.NotNull(result.TreatmentIob);
+    }
+
+    [Fact]
     public async Task CalculateTotalAsync_DeviceReportsBasalIob_LocalBasalIobNotAdded()
     {
         // The device's basal IOB already covers its own temp basals; the locally-computed value
