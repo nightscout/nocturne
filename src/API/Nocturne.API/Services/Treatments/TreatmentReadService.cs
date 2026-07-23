@@ -108,6 +108,11 @@ public class TreatmentReadService : ITreatmentStore
             var exhausted = projected.Count < fetchLimit || fetchLimit >= MaxFilterFetch;
             if (matching.Count >= needed || exhausted)
             {
+                if (matching.Count < needed && projected.Count >= fetchLimit)
+                    _logger.LogWarning(
+                        "Find-filtered treatment query hit the {MaxFetch}-row window; older matches are not returned",
+                        MaxFilterFetch);
+
                 return matching
                     .OrderByDescending(t => t.Mills)
                     .Skip(skip)
@@ -247,6 +252,14 @@ public class TreatmentReadService : ITreatmentStore
                 return false;
             }
         }
+
+        // Projected treatments for V4 rows carry the raw record UUID as their id (the 24-hex
+        // ObjectId form only exists on the wire), so the filtered bulk-delete path and direct
+        // by-UUID deletes arrive here with a Guid string. Resolve it across the repos, preferring
+        // the stored LegacyId so correlated siblings (e.g. a meal bolus's carb) go together.
+        if (deleted == 0 && Guid.TryParse(id, out var recordId)
+            && await DeleteByRecordIdAsync(recordId, ct))
+            return true;
 
         // A 24-hex ObjectId AAPS derived from the record's UUID: resolve it via the uuid prefix
         // range. Prefer deleting by the resolved record's LegacyId so correlated siblings (e.g. a
@@ -464,6 +477,36 @@ public class TreatmentReadService : ITreatmentStore
         if (tempBasal != null) return tempBasal.LegacyId;
 
         return null;
+    }
+
+    /// <summary>
+    /// Deletes the record with the given UUID from whichever repo owns it, via LegacyId when one
+    /// is stored (so correlated siblings are removed together). TempBasal is handled by the
+    /// caller before this runs.
+    /// </summary>
+    private async Task<bool> DeleteByRecordIdAsync(Guid id, CancellationToken ct)
+    {
+        return await TryDeleteFromRepoAsync(_bolusRepo, id, ct)
+            || await TryDeleteFromRepoAsync(_carbIntakeRepo, id, ct)
+            || await TryDeleteFromRepoAsync(_bgCheckRepo, id, ct)
+            || await TryDeleteFromRepoAsync(_noteRepo, id, ct)
+            || await TryDeleteFromRepoAsync(_deviceEventRepo, id, ct)
+            || await TryDeleteFromRepoAsync(_bolusCalcRepo, id, ct);
+    }
+
+    private async Task<bool> TryDeleteFromRepoAsync<T>(
+        IV4Repository<T> repo, Guid id, CancellationToken ct) where T : class, IV4Record
+    {
+        var record = await repo.GetByIdAsync(id, ct);
+        if (record is null)
+            return false;
+
+        if (!string.IsNullOrEmpty(record.LegacyId))
+            return await _pipeline.DeleteByLegacyIdAsync<Treatment>(record.LegacyId, WriteOrigin.Live, ct) > 0;
+
+        // Native row with no LegacyId (no correlated sibling to worry about): delete directly.
+        await repo.DeleteAsync(id, WriteOrigin.Live, ct);
+        return true;
     }
 
     /// <summary>Deletes the record inside a UUID prefix range (derived ObjectId) by its real UUID.</summary>

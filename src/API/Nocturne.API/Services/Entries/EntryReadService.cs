@@ -103,7 +103,14 @@ public class EntryReadService : IEntryStore
             var matching = page.Where(find.Matches).ToList();
             var exhausted = page.Count < fetchLimit || fetchLimit >= MaxFilterFetch;
             if (matching.Count >= needed || exhausted)
+            {
+                if (matching.Count < needed && page.Count >= fetchLimit)
+                    _logger.LogWarning(
+                        "Find-filtered entry query hit the {MaxFetch}-row window; older matches are not returned",
+                        MaxFilterFetch);
+
                 return matching.Skip(skip).Take(count).ToList();
+            }
 
             fetchLimit = (int)Math.Min((long)fetchLimit * 4, MaxFilterFetch);
         }

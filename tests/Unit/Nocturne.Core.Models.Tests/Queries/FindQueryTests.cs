@@ -492,4 +492,111 @@ public class FindQueryTests
     }
 
     #endregion
+
+    #region Fail-closed and edge semantics
+
+    [Fact]
+    public void NestedPathKeys_ParseAsDottedFieldPaths()
+    {
+        var query = FindQuery.Parse("find[boluscalc][cob]=5");
+
+        query.HasFieldFilters.Should().BeTrue();
+        query.Matches(Doc("""{"boluscalc":{"cob":5}}""")).Should().BeTrue();
+        query.Matches(Doc("""{"boluscalc":{"cob":7}}""")).Should().BeFalse();
+        query.Matches(Doc("""{"carbs":5}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void UnparseableFindKey_FailsClosed()
+    {
+        // A key the parser can't interpret must narrow the query to nothing — dropping it
+        // would widen a field-filtered delete into a whole-window sweep
+        var query = FindQuery.Parse(
+            "find[$and][x][enteredBy][$ne]=Trio&find[created_at][$gte]=2023-01-01T00:00:00Z");
+
+        query.HasFieldFilters.Should().BeTrue();
+        query.Matches(Doc("""{"enteredBy":"xdrip","created_at":"2023-06-01T00:00:00Z"}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ContradictoryTypeEqualities_StayResidualAndMatchNothing()
+    {
+        var query = FindQuery.Parse("find[type]=sgv&find[type]=mbg&find[date][$gte]=1672531200000");
+
+        query.GetEqualityValue("type").Should().BeNull();
+        query.HasFieldFiltersExcept("type").Should().BeTrue();
+        query.Matches(Doc("""{"type":"sgv","date":1672531200001}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void NeNull_MatchesOnlyPresentNonNullFields()
+    {
+        var query = FindQuery.Parse("""{"duration":{"$ne":null}}""");
+
+        query.Matches(Doc("""{"duration":30}""")).Should().BeTrue();
+        query.Matches(Doc("""{"duration":null}""")).Should().BeFalse();
+        query.Matches(Doc("""{"eventType":"Note"}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void EqNull_MatchesAbsentOrNullFields()
+    {
+        var query = FindQuery.Parse("""{"duration":null}""");
+
+        query.Matches(Doc("""{"eventType":"Note"}""")).Should().BeTrue();
+        query.Matches(Doc("""{"duration":null}""")).Should().BeTrue();
+        query.Matches(Doc("""{"duration":30}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TimeField_IsoOperandAgainstNumericField_ComparesByInstant()
+    {
+        // A captured time bound is re-evaluated inside filtered pages, so mixed representations
+        // (ISO operand, epoch-ms document field) must agree with the pushdown
+        var query = FindQuery.Parse(
+            """{"date":{"$gte":"2023-01-01T00:00:00Z"},"sgv":{"$gte":180}}""");
+
+        query.Matches(Doc("""{"date":1672531200001,"sgv":200}""")).Should().BeTrue();
+        query.Matches(Doc("""{"date":1672531199999,"sgv":200}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TimeField_NumericOperandAgainstIsoField_ComparesByInstant()
+    {
+        var query = FindQuery.Parse("find[created_at][$lte]=1672531200000");
+
+        query.Matches(Doc("""{"created_at":"2022-12-31T00:00:00Z"}""")).Should().BeTrue();
+        query.Matches(Doc("""{"created_at":"2023-01-02T00:00:00Z"}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void In_RepeatedArrayMarkerParams_FormOneValueSet()
+    {
+        var query = FindQuery.Parse("find[type][$in][]=sgv&find[type][$in][]=mbg");
+
+        query.Matches(Doc("""{"type":"sgv"}""")).Should().BeTrue();
+        query.Matches(Doc("""{"type":"mbg"}""")).Should().BeTrue();
+        query.Matches(Doc("""{"type":"cal"}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void DuplicateOptionsParams_DoNotBreakTheRegex()
+    {
+        var query = FindQuery.Parse(
+            "find[eventType][$regex]=temp&find[eventType][$options]=i&find[eventType][$options]=i");
+
+        query.Matches(Doc("""{"eventType":"Temp Basal"}""")).Should().BeTrue();
+        query.Matches(Doc("""{"eventType":"Bolus"}""")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void JsonFindContainingFindBracketLiteral_RoutesToJsonParser()
+    {
+        var query = FindQuery.Parse("""{"notes":{"$regex":"find[0-9]"}}""");
+
+        query.Matches(Doc("""{"notes":"see find3 above"}""")).Should().BeTrue();
+        query.Matches(Doc("""{"notes":"nothing"}""")).Should().BeFalse();
+    }
+
+    #endregion
 }

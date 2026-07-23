@@ -35,6 +35,12 @@ public sealed class FindQuery
 
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// Synthetic operator for a find[...] key the parser couldn't interpret. It never matches, so
+    /// an unsupported filter narrows results to nothing (fail closed) instead of being dropped.
+    /// </summary>
+    private const string UnsupportedOp = "$unsupported";
+
     /// <summary>An empty query: no time bounds, no field filters, matches everything.</summary>
     public static readonly FindQuery Empty = new(new Group(IsAnd: true, []), null, null);
 
@@ -70,6 +76,12 @@ public sealed class FindQuery
     /// </summary>
     public bool HasFieldFiltersExcept(string? exceptField)
     {
+        // Only a single consistent equality can be excepted: contradictory equalities on the
+        // field (a match-nothing query) must stay residual, or excepting them would silently
+        // widen the query — and, on the delete path, widen it into a whole-window sweep.
+        if (exceptField != null && GetEqualityValue(exceptField) is null)
+            exceptField = null;
+
         return CountResidual(_root, andReachable: true, exceptField) > 0;
     }
 
@@ -105,16 +117,18 @@ public sealed class FindQuery
 
         try
         {
+            // JSON form is checked first: a JSON find could contain the literal "find[" inside
+            // an operand (e.g. a $regex pattern) and must not be misrouted to the querystring parser.
             Group root;
-            if (find.Contains("find[", StringComparison.OrdinalIgnoreCase)
-                || find.Contains("find%5B", StringComparison.OrdinalIgnoreCase))
-            {
-                root = ParseQueryString(find);
-            }
-            else if (find.TrimStart().StartsWith('{'))
+            if (find.TrimStart().StartsWith('{'))
             {
                 using var doc = JsonDocument.Parse(find);
                 root = ParseJsonObject(doc.RootElement, path: null, depth: 0);
+            }
+            else if (find.Contains("find[", StringComparison.OrdinalIgnoreCase)
+                || find.Contains("find%5B", StringComparison.OrdinalIgnoreCase))
+            {
+                root = ParseQueryString(find);
             }
             else
             {
@@ -169,6 +183,9 @@ public sealed class FindQuery
 
         // First pass: flatten find[...] keys into (groupKey, field, op, value) entries.
         // groupKey is "" for top-level conditions, "and:0"/"or:1" for logical group clauses.
+        // A find[...] key that fits no recognised shape becomes a match-nothing condition:
+        // silently dropping it would widen the query — and, on the delete path, widen a
+        // field-filtered delete into a whole-window sweep.
         var entries = new List<(string GroupKey, string Field, string Op, string Value)>();
         foreach (string? key in parsed.AllKeys)
         {
@@ -179,31 +196,31 @@ public sealed class FindQuery
             if (values is null)
                 continue;
 
-            // Logical group entries: find[$and][0][field][$op] / find[$or][0][field][$op]
-            var logical = Regex.Match(key, @"^find\[\$(and|or)\]\[(\d+)\]\[([^\]]+)\](?:\[(\$\w+)\])?$");
-            if (logical.Success)
+            if (!TryParseFindKey(key, out var groupKey, out var field, out var op))
             {
-                var groupKey = $"{logical.Groups[1].Value}:{logical.Groups[2].Value}";
-                var op = logical.Groups[4].Success ? logical.Groups[4].Value : "$eq";
-                foreach (var value in values)
-                    entries.Add((groupKey, logical.Groups[3].Value, op, value));
+                entries.Add(("", "", UnsupportedOp, ""));
                 continue;
             }
 
-            // Plain field entries: find[field] / find[field][$op] / find[field][$in][]
-            var plain = Regex.Match(key, @"^find\[([^\]]+)\](?:\[(\$\w+)\])?(?:\[\])?$");
-            if (plain.Success)
-            {
-                var op = plain.Groups[2].Success ? plain.Groups[2].Value : "$eq";
-                foreach (var value in values)
-                    entries.Add(("", plain.Groups[1].Value, op, value));
-            }
+            foreach (var value in values)
+                entries.Add((groupKey, field, op, value));
         }
 
+        // Repeated $in/$nin params for one field form a single value set, not AND'ed conditions
+        entries = entries
+            .GroupBy(e => (e.GroupKey, e.Field, e.Op))
+            .SelectMany(g => g.Key.Op is "$in" or "$nin"
+                ? new[] { (g.Key.GroupKey, g.Key.Field, g.Key.Op, string.Join("|", g.Select(e => e.Value))) }
+                : g.AsEnumerable())
+            .ToList();
+
         // $options entries modify the sibling $regex on the same field rather than standing alone
-        var regexOptions = entries
-            .Where(e => e.Op == "$options")
-            .ToDictionary(e => (e.GroupKey, Field: e.Field.ToLowerInvariant()), e => e.Value);
+        var regexOptions = new Dictionary<(string GroupKey, string Field), string>();
+        foreach (var entry in entries)
+        {
+            if (entry.Op == "$options")
+                regexOptions[(entry.GroupKey, entry.Field.ToLowerInvariant())] = entry.Value;
+        }
 
         // Second pass: build the tree. Clauses sharing a group index are AND'd internally;
         // "or:*" clauses combine under a single OR group, "and:*" clauses join the root AND.
@@ -250,6 +267,52 @@ public sealed class FindQuery
         var child = new Group(isAnd, []);
         parent.Children.Add(child);
         return child;
+    }
+
+    /// <summary>
+    /// Parses a single querystring key into its group ("", "and:N", "or:N"), dotted field path,
+    /// and operator. Handles <c>find[field]</c>, <c>find[field][$op]</c>, nested paths
+    /// (<c>find[a][b]</c> → <c>a.b</c>), the <c>find[field][$in][]</c> array marker, and
+    /// <c>find[$and|$or][N][field…][$op]</c> group clauses.
+    /// </summary>
+    private static bool TryParseFindKey(string key, out string groupKey, out string field, out string op)
+    {
+        groupKey = "";
+        field = "";
+        op = "$eq";
+
+        if (!Regex.IsMatch(key, @"^find(\[[^\]]*\])+$"))
+            return false;
+
+        var segments = Regex.Matches(key, @"\[([^\]]*)\]")
+            .Select(m => m.Groups[1].Value)
+            .ToList();
+
+        // Trailing [] is an array marker (find[f][$in][])
+        if (segments.Count > 1 && segments[^1].Length == 0)
+            segments.RemoveAt(segments.Count - 1);
+
+        // Logical group clauses: find[$and][N][field…][$op]
+        if (segments[0] is "$and" or "$or")
+        {
+            if (segments.Count < 3 || segments[1].Length == 0 || !segments[1].All(char.IsAsciiDigit))
+                return false;
+            groupKey = $"{segments[0][1..]}:{segments[1]}";
+            segments = segments.GetRange(2, segments.Count - 2);
+        }
+
+        // A trailing $-segment is the operator; everything before it is the (dotted) field path
+        if (segments[^1].StartsWith('$'))
+        {
+            op = segments[^1];
+            segments.RemoveAt(segments.Count - 1);
+        }
+
+        if (segments.Count == 0 || segments.Any(s => s.Length == 0 || s.StartsWith('$')))
+            return false;
+
+        field = string.Join(".", segments);
+        return true;
     }
 
     #endregion
@@ -499,6 +562,7 @@ public sealed class FindQuery
     {
         var field = ResolveField(document, cond.Path);
         var missing = field is null || field.Value.ValueKind == JsonValueKind.Null;
+        var operandIsNull = cond.JsonValue is { ValueKind: JsonValueKind.Null };
 
         switch (cond.Op)
         {
@@ -507,11 +571,14 @@ public sealed class FindQuery
                     || cond.StringValue == "1";
                 return wantExists != missing;
 
-            // Mongo semantics: negative operators match documents missing the field
+            // Mongo semantics: negative operators match documents missing the field, and a null
+            // operand means "absent or null" for $eq / "present and non-null" for $ne
             case "$ne":
-                return missing || !EqualsOperand(field!.Value, cond);
+                return operandIsNull ? !missing : missing || !EqualsOperand(field!.Value, cond);
             case "$nin":
                 return missing || !InOperand(field!.Value, cond);
+            case "$eq" when operandIsNull:
+                return missing;
         }
 
         if (missing)
@@ -521,13 +588,40 @@ public sealed class FindQuery
         {
             "$eq" => EqualsOperand(field!.Value, cond),
             "$in" => InOperand(field!.Value, cond),
-            "$gt" => Compare(field!.Value, cond) is > 0,
-            "$gte" => Compare(field!.Value, cond) is >= 0,
-            "$lt" => Compare(field!.Value, cond) is < 0,
-            "$lte" => Compare(field!.Value, cond) is <= 0,
+            "$gt" => CompareOperand(field!.Value, cond) is > 0,
+            "$gte" => CompareOperand(field!.Value, cond) is >= 0,
+            "$lt" => CompareOperand(field!.Value, cond) is < 0,
+            "$lte" => CompareOperand(field!.Value, cond) is <= 0,
             "$regex" => RegexMatches(field!.Value, cond),
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// Compares a recognised time field against the operand on the epoch-millisecond axis, so a
+    /// numeric field matches an ISO operand and vice versa. The pushdown already treats the
+    /// representations interchangeably; in-memory evaluation must agree or a captured time bound
+    /// re-checked inside a filtered page would reject every row.
+    /// </summary>
+    private static bool TryTimeCompare(JsonElement field, Condition cond, out int comparison)
+    {
+        comparison = 0;
+        if (!TimeFields.Contains(cond.Path))
+            return false;
+        if (!TryConvertToMills(cond, out var operandMills))
+            return false;
+
+        long fieldMills;
+        if (field.ValueKind == JsonValueKind.Number && field.TryGetInt64(out var numeric))
+            fieldMills = numeric;
+        else if (field.ValueKind == JsonValueKind.String
+                 && TryParseDate(field.GetString() ?? string.Empty, out var date))
+            fieldMills = date.ToUnixTimeMilliseconds();
+        else
+            return false;
+
+        comparison = fieldMills.CompareTo(operandMills);
+        return true;
     }
 
     private static JsonElement? ResolveField(JsonElement document, string path)
@@ -544,7 +638,18 @@ public sealed class FindQuery
     }
 
     private static bool EqualsOperand(JsonElement field, Condition cond)
-        => ScalarEquals(field, cond.StringValue);
+    {
+        if (TryTimeCompare(field, cond, out var comparison))
+            return comparison == 0;
+        return ScalarEquals(field, cond.StringValue);
+    }
+
+    private static int? CompareOperand(JsonElement field, Condition cond)
+    {
+        if (TryTimeCompare(field, cond, out var comparison))
+            return comparison;
+        return Compare(field, cond);
+    }
 
     private static bool ScalarEquals(JsonElement field, string operand)
     {

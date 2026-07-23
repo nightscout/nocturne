@@ -145,13 +145,16 @@ public class ProfileController : ControllerBase
             var find = FindQuery.Parse(queryString.TrimStart('?'));
 
             count = Math.Max(1, Math.Min(count, 1000));
+
+            // Filter before limiting: a find that excludes the newest documents must still
+            // surface older matches. Profile history is small, so fetch the route's maximum.
             var profiles = await _projectionService.GetProfilesAsync(
-                count: count,
+                count: 1000,
                 skip: 0,
                 ct: cancellationToken
             );
 
-            return Ok(profiles.Where(find.Matches).ToArray());
+            return Ok(profiles.Where(find.Matches).Take(count).ToArray());
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
