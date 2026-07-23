@@ -109,9 +109,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(deviceStatusList.Cast<object>());
-            var etag = GenerateETag(deviceStatusList);
 
-            if (lastModified.HasValue && ShouldReturn304(etag, lastModified.Value, parameters))
+            if (lastModified.HasValue && ShouldReturn304(lastModified.Value, parameters))
             {
                 return StatusCode(304);
             }

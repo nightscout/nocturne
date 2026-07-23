@@ -105,9 +105,8 @@ public class EntriesController : BaseV3Controller<Entry>
 
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(entriesList);
-            var etag = GenerateETag(entriesList);
 
-            if (ShouldReturn304(etag, lastModified, parameters))
+            if (ShouldReturn304(lastModified, parameters))
             {
                 return StatusCode(304);
             }
@@ -167,8 +166,7 @@ public class EntriesController : BaseV3Controller<Entry>
             }
 
             // Set appropriate headers
-            var etag = GenerateETag(new[] { entry });
-            Response.Headers["ETag"] = $"\"{etag}\"";
+            Response.Headers["ETag"] = FormatCursorETag(entry.Mills);
             Response.Headers["Cache-Control"] = "public, max-age=60";
 
             return Ok(entry.ToV3Response());

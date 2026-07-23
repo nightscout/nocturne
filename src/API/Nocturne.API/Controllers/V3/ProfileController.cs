@@ -74,22 +74,20 @@ public class ProfileController : BaseV3Controller<Profile>
                 ct: cancellationToken
             ); // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(profilesList.Cast<object>());
-            var etag = GenerateETag(profilesList);
 
-            if (lastModified.HasValue && ShouldReturn304(etag, lastModified.Value, parameters))
+            if (lastModified.HasValue && ShouldReturn304(lastModified.Value, parameters))
             {
                 return StatusCode(304);
             }
-
-            // Create V3 response
-            var response = CreateV3CollectionResponse(profilesList, parameters, totalCount);
 
             _logger.LogDebug(
                 "Successfully returned {Count} profiles with V3 format",
                 profilesList.Count
             );
 
-            return Ok(response);
+            // CreateV3CollectionResponse returns the {status, result} envelope IActionResult;
+            // wrapping it in Ok(...) again would serialize the ActionResult object itself.
+            return (ActionResult)CreateV3CollectionResponse(profilesList, parameters, totalCount);
         }
         catch (ArgumentException ex)
         {
@@ -99,6 +97,61 @@ public class ProfileController : BaseV3Controller<Profile>
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving V3 profiles");
+            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Get profiles modified since a given timestamp (for AAPS incremental sync).
+    /// </summary>
+    /// <param name="lastModified">Unix timestamp in milliseconds. Only profiles newer than this time are returned.</param>
+    /// <param name="limit">Maximum number of profiles to return (1-100, default 10).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>V3 collection of <see cref="Profile"/> records newer than the given timestamp.</returns>
+    /// <remarks>
+    /// AAPS calls this on every incremental profile sync after the first load; without this
+    /// route its profile cursor never advances and it re-requests (and errors) every cycle.
+    /// </remarks>
+    /// <response code="200">Profiles newer than the given timestamp.</response>
+    /// <response code="500">Internal server error.</response>
+    [HttpGet("history/{lastModified:long}")]
+    [NightscoutEndpoint("/api/v3/profile/history/{lastModified}")]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult> GetProfileHistory(
+        long lastModified,
+        [FromQuery] int limit = 10,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug(
+            "V3 profile history requested since {LastModified} with limit {Limit}",
+            lastModified,
+            limit
+        );
+
+        try
+        {
+            limit = Math.Min(Math.Max(limit, 1), 100);
+
+            var profiles = await _projectionService.GetProfilesAsync(
+                count: limit,
+                skip: 0,
+                ct: cancellationToken
+            );
+
+            var newerProfiles = profiles.Where(p => p.Mills > lastModified).ToList();
+
+            if (newerProfiles.Count > 0)
+            {
+                SetHistoryCursorHeaders(newerProfiles.Max(p => p.Mills));
+            }
+
+            return CreateV3SuccessResponse(newerProfiles);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving V3 profile history");
             return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
         }
     }

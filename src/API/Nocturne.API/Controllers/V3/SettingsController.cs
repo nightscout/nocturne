@@ -86,22 +86,20 @@ public class SettingsController : BaseV3Controller<Settings>
                 "settings"
             ); // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(settingsList.Cast<object>());
-            var etag = GenerateETag(settingsList);
 
-            if (lastModified.HasValue && ShouldReturn304(etag, lastModified.Value, parameters))
+            if (lastModified.HasValue && ShouldReturn304(lastModified.Value, parameters))
             {
                 return StatusCode(304);
             }
-
-            // Create V3 response
-            var response = CreateV3CollectionResponse(settingsList, parameters, totalCount);
 
             _logger.LogDebug(
                 "Successfully returned {Count} settings with V3 format",
                 settingsList.Count
             );
 
-            return Ok(response);
+            // CreateV3CollectionResponse returns the {status, result} envelope IActionResult;
+            // wrapping it in Ok(...) again would serialize the ActionResult object itself.
+            return (ActionResult)CreateV3CollectionResponse(settingsList, parameters, totalCount);
         }
         catch (ArgumentException ex)
         {

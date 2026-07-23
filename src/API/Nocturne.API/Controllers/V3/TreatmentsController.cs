@@ -99,9 +99,8 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(treatmentsList);
-            var etag = GenerateETag(treatmentsList);
 
-            if (ShouldReturn304(etag, lastModified, parameters))
+            if (ShouldReturn304(lastModified, parameters))
             {
                 return StatusCode(304);
             }
@@ -158,8 +157,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             }
 
             // Set appropriate headers
-            var etag = GenerateETag(new[] { treatment });
-            Response.Headers["ETag"] = $"\"{etag}\"";
+            Response.Headers["ETag"] = FormatCursorETag(treatment.SrvModified ?? treatment.Mills);
             Response.Headers["Cache-Control"] = "public, max-age=60";
 
             return Ok(treatment);

@@ -91,9 +91,8 @@ public class FoodController : BaseV3Controller<Food>
 
             // Check for conditional requests (304 Not Modified)
             var lastModified = GetLastModified(foodList.Cast<object>());
-            var etag = GenerateETag(foodList);
 
-            if (lastModified.HasValue && ShouldReturn304(etag, lastModified.Value, parameters))
+            if (lastModified.HasValue && ShouldReturn304(lastModified.Value, parameters))
             {
                 return StatusCode(304);
             }
@@ -121,6 +120,79 @@ public class FoodController : BaseV3Controller<Food>
             _logger.LogError(ex, "Error retrieving V3 food");
             return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Get food records modified since a given timestamp (for AAPS incremental sync).
+    /// </summary>
+    /// <param name="lastModified">Unix timestamp in milliseconds. Only foods newer than this time are returned.</param>
+    /// <param name="limit">Maximum number of foods to return (1-1000, default 1000).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>V3 collection of <see cref="Food"/> records newer than the given timestamp.</returns>
+    /// <remarks>
+    /// AAPS requires a parseable cursor ETag on this response even when it is empty (its food
+    /// loader throws on a missing ETag), so the request cursor is echoed back when no newer
+    /// records exist.
+    /// </remarks>
+    /// <response code="200">Foods newer than the given timestamp.</response>
+    /// <response code="500">Internal server error.</response>
+    [HttpGet("history/{lastModified:long}")]
+    [NightscoutEndpoint("/api/v3/food/history/{lastModified}")]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult> GetFoodHistory(
+        long lastModified,
+        [FromQuery] int limit = 1000,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _logger.LogDebug(
+            "V3 food history requested since {LastModified} with limit {Limit}",
+            lastModified,
+            limit
+        );
+
+        try
+        {
+            limit = Math.Min(Math.Max(limit, 1), 1000);
+
+            var foodRecords = await _foods.GetFoodWithAdvancedFilterAsync(
+                count: int.MaxValue,
+                skip: 0,
+                findQuery: null,
+                type: null,
+                reverseResults: false,
+                cancellationToken: cancellationToken
+            );
+
+            var newerFoods = foodRecords
+                .Select(f => (Food: f, Mills: ParseCreatedAtMills(f.CreatedAt)))
+                .Where(x => x.Mills.HasValue && x.Mills.Value > lastModified)
+                .OrderBy(x => x.Mills)
+                .Take(limit)
+                .ToList();
+
+            SetHistoryCursorHeaders(
+                newerFoods.Count > 0 ? newerFoods.Max(x => x.Mills!.Value) : lastModified
+            );
+
+            return CreateV3SuccessResponse(newerFoods.Select(x => x.Food).ToList());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving V3 food history");
+            return CreateV3ErrorResponse(500, "Internal server error", ex.Message);
+        }
+    }
+
+    private static long? ParseCreatedAtMills(string? createdAt)
+    {
+        if (string.IsNullOrEmpty(createdAt))
+            return null;
+
+        return DateTimeOffset.TryParse(createdAt, out var parsed)
+            ? parsed.ToUnixTimeMilliseconds()
+            : null;
     }
 
     /// <summary>

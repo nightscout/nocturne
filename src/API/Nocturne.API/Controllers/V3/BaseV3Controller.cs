@@ -241,18 +241,14 @@ public abstract class BaseV3Controller<T> : ControllerBase
     }
 
     /// <summary>
-    /// Generate ETag for a collection of data
+    /// Format a V3 ETag from a record timestamp. AAPS parses every V3 ETag by stripping the
+    /// first three characters (<c>W/"</c>) and the trailing quote, then calling
+    /// <c>toLong()</c> — so the value between the quotes MUST be a bare Unix-milliseconds
+    /// number. Any other shape (e.g. a content hash) crashes the AAPS sync loop with
+    /// <c>NumberFormatException</c> (#522).
     /// </summary>
-    /// <param name="data">Data to generate ETag for</param>
-    /// <returns>ETag value</returns>
-    protected string GenerateETag<TItem>(IEnumerable<TItem> data)
-    {
-        var json = JsonSerializer.Serialize(data);
-        var hash = System.Security.Cryptography.SHA256.HashData(
-            System.Text.Encoding.UTF8.GetBytes(json)
-        );
-        return Convert.ToHexString(hash)[..16]; // Use first 16 characters
-    }
+    /// <param name="maxMills">Highest record timestamp in the response, in Unix milliseconds.</param>
+    protected static string FormatCursorETag(long maxMills) => $"W/\"{maxMills}\"";
 
     /// <summary>
     /// Set V3 response headers including pagination, ETag, and caching
@@ -266,9 +262,10 @@ public abstract class BaseV3Controller<T> : ControllerBase
         long totalCount
     )
     {
-        // Set ETag header
-        var etag = GenerateETag(data);
-        Response.Headers["ETag"] = $"\"{etag}\"";
+        // Cursor-style ETag from the newest record; falls back to the current time for
+        // collections whose items carry no recognizable timestamp.
+        var lastModified = GetLastModified(data.Cast<object>()) ?? DateTimeOffset.UtcNow;
+        Response.Headers["ETag"] = FormatCursorETag(lastModified.ToUnixTimeMilliseconds());
 
         // Set pagination headers
         Response.Headers["X-Total-Count"] = totalCount.ToString();
@@ -298,28 +295,28 @@ public abstract class BaseV3Controller<T> : ControllerBase
 
         // Set cache control headers
         Response.Headers["Cache-Control"] = "public, max-age=60";
-        Response.Headers["Last-Modified"] = DateTimeOffset.UtcNow.ToString("R");
+        Response.Headers["Last-Modified"] = lastModified.UtcDateTime.ToString("R");
         Response.Headers["Vary"] = "Accept, If-Modified-Since, If-None-Match";
     }
 
     /// <summary>
-    /// Check if the request can return a 304 Not Modified response
+    /// Check if the request can return a 304 Not Modified response.
+    /// The current ETag is derived from <paramref name="lastModified"/> with
+    /// <see cref="FormatCursorETag"/>, matching what the response headers carry.
     /// </summary>
-    /// <param name="etag">Current ETag</param>
-    /// <param name="lastModified">Last modified timestamp</param>
+    /// <param name="lastModified">Last modified timestamp of the response data</param>
     /// <param name="parameters">Query parameters</param>
     /// <returns>True if 304 should be returned</returns>
-    protected bool ShouldReturn304(
-        string etag,
-        DateTimeOffset lastModified,
-        V3QueryParameters parameters
-    )
+    protected bool ShouldReturn304(DateTimeOffset lastModified, V3QueryParameters parameters)
     {
-        // Check If-None-Match header
+        // Check If-None-Match header (tolerate weak markers and quoting variations)
         if (!string.IsNullOrEmpty(parameters.IfNoneMatch))
         {
-            var clientETag = parameters.IfNoneMatch.Trim('"');
-            if (clientETag == etag)
+            var clientETag = NormalizeETag(parameters.IfNoneMatch);
+            var currentETag = NormalizeETag(
+                FormatCursorETag(lastModified.ToUnixTimeMilliseconds())
+            );
+            if (clientETag == currentETag)
             {
                 return true;
             }
@@ -335,6 +332,16 @@ public abstract class BaseV3Controller<T> : ControllerBase
         }
 
         return false;
+    }
+
+    private static string NormalizeETag(string etag)
+    {
+        var value = etag.Trim();
+        if (value.StartsWith("W/", StringComparison.OrdinalIgnoreCase))
+        {
+            value = value[2..];
+        }
+        return value.Trim('"');
     }
 
     /// <summary>
@@ -378,7 +385,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
     {
         var lastModified = DateTimeOffset.FromUnixTimeMilliseconds(maxMills).UtcDateTime;
         Response.Headers["Last-Modified"] = lastModified.ToString("R");
-        Response.Headers["ETag"] = $"W/\"{maxMills}\"";
+        Response.Headers["ETag"] = FormatCursorETag(maxMills);
     }
 
     /// <summary>
