@@ -3,7 +3,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Entries;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Mappers;
 
@@ -53,24 +53,70 @@ public class TreatmentReadService : ITreatmentStore
         _logger = logger;
     }
 
+    /// <summary>
+    /// Upper bound on rows fetched into memory when a find query carries field filters, which can
+    /// only be applied after projection and therefore defeat limit pushdown.
+    /// </summary>
+    private const int MaxFilterFetch = 100_000;
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> QueryAsync(TreatmentQuery query, CancellationToken ct = default)
     {
-        var (fromMills, toMills) = ParseTimeRangeFromFind(query.Find);
+        var find = FindQuery.Parse(query.Find);
 
-        var projected = await _projection.GetProjectedTreatmentsAsync(
-            fromMills, toMills, query.Count + query.Skip, nativeOnly: false, ct: ct);
-
-        var results = projected
-            .OrderByDescending(t => t.Mills)
-            .Skip(query.Skip)
-            .Take(query.Count)
-            .ToList();
+        var results = find.HasFieldFilters
+            ? await QueryFilteredAsync(find, query.Count, query.Skip, ct)
+            : await QueryByTimeRangeAsync(find, query.Count, query.Skip, ct);
 
         if (query.ReverseResults)
             return results.OrderBy(t => t.Mills).ToList();
 
         return results;
+    }
+
+    private async Task<IReadOnlyList<Treatment>> QueryByTimeRangeAsync(
+        FindQuery find, int count, int skip, CancellationToken ct)
+    {
+        var limit = (int)Math.Min((long)count + skip, int.MaxValue);
+        var projected = await _projection.GetProjectedTreatmentsAsync(
+            find.FromMills, find.ToMills, limit, nativeOnly: false, ct: ct);
+
+        return projected
+            .OrderByDescending(t => t.Mills)
+            .Skip(skip)
+            .Take(count)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Serves a find query with field filters (eventType, enteredBy, $exists, …) by matching the
+    /// projected legacy shape. Paging cannot be pushed down past an in-memory filter, so the fetch
+    /// window grows geometrically until the page fills or the window is exhausted.
+    /// </summary>
+    private async Task<IReadOnlyList<Treatment>> QueryFilteredAsync(
+        FindQuery find, int count, int skip, CancellationToken ct)
+    {
+        var needed = (long)count + skip;
+        var fetchLimit = (int)Math.Min(Math.Max(needed * 4, 100), MaxFilterFetch);
+
+        while (true)
+        {
+            var projected = (await _projection.GetProjectedTreatmentsAsync(
+                find.FromMills, find.ToMills, fetchLimit, nativeOnly: false, ct: ct)).ToList();
+
+            var matching = projected.Where(find.Matches).ToList();
+            var exhausted = projected.Count < fetchLimit || fetchLimit >= MaxFilterFetch;
+            if (matching.Count >= needed || exhausted)
+            {
+                return matching
+                    .OrderByDescending(t => t.Mills)
+                    .Skip(skip)
+                    .Take(count)
+                    .ToList();
+            }
+
+            fetchLimit = (int)Math.Min((long)fetchLimit * 4, MaxFilterFetch);
+        }
     }
 
     /// <inheritdoc />
@@ -227,7 +273,18 @@ public class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<long> CountAsync(string? find = null, CancellationToken ct = default)
     {
-        var (fromMills, toMills) = ParseTimeRangeFromFind(find);
+        var findQuery = FindQuery.Parse(find);
+
+        if (findQuery.HasFieldFilters)
+        {
+            // Field filters only exist on the projected shape; count matches within the
+            // (bounded) window instead of delegating to per-repo counts.
+            var projected = await _projection.GetProjectedTreatmentsAsync(
+                findQuery.FromMills, findQuery.ToMills, MaxFilterFetch, nativeOnly: false, ct: ct);
+            return projected.Count(findQuery.Matches);
+        }
+
+        var (fromMills, toMills) = (findQuery.FromMills, findQuery.ToMills);
         var from = fromMills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime : (DateTime?)null;
         var to = toMills.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(toMills.Value).UtcDateTime : (DateTime?)null;
 
@@ -488,10 +545,4 @@ public class TreatmentReadService : ITreatmentStore
 
     #endregion
 
-    #region Private — Find query parsing
-
-    private static (long? From, long? To) ParseTimeRangeFromFind(string? find)
-        => EntryDomainLogic.ParseTimeRangeFromFind(find);
-
-    #endregion
 }

@@ -4,6 +4,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Treatments;
@@ -264,10 +265,39 @@ public class TreatmentService : ITreatmentService
     public async Task<long> DeleteTreatmentsAsync(
         string? find = null, CancellationToken cancellationToken = default)
     {
+        // Field filters (eventType, enteredBy, …) don't survive the decomposer's coarse by-time
+        // sweep — it would delete every record type in the window. Resolve the matching
+        // treatments through the filtered read path instead and delete them individually, which
+        // also removes correlated siblings (e.g. a meal bolus's carb) via LegacyId.
+        if (FindQuery.Parse(find).HasFieldFilters)
+            return await DeleteMatchingTreatmentsAsync(find, cancellationToken);
+
         var count = await _decomposer.BulkDeleteAsync(find, WriteOrigin.Live, cancellationToken);
         if (count > 0)
             await _cache.InvalidateAsync(cancellationToken);
         return count;
+    }
+
+    private async Task<long> DeleteMatchingTreatmentsAsync(string? find, CancellationToken ct)
+    {
+        var matching = await _store.QueryAsync(
+            new TreatmentQuery { Find = find, Count = int.MaxValue }, ct);
+
+        long deleted = 0;
+        foreach (var treatment in matching)
+        {
+            if (string.IsNullOrEmpty(treatment.Id))
+                continue;
+            if (await _store.DeleteAsync(treatment.Id, ct))
+            {
+                deleted++;
+                await _events.OnDeletedAsync(treatment, ct);
+            }
+        }
+
+        if (deleted > 0)
+            await _cache.InvalidateAsync(ct);
+        return deleted;
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -118,6 +119,47 @@ public class ProfileController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error occurred while fetching profiles");
+            return StatusCode(500, Array.Empty<Profile>());
+        }
+    }
+
+    /// <summary>
+    /// Get profile history documents (plural collection alias).
+    /// Legacy Nightscout serves /api/v1/profiles.json as a filterable collection; LoopFollow
+    /// polls it with find[startDate][$lte]=… for the profile history behind its basal rendering.
+    /// </summary>
+    /// <param name="count">Maximum number of profiles to return (default: 10)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of profiles matching the find query, newest first</returns>
+    [HttpGet("/api/v1/profiles")]
+    [NightscoutEndpoint("/api/v1/profiles")]
+    [ProducesResponseType(typeof(Profile[]), 200)]
+    public async Task<ActionResult<Profile[]>> GetProfileHistory(
+        [FromQuery] int count = 10,
+        CancellationToken cancellationToken = default
+    )
+    {
+        try
+        {
+            var queryString = HttpContext?.Request?.QueryString.ToString() ?? string.Empty;
+            var find = FindQuery.Parse(queryString.TrimStart('?'));
+
+            count = Math.Max(1, Math.Min(count, 1000));
+            var profiles = await _projectionService.GetProfilesAsync(
+                count: count,
+                skip: 0,
+                ct: cancellationToken
+            );
+
+            return Ok(profiles.Where(find.Matches).ToArray());
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return StatusCode(499, Array.Empty<Profile>());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while fetching profile history");
             return StatusCode(500, Array.Empty<Profile>());
         }
     }

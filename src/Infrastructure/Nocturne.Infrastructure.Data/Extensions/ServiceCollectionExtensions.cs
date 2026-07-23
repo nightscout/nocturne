@@ -145,9 +145,6 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<ISettingsRepository, SettingsRepository>();
 
-        // Register Nightscout query parser
-        services.AddScoped<IQueryParser, QueryParser>();
-
         // Register avatar storage
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();
 
@@ -332,9 +329,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFoodRepository, FoodRepository>();
 
         services.AddScoped<ISettingsRepository, SettingsRepository>();
-
-        // Register Nightscout query parser
-        services.AddScoped<IQueryParser, QueryParser>();
 
         // Register avatar storage
         services.AddScoped<IAvatarStore, DatabaseAvatarStore>();

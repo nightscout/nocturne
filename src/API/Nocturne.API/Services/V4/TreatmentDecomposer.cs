@@ -1590,15 +1590,18 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
     public async Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default)
     {
         // origin is accepted for interface uniformity; the v4-native delete broadcast is deferred to the glucose-unification follow-up (deletes here bypass the repository chokepoint).
-        var (fromMills, toMills) = Core.Models.Entries.EntryDomainLogic.ParseTimeRangeFromFind(find);
+        var findQuery = Core.Models.Queries.FindQuery.Parse(find);
+        var (fromMills, toMills) = (findQuery.FromMills, findQuery.ToMills);
 
-        // Reject implausible timestamps that clearly aren't time bounds
-        // (e.g. {"carbs":{"$gte":45}} would parse from=45)
-        const long MinPlausibleMills = 946684800000L; // 2000-01-01T00:00:00Z
-        if (fromMills.HasValue && fromMills.Value < MinPlausibleMills)
-            fromMills = null;
-        if (toMills.HasValue && toMills.Value < MinPlausibleMills)
-            toMills = null;
+        // This sweep deletes every record type in the window, so it can only honor pure
+        // time-range queries. Field-filtered deletes must resolve matches through the filtered
+        // read path (TreatmentService.DeleteTreatmentsAsync) — deleting here would wipe
+        // non-matching records.
+        if (findQuery.HasFieldFilters)
+        {
+            _logger.LogWarning("BulkDelete refused: find query carries field filters the by-time sweep cannot honor. find={Find}", find);
+            return 0;
+        }
 
         var hasFind = !string.IsNullOrEmpty(find) && find != "{}";
         var hasTimeBounds = fromMills.HasValue || toMills.HasValue;

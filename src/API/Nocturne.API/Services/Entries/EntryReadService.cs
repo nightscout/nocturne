@@ -4,8 +4,8 @@ using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
-using Nocturne.Core.Models.Entries;
 using Nocturne.Core.Models.Projections;
+using Nocturne.Core.Models.Queries;
 namespace Nocturne.API.Services.Entries;
 
 /// <summary>
@@ -48,21 +48,65 @@ public class EntryReadService : IEntryStore
         _logger = logger;
     }
 
+    /// <summary>
+    /// Upper bound on rows fetched into memory when a find query carries field filters, which can
+    /// only be applied after projection and therefore defeat limit pushdown.
+    /// </summary>
+    private const int MaxFilterFetch = 100_000;
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<Entry>> QueryAsync(EntryQuery query, CancellationToken ct = default)
     {
         var descending = !query.ReverseResults;
         var (source, excludeDemo) = ResolveDemoFilter();
-        var (from, to) = ResolveTimeRange(query);
+        var find = FindQuery.Parse(query.Find);
+        var (from, to) = ResolveTimeRange(query, find);
 
-        return query.Type switch
+        // A find[type]=x equality routes like an explicit type so the fetch stays single-repo
+        var type = !string.IsNullOrEmpty(query.Type) ? query.Type : find.GetEqualityValue("type");
+
+        if (find.HasFieldFiltersExcept("type"))
+            return await QueryFilteredAsync(find, type, from, to, source, excludeDemo, query.Count, query.Skip, descending, ct);
+
+        return await QueryByTypeAsync(type, from, to, source, excludeDemo, query.Count, query.Skip, descending, ct);
+    }
+
+    private async Task<IReadOnlyList<Entry>> QueryByTypeAsync(
+        string? type, DateTime? from, DateTime? to, string? source, bool excludeDemo,
+        int count, int skip, bool descending, CancellationToken ct)
+    {
+        return type switch
         {
-            "sgv" => await QuerySgvAsync(from, to, source, excludeDemo, query.Count, query.Skip, descending, ct),
-            "mbg" => await QueryMbgAsync(from, to, source, excludeDemo, query.Count, query.Skip, descending, ct),
-            "cal" => await QueryCalAsync(from, to, source, excludeDemo, query.Count, query.Skip, descending, ct),
-            null or "" => await QueryAllTypesAsync(from, to, source, excludeDemo, query.Count, query.Skip, descending, ct),
+            "sgv" => await QuerySgvAsync(from, to, source, excludeDemo, count, skip, descending, ct),
+            "mbg" => await QueryMbgAsync(from, to, source, excludeDemo, count, skip, descending, ct),
+            "cal" => await QueryCalAsync(from, to, source, excludeDemo, count, skip, descending, ct),
+            null or "" => await QueryAllTypesAsync(from, to, source, excludeDemo, count, skip, descending, ct),
             _ => [],
         };
+    }
+
+    /// <summary>
+    /// Serves a find query with field filters (type $ne, sgv/device/direction conditions, …) by
+    /// matching the projected legacy shape. Paging cannot be pushed down past an in-memory
+    /// filter, so the fetch window grows geometrically until the page fills or is exhausted.
+    /// </summary>
+    private async Task<IReadOnlyList<Entry>> QueryFilteredAsync(
+        FindQuery find, string? type, DateTime? from, DateTime? to, string? source, bool excludeDemo,
+        int count, int skip, bool descending, CancellationToken ct)
+    {
+        var needed = (long)count + skip;
+        var fetchLimit = (int)Math.Min(Math.Max(needed * 4, 100), MaxFilterFetch);
+
+        while (true)
+        {
+            var page = await QueryByTypeAsync(type, from, to, source, excludeDemo, fetchLimit, 0, descending, ct);
+            var matching = page.Where(find.Matches).ToList();
+            var exhausted = page.Count < fetchLimit || fetchLimit >= MaxFilterFetch;
+            if (matching.Count >= needed || exhausted)
+                return matching.Skip(skip).Take(count).ToList();
+
+            fetchLimit = (int)Math.Min((long)fetchLimit * 4, MaxFilterFetch);
+        }
     }
 
     /// <inheritdoc />
@@ -122,9 +166,21 @@ public class EntryReadService : IEntryStore
     /// <inheritdoc />
     public async Task<long> CountAsync(string? find = null, string? type = null, CancellationToken ct = default)
     {
-        var (from, to) = ResolveTimeRange(new EntryQuery { Find = find });
+        var findQuery = FindQuery.Parse(find);
+        var (from, to) = ResolveTimeRange(new EntryQuery { Find = find }, findQuery);
+        var effectiveType = !string.IsNullOrEmpty(type) ? type : findQuery.GetEqualityValue("type");
 
-        return type switch
+        if (findQuery.HasFieldFiltersExcept("type"))
+        {
+            // Field filters only exist on the projected shape; count matches within the
+            // (bounded) window instead of delegating to per-repo counts.
+            var (source, excludeDemo) = ResolveDemoFilter();
+            var page = await QueryByTypeAsync(
+                effectiveType, from, to, source, excludeDemo, MaxFilterFetch, 0, descending: true, ct);
+            return page.Count(findQuery.Matches);
+        }
+
+        return effectiveType switch
         {
             "sgv" => await _sgRepo.CountAsync(from, to, ct),
             "mbg" => await _mgRepo.CountAsync(from, to, ct),
@@ -345,13 +401,13 @@ public class EntryReadService : IEntryStore
             : results;
     }
 
-    private static (DateTime? From, DateTime? To) ResolveTimeRange(EntryQuery query)
+    private static (DateTime? From, DateTime? To) ResolveTimeRange(EntryQuery query, FindQuery find)
     {
         DateTime? from = null;
         DateTime? to = null;
 
-        // Parse time range from MongoDB-style find query
-        var (fromMills, toMills) = EntryDomainLogic.ParseTimeRangeFromFind(query.Find);
+        // Time range from the parsed find query
+        var (fromMills, toMills) = (find.FromMills, find.ToMills);
         if (fromMills.HasValue)
             from = DateTimeOffset.FromUnixTimeMilliseconds(fromMills.Value).UtcDateTime;
         if (toMills.HasValue)
