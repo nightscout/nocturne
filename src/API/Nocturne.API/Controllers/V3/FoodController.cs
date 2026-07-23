@@ -185,16 +185,6 @@ public class FoodController : BaseV3Controller<Food>
         }
     }
 
-    private static long? ParseCreatedAtMills(string? createdAt)
-    {
-        if (string.IsNullOrEmpty(createdAt))
-            return null;
-
-        return DateTimeOffset.TryParse(createdAt, out var parsed)
-            ? parsed.ToUnixTimeMilliseconds()
-            : null;
-    }
-
     /// <summary>
     /// Apply V3 filter criteria to a list of food records
     /// </summary>

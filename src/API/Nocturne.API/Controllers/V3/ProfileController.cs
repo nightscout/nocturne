@@ -134,18 +134,26 @@ public class ProfileController : BaseV3Controller<Profile>
         {
             limit = Math.Min(Math.Max(limit, 1), 100);
 
+            // The projection returns the newest `limit` profiles. A record newer than the
+            // cursor but older than this window is a superseded profile version; AAPS only
+            // activates the newest store in the page, so skipping it loses nothing.
             var profiles = await _projectionService.GetProfilesAsync(
                 count: limit,
                 skip: 0,
                 ct: cancellationToken
             );
 
-            var newerProfiles = profiles.Where(p => p.Mills > lastModified).ToList();
+            // Ascending order: AAPS activates the LAST element of the page.
+            var newerProfiles = profiles
+                .Where(p => p.Mills > lastModified)
+                .OrderBy(p => p.Mills)
+                .ToList();
 
-            if (newerProfiles.Count > 0)
-            {
-                SetHistoryCursorHeaders(newerProfiles.Max(p => p.Mills));
-            }
+            // Echo the request cursor on an empty page so conditional clients always see
+            // a parseable cursor ETag.
+            SetHistoryCursorHeaders(
+                newerProfiles.Count > 0 ? newerProfiles.Max(p => p.Mills) : lastModified
+            );
 
             return CreateV3SuccessResponse(newerProfiles);
         }

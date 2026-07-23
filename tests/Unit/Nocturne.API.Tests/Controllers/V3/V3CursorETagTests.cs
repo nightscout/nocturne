@@ -122,8 +122,9 @@ public class V3CursorETagTests
     }
 
     [Fact]
-    public async Task GetProfileHistory_ReturnsOnlyNewerProfiles_AndSetsCursorHeaders()
+    public async Task GetProfileHistory_ReturnsNewerProfilesAscending_AndSetsCursorHeaders()
     {
+        var cursor = new DateTimeOffset(2024, 3, 26, 11, 55, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var older = new DateTimeOffset(2024, 3, 26, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var newer = new DateTimeOffset(2024, 3, 26, 12, 5, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
@@ -132,12 +133,13 @@ public class V3CursorETagTests
             .Setup(s => s.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[]
             {
-                new Profile { Mills = older },
+                // Projection returns newest-first
                 new Profile { Mills = newer },
+                new Profile { Mills = older },
             });
 
         var controller = CreateProfileController(projectionService);
-        var result = await controller.GetProfileHistory(older);
+        var result = await controller.GetProfileHistory(cursor);
 
         controller.Response.Headers["ETag"].ToString().Should().Be($"W/\"{newer}\"");
 
@@ -146,7 +148,25 @@ public class V3CursorETagTests
         var resultProperty = envelope.GetType().GetProperty("result");
         var profiles = resultProperty!.GetValue(envelope)
             .Should().BeAssignableTo<IEnumerable<Profile>>().Subject.ToList();
-        profiles.Should().ContainSingle().Which.Mills.Should().Be(newer);
+
+        // Ascending order matters: AAPS activates the LAST element of the page.
+        profiles.Select(p => p.Mills).Should().Equal(older, newer);
+    }
+
+    [Fact]
+    public async Task GetProfileHistory_EmptyResult_EchoesRequestCursorInETag()
+    {
+        var cursor = new DateTimeOffset(2024, 3, 26, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+        var projectionService = new Mock<IProfileProjectionService>();
+        projectionService
+            .Setup(s => s.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Profile>());
+
+        var controller = CreateProfileController(projectionService);
+        await controller.GetProfileHistory(cursor);
+
+        controller.Response.Headers["ETag"].ToString().Should().Be($"W/\"{cursor}\"");
     }
 
     [Fact]

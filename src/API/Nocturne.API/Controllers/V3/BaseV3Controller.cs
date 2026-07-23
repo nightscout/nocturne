@@ -256,16 +256,24 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// <param name="data">Response data</param>
     /// <param name="parameters">Query parameters</param>
     /// <param name="totalCount">Total count of items (for pagination)</param>
+    /// <param name="lastModified">
+    /// Newest record timestamp when the caller already knows it (e.g. computed from domain
+    /// models before mapping to DTOs the timestamp reflection can't read).
+    /// </param>
     protected void SetV3ResponseHeaders<TItem>(
         IEnumerable<TItem> data,
         V3QueryParameters parameters,
-        long totalCount
+        long totalCount,
+        DateTimeOffset? lastModified = null
     )
     {
         // Cursor-style ETag from the newest record; falls back to the current time for
         // collections whose items carry no recognizable timestamp.
-        var lastModified = GetLastModified(data.Cast<object>()) ?? DateTimeOffset.UtcNow;
-        Response.Headers["ETag"] = FormatCursorETag(lastModified.ToUnixTimeMilliseconds());
+        var effectiveLastModified =
+            lastModified ?? GetLastModified(data.Cast<object>()) ?? DateTimeOffset.UtcNow;
+        Response.Headers["ETag"] = FormatCursorETag(
+            effectiveLastModified.ToUnixTimeMilliseconds()
+        );
 
         // Set pagination headers
         Response.Headers["X-Total-Count"] = totalCount.ToString();
@@ -295,7 +303,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
 
         // Set cache control headers
         Response.Headers["Cache-Control"] = "public, max-age=60";
-        Response.Headers["Last-Modified"] = lastModified.UtcDateTime.ToString("R");
+        Response.Headers["Last-Modified"] = effectiveLastModified.UtcDateTime.ToString("R");
         Response.Headers["Vary"] = "Accept, If-Modified-Since, If-None-Match";
     }
 
@@ -332,6 +340,24 @@ public abstract class BaseV3Controller<T> : ControllerBase
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Parse a legacy <c>created_at</c> string into Unix milliseconds.
+    /// </summary>
+    protected static long? ParseCreatedAtMills(string? createdAt)
+    {
+        if (string.IsNullOrEmpty(createdAt))
+            return null;
+
+        return DateTimeOffset.TryParse(
+            createdAt,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal,
+            out var parsed
+        )
+            ? parsed.ToUnixTimeMilliseconds()
+            : null;
     }
 
     private static string NormalizeETag(string etag)
@@ -400,7 +426,8 @@ public abstract class BaseV3Controller<T> : ControllerBase
     protected IActionResult CreateV3CollectionResponse<TItem>(
         IEnumerable<TItem> data,
         V3QueryParameters parameters,
-        long totalCount
+        long totalCount,
+        DateTimeOffset? lastModified = null
     )
     {
         // Apply field selection
@@ -423,7 +450,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
         };
 
         // Set response headers
-        SetV3ResponseHeaders(data, parameters, totalCount);
+        SetV3ResponseHeaders(data, parameters, totalCount, lastModified);
 
         // Nightscout V3 API returns {"status": 200, "result": [...]}
         return Ok(
@@ -623,15 +650,18 @@ public abstract class BaseV3Controller<T> : ControllerBase
                     itemModified = srvModified;
                 }
 
-                // Check for CreatedAt property
+                // Check for CreatedAt property (DateTimeOffset or ISO-8601 string)
                 var createdAtProperty = itemType.GetProperty("CreatedAt");
-                if (
-                    createdAtProperty != null
-                    && createdAtProperty.GetValue(item) is DateTimeOffset createdAt
-                )
+                var createdAt = createdAtProperty?.GetValue(item) switch
                 {
-                    if (itemModified == null || createdAt > itemModified)
-                        itemModified = createdAt;
+                    DateTimeOffset dto => dto,
+                    string s when ParseCreatedAtMills(s) is long createdAtMills =>
+                        DateTimeOffset.FromUnixTimeMilliseconds(createdAtMills),
+                    _ => (DateTimeOffset?)null,
+                };
+                if (createdAt != null && (itemModified == null || createdAt > itemModified))
+                {
+                    itemModified = createdAt;
                 }
 
                 if (itemModified != null && (lastModified == null || itemModified > lastModified))
