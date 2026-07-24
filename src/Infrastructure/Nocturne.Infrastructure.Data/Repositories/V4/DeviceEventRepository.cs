@@ -69,7 +69,7 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
         DateTime? from, DateTime? to, string? device, string? source,
         int limit = 100, int offset = 0, bool descending = true,
         CancellationToken ct = default)
-        => GetAsync(from, to, device, source, limit, offset, descending, nativeOnly: false, ct);
+        => GetAsync(from, to, device, source, limit, offset, descending, nativeOnly: false, patientDeviceId: null, ct: ct);
 
     /// <summary>
     /// Gets device event records based on filter criteria.
@@ -83,6 +83,7 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
     /// <param name="offset">The number of records to skip.</param>
     /// <param name="descending">Whether to sort by timestamp in descending order.</param>
     /// <param name="nativeOnly">Whether to return only native records.</param>
+    /// <param name="patientDeviceId">Optional filter restricting results to events linked to a single registered patient device.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of device events.</returns>
     public async Task<IEnumerable<DeviceEvent>> GetAsync(
@@ -94,6 +95,7 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
         int offset = 0,
         bool descending = true,
         bool nativeOnly = false,
+        Guid? patientDeviceId = null,
         CancellationToken ct = default
     )
     {
@@ -109,6 +111,8 @@ public class DeviceEventRepository : V4RepositoryBase<DeviceEvent, DeviceEventEn
             query = query.Where(e => e.DataSource == source);
         if (nativeOnly)
             query = query.Where(e => e.LegacyId == null);
+        if (patientDeviceId.HasValue)
+            query = query.Where(e => e.PatientDeviceId == patientDeviceId.Value);
 
         // Exclude non-primary duplicates from cross-connector deduplication
         query = query.Where(b => !ctx.LinkedRecords

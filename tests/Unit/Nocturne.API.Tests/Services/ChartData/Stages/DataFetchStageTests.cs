@@ -105,13 +105,13 @@ public class DataFetchStageTests
                 It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<BGCheck>());
 
-        // IDeviceEventRepository.GetAsync: (DateTime?, DateTime?, string?, string?, int, int, bool, bool, CancellationToken)
+        // IDeviceEventRepository.GetAsync: (DateTime?, DateTime?, string?, string?, int, int, bool, bool, Guid?, CancellationToken)
         _mockDeviceEventRepo
             .Setup(r => r.GetAsync(
                 It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
                 It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                It.IsAny<bool>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DeviceEvent>());
 
         // ITempBasalRepository.GetAsync: (DateTime?, DateTime?, string?, string?, int, int, bool, CancellationToken) — no nativeOnly

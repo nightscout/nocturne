@@ -29,6 +29,8 @@ public interface IDeviceEventRepository : IV4Repository<DeviceEvent>
     /// <param name="offset">Number of records to skip for pagination (default 0).</param>
     /// <param name="descending">When <c>true</c>, results are ordered newest-first (default).</param>
     /// <param name="nativeOnly">When <c>true</c>, excludes records projected from legacy V1/V2/V3 treatments.</param>
+    /// <param name="patientDeviceId">Optional filter restricting results to events linked to a single
+    /// registered <see cref="PatientDevice"/>.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<IEnumerable<DeviceEvent>> GetAsync(
         DateTime? from,
@@ -39,6 +41,7 @@ public interface IDeviceEventRepository : IV4Repository<DeviceEvent>
         int offset = 0,
         bool descending = true,
         bool nativeOnly = false,
+        Guid? patientDeviceId = null,
         CancellationToken ct = default
     );
 
@@ -46,7 +49,7 @@ public interface IDeviceEventRepository : IV4Repository<DeviceEvent>
     Task<IEnumerable<DeviceEvent>> IV4Repository<DeviceEvent>.GetAsync(
         DateTime? from, DateTime? to, string? device, string? source,
         int limit, int offset, bool descending, CancellationToken ct)
-        => GetAsync(from, to, device, source, limit, offset, descending, false, ct);
+        => GetAsync(from, to, device, source, limit, offset, descending, nativeOnly: false, patientDeviceId: null, ct: ct);
 
     /// <summary>Returns a single <see cref="DeviceEvent"/> by its UUID v7, or <c>null</c> if not found.</summary>
     /// <param name="id">UUID v7 record identifier.</param>

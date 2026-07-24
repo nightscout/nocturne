@@ -25,6 +25,14 @@ public class UpsertDeviceEventRequest
     public string? Device { get; set; }
 
     /// <summary>
+    /// Optional reference to the registered <see cref="Nocturne.Core.Models.V4.PatientDevice"/> the event
+    /// occurred on. Must resolve to one of the caller's registered devices. When omitted on create, the
+    /// server attempts attribution from <see cref="Device"/> and <see cref="DataSource"/>; when omitted on
+    /// update, the existing link is preserved.
+    /// </summary>
+    public Guid? PatientDeviceId { get; set; }
+
+    /// <summary>
     /// Name of the application that submitted this record.
     /// </summary>
     public string? App { get; set; }
