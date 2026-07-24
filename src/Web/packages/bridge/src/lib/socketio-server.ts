@@ -41,6 +41,12 @@ export function pickHandshakeHost(
  *  the API's tenant resolution so a single tenant served on the root domain works
  *  without a subdomain. Returns null when the host is foreign or the apex can't be
  *  resolved to a single tenant. */
+/** Socket.IO query values are `string | string[]`; take the first. */
+function queryValue(value: string | string[] | undefined): string | undefined {
+  const single = Array.isArray(value) ? value[0] : value;
+  return single || undefined;
+}
+
 export function resolveTenantSlug(
   host: string | undefined,
   baseDomain: string,
@@ -71,6 +77,7 @@ class SocketIOServer {
   private baseDomain: string;
   private tenantSlugs: string[];
   private signingSecret: string;
+  private apiBaseUrl: string;
 
   constructor(
     httpServer: HttpServer,
@@ -78,11 +85,13 @@ class SocketIOServer {
     baseDomain: string,
     tenantSlugs: string[] = [],
     signingSecret: string = '',
+    apiBaseUrl: string = '',
   ) {
     this.httpServer = httpServer;
     this.baseDomain = baseDomain;
     this.tenantSlugs = tenantSlugs;
     this.signingSecret = signingSecret;
+    this.apiBaseUrl = apiBaseUrl;
     this.config = {
       cors: config.cors ?? { origin: '*', methods: ['GET', 'POST'], credentials: true },
       transports: config.transports || ['websocket', 'polling'],
@@ -99,7 +108,11 @@ class SocketIOServer {
           cors: this.config.cors,
           transports: this.config.transports as any,
           pingTimeout: this.config.pingTimeout,
-          pingInterval: this.config.pingInterval
+          pingInterval: this.config.pingInterval,
+          // Legacy Nightscout clients (LoopFollow's socket.io-client-swift) speak
+          // Engine.IO v3 and are otherwise rejected with "Unsupported protocol
+          // version" before any handler runs.
+          allowEIO3: true
         });
 
         this.setupHandshakeAuth();
@@ -140,21 +153,39 @@ class SocketIOServer {
         return next(new Error('tenant_unresolved'));
       }
 
-      const token = (socket.handshake.auth as { token?: string } | undefined)?.token;
-      const ticket = verifyHandshakeTicket(this.signingSecret, token);
-      if (!ticket) {
-        logger.warn(`Rejecting connection ${socket.id}: missing or invalid handshake ticket for tenant ${tenantSlug}`);
-        return next(new Error('unauthorized'));
+      // Engine.IO v3 clients have no `auth` payload — that arrived with the v4
+      // protocol — so also accept the ticket from the handshake query.
+      const token =
+        (socket.handshake.auth as { token?: string } | undefined)?.token
+        ?? queryValue(socket.handshake.query?.token);
+      if (token) {
+        // A ticket was offered, so this is the browser path: reject it outright if
+        // it doesn't verify. Admitting it silently would leave a client whose
+        // ticket merely expired connected but receiving nothing, instead of
+        // getting connect_error and retrying with a fresh one.
+        const ticket = verifyHandshakeTicket(this.signingSecret, token);
+        if (!ticket) {
+          logger.warn(`Rejecting connection ${socket.id}: invalid handshake ticket for tenant ${tenantSlug}`);
+          return next(new Error('unauthorized'));
+        }
+
+        // Bind the ticket to the host the connection actually arrived on, so a
+        // ticket minted for one tenant can't be replayed on another tenant's socket.
+        if (ticket.h !== normalizeHandshakeHost(host!)) {
+          logger.warn(`Rejecting connection ${socket.id}: handshake ticket host mismatch for tenant ${tenantSlug}`);
+          return next(new Error('unauthorized'));
+        }
+
+        socket.data.tenantSlug = tenantSlug;
+        return next();
       }
 
-      // Bind the ticket to the host the connection actually arrived on, so a
-      // ticket minted for one tenant can't be replayed on another tenant's socket.
-      if (ticket.h !== normalizeHandshakeHost(host!)) {
-        logger.warn(`Rejecting connection ${socket.id}: handshake ticket host mismatch for tenant ${tenantSlug}`);
-        return next(new Error('unauthorized'));
-      }
-
-      socket.data.tenantSlug = tenantSlug;
+      // No ticket offered at all: admit the socket unauthorized so a legacy
+      // Nightscout client can complete the classic `authorize` exchange, which it
+      // sends only after connecting. The socket joins no room until that succeeds,
+      // so it receives nothing in the meantime.
+      logger.debug(`Connection ${socket.id} carries no ticket; awaiting classic authorize for tenant ${tenantSlug}`);
+      socket.data.pendingTenantSlug = tenantSlug;
       next();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -187,6 +218,12 @@ class SocketIOServer {
         logger.info(`Client ${clientId} joined tenant room: ${tenantSlug}`);
       }
 
+      // Classic Nightscout authorization: legacy clients connect first and then
+      // send their credentials in an `authorize` message.
+      socket.on('authorize', (payload: unknown, callback?: (result: unknown) => void) => {
+        void this.handleAuthorize(socket, payload, callback);
+      });
+
       // Handle client disconnection
       socket.on('disconnect', (reason: string) => {
         this.clients.delete(clientId);
@@ -203,10 +240,94 @@ class SocketIOServer {
     });
   }
 
-  /** Return the Socket.IO emit target: tenant room if scoped, or all clients. */
+  /** Handle the classic Nightscout `authorize` message.
+   *
+   *  Legacy clients (LoopFollow, Nightscout watchfaces) don't have — and can't
+   *  obtain — a handshake ticket, because /realtime/ticket mints one only after
+   *  replaying the read against the API with the caller's browser session. They
+   *  authenticate the way they do against classic Nightscout instead: an API
+   *  secret (already SHA-1 hashed by the client) and/or a subject token.
+   *
+   *  Rather than interpret those credentials here, replay them against the same
+   *  read the ticket endpoint probes. The API applies its own per-tenant policy,
+   *  so this grants exactly what a REST read with the same credential would.
+   *  Only on success does the socket join its tenant room.
+   *
+   *  The probe carries the client's credential and nothing else — never the
+   *  bridge's instance key, which would authenticate any anonymous caller as a
+   *  service and hand them another tenant's data. */
+  async handleAuthorize(
+    socket: Socket,
+    payload: unknown,
+    callback?: (result: unknown) => void,
+  ): Promise<void> {
+    const deny = (reason: string) => {
+      logger.warn(`Authorize failed for ${socket.id}: ${reason}`);
+      callback?.({ read: false, write: false, write_treatment: false });
+      socket.disconnect(true);
+    };
+
+    // Already authorized by a valid handshake ticket — nothing more to do.
+    if (socket.data.tenantSlug) {
+      callback?.({ read: true, write: false, write_treatment: false });
+      return;
+    }
+
+    const tenantSlug = socket.data.pendingTenantSlug as string | undefined;
+    if (!tenantSlug) return deny('no resolvable tenant');
+
+    if (!this.apiBaseUrl) return deny('bridge has no API base URL configured');
+
+    const message = (payload ?? {}) as { secret?: unknown; token?: unknown };
+    const secret = typeof message.secret === 'string' ? message.secret : undefined;
+    const token = typeof message.token === 'string' ? message.token : undefined;
+    if (!secret && !token) return deny('no credentials supplied');
+
+    try {
+      const url = new URL(`${this.apiBaseUrl}/api/v1/entries`);
+      url.searchParams.set('count', '1');
+      if (token) url.searchParams.set('token', token);
+
+      const headers: Record<string, string> = {
+        'X-Forwarded-Host': `${tenantSlug}.${this.baseDomain}`,
+        // The API's response cache runs before auth and keys on the internal
+        // Host, so a cached authenticated 200 could otherwise authorize an
+        // unauthenticated probe.
+        'Cache-Control': 'no-cache, no-store',
+      };
+      if (secret) headers['api-secret'] = secret;
+
+      const probe = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!probe.ok) return deny(`API denied the credential (${probe.status})`);
+
+      socket.data.tenantSlug = tenantSlug;
+      socket.data.pendingTenantSlug = undefined;
+      socket.join(`tenant:${tenantSlug}`);
+      logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
+      callback?.({ read: true, write: false, write_treatment: false });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      return deny(`credential probe failed: ${reason}`);
+    }
+  }
+
+  /** Return the Socket.IO emit target for a tenant room.
+   *
+   *  Always scoped: an unscoped broadcast would also reach sockets that are
+   *  connected but not yet authorized (legacy clients mid-`authorize`), which
+   *  would leak one tenant's data to them. */
   private emitTarget(tenantSlug?: string) {
     if (!this.io) return null;
-    return tenantSlug ? this.io.to(`tenant:${tenantSlug}`) : this.io;
+    if (!tenantSlug) {
+      logger.warn('Refusing to broadcast without a tenant slug');
+      return null;
+    }
+    return this.io.to(`tenant:${tenantSlug}`);
   }
 
   // Methods to broadcast messages to clients

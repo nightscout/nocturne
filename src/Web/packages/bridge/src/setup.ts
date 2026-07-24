@@ -106,6 +106,8 @@ export async function setupBridge(
     );
   }
 
+  const apiBaseUrl = apiBaseFromHubUrl(config.signalr.hubUrl);
+
   // Start the Socket.IO server eagerly — it doesn't need tenant info to accept
   // browser connections. Tenant room assignment uses the Host header; the slug
   // list is only needed for the apex-domain single-tenant case and is filled in
@@ -116,6 +118,7 @@ export async function setupBridge(
     baseDomain,
     [],
     config.instanceKey,
+    apiBaseUrl,
   );
 
   await socketIOServer.start();
@@ -131,7 +134,6 @@ export async function setupBridge(
     .digest('hex')
     .toLowerCase();
 
-  const apiBaseUrl = apiBaseFromHubUrl(config.signalr.hubUrl);
   const clients: SignalRClient[] = [];
   let cancelled = false;
 
