@@ -42,6 +42,9 @@ function makeStub(overrides: Record<string, unknown> = {}) {
 		now: baseNow,
 		currentPumpMode: null,
 		currentSensitivityPercent: null,
+		currentReservoir: null,
+		currentPumpBatteryPercent: null,
+		currentPumpBatteryVoltage: null,
 		pillsData: { iob: null, cob: null, cage: null, sage: null, basal: null, loop: null },
 		direction: "Flat",
 		entries: [
@@ -83,6 +86,36 @@ describe("HaloDial", () => {
 		// and a non-empty SVG exists.
 		const svg = container.querySelector("[data-testid='halo-dial-svg']");
 		expect(svg).not.toBeNull();
+	});
+
+	it("renders pump reservoir and battery in the default top-left corner from the store", () => {
+		const { container } = render(HaloDial, {
+			realtimeOverride: makeStub({
+				currentReservoir: 87.5,
+				currentPumpBatteryPercent: 64,
+			}),
+			configOverride: defaultHaloDialConfig(),
+		});
+
+		const reservoir = container.querySelector("[data-testid='reservoir']");
+		expect(reservoir!.textContent).toContain("87.5 U");
+
+		const battery = container.querySelector("[data-testid='battery']");
+		expect(battery!.textContent).toContain("64%");
+	});
+
+	it("shows placeholders when the pump reports no reservoir or battery", () => {
+		const { container } = render(HaloDial, {
+			realtimeOverride: makeStub(),
+			configOverride: defaultHaloDialConfig(),
+		});
+
+		expect(
+			container.querySelector("[data-testid='reservoir']")!.textContent
+		).toContain("--");
+		expect(
+			container.querySelector("[data-testid='battery']")!.textContent
+		).toContain("--");
 	});
 
 	it("applies the stale class and hides the chevron when the latest entry is older than the threshold", () => {

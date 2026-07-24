@@ -3,7 +3,7 @@
 
 	interface Props {
 		value:
-			| { units: number; percent: number; minutesRemaining: number }
+			| { units: number; percent?: number; minutesRemaining?: number }
 			| null;
 		options: { format: "units" | "percent" | "time-left" };
 	}
@@ -23,9 +23,15 @@
 			case "units":
 				return `${value.units.toFixed(1)} U`;
 			case "percent":
-				return `${Math.round(value.percent)}%`;
+				// percent/time-left need reservoir capacity / delivery rate, which
+				// a pump snapshot doesn't carry — show placeholder when absent.
+				return value.percent === undefined
+					? "--"
+					: `${Math.round(value.percent)}%`;
 			case "time-left":
-				return formatMinutes(value.minutesRemaining);
+				return value.minutesRemaining === undefined
+					? "--"
+					: formatMinutes(value.minutesRemaining);
 		}
 	});
 </script>

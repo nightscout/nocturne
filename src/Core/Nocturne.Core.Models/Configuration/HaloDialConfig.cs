@@ -64,12 +64,17 @@ public class HaloDialConfig
 /// <summary>
 /// The four corner-slot stacks on the Halo Dial. Each holds up to three
 /// elements rendered top-to-bottom. Defaults reproduce the source design's
-/// "loop dot top-right; direction + eventual + loop label bottom-right".
+/// "loop dot top-right; direction + eventual + loop label bottom-right", with
+/// pump reservoir and battery in the top-left.
 /// </summary>
 public class HaloDialCorners
 {
     [JsonPropertyName("tl")]
-    public List<HaloDialCornerElement> Tl { get; set; } = new();
+    public List<HaloDialCornerElement> Tl { get; set; } = new()
+    {
+        HaloDialCornerElement.Reservoir,
+        HaloDialCornerElement.Battery,
+    };
 
     [JsonPropertyName("tr")]
     public List<HaloDialCornerElement> Tr { get; set; } = new() { HaloDialCornerElement.LoopDot };

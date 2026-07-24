@@ -42,7 +42,7 @@ export function defaultHaloDialConfig(): HaloDialConfig {
     iobMaxUnits: 8.0,
     cobMaxGrams: 80.0,
     corners: {
-      tl: [],
+      tl: [HaloDialCornerElement.Reservoir, HaloDialCornerElement.Battery],
       tr: [HaloDialCornerElement.LoopDot],
       bl: [],
       br: [

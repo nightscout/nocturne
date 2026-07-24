@@ -1,7 +1,7 @@
 <script lang="ts" module>
 	export interface CornerData {
 		basalRate?: { rate: number; percent: number } | null;
-		reservoir?: { units: number; percent: number; minutesRemaining: number } | null;
+		reservoir?: { units: number; percent?: number; minutesRemaining?: number } | null;
 		sensorAge?: { startedAtMs: number; expiryMs?: number } | null;
 		pumpSiteAge?: { startedAtMs: number; expiryMs?: number } | null;
 		battery?: { percent: number; voltage?: number; minutesRemaining?: number } | null;

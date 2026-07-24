@@ -3,14 +3,16 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
 /// Returns small "right now" therapy values consumed by the dashboard Halo Dial:
-/// the active pump operational mode and the current insulin sensitivity expressed
-/// as a percentage of the profile baseline.
+/// the active pump operational mode, the current insulin sensitivity expressed
+/// as a percentage of the profile baseline, and the pump's latest reservoir and
+/// battery reading.
 /// </summary>
 [ApiController]
 [Tags("Current Therapy State")]
@@ -20,17 +22,21 @@ public class CurrentTherapyStateController : ControllerBase
 {
     private readonly IStateSpanService _stateSpanService;
     private readonly ISensitivityResolver _sensitivityResolver;
+    private readonly IPumpSnapshotRepository _pumpSnapshotRepository;
 
     public CurrentTherapyStateController(
         IStateSpanService stateSpanService,
-        ISensitivityResolver sensitivityResolver)
+        ISensitivityResolver sensitivityResolver,
+        IPumpSnapshotRepository pumpSnapshotRepository)
     {
         _stateSpanService = stateSpanService;
         _sensitivityResolver = sensitivityResolver;
+        _pumpSnapshotRepository = pumpSnapshotRepository;
     }
 
     /// <summary>
-    /// Get the current pump mode and sensitivity adjustment for the active tenant.
+    /// Get the current pump mode, sensitivity adjustment, and latest pump
+    /// reservoir/battery reading for the active tenant.
     /// </summary>
     [HttpGet]
     [RemoteQuery]
@@ -40,10 +46,14 @@ public class CurrentTherapyStateController : ControllerBase
     {
         var pumpMode = await _stateSpanService.GetCurrentPumpModeAsync(cancellationToken);
         var sensitivityPercent = await _sensitivityResolver.GetCurrentSensitivityPercentAsync(cancellationToken);
+        var latestPump = await _pumpSnapshotRepository.GetLatestAsync(asOf: null, cancellationToken);
         return Ok(new CurrentTherapyStateResponse
         {
             CurrentPumpMode = pumpMode,
             SensitivityPercent = sensitivityPercent,
+            Reservoir = latestPump?.Reservoir,
+            PumpBatteryPercent = latestPump?.BatteryPercent,
+            PumpBatteryVoltage = latestPump?.BatteryVoltage,
         });
     }
 }
@@ -66,4 +76,23 @@ public class CurrentTherapyStateResponse
     /// Null when no CircadianPercentageProfile adjustment is active.
     /// </summary>
     public double? SensitivityPercent { get; set; }
+
+    /// <summary>
+    /// Insulin remaining in the pump reservoir (units), from the most recent pump
+    /// snapshot. Null when no pump has reported a reservoir value — e.g. Omnipod
+    /// pods report no numeric reservoir until they drop below 50 U.
+    /// </summary>
+    public double? Reservoir { get; set; }
+
+    /// <summary>
+    /// Pump battery level as a percentage (0–100) from the most recent pump
+    /// snapshot, or null when the pump reports no battery percentage.
+    /// </summary>
+    public int? PumpBatteryPercent { get; set; }
+
+    /// <summary>
+    /// Pump battery voltage from the most recent pump snapshot, or null when the
+    /// pump reports no battery voltage.
+    /// </summary>
+    public double? PumpBatteryVoltage { get; set; }
 }

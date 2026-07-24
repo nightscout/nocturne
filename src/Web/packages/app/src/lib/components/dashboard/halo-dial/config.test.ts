@@ -36,7 +36,10 @@ describe("defaultHaloDialConfig", () => {
     expect(config.iobMaxUnits).toBe(8.0);
     expect(config.cobMaxGrams).toBe(80.0);
 
-    expect(config.corners!.tl).toEqual([]);
+    expect(config.corners!.tl).toEqual([
+      HaloDialCornerElement.Reservoir,
+      HaloDialCornerElement.Battery,
+    ]);
     expect(config.corners!.tr).toEqual([HaloDialCornerElement.LoopDot]);
     expect(config.corners!.bl).toEqual([]);
     expect(config.corners!.br).toEqual([

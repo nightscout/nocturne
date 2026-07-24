@@ -68,6 +68,9 @@
   );
   const pills = $derived(realtime?.pillsData ?? null);
   const direction = $derived(realtime?.direction ?? "Flat");
+  const reservoir = $derived(realtime?.currentReservoir ?? null);
+  const pumpBatteryPercent = $derived(realtime?.currentPumpBatteryPercent ?? null);
+  const pumpBatteryVoltage = $derived(realtime?.currentPumpBatteryVoltage ?? null);
 
   // Cutoff rounded to one-minute buckets so the per-second `now` tick doesn't
   // invalidate `historyValues` (and the whole HistoryRing) 60 times a minute.
@@ -235,10 +238,17 @@
           percent: pills.basal.tempBasal?.percent ?? 100,
         }
       : null,
-    reservoir: null, // Not yet surfaced via pillsData; Phase 5/6 will hook reservoir DTO.
+    // Reservoir units come straight from the latest pump snapshot; percent and
+    // time-remaining aren't derivable without reservoir capacity / delivery rate,
+    // so they stay undefined (the "units" format is the default and only one the
+    // data supports).
+    reservoir: reservoir !== null ? { units: reservoir } : null,
     sensorAge: null,
     pumpSiteAge: null,
-    battery: null,
+    battery:
+      pumpBatteryPercent !== null
+        ? { percent: pumpBatteryPercent, voltage: pumpBatteryVoltage ?? undefined }
+        : null,
     loop: pills?.loop ? { status: pills.loop.status } : null,
     direction: { direction },
     eventual: predictions

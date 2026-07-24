@@ -127,6 +127,11 @@ export class RealtimeStore {
   /** Current ISF as % of profile baseline (null when no CCP adjustment is active). Fetched once at init. */
   currentSensitivityPercent = $state<number | null>(null);
 
+  /** Latest pump reservoir (units) and battery. Fetched once at init; not yet pushed via the realtime channel. */
+  currentReservoir = $state<number | null>(null);
+  currentPumpBatteryPercent = $state<number | null>(null);
+  currentPumpBatteryVoltage = $state<number | null>(null);
+
   /** Connection state (with safe initialization) */
   connectionStatus = $derived(
     this.websocketClient?.connectionStatus || "disconnected"
@@ -418,6 +423,9 @@ export class RealtimeStore {
         if (currentTherapyState) {
           this.currentPumpMode = currentTherapyState.currentPumpMode ?? null;
           this.currentSensitivityPercent = currentTherapyState.sensitivityPercent ?? null;
+          this.currentReservoir = currentTherapyState.reservoir ?? null;
+          this.currentPumpBatteryPercent = currentTherapyState.pumpBatteryPercent ?? null;
+          this.currentPumpBatteryVoltage = currentTherapyState.pumpBatteryVoltage ?? null;
         }
 
         this.isReady = true;
