@@ -17,8 +17,8 @@
     "generate-remote-functions": "npx openapi-remote-codegen",
     "generate-api": "pnpm run generate-api-client && pnpm run generate-zod-schemas && pnpm run generate-remote-functions",
     "translations:stage": "cd ../.. && git ls-files src/Web/locales/ | xargs git update-index --no-skip-worktree && git add src/Web/locales/",
-    "hide-generated": "cd ../.. && git ls-files src/Web/locales/ deploy/portainer/docker-compose.yaml deploy/portainer/.env.example | xargs git update-index --skip-worktree",
-    "unhide-generated": "cd ../.. && git ls-files src/Web/locales/ deploy/portainer/docker-compose.yaml deploy/portainer/.env.example | xargs git update-index --no-skip-worktree"
+    "hide-generated": "cd ../.. && git ls-files src/Web/locales/ deploy/portainer/docker-compose.yaml deploy/portainer/.env.example sdk/openapi-v4.json | xargs git update-index --skip-worktree",
+    "unhide-generated": "cd ../.. && git ls-files src/Web/locales/ deploy/portainer/docker-compose.yaml deploy/portainer/.env.example sdk/openapi-v4.json | xargs git update-index --no-skip-worktree"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

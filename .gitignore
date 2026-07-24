@@ -72,8 +72,7 @@ src/Web/packages/app/src/lib/api/api-client.generated.ts
 
 docs/plans/
 
-# SDK generated output
-sdk/openapi-v4.json
+# SDK generated output (openapi-v4.json is tracked — synced by CI, see sync-sdk-spec.yml)
 sdk/csharp/out/
 sdk/typescript/out/
 sdk/kotlin/out/
