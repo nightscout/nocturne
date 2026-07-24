@@ -191,9 +191,14 @@ export const sidebarWidget = new SyncedPref<SidebarWidget>("nocturne-sidebar-wid
 
 /**
  * Halo dial configuration — device-local (not part of the per-user synced set).
+ *
+ * The storage key carries a version suffix: bumping it discards a stale persisted
+ * blob so a changed default (e.g. new default corner elements) reaches existing
+ * devices. Safe while the dial has no user-facing editor — no real customization
+ * exists to lose. Bump the suffix whenever `defaultHaloDialConfig()` changes.
  */
 export const haloDialConfig = new PersistedState<HaloDialConfig>(
-  "nocturne-halo-dial-config",
+  "nocturne-halo-dial-config-v2",
   defaultHaloDialConfig()
 );
 

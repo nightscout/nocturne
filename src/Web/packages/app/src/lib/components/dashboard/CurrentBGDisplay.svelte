@@ -7,6 +7,7 @@
     BasalPill,
     IOBPill,
     LoopPill,
+    ReservoirPill,
     TrackerPillBar,
   } from "$lib/components/status-pills";
   import { GlucoseValueIndicator } from "$lib/components/shared";
@@ -197,6 +198,11 @@
         <BasalPill data={realtimeStore.pillsData.basal} />
         <IOBPill data={realtimeStore.pillsData.iob} />
         <LoopPill data={realtimeStore.pillsData.loop} />
+        <!-- Reservoir is optional: many pumps/pods report no numeric value
+             (e.g. Omnipod above 50 U), so only show the pill when present. -->
+        {#if realtimeStore.currentReservoir !== null}
+          <ReservoirPill reservoir={realtimeStore.currentReservoir} />
+        {/if}
       {/if}
       <!-- Tracker Pills -->
       {#if trackerPillsEnabled && realtimeStore.trackerInstances.length > 0}
