@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -27,6 +29,7 @@ public class PropertiesService : IPropertiesService
     private readonly ICarbIntakeRepository _carbIntakeRepository;
     private readonly ITempBasalRepository _tempBasalRepository;
     private readonly IAr2Service _ar2Service;
+    private readonly IDeviceAgeService _deviceAgeService;
 
     // Properties that should be filtered out for security
     private static readonly string[] SecureProperties =
@@ -48,7 +51,8 @@ public class PropertiesService : IPropertiesService
         IBolusRepository bolusRepository,
         ICarbIntakeRepository carbIntakeRepository,
         ITempBasalRepository tempBasalRepository,
-        IAr2Service ar2Service
+        IAr2Service ar2Service,
+        IDeviceAgeService deviceAgeService
     )
     {
         _ddataService = ddataService;
@@ -59,6 +63,7 @@ public class PropertiesService : IPropertiesService
         _carbIntakeRepository = carbIntakeRepository;
         _tempBasalRepository = tempBasalRepository;
         _ar2Service = ar2Service;
+        _deviceAgeService = deviceAgeService;
     }
 
     /// <inheritdoc />
@@ -187,6 +192,9 @@ public class PropertiesService : IPropertiesService
             // Battery properties
             SetBatteryProperties(properties, ddata);
 
+            // Device age properties (cannula / sensor / insulin / battery age)
+            await SetDeviceAgePropertiesAsync(properties, cancellationToken);
+
             // Profile properties
             SetProfileProperties(properties, ddata);
 
@@ -299,28 +307,26 @@ public class PropertiesService : IPropertiesService
                 limit: 1000, offset: 0, descending: false
             )).ToList();
 
-            if (!boluses.Any() && !tempBasals.Any())
-                return;
+            // Emit the property even with no insulin on board: legacy clients treat a
+            // missing `iob` as "server doesn't support it" rather than "zero".
+            var iobResult = boluses.Any() || tempBasals.Any()
+                ? await _iobCalculator.CalculateTotalAsync(boluses, tempBasals, now)
+                : null;
 
-            var iobResult = await _iobCalculator.CalculateTotalAsync(
-                boluses,
-                tempBasals,
-                now
-            );
-
-            if (iobResult == null)
-                return;
+            var iob = Math.Round(iobResult?.Iob ?? 0, 2);
+            var display = iobResult?.Display ?? iob.ToString(CultureInfo.InvariantCulture);
 
             properties["iob"] = new Dictionary<string, object?>
             {
-                ["iob"] = Math.Round(iobResult.Iob, 2),
-                ["displayLine"] = iobResult.DisplayLine ?? $"IOB: {Math.Round(iobResult.Iob, 2)}U",
+                ["iob"] = iob,
+                ["display"] = display,
+                ["displayLine"] = iobResult?.DisplayLine ?? $"IOB: {display}U",
                 ["timestamp"] = now,
-                ["source"] = iobResult.Source ?? "Care Portal",
-                ["activity"] = iobResult.Activity,
-                ["lastBolus"] = iobResult.LastBolus?.Mills,
-                ["basalIob"] = iobResult.BasalIob,
-                ["treatmentIob"] = iobResult.TreatmentIob,
+                ["source"] = iobResult?.Source ?? "Care Portal",
+                ["activity"] = iobResult?.Activity,
+                ["lastBolus"] = iobResult?.LastBolus?.Mills,
+                ["basalIob"] = iobResult?.BasalIob,
+                ["treatmentIob"] = iobResult?.TreatmentIob,
             };
         }
         catch (Exception ex)
@@ -355,31 +361,24 @@ public class PropertiesService : IPropertiesService
                 limit: 1000, offset: 0, descending: false
             )).ToList();
 
-            if (!carbIntakes.Any())
-            {
-                _logger.LogDebug("SetCobProperties: No carb intakes, returning");
-                return;
-            }
+            // Emit the property even with no carbs on board: legacy clients treat a
+            // missing `cob` as "server doesn't support it" rather than "zero".
+            var cobResult = carbIntakes.Any()
+                ? await _cobCalculator.CalculateTotalAsync(carbIntakes, boluses, tempBasals, now)
+                : null;
 
-            _logger.LogDebug("SetCobProperties: Calling COB calculator");
-            var cobResult = await _cobCalculator.CalculateTotalAsync(carbIntakes, boluses, tempBasals, now);
-            _logger.LogDebug("SetCobProperties: COB calculator returned result, is null: {IsNull}", cobResult == null);
-
-            if (cobResult == null)
-            {
-                _logger.LogDebug("SetCobProperties: COB result is null, returning");
-                return;
-            }
+            var cob = Math.Round(cobResult?.Cob ?? 0);
+            var display = cobResult?.Display ?? cob.ToString(CultureInfo.InvariantCulture);
 
             properties["cob"] = new Dictionary<string, object?>
             {
-                ["cob"] = Math.Round(cobResult.Cob),
-                ["displayLine"] = cobResult.DisplayLine ?? $"COB: {Math.Round(cobResult.Cob)}g",
+                ["cob"] = cob,
+                ["display"] = display,
+                ["displayLine"] = cobResult?.DisplayLine ?? $"COB: {display}g",
                 ["timestamp"] = now,
-                ["source"] = cobResult.Source ?? "Care Portal",
-                ["activity"] = cobResult.Activity,
+                ["source"] = cobResult?.Source ?? "Care Portal",
+                ["activity"] = cobResult?.Activity,
             };
-            _logger.LogDebug("SetCobProperties: COB property set successfully");
         }
         catch (Exception ex)
         {
@@ -515,11 +514,59 @@ public class PropertiesService : IPropertiesService
         if (!batteryLevel.HasValue)
             return;
 
+        // Per-device uploader batteries: the most recent report from each uploader,
+        // weakest first. Legacy clients read this list to show more than one phone.
+        var devices = (ddata.DeviceStatus ?? [])
+            .Where(d => d.Uploader?.Battery != null)
+            .GroupBy(d => d.Device ?? "unknown")
+            .Select(g => g.OrderByDescending(d => d.Mills).First())
+            .Select(d => new Dictionary<string, object?>
+            {
+                ["name"] = d.Uploader!.Name ?? d.Device ?? "unknown",
+                ["device"] = d.Device,
+                ["value"] = d.Uploader.Battery,
+                ["voltage"] = d.Uploader.BatteryVoltage,
+                ["isCharging"] = d.Uploader.IsCharging,
+                ["temperature"] = d.Uploader.Temperature,
+                ["mills"] = d.Mills,
+            })
+            .OrderBy(d => (int?)d["value"])
+            .ToList();
+
         properties["upbat"] = new Dictionary<string, object>
         {
             ["level"] = batteryLevel.Value,
+            ["display"] = $"{batteryLevel}%",
             ["displayLine"] = $"Battery: {batteryLevel}%",
+            ["devices"] = devices,
         };
+    }
+
+    /// <summary>
+    /// Set the legacy device-age plugin properties: cannula (cage), sensor (sage),
+    /// insulin (iage) and pump battery (bage) age.
+    /// </summary>
+    private async Task SetDeviceAgePropertiesAsync(
+        Dictionary<string, object> properties,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            // Thresholds/display are per-plugin settings in legacy Nightscout; the
+            // properties endpoint reports the service defaults.
+            var prefs = new DeviceAgePreferences();
+
+            properties["cage"] = await _deviceAgeService.GetCannulaAgeAsync(prefs, cancellationToken);
+            properties["sage"] = await _deviceAgeService.GetSensorAgeAsync(prefs, cancellationToken);
+            properties["iage"] = await _deviceAgeService.GetInsulinAgeAsync(prefs, cancellationToken);
+            properties["bage"] = await _deviceAgeService.GetBatteryAgeAsync(prefs, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting device age properties");
+            // Don't throw, just skip setting device age properties
+        }
     }
 
     /// <summary>
