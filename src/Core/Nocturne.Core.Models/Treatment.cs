@@ -131,12 +131,16 @@ public class Treatment : ProcessableDocumentBase
     /// Gets or sets the protein content in grams
     /// </summary>
     [JsonPropertyName("protein")]
+    // AAPS parses protein as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? Protein { get; set; }
 
     /// <summary>
     /// Gets or sets the fat content in grams
     /// </summary>
     [JsonPropertyName("fat")]
+    // AAPS parses fat as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? Fat { get; set; }
 
     /// <summary>
@@ -413,6 +417,8 @@ public class Treatment : ProcessableDocumentBase
     /// Gets or sets the pre-bolus time in minutes (used by Glooko connector)
     /// </summary>
     [JsonPropertyName("preBolus")]
+    // AAPS parses preBolus as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? PreBolus { get; set; }
 
     /// <summary>
@@ -512,12 +518,16 @@ public class Treatment : ProcessableDocumentBase
     /// Gets or sets the percentage of combo bolus delivered immediately
     /// </summary>
     [JsonPropertyName("splitNow")]
+    // AAPS parses splitNow as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? SplitNow { get; set; }
 
     /// <summary>
     /// Gets or sets the percentage of combo bolus delivered extended
     /// </summary>
     [JsonPropertyName("splitExt")]
+    // AAPS parses splitExt as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? SplitExt { get; set; }
 
     /// <summary>
@@ -578,12 +588,16 @@ public class Treatment : ProcessableDocumentBase
     /// Gets or sets the percentage for CircadianPercentageProfile
     /// </summary>
     [JsonPropertyName("percentage")]
+    // AAPS parses percentage as an Int; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? Percentage { get; set; }
 
     /// <summary>
     /// Gets or sets the timeshift for CircadianPercentageProfile (in hours)
     /// </summary>
     [JsonPropertyName("timeshift")]
+    // AAPS parses timeshift as a Long; a fractional value crashes its sync loop
+    [JsonConverter(typeof(RoundedNullableDoubleConverter))]
     public double? Timeshift { get; set; }
 
     /// <summary>
