@@ -284,12 +284,15 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
         var findQuery = Core.Models.Queries.FindQuery.Parse(find);
         var (fromMills, toMills) = (findQuery.FromMills, findQuery.ToMills);
 
+        // find is client-controlled; strip line breaks so it can't forge log entries
+        var findForLog = find?.ReplaceLineEndings(" ");
+
         // A find[type]=x equality narrows the sweep to that record type; any other field filter
         // cannot be honored by a by-time sweep, so refuse rather than wipe non-matching records.
         var typeFilter = findQuery.GetEqualityValue("type");
         if (findQuery.HasFieldFiltersExcept("type"))
         {
-            _logger.LogWarning("BulkDelete refused: find query carries field filters the by-time sweep cannot honor. find={Find}", find);
+            _logger.LogWarning("BulkDelete refused: find query carries field filters the by-time sweep cannot honor. find={Find}", findForLog);
             return 0;
         }
 
@@ -302,7 +305,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
 
         if (hasFind && !hasTimeBounds && typeFilter is null)
         {
-            _logger.LogWarning("BulkDelete refused: find query has no parseable time range, would delete all records. find={Find}", find);
+            _logger.LogWarning("BulkDelete refused: find query has no parseable time range, would delete all records. find={Find}", findForLog);
             return 0;
         }
 
@@ -322,7 +325,7 @@ public class EntryDecomposer : IEntryDecomposer, IDecomposer<Entry>
 
         var total = (long)sgDeleted + mgDeleted + calDeleted;
         _logger.LogInformation("BulkDelete: removed {Total} v4 records (sg={Sg}, mg={Mg}, cal={Cal}) for find={Find}",
-            total, sgDeleted, mgDeleted, calDeleted, find);
+            total, sgDeleted, mgDeleted, calDeleted, findForLog);
 
         return total;
     }

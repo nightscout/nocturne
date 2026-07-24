@@ -284,11 +284,9 @@ public class TreatmentService : ITreatmentService
             new TreatmentQuery { Find = find, Count = int.MaxValue }, ct);
 
         long deleted = 0;
-        foreach (var treatment in matching)
+        foreach (var treatment in matching.Where(t => !string.IsNullOrEmpty(t.Id)))
         {
-            if (string.IsNullOrEmpty(treatment.Id))
-                continue;
-            if (await _store.DeleteAsync(treatment.Id, ct))
+            if (await _store.DeleteAsync(treatment.Id!, ct))
             {
                 deleted++;
                 await _events.OnDeletedAsync(treatment, ct);

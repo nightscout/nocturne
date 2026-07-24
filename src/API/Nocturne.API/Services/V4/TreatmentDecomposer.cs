@@ -1593,13 +1593,16 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         var findQuery = Core.Models.Queries.FindQuery.Parse(find);
         var (fromMills, toMills) = (findQuery.FromMills, findQuery.ToMills);
 
+        // find is client-controlled; strip line breaks so it can't forge log entries
+        var findForLog = find?.ReplaceLineEndings(" ");
+
         // This sweep deletes every record type in the window, so it can only honor pure
         // time-range queries. Field-filtered deletes must resolve matches through the filtered
         // read path (TreatmentService.DeleteTreatmentsAsync) — deleting here would wipe
         // non-matching records.
         if (findQuery.HasFieldFilters)
         {
-            _logger.LogWarning("BulkDelete refused: find query carries field filters the by-time sweep cannot honor. find={Find}", find);
+            _logger.LogWarning("BulkDelete refused: find query carries field filters the by-time sweep cannot honor. find={Find}", findForLog);
             return 0;
         }
 
@@ -1608,7 +1611,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
 
         if (hasFind && !hasTimeBounds)
         {
-            _logger.LogWarning("BulkDelete refused: find query has no parseable time range. find={Find}", find);
+            _logger.LogWarning("BulkDelete refused: find query has no parseable time range. find={Find}", findForLog);
             return 0;
         }
 
@@ -1628,7 +1631,7 @@ public class TreatmentDecomposer : ITreatmentDecomposer, IDecomposer<Treatment>
         total += await DeleteEntitiesByTimeRange(_dbContext.BolusCalculations, from, to, ct);
         total += await DeleteEntitiesByTimeRange(_dbContext.TempBasals, from, to, ct);
 
-        _logger.LogInformation("BulkDelete: removed {Total} v4 treatment records for find={Find}", total, find);
+        _logger.LogInformation("BulkDelete: removed {Total} v4 treatment records for find={Find}", total, findForLog);
         return total;
     }
 

@@ -93,10 +93,9 @@ public sealed class FindQuery
     public string? GetEqualityValue(string field)
     {
         string? found = null;
-        foreach (var cond in EnumerateAndReachable(_root))
+        foreach (var cond in EnumerateAndReachable(_root)
+                     .Where(c => c.Path.Equals(field, StringComparison.OrdinalIgnoreCase)))
         {
-            if (!cond.Path.Equals(field, StringComparison.OrdinalIgnoreCase))
-                continue;
             if (cond.Op != "$eq")
                 return null;
             if (found != null && found != cond.StringValue)
@@ -187,11 +186,10 @@ public sealed class FindQuery
         // silently dropping it would widen the query — and, on the delete path, widen a
         // field-filtered delete into a whole-window sweep.
         var entries = new List<(string GroupKey, string Field, string Op, string Value)>();
-        foreach (string? key in parsed.AllKeys)
+        var findKeys = parsed.AllKeys
+            .Where(k => k is not null && k.StartsWith("find[", StringComparison.OrdinalIgnoreCase));
+        foreach (var key in findKeys)
         {
-            if (key is null || !key.StartsWith("find[", StringComparison.OrdinalIgnoreCase))
-                continue;
-
             var values = parsed.GetValues(key);
             if (values is null)
                 continue;
@@ -216,11 +214,8 @@ public sealed class FindQuery
 
         // $options entries modify the sibling $regex on the same field rather than standing alone
         var regexOptions = new Dictionary<(string GroupKey, string Field), string>();
-        foreach (var entry in entries)
-        {
-            if (entry.Op == "$options")
-                regexOptions[(entry.GroupKey, entry.Field.ToLowerInvariant())] = entry.Value;
-        }
+        foreach (var entry in entries.Where(e => e.Op == "$options"))
+            regexOptions[(entry.GroupKey, entry.Field.ToLowerInvariant())] = entry.Value;
 
         // Second pass: build the tree. Clauses sharing a group index are AND'd internally;
         // "or:*" clauses combine under a single OR group, "and:*" clauses join the root AND.
@@ -228,11 +223,8 @@ public sealed class FindQuery
         var clauses = new Dictionary<string, Group>();
         Group? orGroup = null;
 
-        foreach (var (groupKey, field, op, value) in entries)
+        foreach (var (groupKey, field, op, value) in entries.Where(e => e.Op != "$options"))
         {
-            if (op == "$options")
-                continue;
-
             var owner = root;
             if (groupKey.Length > 0)
             {
@@ -339,11 +331,9 @@ public sealed class FindQuery
                     if (property.Value.ValueKind == JsonValueKind.Array)
                     {
                         var logical = new Group(IsAnd: property.Name == "$and", []);
-                        foreach (var item in property.Value.EnumerateArray())
-                        {
-                            if (item.ValueKind == JsonValueKind.Object)
-                                logical.Children.Add(ParseJsonObject(item, path: null, depth + 1));
-                        }
+                        foreach (var item in property.Value.EnumerateArray()
+                                     .Where(i => i.ValueKind == JsonValueKind.Object))
+                            logical.Children.Add(ParseJsonObject(item, path: null, depth + 1));
                         group.Children.Add(logical);
                     }
                     break;
@@ -415,10 +405,8 @@ public sealed class FindQuery
         long? from = null;
         long? to = null;
 
-        foreach (var cond in EnumerateAndReachable(root))
+        foreach (var cond in EnumerateAndReachable(root).Where(c => TimeFields.Contains(c.Path)))
         {
-            if (!TimeFields.Contains(cond.Path))
-                continue;
             if (!TryConvertToMills(cond, out var mills))
                 continue;
 
@@ -540,23 +528,17 @@ public sealed class FindQuery
         if (group.Children.Count == 0)
             return true;
 
-        foreach (var child in group.Children)
-        {
-            var matched = child switch
-            {
-                Condition cond => EvaluateCondition(cond, document),
-                Group nested => EvaluateGroup(nested, document),
-                _ => true,
-            };
-
-            if (group.IsAnd && !matched)
-                return false;
-            if (!group.IsAnd && matched)
-                return true;
-        }
-
-        return group.IsAnd;
+        return group.IsAnd
+            ? group.Children.All(child => EvaluateChild(child, document))
+            : group.Children.Any(child => EvaluateChild(child, document));
     }
+
+    private static bool EvaluateChild(object child, JsonElement document) => child switch
+    {
+        Condition cond => EvaluateCondition(cond, document),
+        Group nested => EvaluateGroup(nested, document),
+        _ => true,
+    };
 
     private static bool EvaluateCondition(Condition cond, JsonElement document)
     {
@@ -760,7 +742,7 @@ public sealed class FindQuery
         {
             return Regex.IsMatch(input, pattern, options, RegexTimeout);
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is ArgumentException or RegexMatchTimeoutException)
         {
             // Invalid pattern or timeout: no match, never an error (legacy behavior)
             return false;
