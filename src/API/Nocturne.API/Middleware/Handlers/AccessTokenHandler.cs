@@ -75,8 +75,13 @@ public class AccessTokenHandler : IAuthHandler
 
             if (subject == null)
             {
-                _logger.LogDebug("Access token not found in database");
-                return AuthResult.Failure("Invalid access token");
+                // Skip rather than fail so the chain keeps trying later credentials: a
+                // request may carry an unknown ?token= alongside a valid api-secret, and
+                // classic Nightscout authenticates it on the api-secret. Mirrors
+                // DirectGrantTokenHandler, which skips its own miss for the same reason.
+                // With no other credential the request still ends up unauthenticated.
+                _logger.LogDebug("Access token not found in database, skipping");
+                return AuthResult.Skip();
             }
 
             if (!subject.IsActive)

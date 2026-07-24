@@ -673,6 +673,11 @@ class Program
                 // OAuth/OIDC discovery endpoints → API
                 ApplyEdgeTransforms(yarp.AddRoute("/.well-known/{**catch-all}", api.GetEndpoint("http")));
 
+                // Legacy Nightscout /pebble (watchfaces, Loop, LoopFollow) → API. It sits
+                // outside /api, so without this route the web fallback answers with the SPA
+                // 404 page instead. Authorization is the API's default-deny fallback policy.
+                ApplyEdgeTransforms(yarp.AddRoute("/pebble", api.GetEndpoint("http")));
+
                 // Fallback → web (includes Socket.IO websockets, HMR, all frontend routes)
                 ApplyEdgeTransforms(yarp.AddRoute(webEndpoints.GetEndpoint("http")));
             });
