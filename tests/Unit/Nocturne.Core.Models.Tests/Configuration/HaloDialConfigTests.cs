@@ -24,7 +24,9 @@ public class HaloDialConfigTests
         config.IobMaxUnits.Should().Be(8.0);
         config.CobMaxGrams.Should().Be(80.0);
 
-        config.Corners.Tl.Should().BeEmpty();
+        config.Corners.Tl.Should().Equal(
+            HaloDialCornerElement.Reservoir,
+            HaloDialCornerElement.Battery);
         config.Corners.Tr.Should().Equal(HaloDialCornerElement.LoopDot);
         config.Corners.Bl.Should().BeEmpty();
         config.Corners.Br.Should().Equal(
@@ -62,11 +64,13 @@ public class HaloDialConfigTests
     public void RoundTrip_PreservesCornerStacks()
     {
         var original = new HaloDialConfig();
-        original.Corners.Tl.AddRange(new[]
+        // Replace (not append to) the default stack so the assertion is independent
+        // of whatever the default Tl corner ships with.
+        original.Corners.Tl = new()
         {
             HaloDialCornerElement.SensorAge,
             HaloDialCornerElement.PumpSiteAge,
-        });
+        };
 
         var json = JsonSerializer.Serialize(original);
         var roundTripped = JsonSerializer.Deserialize<HaloDialConfig>(json)!;
