@@ -129,6 +129,7 @@
           {yPos}
           insulin={marker.insulin ?? 0}
           isOverride={marker.isOverride ?? false}
+          bolusType={marker.bolusType}
           treatmentId={marker.treatmentId ?? ""}
           onMarkerClick={effectiveOnMarkerClick}
         />

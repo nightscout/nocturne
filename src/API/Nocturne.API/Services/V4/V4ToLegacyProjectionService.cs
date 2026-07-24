@@ -468,6 +468,7 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             SyncIdentifier = bolus.SyncIdentifier,
             InsulinType = bolus.InsulinType,
             UtcOffset = bolus.UtcOffset,
+            Automatic = bolus.Automatic,
         };
 
     private static Treatment ProjectCorrectionBolus(Bolus bolus) =>
@@ -482,6 +483,11 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
             SyncIdentifier = bolus.SyncIdentifier,
             InsulinType = bolus.InsulinType,
             UtcOffset = bolus.UtcOffset,
+            // Preserve the algorithm/manual distinction (SMBs, auto-boluses): the v4 Bolus.Automatic
+            // flag (set alongside Kind=Algorithm during decomposition) maps onto the legacy Nightscout
+            // `automatic` field so v1/v3 clients (LoopFollow, Trio import) can tell an SMB from a
+            // user-initiated bolus.
+            Automatic = bolus.Automatic,
         };
 
     private static Treatment ProjectCarbCorrection(CarbIntake carb, List<TreatmentFood> foods) =>

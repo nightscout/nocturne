@@ -175,6 +175,47 @@ public class V4ToLegacyProjectionServiceTests
     }
 
     [Fact]
+    public async Task GetProjectedTreatments_AlgorithmBolus_ProjectsAutomaticFlag()
+    {
+        // An SMB / auto-bolus is stored with Kind=Algorithm + Automatic=true; a user-initiated
+        // bolus with Automatic=false. Both must surface on the legacy `automatic` field so v1/v3
+        // clients (LoopFollow, Trio import) can distinguish them. Each bolus is standalone
+        // (distinct CorrelationId, no carbs) so both project as Correction Bolus.
+        var timestamp = new DateTime(2025, 01, 01, 12, 0, 0, DateTimeKind.Utc);
+
+        var smb = new Bolus
+        {
+            Id = Guid.CreateVersion7(),
+            CorrelationId = Guid.CreateVersion7(),
+            Timestamp = timestamp,
+            Insulin = 0.3,
+            Kind = BolusKind.Algorithm,
+            Automatic = true,
+        };
+        var manual = new Bolus
+        {
+            Id = Guid.CreateVersion7(),
+            CorrelationId = Guid.CreateVersion7(),
+            Timestamp = timestamp.AddMinutes(5),
+            Insulin = 4.0,
+            Kind = BolusKind.Manual,
+            Automatic = false,
+        };
+
+        SetupBoluses(new[] { smb, manual });
+        SetupCarbs(Enumerable.Empty<CarbIntake>());
+
+        var result = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+
+        var smbTreatment = result.Single(t => t.Id == smb.Id.ToString());
+        smbTreatment.EventType.Should().Be(TreatmentTypes.CorrectionBolus);
+        smbTreatment.Automatic.Should().Be(true);
+
+        var manualTreatment = result.Single(t => t.Id == manual.Id.ToString());
+        manualTreatment.Automatic.Should().Be(false);
+    }
+
+    [Fact]
     public async Task GetProjectedTreatments_MultipleCarbsInCorrelation_SelectsLargestAsMealBolus()
     {
         var correlationId = Guid.CreateVersion7();

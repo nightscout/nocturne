@@ -6,12 +6,28 @@
     yPos: number;
     insulin: number;
     isOverride: boolean;
+    /** Backend-categorized bolus type (e.g. "AutomaticBolus", "Smb", "Bolus"). */
+    bolusType?: string;
     treatmentId: string;
     onMarkerClick: (treatmentId: string) => void;
   }
 
-  let { xPos, yPos, insulin, isOverride, treatmentId, onMarkerClick }: Props =
-    $props();
+  let {
+    xPos,
+    yPos,
+    insulin,
+    isOverride,
+    bolusType,
+    treatmentId,
+    onMarkerClick,
+  }: Props = $props();
+
+  // Algorithm-delivered doses (SMBs / auto-boluses) render as an outlined dome so
+  // they read distinctly from a user-initiated (filled) bolus. Category comes from
+  // the backend; the frontend only picks the shape.
+  const isAutomatic = $derived(
+    bolusType === "AutomaticBolus" || bolusType === "Smb",
+  );
 </script>
 
 <Group
@@ -29,6 +45,14 @@
         { x: 8, y: 0 },
       ]}
       class="opacity-90 fill-insulin-bolus hover:opacity-100 transition-opacity"
+    />
+  {:else if isAutomatic}
+    <!-- Outlined dome for algorithm-delivered doses (SMB / auto-bolus) -->
+    <path
+      d="M -8,0 A 8,8 0 0,1 8,0 Z"
+      fill="none"
+      class="stroke-insulin-bolus opacity-90 hover:opacity-100 transition-opacity"
+      stroke-width="1.5"
     />
   {:else}
     <!-- Hemisphere (dome shape - curves above baseline) -->
