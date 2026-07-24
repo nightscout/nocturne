@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -438,8 +439,10 @@ public class CobCalculator(
         if (cob.Cob <= 0)
             return cob;
 
-        var display = Math.Round(cob.Cob * 10) / 10;
-        cob.Display = display.ToString();
+        // Invariant: these strings go out over the API, so they must not pick up the
+        // server's decimal separator.
+        var display = (Math.Round(cob.Cob * 10) / 10).ToString(CultureInfo.InvariantCulture);
+        cob.Display = display;
         cob.DisplayLine = $"COB: {display}g";
 
         return cob;

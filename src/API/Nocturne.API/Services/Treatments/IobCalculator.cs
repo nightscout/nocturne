@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -427,7 +428,9 @@ public class IobCalculator(
             return iob;
         }
 
-        var display = iob.Iob.ToString("F2");
+        // Invariant: these strings go out over the API, so they must not pick up the
+        // server's decimal separator.
+        var display = iob.Iob.ToString("F2", CultureInfo.InvariantCulture);
         iob.Display = display;
         iob.DisplayLine = $"IOB: {display}U";
 
