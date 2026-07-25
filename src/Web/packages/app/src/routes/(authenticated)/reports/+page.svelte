@@ -85,7 +85,7 @@
 
   const reportsResource = contextResource(
     () => getReportsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Reports" }
+    { errorTitle: "Error Loading Reports", dateParams: reportsParams }
   );
 
   const isLoading = $derived(reportsResource.loading);
@@ -93,13 +93,9 @@
   const entries = $derived(queryData?.entries ?? []);
   const analysis = $derived(queryData?.analysis);
   const averagedStats = $derived(queryData?.averagedStats);
-  const dateRange = $derived(
-    queryData?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-    }
-  );
+  const startDate = $derived(reportsResource.date.from);
+  const endDate = $derived(reportsResource.date.to);
+  const lastUpdated = $derived(queryData?.dateRange?.lastUpdated);
 
   const units = $derived(glucoseUnits.current);
   const glucoseFormatting = $derived({
@@ -197,10 +193,10 @@
             class="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary"
           >
             <Calendar class="h-4 w-4" />
-            {new Date(dateRange.from).toLocaleDateString("en-US", {
+            {startDate.toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
-            })} – {new Date(dateRange.to).toLocaleDateString("en-US", {
+            })} – {endDate.toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
               year: "numeric",
@@ -561,14 +557,14 @@
           <span class="font-medium">
             {entries.length.toLocaleString()} readings
           </span>
-          from {new Date(dateRange.from).toLocaleDateString()} to {new Date(
-            dateRange.to
-          ).toLocaleDateString()}
-          <span class="mx-2 opacity-50">•</span>
-          Last updated {new Date(dateRange.lastUpdated).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          from {startDate.toLocaleDateString()} to {endDate.toLocaleDateString()}
+          {#if lastUpdated}
+            <span class="mx-2 opacity-50">•</span>
+            Last updated {new Date(lastUpdated).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          {/if}
         </p>
         <p class="mt-1 text-xs text-muted-foreground/70">
           This report is for informational purposes. Always consult your

@@ -439,9 +439,7 @@
       <p>
         Data collected from {allDevices.length} device{allDevices.length !== 1
           ? "s"
-          : ""} over {Math.round(
-          (dateRange.to - dateRange.from) / (24 * 60 * 60 * 1000)
-        )} days
+          : ""} over {reportsParams.dayCount} days
       </p>
       <p class="text-muted-foreground/60">
         Battery statistics are calculated from device status reports sent by
