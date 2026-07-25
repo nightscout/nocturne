@@ -24,17 +24,19 @@ describe("fieldMessages", () => {
   });
 
   it("accepts SvelteKit form issues", () => {
-    expect(
-      fieldMessages([{ message: "Too short", path: ["username"] }] as never)
-    ).toEqual(["Too short"]);
+    const issues: readonly { message: string; path: (string | number)[] }[] = [
+      { message: "Too short", path: ["username"] },
+    ];
+    expect(fieldMessages(issues)).toEqual(["Too short"]);
   });
 
   it("accepts Zod issues from FormGuard.issuesFor", () => {
-    expect(
-      fieldMessages([
-        { message: "Name must be at least 2 characters", code: "too_small" },
-      ] as never)
-    ).toEqual(["Name must be at least 2 characters"]);
+    const issues: readonly { message: string; code: string }[] = [
+      { message: "Name must be at least 2 characters", code: "too_small" },
+    ];
+    expect(fieldMessages(issues)).toEqual([
+      "Name must be at least 2 characters",
+    ]);
   });
 
   it("skips issues with no usable message", () => {
