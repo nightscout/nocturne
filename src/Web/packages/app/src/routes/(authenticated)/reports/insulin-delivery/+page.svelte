@@ -25,7 +25,7 @@
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import type { InsulinDeliveryStatistics } from "$lib/api";
   import {
-    getMultiPeriodStatistics,
+    getInsulinDeliveryStatistics,
     getDailyBasalBolusRatios,
     getHourlyInsulinDelivery,
   } from "$api/generated/statistics.generated.remote";
@@ -36,36 +36,30 @@
   // Default: 30 days for insulin delivery analysis (TDD and ratios benefit from more data)
   const reportsParams = requireDateParamsContext(30);
 
-  const dateRange = $derived.by(() => {
-    const range = reportsParams.getDateRange();
-    return { from: range.start.toISOString(), to: range.end.toISOString() };
+  // Date args shared by every statistics query on this page.
+  // Send ISO strings, not Date objects. A Date can't be serialised as a
+  // remote-query argument ("Unknown date type"), so passing Dates left these
+  // queries erroring — empty on first load, hard error when the filter dates
+  // change. The server schema is z.coerce.date(), which parses the ISO strings
+  // back to dates; the cast satisfies the generated Date arg type.
+  // Same pattern as ReplayPanel's replay() call.
+  const statisticsDates = $derived({
+    startDate: reportsParams.startDate.toISOString() as unknown as Date,
+    endDate: reportsParams.endDate.toISOString() as unknown as Date,
   });
 
-  // Date args shared by the statistics queries
-  const statisticsDates = $derived.by(() => {
-    const input = reportsParams.dateRangeInput;
-    const endDate = input?.to ? new Date(input.to) : new Date();
-    endDate.setHours(23, 59, 59, 999);
-    const startDate = input?.from
-      ? new Date(input.from)
-      : (() => {
-          const d = new Date(endDate);
-          d.setDate(d.getDate() - ((input?.days ?? 30) - 1));
-          return d;
-        })();
-    startDate.setHours(0, 0, 0, 0);
-    // Send ISO strings, not Date objects. A Date can't be serialised as a
-    // remote-query argument ("Unknown date type"), so passing Dates left this
-    // query erroring — empty on first load, hard error when the filter dates
-    // change. The server schema is z.coerce.date(), which parses the ISO
-    // strings back to dates; the cast satisfies the generated Date arg type.
-    // Same pattern as ReplayPanel's replay() call.
-    return {
-      startDate: startDate.toISOString() as unknown as Date,
-      endDate: endDate.toISOString() as unknown as Date,
-    };
-  });
   const dailyRatiosResource = $derived(getDailyBasalBolusRatios(statisticsDates));
+
+  // Headline insulin figures for the selected range. The fixed-bucket
+  // multi-period endpoint was used here instead, so every number above the
+  // charts described the last 30 days no matter what the picker said.
+  const insulinResource = contextResource(
+    () => getInsulinDeliveryStatistics(statisticsDates),
+    {
+      errorTitle: "Error Loading Insulin Delivery Data",
+      dateParams: reportsParams,
+    }
+  );
 
   // Hourly delivery pattern with automatic layout registration. Computed
   // backend-side from pump-confirmed records, bucketed by the user's timezone.
@@ -75,11 +69,7 @@
   );
   const hourlyDelivery = $derived(hourlyDeliveryResource.current?.hours ?? []);
 
-  // Secondary resource for multi-period statistics
-  const multiPeriodStatsResource = $derived(getMultiPeriodStatistics());
-
-  // Default statistics when loading or no data
-  const defaultStats: InsulinDeliveryStatistics = {
+  const emptyStats: InsulinDeliveryStatistics = {
     totalBolus: 0,
     totalBasal: 0,
     totalInsulin: 0,
@@ -94,24 +84,15 @@
     correctionBoluses: 0,
     icRatio: 0,
     bolusesPerDay: 0,
-    dayCount: 1,
-    startDate: new Date().toISOString(),
-    endDate: new Date().toISOString(),
     carbCount: 0,
     carbBolusCount: 0,
   };
 
-  // Get insulin stats from the appropriate period based on date range
-  // Default to 30-day stats which is most commonly used for reports
-  const insulinStats = $derived(
-    multiPeriodStatsResource.current?.lastMonth?.insulinDelivery ?? defaultStats
-  );
+  const insulinStats = $derived(insulinResource.current ?? emptyStats);
 
-  // Helper dates derived from backend stats
-  const startDate = $derived(new Date(insulinStats.startDate || dateRange.from));
-  const endDate = $derived(new Date(insulinStats.endDate || dateRange.to));
-  const dayCount = $derived(insulinStats.dayCount || 1);
-
+  const startDate = $derived(insulinResource.date.from);
+  const endDate = $derived(insulinResource.date.to);
+  const dayCount = $derived(insulinResource.date.dayCount);
 </script>
 
 <svelte:head>
@@ -122,7 +103,7 @@
   />
 </svelte:head>
 
-{#if hourlyDeliveryResource.current || multiPeriodStatsResource.current}
+{#if insulinResource.current}
 <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
   <!-- Header -->
   <div class="space-y-4">
@@ -297,8 +278,6 @@
     </CardHeader>
     <CardContent>
       <BasalBolusRatioChart
-        startDate={dateRange.from}
-        endDate={dateRange.to}
         data={dailyRatiosResource.current}
         loading={dailyRatiosResource.loading}
       />

@@ -13,8 +13,16 @@
  */
 import { useSearchParams } from "runed/kit";
 import { z } from "zod";
-import { getLocalTimeZone, today, parseDate } from "@internationalized/date";
-import { getContext, setContext, untrack } from "svelte";
+import { getLocalTimeZone, today } from "@internationalized/date";
+import { getContext, onDestroy, setContext, untrack } from "svelte";
+import { SvelteSet } from "svelte/reactivity";
+import {
+  dayCount as countDays,
+  endOfDay,
+  resolveDayRange,
+  startOfDay,
+  type DayRangeStrings,
+} from "$lib/utils/date-range";
 
 /**
  * Zod schema for reports URL parameters.
@@ -62,6 +70,11 @@ export function useDateParams(defaultDays = 7) {
 
   // Track initialization to prevent infinite loops
   let initialized = $state(false);
+
+  // The default window of the report currently on screen, which differs from the
+  // layout's baseline (insulin-delivery wants 30 days, readings 7). Reset returns
+  // to this rather than to the layout's, so Reset on a 30-day report stays 30 days.
+  let reportDefaultDays = $state(defaultDays);
 
   // Compute initial defaults eagerly so memoizedInput is valid before effects run (SSR)
   const _initEnd = today(getLocalTimeZone());
@@ -199,40 +212,12 @@ export function useDateParams(defaultDays = 7) {
    */
   function reset() {
     const endDate = today(getLocalTimeZone());
-    const startDate = endDate.subtract({ days: defaultDays - 1 });
+    const startDate = endDate.subtract({ days: reportDefaultDays - 1 });
 
-    params.days = defaultDays;
+    params.days = reportDefaultDays;
     params.from = startDate.toString();
     params.to = endDate.toString();
     params.isDefault = true;
-  }
-
-  /**
-   * Get the current date range as Date objects.
-   */
-  function getDateRange(): { start: Date; end: Date } {
-    if (params.from && params.to) {
-      try {
-        const startParsed = parseDate(params.from);
-        const endParsed = parseDate(params.to);
-        return {
-          start: startParsed.toDate(getLocalTimeZone()),
-          end: endParsed.toDate(getLocalTimeZone()),
-        };
-      } catch {
-        // Fall through to default
-      }
-    }
-
-    // Calculate from days or use default
-    const daysCount = params.days ?? defaultDays;
-    const endDate = today(getLocalTimeZone());
-    const startDate = endDate.subtract({ days: daysCount - 1 });
-
-    return {
-      start: startDate.toDate(getLocalTimeZone()),
-      end: endDate.toDate(getLocalTimeZone()),
-    };
   }
 
   /**
@@ -244,16 +229,17 @@ export function useDateParams(defaultDays = 7) {
    * which the init effect copies through as from/to undefined) into a single
    * today→today range — reported as "N of 1" and anchoring the actograms on today.
    */
-  function resolveRangeStrings(
-    daysVal: number | null | undefined,
-    fromVal: string | null | undefined,
-    toVal: string | null | undefined,
-  ): { from: string; to: string } {
-    if (fromVal && toVal) return { from: fromVal, to: toVal };
-    const daysCount = daysVal ?? defaultDays;
-    const end = today(getLocalTimeZone());
-    const start = end.subtract({ days: daysCount - 1 });
-    return { from: start.toString(), to: end.toString() };
+  function resolvedRange(): DayRangeStrings {
+    return resolveDayRange(memoizedInput, defaultDays);
+  }
+
+  /**
+   * The current range as instants: local midnight opening the first day through
+   * the last millisecond of the last day, so the range is inclusive.
+   */
+  function getDateRange(): { start: Date; end: Date } {
+    const { from, to } = resolvedRange();
+    return { start: startOfDay(from), end: endOfDay(to) };
   }
 
   return {
@@ -277,20 +263,36 @@ export function useDateParams(defaultDays = 7) {
       return memoizedInput;
     },
 
-    /** Start of the date range as a Date object. Derived from memoizedInput for stability. */
+    /** First day of the range as YYYY-MM-DD. */
+    get fromDay(): string {
+      return resolvedRange().from;
+    },
+
+    /** Last day of the range as YYYY-MM-DD. */
+    get toDay(): string {
+      return resolvedRange().to;
+    },
+
+    /** Local midnight opening the range. */
     get startDate(): Date {
-      return new Date(resolveRangeStrings(memoizedInput.days, memoizedInput.from, memoizedInput.to).from);
+      return startOfDay(resolvedRange().from);
     },
 
-    /** End of the date range as a Date object. Derived from memoizedInput for stability. */
+    /** Last millisecond of the range's final day, local time. */
     get endDate(): Date {
-      return new Date(resolveRangeStrings(memoizedInput.days, memoizedInput.from, memoizedInput.to).to);
+      return endOfDay(resolvedRange().to);
     },
 
-    /** Date range as Unix milliseconds. Derived from memoizedInput for stability. */
+    /** The inclusive range as Unix milliseconds. */
     get dateRangeMillis(): { from: number; to: number } {
-      const { from, to } = resolveRangeStrings(memoizedInput.days, memoizedInput.from, memoizedInput.to);
-      return { from: new Date(from).getTime(), to: new Date(to).getTime() };
+      const { from, to } = resolvedRange();
+      return { from: startOfDay(from).getTime(), to: endOfDay(to).getTime() };
+    },
+
+    /** Calendar days the range covers, counting both end days. */
+    get dayCount(): number {
+      const { from, to } = resolvedRange();
+      return countDays(from, to);
     },
 
     // Helper methods
@@ -299,11 +301,25 @@ export function useDateParams(defaultDays = 7) {
     reset,
     getDateRange,
 
+    /** The default window of the report currently on screen. */
+    get reportDefaultDays(): number {
+      return reportDefaultDays;
+    },
+
+    /**
+     * Internal method: record the on-screen report's default window, so Reset
+     * returns to it rather than to the layout's baseline.
+     */
+    _setReportDefaultDays(daysCount: number) {
+      reportDefaultDays = daysCount;
+    },
+
     /**
      * Internal method: Set day range while keeping isDefault=true.
      * Used when auto-adjusting to a report's preferred default.
      */
     _setDefaultDayRange(daysCount: number) {
+      reportDefaultDays = daysCount;
       const endDate = today(getLocalTimeZone());
       const startDate = endDate.subtract({ days: daysCount - 1 });
       params.days = daysCount;
@@ -366,6 +382,41 @@ export function getDateParamsContext(): ReportsParamsReturn | undefined {
 }
 
 /**
+ * Whether the report on screen reads the shared date range.
+ *
+ * The layout offers the range button and Filters sheet on every report route, but
+ * Comparison, Year Overview, Day in Review, Data Quality and Compression Lows
+ * carry their own period controls and ignore it — changing the range there did
+ * nothing. Reports declare their use by asking for the context with a default
+ * window; consumers are tracked by token so an outgoing page unregistering after
+ * an incoming page registers cannot hide a control that is in use.
+ */
+export class SharedRangeUse {
+  #consumers = new SvelteSet<symbol>();
+
+  get consumed(): boolean {
+    return this.#consumers.size > 0;
+  }
+
+  add(token: symbol): void {
+    this.#consumers.add(token);
+  }
+
+  remove(token: symbol): void {
+    this.#consumers.delete(token);
+  }
+}
+
+const SHARED_RANGE_USE_KEY = Symbol("shared-range-use");
+
+/** Create and provide the shared-range-use flag. Call this in the reports layout. */
+export function createSharedRangeUse(): SharedRangeUse {
+  const use = new SharedRangeUse();
+  setContext(SHARED_RANGE_USE_KEY, use);
+  return use;
+}
+
+/**
  * Get the shared date params from context, throwing if not available.
  * Use this when you're certain the context has been set (e.g., in report pages).
  *
@@ -390,12 +441,25 @@ export function requireDateParamsContext(reportDefaultDays?: number): ReportsPar
   // Auto-adjust if this report has a different default and we're in default mode
   // Use untrack to read values without creating reactive dependencies that could
   // cause effect_update_depth_exceeded when this is called during component init
+  if (reportDefaultDays !== undefined) {
+    const use = getContext<SharedRangeUse | undefined>(SHARED_RANGE_USE_KEY);
+    if (use) {
+      const token = Symbol("shared-range-consumer");
+      use.add(token);
+      onDestroy(() => use.remove(token));
+    }
+  }
+
   untrack(() => {
-    if (reportDefaultDays !== undefined && params.isDefault && params.days !== reportDefaultDays) {
+    if (reportDefaultDays === undefined) return;
+    if (params.isDefault && params.days !== reportDefaultDays) {
       // The user hasn't made a custom selection (isDefault=true), so we can adjust
       // to this report's preferred default range using direct property assignment
       // (which triggers runed's reactive proxy correctly)
       params._setDefaultDayRange(reportDefaultDays);
+    } else {
+      // No adjustment needed, but Reset still has to know this report's default.
+      params._setReportDefaultDays(reportDefaultDays);
     }
   });
 

@@ -4,7 +4,7 @@
     import {ReportsFilterSidebar} from "$lib/components/layout";
     import ResourceGuard from "$lib/components/reports/ResourceGuard.svelte";
     import {Filter, Calendar, ChevronDown} from "lucide-svelte";
-    import {useDateParams, setDateParamsContext} from "$lib/hooks/date-params.svelte";
+    import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
 
     let {children} = $props();
@@ -21,6 +21,12 @@
     // adjustment, so they no longer depend on the adjust-up path resolving.
     const params = useDateParams(14);
     setDateParamsContext(params);
+
+    // Reports declare whether they read the shared range; those that carry their
+    // own period controls (comparison, year overview, day in review, data quality)
+    // do not, and the range control is hidden for them rather than sitting there
+    // doing nothing.
+    const sharedRangeUse = createSharedRangeUse();
 
     // Create resource context for layout-level loading/error handling
     const resourceCtx = createResourceContext();
@@ -46,8 +52,10 @@
         );
     });
 
-    // Determine if we should show the filter button (not on main reports page)
-    const showFilters = $derived(page.url.pathname !== "/reports");
+    // Show the range control only where the report actually reads the range
+    const showFilters = $derived(
+        page.url.pathname !== "/reports" && sharedRangeUse.consumed
+    );
 
     // Format date range for display
     const dateRangeDisplay = $derived.by(() => {
@@ -78,7 +86,7 @@
         <div class="hidden print:block border-b border-border pb-3 mb-4 px-3">
             <h1 class="text-xl font-bold text-foreground">{reportName}</h1>
             <p class="text-sm text-muted-foreground">
-                {dateRangeDisplay} · Generated {new Date().toLocaleString()}
+                {#if showFilters}{dateRangeDisplay} · {/if}Generated {new Date().toLocaleString()}
             </p>
         </div>
 
@@ -130,6 +138,7 @@
                 loading={resourceCtx.loading}
                 error={resourceCtx.error}
                 hasData={resourceCtx.hasData}
+                refreshing={resourceCtx.refreshing}
                 errorTitle={resourceCtx.errorTitle}
                 onRetry={resourceCtx.refetch}
             >
@@ -141,8 +150,10 @@
     </main>
 
     <!-- Filter Sidebar -->
-    <ReportsFilterSidebar
-            bind:open={filterSidebarOpen}
-            onOpenChange={(open) => (filterSidebarOpen = open)}
-    />
+    {#if showFilters}
+        <ReportsFilterSidebar
+                bind:open={filterSidebarOpen}
+                onOpenChange={(open) => (filterSidebarOpen = open)}
+        />
+    {/if}
 </div>

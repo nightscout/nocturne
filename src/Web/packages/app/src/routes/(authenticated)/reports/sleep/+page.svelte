@@ -19,10 +19,12 @@
     Activity,
   } from "lucide-svelte";
   import {
+    ACTOGRAM_PADDING_DAYS,
     Actogram,
+    buildDayRange,
     type ActogramRowContext,
   } from "$lib/components/actogram";
-  import { MS_PER_HOUR, HOURS_PER_ROW } from "$lib/components/actogram/actogram";
+  import { MS_PER_DAY, MS_PER_HOUR, HOURS_PER_ROW } from "$lib/components/actogram/actogram";
   import { getActogramData } from "$api/actogram.remote";
   import { getTrends } from "$api/generated/sleepReports.generated.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -36,17 +38,17 @@
   import SleepCompositionChart from "$lib/components/reports/sleep/SleepCompositionChart.svelte";
   import SleepWeeklyBreakdown from "$lib/components/reports/sleep/SleepWeeklyBreakdown.svelte";
   import { SleepSource } from "$api";
+  import { useSearchParams } from "runed/kit";
+  import { z } from "zod";
 
   const VISIBLE_DAYS = 14;
-  const PADDING_DAYS = 14;
-  const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
   const reportsParams = requireDateParamsContext(14);
 
-  /** Padded ±14-day window the actogram loads, so its double-plot rows have context on either side. */
+  /** Padded window the actogram loads, so its double-plot rows have context either side. */
   const paddedRangeMillis = $derived({
-    from: reportsParams.dateRangeMillis.from - PADDING_DAYS * MS_PER_DAY,
-    to: reportsParams.dateRangeMillis.to + PADDING_DAYS * MS_PER_DAY,
+    from: reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
+    to: reportsParams.dateRangeMillis.to + ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
   });
 
   const actogramResource = contextResource(
@@ -58,8 +60,15 @@
     { errorTitle: "Error Loading Sleep Report" }
   );
 
-  /** "All sources" is a frontend-only sentinel; omitted from the request when selected. */
-  let sourceFilter = $state<SleepSource | "all">("all");
+  /**
+   * "All sources" is a frontend-only sentinel; omitted from the request when
+   * selected. Held in the URL so a filtered report can be refreshed and shared.
+   */
+  const viewParams = useSearchParams(
+    z.object({ source: z.enum(SleepSource).nullable().default(null) }),
+    { showDefaults: false, noScroll: true }
+  );
+  const sourceFilter = $derived<SleepSource | "all">(viewParams.source ?? "all");
 
   const sourceOptions: { value: SleepSource | "all"; label: string }[] = [
     { value: "all", label: "All sources" },
@@ -90,29 +99,14 @@
     { errorTitle: "Error Loading Sleep Report" }
   );
 
-  /** Every local-midnight Date between `fromMs` and `toMs`, inclusive. */
-  function buildDayRange(fromMs: number, toMs: number): Date[] {
-    const start = new Date(fromMs);
-    const end = new Date(toMs);
-    const startMidnight = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-    const endMidnight = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-    const dayCount =
-      Math.round((endMidnight.getTime() - startMidnight.getTime()) / MS_PER_DAY) + 1;
-    return Array.from({ length: dayCount }, (_, i) => {
-      const d = new Date(startMidnight);
-      d.setDate(d.getDate() + i);
-      return d;
-    });
-  }
-
   // Actogram rows run newest-first (most recent night on top), descending into
   // the past. Anchored at the selected range end — never the future — so padding
   // days after `to` are not shown as rows; the padded fetch window above still
-  // feeds each row's next-day double-plot. Extends PADDING_DAYS before the range
-  // start for scroll-back context.
+  // feeds each row's next-day double-plot. Extends ACTOGRAM_PADDING_DAYS before
+  // the range start for scroll-back context.
   const days = $derived(
     buildDayRange(
-      reportsParams.dateRangeMillis.from - PADDING_DAYS * MS_PER_DAY,
+      reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
       reportsParams.dateRangeMillis.to
     ).reverse()
   );
@@ -382,7 +376,8 @@
               <Select.Root
                 type="single"
                 value={sourceFilter}
-                onValueChange={(v) => (sourceFilter = (v || "all") as SleepSource | "all")}
+                onValueChange={(v) =>
+                  (viewParams.source = v && v !== "all" ? (v as SleepSource) : null)}
               >
                 <Select.Trigger class="w-44">
                   {sourceLabel}

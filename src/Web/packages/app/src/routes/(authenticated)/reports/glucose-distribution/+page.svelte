@@ -9,6 +9,8 @@
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { bg, bgLabel } from "$lib/utils/formatting";
+  import { useSearchParams } from "runed/kit";
+  import { z } from "zod";
 
   const reportsParams = requireDateParamsContext(14);
 
@@ -17,7 +19,12 @@
     { errorTitle: "Error Loading Glucose Distribution" }
   );
 
-  let showTightRange = $state(true);
+  // In the URL so the chart the user is looking at can be refreshed and shared.
+  const viewParams = useSearchParams(
+    z.object({ tightRange: z.enum(["show", "hide"]).nullable().default(null) }),
+    { showDefaults: false, noScroll: true }
+  );
+  const showTightRange = $derived(viewParams.tightRange !== "hide");
 
   const rangeStats = $derived.by(() => {
     const tir =
@@ -117,7 +124,8 @@
                 variant="ghost"
                 size="sm"
                 class="print:hidden"
-                onclick={() => (showTightRange = !showTightRange)}
+                onclick={() =>
+                  (viewParams.tightRange = showTightRange ? "hide" : "show")}
               >
                 {showTightRange ? "Hide" : "Show"} Tight Range
               </Button>

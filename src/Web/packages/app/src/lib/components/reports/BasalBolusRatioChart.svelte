@@ -18,22 +18,13 @@
   }
 
   interface Props {
-    /** Start date for the report (ISO string or Date) - for future data fetching */
-    startDate?: string | Date;
-    /** End date for the report (ISO string or Date) - for future data fetching */
-    endDate?: string | Date;
     /** Optional pre-loaded ratio data */
     data?: DailyBasalBolusRatioResponse | null;
     /** Whether data is currently loading */
     loading?: boolean;
   }
 
-  let {
-    startDate: _startDate,
-    endDate: _endDate,
-    data = null,
-    loading = false,
-  }: Props = $props();
+  let { data = null, loading = false }: Props = $props();
 
   // Extract data from prop
   const ratioData = $derived(data as DailyBasalBolusRatioResponse | null);

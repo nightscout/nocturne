@@ -29,38 +29,20 @@
   // Default: 14 days is the standard AGP report period
   const reportsParams = requireDateParamsContext(14);
 
-  // Create resource with automatic layout registration
+  // Create resource with automatic layout registration; `date` carries the
+  // selected range so the header and footer never disagree with the query.
   const reportsResource = contextResource(
     () => getReportsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading AGP Report" }
+    { errorTitle: "Error Loading AGP Report", dateParams: reportsParams }
   );
 
-  // Unwrap the data from the resource with null safety
-  const data = $derived({
-    entries: reportsResource.current?.entries ?? [],
-    analysis: reportsResource.current?.analysis,
-    averagedStats: reportsResource.current?.averagedStats,
-    dateRange: reportsResource.current?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-    },
-  });
-
-  // Derived values from data
-  const entries = $derived(data.entries);
-  const analysis = $derived(data.analysis);
-  const dateRange = $derived(data.dateRange);
-  const startDate = $derived(new Date(dateRange.from));
-  const endDate = $derived(new Date(dateRange.to));
-  const dayCount = $derived(
-    Math.max(
-      1,
-      Math.round(
-        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
-      )
-    )
-  );
+  const entries = $derived(reportsResource.current?.entries ?? []);
+  const analysis = $derived(reportsResource.current?.analysis);
+  const averagedStats = $derived(reportsResource.current?.averagedStats);
+  const lastUpdated = $derived(reportsResource.current?.dateRange?.lastUpdated);
+  const startDate = $derived(reportsResource.date.from);
+  const endDate = $derived(reportsResource.date.to);
+  const dayCount = $derived(reportsResource.date.dayCount);
 </script>
 
 <svelte:head>
@@ -230,7 +212,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="h-80 @lg:h-96 w-full">
-        <AmbulatoryGlucoseProfile averagedStats={data.averagedStats} />
+        <AmbulatoryGlucoseProfile {averagedStats} />
       </CardContent>
     </Card>
 
@@ -348,7 +330,9 @@
 
   <div class="text-xs text-muted-foreground text-center">
     Data from {startDate.toLocaleDateString()} – {endDate.toLocaleDateString()}.
-    Last updated {new Date(dateRange.lastUpdated).toLocaleString()}.
+    {#if lastUpdated}
+      Last updated {new Date(lastUpdated).toLocaleString()}.
+    {/if}
   </div>
 </div>
 {/if}

@@ -7,59 +7,38 @@
   } from "$lib/components/ui/card";
   import { HeartPulse, TrendingDown, TrendingUp, Calendar } from "lucide-svelte";
   import {
+    ACTOGRAM_PADDING_DAYS,
     Actogram,
+    buildDayRange,
+    extentOf,
+    pointsInRange,
     type ActogramRowContext,
   } from "$lib/components/actogram";
-  import { MS_PER_HOUR } from "$lib/components/actogram/actogram";
+  import { MS_PER_DAY, MS_PER_HOUR } from "$lib/components/actogram/actogram";
   import { getActogramData } from "$api/actogram.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
   const VISIBLE_DAYS = 14;
-  const PADDING_DAYS = 14;
-  const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
   const reportsParams = requireDateParamsContext(14);
 
-  const dateRangeMillis = $derived({
-    from: reportsParams.dateRangeMillis.from - PADDING_DAYS * MS_PER_DAY,
-    to: reportsParams.dateRangeMillis.to + PADDING_DAYS * MS_PER_DAY,
+  /** Padded window the actogram loads, so its double-plot rows have context either side. */
+  const paddedRangeMillis = $derived({
+    from: reportsParams.dateRangeMillis.from - ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
+    to: reportsParams.dateRangeMillis.to + ACTOGRAM_PADDING_DAYS * MS_PER_DAY,
   });
 
   const actogramResource = contextResource(
     () =>
       getActogramData({
-        from: dateRangeMillis.from,
-        to: dateRangeMillis.to,
+        from: paddedRangeMillis.from,
+        to: paddedRangeMillis.to,
       }),
     { errorTitle: "Error Loading Heart Rate Report" }
   );
 
-  // Build day array from date range
-  const days = $derived.by(() => {
-    const start = new Date(dateRangeMillis.from);
-    const end = new Date(dateRangeMillis.to);
-    const startMidnight = new Date(
-      start.getFullYear(),
-      start.getMonth(),
-      start.getDate()
-    );
-    const endMidnight = new Date(
-      end.getFullYear(),
-      end.getMonth(),
-      end.getDate()
-    );
-    const dayCount =
-      Math.round(
-        (endMidnight.getTime() - startMidnight.getTime()) /
-          (24 * 60 * 60 * 1000)
-      ) + 1;
-    return Array.from({ length: dayCount }, (_, i) => {
-      const d = new Date(startMidnight);
-      d.setDate(d.getDate() + i);
-      return d;
-    });
-  });
+  const days = $derived(buildDayRange(paddedRangeMillis.from, paddedRangeMillis.to));
 
   // HR data as ActogramPoints
   const hrPoints = $derived(
@@ -71,29 +50,31 @@
     (actogramResource.current?.glucoseData ?? []).map((g) => ({ mills: g.mills, sgv: g.sgv, color: g.color }))
   );
 
-  // Summary statistics
-  const avgBpm = $derived.by(() => {
-    const rates = actogramResource.current?.heartRates ?? [];
-    return rates.length > 0
-      ? Math.round(rates.reduce((sum, h) => sum + h.bpm, 0) / rates.length)
-      : 0;
-  });
-  const minBpm = $derived.by(() => {
-    const rates = actogramResource.current?.heartRates ?? [];
-    return rates.length > 0 ? Math.min(...rates.map((h) => h.bpm)) : 0;
-  });
-  const maxBpm = $derived.by(() => {
-    const rates = actogramResource.current?.heartRates ?? [];
-    return rates.length > 0 ? Math.max(...rates.map((h) => h.bpm)) : 0;
-  });
+  // Summary statistics cover the selected range only. The actogram fetches ±14
+  // days of context around it, so aggregating the whole response described a
+  // window up to 28 days wider than the one the picker showed.
+  const selectedRates = $derived(
+    pointsInRange(
+      actogramResource.current?.heartRates ?? [],
+      reportsParams.dateRangeMillis.from,
+      reportsParams.dateRangeMillis.to
+    )
+  );
 
-  // Resting HR estimate: 10th percentile of all readings
+  const avgBpm = $derived(
+    selectedRates.length > 0
+      ? Math.round(selectedRates.reduce((sum, h) => sum + h.bpm, 0) / selectedRates.length)
+      : 0
+  );
+  const bpmExtent = $derived(extentOf(selectedRates, (h) => h.bpm));
+  const minBpm = $derived(bpmExtent?.min ?? 0);
+  const maxBpm = $derived(bpmExtent?.max ?? 0);
+
+  // Resting HR estimate: 10th percentile of the range's readings
   const restingBpm = $derived.by(() => {
-    const rates = actogramResource.current?.heartRates ?? [];
-    if (rates.length === 0) return 0;
-    const sorted = [...rates].sort((a, b) => a.bpm - b.bpm);
-    const idx = Math.floor(sorted.length * 0.1);
-    return sorted[idx]?.bpm ?? 0;
+    if (selectedRates.length === 0) return 0;
+    const sorted = [...selectedRates].sort((a, b) => a.bpm - b.bpm);
+    return sorted[Math.floor(sorted.length * 0.1)]?.bpm ?? 0;
   });
 
   // Scale for dot Y position (map BPM to row height)
@@ -179,7 +160,7 @@
           <div class="flex items-center gap-2">
             <Calendar class="h-5 w-5 text-muted-foreground" />
             <span class="text-2xl font-bold tabular-nums">
-              {(actogramResource.current?.heartRates ?? []).length.toLocaleString()}
+              {selectedRates.length.toLocaleString()}
             </span>
           </div>
         </CardContent>
@@ -202,7 +183,7 @@
           thresholds={actogramResource.current?.thresholds}
           rowHeight={48}
           visibleCount={VISIBLE_DAYS}
-          initialOffset={PADDING_DAYS}
+          initialOffset={ACTOGRAM_PADDING_DAYS}
         >
           {#snippet tooltipValue({ point })}
             {@const bpm = (point as { mills: number; bpm: number }).bpm ?? 0}

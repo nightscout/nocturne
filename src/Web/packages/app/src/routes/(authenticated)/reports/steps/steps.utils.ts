@@ -19,23 +19,3 @@ export function computeDayTotals(
   }
   return totals;
 }
-
-/**
- * Converts a target timestamp into an actogram row offset.
- *
- * Finds the first day >= targetMs and returns its index, clamped so that
- * `visibleCount` rows always fit.
- *
- * @param targetMs - Must be a local midnight timestamp (e.g. `new Date(y, m, d).getTime()`).
- *   Passing a UTC midnight value (`new Date('YYYY-MM-DD').getTime()`) may give off-by-one
- *   results in UTC+ timezones.
- */
-export function computeInitialOffset(
-  days: Date[],
-  targetMs: number,
-  visibleCount: number,
-): number {
-  const idx = days.findIndex((d) => d.getTime() >= targetMs);
-  if (idx === -1) return Math.max(0, days.length - visibleCount);
-  return Math.max(0, Math.min(idx, days.length - visibleCount));
-}

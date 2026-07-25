@@ -32,13 +32,13 @@
   // Default: 14 days is the standard IDP report period
   const reportsParams = requireDateParamsContext(14);
 
-  // Create resource with automatic layout registration
+  // Create resource with automatic layout registration; `date` carries the
+  // selected range, so the page has one day count rather than two.
   const reportsResource = contextResource(
     () => getIdpData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading IDP Report" }
+    { errorTitle: "Error Loading IDP Report", dateParams: reportsParams }
   );
 
-  // Unwrap the data from the resource with null safety
   const data = $derived({
     entries: reportsResource.current?.entries ?? [],
     boluses: reportsResource.current?.boluses ?? [],
@@ -47,11 +47,6 @@
     analysis: reportsResource.current?.analysis,
     averagedStats: reportsResource.current?.averagedStats,
     aidSystemMetrics: reportsResource.current?.aidSystemMetrics,
-    dateRange: reportsResource.current?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-    },
   });
 
   // Derived values from data
@@ -60,17 +55,10 @@
   const insulinStats = $derived(data.insulinDeliveryStats);
   const analysis = $derived(data.analysis);
   const aidMetrics = $derived(data.aidSystemMetrics);
-  const dateRange = $derived(data.dateRange);
-  const startDate = $derived(new Date(dateRange.from));
-  const endDate = $derived(new Date(dateRange.to));
-  const dayCount = $derived(
-    Math.max(
-      1,
-      Math.round(
-        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
-      )
-    )
-  );
+  const lastUpdated = $derived(reportsResource.current?.dateRange?.lastUpdated);
+  const startDate = $derived(reportsResource.date.from);
+  const endDate = $derived(reportsResource.date.to);
+  const dayCount = $derived(reportsResource.date.dayCount);
 </script>
 
 <svelte:head>
@@ -135,10 +123,9 @@
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-4">
-        {@const days = Math.max(insulinStats?.dayCount ?? 1, 1)}
-        {@const avgBasal = insulinStats?.totalBasal != null ? insulinStats.totalBasal / days : null}
-        {@const avgBolus = insulinStats?.totalBolus != null ? insulinStats.totalBolus / days : null}
-        {@const avgScheduled = insulinStats?.scheduledBasal != null ? insulinStats.scheduledBasal / days : null}
+        {@const avgBasal = insulinStats?.totalBasal != null ? insulinStats.totalBasal / dayCount : null}
+        {@const avgBolus = insulinStats?.totalBolus != null ? insulinStats.totalBolus / dayCount : null}
+        {@const avgScheduled = insulinStats?.scheduledBasal != null ? insulinStats.scheduledBasal / dayCount : null}
 
         <!-- TDD -->
         <div class="flex items-baseline justify-between">
@@ -197,13 +184,13 @@
           <div>
             <div class="text-muted-foreground">Meal Boluses/Day</div>
             <div class="font-semibold">
-              {insulinStats?.mealBoluses != null ? (insulinStats.mealBoluses / days).toFixed(1) : "--"}
+              {insulinStats?.mealBoluses != null ? (insulinStats.mealBoluses / dayCount).toFixed(1) : "--"}
             </div>
           </div>
           <div>
             <div class="text-muted-foreground">Correction Boluses/Day</div>
             <div class="font-semibold">
-              {insulinStats?.correctionBoluses != null ? (insulinStats.correctionBoluses / days).toFixed(1) : "--"}
+              {insulinStats?.correctionBoluses != null ? (insulinStats.correctionBoluses / dayCount).toFixed(1) : "--"}
             </div>
           </div>
         </div>
@@ -374,7 +361,9 @@
 
   <div class="text-xs text-muted-foreground text-center">
     Data from {startDate.toLocaleDateString()} – {endDate.toLocaleDateString()}.
-    Last updated {new Date(dateRange.lastUpdated).toLocaleString()}.
+    {#if lastUpdated}
+      Last updated {new Date(lastUpdated).toLocaleString()}.
+    {/if}
   </div>
 </div>
 {/if}
