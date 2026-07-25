@@ -71,7 +71,11 @@ public class AccessTokenHandler : IAuthHandler
 
         try
         {
-            var subject = await subjectService.GetSubjectByAccessTokenHashAsync(tokenHash);
+            // Native lookup: SHA-256 of the presented token. Migrated legacy Nightscout subjects
+            // fall back to prefix-matching the stored 40-char digest (Nightscout's findSubject
+            // rule) so existing AAPS / legacy client tokens keep authenticating unchanged.
+            var subject = await subjectService.GetSubjectByAccessTokenHashAsync(tokenHash)
+                ?? await subjectService.FindSubjectByLegacyTokenAsync(accessToken);
 
             if (subject == null)
             {

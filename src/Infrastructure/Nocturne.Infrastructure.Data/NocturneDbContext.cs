@@ -942,6 +942,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_subjects_access_token_hash")
             .IsUnique();
 
+        // Legacy Nightscout digest is prefix-matched (not equality), so this index only
+        // narrows the candidate set; it is filtered to the small migrated-subject population.
+        modelBuilder
+            .Entity<SubjectEntity>()
+            .HasIndex(s => s.LegacyTokenDigest)
+            .HasDatabaseName("ix_subjects_legacy_token_digest")
+            .HasFilter("legacy_token_digest IS NOT NULL");
+
         modelBuilder
             .Entity<SubjectEntity>()
             .HasIndex(s => s.Email)

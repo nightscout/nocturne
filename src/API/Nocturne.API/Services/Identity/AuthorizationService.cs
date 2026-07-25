@@ -83,8 +83,11 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             // Hash the access token to look it up
             var tokenHash = ComputeSha256Hash(accessToken);
 
-            // Find subject by access token hash
-            var subject = await _subjectService.GetSubjectByAccessTokenHashAsync(tokenHash);
+            // Find subject by access token hash, falling back to legacy Nightscout digest matching
+            // for tokens migrated from a classic instance (AAPS V3 exchanges its plaintext token
+            // here via /api/v2/authorization/request/{token}).
+            var subject = await _subjectService.GetSubjectByAccessTokenHashAsync(tokenHash)
+                ?? await _subjectService.FindSubjectByLegacyTokenAsync(accessToken);
 
             if (subject == null)
             {

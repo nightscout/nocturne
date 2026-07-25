@@ -61,6 +61,31 @@ public class SubjectService : ISubjectService
     }
 
     /// <inheritdoc />
+    public async Task<Subject?> FindSubjectByLegacyTokenAsync(string legacyAccessToken)
+    {
+        var prefix = LegacyNightscoutToken.ExtractDigestPrefix(legacyAccessToken);
+        if (prefix == null)
+        {
+            return null;
+        }
+
+        // Only migrated subjects carry a legacy digest, so this candidate set is tiny (a handful
+        // of imported devices/roles per tenant). Match in memory to mirror Nightscout's own
+        // in-memory findSubject and stay independent of provider LIKE support (InMemory in tests).
+        var candidates = await _dbContext
+            .Subjects.AsNoTracking()
+            .Include(s => s.SubjectRoles)
+            .ThenInclude(sr => sr.Role)
+            .Where(s => s.LegacyTokenDigest != null && s.IsActive)
+            .ToListAsync();
+
+        var match = candidates.FirstOrDefault(s =>
+            s.LegacyTokenDigest!.StartsWith(prefix, StringComparison.Ordinal));
+
+        return match == null ? null : MapToModel(match);
+    }
+
+    /// <inheritdoc />
     public async Task<Subject> FindOrCreateFromOidcAsync(
         Guid providerId,
         string oidcSubjectId,

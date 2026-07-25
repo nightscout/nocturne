@@ -66,4 +66,25 @@ public class AccessTokenHandlerTests
             s => s.GetSubjectByAccessTokenHashAsync(It.IsAny<string>()),
             Times.Never);
     }
+
+    [Fact]
+    public async Task AuthenticateAsync_LegacyMigratedToken_FallsBackToDigestMatch()
+    {
+        // The SHA-256 lookup misses (subject was migrated from a classic Nightscout and stores
+        // only the legacy digest), so the handler must fall back to digest matching and succeed.
+        var subjectId = Guid.NewGuid();
+        _subjectService
+            .Setup(s => s.GetSubjectByAccessTokenHashAsync(It.IsAny<string>()))
+            .ReturnsAsync((Subject?)null);
+        _subjectService
+            .Setup(s => s.FindSubjectByLegacyTokenAsync("phone-318030bcdc470b9d"))
+            .ReturnsAsync(new Subject { Id = subjectId, Name = "Phone", IsActive = true });
+
+        var result = await _handler.AuthenticateAsync(CreateContext("phone-318030bcdc470b9d"));
+
+        Assert.True(result.Succeeded);
+        _subjectService.Verify(
+            s => s.FindSubjectByLegacyTokenAsync("phone-318030bcdc470b9d"),
+            Times.Once);
+    }
 }

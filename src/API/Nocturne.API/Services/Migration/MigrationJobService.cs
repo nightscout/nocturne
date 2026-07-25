@@ -1402,6 +1402,13 @@ internal class MigrationJob
             var nocturneRoles = await dbContext.Roles
                 .ToDictionaryAsync(r => r.Name, r => r.Id, ct);
 
+            // Nightscout derives each subject's token from digest = sha1(sha1(api_secret) + _id).
+            // HashApiSecret yields exactly that inner sha1(api_secret), so with the mongo _id we
+            // can reconstruct the full 40-char digest and store it for 1:1 legacy token matching.
+            var hashedSecret = string.IsNullOrEmpty(_request.NightscoutApiSecret)
+                ? null
+                : HashApiSecret(_request.NightscoutApiSecret);
+
             foreach (var subject in subjects)
             {
                 ct.ThrowIfCancellationRequested();
@@ -1425,15 +1432,19 @@ internal class MigrationJob
                     // Determine if subject should be inactive ("denied" is only role)
                     var isDenied = subject.Roles is ["denied"];
 
+                    var mongoId = subject.MongoId ?? subject.Id;
+                    var legacyDigest = Auth.LegacyNightscoutToken.DeriveDigest(hashedSecret, mongoId, subject.AccessToken);
+
                     var entity = new SubjectEntity
                     {
                         Id = Guid.CreateVersion7(),
                         Name = subject.Name ?? "Unnamed",
                         AccessTokenHash = tokenHash,
                         AccessTokenPrefix = $"{(subject.Name ?? "unknown").ToLowerInvariant()}-{subject.AccessToken[..Math.Min(8, subject.AccessToken.Length)]}",
+                        LegacyTokenDigest = legacyDigest,
                         IsActive = !isDenied,
                         Notes = "Migrated from Nightscout. Consider rotating to a Nocturne token.",
-                        OriginalId = subject.MongoId ?? subject.Id,
+                        OriginalId = mongoId,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow,
                         ApprovalStatus = "Approved",

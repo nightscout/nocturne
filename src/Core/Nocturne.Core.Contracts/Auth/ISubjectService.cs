@@ -26,6 +26,16 @@ public interface ISubjectService
     Task<Subject?> GetSubjectByAccessTokenHashAsync(string accessTokenHash);
 
     /// <summary>
+    /// Finds an active subject by matching a legacy Nightscout access token against the stored
+    /// legacy token digest, reproducing Nightscout's prefix-based matching (the substring after
+    /// the last dash, 16–40 hex chars, matched as a prefix of the 40-char digest). Only subjects
+    /// migrated from a legacy Nightscout instance carry a digest; returns null otherwise.
+    /// </summary>
+    /// <param name="legacyAccessToken">The raw legacy access token as presented by the client.</param>
+    /// <returns>Subject if a migrated digest matches and the subject is active, null otherwise.</returns>
+    Task<Subject?> FindSubjectByLegacyTokenAsync(string legacyAccessToken);
+
+    /// <summary>
     /// Find or create a subject from OIDC claims
     /// </summary>
     /// <param name="oidcSubjectId">OIDC subject identifier (sub claim)</param>
