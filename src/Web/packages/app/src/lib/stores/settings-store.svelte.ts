@@ -87,20 +87,13 @@ export class SettingsStore {
     this.error = null;
 
     try {
+      // The server is the source of truth. There used to be a localStorage
+      // override merged in ahead of the API response, under a key with no user or
+      // tenant scoping and nothing to clear it on logout — so on a shared device
+      // the second person to sign in inherited the first person's settings, and a
+      // save that the server had rejected still read back as persisted.
       const apiClient = getApiClient();
-      let settings = await apiClient.uiSettings.getUISettings();
-
-      // Check for locally saved settings that override API response
-      const localSettings = localStorage.getItem('nocturne-ui-settings');
-      if (localSettings) {
-        try {
-          const parsed = JSON.parse(localSettings);
-          // Merge local settings with API settings (local takes precedence)
-          settings = { ...settings, ...parsed };
-        } catch {
-          // Ignore invalid JSON
-        }
-      }
+      const settings = await apiClient.uiSettings.getUISettings();
 
       this._rawSettings = settings;
 
@@ -184,21 +177,11 @@ export class SettingsStore {
       // Save to backend API
       const savedSettings = await apiClient.uiSettings.saveUISettings(settings);
 
-      // Also save to localStorage as fallback/cache
-      localStorage.setItem('nocturne-ui-settings', JSON.stringify(settings));
-
       this._hasChanges = false;
       this._rawSettings = savedSettings;
       return true;
     } catch (e) {
       this.error = e instanceof Error ? e.message : "Failed to save settings";
-      // Still try to save to localStorage as fallback
-      try {
-        const settings = this.getSettings();
-        localStorage.setItem('nocturne-ui-settings', JSON.stringify(settings));
-      } catch {
-        // Ignore localStorage errors
-      }
       return false;
     } finally {
       this._isSaving = false;
@@ -244,10 +227,6 @@ export class SettingsStore {
       if (this.notifications) {
         this.notifications.alarmConfiguration = savedConfig as NotificationSettings["alarmConfiguration"];
       }
-
-      // Cache in localStorage
-      const settings = this.getSettings();
-      localStorage.setItem('nocturne-ui-settings', JSON.stringify(settings));
 
       this._hasChanges = false;
       return true;
