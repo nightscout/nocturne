@@ -16,6 +16,7 @@ import { invalid, redirect } from "@sveltejs/kit";
 
 import type { OidcProviderInfo } from "$lib/api/generated/nocturne-api-client";
 import { clearAuthCookies } from "$lib/config/auth-cookies";
+import { errorStatus } from "$lib/forms/submit-error";
 import { safeReturnUrl } from "$lib/server/return-url";
 
 // ============================================================================
@@ -254,18 +255,23 @@ export const signInWithRecoveryCode = form(
   async (data, issue) => {
     const api = getApiClient();
 
+    let verified = false;
     try {
       const result = await api.passkey.recoveryVerify({
         username: data.username,
         code: data.code,
       });
-
-      if (!result?.success) {
-        invalid(issue.code("That username and recovery code don't match."));
-      }
+      verified = result?.success === true;
     } catch (err) {
-      // The API deliberately doesn't say which of the two was wrong.
-      console.error("Recovery code sign-in failed:", err);
+      // Log the status only: the response carries the submitted credentials.
+      console.error(
+        "Recovery code sign-in failed with status:",
+        errorStatus(err) ?? "none"
+      );
+    }
+
+    // The API deliberately doesn't say which of the two was wrong.
+    if (!verified) {
       invalid(issue.code("That username and recovery code don't match."));
     }
 
@@ -287,21 +293,21 @@ export const signInWithAuthenticator = form(
   async (data, issue) => {
     const api = getApiClient();
 
+    let verified = false;
     try {
       const result = await api.totp.login({
         username: data.username,
         code: data.code,
       });
-
-      if (!result?.success) {
-        invalid(
-          issue.code(
-            "That code wasn't accepted. Codes expire after 30 seconds — try the current one."
-          )
-        );
-      }
+      verified = result?.success === true;
     } catch (err) {
-      console.error("Authenticator sign-in failed:", err);
+      console.error(
+        "Authenticator sign-in failed with status:",
+        errorStatus(err) ?? "none"
+      );
+    }
+
+    if (!verified) {
       invalid(
         issue.code(
           "That code wasn't accepted. Codes expire after 30 seconds — try the current one."
