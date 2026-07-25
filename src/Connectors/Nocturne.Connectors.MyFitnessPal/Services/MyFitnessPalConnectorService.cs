@@ -102,6 +102,16 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     {
         var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
 
+        // This override replaces the base's data-type dispatch, so the toggle it would have
+        // honoured has to be checked here.
+        if (!config.GetEnabledDataTypes(SupportedDataTypes).Contains(SyncDataType.Food))
+        {
+            _logger.LogInformation(
+                "[{ConnectorSource}] Food sync is disabled; nothing to do", ConnectorSource);
+            result.EndTime = DateTimeOffset.UtcNow;
+            return result;
+        }
+
         if (!await AuthenticateWithConfigAsync(config, cancellationToken))
         {
             result.Success = false;
@@ -113,9 +123,13 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         // The request carries UTC instants; pin the kind so the window is not reinterpreted as local.
         var from = AsUtc(request.From ?? DateTime.UtcNow.AddDays(-config.LookbackDays));
 
-        // A background sync leaves the end open on purpose. Imposing "now" would discard entries
-        // the user has pre-logged for later today, which resolve to a time still in the future.
-        var to = request.To.HasValue ? AsUtc(request.To.Value) : (DateTimeOffset?)null;
+        // A background sync leaves the end open on purpose: clamping to "now" would discard
+        // entries pre-logged for later today, whose resolved time is still in the future. The
+        // diary does allow logging arbitrarily far ahead though, so keep a day's headroom rather
+        // than importing next week's plan as if it had been eaten.
+        var to = request.To.HasValue
+            ? AsUtc(request.To.Value)
+            : AsUtc(DateTime.UtcNow.AddDays(1));
 
         var entries = await FetchDiaryAsync(config, from, cancellationToken);
         if (entries == null)
@@ -228,7 +242,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         var entries = new List<MfpFoodDiaryEntryNode>();
         var windowStart = DateOnly.FromDateTime(from.UtcDateTime.Date);
         string? before = null;
-        var reachedWindow = false;
+        var preWindowPages = 0;
 
         for (var page = 0; page < MyFitnessPalConstants.MaxPagesPerSync; page++)
         {
@@ -267,12 +281,15 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 return entries;
 
             // Pages run newest first, but their order tracks modification rather than diary date,
-            // so a block of recently edited old entries can sit ahead of the window. Stop only
-            // after the window has actually been reached and a whole page then falls before it,
-            // rather than on the first page that happens to look old.
-            if (newestOnPage >= windowStart)
-                reachedWindow = true;
-            else if (reachedWindow)
+            // so a block of recently edited old entries can sit ahead of the window. Read a few
+            // pages past the first that falls entirely before the window rather than stopping at
+            // it. A page with no dated entries — an all-deletions page — is evidence either way,
+            // so it neither ends the walk nor resets the count.
+            if (newestOnPage == null)
+                continue;
+
+            preWindowPages = newestOnPage >= windowStart ? 0 : preWindowPages + 1;
+            if (preWindowPages >= MyFitnessPalConstants.PreWindowPageLookahead)
                 return entries;
         }
 
@@ -296,7 +313,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     private async Task<IReadOnlyDictionary<string, string>> ResolveMealNamesAsync(
         List<MfpFoodDiaryEntryNode> entries,
         DateTimeOffset from,
-        DateTimeOffset? to,
+        DateTimeOffset to,
         CancellationToken cancellationToken)
     {
         var resolved = new Dictionary<string, string>();
@@ -304,7 +321,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         var days = entries
             .Where(e => DateOnly.TryParse(e.Date, CultureInfo.InvariantCulture, out var d)
                         && d >= DateOnly.FromDateTime(from.UtcDateTime.Date)
-                        && (to == null || d <= DateOnly.FromDateTime(to.Value.UtcDateTime.Date)))
+                        && d <= DateOnly.FromDateTime(to.UtcDateTime.Date))
             .GroupBy(e => e.Date!)
             .ToList();
 
@@ -415,8 +432,10 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         if (!response.IsSuccessStatusCode)
         {
             // Drop the cached token so the next sync re-authenticates. Without this a token the
-            // server has already rejected stays cached for its full nominal lifetime.
-            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            // server has already rejected stays cached for its full nominal lifetime. Only on 401:
+            // a 403 here is more likely a WAF block, and re-minting a good token every cycle
+            // risks MyFitnessPal rate-limiting the login itself.
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
                 _tokenProvider.InvalidateToken();
 
             _logger.LogError(

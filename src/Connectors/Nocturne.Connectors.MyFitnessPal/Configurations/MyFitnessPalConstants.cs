@@ -74,6 +74,14 @@ public static class MyFitnessPalConstants
     public const int MaxPagesPerSync = 200;
 
     /// <summary>
+    ///     How many consecutive pages lying entirely before the window are read before the walk
+    ///     gives up. Pages are ordered by modification rather than diary date, so recently edited
+    ///     old entries can sit ahead of the window; this reads past a block of them without
+    ///     walking the whole diary when the user simply has not logged anything lately.
+    /// </summary>
+    public const int PreWindowPageLookahead = 3;
+
+    /// <summary>
     ///     Meal names cost one legacy diary request per day. Beyond this many days in a window —
     ///     which only happens on a first full-history sync — entries are imported unnamed rather
     ///     than issuing hundreds of requests.

@@ -41,11 +41,7 @@ public class MyFitnessPalAuthTokenProvider(
         var maxRetries = Math.Max(1, config.MaxRetryAttempts);
 
         var token = await ExecuteWithRetryAsync(
-            async attempt =>
-            {
-                var result = await RequestTokenAsync(config, attempt, cancellationToken);
-                return (result, result == null);
-            },
+            async attempt => await RequestTokenAsync(config, attempt, cancellationToken),
             _retryDelayStrategy,
             maxRetries,
             "MyFitnessPal authentication",
@@ -84,7 +80,7 @@ public class MyFitnessPalAuthTokenProvider(
     ///     expired or been revoked yields a non-retryable 4xx, so the password fallback runs in the
     ///     same attempt rather than burning the retry budget.
     /// </summary>
-    private async Task<MfpTokenResponse?> RequestTokenAsync(
+    private async Task<(MfpTokenResponse? Result, bool ShouldRetry)> RequestTokenAsync(
         MyFitnessPalConnectorConfiguration config, int attempt, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(config.RefreshToken))
@@ -94,7 +90,7 @@ public class MyFitnessPalAuthTokenProvider(
                 config.Username,
                 attempt + 1);
 
-            var refreshed = await PostTokenRequestAsync(
+            var (refreshed, _) = await PostTokenRequestAsync(
                 new Dictionary<string, string>
                 {
                     ["grant_type"] = "refresh_token",
@@ -105,7 +101,7 @@ public class MyFitnessPalAuthTokenProvider(
                 cancellationToken);
 
             if (refreshed != null)
-                return refreshed;
+                return (refreshed, false);
 
             _logger.LogWarning("MyFitnessPal token refresh failed, falling back to password grant");
         }
@@ -113,7 +109,7 @@ public class MyFitnessPalAuthTokenProvider(
         if (string.IsNullOrWhiteSpace(config.Password))
         {
             _logger.LogError("MyFitnessPal refresh token is unusable and no password is configured");
-            return null;
+            return (null, false);
         }
 
         _logger.LogInformation(
@@ -133,7 +129,7 @@ public class MyFitnessPalAuthTokenProvider(
             cancellationToken);
     }
 
-    private async Task<MfpTokenResponse?> PostTokenRequestAsync(
+    private async Task<(MfpTokenResponse? Result, bool ShouldRetry)> PostTokenRequestAsync(
         Dictionary<string, string> body,
         string operationName,
         CancellationToken cancellationToken)
@@ -151,8 +147,11 @@ public class MyFitnessPalAuthTokenProvider(
 
         if (!response.IsSuccessStatusCode)
         {
-            await HandleErrorResponseAsync(response, operationName, cancellationToken);
-            return null;
+            // A wrong password or revoked refresh token is non-retryable. Retrying it burns the
+            // multi-minute backoff, overruns the per-tenant sync timeout, and hammers the login
+            // endpoint every cycle.
+            var shouldRetry = await HandleErrorResponseAsync(response, operationName, cancellationToken);
+            return (null, shouldRetry);
         }
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -161,9 +160,9 @@ public class MyFitnessPalAuthTokenProvider(
         if (string.IsNullOrEmpty(tokenResponse?.AccessToken))
         {
             _logger.LogError("{OperationName} returned an empty access token", operationName);
-            return null;
+            return (null, false);
         }
 
-        return tokenResponse;
+        return (tokenResponse, false);
     }
 }

@@ -25,7 +25,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
         IEnumerable<MfpFoodDiaryEntryNode> entries,
         MyFitnessPalConnectorConfiguration config,
         DateTimeOffset from,
-        DateTimeOffset? to,
+        DateTimeOffset to,
         IReadOnlyDictionary<string, string>? mealNames = null)
     {
         var imports = new List<ConnectorFoodEntryImport>();
@@ -40,7 +40,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
 
             var mealName = mealNames?.GetValueOrDefault(entry.Id);
             var consumedAt = ResolveConsumedAt(entry, date, mealName, config);
-            if (consumedAt < from || (to != null && consumedAt > to))
+            if (consumedAt < from || consumedAt > to)
                 continue;
 
             // consumedNutrientSet is already scaled to the logged quantity; the food's own
@@ -106,8 +106,11 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
             _ => 12,
         };
 
+        // DateTimeOffset rejects an offset that is not a whole number of minutes, and
+        // TimezoneOffset is a double validated only against a range, so round before using it.
+        var offset = TimeSpan.FromMinutes(Math.Round(config.TimezoneOffset * 60));
         var dateTime = date.ToDateTime(new TimeOnly(mealHour, 0));
-        return new DateTimeOffset(dateTime, TimeSpan.FromHours(config.TimezoneOffset)).ToUniversalTime();
+        return new DateTimeOffset(dateTime, offset).ToUniversalTime();
     }
 
     private static DateTimeOffset? TryParseTimestamp(string? timestamp)

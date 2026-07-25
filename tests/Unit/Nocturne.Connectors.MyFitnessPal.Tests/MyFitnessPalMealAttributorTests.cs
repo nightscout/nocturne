@@ -234,6 +234,41 @@ public class MyFitnessPalMealAttributorTests
     }
 
     [Fact]
+    public void Attribute_ReturnsNothing_WhenInterchangeableExceptForServingSize()
+    {
+        // Same food and nutrients but different serving descriptions: swapping them would swap
+        // what each meal reports having been eaten.
+        var cup = Item("cup", 100, 1, carbs: 27, foodId: "milk");
+        cup.ServingSize = new MfpServingSize { Amount = 1, Unit = "cup" };
+        var millilitres = Item("ml", 100, 1, carbs: 27, foodId: "milk");
+        millilitres.ServingSize = new MfpServingSize { Amount = 250, Unit = "ml" };
+
+        List<MfpFoodDiaryEntryNode> entries = [cup, millilitres, Item("toast", 200, 6, carbs: 30)];
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 300, 7), Meal("Snacks", 100, 1)];
+
+        MyFitnessPalMealAttributor.Attribute(entries, meals).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Attribute_TreatsNumericallyEqualNutrientsAsInterchangeable()
+    {
+        // decimal keeps its scale, so 100 and 100.0 are equal but do not render alike.
+        List<MfpFoodDiaryEntryNode> entries =
+        [
+            Item("banana-1", 100m, 1m, carbs: 27m, foodId: "banana"),
+            Item("banana-2", 100.0m, 1.0m, carbs: 27.0m, foodId: "banana"),
+            Item("toast", 200, 6, carbs: 30),
+        ];
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 300, 7), Meal("Snacks", 100, 1)];
+
+        var result = MyFitnessPalMealAttributor.Attribute(entries, meals);
+
+        result["toast"].Should().Be("Breakfast");
+        new[] { result["banana-1"], result["banana-2"] }
+            .Should().BeEquivalentTo(["Breakfast", "Snacks"]);
+    }
+
+    [Fact]
     public void Attribute_CountsOnlySolvableEntriesTowardsTheSizeLimit()
     {
         // A long day of mostly water is still cheap to solve.

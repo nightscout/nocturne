@@ -123,11 +123,20 @@ public static class MyFitnessPalMealAttributor
             n?.Protein ?? 0,
             n?.Carbs ?? 0,
             n?.Fat ?? 0,
+            entry.ServingSize?.Amount ?? 0,
         ];
 
-        return (entry.Food?.Id ?? string.Empty)
-               + '|'
-               + string.Join('|', values.Select(v => v.ToString(CultureInfo.InvariantCulture)));
+        string[] parts =
+        [
+            entry.Food?.Id ?? string.Empty,
+            entry.ServingSize?.Unit ?? string.Empty,
+            entry.LoggedAt ?? string.Empty,
+            // A fixed format: decimal keeps its scale, so 100 and 100.0 are equal numerically
+            // but would otherwise render differently and split an interchangeable group.
+            .. values.Select(v => v.ToString("0.############", CultureInfo.InvariantCulture)),
+        ];
+
+        return string.Join('|', parts);
     }
 
     /// <summary>
