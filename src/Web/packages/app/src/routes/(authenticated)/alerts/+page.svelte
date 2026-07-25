@@ -114,8 +114,16 @@
   async function handleAcknowledge(): Promise<void> {
     acknowledging = true;
     try {
-      await acknowledge({ acknowledgedBy: "web_user" });
-      await activeAlertsQuery.refresh();
+      // Optimistically badge every unacknowledged excursion so the card updates
+      // at once; the command's GetActiveAlerts invalidation reconciles it in the
+      // same round-trip (same pattern as AlertBanner/FiringToast).
+      await acknowledge({ acknowledgedBy: "web_user" }).updates(
+        activeAlertsQuery.withOverride((current) =>
+          (current ?? []).map((a) =>
+            a.acknowledgedAt ? a : { ...a, acknowledgedAt: new Date() },
+          ),
+        ),
+      );
     } finally {
       acknowledging = false;
     }
@@ -236,7 +244,13 @@
               <AlertTriangle class="h-5 w-5 shrink-0" />
               <span class="truncate">Active alerts ({activeAlerts.length})</span>
             </CardTitle>
-            <Button class="@sm:shrink-0" variant="outline" size="sm" onclick={handleAcknowledge} disabled={acknowledging}>
+            <Button
+              class="@sm:shrink-0"
+              variant="outline"
+              size="sm"
+              onclick={handleAcknowledge}
+              disabled={acknowledging || activeAlerts.every((a) => a.acknowledgedAt)}
+            >
               {#if acknowledging}
                 <Loader2 class="h-4 w-4 mr-2 animate-spin" />
               {:else}
