@@ -9,6 +9,8 @@
   import { StateSpansTimeline } from "$lib/components/dashboard/state-spans-timeline";
   import { getTimeSpansData } from "./data.remote";
   import { dayCount as countDays, resolveDayRange, startOfDay, toDayString } from "$lib/utils/date-range";
+  import { useSearchParams } from "runed/kit";
+  import { z } from "zod";
 
   // Default range: the last 7 local calendar days. Deriving these from
   // `toISOString()` named yesterday for anyone east of UTC.
@@ -39,12 +41,40 @@
     to: data?.dateRange.to ?? toDate,
   });
 
-  // Toggle states for each category (all enabled by default)
-  let showPumpModes = $state(true);
-  let showProfiles = $state(true);
-  let showTempBasals = $state(true);
-  let showOverrides = $state(true);
-  let showActivities = $state(true);
+  const CATEGORIES = [
+    { key: "pumpModes", label: "Pump Modes", color: "var(--pump-mode-automatic)" },
+    { key: "profiles", label: "Profiles", color: "var(--chart-1)" },
+    { key: "basal", label: "Basal", color: "var(--insulin-basal)" },
+    { key: "overrides", label: "Overrides", color: "var(--chart-2)" },
+    { key: "activities", label: "Activities", color: "var(--pump-mode-sleep)" },
+  ] as const;
+
+  type CategoryKey = (typeof CATEGORIES)[number]["key"];
+
+  // Every category shows by default; the hidden ones are named in the URL, so a
+  // timeline narrowed to one or two categories can be refreshed and shared.
+  const viewParams = useSearchParams(
+    z.object({ hide: z.string().nullable().default(null) }),
+    { showDefaults: false, noScroll: true }
+  );
+
+  const hidden = $derived(
+    new Set((viewParams.hide ?? "").split(",").filter(Boolean) as CategoryKey[])
+  );
+
+  const isShown = (key: CategoryKey) => !hidden.has(key);
+
+  function setShown(key: CategoryKey, shown: boolean) {
+    const next = new Set(hidden);
+    if (shown) next.delete(key);
+    else next.add(key);
+    viewParams.hide =
+      next.size > 0
+        ? CATEGORIES.filter((c) => next.has(c.key))
+            .map((c) => c.key)
+            .join(",")
+        : null;
+  }
 
   /** Shift the window by whole days, keeping its length. */
   function shiftPeriod(direction: -1 | 1) {
@@ -129,66 +159,21 @@
     <Card.Content>
       <!-- Category toggles -->
       <div class="flex flex-wrap gap-2 mb-4">
-        <Toggle
-          variant="outline"
-          size="sm"
-          bind:pressed={showPumpModes}
-          aria-label="Toggle pump modes"
-        >
-          <span
-            class="w-2 h-2 rounded-full mr-2"
-            style="background-color: var(--pump-mode-automatic);"
-          ></span>
-          Pump Modes
-        </Toggle>
-        <Toggle
-          variant="outline"
-          size="sm"
-          bind:pressed={showProfiles}
-          aria-label="Toggle profiles"
-        >
-          <span
-            class="w-2 h-2 rounded-full mr-2"
-            style="background-color: var(--chart-1);"
-          ></span>
-          Profiles
-        </Toggle>
-        <Toggle
-          variant="outline"
-          size="sm"
-          bind:pressed={showTempBasals}
-          aria-label="Toggle basal delivery"
-        >
-          <span
-            class="w-2 h-2 rounded-full mr-2"
-            style="background-color: var(--insulin-basal);"
-          ></span>
-          Basal
-        </Toggle>
-        <Toggle
-          variant="outline"
-          size="sm"
-          bind:pressed={showOverrides}
-          aria-label="Toggle overrides"
-        >
-          <span
-            class="w-2 h-2 rounded-full mr-2"
-            style="background-color: var(--chart-2);"
-          ></span>
-          Overrides
-        </Toggle>
-        <Toggle
-          variant="outline"
-          size="sm"
-          bind:pressed={showActivities}
-          aria-label="Toggle activities"
-        >
-          <span
-            class="w-2 h-2 rounded-full mr-2"
-            style="background-color: var(--pump-mode-sleep);"
-          ></span>
-          Activities
-        </Toggle>
+        {#each CATEGORIES as category (category.key)}
+          <Toggle
+            variant="outline"
+            size="sm"
+            pressed={isShown(category.key)}
+            onPressedChange={(pressed: boolean) => setShown(category.key, pressed)}
+            aria-label="Toggle {category.label.toLowerCase()}"
+          >
+            <span
+              class="w-2 h-2 rounded-full mr-2"
+              style="background-color: {category.color};"
+            ></span>
+            {category.label}
+          </Toggle>
+        {/each}
       </div>
 
       <!-- Timeline visualization -->
@@ -199,11 +184,11 @@
         overrideSpans={data?.overrideSpans ?? []}
         activitySpans={data?.activitySpans ?? []}
         {dateRange}
-        {showPumpModes}
-        {showProfiles}
-        {showTempBasals}
-        {showOverrides}
-        {showActivities}
+        showPumpModes={isShown("pumpModes")}
+        showProfiles={isShown("profiles")}
+        showTempBasals={isShown("basal")}
+        showOverrides={isShown("overrides")}
+        showActivities={isShown("activities")}
       />
     </Card.Content>
   </Card.Root>

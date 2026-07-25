@@ -211,27 +211,29 @@
   let filteredCounts = $derived(countEntryRecords(filteredRows));
 
   // Handlers
-  function handleCategoryChange(category: EntryCategoryId | "all") {
-    activeCategory = category;
+  // Filters are reflected in the URL via SvelteKit shallow routing, so a filtered
+  // log can be refreshed and shared and `page.url` stays authoritative (the edit
+  // dialog reads it to keep its `?edit=` param in sync).
+  function setFilterParam(name: string, value: string) {
     const url = new URL(page.url);
-    if (category === "all") {
-      url.searchParams.delete("category");
-    } else {
-      url.searchParams.set("category", category);
-    }
-    // Use SvelteKit shallow routing so `page.url` stays authoritative (the edit
-    // dialog reads it to keep its `?edit=` param in sync).
+    if (value) url.searchParams.set(name, value);
+    else url.searchParams.delete(name);
     replaceState(url, page.state);
   }
 
-  function handleSearch(e: Event) {
-    const target = e.target as HTMLInputElement;
-    searchQuery = target.value;
+  function setCategory(category: EntryCategoryId | "all") {
+    activeCategory = category;
+    setFilterParam("category", category === "all" ? "" : category);
+  }
+
+  function setSearch(value: string) {
+    searchQuery = value;
+    setFilterParam("search", value.trim());
   }
 
   function clearFilters() {
-    searchQuery = "";
-    activeCategory = "all";
+    setSearch("");
+    setCategory("all");
   }
 
   function confirmDelete(row: EntryRecord) {
@@ -389,7 +391,7 @@
     <TreatmentCategoryTabs
       {activeCategory}
       categoryCounts={counts}
-      onChange={handleCategoryChange}
+      onChange={setCategory}
     />
   </div>
 
@@ -407,7 +409,8 @@
               type="text"
               placeholder="Search records..."
               value={searchQuery}
-              oninput={handleSearch}
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                setSearch(e.currentTarget.value)}
             />
           </div>
         </div>
@@ -456,7 +459,7 @@
             <Badge variant="secondary" class="gap-1">
               {ENTRY_CATEGORIES[activeCategory].name}
               <button
-                onclick={() => (activeCategory = "all")}
+                onclick={() => setCategory("all")}
                 class="ml-1 hover:text-foreground"
               >
                 <X class="h-3 w-3" />
@@ -468,7 +471,7 @@
             <Badge variant="outline" class="gap-1">
               "{searchQuery}"
               <button
-                onclick={() => (searchQuery = "")}
+                onclick={() => setSearch("")}
                 class="ml-1 hover:text-foreground"
               >
                 <X class="h-3 w-3" />

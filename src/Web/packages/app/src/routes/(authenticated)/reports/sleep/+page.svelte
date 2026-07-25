@@ -38,6 +38,8 @@
   import SleepCompositionChart from "$lib/components/reports/sleep/SleepCompositionChart.svelte";
   import SleepWeeklyBreakdown from "$lib/components/reports/sleep/SleepWeeklyBreakdown.svelte";
   import { SleepSource } from "$api";
+  import { useSearchParams } from "runed/kit";
+  import { z } from "zod";
 
   const VISIBLE_DAYS = 14;
 
@@ -58,8 +60,15 @@
     { errorTitle: "Error Loading Sleep Report" }
   );
 
-  /** "All sources" is a frontend-only sentinel; omitted from the request when selected. */
-  let sourceFilter = $state<SleepSource | "all">("all");
+  /**
+   * "All sources" is a frontend-only sentinel; omitted from the request when
+   * selected. Held in the URL so a filtered report can be refreshed and shared.
+   */
+  const viewParams = useSearchParams(
+    z.object({ source: z.enum(SleepSource).nullable().default(null) }),
+    { showDefaults: false, noScroll: true }
+  );
+  const sourceFilter = $derived<SleepSource | "all">(viewParams.source ?? "all");
 
   const sourceOptions: { value: SleepSource | "all"; label: string }[] = [
     { value: "all", label: "All sources" },
@@ -367,7 +376,8 @@
               <Select.Root
                 type="single"
                 value={sourceFilter}
-                onValueChange={(v) => (sourceFilter = (v || "all") as SleepSource | "all")}
+                onValueChange={(v) =>
+                  (viewParams.source = v && v !== "all" ? (v as SleepSource) : null)}
               >
                 <Select.Trigger class="w-44">
                   {sourceLabel}
