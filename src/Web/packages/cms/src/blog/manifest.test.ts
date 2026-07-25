@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFrontmatter, buildManifest } from './manifest.ts';
+import { parseFrontmatter, buildManifest, listedPosts } from './manifest.ts';
 import type { BlogPostMeta } from './types.ts';
 
 describe('parseFrontmatter', () => {
@@ -27,6 +27,7 @@ summary: A test post
       summary: 'A test post',
       image: undefined,
       draft: undefined,
+      unlisted: undefined,
     });
   });
 
@@ -111,6 +112,32 @@ draft: true
     expect(meta?.image).toBe('/blog/draft.png');
     expect(meta?.draft).toBe(true);
   });
+
+  it('parses the unlisted flag', () => {
+    const content = `---
+title: Unlisted Post
+slug: unlisted-post
+date: 2026-04-12
+tags: []
+category: dev
+author: Rhys
+summary: Circulating for review
+unlisted: true
+---`;
+
+    expect(parseFrontmatter(content, 'unlisted-post.svx')?.unlisted).toBe(true);
+  });
+});
+
+describe('listedPosts', () => {
+  it('drops unlisted posts and keeps everything else', () => {
+    const posts = [
+      makeMeta({ slug: 'public' }),
+      makeMeta({ slug: 'hidden', unlisted: true }),
+      makeMeta({ slug: 'explicitly-listed', unlisted: false }),
+    ];
+    expect(listedPosts(posts).map((p) => p.slug)).toEqual(['public', 'explicitly-listed']);
+  });
 });
 
 describe('buildManifest', () => {
@@ -151,6 +178,22 @@ describe('buildManifest', () => {
     const manifest = buildManifest(posts, false);
     expect(manifest.tags).toEqual(['a', 'b', 'c']);
     expect(manifest.categories).toEqual(['dev', 'news']);
+  });
+
+  it('keeps unlisted posts in production so their page still builds', () => {
+    const posts = [makeMeta({ slug: 'published' }), makeMeta({ slug: 'hidden', unlisted: true })];
+    const manifest = buildManifest(posts, true);
+    expect(manifest.posts.map((p) => p.slug).sort()).toEqual(['hidden', 'published']);
+  });
+
+  it('does not let an unlisted post widen the tag or category lists', () => {
+    const posts = [
+      makeMeta({ tags: ['a'], category: 'news' }),
+      makeMeta({ tags: ['secret'], category: 'skunkworks', unlisted: true }),
+    ];
+    const manifest = buildManifest(posts, true);
+    expect(manifest.tags).toEqual(['a']);
+    expect(manifest.categories).toEqual(['news']);
   });
 });
 
