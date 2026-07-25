@@ -33,6 +33,10 @@
     type Vec2,
   } from "$lib/components/clock/screensaver-math";
   import ScreensaverPulse, { PULSE_DURATION_MS } from "$lib/components/clock/ScreensaverPulse.svelte";
+  import {
+    isClockReadingStale,
+    readingAgeLabel,
+  } from "$lib/components/clock/staleness";
 
   interface Props {
     config: ClockFaceConfig;
@@ -75,23 +79,6 @@
   const displayBG = $derived(formatGlucoseValue(currentBG, units));
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
 
-  // Calculate staleness
-  const isStale = $derived.by(() => {
-    if (!config?.settings?.staleMinutes) return false;
-    if (config.settings.staleMinutes === 0) return false;
-    const diff = Date.now() - lastUpdated;
-    const mins = Math.floor(diff / 60000);
-    return mins >= config.settings.staleMinutes;
-  });
-
-  // Time since last reading
-  const timeSince = $derived.by(() => {
-    const diff = Date.now() - lastUpdated;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "now";
-    return `${mins}m`;
-  });
-
   // Current time state
   let currentTime = $state(new Date());
   $effect(() => {
@@ -101,6 +88,18 @@
     }, 1000);
     return () => clearInterval(interval);
   });
+
+  // Reading age, driven by the ticker above so it advances while the CGM is silent.
+  const isStale = $derived(
+    isClockReadingStale(
+      config?.settings?.staleMinutes,
+      lastUpdated,
+      currentTime.getTime()
+    )
+  );
+  const timeSince = $derived(
+    readingAgeLabel(lastUpdated, currentTime.getTime())
+  );
 
   // Format time based on 12h/24h preference
   function formatTime(format: string | undefined): string {
