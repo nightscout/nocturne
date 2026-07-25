@@ -9,6 +9,11 @@
   --glucose-high: oklch(0.65 0.18 270);
   --glucose-very-high: oklch(0.55 0.25 15);
 
+  /* Sensor-integrity cluster confidence (noise detection annotation bands) */
+  --cluster-low: oklch(0.78 0.12 90);     /* muted amber */
+  --cluster-medium: oklch(0.646 0.222 41.116); /* orange, == --glucose-low */
+  --cluster-high: oklch(0.577 0.245 27.325);   /* red, == --status-critical */
+
   /* OpenAPS Prediction Lines */
   --pred-iob: oklch(0.6 0.18 258);       /* blue, was #1e88e5 */
   --pred-cob: oklch(0.7 0.18 50);        /* orange, was #FB8C00 */
@@ -104,6 +109,11 @@
   --color-glucose-very-low: var(--glucose-very-low);
   --color-glucose-high: var(--glucose-high);
   --color-glucose-very-high: var(--glucose-very-high);
+
+  /* Sensor-integrity cluster confidence */
+  --color-cluster-low: var(--cluster-low);
+  --color-cluster-medium: var(--cluster-medium);
+  --color-cluster-high: var(--cluster-high);
 
   /* OpenAPS Prediction Lines */
   --color-pred-iob: var(--pred-iob);
