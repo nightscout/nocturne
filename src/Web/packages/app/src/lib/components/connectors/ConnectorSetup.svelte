@@ -190,12 +190,18 @@
   );
   const hasData = $derived(dataSummary && (dataSummary.total ?? 0) > 0);
 
-  // --- Initialize configuration when server data loads or changes ---
-  $effect(() => {
-    const config = existingConfig;
-    const s = schema;
-    if (!s) return;
+  /** The connector whose stored config has already been loaded into the form. */
+  let seededConnectorId = $state<string | undefined>(undefined);
 
+  // --- Seed the form from the stored config, once per connector ---
+  // setActive invalidates GetConfiguration, so this runs again after the enable/disable
+  // toggle; re-seeding then would discard edits the user hasn't saved yet.
+  $effect(() => {
+    const s = schema;
+    const id = activeId;
+    if (!s || !id || configQuery?.loading || seededConnectorId === id) return;
+
+    const config = existingConfig;
     const configData = config?.configuration?.rootElement ?? config?.configuration;
     if (configData && typeof configData === "object" && Object.keys(configData).length > 0) {
       configuration = { ...configData };
@@ -203,6 +209,7 @@
       configuration = getDefaultsFromSchema(s);
     }
     secrets = {};
+    seededConnectorId = id;
   });
 
   function getDefaultsFromSchema(s: JsonSchema): Record<string, unknown> {
@@ -249,6 +256,8 @@
         });
       }
 
+      // Secrets are write-only — drop the entered values once they're stored.
+      secrets = {};
       saveMessage = { type: "success", text: "Configuration saved" };
     } catch (e) {
       saveMessage = {
@@ -298,6 +307,7 @@
     step = "selection";
     manuallySelectedId = undefined;
     // Reactive queries auto-clean when activeId becomes undefined
+    seededConnectorId = undefined;
     configuration = {};
     secrets = {};
     syncResult = null;
