@@ -100,14 +100,20 @@ public class UISettingsController : ControllerBase
                 }
 
                 // Fallback: Generate default demo settings locally
-                var settings = GenerateDefaultDemoSettings();
-                return Ok(settings);
+                return Ok(GenerateDefaultDemoSettings());
             }
 
-            // In non-demo mode, generate settings from actual configuration/database
-            // For now, return default settings structure
-            var defaultSettings = GenerateDefaultSettings();
-            return Ok(defaultSettings);
+            // Read what was persisted by SaveUISettings; the service falls back to
+            // defaults when the tenant has never saved. Returning freshly generated
+            // defaults here instead meant a saved setting never came back on the
+            // next load, so every settings page appeared to revert on reload.
+            var settings = await _settingsService.GetSettingsAsync(cancellationToken);
+
+            // The connector catalog is static metadata, not persisted tenant state.
+            settings.Services ??= new ServicesSettings();
+            settings.Services.AvailableServices = GenerateAvailableServices();
+
+            return Ok(settings);
         }
         catch (Exception ex)
         {
@@ -581,21 +587,6 @@ public class UISettingsController : ControllerBase
             Features = GenerateDefaultFeatureSettings(),
             Notifications = GenerateDefaultNotificationSettings(),
             Services = GenerateDefaultServicesSettings(),
-            Security = new SecuritySettings(),
-        };
-    }
-
-    private UISettingsConfiguration GenerateDefaultSettings()
-    {
-        // For non-demo mode, return empty/default structure
-        // In a real implementation, this would pull from the database
-        return new UISettingsConfiguration
-        {
-            Devices = new DeviceSettings(),
-            Algorithm = new AlgorithmSettings(),
-            Features = GenerateDefaultFeatureSettings(),
-            Notifications = GenerateDefaultNotificationSettings(),
-            Services = new ServicesSettings { AvailableServices = GenerateAvailableServices() },
             Security = new SecuritySettings(),
         };
     }
