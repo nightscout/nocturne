@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { Check, Copy, ShieldCheck } from "lucide-svelte";
+  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Check, Copy, Download, ShieldCheck, TriangleAlert } from "lucide-svelte";
 
   interface Props {
     codes: string[];
@@ -10,16 +11,48 @@
 
   let { codes, onContinue, continueLabel = "Continue" }: Props = $props();
 
-  let codesCopied = $state(false);
+  let copyFailed = $state(false);
+  let copied = $state(false);
+  let downloaded = $state(false);
+  let confirmedWrittenDown = $state(false);
+
+  /**
+   * Losing these codes can lock someone out of their own data, so the gate only
+   * opens once the codes have actually left the screen — a failed clipboard
+   * write (insecure context, denied permission) must not count as saved.
+   */
+  const codesSaved = $derived(copied || downloaded || confirmedWrittenDown);
+
+  function codesAsText(): string {
+    return `${codes.join("\n")}\n`;
+  }
 
   async function copyRecoveryCodes() {
-    const text = codes.join("\n");
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(codesAsText());
+      copied = true;
+      copyFailed = false;
     } catch {
-      // Clipboard API not available — treat as copied anyway
+      copied = false;
+      copyFailed = true;
     }
-    codesCopied = true;
+  }
+
+  function downloadRecoveryCodes() {
+    let url: string | undefined;
+    try {
+      const blob = new Blob([codesAsText()], { type: "text/plain" });
+      url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "nocturne-recovery-codes.txt";
+      link.click();
+      downloaded = true;
+    } catch {
+      downloaded = false;
+    } finally {
+      if (url) URL.revokeObjectURL(url);
+    }
   }
 </script>
 
@@ -46,23 +79,57 @@
         {/each}
       </div>
 
-      <Button
-        variant={codesCopied ? "outline" : "default"}
-        class="w-full"
-        onclick={copyRecoveryCodes}
-      >
-        {#if codesCopied}
-          <Check class="mr-2 h-4 w-4" />
-          Codes copied
-        {:else}
-          <Copy class="mr-2 h-4 w-4" />
-          Copy recovery codes
-        {/if}
-      </Button>
+      <div class="grid gap-2 @sm:grid-cols-2">
+        <Button
+          variant={copied ? "outline" : "default"}
+          class="w-full"
+          onclick={copyRecoveryCodes}
+        >
+          {#if copied}
+            <Check class="mr-2 h-4 w-4" />
+            Codes copied
+          {:else}
+            <Copy class="mr-2 h-4 w-4" />
+            Copy recovery codes
+          {/if}
+        </Button>
+        <Button variant="outline" class="w-full" onclick={downloadRecoveryCodes}>
+          {#if downloaded}
+            <Check class="mr-2 h-4 w-4" />
+            Codes downloaded
+          {:else}
+            <Download class="mr-2 h-4 w-4" />
+            Download codes
+          {/if}
+        </Button>
+      </div>
 
-      {#if !codesCopied}
+      {#if copyFailed}
+        <div
+          class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
+        >
+          <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <p class="text-sm text-destructive">
+            The codes weren't copied — your browser blocked clipboard access.
+            Download them, or write them down and confirm below.
+          </p>
+        </div>
+      {/if}
+
+      {#if !copied && !downloaded}
+        <label class="flex items-start gap-2 text-sm">
+          <Checkbox
+            checked={confirmedWrittenDown}
+            onCheckedChange={(checked: boolean) =>
+              (confirmedWrittenDown = checked)}
+          />
+          <span>I've written down my recovery codes</span>
+        </label>
+      {/if}
+
+      {#if !codesSaved}
         <p class="text-center text-xs text-muted-foreground">
-          You must copy your recovery codes before continuing.
+          Save your recovery codes before continuing.
         </p>
       {/if}
     {:else}
@@ -76,7 +143,7 @@
   <Button
     class="w-full"
     size="lg"
-    disabled={codes.length > 0 && !codesCopied}
+    disabled={codes.length > 0 && !codesSaved}
     onclick={onContinue}
   >
     {continueLabel}

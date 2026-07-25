@@ -9,14 +9,13 @@
     Loader2,
     AlertTriangle,
     Check,
-    Copy,
-    ShieldCheck,
   } from "lucide-svelte";
   import { startRegistration } from "@simplewebauthn/browser";
   import {
     registerOptions,
     registerComplete,
   } from "$lib/api/generated/passkeys.generated.remote";
+  import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
   import { goto } from "$app/navigation";
 
   // Steps: identify -> register -> codes -> done
@@ -29,7 +28,6 @@
   let isRegistering = $state(false);
   let errorMessage = $state<string | null>(null);
   let recoveryCodes = $state<string[]>([]);
-  let codesCopied = $state(false);
 
   // In recovery mode, we need to find the orphaned subject.
   // The register/options endpoint will look up the subject by username.
@@ -71,16 +69,6 @@
         err instanceof Error ? err.message : "Failed to register passkey. Check that your username is correct.";
     } finally {
       isRegistering = false;
-    }
-  }
-
-  async function copyRecoveryCodes() {
-    const text = recoveryCodes.join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-      codesCopied = true;
-    } catch {
-      codesCopied = true;
     }
   }
 
@@ -164,47 +152,7 @@
             </p>
           </div>
 
-          <div class="space-y-3">
-            <div class="flex items-center gap-2">
-              <ShieldCheck class="h-5 w-5 text-primary" />
-              <h3 class="font-medium">Recovery Codes</h3>
-            </div>
-            <p class="text-sm text-muted-foreground">
-              Save these recovery codes in a safe place. Each code can only be used once.
-            </p>
-
-            <div class="grid grid-cols-2 gap-2 rounded-lg border bg-muted/50 p-4">
-              {#each recoveryCodes as code}
-                <code class="rounded bg-background px-2 py-1 text-center text-sm font-mono">
-                  {code}
-                </code>
-              {/each}
-            </div>
-
-            <Button
-              variant={codesCopied ? "outline" : "default"}
-              class="w-full"
-              onclick={copyRecoveryCodes}
-            >
-              {#if codesCopied}
-                <Check class="mr-2 h-4 w-4" />
-                Codes copied
-              {:else}
-                <Copy class="mr-2 h-4 w-4" />
-                Copy recovery codes
-              {/if}
-            </Button>
-
-            {#if codesCopied}
-              <Button class="w-full" onclick={handleContinue}>
-                Continue
-              </Button>
-            {:else}
-              <p class="text-center text-xs text-muted-foreground">
-                Copy your recovery codes before continuing.
-              </p>
-            {/if}
-          </div>
+          <RecoveryCodes codes={recoveryCodes} onContinue={handleContinue} />
         </div>
       {:else if step === "done"}
         <div class="space-y-4">
