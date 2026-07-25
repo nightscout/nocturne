@@ -84,15 +84,24 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
     }
 
     /// <summary>
-    ///     Resolves the consumed-at time for an entry. Production returns a date but leaves
-    ///     <c>consumedAt</c> and <c>loggedAt</c> null, so the meal name supplies an approximate
-    ///     hour. Users can rename meals, so an unrecognised name falls back to midday.
+    ///     Resolves the consumed-at time for an entry, preferring the time MyFitnessPal reports over
+    ///     one derived from the meal name. Users can rename meals, so an unrecognised name falls
+    ///     back to midday.
     /// </summary>
+    /// <remarks>
+    ///     Production sends <c>consumedAt</c> as a bare local time of day — <c>"09:13:00"</c>, with
+    ///     no date — for most entries, and null for the rest. It has to be combined with the entry's
+    ///     own <paramref name="date"/>: handing a time-only string to
+    ///     <see cref="DateTimeOffset.TryParse(string, IFormatProvider, out DateTimeOffset)"/> yields
+    ///     that time on the *current* date, which silently redates the entire history to the day of
+    ///     the sync. Confirmed against the live graph: an entry dated 2025-05-23 with
+    ///     <c>consumedAt</c> 13:12:00 has <c>loggedAt</c> 2025-05-23T03:12:10Z, exactly 13:12 at the
+    ///     account's +10 offset, so the pair is a local date and a local wall-clock time.
+    /// </remarks>
     /// <returns>
-    ///     The resolved time, and whether it was inferred rather than reported. Only a parsed
-    ///     <c>consumedAt</c> counts as reported; everything else is derived from the meal name and
-    ///     must not overwrite a stored value — see
-    ///     <see cref="ConnectorFoodEntryImport.IsTimeInferred"/>.
+    ///     The resolved time, and whether it was inferred rather than reported. A reported time is
+    ///     never inferred; a meal-name derivation always is, and must not overwrite a stored value —
+    ///     see <see cref="ConnectorFoodEntryImport.IsTimeInferred"/>.
     /// </returns>
     public static (DateTimeOffset ConsumedAt, bool IsTimeInferred) ResolveConsumedAt(
         MfpFoodDiaryEntryNode entry,
@@ -100,6 +109,14 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
         string? mealName,
         MyFitnessPalConnectorConfiguration config)
     {
+        // DateTimeOffset rejects an offset that is not a whole number of minutes, and
+        // TimezoneOffset is a double validated only against a range, so round before using it.
+        var offset = TimeSpan.FromMinutes(Math.Round(config.TimezoneOffset * 60));
+
+        if (TryParseLocalTimeOfDay(entry.ConsumedAt, out var timeOfDay))
+            return (new DateTimeOffset(date.ToDateTime(timeOfDay), offset).ToUniversalTime(), false);
+
+        // Not the shape production sends, but honour a full instant if it ever does.
         if (entry.ConsumedAt != null
             && DateTimeOffset.TryParse(entry.ConsumedAt, CultureInfo.InvariantCulture, out var parsed))
             return (parsed.ToUniversalTime(), false);
@@ -113,11 +130,23 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
             _ => 12,
         };
 
-        // DateTimeOffset rejects an offset that is not a whole number of minutes, and
-        // TimezoneOffset is a double validated only against a range, so round before using it.
-        var offset = TimeSpan.FromMinutes(Math.Round(config.TimezoneOffset * 60));
         var dateTime = date.ToDateTime(new TimeOnly(mealHour, 0));
         return (new DateTimeOffset(dateTime, offset).ToUniversalTime(), true);
+    }
+
+    /// <summary>
+    ///     Matches only a bare time of day, so a full timestamp falls through to instant parsing.
+    /// </summary>
+    private static bool TryParseLocalTimeOfDay(string? value, out TimeOnly timeOfDay)
+    {
+        timeOfDay = default;
+        return !string.IsNullOrEmpty(value)
+               && TimeOnly.TryParseExact(
+                   value,
+                   ["HH:mm:ss", "HH:mm:ss.FFF", "HH:mm"],
+                   CultureInfo.InvariantCulture,
+                   DateTimeStyles.None,
+                   out timeOfDay);
     }
 
     private static DateTimeOffset? TryParseTimestamp(string? timestamp)

@@ -123,6 +123,24 @@ public class MyFitnessPalFoodEntryMapperTests
         import.ExternalFoodId.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("09:13:00")]
+    [InlineData("09:13")]
+    public void ResolveConsumedAt_CombinesAReportedTimeOfDayWithTheEntryDate(string consumedAt)
+    {
+        // Production sends consumedAt as a bare local time. Parsing it as an instant would date the
+        // entry to the day of the sync, silently moving years of history onto today.
+        var config = new MyFitnessPalConnectorConfiguration { TimezoneOffset = 10 };
+
+        var resolved = MyFitnessPalFoodEntryMapper.ResolveConsumedAt(
+            Entry(consumedAt: consumedAt), new DateOnly(2025, 5, 23), null, config);
+
+        // At +10, 09:13 local on the 23rd is 23:13 UTC on the 22nd — matching the loggedAt instant
+        // production reports alongside it.
+        resolved.ConsumedAt.Should().Be(new DateTimeOffset(2025, 5, 22, 23, 13, 0, TimeSpan.Zero));
+        resolved.IsTimeInferred.Should().BeFalse();
+    }
+
     [Fact]
     public void ResolveConsumedAt_PrefersTheReportedTimestamp()
     {
