@@ -13,8 +13,15 @@
  */
 import { useSearchParams } from "runed/kit";
 import { z } from "zod";
-import { getLocalTimeZone, today, parseDate } from "@internationalized/date";
+import { getLocalTimeZone, today } from "@internationalized/date";
 import { getContext, setContext, untrack } from "svelte";
+import {
+  dayCount as countDays,
+  endOfDay,
+  resolveDayRange,
+  startOfDay,
+  type DayRangeStrings,
+} from "$lib/utils/date-range";
 
 /**
  * Zod schema for reports URL parameters.
@@ -208,34 +215,6 @@ export function useDateParams(defaultDays = 7) {
   }
 
   /**
-   * Get the current date range as Date objects.
-   */
-  function getDateRange(): { start: Date; end: Date } {
-    if (params.from && params.to) {
-      try {
-        const startParsed = parseDate(params.from);
-        const endParsed = parseDate(params.to);
-        return {
-          start: startParsed.toDate(getLocalTimeZone()),
-          end: endParsed.toDate(getLocalTimeZone()),
-        };
-      } catch {
-        // Fall through to default
-      }
-    }
-
-    // Calculate from days or use default
-    const daysCount = params.days ?? defaultDays;
-    const endDate = today(getLocalTimeZone());
-    const startDate = endDate.subtract({ days: daysCount - 1 });
-
-    return {
-      start: startDate.toDate(getLocalTimeZone()),
-      end: endDate.toDate(getLocalTimeZone()),
-    };
-  }
-
-  /**
    * Effective [from, to] as YYYY-MM-DD strings. Explicit from/to win; otherwise
    * the window is the last `days` (or defaultDays) ending today.
    *
@@ -244,16 +223,17 @@ export function useDateParams(defaultDays = 7) {
    * which the init effect copies through as from/to undefined) into a single
    * today→today range — reported as "N of 1" and anchoring the actograms on today.
    */
-  function resolveRangeStrings(
-    daysVal: number | null | undefined,
-    fromVal: string | null | undefined,
-    toVal: string | null | undefined,
-  ): { from: string; to: string } {
-    if (fromVal && toVal) return { from: fromVal, to: toVal };
-    const daysCount = daysVal ?? defaultDays;
-    const end = today(getLocalTimeZone());
-    const start = end.subtract({ days: daysCount - 1 });
-    return { from: start.toString(), to: end.toString() };
+  function resolvedRange(): DayRangeStrings {
+    return resolveDayRange(memoizedInput, defaultDays);
+  }
+
+  /**
+   * The current range as instants: local midnight opening the first day through
+   * the last millisecond of the last day, so the range is inclusive.
+   */
+  function getDateRange(): { start: Date; end: Date } {
+    const { from, to } = resolvedRange();
+    return { start: startOfDay(from), end: endOfDay(to) };
   }
 
   return {
@@ -277,20 +257,36 @@ export function useDateParams(defaultDays = 7) {
       return memoizedInput;
     },
 
-    /** Start of the date range as a Date object. Derived from memoizedInput for stability. */
+    /** First day of the range as YYYY-MM-DD. */
+    get fromDay(): string {
+      return resolvedRange().from;
+    },
+
+    /** Last day of the range as YYYY-MM-DD. */
+    get toDay(): string {
+      return resolvedRange().to;
+    },
+
+    /** Local midnight opening the range. */
     get startDate(): Date {
-      return new Date(resolveRangeStrings(memoizedInput.days, memoizedInput.from, memoizedInput.to).from);
+      return startOfDay(resolvedRange().from);
     },
 
-    /** End of the date range as a Date object. Derived from memoizedInput for stability. */
+    /** Last millisecond of the range's final day, local time. */
     get endDate(): Date {
-      return new Date(resolveRangeStrings(memoizedInput.days, memoizedInput.from, memoizedInput.to).to);
+      return endOfDay(resolvedRange().to);
     },
 
-    /** Date range as Unix milliseconds. Derived from memoizedInput for stability. */
+    /** The inclusive range as Unix milliseconds. */
     get dateRangeMillis(): { from: number; to: number } {
-      const { from, to } = resolveRangeStrings(memoizedInput.days, memoizedInput.from, memoizedInput.to);
-      return { from: new Date(from).getTime(), to: new Date(to).getTime() };
+      const { from, to } = resolvedRange();
+      return { from: startOfDay(from).getTime(), to: endOfDay(to).getTime() };
+    },
+
+    /** Calendar days the range covers, counting both end days. */
+    get dayCount(): number {
+      const { from, to } = resolvedRange();
+      return countDays(from, to);
     },
 
     // Helper methods

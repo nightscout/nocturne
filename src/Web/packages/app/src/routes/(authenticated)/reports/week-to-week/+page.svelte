@@ -6,6 +6,7 @@
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
+  import { toDayString } from "$lib/utils/date-range";
   import { bg } from "$lib/utils/formatting";
 
   // Day of week series config
@@ -85,10 +86,7 @@
     newEnd.setDate(newEnd.getDate() - 1);
     const newStart = new Date(newEnd);
     newStart.setDate(newStart.getDate() - 6);
-    reportsParams.setCustomRange(
-      newStart.toISOString().split("T")[0],
-      newEnd.toISOString().split("T")[0]
-    );
+    reportsParams.setCustomRange(toDayString(newStart), toDayString(newEnd));
   }
 
   function nextWeek() {
@@ -96,10 +94,7 @@
     newStart.setDate(newStart.getDate() + 1);
     const newEnd = new Date(newStart);
     newEnd.setDate(newEnd.getDate() + 6);
-    reportsParams.setCustomRange(
-      newStart.toISOString().split("T")[0],
-      newEnd.toISOString().split("T")[0]
-    );
+    reportsParams.setCustomRange(toDayString(newStart), toDayString(newEnd));
   }
 
   function goToCurrentWeek() {

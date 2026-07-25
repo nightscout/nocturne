@@ -96,7 +96,7 @@
     (actogramResource.current?.stepCounts ?? []).filter(
       (s) =>
         s.mills >= reportsParams.dateRangeMillis.from &&
-        s.mills <= reportsParams.dateRangeMillis.to + MS_PER_DAY - 1
+        s.mills <= reportsParams.dateRangeMillis.to
     )
   );
   const totalSteps = $derived(visibleStepCounts.reduce((sum, s) => sum + s.metric, 0));
