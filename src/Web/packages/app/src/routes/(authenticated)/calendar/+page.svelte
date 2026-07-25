@@ -309,21 +309,14 @@
     return events;
   }
 
-  function getTrackerIconColor(eventType: string, level: string): string {
-    if (eventType === "completed") return "text-muted-foreground";
-    if (eventType === "start") return "text-green-500 dark:text-green-400";
-    switch (level) {
-      case "urgent":
-        return "text-red-500 dark:text-red-400";
-      case "hazard":
-        return "text-orange-500 dark:text-orange-400";
-      case "warn":
-        return "text-yellow-500 dark:text-yellow-400";
-      case "info":
-        return "text-blue-500 dark:text-blue-400";
-      default:
-        return "text-muted-foreground";
-    }
+  /**
+   * The tone a tracker icon is drawn in, emitted as a data attribute so the
+   * colour itself lives in CSS (see CalendarDayCell).
+   */
+  function getTrackerTone(eventType: string, level: string): string {
+    if (eventType === "completed") return "completed";
+    if (eventType === "start") return "start";
+    return level;
   }
 
   function formatTrackerStartTime(startedAt: Date | undefined): string | null {
@@ -496,7 +489,7 @@
                       {handleDayClick}
                       {getDefinition}
                       {getTrackerLevel}
-                      {getTrackerIconColor}
+                      {getTrackerTone}
                       {formatTrackerStartTime}
                       {formatTrackerAge}
                       {openCompletionDialog}

@@ -77,17 +77,6 @@
     });
   }
 
-  function getStatusColor(status: string | undefined): string {
-    switch (status) {
-      case "urgent":
-        return "text-red-500";
-      case "warn":
-        return "text-yellow-500";
-      default:
-        return "text-green-500";
-    }
-  }
-
   function getBatteryIconComponent(
     level: number | undefined,
     isCharging: boolean | undefined
@@ -207,7 +196,9 @@
           <CardHeader class="pb-2">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
-                <StatIcon class="h-5 w-5 {getStatusColor(stat?.status)}" />
+                <span class="battery-status" data-status={stat?.status ?? ""}>
+                  <StatIcon class="h-5 w-5" />
+                </span>
                 <CardTitle class="text-base">{stat?.displayName}</CardTitle>
               </div>
               <Badge
@@ -460,3 +451,17 @@
   {/if}
 </div>
 {/if}
+
+<style>
+  /* Battery status is a backend enum; the colour comes from the theme's status
+     vars keyed off data-status. */
+  .battery-status {
+    color: var(--status-normal);
+  }
+  .battery-status[data-status="warn"] {
+    color: var(--status-warning);
+  }
+  .battery-status[data-status="urgent"] {
+    color: var(--status-critical);
+  }
+</style>

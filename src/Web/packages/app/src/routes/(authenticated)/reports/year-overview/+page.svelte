@@ -211,13 +211,13 @@
 
     if (selectedMetric === "avgGlucose") {
       if (data.value != null) return heatmapScale(data.value);
-      if (data.filteredCount > 0) return "hsl(var(--muted))";
+      if (data.filteredCount > 0) return "var(--muted)";
       return "rgb(0 0 0 / 5%)";
     }
 
     const metricValue = getMetricCellValue(data);
     if (metricValue == null) {
-      if (data.filteredCount > 0) return "hsl(var(--muted))";
+      if (data.filteredCount > 0) return "var(--muted)";
       return "rgb(0 0 0 / 5%)";
     }
 

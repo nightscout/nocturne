@@ -25,7 +25,7 @@
     handleDayClick,
     getDefinition,
     getTrackerLevel,
-    getTrackerIconColor,
+    getTrackerTone,
     formatTrackerStartTime,
     formatTrackerAge,
     openCompletionDialog,
@@ -42,7 +42,7 @@
     handleDayClick: (day: any) => void;
     getDefinition: (instance: TrackerInstanceDto, defs: TrackerDefinitionDto[]) => TrackerDefinitionDto | undefined;
     getTrackerLevel: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined) => string;
-    getTrackerIconColor: (eventType: string, level: string) => string;
+    getTrackerTone: (eventType: string, level: string) => string;
     formatTrackerStartTime: (startedAt: Date | undefined) => string | null;
     formatTrackerAge: (hours: number | undefined) => string;
     openCompletionDialog: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined, date: string) => void;
@@ -106,10 +106,8 @@
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <button
                   {...props}
-                  class={cn(
-                    "h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
-                    getTrackerIconColor(event.eventType, level)
-                  )}
+                  class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
+                  data-tone={getTrackerTone(event.eventType, level)}
                   title={event.instance.definitionName}
                 >
                   <TrackerCategoryIcon {category} class="h-3 w-3" />
@@ -228,10 +226,8 @@
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <button
                   {...props}
-                  class={cn(
-                    "h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
-                    getTrackerIconColor(event.eventType, level)
-                  )}
+                  class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
+                  data-tone={getTrackerTone(event.eventType, level)}
                   title={event.instance.definitionName}
                 >
                   <TrackerCategoryIcon {category} class="h-3 w-3" />
@@ -276,10 +272,8 @@
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <button
                   {...props}
-                  class={cn(
-                    "h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform",
-                    getTrackerIconColor(event.eventType, level)
-                  )}
+                  class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
+                  data-tone={getTrackerTone(event.eventType, level)}
                   title={event.instance.definitionName}
                 >
                   <TrackerCategoryIcon {category} class="h-3 w-3" />
@@ -306,3 +300,26 @@
     <!-- Empty cell (before/after month) -->
   {/if}
 </div>
+
+<style>
+  /* Tracker icon tone: the tracker's event type or notification urgency comes
+     in as data-tone and picks a colour from the theme's severity vars. */
+  .tracker-icon {
+    color: var(--muted-foreground);
+  }
+  .tracker-icon[data-tone="start"] {
+    color: var(--status-normal);
+  }
+  .tracker-icon[data-tone="info"] {
+    color: var(--system-event-info);
+  }
+  .tracker-icon[data-tone="warn"] {
+    color: var(--system-event-warning);
+  }
+  .tracker-icon[data-tone="hazard"] {
+    color: var(--system-event-hazard);
+  }
+  .tracker-icon[data-tone="urgent"] {
+    color: var(--system-event-alarm);
+  }
+</style>

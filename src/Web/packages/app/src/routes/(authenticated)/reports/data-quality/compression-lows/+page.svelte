@@ -228,17 +228,6 @@
 		}
 	}
 
-	function getStatusColor(status: string | undefined): string {
-		switch (status?.toLowerCase()) {
-			case 'accepted':
-				return 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400';
-			case 'dismissed':
-				return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
-			default:
-				return 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400';
-		}
-	}
-
 	function getConfidenceLabel(confidence: number): string {
 		if (confidence >= 0.75) return 'High';
 		if (confidence >= 0.6) return 'Medium';
@@ -411,9 +400,8 @@
 							>
 								<div class="flex items-center gap-3">
 									<div
-										class="flex h-8 w-8 items-center justify-center rounded-full {getStatusColor(
-											suggestion.status
-										)}"
+										class="review-status flex h-8 w-8 items-center justify-center rounded-full"
+										data-status={suggestion.status?.toLowerCase() ?? ''}
 									>
 										<StatusIcon class="h-4 w-4" />
 									</div>
@@ -448,9 +436,8 @@
 											: 'Unknown'}
 									</CardTitle>
 									<div
-										class="flex h-8 w-8 items-center justify-center rounded-full {getStatusColor(
-											suggestionDetail.suggestion?.status
-										)}"
+										class="review-status flex h-8 w-8 items-center justify-center rounded-full"
+										data-status={suggestionDetail.suggestion?.status?.toLowerCase() ?? ''}
 									>
 										<DetailStatusIcon class="h-4 w-4" />
 									</div>
@@ -622,3 +609,20 @@
 		{/if}
 	</div>
 {/if}
+
+<style>
+	/* Review status is a backend enum; the colour comes from the theme's status
+	   vars keyed off data-status. Anything not yet reviewed uses the default. */
+	.review-status {
+		background: color-mix(in oklab, var(--status-warning) 15%, transparent);
+		color: var(--status-warning);
+	}
+	.review-status[data-status='accepted'] {
+		background: color-mix(in oklab, var(--status-normal) 15%, transparent);
+		color: var(--status-normal);
+	}
+	.review-status[data-status='dismissed'] {
+		background: var(--muted);
+		color: var(--muted-foreground);
+	}
+</style>
