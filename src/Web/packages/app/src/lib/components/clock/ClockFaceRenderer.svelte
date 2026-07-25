@@ -5,7 +5,10 @@
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
+    bgLabel,
   } from "$lib/utils/formatting";
+  import { UNWIRED_ELEMENT_TYPES } from "$lib/clock-builder/types";
+  import { renderClockElementValue } from "$lib/components/clock/element-value";
   import { ArrowUp } from "lucide-svelte";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
   import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
@@ -219,32 +222,13 @@
 
   // Render element value (for text-based elements, not arrow/tracker)
   function renderElementValue(element: ClockElement): string {
-    switch (element.type) {
-      case "sg":
-        return String(displayBG);
-      case "delta":
-        return `${bgDelta > 0 ? "+" : ""}${displayDelta}${element.showUnits !== false ? "" : ""}`;
-      case "arrow":
-        return ""; // Handled separately with Lucide icon
-      case "age":
-        return `${timeSince} ago`;
-      case "time":
-        return formatTime(element.format);
-      case "iob":
-        return "--U";
-      case "cob":
-        return "--g";
-      case "basal":
-        return "0.8U/h";
-      case "forecast":
-        return `${currentBG + 10}`;
-      case "tracker":
-        return ""; // Handled separately with icon + time
-      case "text":
-        return element.text || "";
-      default:
-        return "";
-    }
+    return renderClockElementValue(element, {
+      displayBG: String(displayBG),
+      displayDelta,
+      unitLabel: bgLabel(),
+      age: timeSince,
+      time: formatTime(element.format),
+    });
   }
 
   // Background chart element
@@ -487,7 +471,7 @@
     {#each config?.rows ?? [] as row, rowIndex (rowIndex)}
       <div class="flex items-center" style="gap: {2 * scale}px;">
         {#each row.elements ?? [] as element, elementIndex (elementIndex)}
-          {#if !(element.type === "chart" && element.chartConfig?.asBackground)}
+          {#if !(element.type === "chart" && element.chartConfig?.asBackground) && !UNWIRED_ELEMENT_TYPES.has(element.type)}
             {#if element.type === "chart"}
               {#if showCharts}
                 {@const inlineEngine = createChartDataEngine({
