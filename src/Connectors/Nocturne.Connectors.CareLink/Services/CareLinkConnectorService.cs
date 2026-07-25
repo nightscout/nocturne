@@ -806,7 +806,8 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
             foreach (var key in updates.Where(u => string.IsNullOrEmpty(u.Value)).Select(u => u.Key).ToList())
                 updates.Remove(key);
 
-            await _configService.MergeSecretsAsync("CareLink", updates, "connector-runtime", ct);
+            await _configService.MergeSecretsAsync(
+                "CareLink", updates, "connector-runtime", _logger, ct);
             _logger.LogInformation("[{ConnectorSource}] Persisted updated refresh token", ConnectorSource);
             _initialRefreshToken = currentRefreshToken;
         }

@@ -25,7 +25,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
         IEnumerable<MfpFoodDiaryEntryNode> entries,
         MyFitnessPalConnectorConfiguration config,
         DateTimeOffset from,
-        DateTimeOffset to,
+        DateTimeOffset? to,
         IReadOnlyDictionary<string, string>? mealNames = null)
     {
         var imports = new List<ConnectorFoodEntryImport>();
@@ -40,7 +40,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
 
             var mealName = mealNames?.GetValueOrDefault(entry.Id);
             var consumedAt = ResolveConsumedAt(entry, date, mealName, config);
-            if (consumedAt < from || consumedAt > to)
+            if (consumedAt < from || (to != null && consumedAt > to))
                 continue;
 
             // consumedNutrientSet is already scaled to the logged quantity; the food's own

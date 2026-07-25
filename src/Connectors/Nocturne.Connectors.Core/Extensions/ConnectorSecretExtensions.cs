@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.Connectors.Core.Extensions;
@@ -21,6 +22,7 @@ public static class ConnectorSecretExtensions
         string connectorName,
         IReadOnlyDictionary<string, string?> updates,
         string? modifiedBy = null,
+        ILogger? logger = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(configService);
@@ -32,8 +34,21 @@ public static class ConnectorSecretExtensions
         // Saving would re-encrypt that blank over ciphertext that may only be transiently
         // unreadable — for instance right after an instance key change — destroying the very
         // credentials this helper exists to preserve.
-        if (stored.Any(s => string.IsNullOrEmpty(s.Value) && !updates.ContainsKey(s.Key)))
+        var unreadable = stored
+            .Where(s => string.IsNullOrEmpty(s.Value) && !updates.ContainsKey(s.Key))
+            .Select(s => s.Key)
+            .ToList();
+        if (unreadable.Count > 0)
+        {
+            // Declining is itself a problem when the caller was storing a rotated credential, so
+            // this must be visible rather than looking like "nothing to do".
+            logger?.LogWarning(
+                "Not saving {ConnectorName} secrets: {Keys} could not be read back, and writing "
+                + "would overwrite them. Any credential rotated this cycle has been lost.",
+                connectorName,
+                string.Join(", ", unreadable));
             return false;
+        }
 
         var changed = false;
         foreach (var (key, value) in updates)

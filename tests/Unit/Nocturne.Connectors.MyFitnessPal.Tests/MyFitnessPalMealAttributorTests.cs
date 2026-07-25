@@ -12,11 +12,14 @@ namespace Nocturne.Connectors.MyFitnessPal.Tests;
 /// </summary>
 public class MyFitnessPalMealAttributorTests
 {
-    private static MfpFoodDiaryEntryNode Item(string id, decimal calories, decimal protein) => new()
+    private static MfpFoodDiaryEntryNode Item(
+        string id, decimal calories, decimal protein, decimal carbs = 0, string? foodId = null) => new()
     {
         Id = id,
         Date = "2025-05-23",
-        ConsumedNutrientSet = new MfpNutrientSet { Calories = calories, Protein = protein },
+        ConsumedNutrientSet =
+            new MfpNutrientSet { Calories = calories, Protein = protein, Carbs = carbs },
+        Food = new MfpFood { Id = foodId ?? id, Description = id },
     };
 
     private static MfpDiaryItem Meal(
@@ -151,18 +154,94 @@ public class MyFitnessPalMealAttributorTests
     [Fact]
     public void Attribute_ResolvesDaysContainingIdenticalEntries()
     {
-        // Two identical bananas in different meals are two assignment vectors but one outcome,
-        // so the day is answerable.
+        // Two servings of the same banana in different meals are two assignment vectors but one
+        // outcome, since both publish identical imports, so the day is answerable.
         List<MfpFoodDiaryEntryNode> entries =
-            [Item("banana-1", 100, 1), Item("toast", 200, 6), Item("banana-2", 100, 1)];
+        [
+            Item("banana-1", 100, 1, carbs: 27, foodId: "banana"),
+            Item("toast", 200, 6, carbs: 30),
+            Item("banana-2", 100, 1, carbs: 27, foodId: "banana"),
+        ];
         List<MfpDiaryItem> meals = [Meal("Breakfast", 300, 7), Meal("Snacks", 100, 1)];
 
         var result = MyFitnessPalMealAttributor.Attribute(entries, meals);
 
         result["toast"].Should().Be("Breakfast");
-        result.Should().ContainKeys("banana-1", "banana-2");
         new[] { result["banana-1"], result["banana-2"] }
             .Should().BeEquivalentTo(["Breakfast", "Snacks"]);
+    }
+
+    [Fact]
+    public void Attribute_ReturnsNothing_WhenEntriesMatchOnEnergyButDifferInCarbs()
+    {
+        // An apple and a cordial can agree on calories and protein — the two dimensions the
+        // search uses — while carrying very different carbs. Treating them as interchangeable
+        // would put 25g of carbs at the wrong time of day on a coin flip.
+        List<MfpFoodDiaryEntryNode> entries =
+        [
+            Item("apple", 95, 0.5m, carbs: 25),
+            Item("cordial", 95, 0.5m, carbs: 0),
+            Item("toast", 200, 6, carbs: 30),
+        ];
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 295, 6.5m), Meal("Lunch", 95, 0.5m)];
+
+        MyFitnessPalMealAttributor.Attribute(entries, meals).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Attribute_IsStableAcrossRunsForInterchangeableEntries()
+    {
+        // The same diary must always produce the same answer, or an entry's meal time would
+        // flip between syncs.
+        List<MfpFoodDiaryEntryNode> entries =
+        [
+            Item("banana-b", 100, 1, carbs: 27, foodId: "banana"),
+            Item("toast", 200, 6, carbs: 30),
+            Item("banana-a", 100, 1, carbs: 27, foodId: "banana"),
+        ];
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 300, 7), Meal("Snacks", 100, 1)];
+
+        var first = MyFitnessPalMealAttributor.Attribute(entries, meals);
+        var reordered = MyFitnessPalMealAttributor.Attribute(
+            [entries[2], entries[0], entries[1]], meals);
+
+        reordered.Should().BeEquivalentTo(first);
+    }
+
+    [Fact]
+    public void Attribute_ToleratesAMealRowWithNoTotals()
+    {
+        // An empty meal slot is inert rather than fatal: no solvable entry can be assigned to it.
+        List<MfpFoodDiaryEntryNode> entries = [Item("toast", 200, 6, carbs: 30)];
+        List<MfpDiaryItem> meals =
+        [
+            Meal("Breakfast", 200, 6),
+            new() { Type = "diary_meal", DiaryMeal = "Snacks", NutritionalContents = null },
+        ];
+
+        MyFitnessPalMealAttributor.Attribute(entries, meals)["toast"].Should().Be("Breakfast");
+    }
+
+    [Theory]
+    [InlineData("kilojoules")]
+    [InlineData("kJ")]
+    public void Attribute_ConvertsKilojouleUnitVariants(string unit)
+    {
+        List<MfpFoodDiaryEntryNode> entries = [Item("toast", 200, 6, carbs: 30)];
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 836.8m, 6, unit: unit)];
+
+        MyFitnessPalMealAttributor.Attribute(entries, meals)["toast"].Should().Be("Breakfast");
+    }
+
+    [Fact]
+    public void Attribute_CountsOnlySolvableEntriesTowardsTheSizeLimit()
+    {
+        // A long day of mostly water is still cheap to solve.
+        var entries = Enumerable.Range(0, 20).Select(i => Item($"water-{i}", 0, 0)).ToList();
+        entries.Add(Item("toast", 200, 6, carbs: 30));
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 200, 6)];
+
+        MyFitnessPalMealAttributor.Attribute(entries, meals)["toast"].Should().Be("Breakfast");
     }
 
     [Fact]
@@ -183,7 +262,15 @@ public class MyFitnessPalMealAttributorTests
         List<MfpDiaryItem> meals =
         [
             Meal("Breakfast", 100, 5),
-            new() { Type = "diary_meal", DiaryMeal = null, NutritionalContents = null },
+            new()
+            {
+                Type = "diary_meal",
+                DiaryMeal = null,
+                NutritionalContents = new MfpDiaryNutrition
+                {
+                    Energy = new MfpDiaryEnergy { Unit = "calories", Value = 200 }, Protein = 8,
+                },
+            },
         ];
 
         MyFitnessPalMealAttributor.Attribute(entries, meals).Should().BeEmpty();

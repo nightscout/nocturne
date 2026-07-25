@@ -1,3 +1,4 @@
+using System.Globalization;
 using Nocturne.Connectors.MyFitnessPal.Models;
 
 namespace Nocturne.Connectors.MyFitnessPal.Mappers;
@@ -56,14 +57,13 @@ public static class MyFitnessPalMealAttributor
     {
         var empty = new Dictionary<string, string>();
 
-        if (entries.Count == 0 || entries.Count > MaxEntries)
+        if (entries.Count == 0 || meals.Count == 0)
             return empty;
 
-        // A meal row without a name or totals still contributes to the day, so its entries cannot
-        // be told apart from the rest and the day as a whole is unsolvable.
-        if (meals.Any(m => string.IsNullOrEmpty(m.DiaryMeal) || m.NutritionalContents == null))
-            return empty;
-        if (meals.Count == 0)
+        // An unnamed meal row still accounts for part of the day, so its entries cannot be told
+        // apart from the rest and the day as a whole is unsolvable. A named row with no totals is
+        // treated as empty below, which is inert rather than fatal.
+        if (meals.Any(m => string.IsNullOrEmpty(m.DiaryMeal)))
             return empty;
 
         // Entries with no energy and no protein — water, black coffee, diet drinks — fit every
@@ -72,15 +72,17 @@ public static class MyFitnessPalMealAttributor
         var solvable = entries
             .Where(e => Calories(e) != 0 || Protein(e) != 0)
             .ToList();
-        if (solvable.Count == 0)
+
+        // Applied after the filter: a long day of mostly water is still cheap to solve.
+        if (solvable.Count == 0 || solvable.Count > MaxEntries)
             return empty;
 
         // Calories first: it is the dimension the two endpoints agree on most closely, so it
         // prunes hardest. Protein breaks the remaining ties.
         var itemCalories = solvable.Select(Calories).ToArray();
         var itemProtein = solvable.Select(Protein).ToArray();
-        var mealCalories = meals.Select(m => ToCalories(m.NutritionalContents!.Energy)).ToArray();
-        var mealProtein = meals.Select(m => m.NutritionalContents!.Protein ?? 0).ToArray();
+        var mealCalories = meals.Select(m => ToCalories(m.NutritionalContents?.Energy)).ToArray();
+        var mealProtein = meals.Select(m => m.NutritionalContents?.Protein ?? 0).ToArray();
 
         // The search prunes on partial sums exceeding a target, which is only sound while every
         // contribution is non-negative.
@@ -93,14 +95,61 @@ public static class MyFitnessPalMealAttributor
         if (Math.Abs(itemCalories.Sum() - mealCalories.Sum()) > Tolerance * meals.Count)
             return empty;
 
-        var assignment = new PartitionSearch(itemCalories, itemProtein, mealCalories, mealProtein)
+        // Entries are interchangeable only if everything the import carries matches, not merely
+        // the two dimensions the search happens to use. Two different foods can share calories
+        // and protein while differing in carbs, and carbs are what the matching pipeline reads.
+        var interchangeable = solvable.Select(Signature).ToArray();
+
+        var assignment = new PartitionSearch(
+                itemCalories, itemProtein, mealCalories, mealProtein, interchangeable)
             .FindUniqueAssignment();
         if (assignment == null)
             return empty;
 
+        return BuildResult(solvable, meals, assignment, interchangeable);
+    }
+
+    /// <summary>
+    ///     Identifies entries whose imports would be identical, so that swapping which of them
+    ///     went to which meal cannot change what is published.
+    /// </summary>
+    private static string Signature(MfpFoodDiaryEntryNode entry)
+    {
+        var n = entry.ConsumedNutrientSet;
+        decimal[] values =
+        [
+            entry.Quantity,
+            n?.Calories ?? 0,
+            n?.Protein ?? 0,
+            n?.Carbs ?? 0,
+            n?.Fat ?? 0,
+        ];
+
+        return (entry.Food?.Id ?? string.Empty)
+               + '|'
+               + string.Join('|', values.Select(v => v.ToString(CultureInfo.InvariantCulture)));
+    }
+
+    /// <summary>
+    ///     Emits the meal names, allocating each group of interchangeable entries by entry id so
+    ///     that the same diary always produces the same answer regardless of search order.
+    /// </summary>
+    private static Dictionary<string, string> BuildResult(
+        List<MfpFoodDiaryEntryNode> solvable,
+        IReadOnlyList<MfpDiaryItem> meals,
+        int[] assignment,
+        string[] signatures)
+    {
         var result = new Dictionary<string, string>(solvable.Count);
-        for (var i = 0; i < solvable.Count; i++)
-            result[solvable[i].Id] = meals[assignment[i]].DiaryMeal!;
+
+        foreach (var group in Enumerable.Range(0, solvable.Count).GroupBy(i => signatures[i]))
+        {
+            var indices = group.OrderBy(i => solvable[i].Id, StringComparer.Ordinal).ToList();
+            var assigned = group.Select(i => assignment[i]).OrderBy(m => m).ToList();
+
+            for (var k = 0; k < indices.Count; k++)
+                result[solvable[indices[k]].Id] = meals[assigned[k]].DiaryMeal!;
+        }
 
         return result;
     }
@@ -120,7 +169,12 @@ public static class MyFitnessPalMealAttributor
         if (energy == null)
             return 0;
 
-        return energy.Unit?.StartsWith("kilojoule", StringComparison.OrdinalIgnoreCase) == true
+        var unit = energy.Unit?.Trim();
+        var isKilojoules = unit != null
+            && (unit.StartsWith("kilojoule", StringComparison.OrdinalIgnoreCase)
+                || unit.Equals("kj", StringComparison.OrdinalIgnoreCase));
+
+        return isKilojoules
             ? energy.Value * CaloriesPerKilojoule
             : energy.Value;
     }
@@ -140,14 +194,15 @@ public static class MyFitnessPalMealAttributor
         decimal[] itemCalories,
         decimal[] itemProtein,
         decimal[] mealCalories,
-        decimal[] mealProtein)
+        decimal[] mealProtein,
+        string[] signatures)
     {
         private readonly int[] _assignment = new int[itemCalories.Length];
         private readonly decimal[] _calories = new decimal[mealCalories.Length];
         private readonly decimal[] _protein = new decimal[mealCalories.Length];
 
-        /// <summary>Index of the first entry sharing each entry's nutrient values.</summary>
-        private readonly int[] _valueGroup = BuildValueGroups(itemCalories, itemProtein);
+        /// <summary>Index of the first entry that would import identically to each entry.</summary>
+        private readonly int[] _valueGroup = BuildValueGroups(signatures);
 
         private int[]? _firstSolution;
         private string? _firstCanonical;
@@ -167,20 +222,21 @@ public static class MyFitnessPalMealAttributor
             return _firstSolution;
         }
 
-        private static int[] BuildValueGroups(decimal[] calories, decimal[] protein)
+        private static int[] BuildValueGroups(string[] signatures)
         {
-            var groups = new int[calories.Length];
-            for (var i = 0; i < calories.Length; i++)
-            {
-                groups[i] = i;
-                for (var j = 0; j < i; j++)
-                {
-                    if (calories[j] != calories[i] || protein[j] != protein[i])
-                        continue;
+            var groups = new int[signatures.Length];
+            var first = new Dictionary<string, int>(signatures.Length, StringComparer.Ordinal);
 
-                    groups[i] = groups[j];
-                    break;
+            for (var i = 0; i < signatures.Length; i++)
+            {
+                if (first.TryGetValue(signatures[i], out var owner))
+                {
+                    groups[i] = owner;
+                    continue;
                 }
+
+                groups[i] = i;
+                first[signatures[i]] = i;
             }
 
             return groups;

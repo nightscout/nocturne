@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -70,6 +71,27 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         return Task.FromResult(Enumerable.Empty<Entry>());
     }
 
+    /// <summary>
+    /// Entry point for the scheduled sync.
+    /// </summary>
+    /// <remarks>
+    /// The base implementation derives the window from the tenant's most recent glucose reading,
+    /// which says nothing about how far back the food diary needs reading — with a live CGM it
+    /// resolves to roughly now, and nothing would ever be imported. The food diary's own window is
+    /// <see cref="MyFitnessPalConnectorConfiguration.LookbackDays"/>.
+    /// </remarks>
+    public override Task<SyncResult> SyncDataAsync(
+        MyFitnessPalConnectorConfiguration config,
+        CancellationToken cancellationToken = default,
+        DateTime? since = null,
+        ISyncProgressReporter? progressReporter = null
+    ) =>
+        base.SyncDataAsync(
+            config,
+            cancellationToken,
+            since ?? DateTime.UtcNow.AddDays(-config.LookbackDays),
+            progressReporter);
+
     /// <inheritdoc />
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
@@ -90,7 +112,10 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
         // The request carries UTC instants; pin the kind so the window is not reinterpreted as local.
         var from = AsUtc(request.From ?? DateTime.UtcNow.AddDays(-config.LookbackDays));
-        var to = AsUtc(request.To ?? DateTime.UtcNow);
+
+        // A background sync leaves the end open on purpose. Imposing "now" would discard entries
+        // the user has pre-logged for later today, which resolve to a time still in the future.
+        var to = request.To.HasValue ? AsUtc(request.To.Value) : (DateTimeOffset?)null;
 
         var entries = await FetchDiaryAsync(config, from, cancellationToken);
         if (entries == null)
@@ -131,11 +156,10 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
         result.ItemsSynced[SyncDataType.Food] = count;
         _logger.LogInformation(
-            "[{ConnectorSource}] Synced {Count} food entries from MyFitnessPal ({From:yyyy-MM-dd} to {To:yyyy-MM-dd})",
+            "[{ConnectorSource}] Synced {Count} food entries from MyFitnessPal since {From:yyyy-MM-dd}",
             ConnectorSource,
             count,
-            from,
-            to
+            from
         );
 
         result.EndTime = DateTimeOffset.UtcNow;
@@ -204,6 +228,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         var entries = new List<MfpFoodDiaryEntryNode>();
         var windowStart = DateOnly.FromDateTime(from.UtcDateTime.Date);
         string? before = null;
+        var reachedWindow = false;
 
         for (var page = 0; page < MyFitnessPalConstants.MaxPagesPerSync; page++)
         {
@@ -242,9 +267,12 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 return entries;
 
             // Pages run newest first, but their order tracks modification rather than diary date,
-            // so stop only once an entire page sits before the window rather than on the first
-            // entry that does.
-            if (newestOnPage != null && newestOnPage < windowStart)
+            // so a block of recently edited old entries can sit ahead of the window. Stop only
+            // after the window has actually been reached and a whole page then falls before it,
+            // rather than on the first page that happens to look old.
+            if (newestOnPage >= windowStart)
+                reachedWindow = true;
+            else if (reachedWindow)
                 return entries;
         }
 
@@ -268,7 +296,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     private async Task<IReadOnlyDictionary<string, string>> ResolveMealNamesAsync(
         List<MfpFoodDiaryEntryNode> entries,
         DateTimeOffset from,
-        DateTimeOffset to,
+        DateTimeOffset? to,
         CancellationToken cancellationToken)
     {
         var resolved = new Dictionary<string, string>();
@@ -276,7 +304,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         var days = entries
             .Where(e => DateOnly.TryParse(e.Date, CultureInfo.InvariantCulture, out var d)
                         && d >= DateOnly.FromDateTime(from.UtcDateTime.Date)
-                        && d <= DateOnly.FromDateTime(to.UtcDateTime.Date))
+                        && (to == null || d <= DateOnly.FromDateTime(to.Value.UtcDateTime.Date)))
             .GroupBy(e => e.Date!)
             .ToList();
 
@@ -386,6 +414,11 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
         if (!response.IsSuccessStatusCode)
         {
+            // Drop the cached token so the next sync re-authenticates. Without this a token the
+            // server has already rejected stays cached for its full nominal lifetime.
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                _tokenProvider.InvalidateToken();
+
             _logger.LogError(
                 "MyFitnessPal GraphQL returned HTTP {StatusCode}: {ResponseBody}",
                 (int)response.StatusCode,
@@ -482,7 +515,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             };
 
             if (await _configService.MergeSecretsAsync(
-                    "MyFitnessPal", updates, "connector-runtime", cancellationToken))
+                    "MyFitnessPal", updates, "connector-runtime", _logger, cancellationToken))
                 _logger.LogInformation("[{ConnectorSource}] Persisted updated connector state", ConnectorSource);
         }
         catch (OperationCanceledException) { throw; }
