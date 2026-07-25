@@ -108,9 +108,9 @@
       id="sex"
       description="Biological sex, used with your age to show sex-specific typical ranges in sleep reports. Separate from pronouns."
     >
-      {#snippet control({ required: _required, ...aria })}
+      {#snippet control(field)}
         <Select.Root type="single" name="sex" bind:value={clinical.sex}>
-          <Select.Trigger {...aria}>
+          <Select.Trigger {...field}>
             {clinical.sex
               ? (biologicalSexLabels[clinical.sex as BiologicalSex] ?? clinical.sex)
               : "Select sex"}
@@ -154,10 +154,12 @@
       class="@sm:col-span-2"
       issues={clinical.guard.issuesFor("timezone")}
     >
-      {#snippet control({ required: _required, ...aria })}
+      {#snippet control(field)}
         <input type="hidden" name="timezone" value={clinical.timezone} />
         <TimezoneCombobox
-          {...aria}
+          id={field.id}
+          aria-invalid={field["aria-invalid"]}
+          aria-describedby={field["aria-describedby"]}
           bind:value={clinical.timezone}
           placeholder="Search timezones..."
         />
