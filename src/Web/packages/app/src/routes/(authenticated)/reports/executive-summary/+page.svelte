@@ -8,15 +8,12 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Progress } from "$lib/components/ui/progress";
-  import { Badge } from "$lib/components/ui/badge";
   import {
     Gauge,
     Target,
     TrendingUp,
     Shield,
     AlertTriangle,
-    CheckCircle2,
-    Info,
     Activity,
     Zap,
     BarChart3,
@@ -27,7 +24,6 @@
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { getReportsData } from "$api/reports.remote";
-  import { ClinicalAssessmentLevel } from "$lib/api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { bg, bgLabel, bgRange } from "$lib/utils/formatting";
@@ -65,52 +61,6 @@
     )
   );
 
-  // Assessment level mapping from backend
-  function getAssessmentDisplay(level: string | undefined): {
-    grade: string;
-    label: string;
-    description: string;
-    color: string;
-  } {
-    switch (level) {
-      case ClinicalAssessmentLevel.Excellent:
-        return {
-          grade: "A",
-          label: "Excellent",
-          description: "Outstanding glucose management!",
-          color: "text-green-600",
-        };
-      case ClinicalAssessmentLevel.Good:
-        return {
-          grade: "B",
-          label: "Good",
-          description: "Strong management with room for fine-tuning.",
-          color: "text-blue-600",
-        };
-      case ClinicalAssessmentLevel.NeedsAttention:
-        return {
-          grade: "C",
-          label: "Needs Attention",
-          description: "Some areas need focus. Your care team can help.",
-          color: "text-orange-600",
-        };
-      case ClinicalAssessmentLevel.NeedsSignificantImprovement:
-        return {
-          grade: "D",
-          label: "Needs Improvement",
-          description: "Please discuss with your healthcare provider soon.",
-          color: "text-red-600",
-        };
-      default:
-        return {
-          grade: "–",
-          label: "Pending",
-          description: "Calculating assessment...",
-          color: "text-gray-600",
-        };
-    }
-  }
-
   function formatDuration(minutes: number): string {
     const hours = Math.floor(minutes / 60);
     const mins = Math.round(minutes % 60);
@@ -138,94 +88,54 @@
       {@const quality = analysis?.dataQuality}
       {@const totalLows = (tir?.low ?? 0) + (tir?.veryLow ?? 0)}
       {@const totalHighs = (tir?.high ?? 0) + (tir?.veryHigh ?? 0)}
-      {@const clinicalAssessment = analysis?.clinicalAssessment}
-      {@const assessment = getAssessmentDisplay(
-        clinicalAssessment?.overallAssessment
-      )}
 
-      <!-- Overall Grade Card - The Big Picture -->
+      <!-- A metric tile: the figure, or an explicit empty state when the window
+           has no value for it, plus the consensus target it is read against. -->
+      {#snippet metricTile(
+        label: string,
+        value: number | null | undefined,
+        digits: number,
+        target: string
+      )}
+        <div>
+          {#if value != null}
+            <div class="text-2xl font-bold tabular-nums">
+              {value.toFixed(digits)}%
+            </div>
+          {:else}
+            <div class="text-sm font-medium text-muted-foreground">No data</div>
+          {/if}
+          <div class="text-xs text-muted-foreground">{label}</div>
+          <div class="text-[10px] text-muted-foreground/70">Target {target}</div>
+        </div>
+      {/snippet}
+
+      <!-- Headline Metrics -->
       <Card
         class="border-2 border-primary/20 bg-linear-to-br from-background to-muted/30"
       >
         <CardContent class="pt-6">
-          <div class="flex flex-col @3xl:flex-row items-center gap-6">
-            <!-- Grade Circle -->
-            <div class="relative">
-              <div
-                class="w-32 h-32 rounded-full border-8 {assessment.color.replace(
-                  'text-',
-                  'border-'
-                )} flex items-center justify-center bg-background"
-              >
-                <span class="text-5xl font-bold {assessment.color}">
-                  {assessment.grade}
-                </span>
-              </div>
-            </div>
-
-            <!-- Assessment Details -->
+          <div
+            class="flex flex-col @3xl:flex-row items-center justify-between gap-6"
+          >
             <div class="flex-1 text-center @3xl:text-left space-y-2">
-              <div
-                class="flex items-center justify-center @3xl:justify-start gap-2 flex-wrap"
-              >
-                <Badge
-                  class="{assessment.color
-                    .replace('text-', 'bg-')
-                    .replace('-600', '-100')} {assessment.color}"
-                >
-                  {assessment.label}
-                </Badge>
-                <span class="text-sm text-muted-foreground">
-                  Overall Assessment
-                </span>
-              </div>
-              <p class="text-lg">{assessment.description}</p>
+              <h2 class="text-lg font-semibold">Headline metrics</h2>
               <p class="text-sm text-muted-foreground">
-                Based on Time in Range, Glucose Variability, and Hypoglycemia
-                Avoidance
+                Time in Range, glucose variability and estimated A1C over the
+                last {dayCount} days, each shown with the consensus target it is
+                read against.
               </p>
             </div>
 
-            <!-- Quick Stats -->
-            <div class="grid grid-cols-3 gap-2 @sm:gap-4 text-center shrink-0">
-              <div>
-                <div
-                  class="text-2xl font-bold {(tir?.target ?? 0) >= 70
-                    ? 'text-green-600'
-                    : (tir?.target ?? 0) >= 50
-                      ? 'text-yellow-600'
-                      : 'text-orange-600'}"
-                >
-                  {tir?.target?.toFixed(0) ?? "–"}%
-                </div>
-                <div class="text-xs text-muted-foreground">TIR</div>
-              </div>
-              <div>
-                <div
-                  class="text-2xl font-bold {(variability?.coefficientOfVariation ??
-                    40) <= 33
-                    ? 'text-green-600'
-                    : (variability?.coefficientOfVariation ?? 40) <= 36
-                      ? 'text-yellow-600'
-                      : 'text-orange-600'}"
-                >
-                  {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}%
-                </div>
-                <div class="text-xs text-muted-foreground">CV</div>
-              </div>
-              <div>
-                <div
-                  class="text-2xl font-bold {(variability?.estimatedA1c ?? 8) <
-                  7
-                    ? 'text-green-600'
-                    : (variability?.estimatedA1c ?? 8) < 7.5
-                      ? 'text-yellow-600'
-                      : 'text-orange-600'}"
-                >
-                  {variability?.estimatedA1c?.toFixed(1) ?? "–"}%
-                </div>
-                <div class="text-xs text-muted-foreground">eA1C</div>
-              </div>
+            <div class="grid grid-cols-3 gap-3 @sm:gap-6 text-center shrink-0">
+              {@render metricTile("TIR", tir?.target, 0, "≥70%")}
+              {@render metricTile(
+                "CV",
+                variability?.coefficientOfVariation,
+                0,
+                "≤33%"
+              )}
+              {@render metricTile("eA1C", variability?.estimatedA1c, 1, "<7%")}
             </div>
           </div>
         </CardContent>
@@ -295,24 +205,21 @@
           </CardHeader>
           <CardContent class="space-y-4">
             <div class="text-center">
-              <div
-                class="text-5xl font-bold {(variability?.estimatedA1c ?? 8) < 7
-                  ? 'text-green-600'
-                  : (variability?.estimatedA1c ?? 8) < 7.5
-                    ? 'text-yellow-600'
-                    : 'text-orange-600'}"
-              >
-                {variability?.estimatedA1c?.toFixed(1) ?? "–"}%
-              </div>
-              <p class="text-sm text-muted-foreground mt-1">
-                {#if (variability?.estimatedA1c ?? 8) < 7}
-                  Great! Below the 7% target
-                {:else if (variability?.estimatedA1c ?? 8) < 7.5}
-                  Near target — keep it up!
-                {:else}
-                  Room for improvement
-                {/if}
-              </p>
+              {#if variability?.estimatedA1c != null}
+                <div class="text-5xl font-bold tabular-nums">
+                  {variability.estimatedA1c.toFixed(1)}%
+                </div>
+                <p class="text-sm text-muted-foreground mt-1">
+                  Target: below 7%. Your care team sets your individual target.
+                </p>
+              {:else}
+                <div class="text-lg font-medium text-muted-foreground">
+                  No estimate for this window
+                </div>
+                <p class="text-sm text-muted-foreground mt-1">
+                  An estimate needs enough readings to compute a mean glucose.
+                </p>
+              {/if}
               <ReliabilityBadge reliability={analysis?.reliability} />
             </div>
 
@@ -347,46 +254,24 @@
           </CardHeader>
           <CardContent class="space-y-4">
             <div class="text-center">
-              <div
-                class="text-5xl font-bold {(variability?.coefficientOfVariation ??
-                  40) <= 33
-                  ? 'text-green-600'
-                  : (variability?.coefficientOfVariation ?? 40) <= 36
-                    ? 'text-yellow-600'
-                    : 'text-orange-600'}"
-              >
-                {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}%
-              </div>
+              {#if variability?.coefficientOfVariation != null}
+                <div class="text-5xl font-bold tabular-nums">
+                  {variability.coefficientOfVariation.toFixed(0)}%
+                </div>
+              {:else}
+                <div class="text-lg font-medium text-muted-foreground">
+                  No data for this window
+                </div>
+              {/if}
               <p class="text-sm text-muted-foreground mt-1">
                 Coefficient of Variation (CV)
               </p>
             </div>
 
-            <!-- Interpretation -->
-            <div class="space-y-2">
-              <div class="flex items-center gap-2">
-                {#if (variability?.coefficientOfVariation ?? 40) <= 33}
-                  <CheckCircle2 class="w-4 h-4 text-green-600" />
-                  <span class="text-sm text-green-600 font-medium">
-                    Stable — well done!
-                  </span>
-                {:else if (variability?.coefficientOfVariation ?? 40) <= 36}
-                  <Info class="w-4 h-4 text-blue-600" />
-                  <span class="text-sm text-blue-600 font-medium">
-                    Good stability
-                  </span>
-                {:else}
-                  <AlertTriangle class="w-4 h-4 text-orange-500" />
-                  <span class="text-sm text-orange-500 font-medium">
-                    Variable — swings present
-                  </span>
-                {/if}
-              </div>
-              <p class="text-xs text-muted-foreground">
-                Target: ≤33%. Lower means steadier glucose with fewer ups and
-                downs.
-              </p>
-            </div>
+            <p class="text-xs text-muted-foreground">
+              Target: ≤33%. Lower means steadier glucose with fewer ups and
+              downs.
+            </p>
 
             <!-- Additional variability metrics -->
             <div class="grid grid-cols-2 gap-2 text-xs border-t pt-3">
@@ -410,18 +295,10 @@
       <!-- Safety Metrics Row -->
       <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
         <!-- Hypoglycemia -->
-        <Card
-          class="border-2 {totalLows > 4
-            ? 'border-red-200 bg-red-50/30 dark:bg-red-950/30'
-            : ''}"
-        >
+        <Card class="border-2">
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
-              <AlertTriangle
-                class="w-5 h-5 {totalLows > 4
-                  ? 'text-red-600'
-                  : 'text-yellow-600'}"
-              />
+              <AlertTriangle class="w-5 h-5 text-glucose-very-low" />
               Low Blood Sugar Events
             </CardTitle>
             <CardDescription>
@@ -431,11 +308,7 @@
           <CardContent class="space-y-4">
             <div class="flex items-center justify-between">
               <div>
-                <div
-                  class="text-3xl font-bold {totalLows > 4
-                    ? 'text-red-600'
-                    : 'text-green-600'}"
-                >
+                <div class="text-3xl font-bold tabular-nums">
                   {totalLows.toFixed(1)}%
                 </div>
                 <p class="text-sm text-muted-foreground">
@@ -467,38 +340,18 @@
               </div>
             {/if}
 
-            {#if totalLows > 4}
-              <div
-                class="bg-red-100 dark:bg-red-900/30 rounded p-3 text-sm text-red-700 dark:text-red-300"
-              >
-                <strong>Action needed:</strong>
-                You're experiencing more lows than recommended. Discuss with your
-                care team about adjusting your treatment.
-              </div>
-            {:else}
-              <div
-                class="bg-green-100 dark:bg-green-900/30 rounded p-3 text-sm text-green-700 dark:text-green-300"
-              >
-                <CheckCircle2 class="w-4 h-4 inline mr-1" />
-                Great job keeping lows under control!
-              </div>
-            {/if}
+            <div class="bg-muted/50 rounded p-3 text-sm text-muted-foreground">
+              Target for time below {bg(70)} {bgLabel()} is under 4%. Discuss any
+              patterns with your care team.
+            </div>
           </CardContent>
         </Card>
 
         <!-- Hyperglycemia -->
-        <Card
-          class="border-2 {totalHighs > 25
-            ? 'border-orange-200 bg-orange-50/30 dark:bg-orange-950/30'
-            : ''}"
-        >
+        <Card class="border-2">
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
-              <TrendingUp
-                class="w-5 h-5 {totalHighs > 25
-                  ? 'text-orange-600'
-                  : 'text-blue-600'}"
-              />
+              <TrendingUp class="w-5 h-5 text-glucose-high" />
               High Blood Sugar Events
             </CardTitle>
             <CardDescription>
@@ -508,11 +361,7 @@
           <CardContent class="space-y-4">
             <div class="flex items-center justify-between">
               <div>
-                <div
-                  class="text-3xl font-bold {totalHighs > 25
-                    ? 'text-orange-600'
-                    : 'text-green-600'}"
-                >
+                <div class="text-3xl font-bold tabular-nums">
                   {totalHighs.toFixed(1)}%
                 </div>
                 <p class="text-sm text-muted-foreground">
@@ -531,22 +380,10 @@
               </div>
             </div>
 
-            {#if totalHighs > 25}
-              <div
-                class="bg-orange-100 dark:bg-orange-900/30 rounded p-3 text-sm text-orange-700 dark:text-orange-300"
-              >
-                <strong>Consider:</strong>
-                Look at post-meal patterns and correction doses. Your AGP report can
-                help identify when highs occur most.
-              </div>
-            {:else}
-              <div
-                class="bg-green-100 dark:bg-green-900/30 rounded p-3 text-sm text-green-700 dark:text-green-300"
-              >
-                <CheckCircle2 class="w-4 h-4 inline mr-1" />
-                Time above range is well controlled!
-              </div>
-            {/if}
+            <div class="bg-muted/50 rounded p-3 text-sm text-muted-foreground">
+              Target for time above {bg(180)} {bgLabel()} is under 25%. The AGP
+              report shows the times of day when highs occur most.
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -647,28 +484,16 @@
               class="h-2"
             />
 
-            {#if (quality?.cgmActivePercent ?? 0) >= 90}
-              <div
-                class="bg-green-100 dark:bg-green-900/30 rounded p-2 text-sm text-green-700 dark:text-green-300"
-              >
-                <CheckCircle2 class="w-4 h-4 inline mr-1" />
-                Excellent data coverage!
-              </div>
-            {:else if (quality?.cgmActivePercent ?? 0) >= 70}
-              <div
-                class="bg-yellow-100 dark:bg-yellow-900/30 rounded p-2 text-sm text-yellow-700 dark:text-yellow-300"
-              >
-                <Info class="w-4 h-4 inline mr-1" />
-                Good coverage. For best insights, aim for 90%+
-              </div>
-            {:else}
-              <div
-                class="bg-orange-100 dark:bg-orange-900/30 rounded p-2 text-sm text-orange-700 dark:text-orange-300"
-              >
+            {#if (quality?.cgmActivePercent ?? 0) < 70}
+              <div class="bg-muted/50 rounded p-2 text-sm text-muted-foreground">
                 <AlertTriangle class="w-4 h-4 inline mr-1" />
-                Limited data may affect report accuracy
+                Limited data may affect report accuracy.
               </div>
             {/if}
+            <p class="text-xs text-muted-foreground">
+              Target: at least 70% CGM active time over 14 days; the statistics
+              on this page are most reliable at 90% or above.
+            </p>
 
             <div class="grid grid-cols-2 gap-4 text-sm pt-2 border-t">
               <div>
