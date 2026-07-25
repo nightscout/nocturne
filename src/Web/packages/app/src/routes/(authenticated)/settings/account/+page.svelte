@@ -46,11 +46,6 @@
 
   const user = $derived(data.user);
 
-  /** Handle logout */
-  function handleLogout() {
-    window.location.href = "/auth/logout";
-  }
-
   // ============================================================================
   // Security State
   // ============================================================================
@@ -355,7 +350,7 @@
     </div>
 
     <!-- User Profile Card -->
-    <UserProfileCard {user} onLogout={handleLogout} />
+    <UserProfileCard {user} />
 
     {#if errorMessage}
       <div
