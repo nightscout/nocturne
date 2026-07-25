@@ -17,6 +17,8 @@
     error: Error | string | null | undefined;
     /** Whether there is cached data to show (prevents skeleton flash) */
     hasData?: boolean;
+    /** Whether a new value is loading while the previous one is still shown */
+    refreshing?: boolean;
     /** Title for error card */
     errorTitle?: string;
     /** Function to call for retry */
@@ -35,6 +37,7 @@
     loading,
     error,
     hasData = false,
+    refreshing = false,
     errorTitle = "Error Loading Data",
     onRetry,
     compact = false,
@@ -64,7 +67,22 @@
   break hydration on the next render. When skeleton or error UI is shown,
   children remain mounted but are visually hidden via the `hidden` attribute.
 -->
-<div hidden={!showContent} aria-hidden={!showContent}>
+<!--
+  While a new range loads, the previous report stays on screen with a status line
+  above it rather than being replaced by a skeleton, so scroll position and any
+  panel already valid survive the change.
+-->
+{#if showContent && refreshing}
+  <div
+    class="flex items-center justify-center gap-2 border-b border-border bg-muted/40 px-4 py-1.5 text-xs text-muted-foreground print:hidden"
+    role="status"
+  >
+    <RefreshCw class="h-3 w-3 animate-spin" />
+    Loading the selected range
+  </div>
+{/if}
+
+<div hidden={!showContent} aria-hidden={!showContent} aria-busy={refreshing}>
   {@render children()}
 </div>
 

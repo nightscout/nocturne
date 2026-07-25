@@ -6,6 +6,7 @@ function registration(overrides: Partial<ResourceRegistration> = {}): ResourceRe
     loading: false,
     error: null,
     hasData: true,
+    refreshing: false,
     errorTitle: "Error Loading Data",
     refetch: () => {},
     ...overrides,
@@ -71,6 +72,20 @@ describe("ResourceContext", () => {
     ctx.register(key, registration({ error: null }));
     expect(ctx.error).toBeNull();
     expect(ctx.loading).toBe(true);
+  });
+
+  it("is refreshing when a resource reloads with a previous value still shown", () => {
+    const ctx = new ResourceContext();
+    ctx.register(Symbol(), registration());
+    ctx.register(Symbol(), registration({ loading: true, refreshing: true }));
+    expect(ctx.refreshing).toBe(true);
+    expect(ctx.hasData).toBe(true);
+  });
+
+  it("is not refreshing when a loading resource has nothing to show yet", () => {
+    const ctx = new ResourceContext();
+    ctx.register(Symbol(), registration({ loading: true, hasData: false }));
+    expect(ctx.refreshing).toBe(false);
   });
 
   it("drops a resource's state when it unregisters", () => {

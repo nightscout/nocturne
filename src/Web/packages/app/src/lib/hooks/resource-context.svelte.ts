@@ -14,6 +14,8 @@ interface ContextResourceBase<T> {
   readonly loading: boolean;
   readonly error: unknown;
   readonly current: T | undefined;
+  /** Whether `current` is a retained value from a superseded query. */
+  readonly stale: boolean;
   refresh(): void;
 }
 
@@ -36,6 +38,8 @@ export interface ResourceRegistration {
   loading: boolean;
   error: Error | string | null | undefined;
   hasData: boolean;
+  /** Loading a new value while a previous one is still on screen. */
+  refreshing: boolean;
   errorTitle: string;
   refetch: () => void;
 }
@@ -81,6 +85,11 @@ export class ResourceContext {
   /** Whether any resource has data (prevents skeleton flash). */
   get hasData(): boolean {
     return this.#all.some((r) => r.hasData);
+  }
+
+  /** Whether a new value is loading while a previous one is still on screen. */
+  get refreshing(): boolean {
+    return this.#all.some((r) => r.refreshing);
   }
 
   /** Title for the error card, taken from whichever resource failed. */
@@ -163,6 +172,7 @@ export function useResourceContext(config: {
       loading: config.loading(),
       error: config.error(),
       hasData: config.hasData(),
+      refreshing: config.loading() && config.hasData(),
       errorTitle: config.errorTitle ?? "Error Loading Data",
       refetch: config.refetch,
     })
@@ -214,12 +224,27 @@ export function contextResource<T>(
   // are never constructed inside an $effect (which would trigger a Svelte warning).
   const query = $derived(queryFn());
 
+  // Hold on to the last resolved value. Changing the range creates a new query
+  // whose `.current` is undefined, which failed both the page's own `{#if}` gate
+  // and the layout's hasData check at once: the report went blank, then swapped in
+  // a full-page skeleton, losing scroll position and every panel already valid.
+  let retained = $state<T | undefined>(undefined);
+  $effect.pre(() => {
+    if (query.current !== undefined && query.current !== null) {
+      retained = query.current;
+    }
+  });
+
+  const current = $derived(query.current ?? retained);
+  const stale = $derived(query.current === undefined && retained !== undefined);
+
   registerWith(
     getResourceContext(),
     () => ({
       loading: query.loading,
       error: query.error as Error | string | null | undefined,
-      hasData: query.current !== undefined && query.current !== null,
+      hasData: current !== undefined && current !== null,
+      refreshing: query.loading && current !== undefined && current !== null,
       errorTitle,
       refetch: () => query.refresh(),
     })
@@ -233,7 +258,10 @@ export function contextResource<T>(
       return query.error;
     },
     get current() {
-      return query.current;
+      return current;
+    },
+    get stale() {
+      return stale;
     },
     refresh() {
       query.refresh();

@@ -138,6 +138,7 @@
                 loading={resourceCtx.loading}
                 error={resourceCtx.error}
                 hasData={resourceCtx.hasData}
+                refreshing={resourceCtx.refreshing}
                 errorTitle={resourceCtx.errorTitle}
                 onRetry={resourceCtx.refetch}
             >
