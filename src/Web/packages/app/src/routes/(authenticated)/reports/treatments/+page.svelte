@@ -66,7 +66,7 @@
 
   const reportsResource = contextResource(
     () => getTreatmentsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Treatments" }
+    { errorTitle: "Error Loading Treatments", dateParams: reportsParams }
   );
 
   const allRows = $derived(
@@ -79,12 +79,7 @@
       basalInjections: reportsResource.current?.basalInjections,
     })
   );
-  const dateRange = $derived(
-    reportsResource.current?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-    }
-  );
+  const dateInfo = $derived(reportsResource.date);
 
   const treatmentSummary = $derived(
     reportsResource.current?.treatmentSummary ??
@@ -373,9 +368,7 @@
     >
       <Calendar class="h-4 w-4" />
       <span>
-        {new Date(dateRange.from).toLocaleDateString()} – {new Date(
-          dateRange.to
-        ).toLocaleDateString()}
+        {dateInfo.from.toLocaleDateString()} – {dateInfo.to.toLocaleDateString()}
       </span>
       <span class="text-muted-foreground/50">•</span>
       <span>{allRows.length.toLocaleString()} records</span>
@@ -389,7 +382,7 @@
   </div>
 
   <!-- Summary Stats -->
-  <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} {dateRange} />
+  <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} dayCount={dateInfo.dayCount} />
 
   <!-- Category Tabs — view toggle, print chaff -->
   <div class="print:hidden">
@@ -505,9 +498,7 @@
   <div class="text-center text-xs text-muted-foreground">
     <p>
       Report generated from {allRows.length.toLocaleString()} records between
-      {new Date(dateRange.from).toLocaleDateString()} and {new Date(
-        dateRange.to
-      ).toLocaleDateString()}
+      {dateInfo.from.toLocaleDateString()} and {dateInfo.to.toLocaleDateString()}
     </p>
   </div>
 </div>

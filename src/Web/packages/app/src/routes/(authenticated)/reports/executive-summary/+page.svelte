@@ -36,30 +36,17 @@
   // Default: 14 days is standard for executive summary reports
   const reportsParams = requireDateParamsContext(14);
 
-  // Create resource with automatic layout registration
+  // Create resource with automatic layout registration; `date` carries the
+  // selected range so per-day figures divide by the days the user picked.
   const reportsResource = contextResource(
     () => getReportsData(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Executive Summary" }
+    { errorTitle: "Error Loading Executive Summary", dateParams: reportsParams }
   );
 
-  const dateRange = $derived(
-    reportsResource.current?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-    }
-  );
   const entries = $derived(reportsResource.current?.entries ?? []);
   const analysis = $derived(reportsResource.current?.analysis);
-
-  // Helper to get date values
-  const startDate = $derived(new Date(dateRange.from));
-  const endDate = $derived(new Date(dateRange.to));
-  const dayCount = $derived(
-    Math.round(
-      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
-    )
-  );
+  const lastUpdated = $derived(reportsResource.current?.dateRange?.lastUpdated);
+  const dayCount = $derived(reportsResource.date.dayCount);
 
   function formatDuration(minutes: number): string {
     const hours = Math.floor(minutes / 60);
@@ -168,7 +155,7 @@
                   <span class="text-green-600 font-medium">In Range</span>
                   <span>
                     {formatDuration(
-                      (durations?.target ?? 0) / Math.max(1, dayCount)
+                      (durations?.target ?? 0) / dayCount
                     )}
                   </span>
                 </div>
@@ -177,7 +164,7 @@
                   <span>
                     {formatDuration(
                       ((durations?.low ?? 0) + (durations?.veryLow ?? 0)) /
-                        Math.max(1, dayCount)
+                        dayCount
                     )}
                   </span>
                 </div>
@@ -186,7 +173,7 @@
                   <span>
                     {formatDuration(
                       ((durations?.high ?? 0) + (durations?.veryHigh ?? 0)) /
-                        Math.max(1, dayCount)
+                        dayCount
                     )}
                   </span>
                 </div>
@@ -558,9 +545,9 @@
 
     <!-- Footer -->
     <div class="text-xs text-muted-foreground text-center space-y-1 print:mt-8">
-      <p>
-        Report generated: {new Date(dateRange.lastUpdated).toLocaleString()}
-      </p>
+      {#if lastUpdated}
+        <p>Report generated: {new Date(lastUpdated).toLocaleString()}</p>
+      {/if}
       <p class="text-muted-foreground/60">
         This report is for informational purposes. Always consult your
         healthcare provider for medical decisions.

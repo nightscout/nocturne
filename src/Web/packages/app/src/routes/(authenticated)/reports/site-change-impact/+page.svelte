@@ -31,33 +31,18 @@
   // Default: 30 days to capture multiple site changes for meaningful analysis
   const reportsParams = requireDateParamsContext(30);
 
-  // Create resource with automatic layout registration
+  // Create resource with automatic layout registration; `date` carries the
+  // selected range so the header matches the window that was queried.
   const siteChangeResource = contextResource(
     () => getSiteChangeImpact(reportsParams.dateRangeInput),
-    { errorTitle: "Error Loading Site Change Data" }
+    { errorTitle: "Error Loading Site Change Data", dateParams: reportsParams }
   );
 
   const isLoading = $derived(siteChangeResource.loading);
-  const queryData = $derived(siteChangeResource.current);
-  const analysis = $derived(queryData?.analysis ?? null);
-  const dateRange = $derived(
-    queryData?.dateRange ?? {
-      from: new Date().toISOString(),
-      to: new Date().toISOString(),
-    }
-  );
-
-  // Helper dates
-  const startDate = $derived(new Date(dateRange.from));
-  const endDate = $derived(new Date(dateRange.to));
-  const dayCount = $derived(
-    Math.max(
-      1,
-      Math.round(
-        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
-      )
-    )
-  );
+  const analysis = $derived(siteChangeResource.current?.analysis ?? null);
+  const startDate = $derived(siteChangeResource.date.from);
+  const endDate = $derived(siteChangeResource.date.to);
+  const dayCount = $derived(siteChangeResource.date.dayCount);
 
   // Format date for display
   function formatDate(date: Date): string {

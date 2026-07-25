@@ -6,15 +6,11 @@
   // Default: 14 days for basal pattern analysis
   const reportsParams = requireDateParamsContext(14);
 
-  // Date info derived from the URL params (same shape contextResource.date exposed).
-  const dateInfo = $derived.by(() => {
-    const range = reportsParams.getDateRange();
-    const ms = range.end.getTime() - range.start.getTime();
-    return {
-      from: range.start,
-      to: range.end,
-      dayCount: Math.max(1, Math.round(ms / (1000 * 60 * 60 * 24))),
-    };
+  // Date info derived from the URL params (same shape contextResource.date exposes).
+  const dateInfo = $derived({
+    from: reportsParams.startDate,
+    to: reportsParams.endDate,
+    dayCount: reportsParams.dayCount,
   });
 
   // ISO strings rather than Date objects: remote-query arguments are devalue
