@@ -155,50 +155,42 @@
     MetricKey,
     {
       label: string;
-      goodWhen: "up" | "down";
       format: (v: number) => string;
       formatDelta: (delta: number) => string;
     }
   > = {
     tirTarget: {
       label: "Time in Range",
-      goodWhen: "up",
       format: (v) => `${v.toFixed(1)}%`,
       formatDelta: (d) => `${signed(d)} pp`,
     },
     gmi: {
       label: "GMI",
-      goodWhen: "down",
       format: (v) => `${v.toFixed(1)}%`,
       formatDelta: (d) => `${signed(d, 2)} pp`,
     },
     cv: {
       label: "Variability (CV)",
-      goodWhen: "down",
       format: (v) => `${v.toFixed(1)}%`,
       formatDelta: (d) => `${signed(d)} pp`,
     },
     gri: {
       label: "Glycemic Risk Index",
-      goodWhen: "down",
       format: (v) => v.toFixed(0),
       formatDelta: (d) => signed(d, 0),
     },
     mean: {
       label: "Mean Glucose",
-      goodWhen: "down",
       format: (v) => `${bg(v)} ${bgLabel()}`,
       formatDelta: (d) => `${bgDelta(d)} ${bgLabel()}`,
     },
     hyperHours: {
       label: "Hyper Duration",
-      goodWhen: "down",
       format: (v) => `${v.toFixed(1)} h`,
       formatDelta: (d) => `${signed(d)} h`,
     },
     hyperEvents: {
       label: "Hyper Events",
-      goodWhen: "down",
       format: (v) => v.toFixed(0),
       formatDelta: (d) => signed(d, 0),
     },
@@ -245,6 +237,7 @@
 
   // Cap percent change at ±60 % so outliers don't blow out the bar.
   const BAR_CAP_PCT = 60;
+  const BAR_COLOR = "var(--foreground)";
 
   type DiffRow = {
     key: MetricKey;
@@ -253,7 +246,6 @@
     bv: number | null;
     delta: number | null;
     pct: number | null;
-    verdict: "better" | "worse" | "neutral";
     fillStyle: string;
     deltaText: string;
   };
@@ -275,8 +267,7 @@
           bv,
           delta: null,
           pct: null,
-          verdict: "neutral",
-          fillStyle: "left: calc(50% - 1px); width: 2px; background: var(--muted-foreground);",
+          fillStyle: `left: calc(50% - 1px); width: 2px; background: ${BAR_COLOR};`,
           deltaText: "—",
         };
       }
@@ -285,31 +276,17 @@
       const pct = av === 0 ? 0 : (delta / Math.abs(av)) * 100;
       const flat =
         Math.abs(delta) < (key === "gri" || key === "hyperEvents" ? 0.5 : 0.05);
-      const direction = flat ? "flat" : delta > 0 ? "up" : "down";
-      const isImprovement =
-        direction !== "flat" &&
-        ((def.goodWhen === "up" && direction === "up") ||
-          (def.goodWhen === "down" && direction === "down"));
-      const verdict: DiffRow["verdict"] = flat
-        ? "neutral"
-        : isImprovement
-          ? "better"
-          : "worse";
 
       const magnitude = Math.min(BAR_CAP_PCT, Math.abs(pct));
       const halfWidth = (magnitude / BAR_CAP_PCT) * 50;
-      const color =
-        verdict === "better"
-          ? "var(--glucose-in-range)"
-          : verdict === "worse"
-            ? "var(--glucose-very-low)"
-            : "var(--muted-foreground)";
 
+      // The bar carries the sign of the change: it grows right when the second
+      // period is higher and left when it is lower.
       const fillStyle = flat
-        ? `left: calc(50% - 1px); width: 2px; background: ${color};`
-        : isImprovement
-          ? `left: 50%; width: ${halfWidth}%; background: ${color};`
-          : `right: 50%; width: ${halfWidth}%; background: ${color};`;
+        ? `left: calc(50% - 1px); width: 2px; background: ${BAR_COLOR};`
+        : delta > 0
+          ? `left: 50%; width: ${halfWidth}%; background: ${BAR_COLOR};`
+          : `right: 50%; width: ${halfWidth}%; background: ${BAR_COLOR};`;
 
       return {
         key,
@@ -318,7 +295,6 @@
         bv,
         delta,
         pct,
-        verdict,
         fillStyle,
         deltaText: def.formatDelta(delta),
       };
@@ -509,11 +485,6 @@
             </div>
             <div
               class="ml-auto font-mono text-xs font-semibold tabular-nums @2xl:ml-0 @2xl:text-right"
-              style="color: {row.verdict === 'better'
-                ? 'var(--glucose-in-range)'
-                : row.verdict === 'worse'
-                  ? 'var(--glucose-very-low)'
-                  : 'var(--muted-foreground)'};"
             >
               {row.deltaText}
             </div>
@@ -522,9 +493,9 @@
       </div>
 
       <div class="flex justify-between font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
-        <span>← worse</span>
+        <span>← lower in {periods.b.label}</span>
         <span>no change</span>
-        <span>better →</span>
+        <span>higher in {periods.b.label} →</span>
       </div>
     </Card.Content>
   </Card.Root>
