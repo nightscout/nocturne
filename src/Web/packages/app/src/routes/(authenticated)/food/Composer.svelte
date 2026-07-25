@@ -77,14 +77,17 @@
 		}
 	}
 
+	/** Enter saves and closes, after the browser's required-field checks. */
+	function handleSubmit(e: SubmitEvent) {
+		e.preventDefault();
+		submit(false);
+	}
+
 	function handleKeydown(e: KeyboardEvent) {
 		const mod = e.metaKey || e.ctrlKey;
 		if (mod && e.key === 'Enter') {
 			e.preventDefault();
 			submit(true);
-		} else if (e.shiftKey && e.key === 'Enter') {
-			e.preventDefault();
-			submit(false);
 		} else if (e.key === 'Escape') {
 			e.preventDefault();
 			onclose();
@@ -92,10 +95,13 @@
 	}
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
+<!-- The keydown handler carries the composer's own shortcuts (save and add
+     another, close) — submit and required-field checks come from the form. -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<form
 	class="mx-4 my-3 rounded-[10px] p-3.5"
 	style="border: 1px solid var(--carbs-border); background: var(--carbs-bg-subtle)"
+	onsubmit={handleSubmit}
 	onkeydown={handleKeydown}
 >
 	<!-- Header -->
@@ -105,19 +111,22 @@
 		</div>
 		<span class="font-semibold" style="font-size: 13px">Add food</span>
 		<span class="text-muted-foreground" style="font-size: 11px">
-			Tab through fields · ⌘+Enter to save and add another · Esc to close
+			Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close
 		</span>
-		<Button variant="ghost" size="icon" class="ml-auto h-8 w-8" onclick={onclose}><X class="h-3.5 w-3.5" /></Button>
+		<Button type="button" variant="ghost" size="icon" class="ml-auto h-8 w-8" onclick={onclose}><X class="h-3.5 w-3.5" /></Button>
 	</div>
 
 	<!-- Single-row form -->
 	<div class="grid items-end gap-3" style="grid-template-columns: 1.6fr 110px 90px 1fr 1.4fr; height: 42px">
 		<!-- Name -->
 		<div class="flex h-full flex-col gap-1">
-			<span class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Name</span>
+			<label for="composer-name" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Name</label>
 			<div class="flex flex-1 items-center rounded-md px-3" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
 				<input
+					id="composer-name"
+					name="name"
 					type="text"
+					required
 					class="w-full bg-transparent text-sm outline-none"
 					placeholder="e.g. Greek yogurt, plain"
 					bind:this={nameInput}
@@ -128,10 +137,13 @@
 
 		<!-- Carbs -->
 		<div class="flex h-full flex-col gap-1">
-			<span class="font-medium uppercase" style="font-size: 10px; color: var(--carbs)">Carbs</span>
+			<label for="composer-carbs" class="font-medium uppercase" style="font-size: 10px; color: var(--carbs)">Carbs</label>
 			<div class="flex flex-1 items-center rounded-md px-3" style="border: 1px solid var(--carbs-border-strong); background: var(--carbs-bg)">
 				<input
+					id="composer-carbs"
+					name="carbs"
 					type="number"
+					required
 					class="w-full bg-transparent text-sm outline-none"
 					bind:value={draft.carbs}
 					min="0"
@@ -143,10 +155,13 @@
 
 		<!-- Per (portion) -->
 		<div class="flex h-full flex-col gap-1">
-			<span class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Per</span>
+			<label for="composer-portion" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Per</label>
 			<div class="flex flex-1 items-center rounded-md px-3" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
 				<input
+					id="composer-portion"
+					name="portion"
 					type="number"
+					required
 					class="w-full bg-transparent text-sm outline-none"
 					bind:value={draft.portion}
 					min="0"
@@ -157,8 +172,8 @@
 
 		<!-- Unit -->
 		<div class="flex h-full flex-col gap-1">
-			<span class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Unit</span>
-			<ToggleGroup.Root type="single" value={draft.unit ?? 'g'} onValueChange={(v: string) => { if (v) draft = { ...draft, unit: v }; }} variant="outline" size="sm" class="w-full flex-1">
+			<span id="composer-unit-label" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Unit</span>
+			<ToggleGroup.Root aria-labelledby="composer-unit-label" type="single" value={draft.unit ?? 'g'} onValueChange={(v: string) => { if (v) draft = { ...draft, unit: v }; }} variant="outline" size="sm" class="w-full flex-1">
 				{#each FOOD_UNITS as u (u)}
 					<ToggleGroup.Item value={u} class="flex-1">{u}</ToggleGroup.Item>
 				{/each}
@@ -167,8 +182,8 @@
 
 		<!-- GI -->
 		<div class="flex h-full flex-col gap-1">
-			<span class="text-muted-foreground font-medium uppercase" style="font-size: 10px">GI</span>
-			<ToggleGroup.Root type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (v) draft = { ...draft, gi: giToInt(v as GiLevel) }; }} variant="outline" size="sm" class="w-full flex-1">
+			<span id="composer-gi-label" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">GI</span>
+			<ToggleGroup.Root aria-labelledby="composer-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (v) draft = { ...draft, gi: giToInt(v as GiLevel) }; }} variant="outline" size="sm" class="w-full flex-1">
 				{#each giLevels as g (g)}
 					<ToggleGroup.Item value={g} class="flex-1 capitalize gap-1.5">
 						<GiIcon level={g} size={7} />{g}
@@ -189,10 +204,12 @@
 			<div class="mt-3 grid gap-3" style="grid-template-columns: 1fr 1fr 1fr 1fr 1fr">
 				<!-- Fat -->
 				<div class="flex flex-col gap-1">
-					<span class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Fat</span>
+					<label for="composer-fat" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Fat</label>
 					<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
 						<input
 							type="number"
+							id="composer-fat"
+							name="fat"
 							class="w-full bg-transparent text-sm outline-none"
 							bind:value={draft.fat}
 							min="0"
@@ -204,10 +221,12 @@
 
 				<!-- Protein -->
 				<div class="flex flex-col gap-1">
-					<span class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Protein</span>
+					<label for="composer-protein" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Protein</label>
 					<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
 						<input
 							type="number"
+							id="composer-protein"
+							name="protein"
 							class="w-full bg-transparent text-sm outline-none"
 							bind:value={draft.protein}
 							min="0"
@@ -219,10 +238,12 @@
 
 				<!-- Energy -->
 				<div class="flex flex-col gap-1">
-					<span class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Energy</span>
+					<label for="composer-energy" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Energy</label>
 					<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
 						<input
 							type="number"
+							id="composer-energy"
+							name="energy"
 							class="w-full bg-transparent text-sm outline-none"
 							bind:value={draft.energy}
 							min="0"
@@ -234,9 +255,9 @@
 
 				<!-- Category -->
 				<div class="flex flex-col gap-1">
-					<span class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Category</span>
-					<Select.Root type="single" value={draft.category ?? ''} onValueChange={(v) => { draft = { ...draft, category: v }; }}>
-						<Select.Trigger class="h-9 w-full text-xs">
+					<label for="composer-category" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Category</label>
+					<Select.Root type="single" name="category" value={draft.category ?? ''} onValueChange={(v) => { draft = { ...draft, category: v }; }}>
+						<Select.Trigger id="composer-category" class="h-9 w-full text-xs">
 							{draft.category || 'Category'}
 						</Select.Trigger>
 						<Select.Content>
@@ -250,9 +271,9 @@
 
 				<!-- Subcategory -->
 				<div class="flex flex-col gap-1">
-					<span class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Subcategory</span>
-					<Select.Root type="single" value={draft.subcategory ?? ''} onValueChange={(v) => { draft = { ...draft, subcategory: v }; }}>
-						<Select.Trigger class="h-9 w-full text-xs">
+					<label for="composer-subcategory" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Subcategory</label>
+					<Select.Root type="single" name="subcategory" value={draft.subcategory ?? ''} onValueChange={(v) => { draft = { ...draft, subcategory: v }; }}>
+						<Select.Trigger id="composer-subcategory" class="h-9 w-full text-xs">
 							{draft.subcategory || 'Subcategory'}
 						</Select.Trigger>
 						<Select.Content>
@@ -269,8 +290,8 @@
 
 		<!-- Action buttons -->
 		<div class="flex items-center gap-2">
-			<Button variant="outline" size="sm" disabled={!canSave} onclick={() => submit(false)}>Save</Button>
-			<Button size="sm" disabled={!canSave} onclick={() => submit(true)}>Save & add another <span class="ml-1 text-[11px] opacity-60">⌘+Enter</span></Button>
+			<Button type="submit" variant="outline" size="sm" disabled={!canSave}>Save</Button>
+			<Button type="button" size="sm" disabled={!canSave} onclick={() => submit(true)}>Save & add another <span class="ml-1 text-[11px] opacity-60">⌘+Enter</span></Button>
 		</div>
 	</div>
-</div>
+</form>
