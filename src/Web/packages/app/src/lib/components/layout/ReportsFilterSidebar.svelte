@@ -4,11 +4,11 @@
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
   import { ScrollArea } from "$lib/components/ui/scroll-area";
-  import { Switch } from "$lib/components/ui/switch";
   import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
   import type { DateRange } from "bits-ui";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { RangeCalendar } from "$lib/components/ui/range-calendar";
+  import { dayCount } from "$lib/utils/date-range";
   import { Calendar, Filter, RotateCcw } from "lucide-svelte";
 
   interface Props {
@@ -30,8 +30,6 @@
     { label: "30 Days", days: 30 },
     { label: "90 Days", days: 90 },
   ];
-
-  const MS_PER_DAY = 86_400_000;
 
   // === DRAFT STATE ===
   // The pending date range selection before clicking "Apply Filters".
@@ -74,10 +72,7 @@
     const tz = getLocalTimeZone();
     if (end.compare(today(tz)) !== 0) return undefined;
 
-    const days =
-      Math.round(
-        (end.toDate(tz).getTime() - start.toDate(tz).getTime()) / MS_PER_DAY
-      ) + 1;
+    const days = dayCount(start.toString(), end.toString());
     return dayPresets.some((p) => p.days === days) ? days : undefined;
   });
 
@@ -95,8 +90,16 @@
     }
   }
 
+  /**
+   * Return to the on-screen report's own default window and hand the range back
+   * to default mode, so navigating to another report can adjust it again.
+   * Resetting to a fixed 7 days shortened 30-day reports and pinned the result
+   * as a user choice.
+   */
   function resetFilters() {
-    selectPreset(7);
+    params.reset();
+    open = false;
+    onOpenChange?.(false);
   }
 
   function applyFilters() {
@@ -139,7 +142,7 @@
         </Sheet.Title>
       </div>
       <Sheet.Description class="text-sm text-muted-foreground">
-        Adjust the date range and filters for your report.
+        Adjust the date range for your report.
       </Sheet.Description>
     </Sheet.Header>
 
@@ -180,30 +183,6 @@
               onValueChange={handleCalendarChange}
               class="p-0"
             />
-          </div>
-        </div>
-
-        <Separator />
-
-        <!-- Additional Filters (placeholders for future features) -->
-        <div class="space-y-3">
-          <Label class="text-sm font-medium">Display Options</Label>
-
-          <div class="flex items-center justify-between">
-            <Label class="text-sm text-muted-foreground">
-              Show target range
-            </Label>
-            <Switch checked={true} />
-          </div>
-
-          <div class="flex items-center justify-between">
-            <Label class="text-sm text-muted-foreground">Show treatments</Label>
-            <Switch checked={true} />
-          </div>
-
-          <div class="flex items-center justify-between">
-            <Label class="text-sm text-muted-foreground">Include notes</Label>
-            <Switch checked={false} />
           </div>
         </div>
       </div>

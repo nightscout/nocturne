@@ -70,6 +70,11 @@ export function useDateParams(defaultDays = 7) {
   // Track initialization to prevent infinite loops
   let initialized = $state(false);
 
+  // The default window of the report currently on screen, which differs from the
+  // layout's baseline (insulin-delivery wants 30 days, readings 7). Reset returns
+  // to this rather than to the layout's, so Reset on a 30-day report stays 30 days.
+  let reportDefaultDays = $state(defaultDays);
+
   // Compute initial defaults eagerly so memoizedInput is valid before effects run (SSR)
   const _initEnd = today(getLocalTimeZone());
   const _initStart = _initEnd.subtract({ days: defaultDays - 1 });
@@ -206,9 +211,9 @@ export function useDateParams(defaultDays = 7) {
    */
   function reset() {
     const endDate = today(getLocalTimeZone());
-    const startDate = endDate.subtract({ days: defaultDays - 1 });
+    const startDate = endDate.subtract({ days: reportDefaultDays - 1 });
 
-    params.days = defaultDays;
+    params.days = reportDefaultDays;
     params.from = startDate.toString();
     params.to = endDate.toString();
     params.isDefault = true;
@@ -295,11 +300,25 @@ export function useDateParams(defaultDays = 7) {
     reset,
     getDateRange,
 
+    /** The default window of the report currently on screen. */
+    get reportDefaultDays(): number {
+      return reportDefaultDays;
+    },
+
+    /**
+     * Internal method: record the on-screen report's default window, so Reset
+     * returns to it rather than to the layout's baseline.
+     */
+    _setReportDefaultDays(daysCount: number) {
+      reportDefaultDays = daysCount;
+    },
+
     /**
      * Internal method: Set day range while keeping isDefault=true.
      * Used when auto-adjusting to a report's preferred default.
      */
     _setDefaultDayRange(daysCount: number) {
+      reportDefaultDays = daysCount;
       const endDate = today(getLocalTimeZone());
       const startDate = endDate.subtract({ days: daysCount - 1 });
       params.days = daysCount;
@@ -387,11 +406,15 @@ export function requireDateParamsContext(reportDefaultDays?: number): ReportsPar
   // Use untrack to read values without creating reactive dependencies that could
   // cause effect_update_depth_exceeded when this is called during component init
   untrack(() => {
-    if (reportDefaultDays !== undefined && params.isDefault && params.days !== reportDefaultDays) {
+    if (reportDefaultDays === undefined) return;
+    if (params.isDefault && params.days !== reportDefaultDays) {
       // The user hasn't made a custom selection (isDefault=true), so we can adjust
       // to this report's preferred default range using direct property assignment
       // (which triggers runed's reactive proxy correctly)
       params._setDefaultDayRange(reportDefaultDays);
+    } else {
+      // No adjustment needed, but Reset still has to know this report's default.
+      params._setReportDefaultDays(reportDefaultDays);
     }
   });
 
