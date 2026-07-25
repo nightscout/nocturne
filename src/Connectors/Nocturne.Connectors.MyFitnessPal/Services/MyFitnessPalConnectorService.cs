@@ -131,8 +131,8 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             ? AsUtc(request.To.Value)
             : AsUtc(DateTime.UtcNow.AddDays(1));
 
-        var entries = await FetchDiaryAsync(config, from, cancellationToken);
-        if (entries == null)
+        var read = await FetchDiaryAsync(config, from, cancellationToken);
+        if (read == null)
         {
             result.Success = false;
             result.Errors.Add("Failed to fetch diary data from MyFitnessPal");
@@ -140,9 +140,9 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             return result;
         }
 
-        var mealNames = await ResolveMealNamesAsync(entries, from, to, cancellationToken);
+        var mealNames = await ResolveMealNamesAsync(read.Entries, from, to, cancellationToken);
 
-        var foodEntryImports = _mapper.Map(entries, config, from, to, mealNames);
+        var foodEntryImports = _mapper.Map(read.Entries, config, from, to, mealNames);
         var count = foodEntryImports.Count;
 
         if (count > 0)
@@ -166,6 +166,13 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                     result.Errors.Add("Failed to publish food entries");
                 }
             }
+        }
+
+        // Deliberately outside the publish branch: a window the user has emptied maps to no imports
+        // at all, and that is precisely when every entry stored for it needs withdrawing.
+        if (result.Success && _connectorPublisher is { IsAvailable: true })
+        {
+            await WithdrawDeletedEntriesAsync(read, foodEntryImports, from, to, cancellationToken);
         }
 
         result.ItemsSynced[SyncDataType.Food] = count;
@@ -234,7 +241,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     /// window each sync also means an entry that is edited, or that falls outside the window and
     /// later moves into it, is picked up rather than being passed over for good.
     /// </remarks>
-    private async Task<List<MfpFoodDiaryEntryNode>?> FetchDiaryAsync(
+    private async Task<DiaryRead?> FetchDiaryAsync(
         MyFitnessPalConnectorConfiguration config,
         DateTimeOffset from,
         CancellationToken cancellationToken)
@@ -278,7 +285,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
             before = connection.FoodDiaryEntryPaging?.StartCursor;
             if (connection.FoodDiaryEntryPaging?.HasPreviousPage != true || string.IsNullOrEmpty(before))
-                return entries;
+                return new DiaryRead(entries, CoveredWindow: true);
 
             // Pages run newest first, but their order tracks modification rather than diary date,
             // so a block of recently edited old entries can sit ahead of the window. Read a few
@@ -290,7 +297,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
             preWindowPages = newestOnPage >= windowStart ? 0 : preWindowPages + 1;
             if (preWindowPages >= MyFitnessPalConstants.PreWindowPageLookahead)
-                return entries;
+                return new DiaryRead(entries, CoveredWindow: true);
         }
 
         _logger.LogWarning(
@@ -299,7 +306,51 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             MyFitnessPalConstants.MaxPagesPerSync,
             windowStart);
 
-        return entries;
+        return new DiaryRead(entries, CoveredWindow: false);
+    }
+
+    /// <summary>
+    /// The entries a diary read produced, and whether the walk got far enough back to have seen
+    /// everything in the window. A truncated read cannot be used to conclude that anything it did
+    /// not mention was deleted.
+    /// </summary>
+    private sealed record DiaryRead(List<MfpFoodDiaryEntryNode> Entries, bool CoveredWindow);
+
+    /// <summary>
+    /// Marks entries the user has since deleted in MyFitnessPal as deleted here too.
+    /// </summary>
+    /// <remarks>
+    /// Deleting an entry is how a mis-logged meal gets corrected, and publishing is an upsert, so
+    /// nothing else retires the stored copy or the match suggestion it keeps producing. Production
+    /// does not help: the sync stream's DELETE tombstones never arrive on the cursorless read this
+    /// connector performs — a full walk of a real account returned 1395 edges, every one an UPSERT —
+    /// so absence from a complete read is the only available evidence of a deletion.
+    /// </remarks>
+    private async Task WithdrawDeletedEntriesAsync(
+        DiaryRead read,
+        List<ConnectorFoodEntryImport> imports,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        // Reconciling against a read that fell short of the window start, or that returned nothing
+        // at all because something ahead of the mapping broke, would withdraw entries that still
+        // exist. Emptying the window is still handled — that read has entries, just none in the
+        // window — but an account whose whole diary is empty waits for a sync that has an entry.
+        if (!read.CoveredWindow || read.Entries.Count == 0)
+        {
+            _logger.LogDebug(
+                "[{ConnectorSource}] Skipping deletion reconciliation for an incomplete diary read",
+                ConnectorSource);
+            return;
+        }
+
+        await _connectorPublisher!.Metadata.ReconcileConnectorFoodEntriesAsync(
+            imports.Select(i => i.ExternalEntryId),
+            from,
+            to,
+            ConnectorSource, WriteOrigin.Live,
+            cancellationToken);
     }
 
     /// <summary>
@@ -309,6 +360,9 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     /// The GraphQL sync carries no meal, so the legacy diary is fetched for each day that has
     /// entries and the two are reconciled per day. A day the reconciliation cannot settle is left
     /// unnamed rather than guessed at, and a failed request only costs that day its meal names.
+    /// Past the request budget the oldest days go unnamed rather than the whole window: a
+    /// <see cref="MyFitnessPalConnectorConfiguration.LookbackDays"/> of a year is configurable, and
+    /// abandoning every day at once would leave a permanently unnamed diary.
     /// </remarks>
     private async Task<IReadOnlyDictionary<string, string>> ResolveMealNamesAsync(
         List<MfpFoodDiaryEntryNode> entries,
@@ -323,31 +377,33 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                         && d >= DateOnly.FromDateTime(from.UtcDateTime.Date)
                         && d <= DateOnly.FromDateTime(to.UtcDateTime.Date))
             .GroupBy(e => e.Date!)
-            .ToList();
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
-        if (days.Count > MyFitnessPalConstants.MaxDiaryDaysPerSync)
+        var budgeted = SelectDaysToName(days.Keys);
+        if (budgeted.Count < days.Count)
         {
             _logger.LogInformation(
-                "[{ConnectorSource}] {Days} days in window exceeds the {Max} day meal-name budget; importing without meal names",
+                "[{ConnectorSource}] {Days} days in window exceeds the {Max} day meal-name budget; naming the most recent {Named} and importing the rest unnamed",
                 ConnectorSource,
                 days.Count,
-                MyFitnessPalConstants.MaxDiaryDaysPerSync);
-            return resolved;
+                MyFitnessPalConstants.MaxDiaryDaysPerSync,
+                budgeted.Count);
         }
 
-        foreach (var day in days)
+        foreach (var date in budgeted)
         {
-            var meals = await FetchDiaryMealsAsync(day.Key, cancellationToken);
+            var day = days[date];
+            var meals = await FetchDiaryMealsAsync(date, cancellationToken);
             if (meals == null)
                 continue;
 
-            var attributed = MyFitnessPalMealAttributor.Attribute([.. day], meals);
+            var attributed = MyFitnessPalMealAttributor.Attribute(day, meals);
             if (attributed.Count == 0)
             {
                 _logger.LogDebug(
                     "[{ConnectorSource}] Could not attribute meals for {Date}; importing that day unnamed",
                     ConnectorSource,
-                    day.Key);
+                    date);
                 continue;
             }
 
@@ -357,6 +413,19 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
         return resolved;
     }
+
+    /// <summary>
+    /// Picks the days a sync spends its meal-name request budget on: the most recent ones.
+    /// </summary>
+    /// <remarks>
+    /// Days are ISO <c>yyyy-MM-dd</c>, so an ordinal sort is chronological. Overspending the budget
+    /// on the oldest days would leave the days a user is actually looking at unnamed, and abandoning
+    /// the whole window past the budget leaves a long <c>LookbackDays</c> permanently unnamed.
+    /// </remarks>
+    public static List<string> SelectDaysToName(IEnumerable<string> daysWithEntries) =>
+        [.. daysWithEntries
+            .OrderByDescending(d => d, StringComparer.Ordinal)
+            .Take(MyFitnessPalConstants.MaxDiaryDaysPerSync)];
 
     private async Task<List<MfpDiaryItem>?> FetchDiaryMealsAsync(
         string date,

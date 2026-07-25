@@ -362,6 +362,8 @@ public class TandemE2eSyncTests
             Task.FromResult(true);
         public Task<IReadOnlyList<ConnectorFoodEntry>?> PublishConnectorFoodEntriesAsync(IEnumerable<ConnectorFoodEntryImport> entries, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<ConnectorFoodEntry>?>([]);
+        public Task<int?> ReconcileConnectorFoodEntriesAsync(IEnumerable<string> presentExternalEntryIds, DateTimeOffset from, DateTimeOffset to, string source, WriteOrigin origin, CancellationToken ct = default) =>
+            Task.FromResult<int?>(0);
         public Task<bool> PublishActivityAsync(IEnumerable<Activity> activities, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Task.FromResult(true);
         public Task<bool> PublishStateSpansAsync(IEnumerable<StateSpan> stateSpans, string source, WriteOrigin origin, CancellationToken ct = default) =>

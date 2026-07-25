@@ -23,4 +23,29 @@ public interface IConnectorFoodEntryService
         IEnumerable<ConnectorFoodEntryImport> imports,
         CancellationToken cancellationToken = default
     );
+
+    /// <summary>
+    /// Marks still-pending entries in a window <see cref="ConnectorFoodEntryStatus.Deleted"/> when the
+    /// connector no longer reports them, withdrawing their match suggestions.
+    /// </summary>
+    /// <remarks>
+    /// Deleting an entry is how a user corrects a mis-logged meal, and imports are an upsert, so
+    /// without this the carbs and the suggestion card outlive the entry. Only safe for a connector
+    /// that read the whole window: called with a partial list, every entry it missed looks deleted.
+    /// </remarks>
+    /// <param name="userId">The user whose match notifications are archived alongside</param>
+    /// <param name="connectorSource">Only entries from this connector are considered</param>
+    /// <param name="from">Start of the window that was read, inclusive</param>
+    /// <param name="to">End of the window that was read, inclusive</param>
+    /// <param name="presentExternalEntryIds">Every external entry id the connector saw in the window</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The number of entries marked deleted</returns>
+    Task<int> MarkMissingAsDeletedAsync(
+        string userId,
+        string connectorSource,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        IEnumerable<string> presentExternalEntryIds,
+        CancellationToken cancellationToken = default
+    );
 }

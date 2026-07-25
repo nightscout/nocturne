@@ -82,9 +82,10 @@ public static class MyFitnessPalConstants
     public const int PreWindowPageLookahead = 3;
 
     /// <summary>
-    ///     Meal names cost one legacy diary request per day. Beyond this many days in a window —
-    ///     which only happens on a first full-history sync — entries are imported unnamed rather
-    ///     than issuing hundreds of requests.
+    ///     Meal names cost one legacy diary request per day, so a sync names at most this many days.
+    ///     A window holding more — a long <c>LookbackDays</c>, or a first full-history sync — has its
+    ///     most recent days named and the remainder imported unnamed, rather than issuing hundreds of
+    ///     requests or giving up on the whole window.
     /// </summary>
     public const int MaxDiaryDaysPerSync = 60;
 }

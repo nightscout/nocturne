@@ -39,7 +39,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
             }
 
             var mealName = mealNames?.GetValueOrDefault(entry.Id);
-            var consumedAt = ResolveConsumedAt(entry, date, mealName, config);
+            var (consumedAt, isTimeInferred) = ResolveConsumedAt(entry, date, mealName, config);
             if (consumedAt < from || consumedAt > to)
                 continue;
 
@@ -62,6 +62,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
                 Energy = nutrition?.Calories ?? 0,
                 Servings = entry.Quantity,
                 ServingDescription = FormatServingDescription(entry.ServingSize, entry.Quantity),
+                IsTimeInferred = isTimeInferred,
                 Food = food != null
                     ? new ConnectorFoodImport
                     {
@@ -87,7 +88,13 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
     ///     <c>consumedAt</c> and <c>loggedAt</c> null, so the meal name supplies an approximate
     ///     hour. Users can rename meals, so an unrecognised name falls back to midday.
     /// </summary>
-    public static DateTimeOffset ResolveConsumedAt(
+    /// <returns>
+    ///     The resolved time, and whether it was inferred rather than reported. Only a parsed
+    ///     <c>consumedAt</c> counts as reported; everything else is derived from the meal name and
+    ///     must not overwrite a stored value — see
+    ///     <see cref="ConnectorFoodEntryImport.IsTimeInferred"/>.
+    /// </returns>
+    public static (DateTimeOffset ConsumedAt, bool IsTimeInferred) ResolveConsumedAt(
         MfpFoodDiaryEntryNode entry,
         DateOnly date,
         string? mealName,
@@ -95,7 +102,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
     {
         if (entry.ConsumedAt != null
             && DateTimeOffset.TryParse(entry.ConsumedAt, CultureInfo.InvariantCulture, out var parsed))
-            return parsed.ToUniversalTime();
+            return (parsed.ToUniversalTime(), false);
 
         var mealHour = mealName?.ToLowerInvariant() switch
         {
@@ -110,7 +117,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
         // TimezoneOffset is a double validated only against a range, so round before using it.
         var offset = TimeSpan.FromMinutes(Math.Round(config.TimezoneOffset * 60));
         var dateTime = date.ToDateTime(new TimeOnly(mealHour, 0));
-        return new DateTimeOffset(dateTime, offset).ToUniversalTime();
+        return (new DateTimeOffset(dateTime, offset).ToUniversalTime(), true);
     }
 
     private static DateTimeOffset? TryParseTimestamp(string? timestamp)

@@ -130,7 +130,8 @@ public class MyFitnessPalFoodEntryMapperTests
         var resolved = MyFitnessPalFoodEntryMapper.ResolveConsumedAt(
             Entry(consumedAt: "2026-07-20T08:30:00Z"), new DateOnly(2026, 7, 20), "Dinner", Config);
 
-        resolved.Should().Be(new DateTimeOffset(2026, 7, 20, 8, 30, 0, TimeSpan.Zero));
+        resolved.ConsumedAt.Should().Be(new DateTimeOffset(2026, 7, 20, 8, 30, 0, TimeSpan.Zero));
+        resolved.IsTimeInferred.Should().BeFalse();
     }
 
     [Theory]
@@ -143,7 +144,8 @@ public class MyFitnessPalFoodEntryMapperTests
         var resolved = MyFitnessPalFoodEntryMapper.ResolveConsumedAt(
             Entry(), new DateOnly(2026, 7, 20), mealName, Config);
 
-        resolved.Should().Be(new DateTimeOffset(2026, 7, 20, expectedHour, 0, 0, TimeSpan.Zero));
+        resolved.ConsumedAt.Should().Be(new DateTimeOffset(2026, 7, 20, expectedHour, 0, 0, TimeSpan.Zero));
+        resolved.IsTimeInferred.Should().BeTrue();
     }
 
     [Theory]
@@ -154,7 +156,8 @@ public class MyFitnessPalFoodEntryMapperTests
         var resolved = MyFitnessPalFoodEntryMapper.ResolveConsumedAt(
             Entry(), new DateOnly(2026, 7, 20), mealName, Config);
 
-        resolved.Should().Be(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero));
+        resolved.ConsumedAt.Should().Be(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero));
+        resolved.IsTimeInferred.Should().BeTrue();
     }
 
     [Fact]

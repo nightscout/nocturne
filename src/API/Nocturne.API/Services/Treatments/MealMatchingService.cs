@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Infrastructure.Data.Abstractions;
 
 namespace Nocturne.API.Services.Treatments;
 
@@ -18,6 +19,7 @@ public class MealMatchingService : IMealMatchingService
     private readonly ITreatmentStore _treatmentStore;
     private readonly ITreatmentFoodService _treatmentFoodService;
     private readonly IInAppNotificationService _notificationService;
+    private readonly IInAppNotificationRepository _notificationRepository;
     private readonly IMyFitnessPalMatchingSettingsService _settingsService;
     private readonly ILogger<MealMatchingService> _logger;
 
@@ -26,6 +28,7 @@ public class MealMatchingService : IMealMatchingService
         ITreatmentStore treatmentStore,
         ITreatmentFoodService treatmentFoodService,
         IInAppNotificationService notificationService,
+        IInAppNotificationRepository notificationRepository,
         IMyFitnessPalMatchingSettingsService settingsService,
         ILogger<MealMatchingService> logger)
     {
@@ -33,6 +36,7 @@ public class MealMatchingService : IMealMatchingService
         _treatmentStore = treatmentStore;
         _treatmentFoodService = treatmentFoodService;
         _notificationService = notificationService;
+        _notificationRepository = notificationRepository;
         _settingsService = settingsService;
         _logger = logger;
     }
@@ -56,7 +60,17 @@ public class MealMatchingService : IMealMatchingService
 
         foreach (var entry in pendingEntries)
         {
-            await ProcessFoodEntryAsync(userId, entry, settings, ct);
+            // One entry that cannot be processed — most often the notification source hitting its
+            // active-notification cap — must not abandon the rest of the batch.
+            try
+            {
+                await ProcessFoodEntryAsync(userId, entry, settings, ct);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to process food entry {FoodEntryId} for matching", entry.Id);
+            }
         }
     }
 
@@ -299,6 +313,23 @@ public class MealMatchingService : IMealMatchingService
         Treatment treatment,
         CancellationToken ct)
     {
+        // A food entry reaches this twice over — once when imported, again whenever a treatment
+        // lands near it — and the notification store does not dedupe on source, so without this
+        // check the same suggestion stacks up until the source's active-notification cap trips.
+        var existing = await _notificationRepository.FindBySourceAsync(
+            userId,
+            "meal_matching.suggested_match",
+            entry.Id.ToString(),
+            ct);
+
+        if (existing != null)
+        {
+            _logger.LogDebug(
+                "Match notification for food entry {FoodEntryId} is already active; not raising another",
+                entry.Id);
+            return;
+        }
+
         var foodName = entry.Food?.Name ?? entry.MealName;
         var treatmentTime = DateTimeOffset.FromUnixTimeMilliseconds(treatment.Mills);
         var timeDisplay = FormatTimeDisplay(treatmentTime);

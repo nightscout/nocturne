@@ -49,6 +49,32 @@ public class MyFitnessPalSyncRequestTests
     }
 
     [Fact]
+    public void SelectDaysToName_NamesEveryDayWithinTheBudget()
+    {
+        var days = Enumerable.Range(1, 5).Select(d => $"2026-07-{d:00}").ToList();
+
+        MyFitnessPalConnectorService.SelectDaysToName(days)
+            .Should().BeEquivalentTo(days);
+    }
+
+    [Fact]
+    public void SelectDaysToName_SpendsTheBudgetOnTheMostRecentDays()
+    {
+        // A LookbackDays of a year is configurable, and the registration advertises 365 historical
+        // days; abandoning the whole window past the budget left every day unnamed forever.
+        var days = Enumerable.Range(0, MyFitnessPalConstants.MaxDiaryDaysPerSync + 40)
+            .Select(offset => new DateOnly(2026, 7, 20).AddDays(-offset).ToString("yyyy-MM-dd"))
+            .ToList();
+
+        var named = MyFitnessPalConnectorService.SelectDaysToName(days);
+
+        named.Should().HaveCount(MyFitnessPalConstants.MaxDiaryDaysPerSync);
+        named.Should().BeInDescendingOrder(StringComparer.Ordinal);
+        named[0].Should().Be("2026-07-20");
+        named.Should().NotContain(days[^1], "the oldest days are the ones that go unnamed");
+    }
+
+    [Fact]
     public void Response_DeserializesAliasedConnection()
     {
         const string json = """

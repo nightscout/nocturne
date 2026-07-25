@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data;
@@ -18,16 +19,19 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
 {
     private readonly NocturneDbContext _context;
     private readonly IMealMatchingService _mealMatchingService;
+    private readonly IInAppNotificationService _notificationService;
     private readonly ILogger<ConnectorFoodEntryService> _logger;
 
     public ConnectorFoodEntryService(
         NocturneDbContext context,
         IMealMatchingService mealMatchingService,
+        IInAppNotificationService notificationService,
         ILogger<ConnectorFoodEntryService> logger
     )
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _mealMatchingService = mealMatchingService ?? throw new ArgumentNullException(nameof(mealMatchingService));
+        _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -44,6 +48,11 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
         }
 
         var results = new List<ConnectorFoodEntry>(importList.Count);
+
+        // Only entries created by this call are handed to meal matching. Connectors re-read their
+        // whole lookback window every cycle, so the rows that merely came back unchanged are
+        // already-seen ones; re-processing them would re-run matching and re-notify every cycle.
+        var createdIds = new List<Guid>();
 
         // Track foods added within this batch to prevent duplicate insertions
         // Key: "{connectorSource}:{externalFoodId}"
@@ -149,14 +158,31 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
                 };
 
                 _context.ConnectorFoodEntries.Add(entryEntity);
+                createdIds.Add(entryEntity.Id);
             }
             else
             {
                 entryEntity.ExternalFoodId = externalFoodId;
                 entryEntity.FoodId = foodEntity?.Id ?? entryEntity.FoodId;
-                entryEntity.ConsumedAt = import.ConsumedAt;
-                entryEntity.LoggedAt = import.LoggedAt;
-                entryEntity.MealName = import.MealName ?? entryEntity.MealName;
+
+                // An inferred time is a guess the connector re-derives every sync, and the guess can
+                // get worse: MyFitnessPal recovers the meal name per cycle, so a transient failure
+                // would otherwise rewrite a breakfast logged at 08:00 to an unnamed midday and move
+                // its carbs onto a different bolus. Refuse only that downgrade — an inferred time
+                // that does name its meal is an improvement on one that could not, and a reported
+                // time always wins. Nutrition is reported directly, so it always refreshes.
+                var wouldReplaceNamedMealWithGuess =
+                    import.IsTimeInferred
+                    && string.IsNullOrWhiteSpace(import.MealName)
+                    && !string.IsNullOrWhiteSpace(entryEntity.MealName);
+
+                if (!wouldReplaceNamedMealWithGuess)
+                {
+                    entryEntity.ConsumedAt = import.ConsumedAt;
+                    entryEntity.LoggedAt = import.LoggedAt;
+                    entryEntity.MealName = import.MealName ?? entryEntity.MealName;
+                }
+
                 entryEntity.Carbs = import.Carbs;
                 entryEntity.Protein = import.Protein;
                 entryEntity.Fat = import.Fat;
@@ -175,19 +201,13 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        // Process new entries for meal matching
-        var newEntryIds = results
-            .Where(r => r.Status == ConnectorFoodEntryStatus.Pending)
-            .Select(r => r.Id)
-            .ToList();
-
         // Importing does not depend on having someone to notify, so a tenant without a resolvable
         // owner still gets its entries and its suggestion list; only the notifications are skipped.
-        if (newEntryIds.Count > 0 && !string.IsNullOrEmpty(userId))
+        if (createdIds.Count > 0 && !string.IsNullOrEmpty(userId))
         {
             try
             {
-                await _mealMatchingService.ProcessNewFoodEntriesAsync(userId, newEntryIds, cancellationToken);
+                await _mealMatchingService.ProcessNewFoodEntriesAsync(userId, createdIds, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -197,6 +217,81 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
         }
 
         return results;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> MarkMissingAsDeletedAsync(
+        string userId,
+        string connectorSource,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        IEnumerable<string> presentExternalEntryIds,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(connectorSource))
+        {
+            return 0;
+        }
+
+        var source = connectorSource.Trim();
+        var present = presentExternalEntryIds?.ToHashSet(StringComparer.Ordinal)
+                      ?? new HashSet<string>(StringComparer.Ordinal);
+
+        // Only entries still awaiting a decision are withdrawn. One the user already matched or
+        // dismissed has been acted on, and its carbs are linked to a treatment; removing it
+        // underneath them would undo their own work. Pending is also the only status that keeps
+        // producing match suggestions, which is what an upstream deletion needs to stop.
+        var candidates = await _context.ConnectorFoodEntries
+            .Where(e => e.ConnectorSource == source
+                        && e.Status == ConnectorFoodEntryStatus.Pending
+                        && e.ConsumedAt >= from
+                        && e.ConsumedAt <= to)
+            .ToListAsync(cancellationToken);
+
+        var removed = candidates.Where(e => !present.Contains(e.ExternalEntryId)).ToList();
+        if (removed.Count == 0)
+        {
+            return 0;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var entry in removed)
+        {
+            entry.Status = ConnectorFoodEntryStatus.Deleted;
+            entry.ResolvedAt = now;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        // The suggestion card outlives the entry it refers to unless it is withdrawn too.
+        foreach (var entry in removed)
+        {
+            try
+            {
+                await _notificationService.ArchiveBySourceAsync(
+                    userId,
+                    "meal_matching.suggested_match",
+                    entry.Id.ToString(),
+                    NotificationArchiveReason.ConditionMet,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to archive the match notification for withdrawn food entry {FoodEntryId}",
+                    entry.Id);
+            }
+        }
+
+        _logger.LogInformation(
+            "Marked {Count} {ConnectorSource} food entries deleted after they disappeared upstream",
+            removed.Count,
+            source);
+
+        return removed.Count;
     }
 
     private static FoodEntity BuildFoodEntity(ConnectorFoodImport food, string connectorSource)

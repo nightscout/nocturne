@@ -143,6 +143,31 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         }
     }
 
+    public async Task<int?> ReconcileConnectorFoodEntriesAsync(
+        IEnumerable<string> presentExternalEntryIds,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _connectorFoodEntryService.MarkMissingAsDeletedAsync(
+                DefaultUserId,
+                source,
+                from,
+                to,
+                presentExternalEntryIds,
+                cancellationToken);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to reconcile connector food entries for {Source}", source);
+            return null;
+        }
+    }
+
     public async Task<bool> PublishActivityAsync(
         IEnumerable<Activity> activities,
         string source,

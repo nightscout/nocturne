@@ -156,6 +156,16 @@ public class ConnectorFoodEntryImport
     public string? ServingDescription { get; set; }
 
     /// <summary>
+    /// True when <see cref="ConsumedAt"/> was inferred rather than reported by the external system.
+    /// MyFitnessPal returns no usable timestamp, so the hour is derived from the meal name, which is
+    /// itself recovered per sync and can fail. An inferred time carrying no <see cref="MealName"/>
+    /// will not overwrite the time and meal name already stored for an entry, so a sync that could
+    /// not determine the meal cannot undo what an earlier one established.
+    /// </summary>
+    [JsonPropertyName("isTimeInferred")]
+    public bool IsTimeInferred { get; set; }
+
+    /// <summary>
     /// Optional food details for upsert/deduplication of the food item in the Nocturne food database.
     /// When provided, Nocturne will create or update a <see cref="Food"/> record using the external food data.
     /// </summary>
