@@ -24,7 +24,6 @@ public class ConnectorFoodEntryServiceTests
 
     private readonly DbContextOptions<NocturneDbContext> _options;
     private readonly Mock<IMealMatchingService> _mealMatchingMock = new();
-    private readonly Mock<IInAppNotificationService> _notificationMock = new();
     private readonly Guid _tenantId = Guid.NewGuid();
 
     public ConnectorFoodEntryServiceTests()
@@ -42,7 +41,6 @@ public class ConnectorFoodEntryServiceTests
     private ConnectorFoodEntryService NewService(NocturneDbContext context) =>
         new(context,
             _mealMatchingMock.Object,
-            _notificationMock.Object,
             Mock.Of<ILogger<ConnectorFoodEntryService>>());
 
     private static ConnectorFoodEntryImport Import(
@@ -180,6 +178,78 @@ public class ConnectorFoodEntryServiceTests
     }
 
     [Fact]
+    public async Task ImportAsync_ReMatchesAnEntryWhoseConsumedTimeWasCorrected()
+    {
+        var midday = new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero);
+        var breakfast = new DateTimeOffset(2026, 7, 20, 8, 0, 0, TimeSpan.Zero);
+
+        await using (var context = NewContext())
+        {
+            await NewService(context).ImportAsync(
+                UserId,
+                [Import(mealName: string.Empty, consumedAt: midday)]);
+        }
+
+        _mealMatchingMock.Invocations.Clear();
+
+        // Attribution succeeded this cycle, so the entry now matches against a different time.
+        // Matching keys off that time, so leaving it out would strand the correction.
+        await using (var context = NewContext())
+        {
+            await NewService(context).ImportAsync(UserId, [Import(consumedAt: breakfast)]);
+        }
+
+        await using var assertContext = NewContext();
+        var id = await assertContext.ConnectorFoodEntries.Select(e => e.Id).SingleAsync();
+
+        _mealMatchingMock.Verify(
+            m => m.ProcessNewFoodEntriesAsync(
+                UserId,
+                It.Is<IEnumerable<Guid>>(ids => ids.SequenceEqual(new[] { id })),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ImportAsync_RestoresAWithdrawnEntryTheConnectorReportsAgain()
+    {
+        var from = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
+        var to = new DateTimeOffset(2026, 7, 21, 0, 0, 0, TimeSpan.Zero);
+
+        await using (var context = NewContext())
+        {
+            await NewService(context).ImportAsync(UserId, [Import()]);
+        }
+
+        await using (var context = NewContext())
+        {
+            await NewService(context).MarkMissingAsDeletedAsync(UserId, Source, from, to, []);
+        }
+
+        _mealMatchingMock.Invocations.Clear();
+
+        // Nothing else in the codebase returns a record to Pending, so a withdrawal that turns out
+        // to be wrong has to be undone here or the entry is lost for good.
+        await using (var context = NewContext())
+        {
+            await NewService(context).ImportAsync(UserId, [Import()]);
+        }
+
+        await using var assertContext = NewContext();
+        var stored = await assertContext.ConnectorFoodEntries.SingleAsync();
+
+        stored.Status.Should().Be(ConnectorFoodEntryStatus.Pending);
+        stored.ResolvedAt.Should().BeNull();
+
+        _mealMatchingMock.Verify(
+            m => m.ProcessNewFoodEntriesAsync(
+                UserId,
+                It.Is<IEnumerable<Guid>>(ids => ids.SequenceEqual(new[] { stored.Id })),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task MarkMissingAsDeletedAsync_WithdrawsPendingEntriesTheConnectorNoLongerReports()
     {
         var from = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
@@ -214,13 +284,8 @@ public class ConnectorFoodEntryServiceTests
         gone.Status.Should().Be(ConnectorFoodEntryStatus.Deleted);
         gone.ResolvedAt.Should().NotBeNull();
 
-        _notificationMock.Verify(
-            n => n.ArchiveBySourceAsync(
-                UserId,
-                "meal_matching.suggested_match",
-                withdrawnId.ToString(),
-                NotificationArchiveReason.ConditionMet,
-                It.IsAny<CancellationToken>()),
+        _mealMatchingMock.Verify(
+            m => m.WithdrawSuggestionAsync(UserId, withdrawnId, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

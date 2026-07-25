@@ -172,7 +172,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         // at all, and that is precisely when every entry stored for it needs withdrawing.
         if (result.Success && _connectorPublisher is { IsAvailable: true })
         {
-            await WithdrawDeletedEntriesAsync(read, foodEntryImports, from, to, cancellationToken);
+            await WithdrawDeletedEntriesAsync(read, from, to, cancellationToken);
         }
 
         result.ItemsSynced[SyncDataType.Food] = count;
@@ -284,8 +284,20 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             }
 
             before = connection.FoodDiaryEntryPaging?.StartCursor;
-            if (connection.FoodDiaryEntryPaging?.HasPreviousPage != true || string.IsNullOrEmpty(before))
-                return new DiaryRead(entries, CoveredWindow: true);
+
+            // Running out of pages is the one outcome that proves the read saw the whole diary.
+            if (connection.FoodDiaryEntryPaging?.HasPreviousPage != true)
+                return new DiaryRead(entries, WalkedEntireDiary: true);
+
+            // More pages exist but no cursor leads to them: a truncated or malformed response, not
+            // the end of the diary.
+            if (string.IsNullOrEmpty(before))
+            {
+                _logger.LogWarning(
+                    "[{ConnectorSource}] Diary paging claimed a previous page but supplied no cursor",
+                    ConnectorSource);
+                return new DiaryRead(entries, WalkedEntireDiary: false);
+            }
 
             // Pages run newest first, but their order tracks modification rather than diary date,
             // so a block of recently edited old entries can sit ahead of the window. Read a few
@@ -297,7 +309,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
             preWindowPages = newestOnPage >= windowStart ? 0 : preWindowPages + 1;
             if (preWindowPages >= MyFitnessPalConstants.PreWindowPageLookahead)
-                return new DiaryRead(entries, CoveredWindow: true);
+                return new DiaryRead(entries, WalkedEntireDiary: false);
         }
 
         _logger.LogWarning(
@@ -306,15 +318,20 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             MyFitnessPalConstants.MaxPagesPerSync,
             windowStart);
 
-        return new DiaryRead(entries, CoveredWindow: false);
+        return new DiaryRead(entries, WalkedEntireDiary: false);
     }
 
     /// <summary>
-    /// The entries a diary read produced, and whether the walk got far enough back to have seen
-    /// everything in the window. A truncated read cannot be used to conclude that anything it did
-    /// not mention was deleted.
+    /// The entries a diary read produced, and whether the walk reached the end of the diary.
     /// </summary>
-    private sealed record DiaryRead(List<MfpFoodDiaryEntryNode> Entries, bool CoveredWindow);
+    /// <remarks>
+    /// Only a walk that ran out of pages can support the conclusion that an entry it never mentioned
+    /// no longer exists. Stopping early cannot: pages are ordered by modification rather than diary
+    /// date, so an entry belonging to a day the walk has already passed can still sit further back,
+    /// behind the point where the lookahead gave up. That makes the flag the difference between
+    /// proof and a plausible guess, and only proof may drive a withdrawal.
+    /// </remarks>
+    private sealed record DiaryRead(List<MfpFoodDiaryEntryNode> Entries, bool WalkedEntireDiary);
 
     /// <summary>
     /// Marks entries the user has since deleted in MyFitnessPal as deleted here too.
@@ -324,29 +341,30 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     /// nothing else retires the stored copy or the match suggestion it keeps producing. Production
     /// does not help: the sync stream's DELETE tombstones never arrive on the cursorless read this
     /// connector performs — a full walk of a real account returned 1395 edges, every one an UPSERT —
-    /// so absence from a complete read is the only available evidence of a deletion.
+    /// so absence from a read is the only available evidence of a deletion, and only a read that
+    /// reached the end of the diary makes absence conclusive. An account whose history outgrows the
+    /// page budget therefore stops propagating deletions rather than guessing at them.
     /// </remarks>
     private async Task WithdrawDeletedEntriesAsync(
         DiaryRead read,
-        List<ConnectorFoodEntryImport> imports,
         DateTimeOffset from,
         DateTimeOffset to,
         CancellationToken cancellationToken)
     {
-        // Reconciling against a read that fell short of the window start, or that returned nothing
-        // at all because something ahead of the mapping broke, would withdraw entries that still
-        // exist. Emptying the window is still handled — that read has entries, just none in the
-        // window — but an account whose whole diary is empty waits for a sync that has an entry.
-        if (!read.CoveredWindow || read.Entries.Count == 0)
+        if (!read.WalkedEntireDiary || read.Entries.Count == 0)
         {
             _logger.LogDebug(
-                "[{ConnectorSource}] Skipping deletion reconciliation for an incomplete diary read",
+                "[{ConnectorSource}] Skipping deletion reconciliation: the read did not reach the end of the diary",
                 ConnectorSource);
             return;
         }
 
+        // Every entry the read saw, not just the ones that mapped into the window. The mapped set is
+        // filtered on a consumed time this connector fabricates from the meal name, so an entry
+        // whose meal name changed between cycles can move hours and fall outside the window while
+        // still existing upstream. Comparing against that set would read the move as a deletion.
         await _connectorPublisher!.Metadata.ReconcileConnectorFoodEntriesAsync(
-            imports.Select(i => i.ExternalEntryId),
+            read.Entries.Select(e => e.Id),
             from,
             to,
             ConnectorSource, WriteOrigin.Live,

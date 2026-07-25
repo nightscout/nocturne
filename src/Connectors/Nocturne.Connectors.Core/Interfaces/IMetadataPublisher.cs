@@ -23,8 +23,9 @@ public interface IMetadataPublisher
 
     /// <summary>
     /// Withdraws pending food entries in <paramref name="from"/>..<paramref name="to"/> that
-    /// <paramref name="presentExternalEntryIds"/> does not mention, for a connector that read the
-    /// whole window. Call only after a complete read: a partial list withdraws what it omitted.
+    /// <paramref name="presentExternalEntryIds"/> does not mention. Call only after reading the source
+    /// exhaustively: absence from a partial read is not evidence of a deletion, and an incomplete list
+    /// withdraws every entry it omitted.
     /// </summary>
     /// <returns>The number of entries withdrawn, or <c>null</c> if reconciliation failed.</returns>
     Task<int?> ReconcileConnectorFoodEntriesAsync(

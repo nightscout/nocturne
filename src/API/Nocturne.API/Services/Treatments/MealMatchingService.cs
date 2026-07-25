@@ -15,6 +15,12 @@ namespace Nocturne.API.Services.Treatments;
 /// <seealso cref="IMealMatchingService"/>
 public class MealMatchingService : IMealMatchingService
 {
+    /// <summary>
+    /// Notification type for a suggested match. Registered in <c>BuiltInNotificationTemplates</c>,
+    /// which supplies its category, icon and source.
+    /// </summary>
+    public const string SuggestedMatchNotificationType = "meal_matching.suggested_match";
+
     private readonly IConnectorFoodEntryRepository _foodEntryRepository;
     private readonly ITreatmentStore _treatmentStore;
     private readonly ITreatmentFoodService _treatmentFoodService;
@@ -159,6 +165,16 @@ public class MealMatchingService : IMealMatchingService
             ct);
 
         _logger.LogInformation("Dismissed meal match for food entry {FoodEntryId}", foodEntryId);
+    }
+
+    public async Task WithdrawSuggestionAsync(string userId, Guid foodEntryId, CancellationToken ct = default)
+    {
+        await _notificationService.ArchiveBySourceAsync(
+            userId,
+            SuggestedMatchNotificationType,
+            foodEntryId.ToString(),
+            NotificationArchiveReason.ConditionMet,
+            ct);
     }
 
     public async Task<IReadOnlyList<SuggestedMealMatchResult>> GetSuggestionsAsync(
@@ -313,12 +329,13 @@ public class MealMatchingService : IMealMatchingService
         Treatment treatment,
         CancellationToken ct)
     {
-        // A food entry reaches this twice over — once when imported, again whenever a treatment
-        // lands near it — and the notification store does not dedupe on source, so without this
-        // check the same suggestion stacks up until the source's active-notification cap trips.
+        // The notification store does not dedupe on source, and an entry reaches this more than once
+        // — re-imported with a corrected consumed time, restored after a withdrawal, or scanned again
+        // by ProcessNewTreatmentAsync — so without this check the same suggestion stacks up until the
+        // source's active-notification cap trips and starts throwing.
         var existing = await _notificationRepository.FindBySourceAsync(
             userId,
-            "meal_matching.suggested_match",
+            SuggestedMatchNotificationType,
             entry.Id.ToString(),
             ct);
 
@@ -355,7 +372,7 @@ public class MealMatchingService : IMealMatchingService
 
         await _notificationService.CreateNotificationAsync(
             userId,
-            "meal_matching.suggested_match",
+            SuggestedMatchNotificationType,
             title,
             subtitle: subtitle,
             sourceId: entry.Id.ToString(),

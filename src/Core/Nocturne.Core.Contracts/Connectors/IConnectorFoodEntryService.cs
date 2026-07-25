@@ -30,14 +30,15 @@ public interface IConnectorFoodEntryService
     /// </summary>
     /// <remarks>
     /// Deleting an entry is how a user corrects a mis-logged meal, and imports are an upsert, so
-    /// without this the carbs and the suggestion card outlive the entry. Only safe for a connector
-    /// that read the whole window: called with a partial list, every entry it missed looks deleted.
+    /// without this the carbs and the suggestion outlive the entry. The caller must have read its
+    /// source exhaustively: absence from a partial read is not evidence of a deletion, and passing an
+    /// incomplete list withdraws every entry it omitted.
     /// </remarks>
-    /// <param name="userId">The user whose match notifications are archived alongside</param>
+    /// <param name="userId">The user whose match suggestions are withdrawn alongside</param>
     /// <param name="connectorSource">Only entries from this connector are considered</param>
-    /// <param name="from">Start of the window that was read, inclusive</param>
-    /// <param name="to">End of the window that was read, inclusive</param>
-    /// <param name="presentExternalEntryIds">Every external entry id the connector saw in the window</param>
+    /// <param name="from">Start of the window to reconcile, inclusive</param>
+    /// <param name="to">End of the window to reconcile, inclusive</param>
+    /// <param name="presentExternalEntryIds">Every external entry id the source still reports</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The number of entries marked deleted</returns>
     Task<int> MarkMissingAsDeletedAsync(
