@@ -8,17 +8,24 @@
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { toDayString } from "$lib/utils/date-range";
   import { bg } from "$lib/utils/formatting";
+  import { DAY_KEYS, buildWeekdayBuckets } from "./week-to-week.utils";
 
-  // Day of week series config
-  const DAY_SERIES = [
-    { key: "sun", label: "Sun", color: "#808080" },
-    { key: "mon", label: "Mon", color: "#1e90ff" },
-    { key: "tue", label: "Tue", color: "#009e73" },
-    { key: "wed", label: "Wed", color: "#ff9a00" },
-    { key: "thu", label: "Thu", color: "#f0e442" },
-    { key: "fri", label: "Fri", color: "#ec7892" },
-    { key: "sat", label: "Sat", color: "#d55e00" },
-  ] as const;
+  const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const DAY_COLORS = [
+    "#808080",
+    "#1e90ff",
+    "#009e73",
+    "#ff9a00",
+    "#f0e442",
+    "#ec7892",
+    "#d55e00",
+  ];
+
+  const DAY_SERIES = DAY_KEYS.map((key, i) => ({
+    key,
+    label: DAY_LABELS[i],
+    color: DAY_COLORS[i],
+  }));
 
   // Get shared date params from context (set by reports layout)
   // Default: 7 days (today + last 6 days = 1 full week)
@@ -39,46 +46,10 @@
     return `${reportsParams.startDate.toLocaleDateString(undefined, opts)} – ${reportsParams.endDate.toLocaleDateString(undefined, opts)}`;
   });
 
-  // Transform entries into chart data: each row = { time, sun?, mon?, tue?, ... }
-  const chartData = $derived.by(() => {
-    const entries = reportsResource.current?.entries ?? [];
-
-    // Group by normalized time across all days in the range
-    const timeMap = new Map<number, Record<string, number | Date>>();
-
-    for (const entry of entries) {
-      const mills = entry.mills ?? 0;
-
-      const entryDate = new Date(mills);
-      const dayOfWeek = entryDate.getDay();
-      const dayKey = DAY_SERIES[dayOfWeek].key;
-
-      // Normalize to time-of-day only (minutes since midnight)
-      const minutesInDay = entryDate.getHours() * 60 + entryDate.getMinutes();
-      // Round to 5-minute buckets for grouping
-      const bucket = Math.round(minutesInDay / 5) * 5;
-
-      if (!timeMap.has(bucket)) {
-        // Create a date for x-axis (today's date + time-of-day)
-        const now = new Date();
-        const time = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Math.floor(bucket / 60), bucket % 60);
-        timeMap.set(bucket, { time });
-      }
-
-      const row = timeMap.get(bucket)!;
-      // Average values if we already have data for this day/time slot
-      if (row[dayKey] !== undefined) {
-        row[dayKey] = ((row[dayKey] as number) + bg(entry.mgdl ?? 0)) / 2;
-      } else {
-        row[dayKey] = bg(entry.mgdl ?? 0);
-      }
-    }
-
-    // Sort by time
-    return Array.from(timeMap.values()).sort(
-      (a, b) => (a.time as Date).getTime() - (b.time as Date).getTime()
-    );
-  });
+  // Each cell is the mean of every reading in that weekday's 5-minute bucket.
+  const chartData = $derived(
+    buildWeekdayBuckets(reportsResource.current?.entries ?? [], (mgdl) => bg(mgdl))
+  );
 
   // Navigation helpers
   function previousWeek() {
@@ -135,11 +106,7 @@
         data={chartData}
         x="time"
         legend
-        series={DAY_SERIES.map((d) => ({
-          key: d.key,
-          label: d.label,
-          color: d.color,
-        }))}
+        series={DAY_SERIES}
       />
     {:else}
       <div
