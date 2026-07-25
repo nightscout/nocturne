@@ -17,11 +17,16 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
     /// <summary>
     ///     Maps the entries consumed within the requested window; entries outside it are dropped.
     /// </summary>
+    /// <param name="mealNames">
+    ///     Entry id to meal name, from <see cref="MyFitnessPalMealAttributor"/>. Entries missing
+    ///     from it are imported without a meal name.
+    /// </param>
     public List<ConnectorFoodEntryImport> Map(
         IEnumerable<MfpFoodDiaryEntryNode> entries,
         MyFitnessPalConnectorConfiguration config,
         DateTimeOffset from,
-        DateTimeOffset to)
+        DateTimeOffset to,
+        IReadOnlyDictionary<string, string>? mealNames = null)
     {
         var imports = new List<ConnectorFoodEntryImport>();
 
@@ -33,7 +38,8 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
                 continue;
             }
 
-            var consumedAt = ResolveConsumedAt(entry, date, config);
+            var mealName = mealNames?.GetValueOrDefault(entry.Id);
+            var consumedAt = ResolveConsumedAt(entry, date, mealName, config);
             if (consumedAt < from || consumedAt > to)
                 continue;
 
@@ -49,7 +55,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
                 ExternalFoodId = food?.Id ?? string.Empty,
                 ConsumedAt = consumedAt,
                 LoggedAt = TryParseTimestamp(entry.LoggedAt),
-                MealName = entry.EatingOccasion ?? string.Empty,
+                MealName = mealName ?? string.Empty,
                 Carbs = nutrition?.Carbs ?? 0,
                 Protein = nutrition?.Protein ?? 0,
                 Fat = nutrition?.Fat ?? 0,
@@ -77,33 +83,27 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
     }
 
     /// <summary>
-    ///     Resolves the consumed-at time for an entry. Entries always carry a date but only
-    ///     sometimes an exact time, so the eating occasion supplies an approximate hour. Occasions
-    ///     can be renamed or added by the user, so an unrecognised name falls back to its diary slot.
+    ///     Resolves the consumed-at time for an entry. Production returns a date but leaves
+    ///     <c>consumedAt</c> and <c>loggedAt</c> null, so the meal name supplies an approximate
+    ///     hour. Users can rename meals, so an unrecognised name falls back to midday.
     /// </summary>
     public static DateTimeOffset ResolveConsumedAt(
         MfpFoodDiaryEntryNode entry,
         DateOnly date,
+        string? mealName,
         MyFitnessPalConnectorConfiguration config)
     {
         if (entry.ConsumedAt != null
             && DateTimeOffset.TryParse(entry.ConsumedAt, CultureInfo.InvariantCulture, out var parsed))
             return parsed.ToUniversalTime();
 
-        var mealHour = entry.EatingOccasion?.ToLowerInvariant() switch
+        var mealHour = mealName?.ToLowerInvariant() switch
         {
             "breakfast" => 8,
             "lunch" => 12,
             "dinner" => 18,
             "snack" or "snacks" => 15,
-            _ => entry.EatingOccasionSlot switch
-            {
-                0 => 8,
-                1 => 12,
-                2 => 18,
-                3 => 15,
-                _ => 12,
-            },
+            _ => 12,
         };
 
         var dateTime = date.ToDateTime(new TimeOnly(mealHour, 0));

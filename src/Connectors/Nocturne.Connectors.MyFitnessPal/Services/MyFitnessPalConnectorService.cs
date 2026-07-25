@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -99,7 +101,9 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             return result;
         }
 
-        var foodEntryImports = _mapper.Map(sync.Entries, config, from, to);
+        var mealNames = await ResolveMealNamesAsync(sync.Entries, from, to, cancellationToken);
+
+        var foodEntryImports = _mapper.Map(sync.Entries, config, from, to, mealNames);
         var count = foodEntryImports.Count;
 
         if (count > 0)
@@ -266,6 +270,99 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         return new DiarySync(entries, endSyncCursor, pageCursor);
     }
 
+    /// <summary>
+    /// Resolves a meal name for each entry falling inside the sync window.
+    /// </summary>
+    /// <remarks>
+    /// The GraphQL sync carries no meal, so the legacy diary is fetched for each day that has
+    /// entries and the two are reconciled per day. A day the reconciliation cannot settle is left
+    /// unnamed rather than guessed at, and a failed request only costs that day its meal names.
+    /// </remarks>
+    private async Task<IReadOnlyDictionary<string, string>> ResolveMealNamesAsync(
+        List<MfpFoodDiaryEntryNode> entries,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var resolved = new Dictionary<string, string>();
+
+        var days = entries
+            .Where(e => DateOnly.TryParse(e.Date, CultureInfo.InvariantCulture, out var d)
+                        && d >= DateOnly.FromDateTime(from.UtcDateTime.Date)
+                        && d <= DateOnly.FromDateTime(to.UtcDateTime.Date))
+            .GroupBy(e => e.Date!)
+            .ToList();
+
+        if (days.Count > MyFitnessPalConstants.MaxDiaryDaysPerSync)
+        {
+            _logger.LogInformation(
+                "[{ConnectorSource}] {Days} days in window exceeds the {Max} day meal-name budget; importing without meal names",
+                ConnectorSource,
+                days.Count,
+                MyFitnessPalConstants.MaxDiaryDaysPerSync);
+            return resolved;
+        }
+
+        foreach (var day in days)
+        {
+            var meals = await FetchDiaryMealsAsync(day.Key, cancellationToken);
+            if (meals == null)
+                continue;
+
+            var attributed = MyFitnessPalMealAttributor.Attribute([.. day], meals);
+            if (attributed.Count == 0)
+            {
+                _logger.LogDebug(
+                    "[{ConnectorSource}] Could not attribute meals for {Date}; importing that day unnamed",
+                    ConnectorSource,
+                    day.Key);
+                continue;
+            }
+
+            foreach (var (entryId, mealName) in attributed)
+                resolved[entryId] = mealName;
+        }
+
+        return resolved;
+    }
+
+    private async Task<List<MfpDiaryItem>?> FetchDiaryMealsAsync(
+        string date,
+        CancellationToken cancellationToken)
+    {
+        var url = $"{MyFitnessPalConstants.Servers.Auth}{MyFitnessPalConstants.Endpoints.Diary}"
+                  + $"?entry_date={Uri.EscapeDataString(date)}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        AddAuthHeaders(request);
+
+        try
+        {
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "MyFitnessPal diary for {Date} returned HTTP {StatusCode}",
+                    date,
+                    (int)response.StatusCode);
+                return null;
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            var parsed = JsonSerializer.Deserialize<MfpDiaryResponse>(body);
+
+            return parsed?.Items
+                .Where(i => string.Equals(i.Type, "diary_meal", StringComparison.Ordinal))
+                .ToList();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "MyFitnessPal diary request for {Date} failed", date);
+            return null;
+        }
+    }
+
     private async Task<MfpFoodDiaryEntryConnection?> FetchDiaryPageAsync(
         string? syncCursor,
         string? pageCursor,
@@ -283,12 +380,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         {
             Content = JsonContent.Create(payload),
         };
-        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_accessToken}");
-        request.Headers.TryAddWithoutValidation(MyFitnessPalConstants.Headers.UserId, _userId);
-        request.Headers.TryAddWithoutValidation(
-            MyFitnessPalConstants.Headers.ClientId, MyFitnessPalConstants.ClientId);
-        request.Headers.TryAddWithoutValidation(
-            MyFitnessPalConstants.Headers.ClientMetadata, BuildClientMetadata());
+        AddAuthHeaders(request);
 
         var response = await _httpClient.SendAsync(request, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -348,6 +440,21 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         };
     }
 
+    /// <summary>
+    /// Applies the headers both MyFitnessPal hosts require. <c>client-metadata</c> is mandatory:
+    /// without it the GraphQL endpoint rejects the request after validation, not before, which
+    /// makes the failure look like a schema problem.
+    /// </summary>
+    private void AddAuthHeaders(HttpRequestMessage request)
+    {
+        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_accessToken}");
+        request.Headers.TryAddWithoutValidation(MyFitnessPalConstants.Headers.UserId, _userId);
+        request.Headers.TryAddWithoutValidation(
+            MyFitnessPalConstants.Headers.ClientId, MyFitnessPalConstants.ClientId);
+        request.Headers.TryAddWithoutValidation(
+            MyFitnessPalConstants.Headers.ClientMetadata, BuildClientMetadata());
+    }
+
     private static string BuildClientMetadata()
     {
         var json =
@@ -370,41 +477,23 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     {
         try
         {
-            var stored = await _configService.GetSecretsAsync("MyFitnessPal", cancellationToken);
+            var updates = new Dictionary<string, string?>
+            {
+                ["refreshToken"] = config.RefreshToken,
+                ["userId"] = config.UserId,
+                ["syncCursor"] = config.SyncCursor,
+                ["pageCursor"] = config.PageCursor,
+            };
 
-            var changed = false;
-            changed |= WriteSecret(stored, "refreshToken", config.RefreshToken);
-            changed |= WriteSecret(stored, "userId", config.UserId);
-            changed |= WriteSecret(stored, "syncCursor", config.SyncCursor);
-            changed |= WriteSecret(stored, "pageCursor", config.PageCursor);
-
-            if (!changed)
-                return;
-
-            await _configService.SaveSecretsAsync(
-                "MyFitnessPal", stored, "connector-runtime", cancellationToken);
-            _logger.LogInformation("[{ConnectorSource}] Persisted updated connector state", ConnectorSource);
+            if (await _configService.MergeSecretsAsync(
+                    "MyFitnessPal", updates, "connector-runtime", cancellationToken))
+                _logger.LogInformation("[{ConnectorSource}] Persisted updated connector state", ConnectorSource);
         }
         catch (OperationCanceledException) { throw; }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "[{ConnectorSource}] Failed to persist connector state", ConnectorSource);
         }
-    }
-
-    /// <summary>
-    ///     Writes one secret, removing the key when the value is gone. Returns whether anything moved.
-    /// </summary>
-    public static bool WriteSecret(Dictionary<string, string> secrets, string key, string? value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return secrets.Remove(key);
-
-        if (secrets.GetValueOrDefault(key) == value)
-            return false;
-
-        secrets[key] = value;
-        return true;
     }
 
 }

@@ -52,32 +52,31 @@ public class MfpBatchSyncData
 
 public class MfpBatchSync
 {
-    [JsonPropertyName("foodDiaryEntryConnection")]
+    [JsonPropertyName("foodDiaryEntries")]
     public MfpFoodDiaryEntryConnection? FoodDiaryEntryConnection { get; set; }
 }
 
 /// <summary>
-/// Relay-style connection of food diary entries. Field names follow the aliases in the
-/// operation document.
+/// Relay-style connection of food diary entries.
 /// </summary>
 public class MfpFoodDiaryEntryConnection
 {
-    [JsonPropertyName("foodDiaryEntryEdges")]
+    [JsonPropertyName("edges")]
     public List<MfpFoodDiaryEntryEdge> FoodDiaryEntryEdges { get; set; } = [];
 
-    [JsonPropertyName("foodDiaryEntryPaging")]
+    [JsonPropertyName("pageInfo")]
     public MfpPageInfo? FoodDiaryEntryPaging { get; set; }
 
-    [JsonPropertyName("foodDiaryEntrySyncInfo")]
+    [JsonPropertyName("syncConnectionInfo")]
     public MfpSyncConnectionInfo? FoodDiaryEntrySyncInfo { get; set; }
 }
 
 public class MfpFoodDiaryEntryEdge
 {
-    [JsonPropertyName("foodDiaryEntryNode")]
+    [JsonPropertyName("node")]
     public MfpFoodDiaryEntryNode? FoodDiaryEntryNode { get; set; }
 
-    [JsonPropertyName("foodDiaryEntryEdgeSync")]
+    [JsonPropertyName("syncEdgeInfo")]
     public MfpSyncEdgeInfo? FoodDiaryEntryEdgeSync { get; set; }
 }
 
@@ -141,12 +140,6 @@ public class MfpFoodDiaryEntryNode
     [JsonPropertyName("consumedAt")]
     public string? ConsumedAt { get; set; }
 
-    [JsonPropertyName("eatingOccasion")]
-    public string? EatingOccasion { get; set; }
-
-    [JsonPropertyName("eatingOccasionSlot")]
-    public int EatingOccasionSlot { get; set; }
-
     [JsonPropertyName("loggedAt")]
     public string? LoggedAt { get; set; }
 
@@ -203,12 +196,6 @@ public class MfpFood
     [JsonPropertyName("isVerified")]
     public bool IsVerified { get; set; }
 
-    [JsonPropertyName("grams")]
-    public decimal? Grams { get; set; }
-
-    [JsonPropertyName("note")]
-    public string? Note { get; set; }
-
     [JsonPropertyName("mealFoodId")]
     public string? MealFoodId { get; set; }
 
@@ -230,7 +217,7 @@ public class MfpNutrientSet
     [JsonPropertyName("protein")]
     public decimal? Protein { get; set; }
 
-    [JsonPropertyName("carbs")]
+    [JsonPropertyName("totalCarbohydrates")]
     public decimal? Carbs { get; set; }
 
     [JsonPropertyName("fat")]
@@ -250,4 +237,61 @@ public class MfpNutrientSet
 
     [JsonPropertyName("sodium")]
     public decimal? Sodium { get; set; }
+}
+
+/// <summary>
+/// Response of the legacy per-day diary endpoint.
+/// </summary>
+public class MfpDiaryResponse
+{
+    [JsonPropertyName("items")]
+    public List<MfpDiaryItem> Items { get; set; } = [];
+}
+
+/// <summary>
+/// One diary row. Only rows with <see cref="Type"/> <c>diary_meal</c> are of interest; the
+/// endpoint also returns exercise and step rows.
+/// </summary>
+public class MfpDiaryItem
+{
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    [JsonPropertyName("date")]
+    public string? Date { get; set; }
+
+    [JsonPropertyName("diary_meal")]
+    public string? DiaryMeal { get; set; }
+
+    [JsonPropertyName("nutritional_contents")]
+    public MfpDiaryNutrition? NutritionalContents { get; set; }
+}
+
+/// <summary>
+/// Meal totals as the legacy diary reports them. Note that
+/// <see cref="MfpDiaryNutrition.Carbohydrates"/> does not always agree with the sum of the
+/// GraphQL entries' carbohydrates, so it is used only to identify meals, never as a carb source.
+/// </summary>
+public class MfpDiaryNutrition
+{
+    [JsonPropertyName("energy")]
+    public MfpDiaryEnergy? Energy { get; set; }
+
+    [JsonPropertyName("protein")]
+    public decimal? Protein { get; set; }
+
+    [JsonPropertyName("fat")]
+    public decimal? Fat { get; set; }
+
+    [JsonPropertyName("carbohydrates")]
+    public decimal? Carbohydrates { get; set; }
+}
+
+public class MfpDiaryEnergy
+{
+    [JsonPropertyName("unit")]
+    public string? Unit { get; set; }
+
+    [JsonPropertyName("value")]
+    public decimal Value { get; set; }
 }

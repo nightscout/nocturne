@@ -25,6 +25,12 @@ public static class MyFitnessPalConstants
     {
         public const string Token = "/v2/oauth2/token";
         public const string GraphQl = "/v2/query-envoy/graphql";
+
+        /// <summary>
+        ///     Legacy per-day diary. Returns meal-level totals only, which is the sole place
+        ///     production exposes which meal an entry belongs to.
+        /// </summary>
+        public const string Diary = "/v2/diary";
     }
 
     public static class Headers
@@ -35,19 +41,25 @@ public static class MyFitnessPalConstants
     }
 
     /// <summary>
-    ///     The <c>SyncFoodDiaryEntries</c> operation, copied verbatim from the MyFitnessPal Android
-    ///     client. Kept byte-identical to the shipped document so it stays valid against the schema
-    ///     (introspection is disabled, so a hand-written selection set cannot be checked ahead of
-    ///     time) and matches any server-side operation safelist.
+    ///     The <c>SyncFoodDiaryEntries</c> operation, validated field by field against the live
+    ///     production graph.
     /// </summary>
+    /// <remarks>
+    ///     The Android client's own document does not work here: it is generated against the
+    ///     preprod schema and production rejects <c>eatingOccasion</c>, <c>eatingOccasionSlot</c>,
+    ///     <c>grams</c> and <c>note</c>, and names the carbohydrate field
+    ///     <c>totalCarbohydrates</c> rather than <c>carbs</c>. Introspection is disabled, so any
+    ///     change here has to be checked against the live endpoint, which does report every
+    ///     unknown field in one response.
+    /// </remarks>
     public const string SyncFoodDiaryEntriesDocument =
-        "query SyncFoodDiaryEntries($input: BatchSyncInput!) { batchSync(input: $input) { foodDiaryEntryConnection: foodDiaryEntries { foodDiaryEntryEdges: edges { foodDiaryEntryNode: node { __typename ...FoodDiaryEntry } foodDiaryEntryEdgeSync: syncEdgeInfo { __typename ...SyncEdgeInfo } } foodDiaryEntryPaging: pageInfo { __typename ...PageInfo } foodDiaryEntrySyncInfo: syncConnectionInfo { __typename ...SyncConnectionInfo } } } }  fragment FoodDiaryEntry on FoodDiaryEntry { __typename id createdAt ... on ActiveFoodDiaryEntry { date consumedAt eatingOccasion eatingOccasionSlot loggedAt quantity servingSize { amount nutritionMultiplier isFraction unit } food { __typename ... on IndividualFood { id description brand isVerified grams note createdAt nutrientSet { calories protein carbs fat fiber sugar sugarAlcohols saturatedFat sodium } servingSizes { amount nutritionMultiplier isFraction unit } } ... on MealIngredient { id description brand isVerified grams mealFoodId mealIngredientId createdAt nutrientSet { calories protein carbs fat fiber sugar sugarAlcohols saturatedFat sodium } servingSizes { amount nutritionMultiplier isFraction unit } } } consumedNutrientSet { calories protein carbs fat fiber sugar sugarAlcohols saturatedFat sodium } } }  fragment SyncEdgeInfo on SyncEdgeInfo { operation lastModifiedAt }  fragment PageInfo on PageInfo { hasPreviousPage hasNextPage startCursor endCursor }  fragment SyncConnectionInfo on SyncConnectionInfo { startSyncCursor endSyncCursor totalEdges }";
+        "query SyncFoodDiaryEntries($input: BatchSyncInput!) { batchSync(input: $input) { foodDiaryEntries { edges { node { __typename id createdAt ... on ActiveFoodDiaryEntry { date consumedAt loggedAt quantity servingSize { amount nutritionMultiplier isFraction unit } consumedNutrientSet { calories protein totalCarbohydrates fat fiber sugar sugarAlcohols saturatedFat sodium } food { __typename ... on IndividualFood { id description brand isVerified createdAt nutrientSet { calories protein totalCarbohydrates fat fiber sugar sugarAlcohols saturatedFat sodium } servingSizes { amount nutritionMultiplier isFraction unit } } ... on MealIngredient { id description brand isVerified createdAt nutrientSet { calories protein totalCarbohydrates fat fiber sugar sugarAlcohols saturatedFat sodium } servingSizes { amount nutritionMultiplier isFraction unit } mealFoodId mealIngredientId } } } } syncEdgeInfo { operation lastModifiedAt } } pageInfo { hasPreviousPage hasNextPage startCursor endCursor } syncConnectionInfo { startSyncCursor endSyncCursor totalEdges } } } }";
 
     public const string SyncFoodDiaryEntriesOperationName = "SyncFoodDiaryEntries";
 
     /// <summary>
-    ///     Edges requested per page. The Android client uses 10; a larger page keeps the initial
-    ///     full-history walk to a reasonable number of round trips.
+    ///     Edges requested per page. The server caps this at 100; larger values are silently
+    ///     clamped, so ask for the maximum to keep the initial history walk short.
     /// </summary>
     public const int PageSize = 100;
 
@@ -55,4 +67,11 @@ public static class MyFitnessPalConstants
     ///     Upper bound on pages fetched in a single sync, so a corrupt cursor cannot loop forever.
     /// </summary>
     public const int MaxPagesPerSync = 200;
+
+    /// <summary>
+    ///     Meal names cost one legacy diary request per day. Beyond this many days in a window —
+    ///     which only happens on a first full-history sync — entries are imported unnamed rather
+    ///     than issuing hundreds of requests.
+    /// </summary>
+    public const int MaxDiaryDaysPerSync = 60;
 }

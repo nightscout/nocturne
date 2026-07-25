@@ -17,15 +17,11 @@ public class MyFitnessPalFoodEntryMapperTests
     private static MfpFoodDiaryEntryNode Entry(
         string id = "entry-1",
         string? date = "2026-07-20",
-        string? consumedAt = "2026-07-20T08:30:00Z",
-        string? eatingOccasion = "Breakfast",
-        int slot = 0) => new()
+        string? consumedAt = null) => new()
         {
             Id = id,
             Date = date,
             ConsumedAt = consumedAt,
-            EatingOccasion = eatingOccasion,
-            EatingOccasionSlot = slot,
             LoggedAt = "2026-07-20T09:15:00Z",
             Quantity = 2,
             ServingSize = new MfpServingSize { Amount = 1, Unit = "slice", NutritionMultiplier = 1 },
@@ -39,6 +35,8 @@ public class MyFitnessPalFoodEntryMapperTests
             },
         };
 
+    private static Dictionary<string, string> Breakfast => new() { ["entry-1"] = "Breakfast" };
+
     private static (DateTimeOffset From, DateTimeOffset To) WholeDay =>
         (new DateTimeOffset(2026, 7, 19, 0, 0, 0, TimeSpan.Zero),
          new DateTimeOffset(2026, 7, 21, 0, 0, 0, TimeSpan.Zero));
@@ -48,7 +46,8 @@ public class MyFitnessPalFoodEntryMapperTests
     {
         var (from, to) = WholeDay;
 
-        var import = Mapper().Map([Entry()], Config, from, to).Should().ContainSingle().Subject;
+        var import = Mapper().Map([Entry()], Config, from, to, Breakfast)
+            .Should().ContainSingle().Subject;
 
         import.Carbs.Should().Be(30);
         import.Protein.Should().Be(8);
@@ -65,7 +64,8 @@ public class MyFitnessPalFoodEntryMapperTests
     {
         var (from, to) = WholeDay;
 
-        var import = Mapper().Map([Entry()], Config, from, to).Should().ContainSingle().Subject;
+        var import = Mapper().Map([Entry()], Config, from, to, Breakfast)
+            .Should().ContainSingle().Subject;
 
         import.ConnectorSource.Should().Be(DataSources.MyFitnessPalConnector);
         import.ExternalEntryId.Should().Be("entry-1");
@@ -80,12 +80,25 @@ public class MyFitnessPalFoodEntryMapperTests
     }
 
     [Fact]
+    public void Map_ImportsEntriesTheAttributionCouldNotName()
+    {
+        var (from, to) = WholeDay;
+
+        // An unattributed day still yields entries; only the meal name and its implied hour are lost.
+        var import = Mapper().Map([Entry()], Config, from, to).Should().ContainSingle().Subject;
+
+        import.MealName.Should().BeEmpty();
+        import.Carbs.Should().Be(30);
+        import.ConsumedAt.Should().Be(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero));
+    }
+
+    [Fact]
     public void Map_DropsEntriesOutsideTheRequestedWindow()
     {
         var from = new DateTimeOffset(2026, 7, 21, 0, 0, 0, TimeSpan.Zero);
         var to = new DateTimeOffset(2026, 7, 22, 0, 0, 0, TimeSpan.Zero);
 
-        Mapper().Map([Entry()], Config, from, to).Should().BeEmpty();
+        Mapper().Map([Entry()], Config, from, to, Breakfast).Should().BeEmpty();
     }
 
     [Fact]
@@ -93,7 +106,7 @@ public class MyFitnessPalFoodEntryMapperTests
     {
         var (from, to) = WholeDay;
 
-        Mapper().Map([Entry(date: "not-a-date")], Config, from, to).Should().BeEmpty();
+        Mapper().Map([Entry(date: "not-a-date")], Config, from, to, Breakfast).Should().BeEmpty();
     }
 
     [Fact]
@@ -103,7 +116,8 @@ public class MyFitnessPalFoodEntryMapperTests
         var entry = Entry();
         entry.Food = null;
 
-        var import = Mapper().Map([entry], Config, from, to).Should().ContainSingle().Subject;
+        var import = Mapper().Map([entry], Config, from, to, Breakfast)
+            .Should().ContainSingle().Subject;
 
         import.Food.Should().BeNull();
         import.ExternalFoodId.Should().BeEmpty();
@@ -112,8 +126,9 @@ public class MyFitnessPalFoodEntryMapperTests
     [Fact]
     public void ResolveConsumedAt_PrefersTheReportedTimestamp()
     {
+        // Production leaves consumedAt null, but honour it if MyFitnessPal ever populates it.
         var resolved = MyFitnessPalFoodEntryMapper.ResolveConsumedAt(
-            Entry(), new DateOnly(2026, 7, 20), Config);
+            Entry(consumedAt: "2026-07-20T08:30:00Z"), new DateOnly(2026, 7, 20), "Dinner", Config);
 
         resolved.Should().Be(new DateTimeOffset(2026, 7, 20, 8, 30, 0, TimeSpan.Zero));
     }
@@ -123,23 +138,23 @@ public class MyFitnessPalFoodEntryMapperTests
     [InlineData("lunch", 12)]
     [InlineData("Dinner", 18)]
     [InlineData("Snacks", 15)]
-    public void ResolveConsumedAt_FallsBackToTheOccasionName(string occasion, int expectedHour)
+    public void ResolveConsumedAt_DerivesTheHourFromTheMealName(string mealName, int expectedHour)
     {
         var resolved = MyFitnessPalFoodEntryMapper.ResolveConsumedAt(
-            Entry(consumedAt: null, eatingOccasion: occasion), new DateOnly(2026, 7, 20), Config);
+            Entry(), new DateOnly(2026, 7, 20), mealName, Config);
 
         resolved.Should().Be(new DateTimeOffset(2026, 7, 20, expectedHour, 0, 0, TimeSpan.Zero));
     }
 
-    [Fact]
-    public void ResolveConsumedAt_FallsBackToTheSlot_ForARenamedOccasion()
+    [Theory]
+    [InlineData("Second Breakfast")]
+    [InlineData(null)]
+    public void ResolveConsumedAt_FallsBackToMidday_ForARenamedOrUnknownMeal(string? mealName)
     {
         var resolved = MyFitnessPalFoodEntryMapper.ResolveConsumedAt(
-            Entry(consumedAt: null, eatingOccasion: "Second Breakfast", slot: 2),
-            new DateOnly(2026, 7, 20),
-            Config);
+            Entry(), new DateOnly(2026, 7, 20), mealName, Config);
 
-        resolved.Should().Be(new DateTimeOffset(2026, 7, 20, 18, 0, 0, TimeSpan.Zero));
+        resolved.Should().Be(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero));
     }
 
     [Fact]

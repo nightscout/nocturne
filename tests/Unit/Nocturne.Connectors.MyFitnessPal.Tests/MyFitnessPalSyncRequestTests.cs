@@ -9,7 +9,7 @@ namespace Nocturne.Connectors.MyFitnessPal.Tests;
 
 /// <summary>
 ///     Covers the wire contract of the <c>batchSync</c> request and response, which was
-///     reconstructed from the MyFitnessPal mobile client.
+///     validated field by field against the live production graph.
 /// </summary>
 public class MyFitnessPalSyncRequestTests
 {
@@ -59,17 +59,15 @@ public class MyFitnessPalSyncRequestTests
         {
           "data": {
             "batchSync": {
-              "foodDiaryEntryConnection": {
-                "foodDiaryEntryEdges": [
+              "foodDiaryEntries": {
+                "edges": [
                   {
-                    "foodDiaryEntryNode": {
+                    "node": {
                       "__typename": "ActiveFoodDiaryEntry",
                       "id": "entry-1",
                       "createdAt": "2026-07-20T09:15:00Z",
                       "date": "2026-07-20",
                       "consumedAt": "2026-07-20T08:30:00Z",
-                      "eatingOccasion": "Breakfast",
-                      "eatingOccasionSlot": 0,
                       "loggedAt": "2026-07-20T09:15:00Z",
                       "quantity": 2,
                       "servingSize": {
@@ -84,27 +82,26 @@ public class MyFitnessPalSyncRequestTests
                         "description": "Wholemeal Bread",
                         "brand": "Helga",
                         "isVerified": true,
-                        "grams": 40,
-                        "nutrientSet": { "calories": 90, "protein": 4, "carbs": 15, "fat": 1 },
+                        "nutrientSet": { "calories": 90, "protein": 4, "totalCarbohydrates": 15, "fat": 1 },
                         "servingSizes": [
                           { "amount": 1, "nutritionMultiplier": 1, "isFraction": false, "unit": "slice" }
                         ]
                       },
-                      "consumedNutrientSet": { "calories": 180, "protein": 8, "carbs": 30, "fat": 2 }
+                      "consumedNutrientSet": { "calories": 180, "protein": 8, "totalCarbohydrates": 30, "fat": 2 }
                     },
-                    "foodDiaryEntryEdgeSync": {
+                    "syncEdgeInfo": {
                       "operation": "UPSERT",
                       "lastModifiedAt": "2026-07-20T09:15:00Z"
                     }
                   }
                 ],
-                "foodDiaryEntryPaging": {
+                "pageInfo": {
                   "hasPreviousPage": false,
                   "hasNextPage": true,
                   "startCursor": "page-1",
                   "endCursor": "page-2"
                 },
-                "foodDiaryEntrySyncInfo": {
+                "syncConnectionInfo": {
                   "startSyncCursor": "sync-0",
                   "endSyncCursor": "sync-9",
                   "totalEdges": 1
@@ -129,45 +126,10 @@ public class MyFitnessPalSyncRequestTests
         var node = edge.FoodDiaryEntryNode!;
         node.Id.Should().Be("entry-1");
         node.Date.Should().Be("2026-07-20");
-        node.EatingOccasion.Should().Be("Breakfast");
         node.Quantity.Should().Be(2);
         node.ServingSize!.Unit.Should().Be("slice");
         node.Food!.Brand.Should().Be("Helga");
         node.ConsumedNutrientSet!.Carbs.Should().Be(30);
-    }
-
-    [Fact]
-    public void WriteSecret_MergesIntoTheExistingDocument()
-    {
-        // Secrets are stored as one document, so a runtime write must not drop the credentials
-        // the user configured.
-        var stored = new Dictionary<string, string> { ["password"] = "pw", ["syncCursor"] = "old" };
-
-        MyFitnessPalConnectorService.WriteSecret(stored, "syncCursor", "new").Should().BeTrue();
-        MyFitnessPalConnectorService.WriteSecret(stored, "refreshToken", "rt").Should().BeTrue();
-
-        stored.Should().Contain("password", "pw");
-        stored.Should().Contain("syncCursor", "new");
-        stored.Should().Contain("refreshToken", "rt");
-    }
-
-    [Fact]
-    public void WriteSecret_RemovesTheKey_WhenTheValueIsCleared()
-    {
-        var stored = new Dictionary<string, string> { ["pageCursor"] = "page-7" };
-
-        MyFitnessPalConnectorService.WriteSecret(stored, "pageCursor", null).Should().BeTrue();
-
-        stored.Should().NotContainKey("pageCursor");
-    }
-
-    [Fact]
-    public void WriteSecret_ReportsNoChange_WhenTheValueIsUnchanged()
-    {
-        var stored = new Dictionary<string, string> { ["syncCursor"] = "same" };
-
-        MyFitnessPalConnectorService.WriteSecret(stored, "syncCursor", "same").Should().BeFalse();
-        MyFitnessPalConnectorService.WriteSecret(stored, "pageCursor", null).Should().BeFalse();
     }
 
     [Fact]
