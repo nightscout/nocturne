@@ -120,14 +120,16 @@ public sealed class DemoApiClient
     }
 
     /// <summary>
-    /// Wipes all demo data (entries + treatments) via the admin endpoint.
+    /// Resets the demo tenant via the admin endpoint, clearing its data and every
+    /// configuration change a visitor made and returning it to a freshly provisioned
+    /// state. The tenant keeps its id, slug and share token.
     /// </summary>
-    public async Task WipeAllAsync(CancellationToken ct)
+    public async Task ResetAsync(CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient("DemoAdmin");
-        var response = await client.DeleteAsync("api/v4/admin/demo/data", ct);
+        var response = await client.PostAsync("api/v4/admin/demo/reset", null, ct);
         response.EnsureSuccessStatusCode();
-        _logger.LogInformation("Wiped all demo data via API");
+        _logger.LogInformation("Reset demo tenant (data + configuration) via API");
     }
 
     /// <summary>

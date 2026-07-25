@@ -212,13 +212,13 @@ public class DemoDataHostedService : BackgroundService
     }
 
     /// <summary>
-    /// Wipes all demo data via the API.
+    /// Resets the demo tenant via the API, clearing its data and configuration.
     /// </summary>
     public async Task WipeAsync(CancellationToken ct)
     {
-        _logger.LogInformation("Wiping all demo data");
-        await _apiClient.WipeAllAsync(ct);
-        _logger.LogInformation("Demo data wipe complete");
+        _logger.LogInformation("Resetting demo tenant");
+        await _apiClient.ResetAsync(ct);
+        _logger.LogInformation("Demo tenant reset complete");
     }
 
     /// <summary>
@@ -249,16 +249,16 @@ public class DemoDataHostedService : BackgroundService
     /// </summary>
     public async Task RegenerateDataAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Regenerating demo data - clearing existing data first");
+        _logger.LogInformation("Regenerating demo data - resetting the tenant first");
 
-        // Clear existing demo data via API
+        // Reset the tenant via API: clears data and any configuration a visitor changed
         try
         {
-            await _apiClient.WipeAllAsync(cancellationToken);
+            await _apiClient.ResetAsync(cancellationToken);
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Failed to wipe existing data (may not exist yet), continuing with regeneration");
+            _logger.LogWarning(ex, "Failed to reset the demo tenant (may not exist yet), continuing with regeneration");
         }
 
         // Ensure demo PatientInsulin record exists

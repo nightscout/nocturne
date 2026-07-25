@@ -146,28 +146,30 @@ public class StatusService : IStatusService
             settings["runtimeState"] = "demo";
         }
 
-        // Populate demo fields if this tenant is a demo instance
+        // Populate demo fields if this tenant is a demo instance. Read from the tenant
+        // row, not _demoModeService: whether a tenant is a demo is a property of the
+        // tenant, while demo mode is a server-wide toggle for the bundled generator.
+        // A deployment that runs the demo generator as a separate service leaves the
+        // API's toggle off, and the web app keys the demo banner and demo sign-in off
+        // these fields.
         bool? isDemo = null;
         DateTime? nextResetAt = null;
 
-        if (_demoModeService.IsEnabled)
+        var demoTenantId = _tenantAccessor.Context?.TenantId;
+        if (demoTenantId.HasValue)
         {
-            var tenantId = _tenantAccessor.Context?.TenantId;
-            if (tenantId.HasValue)
-            {
-                await using var ctx = await _dbContextFactory.CreateDbContextAsync();
-                var tenant = await ctx.Tenants
-                    .AsNoTracking()
-                    .Include(t => t.DemoConfig)
-                    .Where(t => t.Id == tenantId.Value)
-                    .Select(t => new { t.IsDemo, NextResetAt = t.DemoConfig != null ? t.DemoConfig.NextResetAt : null })
-                    .FirstOrDefaultAsync();
+            await using var ctx = await _dbContextFactory.CreateDbContextAsync();
+            var tenant = await ctx.Tenants
+                .AsNoTracking()
+                .Include(t => t.DemoConfig)
+                .Where(t => t.Id == demoTenantId.Value)
+                .Select(t => new { t.IsDemo, NextResetAt = t.DemoConfig != null ? t.DemoConfig.NextResetAt : null })
+                .FirstOrDefaultAsync();
 
-                if (tenant is { IsDemo: true })
-                {
-                    isDemo = true;
-                    nextResetAt = tenant.NextResetAt;
-                }
+            if (tenant is { IsDemo: true })
+            {
+                isDemo = true;
+                nextResetAt = tenant.NextResetAt;
             }
         }
 

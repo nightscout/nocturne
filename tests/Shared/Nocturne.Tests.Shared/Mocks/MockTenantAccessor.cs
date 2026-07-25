@@ -21,10 +21,12 @@ public static class MockTenantAccessor
         Guid? tenantId = null,
         string? slug = null,
         string? displayName = null,
-        bool isActive = true)
+        bool isActive = true,
+        bool isDemo = false)
     {
         var id = tenantId ?? DefaultTenantId;
-        var context = new TenantContext(id, slug ?? DefaultSlug, displayName ?? DefaultDisplayName, isActive);
+        var context = new TenantContext(
+            id, slug ?? DefaultSlug, displayName ?? DefaultDisplayName, isActive, isDemo);
 
         var mock = new Mock<ITenantAccessor>();
         mock.Setup(x => x.Context).Returns(context);

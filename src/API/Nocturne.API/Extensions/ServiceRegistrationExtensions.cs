@@ -18,6 +18,7 @@ using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.API.Services.Connectors;
+using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Effects;
 using Nocturne.API.Services.Entries;
@@ -243,6 +244,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();
+        services.AddScoped<DemoTenantService>();
 
         // Shared by InstanceKeyHandler (authentication) and TenantSetupMiddleware
         // (setup-gate bypass) so instance-key validation rules live in one place.
@@ -354,6 +356,23 @@ public static class ServiceRegistrationExtensions
                         {
                             PermitLimit = 5,
                             Window = TimeSpan.FromMinutes(10),
+                            QueueLimit = 0,
+                        }
+                    )
+            );
+
+            // Demo sign-in: 10 sessions per IP per 5 minutes. Generous enough for a
+            // visitor reloading the demo, tight enough that the endpoint can't be used
+            // to mint sessions in bulk.
+            options.AddPolicy(
+                "demo-session",
+                context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                        factory: _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 10,
+                            Window = TimeSpan.FromMinutes(5),
                             QueueLimit = 0,
                         }
                     )

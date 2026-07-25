@@ -1,0 +1,280 @@
+using FluentAssertions;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging;
+using Moq;
+using Nocturne.API.Services.Demo;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Entities.V4;
+using Xunit;
+
+namespace Nocturne.API.Tests.Services.Demo;
+
+/// <summary>
+/// Tests that a demo reset clears configuration as well as data while keeping the
+/// tenant's identity, so cached tenant contexts and the public share link survive it.
+/// </summary>
+public class DemoTenantServiceResetTests : IDisposable
+{
+    private const string DemoSlug = "demo";
+    private const string ShareToken = "sharetoken123";
+
+    private readonly SqliteConnection _connection;
+    private readonly DbContextOptions<NocturneDbContext> _dbOptions;
+    private readonly Mock<ITenantService> _tenantService = new();
+    private readonly DemoTenantService _service;
+
+    public DemoTenantServiceResetTests()
+    {
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+
+        _dbOptions = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseSqlite(_connection)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+
+        using var seed = new NocturneDbContext(_dbOptions);
+        seed.Database.EnsureCreated();
+
+        var dbFactory = new Mock<IDbContextFactory<NocturneDbContext>>();
+        dbFactory.Setup(f => f.CreateDbContextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new NocturneDbContext(_dbOptions));
+
+        // Stand in for the real re-seed, which recreates the seed roles and the Public
+        // membership that ConfigureAccessAsync then grants on top.
+        _tenantService
+            .Setup(t => t.SeedAfterResetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid tenantId, CancellationToken _) => SeedRolesAndPublicMemberAsync(tenantId));
+
+        _service = new DemoTenantService(
+            dbFactory.Object, _tenantService.Object, new Mock<ILogger<DemoTenantService>>().Object);
+    }
+
+    [Fact]
+    public async Task ResetAsync_PreservesTenantIdentity()
+    {
+        var tenantId = SeedDemoTenant();
+
+        var result = await _service.ResetAsync();
+
+        result.Should().Be(tenantId);
+
+        await using var db = new NocturneDbContext(_dbOptions);
+        var tenant = await db.Tenants.SingleAsync(t => t.Id == tenantId);
+        tenant.Slug.Should().Be(DemoSlug);
+        tenant.ShareToken.Should().Be(ShareToken, "share links must keep resolving across a reset");
+        tenant.IsDemo.Should().BeTrue();
+        tenant.OnboardingCompletedAt.Should().NotBeNull("a demo visitor must not be sent to /setup");
+    }
+
+    [Fact]
+    public async Task ResetAsync_CarriesDemoScheduleAcross()
+    {
+        var tenantId = SeedDemoTenant();
+
+        await _service.ResetAsync();
+
+        await using var db = new NocturneDbContext(_dbOptions);
+        var config = await db.Set<TenantDemoConfigEntity>().SingleAsync(c => c.TenantId == tenantId);
+        config.ResetIntervalMinutes.Should().Be(1440);
+        config.BackfillDays.Should().Be(90);
+        config.LastResetAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ResetAsync_ClearsVisitorConfigurationChanges()
+    {
+        var tenantId = SeedDemoTenant();
+        SeedVisitorChanges(tenantId);
+
+        await _service.ResetAsync();
+
+        await using var db = new NocturneDbContext(_dbOptions);
+        db.TenantId = tenantId;
+
+        (await db.AlertRules.CountAsync()).Should().Be(0, "alert rules are configuration and must be reset");
+        (await db.TrackerDefinitions.CountAsync()).Should().Be(0, "tracker definitions must be reset");
+        (await db.Foods.CountAsync()).Should().Be(0, "the food catalog must be reset");
+        (await db.SensorGlucose.CountAsync()).Should().Be(0, "generated data must be reset");
+    }
+
+    [Fact]
+    public async Task ResetAsync_ReinstatesDemoMemberAndPublicAccess()
+    {
+        var tenantId = SeedDemoTenant();
+        SeedVisitorChanges(tenantId);
+
+        await _service.ResetAsync();
+
+        var subjectId = await _service.FindDemoMemberSubjectIdAsync(tenantId);
+        subjectId.Should().NotBeNull("visitors are signed in as the demo member after a reset");
+
+        await using var db = new NocturneDbContext(_dbOptions);
+        db.TenantId = tenantId;
+
+        var members = await db.TenantMembers
+            .Include(m => m.Subject)
+            .Include(m => m.MemberRoles)
+            .Where(m => m.TenantId == tenantId)
+            .ToListAsync();
+
+        members.Should().HaveCount(2, "only the Public subject and the demo member remain");
+
+        var publicMember = members.Single(m => m.Subject!.IsSystemSubject);
+        publicMember.LimitTo24Hours.Should().BeFalse();
+        publicMember.MemberRoles.Should().HaveCount(1, "the demo service writes through the Public subject");
+
+        var demoMember = members.Single(m => !m.Subject!.IsSystemSubject);
+        demoMember.Subject!.Username.Should().Be(DemoTenantService.DemoMemberUsername);
+        demoMember.MemberRoles.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task ResetAsync_ReturnsNull_WhenNoDemoTenantExists()
+    {
+        var result = await _service.ResetAsync();
+
+        result.Should().BeNull();
+        _tenantService.Verify(
+            t => t.SeedAfterResetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>Seeds a provisioned demo tenant: roles, Public membership, demo member, demo config.</summary>
+    private Guid SeedDemoTenant()
+    {
+        using var db = new NocturneDbContext(_dbOptions);
+
+        var tenant = new TenantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Slug = DemoSlug,
+            DisplayName = "Nocturne Demo",
+            IsActive = true,
+            IsDemo = true,
+            ShareToken = ShareToken,
+            ShareTokenSetAt = DateTime.UtcNow,
+            OnboardingCompletedAt = DateTime.UtcNow,
+        };
+        db.Add(tenant);
+        db.Set<TenantDemoConfigEntity>().Add(new TenantDemoConfigEntity
+        {
+            TenantId = tenant.Id,
+            ResetIntervalMinutes = 1440,
+            BackfillDays = 90,
+            IntervalMinutes = 5,
+        });
+        db.SaveChanges();
+
+        SeedRolesAndPublicMemberAsync(tenant.Id).GetAwaiter().GetResult();
+        _service.ConfigureAccessAsync(tenant.Id).GetAwaiter().GetResult();
+
+        return tenant.Id;
+    }
+
+    /// <summary>Configuration and data a visitor could leave behind, all of which a reset must clear.</summary>
+    private void SeedVisitorChanges(Guid tenantId)
+    {
+        using var db = new NocturneDbContext(_dbOptions);
+        db.TenantId = tenantId;
+
+        db.AlertRules.Add(new AlertRuleEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            Name = "Visitor rule",
+        });
+        db.TrackerDefinitions.Add(new TrackerDefinitionEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            Name = "Visitor tracker",
+        });
+        db.Foods.Add(new FoodEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            Name = "Visitor food",
+        });
+        db.SensorGlucose.Add(new SensorGlucoseEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            Timestamp = DateTime.UtcNow,
+            Mgdl = 120,
+        });
+
+        // A member the visitor invited, plus its subject.
+        var invited = new SubjectEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Invited",
+            Username = "invited",
+            IsActive = true,
+        };
+        db.Subjects.Add(invited);
+        db.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            SubjectId = invited.Id,
+        });
+
+        db.SaveChanges();
+    }
+
+    /// <summary>Mirrors the seed-roles + Public-membership half of provisioning.</summary>
+    private async Task SeedRolesAndPublicMemberAsync(Guid tenantId)
+    {
+        await using var db = new NocturneDbContext(_dbOptions);
+
+        foreach (var (slug, permissions) in TenantPermissions.SeedRolePermissions)
+        {
+            db.TenantRoles.Add(new TenantRoleEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = tenantId,
+                Name = TenantPermissions.SeedRoleNames[slug],
+                Slug = slug,
+                Permissions = new List<string>(permissions),
+                IsSystem = true,
+            });
+        }
+
+        var publicSubject = await db.Subjects
+            .FirstOrDefaultAsync(s => s.IsSystemSubject && s.Name == "Public");
+
+        if (publicSubject is null)
+        {
+            publicSubject = new SubjectEntity
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "Public",
+                IsSystemSubject = true,
+                IsActive = true,
+            };
+            db.Subjects.Add(publicSubject);
+        }
+
+        db.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            SubjectId = publicSubject.Id,
+            LimitTo24Hours = true,
+            Label = "Public Access",
+        });
+
+        await db.SaveChangesAsync();
+    }
+
+    public void Dispose()
+    {
+        _connection.Dispose();
+        GC.SuppressFinalize(this);
+    }
+}

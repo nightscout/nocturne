@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Seeding;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -28,11 +28,16 @@ namespace Nocturne.API.Controllers.V4.Admin;
 public class DemoAdminController : ControllerBase
 {
     private readonly ITenantService _tenantService;
+    private readonly DemoTenantService _demoTenantService;
     private readonly IDbContextFactory<NocturneDbContext> _factory;
 
-    public DemoAdminController(ITenantService tenantService, IDbContextFactory<NocturneDbContext> factory)
+    public DemoAdminController(
+        ITenantService tenantService,
+        DemoTenantService demoTenantService,
+        IDbContextFactory<NocturneDbContext> factory)
     {
         _tenantService = tenantService;
+        _demoTenantService = demoTenantService;
         _factory = factory;
     }
 
@@ -65,8 +70,9 @@ public class DemoAdminController : ControllerBase
         await db.SaveChangesAsync(ct);
 
         // Grant the Public subject write access so the demo service can write
-        // entries/treatments without auth and visitors can use the API playground.
-        await GrantPublicWriteAccessAsync(db, created.Id, ct);
+        // entries/treatments without auth, and create the demo member visitors
+        // are signed in as.
+        await _demoTenantService.ConfigureAccessAsync(created.Id, ct);
 
         tenant.DemoConfig = config;
         return Ok(ToDto(tenant, alreadyExisted: false));
@@ -182,50 +188,22 @@ public class DemoAdminController : ControllerBase
     }
 
     /// <summary>
-    /// Deletes all demo data (entries + treatments) for the demo tenant.
+    /// Resets the demo tenant to a freshly provisioned state, discarding both the
+    /// generated data and every configuration change a visitor made — settings, roles,
+    /// members, connectors, alert rules, trackers and audit history. The tenant keeps
+    /// its id, slug and share token. Called by the demo background service before each
+    /// regenerate.
     /// </summary>
-    [HttpDelete("data")]
-    [ProducesResponseType(typeof(DemoDeleteResultDto), StatusCodes.Status200OK)]
+    [HttpPost("reset")]
+    [ProducesResponseType(typeof(DemoResetResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAllData(CancellationToken ct)
+    public async Task<IActionResult> Reset(CancellationToken ct)
     {
-        await using var db = await _factory.CreateDbContextAsync(ct);
-
-        var tenant = await db.Set<TenantEntity>().FirstOrDefaultAsync(t => t.IsDemo, ct);
-        if (tenant is null)
+        var tenantId = await _demoTenantService.ResetAsync(ct);
+        if (tenantId is null)
             return NotFound();
 
-        db.TenantId = tenant.Id;
-
-        var deleted = 0L;
-
-        // Entries
-        deleted += await db.SensorGlucose.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.MeterGlucose.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.Calibrations.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-
-        // Treatments
-        deleted += await db.Boluses.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.CarbIntakes.Where(c => c.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.BGChecks.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.Notes.Where(n => n.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.DeviceEvents.Where(de => de.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.BolusCalculations.Where(bc => bc.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.TempBasals.Where(t => t.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.StateSpans.Where(s => s.Source == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.ApsSnapshots.Where(a => a.Device == DataSources.DemoService).ExecuteDeleteAsync(ct);
-
-        // Seed-extras data (sleep stages/samples cascade from their session).
-        // Tracker definitions and alert rules are configuration, not data —
-        // seed-extras re-upserts them, so only their instances/history go.
-        deleted += await db.HeartRates.Where(h => h.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.StepCounts.Where(s => s.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.SleepSessions.Where(s => s.SourceApp == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.TrackerInstances.ExecuteDeleteAsync(ct);
-        deleted += await db.AlertInstances.ExecuteDeleteAsync(ct);
-        deleted += await db.AlertExcursions.ExecuteDeleteAsync(ct);
-
-        return Ok(new DemoDeleteResultDto(deleted));
+        return Ok(new DemoResetResultDto(tenantId.Value));
     }
 
     /// <summary>
@@ -312,47 +290,6 @@ public class DemoAdminController : ControllerBase
         return Ok(new { created = true });
     }
 
-    /// <summary>
-    /// Assigns the Admin role to the Public system subject's membership on the demo tenant,
-    /// granting unauthenticated read/write access to glucose, treatments, and devices.
-    /// </summary>
-    private static async Task GrantPublicWriteAccessAsync(NocturneDbContext db, Guid tenantId, CancellationToken ct)
-    {
-        db.TenantId = tenantId;
-
-        var publicMember = await db.TenantMembers
-            .Include(m => m.Subject)
-            .FirstOrDefaultAsync(m => m.TenantId == tenantId && m.Subject!.IsSystemSubject && m.Subject.Name == "Public", ct);
-
-        if (publicMember is null)
-            return;
-
-        var adminRole = await db.TenantRoles
-            .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.Slug == TenantPermissions.SeedRoles.Admin, ct);
-
-        if (adminRole is null)
-            return;
-
-        var alreadyAssigned = await db.TenantMemberRoles
-            .AnyAsync(mr => mr.TenantMemberId == publicMember.Id && mr.TenantRoleId == adminRole.Id, ct);
-
-        if (alreadyAssigned)
-            return;
-
-        db.TenantMemberRoles.Add(new TenantMemberRoleEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantMemberId = publicMember.Id,
-            TenantRoleId = adminRole.Id,
-            SysCreatedAt = DateTime.UtcNow,
-        });
-
-        // Also remove the 24-hour limit so the full history is visible
-        publicMember.LimitTo24Hours = false;
-
-        await db.SaveChangesAsync(ct);
-    }
-
     private static DemoStateDto ToDto(TenantEntity tenant, bool alreadyExisted) => new(
         TenantId: tenant.Id,
         Slug: tenant.Slug,
@@ -384,5 +321,7 @@ public record DemoStatusPatchDto(
     bool? IsActive = null);
 
 public record DemoDeleteResultDto(long DeletedCount);
+
+public record DemoResetResultDto(Guid TenantId);
 
 public record DemoSeedExtrasDto(int Days = 7);
