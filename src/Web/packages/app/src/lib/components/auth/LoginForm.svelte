@@ -70,6 +70,8 @@
   // Form fields
   let username = $state("");
   let totpCode = $state("");
+  /** Submitted from the code field's onComplete, so a full code submits itself. */
+  let totpFormEl = $state<HTMLFormElement | null>(null);
 
   async function handleAuthResult(result: {
     success?: boolean;
@@ -450,6 +452,7 @@
     {:else if mode === "totp"}
       <!-- Authenticator-app sign-in. Also verified on the server. -->
       <form
+        bind:this={totpFormEl}
         class="space-y-3"
         {...signInWithAuthenticator.enhance(async ({ submit }) => {
           await authenticator.run(submit, onSuccess);
@@ -492,6 +495,7 @@
               inputId="totp-code-input"
               maxlength={6}
               bind:value={totpCode}
+              onComplete={() => totpFormEl?.requestSubmit()}
             >
               {#snippet children({
                 cells,
