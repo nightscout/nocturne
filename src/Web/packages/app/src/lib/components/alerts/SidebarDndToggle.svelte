@@ -8,13 +8,16 @@
   import type { TenantAlertSettingsResponse } from "$api-clients";
   import { Switch } from "$lib/components/ui/switch";
   import { Bell, BellOff } from "lucide-svelte";
+  import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
 
   let settings = $state<TenantAlertSettingsResponse | null>(null);
   let saving = $state(false);
 
-  let isManualActive = $derived(settings?.dndManualActive ?? false);
-  let isScheduled = $derived(settings?.dndScheduleEnabled ?? false);
-  let isAnyOn = $derived(isManualActive || isScheduled);
+  // A configured schedule is not the same as DND being on now — the backend
+  // evaluates the window and the response carries no "active now" field. See
+  // lib/components/alerts/dnd.ts.
+  let isManualActive = $derived(isDndActiveNow(settings));
+  let isScheduled = $derived(isDndScheduleConfigured(settings));
 
   const href = "/alerts/dnd";
   let isActive = $derived(page.url.pathname.startsWith(href));
@@ -57,9 +60,11 @@
   <a
     {href}
     class="flex flex-1 items-center gap-2 min-w-0 text-sm hover:text-sidebar-accent-foreground"
-    title={isScheduled && !isManualActive ? "Scheduled DND active" : undefined}
+    title={isScheduled && !isManualActive
+      ? "Scheduled Do Not Disturb window configured"
+      : undefined}
   >
-    {#if isAnyOn}
+    {#if isManualActive}
       <BellOff class="size-4 shrink-0 text-status-info" />
     {:else}
       <Bell class="size-4 shrink-0" />
