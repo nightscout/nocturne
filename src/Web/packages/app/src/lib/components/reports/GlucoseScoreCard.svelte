@@ -5,7 +5,6 @@
     slots: {
       card: "relative overflow-hidden border-2 transition-all hover:shadow-md",
       strip: "absolute top-0 left-0 right-0 h-1",
-      badge: "flex items-center gap-1 rounded-full px-2 py-1 text-xs",
       value: "text-4xl font-bold",
     },
     variants: {
@@ -13,34 +12,26 @@
         excellent: {
           card: "border-green-200 dark:border-green-800",
           strip: "bg-green-500",
-          badge:
-            "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
           value: "text-green-700 dark:text-green-300",
         },
         good: {
           card: "border-blue-200 dark:border-blue-800",
           strip: "bg-blue-500",
-          badge: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
           value: "text-blue-700 dark:text-blue-300",
         },
         fair: {
           card: "border-yellow-200 dark:border-yellow-800",
           strip: "bg-yellow-500",
-          badge:
-            "bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
           value: "text-yellow-700 dark:text-yellow-300",
         },
         "needs-attention": {
           card: "border-orange-200 dark:border-orange-800",
           strip: "bg-orange-500",
-          badge:
-            "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
           value: "text-orange-700 dark:text-orange-300",
         },
         critical: {
           card: "border-red-200 dark:border-red-800",
           strip: "bg-red-500",
-          badge: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
           value: "text-red-700 dark:text-red-300",
         },
       },
@@ -63,14 +54,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Progress } from "$lib/components/ui/progress";
-  import {
-    TrendingUp,
-    TrendingDown,
-    Minus,
-    AlertTriangle,
-    CheckCircle2,
-    Info,
-  } from "lucide-svelte";
+  import { TrendingUp, TrendingDown, Minus, Info } from "lucide-svelte";
   import type { Snippet } from "svelte";
   import { cn } from "$lib/utils";
 
@@ -108,28 +92,7 @@
     colorClass,
   }: Props = $props();
 
-  const statusLabels: Record<NonNullable<ScoreCardStatus>, string> = {
-    excellent: "Excellent",
-    good: "Good",
-    fair: "Fair",
-    "needs-attention": "Needs Attention",
-    critical: "Critical",
-  };
-
-  const statusIcons: Record<
-    NonNullable<ScoreCardStatus>,
-    typeof CheckCircle2
-  > = {
-    excellent: CheckCircle2,
-    good: CheckCircle2,
-    fair: Info,
-    "needs-attention": AlertTriangle,
-    critical: AlertTriangle,
-  };
-
   const styles = $derived(scoreCardVariants({ status }));
-  const StatusIcon = $derived(statusIcons[status ?? "good"]);
-  const statusLabel = $derived(statusLabels[status ?? "good"]);
 
   const TrendIcon = $derived(
     trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus
@@ -141,17 +104,11 @@
   <div class={styles.strip()}></div>
 
   <CardHeader class="pb-2">
-    <div class="flex items-start justify-between">
-      <div class="flex items-center gap-2">
-        {#if icon}
-          {@render icon()}
-        {/if}
-        <CardTitle class="text-base font-medium">{title}</CardTitle>
-      </div>
-      <div class={styles.badge()}>
-        <StatusIcon class="h-3 w-3" />
-        <span>{statusLabel}</span>
-      </div>
+    <div class="flex items-center gap-2">
+      {#if icon}
+        {@render icon()}
+      {/if}
+      <CardTitle class="text-base font-medium">{title}</CardTitle>
     </div>
   </CardHeader>
 

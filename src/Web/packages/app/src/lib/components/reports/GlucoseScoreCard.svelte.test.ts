@@ -29,47 +29,23 @@ describe("GlucoseScoreCard", () => {
 			.toBeVisible();
 	});
 
-	it("renders status badge with label", async () => {
-		render(GlucoseScoreCard, {
-			title: "TIR",
-			value: 80,
-			explanation: "Great time in range",
-			status: "excellent",
-		});
-
-		await expect.element(page.getByText("Excellent")).toBeVisible();
-	});
-
-	it("renders 'Good' status by default", async () => {
-		render(GlucoseScoreCard, {
-			title: "TIR",
-			value: 65,
-			explanation: "Good TIR",
-		});
-
-		await expect.element(page.getByText("Good", { exact: true })).toBeVisible();
-	});
-
-	it("renders 'Needs Attention' status", async () => {
+	it("does not label the status with a verdict", async () => {
 		render(GlucoseScoreCard, {
 			title: "TIR",
 			value: 40,
-			explanation: "Low TIR",
+			explanation: "Percentage of time glucose was in target range",
 			status: "needs-attention",
 		});
 
-		await expect.element(page.getByText("Needs Attention")).toBeVisible();
-	});
-
-	it("renders 'Critical' status", async () => {
-		render(GlucoseScoreCard, {
-			title: "TIR",
-			value: 20,
-			explanation: "Very low TIR",
-			status: "critical",
-		});
-
-		await expect.element(page.getByText("Critical")).toBeVisible();
+		for (const verdict of [
+			"Excellent",
+			"Good",
+			"Fair",
+			"Needs Attention",
+			"Critical",
+		]) {
+			await expect.element(page.getByText(verdict)).not.toBeInTheDocument();
+		}
 	});
 
 	it("renders trend label when provided", async () => {

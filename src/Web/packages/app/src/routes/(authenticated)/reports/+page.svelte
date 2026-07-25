@@ -52,14 +52,11 @@
 
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { Badge } from "$lib/components/ui/badge";
-  import { cn } from "$lib/utils";
   import {
     Gauge,
     AlertTriangle,
     ArrowRight,
     BarChart3,
-    Sparkles,
     Activity,
     Calendar,
     ChevronRight,
@@ -68,7 +65,6 @@
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
-  import type { ScoreCardStatus } from "$lib/components/reports/GlucoseScoreCard.svelte";
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
@@ -137,38 +133,6 @@
       label: `Your range: ${rangeLabel} · ${Math.round(personalRange.inRangePercent ?? 0)}% of time`,
     };
   });
-
-  // Status helpers
-  function getTIRStatus(tirValue: number): ScoreCardStatus {
-    if (tirValue >= 70) return "excellent";
-    if (tirValue >= 60) return "good";
-    if (tirValue >= 50) return "fair";
-    if (tirValue >= 40) return "needs-attention";
-    return "critical";
-  }
-
-  function getStatusColor(status: ScoreCardStatus): string {
-    // Uses nocturne theme status colors where semantically relevant
-    const colors = {
-      excellent: "from-glucose-in-range to-glucose-in-range",
-      good: "from-glucose-in-range to-glucose-in-range",
-      fair: "from-status-warning to-status-warning",
-      "needs-attention": "from-status-warning to-status-critical",
-      critical: "from-status-critical to-status-critical",
-    };
-    return colors[status ?? "good"];
-  }
-
-  function getStatusLabel(status: ScoreCardStatus): string {
-    const labels = {
-      excellent: "Excellent",
-      good: "Good",
-      fair: "Fair",
-      "needs-attention": "Needs Attention",
-      critical: "Critical",
-    };
-    return labels[status ?? "good"];
-  }
 
   // Animation delay helper
   function staggerDelay(index: number): number {
@@ -253,8 +217,7 @@
         </div>
 
         {#if analysis}
-          {@const tirValue = tir?.target ?? 0}
-          {@const tirStatus = getTIRStatus(tirValue)}
+          {@const tirValue = tir?.target}
           <!-- Main Metric Hero Card -->
           <div
             class="mb-8"
@@ -263,12 +226,9 @@
             <div
               class="relative overflow-hidden rounded-3xl bg-white p-5 shadow-xl shadow-slate-200/50 @lg:p-6 @3xl:p-8 dark:bg-slate-900 dark:shadow-none dark:ring-1 dark:ring-white/10"
             >
-              <!-- Gradient accent bar -->
+              <!-- Accent bar -->
               <div
-                class={cn(
-                  "absolute left-0 top-0 h-1.5 w-full bg-linear-to-r",
-                  getStatusColor(tirStatus)
-                )}
+                class="absolute left-0 top-0 h-1.5 w-full bg-glucose-in-range"
               ></div>
 
               <div
@@ -282,22 +242,24 @@
                   <div
                     class="flex items-baseline justify-center gap-2 @3xl:justify-start"
                   >
-                    <span
-                      class={cn(
-                        "bg-linear-to-r bg-clip-text text-6xl font-bold tabular-nums text-transparent @lg:text-7xl",
-                        getStatusColor(tirStatus)
-                      )}
-                    >
-                      {tirValue.toFixed(0)}
-                    </span>
-                    <span class="text-2xl font-medium text-muted-foreground">
-                      %
-                    </span>
+                    {#if tirValue != null}
+                      <span
+                        class="text-6xl font-bold tabular-nums @lg:text-7xl"
+                      >
+                        {tirValue.toFixed(0)}
+                      </span>
+                      <span class="text-2xl font-medium text-muted-foreground">
+                        %
+                      </span>
+                    {:else}
+                      <span class="text-2xl font-medium text-muted-foreground">
+                        No data
+                      </span>
+                    {/if}
                   </div>
-                  <Badge variant="secondary" class="mt-2 gap-1.5 px-3 py-1">
-                    <Sparkles class="h-3 w-3" />
-                    {getStatusLabel(tirStatus)}
-                  </Badge>
+                  <p class="mt-2 text-sm text-muted-foreground">
+                    Consensus target: at least 70%
+                  </p>
                 </div>
 
                 <!-- Center: TIR Chart -->
