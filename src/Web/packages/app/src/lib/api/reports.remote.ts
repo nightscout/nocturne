@@ -5,62 +5,17 @@
 import { z } from "zod";
 import { DiabetesPopulationSchema } from "$lib/api/generated/schemas";
 import { getRequestEvent, query } from "$app/server";
-import { error } from "@sveltejs/kit";
 import { DiabetesPopulation, ClusterConfidence } from "$lib/api";
 import { fetchAllGlucose } from "./glucose-pagination";
+import { DateRangeSchema, resolveReportRange } from "./report-range";
 
-/**
- * Input schema for date range queries. Uses nullish() to accept both null and
- * undefined, matching the date-params hook which uses nullable defaults for
- * runed compatibility.
- */
-const DateRangeSchema = z.object({
-  days: z.number().nullish(),
-  from: z.string().nullish(),
-  to: z.string().nullish(),
-});
-
-export type DateRangeInput = z.infer<typeof DateRangeSchema>;
-
-/** Calculate date range from input parameters */
-function calculateDateRange(input?: DateRangeInput): {
-  startDate: Date;
-  endDate: Date;
-} {
-  let startDate: Date;
-  let endDate: Date;
-
-  if (input?.from && input?.to) {
-    startDate = new Date(input.from);
-    endDate = new Date(input.to);
-  } else if (input?.days) {
-    endDate = new Date();
-    startDate = new Date(endDate);
-    startDate.setDate(endDate.getDate() - (input.days - 1));
-  } else {
-    // Default to last 7 days
-    endDate = new Date();
-    startDate = new Date(endDate);
-    startDate.setDate(endDate.getDate() - 6);
-  }
-
-  // Validate dates
-  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-    throw error(400, "Invalid date parameters provided");
-  }
-
-  // Set to full day boundaries
-  startDate.setHours(0, 0, 0, 0);
-  endDate.setHours(23, 59, 59, 999);
-
-  return { startDate, endDate };
-}
+export type { DateRangeInput } from "./report-range";
 
 /** Get sensor glucose readings for a date range */
 export const getEntries = query(DateRangeSchema.optional(), async (input) => {
   const { locals } = getRequestEvent();
   const { apiClient } = locals;
-  const { startDate, endDate } = calculateDateRange(input);
+  const { startDate, endDate } = await resolveReportRange(input);
 
   const entries = await fetchAllGlucose(apiClient, startDate, endDate);
 
@@ -79,7 +34,7 @@ export const getBolusesAndCarbs = query(
   async (input) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
-    const { startDate, endDate } = calculateDateRange(input);
+    const { startDate, endDate } = await resolveReportRange(input);
 
     const pageSize = 1000;
 
@@ -186,7 +141,7 @@ export const getReportsData = query(
   async (input) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
-    const { startDate, endDate } = calculateDateRange(input);
+    const { startDate, endDate } = await resolveReportRange(input);
 
     const [entries, { analysis, averagedStats, personalRange }] = await Promise.all([
       fetchAllGlucose(apiClient, startDate, endDate),
@@ -216,7 +171,7 @@ export const getReportsAnalysis = query(
   async (input) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
-    const { startDate, endDate } = calculateDateRange(input);
+    const { startDate, endDate } = await resolveReportRange(input);
 
     const { analysis, averagedStats, personalRange } =
       await apiClient.statistics.getRangeAnalytics(startDate, endDate);
@@ -243,7 +198,7 @@ export const getDataQualityReport = query(
   async (input) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
-    const { startDate, endDate } = calculateDateRange(input);
+    const { startDate, endDate } = await resolveReportRange(input);
 
     const [entries, integrity] = await Promise.all([
       fetchAllGlucose(apiClient, startDate, endDate),
@@ -275,10 +230,7 @@ export const getDataQualityReport = query(
  * Input schema for site change impact analysis. Uses nullish() for date fields
  * to match date-params hook.
  */
-const SiteChangeImpactSchema = z.object({
-  days: z.number().nullish(),
-  from: z.string().nullish(),
-  to: z.string().nullish(),
+const SiteChangeImpactSchema = DateRangeSchema.extend({
   hoursBeforeChange: z.number().optional().default(12),
   hoursAfterChange: z.number().optional().default(24),
   bucketSizeMinutes: z.number().optional().default(30),
@@ -295,7 +247,7 @@ export const getSiteChangeImpact = query(
   async (input) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
-    const { startDate, endDate } = calculateDateRange(input);
+    const { startDate, endDate } = await resolveReportRange(input);
 
     // Fetch all sensor glucose readings
     const entries = await fetchAllGlucose(apiClient, startDate, endDate);

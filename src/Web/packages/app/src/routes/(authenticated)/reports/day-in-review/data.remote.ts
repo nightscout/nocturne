@@ -7,7 +7,7 @@ import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
 import { getAll as getApsSnapshots } from '$api/generated/apsSnapshots.generated.remote';
 import { getInsulinDeliveryStatistics } from '$api/generated/statistics.generated.remote';
-import { getProfileSummary } from '$api/generated/profiles.generated.remote';
+import { getPatientTimeZone } from '$api/report-range';
 import { getLocalDayBoundariesUtc } from '$lib/utils/timezone';
 
 /**
@@ -28,9 +28,8 @@ export const getDayInReviewData = query(
 		const { locals } = getRequestEvent();
 		const { apiClient } = locals;
 
-		// Resolve the user's timezone from their profile to compute correct day boundaries
-		const profile = await getProfileSummary(undefined);
-		const timezone = profile?.therapySettings?.[0]?.timezone;
+		// Resolve the patient's timezone so the day boundaries are their day, not the server's
+		const timezone = await getPatientTimeZone();
 		const { start: dayStart, end: dayEnd } = getLocalDayBoundariesUtc(dateParam, timezone);
 
 		// Fetch v4 data + APS snapshots for historical predictions

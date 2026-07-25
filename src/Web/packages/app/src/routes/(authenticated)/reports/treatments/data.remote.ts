@@ -27,44 +27,7 @@ import {
 	CreateBasalInjectionRequestSchema,
 	UpdateBasalInjectionRequestSchema,
 } from '$lib/api/generated/schemas';
-import { getProfileSummary } from '$api/generated/profiles.generated.remote';
-import { getLocalDayBoundariesUtc } from '$lib/utils/timezone';
-
-/**
- * Input schema for date range queries (matches reports layout pattern)
- */
-const DateRangeSchema = z.object({
-	days: z.number().nullish(),
-	from: z.string().nullish(),
-	to: z.string().nullish(),
-});
-
-function calculateDateRange(input: z.infer<typeof DateRangeSchema> | undefined, timezone?: string | null) {
-	let startDateStr: string;
-	let endDateStr: string;
-
-	if (input?.from && input?.to) {
-		startDateStr = input.from.split('T')[0];
-		endDateStr = input.to.split('T')[0];
-	} else if (input?.days) {
-		const end = new Date();
-		const start = new Date(end);
-		start.setDate(end.getDate() - (input.days - 1));
-		startDateStr = start.toISOString().split('T')[0];
-		endDateStr = end.toISOString().split('T')[0];
-	} else {
-		const end = new Date();
-		const start = new Date(end);
-		start.setDate(end.getDate() - 7);
-		startDateStr = start.toISOString().split('T')[0];
-		endDateStr = end.toISOString().split('T')[0];
-	}
-
-	const { start: startDate } = getLocalDayBoundariesUtc(startDateStr, timezone);
-	const { end: endDate } = getLocalDayBoundariesUtc(endDateStr, timezone);
-
-	return { startDate, endDate };
-}
+import { DateRangeSchema, resolveReportRange } from '$api/report-range';
 
 /**
  * Get all v4 entry types for the treatments page.
@@ -76,9 +39,7 @@ export const getTreatmentsData = query(
 	async (input) => {
 		const { locals } = getRequestEvent();
 		const { apiClient } = locals;
-		const profile = await getProfileSummary(undefined);
-		const timezone = profile?.therapySettings?.[0]?.timezone;
-		const { startDate, endDate } = calculateDateRange(input, timezone);
+		const { startDate, endDate } = await resolveReportRange(input);
 		const [
 			bolusResponse,
 			carbResponse,
