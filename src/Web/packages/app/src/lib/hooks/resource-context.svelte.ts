@@ -1,4 +1,5 @@
-import { getContext, setContext } from "svelte";
+import { getContext, onDestroy, setContext } from "svelte";
+import { SvelteMap } from "svelte/reactivity";
 import type { ReportsParamsReturn } from "./date-params.svelte";
 
 export interface DateInfo {
@@ -30,37 +31,67 @@ interface ContextResourceOptionsWithDate extends ContextResourceOptions {
 
 const RESOURCE_CONTEXT_KEY = Symbol("resource-context");
 
-export interface ResourceState {
-  /** Whether any registered resource is loading */
+/** One panel's fetch state, as reported to the layout's ResourceGuard. */
+export interface ResourceRegistration {
   loading: boolean;
-  /** First error from any registered resource */
   error: Error | string | null | undefined;
-  /** Whether any resource has data (prevents skeleton flash) */
   hasData: boolean;
-  /** Title for the error card */
   errorTitle: string;
-  /** Function to retry all registered resources */
   refetch: () => void;
 }
 
 /**
- * Reactive resource context class using Svelte 5 runes.
- * Using a class with $state ensures getters are properly reactive.
+ * Aggregate fetch state for a report page.
+ *
+ * Resources register under their own key and the page-level state is derived
+ * across all of them. A page with two resources therefore surfaces either one's
+ * failure and retries both; previously each registration overwrote the fields
+ * unconditionally, so whichever wrote last decided what the page showed — on the
+ * Sleep page a successful trends fetch masked a failed actogram fetch entirely.
  */
 export class ResourceContext {
-  loading = $state(false);
-  error = $state<Error | string | null | undefined>(null);
-  hasData = $state(false);
-  errorTitle = $state("Error Loading Data");
-  refetch = $state<() => void>(() => {});
+  #registrations = new SvelteMap<symbol, ResourceRegistration>();
 
-  setResource(newState: Partial<ResourceState>) {
-    if (newState.loading !== undefined) this.loading = newState.loading;
-    if (newState.error !== undefined) this.error = newState.error;
-    if (newState.hasData !== undefined) this.hasData = newState.hasData;
-    if (newState.errorTitle !== undefined) this.errorTitle = newState.errorTitle;
-    if (newState.refetch !== undefined) this.refetch = newState.refetch;
+  register(key: symbol, registration: ResourceRegistration): void {
+    this.#registrations.set(key, registration);
   }
+
+  unregister(key: symbol): void {
+    this.#registrations.delete(key);
+  }
+
+  get #all(): ResourceRegistration[] {
+    return [...this.#registrations.values()];
+  }
+
+  get #failed(): ResourceRegistration | undefined {
+    return this.#all.find((r) => r.error != null);
+  }
+
+  /** Whether any registered resource is loading. */
+  get loading(): boolean {
+    return this.#all.some((r) => r.loading);
+  }
+
+  /** First error across registered resources. */
+  get error(): Error | string | null | undefined {
+    return this.#failed?.error ?? null;
+  }
+
+  /** Whether any resource has data (prevents skeleton flash). */
+  get hasData(): boolean {
+    return this.#all.some((r) => r.hasData);
+  }
+
+  /** Title for the error card, taken from whichever resource failed. */
+  get errorTitle(): string {
+    return this.#failed?.errorTitle ?? this.#all[0]?.errorTitle ?? "Error Loading Data";
+  }
+
+  /** Retry every registered resource. */
+  refetch = (): void => {
+    for (const registration of this.#all) registration.refetch();
+  };
 }
 
 /**
@@ -79,6 +110,21 @@ export function createResourceContext(): ResourceContext {
  */
 export function getResourceContext(): ResourceContext | undefined {
   return getContext<ResourceContext | undefined>(RESOURCE_CONTEXT_KEY);
+}
+
+/**
+ * Register `read` under a fresh key for the lifetime of the calling component.
+ * Syncs in `$effect.pre` — before render — because the layout's ResourceGuard
+ * conditionally renders children off this state.
+ */
+function registerWith(
+  ctx: ResourceContext | undefined,
+  read: () => ResourceRegistration
+): void {
+  if (!ctx) return;
+  const key = Symbol("resource-registration");
+  $effect.pre(() => ctx.register(key, read()));
+  onDestroy(() => ctx.unregister(key));
 }
 
 /**
@@ -111,19 +157,16 @@ export function useResourceContext(config: {
   errorTitle?: string;
   refetch: () => void;
 }): void {
-  const ctx = getResourceContext();
-  if (!ctx) return;
-
-  // Use an effect to keep context state synced with resource state
-  $effect(() => {
-    ctx.setResource({
+  registerWith(
+    getResourceContext(),
+    () => ({
       loading: config.loading(),
       error: config.error(),
       hasData: config.hasData(),
       errorTitle: config.errorTitle ?? "Error Loading Data",
       refetch: config.refetch,
-    });
-  });
+    })
+  );
 }
 
 /**
@@ -166,22 +209,21 @@ export function contextResource<T>(
   options: ContextResourceOptions & { dateParams?: ReportsParamsReturn } = {}
 ): ContextResourceBase<T> | ContextResourceWithDate<T> {
   const { errorTitle = "Error Loading Data", dateParams } = options;
-  const ctx = getResourceContext();
 
   // Create the query in a $derived tracking context so reactive queries
   // are never constructed inside an $effect (which would trigger a Svelte warning).
   const query = $derived(queryFn());
 
-  // Use $effect.pre to sync state BEFORE render
-  $effect.pre(() => {
-    if (ctx) {
-      ctx.loading = query.loading;
-      ctx.error = query.error as Error | string | null | undefined;
-      ctx.hasData = query.current !== undefined && query.current !== null;
-      ctx.errorTitle = errorTitle;
-      ctx.refetch = () => query.refresh();
-    }
-  });
+  registerWith(
+    getResourceContext(),
+    () => ({
+      loading: query.loading,
+      error: query.error as Error | string | null | undefined,
+      hasData: query.current !== undefined && query.current !== null,
+      errorTitle,
+      refetch: () => query.refresh(),
+    })
+  );
 
   const base = {
     get loading() {
@@ -203,12 +245,10 @@ export function contextResource<T>(
   return {
     ...base,
     get date(): DateInfo {
-      const range = dateParams.getDateRange();
-      const ms = range.end.getTime() - range.start.getTime();
       return {
-        from: range.start,
-        to: range.end,
-        dayCount: Math.max(1, Math.round(ms / (1000 * 60 * 60 * 24))),
+        from: dateParams.startDate,
+        to: dateParams.endDate,
+        dayCount: dateParams.dayCount,
       };
     },
   };

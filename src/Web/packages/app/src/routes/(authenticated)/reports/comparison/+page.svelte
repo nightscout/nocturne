@@ -9,7 +9,7 @@
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import { getReportsAnalysis, type DateRangeInput } from "$api/reports.remote";
   import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
-  import { getResourceContext } from "$lib/hooks/resource-context.svelte";
+  import { contextResource } from "$lib/hooks/resource-context.svelte";
 
   type Preset =
     | "last7-prior7"
@@ -111,29 +111,13 @@
     periods.b.to !== committed.b.to
   );
 
-  // Call queries directly in reactive context — SvelteKit query() returns a
-  // reactive QueryResult, not a Promise. Using $derived ensures the queries
-  // re-run when inputs change.
-  const queryA = $derived(getReportsAnalysis(inputA));
-  const queryB = $derived(getReportsAnalysis(inputB));
-
-  // Sync to layout's ResourceContext using $effect.pre (matching contextResource's
-  // approach). $effect.pre runs before DOM updates, which is critical: the layout's
-  // ResourceGuard conditionally renders children, so the context must be updated
-  // before the render pass commits.
-  const ctx = getResourceContext();
-
-  $effect.pre(() => {
-    if (ctx) {
-      ctx.loading = queryA.loading || queryB.loading;
-      ctx.error = (queryA.error ?? queryB.error) as Error | string | null | undefined;
-      ctx.hasData = !!queryA.current && !!queryB.current;
-      ctx.errorTitle = "Error Loading Comparison";
-      ctx.refetch = () => {
-        queryA.refresh();
-        queryB.refresh();
-      };
-    }
+  // Both periods register with the layout's ResourceContext, which merges them:
+  // either side's failure surfaces and Retry refetches both.
+  const queryA = contextResource(() => getReportsAnalysis(inputA), {
+    errorTitle: "Error Loading Comparison",
+  });
+  const queryB = contextResource(() => getReportsAnalysis(inputB), {
+    errorTitle: "Error Loading Comparison",
   });
 
   type MetricKey =
