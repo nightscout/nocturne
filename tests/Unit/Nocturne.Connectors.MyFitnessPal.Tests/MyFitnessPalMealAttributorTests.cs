@@ -19,14 +19,15 @@ public class MyFitnessPalMealAttributorTests
         ConsumedNutrientSet = new MfpNutrientSet { Calories = calories, Protein = protein },
     };
 
-    private static MfpDiaryItem Meal(string name, decimal calories, decimal protein) => new()
+    private static MfpDiaryItem Meal(
+        string name, decimal calories, decimal protein, string unit = "calories") => new()
     {
         Type = "diary_meal",
         Date = "2025-05-23",
         DiaryMeal = name,
         NutritionalContents = new MfpDiaryNutrition
         {
-            Energy = new MfpDiaryEnergy { Unit = "calories", Value = calories },
+            Energy = new MfpDiaryEnergy { Unit = unit, Value = calories },
             Protein = protein,
         },
     };
@@ -88,9 +89,11 @@ public class MyFitnessPalMealAttributorTests
     [Fact]
     public void Attribute_ReturnsNothing_WhenTheDayIsAmbiguous()
     {
-        // Two interchangeable items across two identical meals: no single answer exists.
-        List<MfpFoodDiaryEntryNode> entries = [Item("a", 100, 5), Item("b", 100, 5)];
-        List<MfpDiaryItem> meals = [Meal("Breakfast", 100, 5), Meal("Lunch", 100, 5)];
+        // Distinguishable entries that fit two different ways round: {a,b} and {c} matches the
+        // totals just as well as {c} and {a,b}, so which meal each belongs to is unknowable.
+        List<MfpFoodDiaryEntryNode> entries =
+            [Item("a", 100, 1), Item("b", 200, 2), Item("c", 300, 3)];
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 300, 3), Meal("Lunch", 300, 3)];
 
         MyFitnessPalMealAttributor.Attribute(entries, meals).Should().BeEmpty();
     }
@@ -125,6 +128,84 @@ public class MyFitnessPalMealAttributorTests
     {
         var entries = Enumerable.Range(0, 30).Select(i => Item($"item-{i}", 10, 1)).ToList();
         List<MfpDiaryItem> meals = [Meal("Breakfast", 300, 30)];
+
+        MyFitnessPalMealAttributor.Attribute(entries, meals).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Attribute_LeavesZeroNutrientEntriesUnnamed_WithoutLosingTheRestOfTheDay()
+    {
+        // Water or black coffee fits every meal equally. Treating it as solvable would make any
+        // day containing one ambiguous; it carries no carbs, so it is simply left unnamed.
+        List<MfpFoodDiaryEntryNode> entries =
+            [Item("toast", 200, 6), Item("steak", 500, 40), Item("water", 0, 0)];
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 200, 6), Meal("Dinner", 500, 40)];
+
+        var result = MyFitnessPalMealAttributor.Attribute(entries, meals);
+
+        result["toast"].Should().Be("Breakfast");
+        result["steak"].Should().Be("Dinner");
+        result.Should().NotContainKey("water");
+    }
+
+    [Fact]
+    public void Attribute_ResolvesDaysContainingIdenticalEntries()
+    {
+        // Two identical bananas in different meals are two assignment vectors but one outcome,
+        // so the day is answerable.
+        List<MfpFoodDiaryEntryNode> entries =
+            [Item("banana-1", 100, 1), Item("toast", 200, 6), Item("banana-2", 100, 1)];
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 300, 7), Meal("Snacks", 100, 1)];
+
+        var result = MyFitnessPalMealAttributor.Attribute(entries, meals);
+
+        result["toast"].Should().Be("Breakfast");
+        result.Should().ContainKeys("banana-1", "banana-2");
+        new[] { result["banana-1"], result["banana-2"] }
+            .Should().BeEquivalentTo(["Breakfast", "Snacks"]);
+    }
+
+    [Fact]
+    public void Attribute_ConvertsKilojouleMealTotals()
+    {
+        // The legacy diary reports energy in the account's unit; the graph always reports calories.
+        List<MfpFoodDiaryEntryNode> entries = [Item("toast", 200, 6)];
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 836.8m, 6, unit: "kilojoules")];
+
+        MyFitnessPalMealAttributor.Attribute(entries, meals)["toast"].Should().Be("Breakfast");
+    }
+
+    [Fact]
+    public void Attribute_ReturnsNothing_WhenAMealRowHasNoName()
+    {
+        // Its entries still count towards the day, so they cannot be told apart from the rest.
+        List<MfpFoodDiaryEntryNode> entries = [Item("a", 100, 5), Item("b", 200, 8)];
+        List<MfpDiaryItem> meals =
+        [
+            Meal("Breakfast", 100, 5),
+            new() { Type = "diary_meal", DiaryMeal = null, NutritionalContents = null },
+        ];
+
+        MyFitnessPalMealAttributor.Attribute(entries, meals).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Attribute_ReturnsNothing_ForNegativeNutrients()
+    {
+        // The search prunes on partial sums, which is only sound while contributions cannot shrink.
+        List<MfpFoodDiaryEntryNode> entries = [Item("a", -50, 5), Item("b", 150, 5)];
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 100, 10)];
+
+        MyFitnessPalMealAttributor.Attribute(entries, meals).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Attribute_ReturnsNothing_ForAPartialDay()
+    {
+        // An incremental feed would deliver a day a meal at a time; the totals cover the whole day,
+        // so a partial set must not be attributed against them.
+        List<MfpFoodDiaryEntryNode> entries = [Item("lunch-item", 400, 20)];
+        List<MfpDiaryItem> meals = [Meal("Breakfast", 300, 10), Meal("Lunch", 400, 20)];
 
         MyFitnessPalMealAttributor.Attribute(entries, meals).Should().BeEmpty();
     }

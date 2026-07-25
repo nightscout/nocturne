@@ -55,7 +55,12 @@ public class MyFitnessPalAuthTokenProvider(
         if (token == null)
             return (null, DateTime.MinValue, null);
 
-        var expiresAt = DateTime.UtcNow.AddSeconds(token.ExpiresIn);
+        // A missing or nonsensical lifetime would otherwise expire the token before the cache's
+        // own safety buffer, so nothing would ever be served from it.
+        var lifetime = token.ExpiresIn > 0
+            ? TimeSpan.FromSeconds(token.ExpiresIn)
+            : MyFitnessPalConstants.DefaultTokenLifetime;
+        var expiresAt = DateTime.UtcNow.Add(lifetime);
 
         var metadata = new Dictionary<string, string>();
         if (!string.IsNullOrEmpty(token.RefreshToken))

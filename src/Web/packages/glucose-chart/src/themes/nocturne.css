@@ -9,12 +9,14 @@
   --glucose-high: oklch(0.65 0.18 270);
   --glucose-very-high: oklch(0.55 0.25 15);
 
-  /* OpenAPS Prediction Lines */
-  --pred-iob: oklch(0.6 0.18 258);       /* blue, was #1e88e5 */
-  --pred-cob: oklch(0.7 0.18 50);        /* orange, was #FB8C00 */
-  --pred-acob: oklch(0.7 0.18 50);       /* orange, was #FB8C00 */
-  --pred-zt: oklch(0.75 0.15 195);       /* teal, was #00d2d2 */
-  --pred-uam: oklch(0.75 0.12 85);       /* yellow-green, was #c9bd60 */
+  /* OpenAPS Prediction Lines - Trio's palette, so a looper reading a Nocturne
+     chart sees the same four colours their pump app draws. Kept in sync with
+     themes/trio.css. */
+  --pred-iob: rgb(30, 150, 252);         /* Insulin blue */
+  --pred-cob: rgb(255, 240, 23);         /* Lemon/Carbs yellow */
+  --pred-acob: rgb(255, 240, 23);        /* Lemon/Carbs yellow */
+  --pred-zt: rgb(113, 97, 239);          /* Purple */
+  --pred-uam: rgb(255, 132, 69);         /* Orange UAM */
 
   /* Insulin Types */
   --insulin: rgb(30, 150, 252);

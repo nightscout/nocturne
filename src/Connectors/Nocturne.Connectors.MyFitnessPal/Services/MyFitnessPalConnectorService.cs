@@ -92,8 +92,8 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         var from = AsUtc(request.From ?? DateTime.UtcNow.AddDays(-config.LookbackDays));
         var to = AsUtc(request.To ?? DateTime.UtcNow);
 
-        var sync = await FetchDiaryAsync(config, cancellationToken);
-        if (sync == null)
+        var entries = await FetchDiaryAsync(config, from, cancellationToken);
+        if (entries == null)
         {
             result.Success = false;
             result.Errors.Add("Failed to fetch diary data from MyFitnessPal");
@@ -101,9 +101,9 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             return result;
         }
 
-        var mealNames = await ResolveMealNamesAsync(sync.Entries, from, to, cancellationToken);
+        var mealNames = await ResolveMealNamesAsync(entries, from, to, cancellationToken);
 
-        var foodEntryImports = _mapper.Map(sync.Entries, config, from, to, mealNames);
+        var foodEntryImports = _mapper.Map(entries, config, from, to, mealNames);
         var count = foodEntryImports.Count;
 
         if (count > 0)
@@ -128,17 +128,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 }
             }
         }
-
-        if (result.Success)
-        {
-            // A finished walk advances the sync cursor and clears the resume point; an unfinished
-            // one does the opposite, so the next run picks up mid-walk rather than starting over.
-            config.PageCursor = sync.PageCursor;
-            if (sync.PageCursor == null)
-                config.SyncCursor = sync.EndSyncCursor;
-        }
-
-        await PersistSecretsIfChangedAsync(config, cancellationToken);
 
         result.ItemsSynced[SyncDataType.Food] = count;
         _logger.LogInformation(
@@ -183,47 +172,44 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             return false;
         }
 
-        // Fold the freshly minted values back into the config so PersistSecretsIfChangedAsync
-        // can compare them against what is stored.
         config.UserId = _userId;
         var refreshToken = metadata?.GetValueOrDefault(MyFitnessPalAuthTokenProvider.RefreshTokenMetadataKey);
         if (!string.IsNullOrEmpty(refreshToken))
             config.RefreshToken = refreshToken;
+
+        // Persist here rather than at the end of the sync. MyFitnessPal invalidates the old
+        // refresh token as soon as it issues a new one, so letting a later failure skip the write
+        // would leave an account configured without a password unable to authenticate again.
+        await PersistSecretsIfChangedAsync(config, cancellationToken);
 
         TrackSuccessfulRequest();
         return true;
     }
 
     /// <summary>
-    /// Result of a diary sync-down walk.
+    /// Reads the diary backwards from the newest entry until the requested window is covered.
     /// </summary>
-    /// <param name="Entries">Entries collected across all pages, deletions excluded.</param>
-    /// <param name="EndSyncCursor">Sync cursor to resume from once the walk has completed.</param>
-    /// <param name="PageCursor">Page to resume at, non-null only when the walk is unfinished.</param>
-    private sealed record DiarySync(
-        List<MfpFoodDiaryEntryNode> Entries,
-        string? EndSyncCursor,
-        string? PageCursor);
-
-    /// <summary>
-    /// Walks the food diary sync-down connection, following page cursors until exhausted or the
-    /// per-run page cap is reached. A capped run reports where it stopped so the next run resumes
-    /// there; the sync cursor only advances once the whole walk is done.
-    /// </summary>
-    private async Task<DiarySync?> FetchDiaryAsync(
+    /// <remarks>
+    /// Deliberately not an incremental sync-down. Meal names are recovered by reconciling a day's
+    /// entries against that day's totals from the legacy diary, which only works given the whole
+    /// day: a cursor-driven delta would deliver a day in pieces and never reconcile. Re-reading the
+    /// window each sync also means an entry that is edited, or that falls outside the window and
+    /// later moves into it, is picked up rather than being passed over for good.
+    /// </remarks>
+    private async Task<List<MfpFoodDiaryEntryNode>?> FetchDiaryAsync(
         MyFitnessPalConnectorConfiguration config,
+        DateTimeOffset from,
         CancellationToken cancellationToken)
     {
         var entries = new List<MfpFoodDiaryEntryNode>();
-        var endSyncCursor = config.SyncCursor;
-        var pageCursor = config.PageCursor;
-        var completed = false;
+        var windowStart = DateOnly.FromDateTime(from.UtcDateTime.Date);
+        string? before = null;
 
         for (var page = 0; page < MyFitnessPalConstants.MaxPagesPerSync; page++)
         {
-            var cursor = pageCursor;
+            var cursor = before;
             var connection = await ExecuteWithRetryAsync(
-                async () => await FetchDiaryPageAsync(config.SyncCursor, cursor, cancellationToken),
+                async () => await FetchDiaryPageAsync(cursor, cancellationToken),
                 _retryDelayStrategy,
                 maxRetries: config.MaxRetryAttempts,
                 operationName: "FetchMyFitnessPalDiaryPage",
@@ -233,6 +219,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             if (connection == null)
                 return null;
 
+            DateOnly? newestOnPage = null;
             foreach (var edge in connection.FoodDiaryEntryEdges)
             {
                 var node = edge.FoodDiaryEntryNode;
@@ -242,32 +229,32 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 // Deleted entries and non-active states carry none of the ActiveFoodDiaryEntry fields.
                 if (string.Equals(edge.FoodDiaryEntryEdgeSync?.Operation, "DELETE", StringComparison.OrdinalIgnoreCase))
                     continue;
-                if (node.Date == null)
+                if (!DateOnly.TryParse(node.Date, CultureInfo.InvariantCulture, out var entryDate))
                     continue;
 
                 entries.Add(node);
+                if (newestOnPage == null || entryDate > newestOnPage)
+                    newestOnPage = entryDate;
             }
 
-            if (connection.FoodDiaryEntrySyncInfo?.EndSyncCursor is { Length: > 0 } newCursor)
-                endSyncCursor = newCursor;
+            before = connection.FoodDiaryEntryPaging?.StartCursor;
+            if (connection.FoodDiaryEntryPaging?.HasPreviousPage != true || string.IsNullOrEmpty(before))
+                return entries;
 
-            pageCursor = connection.FoodDiaryEntryPaging?.EndCursor;
-            if (connection.FoodDiaryEntryPaging?.HasNextPage != true || string.IsNullOrEmpty(pageCursor))
-            {
-                completed = true;
-                break;
-            }
+            // Pages run newest first, but their order tracks modification rather than diary date,
+            // so stop only once an entire page sits before the window rather than on the first
+            // entry that does.
+            if (newestOnPage != null && newestOnPage < windowStart)
+                return entries;
         }
 
-        if (completed)
-            return new DiarySync(entries, endSyncCursor, null);
-
-        _logger.LogInformation(
-            "[{ConnectorSource}] Reached the {MaxPages} page cap; resuming from this page next sync",
+        _logger.LogWarning(
+            "[{ConnectorSource}] Stopped after {MaxPages} pages without reaching {WindowStart}",
             ConnectorSource,
-            MyFitnessPalConstants.MaxPagesPerSync);
+            MyFitnessPalConstants.MaxPagesPerSync,
+            windowStart);
 
-        return new DiarySync(entries, endSyncCursor, pageCursor);
+        return entries;
     }
 
     /// <summary>
@@ -355,24 +342,36 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 .Where(i => string.Equals(i.Type, "diary_meal", StringComparison.Ordinal))
                 .ToList();
         }
-        catch (OperationCanceledException) { throw; }
+        // Losing one day costs that day its meal names; it must never fail the whole sync.
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (OperationCanceledException ex)
+        {
+            // An HttpClient timeout surfaces as TaskCanceledException without the token being set.
+            _logger.LogWarning(ex, "MyFitnessPal diary request for {Date} timed out", date);
+            return null;
+        }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(ex, "MyFitnessPal diary request for {Date} failed", date);
             return null;
         }
+        catch (JsonException ex)
+        {
+            // A WAF interstitial served with a 200 parses as anything but the expected document.
+            _logger.LogWarning(ex, "MyFitnessPal diary for {Date} was not valid JSON", date);
+            return null;
+        }
     }
 
     private async Task<MfpFoodDiaryEntryConnection?> FetchDiaryPageAsync(
-        string? syncCursor,
-        string? pageCursor,
+        string? before,
         CancellationToken cancellationToken)
     {
         var payload = new
         {
             operationName = MyFitnessPalConstants.SyncFoodDiaryEntriesOperationName,
             query = MyFitnessPalConstants.SyncFoodDiaryEntriesDocument,
-            variables = BuildVariables(syncCursor, pageCursor),
+            variables = BuildVariables(before),
         };
 
         var url = $"{MyFitnessPalConstants.Servers.GraphQl}{MyFitnessPalConstants.Endpoints.GraphQl}";
@@ -411,18 +410,17 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     }
 
     /// <summary>
-    /// Builds the <c>batchSync</c> input. Absent cursors are omitted rather than sent as null,
-    /// matching how the mobile client serializes its optional inputs.
+    /// Builds the <c>batchSync</c> input for a page read backwards from the newest entry.
+    /// Absent values are omitted rather than sent as null, matching how the mobile client
+    /// serializes its optional inputs. <c>syncCursors</c> is required even when empty.
     /// </summary>
-    public static Dictionary<string, object?> BuildVariables(string? syncCursor, string? pageCursor)
+    public static Dictionary<string, object?> BuildVariables(string? before)
     {
         var syncCursors = new Dictionary<string, object?>();
-        if (!string.IsNullOrEmpty(syncCursor))
-            syncCursors["startAfterSyncCursor"] = syncCursor;
 
-        var pagination = new Dictionary<string, object?> { ["first"] = MyFitnessPalConstants.PageSize };
-        if (!string.IsNullOrEmpty(pageCursor))
-            pagination["after"] = pageCursor;
+        var pagination = new Dictionary<string, object?> { ["last"] = MyFitnessPalConstants.PageSize };
+        if (!string.IsNullOrEmpty(before))
+            pagination["before"] = before;
 
         return new Dictionary<string, object?>
         {
@@ -481,8 +479,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             {
                 ["refreshToken"] = config.RefreshToken,
                 ["userId"] = config.UserId,
-                ["syncCursor"] = config.SyncCursor,
-                ["pageCursor"] = config.PageCursor,
             };
 
             if (await _configService.MergeSecretsAsync(

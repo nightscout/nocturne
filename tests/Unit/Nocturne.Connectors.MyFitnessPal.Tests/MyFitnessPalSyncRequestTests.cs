@@ -23,33 +23,29 @@ public class MyFitnessPalSyncRequestTests
             .GetProperty("foodDiaryEntrySyncResource");
 
     [Fact]
-    public void BuildVariables_OmitsCursors_OnFirstSync()
+    public void BuildVariables_ReadsBackwardsFromTheNewestEntry()
     {
-        var resource = FoodResource(Serialize(MyFitnessPalConnectorService.BuildVariables(null, null)));
+        var resource = FoodResource(Serialize(MyFitnessPalConnectorService.BuildVariables(null)));
 
-        // syncCursors is non-optional on SyncResourceInput even when both members are absent.
-        resource.GetProperty("syncCursors").EnumerateObject().Should().BeEmpty();
-        resource.GetProperty("paginationInput").TryGetProperty("after", out _).Should().BeFalse();
-        resource.GetProperty("paginationInput").GetProperty("first").GetInt32()
+        // The window is read newest-first, so the walk stops as soon as it is covered rather
+        // than paging forward through years of history.
+        resource.GetProperty("paginationInput").GetProperty("last").GetInt32()
             .Should().Be(MyFitnessPalConstants.PageSize);
+        resource.GetProperty("paginationInput").TryGetProperty("first", out _).Should().BeFalse();
+        resource.GetProperty("paginationInput").TryGetProperty("before", out _).Should().BeFalse();
+
+        // syncCursors is non-optional on SyncResourceInput even when empty; sending a sync cursor
+        // would turn the feed into a delta, which cannot reconcile against whole-day meal totals.
+        resource.GetProperty("syncCursors").EnumerateObject().Should().BeEmpty();
     }
 
     [Fact]
-    public void BuildVariables_SendsSyncCursor_AsStartAfter()
+    public void BuildVariables_PagesFurtherBackWithBefore()
     {
-        var resource = FoodResource(Serialize(MyFitnessPalConnectorService.BuildVariables("sync-1", null)));
+        var resource = FoodResource(Serialize(MyFitnessPalConnectorService.BuildVariables("page-2")));
 
-        resource.GetProperty("syncCursors").GetProperty("startAfterSyncCursor").GetString()
-            .Should().Be("sync-1");
-        resource.GetProperty("syncCursors").TryGetProperty("endOnSyncCursor", out _).Should().BeFalse();
-    }
-
-    [Fact]
-    public void BuildVariables_SendsPageCursor_AsAfter()
-    {
-        var resource = FoodResource(Serialize(MyFitnessPalConnectorService.BuildVariables("sync-1", "page-2")));
-
-        resource.GetProperty("paginationInput").GetProperty("after").GetString().Should().Be("page-2");
+        resource.GetProperty("paginationInput").GetProperty("before").GetString().Should().Be("page-2");
+        resource.GetProperty("syncCursors").EnumerateObject().Should().BeEmpty();
     }
 
     [Fact]

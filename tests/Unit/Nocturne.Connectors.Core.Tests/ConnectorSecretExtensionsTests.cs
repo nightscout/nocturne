@@ -88,6 +88,28 @@ public class ConnectorSecretExtensionsTests
     }
 
     [Fact]
+    public async Task MergeSecretsAsync_RefusesToSave_WhenAStoredSecretCouldNotBeDecrypted()
+    {
+        // Decryption substitutes an empty string but keeps the key, so saving would re-encrypt a
+        // blank over ciphertext that may only be transiently unreadable.
+        var (service, _) = Storage(new Dictionary<string, string>
+        {
+            ["password"] = string.Empty,
+            ["refresh_token"] = "old-token",
+        });
+
+        var changed = await service.Object.MergeSecretsAsync(
+            "CareLink", new Dictionary<string, string?> { ["refresh_token"] = "new-token" });
+
+        changed.Should().BeFalse();
+        service.Verify(
+            s => s.SaveSecretsAsync(
+                It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task MergeSecretsAsync_AddsNewKeys()
     {
         var (service, saved) = Storage(new Dictionary<string, string> { ["password"] = "pw" });

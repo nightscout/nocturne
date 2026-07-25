@@ -12,6 +12,11 @@ public static class MyFitnessPalConstants
     /// </summary>
     public const string AppVersion = "26.27.0";
 
+    /// <summary>
+    ///     Fallback when the token endpoint omits <c>expires_in</c>. It normally returns 30 days.
+    /// </summary>
+    public static readonly TimeSpan DefaultTokenLifetime = TimeSpan.FromDays(30);
+
     public static class Servers
     {
         /// <summary>OAuth token endpoint host. Reachable where <c>www</c> is Cloudflare-blocked.</summary>

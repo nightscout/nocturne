@@ -28,6 +28,13 @@ public static class ConnectorSecretExtensions
 
         var stored = await configService.GetSecretsAsync(connectorName, ct);
 
+        // A secret that cannot be decrypted comes back as an empty string under its own key.
+        // Saving would re-encrypt that blank over ciphertext that may only be transiently
+        // unreadable — for instance right after an instance key change — destroying the very
+        // credentials this helper exists to preserve.
+        if (stored.Any(s => string.IsNullOrEmpty(s.Value) && !updates.ContainsKey(s.Key)))
+            return false;
+
         var changed = false;
         foreach (var (key, value) in updates)
             changed |= ApplySecret(stored, key, value);
