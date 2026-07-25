@@ -69,20 +69,19 @@ public class SubjectService : ISubjectService
             return null;
         }
 
-        // Only migrated subjects carry a legacy digest, so this candidate set is tiny (a handful
-        // of imported devices/roles per tenant). Match in memory to mirror Nightscout's own
-        // in-memory findSubject and stay independent of provider LIKE support (InMemory in tests).
-        var candidates = await _dbContext
+        // Push Nightscout's digest-prefix rule to the database. The prefix is validated hex, so it
+        // is safe as a LIKE pattern; StartsWith translates to an index-friendly LIKE on PostgreSQL
+        // (against the filtered ix_subjects_legacy_token_digest) and still evaluates on the InMemory
+        // provider used in tests. Both stored digest and prefix are lowercase, so a case-sensitive
+        // match is correct. Returns at most one row rather than materialising every migrated subject.
+        var entity = await _dbContext
             .Subjects.AsNoTracking()
             .Include(s => s.SubjectRoles)
             .ThenInclude(sr => sr.Role)
-            .Where(s => s.LegacyTokenDigest != null && s.IsActive)
-            .ToListAsync();
+            .Where(s => s.LegacyTokenDigest != null && s.IsActive && s.LegacyTokenDigest!.StartsWith(prefix))
+            .FirstOrDefaultAsync();
 
-        var match = candidates.FirstOrDefault(s =>
-            s.LegacyTokenDigest!.StartsWith(prefix, StringComparison.Ordinal));
-
-        return match == null ? null : MapToModel(match);
+        return entity == null ? null : MapToModel(entity);
     }
 
     /// <inheritdoc />
@@ -335,6 +334,9 @@ public class SubjectService : ISubjectService
         var plainAccessToken = GenerateAccessToken();
         entity.AccessTokenHash = HashAccessToken(plainAccessToken);
         entity.AccessTokenPrefix = $"{entity.Name.ToLowerInvariant()}-{plainAccessToken[..8]}";
+        // Rotation must revoke the legacy Nightscout token too, otherwise the old (possibly
+        // leaked) migrated token would keep authenticating through the legacy digest fallback.
+        entity.LegacyTokenDigest = null;
         entity.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync();
