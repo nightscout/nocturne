@@ -51,12 +51,12 @@ const authHandle: Handle = async ({ event, resolve }) => {
 
   if (!authCookie && !accessToken) {
     // Check for guest session cookie before giving up
-    const guestSessionCookie = event.cookies.get("nocturne-guest-session");
+    const guestSessionCookie = event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
     if (guestSessionCookie) {
       try {
         const forwardedHost = getEffectiveHost(event.request, event.cookies);
         const headers: Record<string, string> = {
-          Cookie: `nocturne-guest-session=${guestSessionCookie}`,
+          Cookie: `${AUTH_COOKIE_NAMES.guestSession}=${guestSessionCookie}`,
         };
         if (forwardedHost) headers["X-Forwarded-Host"] = forwardedHost;
         headers["X-Forwarded-Proto"] = getOriginalProto(event.request);
@@ -300,7 +300,7 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
     // Forward auth and guest session cookies for authentication
     const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
     const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
-    const guestSession = event.cookies.get("nocturne-guest-session");
+    const guestSession = event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
     const platformAccess = event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
     const cookies: string[] = [];
     if (accessToken) {
@@ -310,7 +310,7 @@ const proxyHandle: Handle = async ({ event, resolve }) => {
       cookies.push(`${AUTH_COOKIE_NAMES.refreshToken}=${refreshToken}`);
     }
     if (guestSession) {
-      cookies.push(`nocturne-guest-session=${guestSession}`);
+      cookies.push(`${AUTH_COOKIE_NAMES.guestSession}=${guestSession}`);
     }
     if (platformAccess) {
       cookies.push(`${AUTH_COOKIE_NAMES.platformAccess}=${platformAccess}`);
@@ -351,7 +351,7 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   // Get auth tokens from cookies to forward to the backend
   const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
   const refreshToken = event.cookies.get(AUTH_COOKIE_NAMES.refreshToken);
-  const guestSessionToken = event.cookies.get("nocturne-guest-session");
+  const guestSessionToken = event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
   const platformAccessToken = event.cookies.get(AUTH_COOKIE_NAMES.platformAccess);
 
   const extraHeaders: Record<string, string> = {

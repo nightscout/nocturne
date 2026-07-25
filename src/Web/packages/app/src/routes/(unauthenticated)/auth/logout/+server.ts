@@ -1,16 +1,7 @@
 import type { RequestHandler } from "./$types";
 import { redirect } from "@sveltejs/kit";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { clearAuthCookies } from "$lib/config/auth-cookies";
 import { logout } from "$api/generated/oidcs.generated.remote";
-
-/**
- * Helper to clear all auth cookies
- */
-function clearAuthCookies(cookies: Parameters<RequestHandler>[0]["cookies"]) {
-  cookies.delete(AUTH_COOKIE_NAMES.accessToken, { path: "/" });
-  cookies.delete(AUTH_COOKIE_NAMES.refreshToken, { path: "/" });
-  cookies.delete("IsAuthenticated", { path: "/" });
-}
 
 /**
  * POST handler for logout

@@ -14,7 +14,7 @@ import { z } from "zod";
 import { query, command, getRequestEvent } from "$app/server";
 
 import type { OidcProviderInfo } from "$lib/api/generated/nocturne-api-client";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { clearAuthCookies } from "$lib/config/auth-cookies";
 
 // ============================================================================
 // Helper Functions
@@ -212,19 +212,14 @@ export const logoutSession = command(z.string().optional(), async (_providerId) 
     // Try to revoke on the backend
     await api.oidc.logout();
 
-    // Clear all auth cookies
-    event.cookies.delete(AUTH_COOKIE_NAMES.accessToken, { path: "/" });
-    event.cookies.delete(AUTH_COOKIE_NAMES.refreshToken, { path: "/" });
-    event.cookies.delete("IsAuthenticated", { path: "/" });
+    clearAuthCookies(event.cookies);
 
     return { success: true };
   } catch (error) {
     console.error("Failed to logout:", error);
 
     // Still clear cookies even if backend call fails
-    event.cookies.delete(AUTH_COOKIE_NAMES.accessToken, { path: "/" });
-    event.cookies.delete(AUTH_COOKIE_NAMES.refreshToken, { path: "/" });
-    event.cookies.delete("IsAuthenticated", { path: "/" });
+    clearAuthCookies(event.cookies);
 
     return { success: true };
   }

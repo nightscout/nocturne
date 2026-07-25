@@ -89,7 +89,7 @@ export function createServerHttpClient(
         cookies.push(`${AUTH_COOKIE_NAMES.refreshToken}=${options.refreshToken}`);
       }
       if (options?.guestSessionToken) {
-        cookies.push(`nocturne-guest-session=${options.guestSessionToken}`);
+        cookies.push(`${AUTH_COOKIE_NAMES.guestSession}=${options.guestSessionToken}`);
       }
       if (options?.platformAccessToken) {
         cookies.push(
