@@ -1,10 +1,16 @@
 import type { BlogPostMeta, BlogManifest } from './types.ts';
 
 export function parseFrontmatter(content: string, filename: string): BlogPostMeta | null {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  // `\r?` matters: a post authored on Windows arrives with CRLF, and an `\n`-only
+  // delimiter silently fails to match. The post then parses as having no frontmatter,
+  // drops out of the manifest and is never built — with no error anywhere, so `check`
+  // and `build` both pass and only the live 404 reveals it.
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return null;
 
-  const yaml = match[1];
+  // Normalised so a CRLF body cannot leave a stray \r inside a value. Scalars are
+  // trimmed below, but array entries are split on ',' and would keep it.
+  const yaml = match[1].replace(/\r\n/g, '\n');
   const meta: Record<string, unknown> = {};
 
   for (const line of yaml.split('\n')) {

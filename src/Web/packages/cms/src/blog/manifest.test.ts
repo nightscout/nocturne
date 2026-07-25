@@ -35,6 +35,65 @@ summary: A test post
     expect(meta).toBeNull();
   });
 
+  // A post authored on Windows arrives with CRLF. The delimiter pattern only accepted a
+  // bare newline, so such a post parsed as having no frontmatter, dropped out of the
+  // manifest and was never built — silently, with both check and build still passing, so
+  // only the live 404 revealed it.
+  it('parses frontmatter with CRLF line endings', () => {
+    const content = [
+      '---',
+      'title: Windows Post',
+      'slug: windows-post',
+      'date: 2026-04-12',
+      'tags: [announcement, release]',
+      'category: news',
+      'author: Rhys',
+      'summary: Authored with CRLF',
+      'draft: true',
+      '---',
+      '',
+      '# Content here',
+    ].join('\r\n');
+
+    const meta = parseFrontmatter(content, 'windows-post.svx');
+
+    expect(meta).toEqual({
+      title: 'Windows Post',
+      slug: 'windows-post',
+      date: '2026-04-12',
+      tags: ['announcement', 'release'],
+      category: 'news',
+      author: 'Rhys',
+      summary: 'Authored with CRLF',
+      image: undefined,
+      draft: true,
+    });
+  });
+
+  // Covers the parts a trailing trim() alone would not: the last entry of an inline array,
+  // and a boolean matched by exact value.
+  it('leaves no carriage returns in values parsed from CRLF content', () => {
+    const content = [
+      '---',
+      'title: Trailing CR',
+      'slug: trailing-cr',
+      'date: 2026-04-12',
+      'tags: [one, two]',
+      'category: news',
+      'author: Rhys',
+      'summary: No stray carriage returns',
+      'draft: true',
+      '---',
+      '# Body',
+    ].join('\r\n');
+
+    const meta = parseFrontmatter(content, 'trailing-cr.svx');
+
+    expect(meta?.tags).toEqual(['one', 'two']);
+    expect(meta?.draft).toBe(true);
+    expect(JSON.stringify(meta)).not.toContain('\\r');
+  });
+
   it('handles optional image and draft fields', () => {
     const content = `---
 title: Draft Post
