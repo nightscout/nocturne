@@ -3,7 +3,7 @@
   import { Label } from "$lib/components/ui/label";
   import { Button } from "$lib/components/ui/button";
   import { Check, Loader2, AlertTriangle, ArrowRight } from "lucide-svelte";
-  import { Debounced } from "runed";
+  import { useAvailability } from "$lib/forms";
   import { setupTenant, validateSetupSlug, setSetupTenantSlug } from "../setup.remote";
 
   let {
@@ -14,58 +14,19 @@
 
   let slug = $state("");
   let displayName = $state("");
-  let slugError = $state<string | null>(null);
-  let slugValid = $state(false);
-  let validating = $state(false);
   let submitting = $state(false);
   let submitError = $state<string | null>(null);
 
   const normalizedSlug = $derived(slug.trim().toLowerCase());
-  const debouncedSlug = new Debounced(() => normalizedSlug, 400);
 
-  $effect(() => {
-    const value = normalizedSlug;
-
-    // Reset on every keystroke
-    slugError = null;
-    slugValid = false;
-
-    if (!value) return;
-    if (value.length < 3) {
-      slugError = "Slug must be at least 3 characters";
-      return;
-    }
-
-    // Still waiting for debounce to settle
-    if (debouncedSlug.current !== value) {
-      validating = true;
-      return;
-    }
-
-    const result = validateSetupSlug({ slug: value });
-
-    // loading=true: fetch in progress; !current: result not yet populated
-    if (result.loading || !result.current) {
-      validating = true;
-      return;
-    }
-
-    validating = false;
-
-    if (result.error) {
-      slugError = "Could not validate slug";
-      return;
-    }
-
-    if (result.current.isValid) {
-      slugValid = true;
-    } else {
-      slugError = result.current.message ?? "Invalid slug";
-    }
-  });
+  const availability = useAvailability(
+    () => normalizedSlug,
+    (value) => validateSetupSlug({ slug: value }),
+    { label: "Slug" },
+  );
 
   async function handleSubmit() {
-    if (!slugValid || !displayName.trim()) return;
+    if (!availability.valid || !displayName.trim()) return;
     submitting = true;
     submitError = null;
 
@@ -85,7 +46,7 @@
   }
 
   const canSubmit = $derived(
-    slugValid && displayName.trim().length > 0 && !submitting
+    availability.valid && displayName.trim().length > 0 && !submitting
   );
 </script>
 
@@ -127,17 +88,17 @@
         id="setup-slug"
         bind:value={slug}
         placeholder="my-instance"
-        class="font-mono bg-white/5 border-white/10 text-white placeholder:text-white/25 {slugError
+        class="font-mono bg-white/5 border-white/10 text-white placeholder:text-white/25 {availability.error
           ? 'border-red-500/50'
-          : slugValid
+          : availability.valid
             ? 'border-green-500/50'
             : ''}"
       />
-      {#if validating}
+      {#if availability.validating}
         <p class="text-xs text-white/40">Checking availability...</p>
-      {:else if slugError}
-        <p class="text-xs text-red-400">{slugError}</p>
-      {:else if slugValid}
+      {:else if availability.error}
+        <p class="text-xs text-red-400">{availability.error}</p>
+      {:else if availability.valid}
         <p class="flex items-center gap-1.5 text-xs text-green-400">
           <Check class="h-3 w-3" />
           Available

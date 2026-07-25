@@ -12,7 +12,7 @@
     setupOwnerOidc,
     validateSetupUsername,
   } from "../setup.remote";
-  import { Debounced } from "runed";
+  import { useAvailability } from "$lib/forms";
   import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
   import OidcProviderButtons from "$lib/components/auth/OidcProviderButtons.svelte";
   import { Button } from "$lib/components/ui/button";
@@ -47,56 +47,16 @@
   let username = $state("");
 
   // ── Username validation ─────────────────────────────────────────────
-  let usernameError = $state<string | null>(null);
-  let usernameValid = $state(false);
-  let validatingUsername = $state(false);
-
   const normalizedUsername = $derived(username.trim().toLowerCase());
-  const debouncedUsername = new Debounced(() => normalizedUsername, 400);
 
-  $effect(() => {
-    const value = normalizedUsername;
-
-    // Reset on every keystroke
-    usernameError = null;
-    usernameValid = false;
-
-    if (!value) return;
-    if (value.length < 3) {
-      usernameError = "Username must be at least 3 characters";
-      return;
-    }
-
-    // Still waiting for debounce to settle
-    if (debouncedUsername.current !== value) {
-      validatingUsername = true;
-      return;
-    }
-
-    const result = validateSetupUsername({ username: value });
-
-    // loading=true: fetch in progress; !current: result not yet populated
-    if (result.loading || !result.current) {
-      validatingUsername = true;
-      return;
-    }
-
-    validatingUsername = false;
-
-    if (result.error) {
-      usernameError = "Could not validate username";
-      return;
-    }
-
-    if (result.current.isValid) {
-      usernameValid = true;
-    } else {
-      usernameError = result.current.message ?? "Invalid username";
-    }
-  });
+  const availability = useAvailability(
+    () => normalizedUsername,
+    (value) => validateSetupUsername({ username: value }),
+    { label: "Username" },
+  );
 
   const canSubmit = $derived(
-    displayName.trim().length > 0 && usernameValid,
+    displayName.trim().length > 0 && availability.valid,
   );
 
   // ── OIDC login ───────────────────────────────────────────────────
@@ -249,17 +209,17 @@
             placeholder="your-username"
             bind:value={username}
             disabled={isRedirecting || isRegistering}
-            class="bg-white/5 border-white/10 text-white placeholder:text-white/25 {usernameError
+            class="bg-white/5 border-white/10 text-white placeholder:text-white/25 {availability.error
               ? 'border-red-500/50'
-              : usernameValid
+              : availability.valid
                 ? 'border-green-500/50'
                 : ''}"
           />
-          {#if validatingUsername}
+          {#if availability.validating}
             <p class="text-xs text-white/40">Checking availability...</p>
-          {:else if usernameError}
-            <p class="text-xs text-red-400">{usernameError}</p>
-          {:else if usernameValid}
+          {:else if availability.error}
+            <p class="text-xs text-red-400">{availability.error}</p>
+          {:else if availability.valid}
             <p class="flex items-center gap-1.5 text-xs text-green-400">
               <Check class="h-3 w-3" />
               Available
