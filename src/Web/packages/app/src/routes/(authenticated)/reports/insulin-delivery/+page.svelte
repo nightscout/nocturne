@@ -13,7 +13,6 @@
     Calendar,
     Info,
     TrendingUp,
-    AlertTriangle,
     ArrowRight,
     Printer,
     HelpCircle,
@@ -112,38 +111,6 @@
   const startDate = $derived(new Date(insulinStats.startDate || dateRange.from));
   const endDate = $derived(new Date(insulinStats.endDate || dateRange.to));
   const dayCount = $derived(insulinStats.dayCount || 1);
-
-  // Determine if ratio is in typical range
-  const ratioAssessment = $derived.by(() => {
-    const basalPercent = insulinStats.basalPercent ?? 0;
-
-    if (basalPercent >= 40 && basalPercent <= 60) {
-      return {
-        status: "optimal",
-        message: "Your basal/bolus ratio is well-balanced.",
-        color: "text-green-600",
-      };
-    } else if (basalPercent > 60) {
-      return {
-        status: "high-basal",
-        message:
-          "Higher basal percentage — may indicate lower carb diet or need for basal rate review.",
-        color: "text-amber-600",
-      };
-    } else if (basalPercent < 40) {
-      return {
-        status: "high-bolus",
-        message:
-          "Higher bolus percentage — may indicate higher carb diet or frequent corrections.",
-        color: "text-blue-600",
-      };
-    }
-    return {
-      status: "unknown",
-      message: "Insufficient data to assess ratio.",
-      color: "text-muted-foreground",
-    };
-  });
 
 </script>
 
@@ -299,21 +266,22 @@
     </Card>
   </div>
 
-  <!-- Ratio Assessment Banner -->
-  <Card
-    class={`border ${ratioAssessment.status === "optimal" ? "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30" : "border-muted"}`}
-  >
+  <!-- Ratio Banner -->
+  <Card class="border border-muted">
     <CardContent class="flex items-center gap-4 py-4">
       <div class="rounded-lg bg-primary/10 p-3">
         <Target class="h-6 w-6 text-primary" />
       </div>
       <div>
-        <h3 class={`font-semibold ${ratioAssessment.color}`}>
+        <h3 class="font-semibold">
           Basal/Bolus Ratio: {(insulinStats.basalPercent ?? 0).toFixed(0)}% / {(insulinStats.bolusPercent ?? 0).toFixed(
             0
           )}%
         </h3>
-        <p class="text-sm text-muted-foreground">{ratioAssessment.message}</p>
+        <p class="text-sm text-muted-foreground">
+          A typical split is around 50/50; 40/60 and 60/40 are both common. Diet,
+          activity and pump settings all move it.
+        </p>
       </div>
     </CardContent>
   </Card>
@@ -414,16 +382,17 @@
           </div>
         </div>
 
-        <!-- Insights based on bolus patterns -->
+        <!-- Observations based on bolus patterns -->
         <div class="mt-4 rounded-lg border border-dashed bg-muted/30 p-4">
-          <h4 class="font-medium">Bolus Pattern Insights</h4>
+          <h4 class="font-medium">Bolus Pattern Observations</h4>
           <ul class="mt-2 space-y-1 text-sm text-muted-foreground">
             {#if (insulinStats.correctionBoluses ?? 0) > (insulinStats.mealBoluses ?? 0)}
               <li class="flex items-start gap-2">
-                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                <Info class="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
                 <span>
-                  More corrections than meal boluses suggests possible
-                  underbolusing for meals or basal rate adjustments needed.
+                  Correction boluses ({insulinStats.correctionBoluses ?? 0})
+                  outnumber meal boluses ({insulinStats.mealBoluses ?? 0}) in this
+                  period.
                 </span>
               </li>
             {/if}
@@ -439,9 +408,9 @@
               <li class="flex items-start gap-2">
                 <Info class="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
                 <span>
-                  High bolus frequency — may include many small corrections.
-                  Consider if larger doses with meals could reduce overall
-                  corrections.
+                  High bolus frequency — {(insulinStats.bolusesPerDay ?? 0).toFixed(
+                    1
+                  )} boluses per day, which may include many small corrections.
                 </span>
               </li>
             {/if}
@@ -482,12 +451,6 @@
         TDD of
         <strong>{(insulinStats.tdd ?? 0).toFixed(1)}U/day</strong>
         can be compared to this reference.
-      </p>
-      <p>
-        <strong>Basal Rate Estimation:</strong>
-        If your TDD is accurate, your hourly basal rate should be approximately
-        <strong>{(((insulinStats.tdd ?? 0) * 0.5) / 24).toFixed(2)} U/hr</strong>
-        (using 50% basal assumption).
       </p>
       <p>
         <strong>I:C Ratio Check:</strong>
