@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import { FormField } from "$lib/forms";
   import { Fingerprint, Loader2 } from "lucide-svelte";
 
   interface Props {
@@ -23,46 +23,65 @@
     displayName.trim().length > 0 && username.trim().length > 0,
   );
 
-  async function handleSubmit() {
-    if (!canRegister) return;
+  /**
+   * A real submit, so Enter works from either field and the browser's own
+   * required-field checks run first. Creating the passkey is a WebAuthn
+   * ceremony, which needs JavaScript — there is no no-JS path for this step.
+   */
+  async function handleSubmit(event: SubmitEvent) {
+    event.preventDefault();
+    if (!canRegister || disabled || isRegistering) return;
     await onRegister(username.trim(), displayName.trim());
   }
 </script>
 
-<div class="space-y-4">
-  <div class="space-y-2">
-    <Label for="display-name">Display name</Label>
-    <Input
-      id="display-name"
-      type="text"
-      placeholder="Your name"
-      bind:value={displayName}
-      disabled={disabled || isRegistering}
-    />
-    <p class="text-xs text-muted-foreground">
-      This is how you will appear to others.
-    </p>
-  </div>
+<form class="space-y-4" onsubmit={handleSubmit}>
+  <FormField
+    label="Display name"
+    id="display-name"
+    required
+    description="This is how you will appear to others."
+  >
+    {#snippet control(field)}
+      <Input
+        {...field}
+        name="displayName"
+        type="text"
+        placeholder="Your name"
+        autocomplete="name"
+        autofocus
+        bind:value={displayName}
+        disabled={disabled || isRegistering}
+      />
+    {/snippet}
+  </FormField>
 
-  <div class="space-y-2">
-    <Label for="pk-username">Username</Label>
-    <Input
-      id="pk-username"
-      type="text"
-      placeholder="your-username"
-      bind:value={username}
-      disabled={disabled || isRegistering}
-    />
-    <p class="text-xs text-muted-foreground">
-      A unique identifier for your account.
-    </p>
-  </div>
+  <FormField
+    label="Username"
+    id="pk-username"
+    required
+    description="A unique identifier for your account."
+  >
+    {#snippet control(field)}
+      <Input
+        {...field}
+        name="username"
+        type="text"
+        placeholder="your-username"
+        autocomplete="username"
+        autocapitalize="none"
+        spellcheck={false}
+        bind:value={username}
+        disabled={disabled || isRegistering}
+      />
+    {/snippet}
+  </FormField>
 
   <Button
+    type="submit"
     class="w-full"
     size="lg"
     disabled={!canRegister || disabled || isRegistering}
-    onclick={handleSubmit}
   >
     {#if isRegistering}
       <Loader2 class="mr-2 h-5 w-5 animate-spin" />
@@ -72,4 +91,4 @@
       Create account with passkey
     {/if}
   </Button>
-</div>
+</form>
