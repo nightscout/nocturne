@@ -67,6 +67,7 @@ public enum ConnectorPropertyKey
 
     // MyFitnessPal-specific
     LookbackDays,
+    LastFullWalkAt,
 
     // Write-back
     WriteBackEnabled,

@@ -74,6 +74,13 @@ public static class MyFitnessPalConstants
     public const int MaxPagesPerSync = 200;
 
     /// <summary>
+    ///     How often the lookahead is set aside and the diary is read all the way back to its first
+    ///     entry. Only such a read proves an entry has been deleted rather than merely not seen, but
+    ///     it costs a request per hundred entries of history, so it is not worth doing every cycle.
+    /// </summary>
+    public static readonly TimeSpan FullWalkInterval = TimeSpan.FromDays(1);
+
+    /// <summary>
     ///     How many consecutive pages lying entirely before the window are read before the walk
     ///     gives up. Pages are ordered by modification rather than diary date, so recently edited
     ///     old entries can sit ahead of the window; this reads past a block of them without

@@ -131,7 +131,8 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             ? AsUtc(request.To.Value)
             : AsUtc(DateTime.UtcNow.AddDays(1));
 
-        var read = await FetchDiaryAsync(config, from, cancellationToken);
+        var walkToEnd = IsFullWalkDue(config);
+        var read = await FetchDiaryAsync(config, from, walkToEnd, cancellationToken);
         if (read == null)
         {
             result.Success = false;
@@ -173,6 +174,14 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         if (result.Success && _connectorPublisher is { IsAvailable: true })
         {
             await WithdrawDeletedEntriesAsync(read, from, to, cancellationToken);
+
+            // Record the walk only once it has been acted on, so a run that failed before
+            // reconciling is retried rather than counting against the schedule.
+            if (read.WalkedEntireDiary)
+            {
+                config.LastFullWalkAt = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                await PersistSecretsIfChangedAsync(config, cancellationToken);
+            }
         }
 
         result.ItemsSynced[SyncDataType.Food] = count;
@@ -189,6 +198,29 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
     private static DateTimeOffset AsUtc(DateTime value) =>
         new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+
+    /// <summary>
+    /// Whether this sync should read the diary all the way back rather than stopping once the
+    /// window looks covered.
+    /// </summary>
+    /// <remarks>
+    /// Withdrawing an entry requires proof it is gone, and only a read that reached the first entry
+    /// provides it. An unset or unparseable timestamp walks — a connector that has never completed
+    /// one has never reconciled.
+    /// </remarks>
+    public static bool IsFullWalkDue(MyFitnessPalConnectorConfiguration config)
+    {
+        if (!DateTimeOffset.TryParse(
+                config.LastFullWalkAt,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out var last))
+            return true;
+
+        // A timestamp in the future means a clock moved; walking is the harmless reading.
+        return DateTimeOffset.UtcNow - last >= MyFitnessPalConstants.FullWalkInterval
+               || last > DateTimeOffset.UtcNow;
+    }
 
     /// <summary>
     /// Obtains an access token and the MyFitnessPal user id required by the GraphQL API.
@@ -244,6 +276,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     private async Task<DiaryRead?> FetchDiaryAsync(
         MyFitnessPalConnectorConfiguration config,
         DateTimeOffset from,
+        bool walkToEnd,
         CancellationToken cancellationToken)
     {
         var entries = new List<MfpFoodDiaryEntryNode>();
@@ -298,6 +331,11 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                     ConnectorSource);
                 return new DiaryRead(entries, WalkedEntireDiary: false);
             }
+
+            // On a full walk nothing short of the end of the diary will do, so the lookahead that
+            // normally cuts the read short is set aside.
+            if (walkToEnd)
+                continue;
 
             // Pages run newest first, but their order tracks modification rather than diary date,
             // so a block of recently edited old entries can sit ahead of the window. Read a few
@@ -614,10 +652,14 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     {
         try
         {
+            // The secrets document doubles as the connector's runtime state, as the derived user id
+            // already does: MergeSecretsAsync merges, whereas writing configuration back from a
+            // background sync would replace the document the user edits.
             var updates = new Dictionary<string, string?>
             {
                 ["refreshToken"] = config.RefreshToken,
                 ["userId"] = config.UserId,
+                ["lastFullWalkAt"] = config.LastFullWalkAt,
             };
 
             if (await _configService.MergeSecretsAsync(
