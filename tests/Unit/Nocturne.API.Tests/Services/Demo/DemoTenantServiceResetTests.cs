@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Demo;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -52,7 +53,10 @@ public class DemoTenantServiceResetTests : IDisposable
             .Returns((Guid tenantId, CancellationToken _) => SeedRolesAndPublicMemberAsync(tenantId));
 
         _service = new DemoTenantService(
-            dbFactory.Object, _tenantService.Object, new Mock<ILogger<DemoTenantService>>().Object);
+            dbFactory.Object,
+            _tenantService.Object,
+            TestPublicAccessCache.Create(),
+            new Mock<ILogger<DemoTenantService>>().Object);
     }
 
     [Fact]
@@ -130,8 +134,69 @@ public class DemoTenantServiceResetTests : IDisposable
         publicMember.MemberRoles.Should().HaveCount(1, "the demo service writes through the Public subject");
 
         var demoMember = members.Single(m => !m.Subject!.IsSystemSubject);
-        demoMember.Subject!.Username.Should().Be(DemoTenantService.DemoMemberUsername);
+        demoMember.Username.Should().Be(DemoTenantService.DemoMemberUsername);
         demoMember.MemberRoles.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task ConfigureAccessAsync_DoesNotBindDemoMemberToAnUnrelatedSubjectNamedDemo()
+    {
+        // subjects.username carries no unique index and any operator or invitee can pick
+        // one, so resolving the demo member by global username could hand an anonymous
+        // caller a session for someone else's account.
+        Guid impostorId;
+        using (var db = new NocturneDbContext(_dbOptions))
+        {
+            var impostor = new SubjectEntity
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "Real Operator",
+                Username = DemoTenantService.DemoMemberUsername,
+                IsActive = true,
+                IsPlatformAdmin = true,
+            };
+            db.Subjects.Add(impostor);
+            db.SaveChanges();
+            impostorId = impostor.Id;
+        }
+
+        var tenantId = SeedDemoTenant();
+
+        var subjectId = await _service.FindDemoMemberSubjectIdAsync(tenantId);
+        subjectId.Should().NotBeNull().And.NotBe(impostorId);
+
+        await using var check = new NocturneDbContext(_dbOptions);
+        var impostorAfter = await check.Subjects.SingleAsync(s => s.Id == impostorId);
+        impostorAfter.IsPlatformAdmin.Should().BeTrue("the demo must not touch an unrelated account");
+        (await check.TenantMembers.AnyAsync(m => m.SubjectId == impostorId))
+            .Should().BeFalse("the impostor must not become a member of the demo tenant");
+    }
+
+    [Fact]
+    public async Task ResetAsync_RevokesDemoVisitorSessions()
+    {
+        var tenantId = SeedDemoTenant();
+        var subjectId = (await _service.FindDemoMemberSubjectIdAsync(tenantId))!.Value;
+
+        using (var db = new NocturneDbContext(_dbOptions))
+        {
+            db.RefreshTokens.Add(new RefreshTokenEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = subjectId,
+                TokenHash = "visitor-token",
+                IssuedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddDays(30),
+                IpAddress = "203.0.113.7",
+            });
+            db.SaveChanges();
+        }
+
+        await _service.ResetAsync();
+
+        await using var check = new NocturneDbContext(_dbOptions);
+        (await check.RefreshTokens.CountAsync()).Should().Be(
+            0, "a reset must not leave visitor sessions or their recorded IPs behind");
     }
 
     [Fact]

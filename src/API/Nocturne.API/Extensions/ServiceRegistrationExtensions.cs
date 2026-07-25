@@ -361,9 +361,9 @@ public static class ServiceRegistrationExtensions
                     )
             );
 
-            // Demo sign-in: 10 sessions per IP per 5 minutes. Generous enough for a
-            // visitor reloading the demo, tight enough that the endpoint can't be used
-            // to mint sessions in bulk.
+            // Demo sign-in: 10 sessions per IP per 5 minutes. Each demo reset revokes
+            // the member's tokens, so the ceiling bounds how fast one client can add
+            // refresh-token rows between resets.
             options.AddPolicy(
                 "demo-session",
                 context =>

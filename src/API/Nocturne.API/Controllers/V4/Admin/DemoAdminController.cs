@@ -55,7 +55,13 @@ public class DemoAdminController : ControllerBase
             .FirstOrDefaultAsync(t => t.IsDemo, ct);
 
         if (existing is not null)
+        {
+            // Re-apply the access grants: this runs on every demo service start, so it
+            // repairs a tenant left without roles or a demo member by a reset that
+            // failed between wiping and re-seeding.
+            await _demoTenantService.ConfigureAccessAsync(existing.Id, ct);
             return Ok(ToDto(existing, alreadyExisted: true));
+        }
 
         var created = await _tenantService.CreateWithoutOwnerAsync("demo", "Nocturne Demo", ct);
 

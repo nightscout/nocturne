@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.V4.Demo;
 using Nocturne.API.Services.Demo;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Configuration;
@@ -146,7 +147,6 @@ public class DemoSessionControllerTests : IDisposable
             {
                 Id = Guid.CreateVersion7(),
                 Name = DemoTenantService.DemoMemberName,
-                Username = DemoTenantService.DemoMemberUsername,
                 IsActive = true,
             };
             db.Subjects.Add(subject);
@@ -155,6 +155,7 @@ public class DemoSessionControllerTests : IDisposable
                 Id = Guid.CreateVersion7(),
                 TenantId = tenant.Id,
                 SubjectId = subject.Id,
+                Username = DemoTenantService.DemoMemberUsername,
             });
         }
 
@@ -171,6 +172,7 @@ public class DemoSessionControllerTests : IDisposable
         var demoTenantService = new DemoTenantService(
             dbFactory.Object,
             new Mock<ITenantService>().Object,
+            TestPublicAccessCache.Create(),
             new Mock<ILogger<DemoTenantService>>().Object);
 
         var controller = new DemoSessionController(

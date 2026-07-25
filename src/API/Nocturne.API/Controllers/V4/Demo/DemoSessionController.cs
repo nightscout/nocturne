@@ -59,9 +59,10 @@ public class DemoSessionController : ControllerBase
     /// </summary>
     /// <remarks>
     /// A state-changing GET is deliberate: browser navigation from the login page is
-    /// the use case, and the login page cannot POST a redirect. Nothing is at risk —
-    /// the endpoint only ever hands out the demo tenant's shared, synthetic account,
-    /// and it exists on no other tenant.
+    /// the use case, and the login page cannot POST a redirect. The state it changes is
+    /// limited to minting a session for the demo tenant's own member, which any caller
+    /// can request anyway; it carries no CSRF risk because there is no victim whose
+    /// authority is borrowed.
     /// </remarks>
     [HttpGet("session")]
     [EnableRateLimiting("demo-session")]

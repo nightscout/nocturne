@@ -8,7 +8,9 @@ namespace Nocturne.API.Services.Alerts.Webhooks;
 /// </summary>
 /// <remarks>
 /// Blank or null URLs are silently skipped. Failed URLs are collected and returned
-/// rather than raising an exception so that partial success is possible.
+/// rather than raising an exception so that partial success is possible. A URL that is
+/// not a publicly routable http(s) destination is reported as failed without being
+/// requested — see <see cref="WebhookDestination"/>.
 /// </remarks>
 public class WebhookRequestSender(
     IHttpClientFactory httpClientFactory,
@@ -42,6 +44,14 @@ public class WebhookRequestSender(
 
         foreach (var url in urlList)
         {
+            if (!WebhookDestination.IsAllowed(url))
+            {
+                failures.Add(url);
+                logger.LogWarning(
+                    "Refusing to send webhook to {Url}: not a publicly routable http(s) destination", url);
+                continue;
+            }
+
             try
             {
                 using var content = new StringContent(

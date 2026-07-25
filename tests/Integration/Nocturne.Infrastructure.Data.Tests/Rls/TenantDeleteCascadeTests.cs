@@ -52,8 +52,14 @@ public class TenantDeleteCascadeTests
 
     /// <summary>
     /// Child-to-parent edges for foreign keys whose delete action is CASCADE
-    /// (<c>confdeltype = 'c'</c>).
+    /// (<c>confdeltype = 'c'</c>) and whose referencing columns are all NOT NULL.
     /// </summary>
+    /// <remarks>
+    /// A nullable referencing column is excluded deliberately: the cascade fires only
+    /// for rows that actually point at a parent, so a row with a NULL foreign key
+    /// survives the parent's deletion. Counting such an edge as a cascade path would
+    /// let the guard pass while rows outlive the tenant.
+    /// </remarks>
     private async Task<IReadOnlyList<(string Child, string Parent)>> LoadCascadeEdgesAsync()
     {
         await using var conn = await _fixture.OpenMigratorConnectionAsync();
@@ -66,6 +72,13 @@ public class TenantDeleteCascadeTests
             WHERE c.contype = 'f'
               AND c.confdeltype = 'c'
               AND child.relnamespace = 'public'::regnamespace
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM unnest(c.conkey) AS col(attnum)
+                  JOIN pg_attribute a
+                    ON a.attrelid = c.conrelid AND a.attnum = col.attnum
+                  WHERE NOT a.attnotnull
+              )
             """;
 
         var edges = new List<(string, string)>();

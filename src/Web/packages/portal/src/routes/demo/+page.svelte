@@ -1,5 +1,6 @@
 <script lang="ts">
     import { Button } from "@nocturne/ui/ui/button";
+    import { ExternalLink } from "@lucide/svelte";
     import { DEMO_ENABLED, DEMO_WEB_URL } from "$lib/config";
 </script>
 
@@ -7,42 +8,44 @@
     <title>Demo - Nocturne</title>
 </svelte:head>
 
-{#if DEMO_ENABLED && DEMO_WEB_URL}
-    <div class="flex flex-col h-[calc(100vh-4rem)]">
-        <div class="px-4 py-3 border-b border-border/60 bg-card/50 flex items-center justify-between">
-            <div>
-                <h1 class="text-lg font-semibold">Live Demo</h1>
-                <p class="text-sm text-muted-foreground">
-                    Realistic demo data — resets periodically
-                </p>
-            </div>
+<div class="container mx-auto px-4 py-20">
+    {#if DEMO_ENABLED && DEMO_WEB_URL}
+        <div class="max-w-xl mx-auto text-center">
+            <h1 class="text-3xl font-bold mb-4">Live demo</h1>
+            <p class="text-muted-foreground mb-6">
+                A full Nocturne instance you can explore and change — add treatments, edit
+                settings, browse reports. It runs on made-up data, not anyone's real
+                readings, and it resets on a schedule, so you can click anything.
+            </p>
+
+            <!--
+                Opens in a new tab rather than an embedded frame. The demo signs visitors in
+                with a session cookie and runs on a different domain to this site, so a
+                browser will not send that cookie to a frame embedded here.
+            -->
             <Button
                 href={DEMO_WEB_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                variant="outline"
-                size="sm"
+                size="lg"
+                class="gap-2 text-base"
             >
-                Open in new tab
+                Open the demo
+                <ExternalLink class="size-4" />
             </Button>
+
+            <p class="text-sm text-muted-foreground mt-6">
+                Everyone shares the same demo instance, so you may see changes other
+                visitors have made.
+            </p>
         </div>
-        <iframe
-            src={DEMO_WEB_URL}
-            title="Nocturne Demo"
-            class="flex-1 w-full border-0"
-            allow="fullscreen"
-        ></iframe>
-    </div>
-{:else}
-    <div class="container mx-auto px-4 py-20">
+    {:else}
         <div class="max-w-md mx-auto text-center">
-            <h1 class="text-2xl font-bold mb-4">Demo Not Available</h1>
+            <h1 class="text-2xl font-bold mb-4">Demo not available</h1>
             <p class="text-muted-foreground mb-6">
                 The demo instance is not currently enabled.
             </p>
-            <Button href="/" variant="outline">
-                Back to Home
-            </Button>
+            <Button href="/" variant="outline">Back to home</Button>
         </div>
-    </div>
-{/if}
+    {/if}
+</div>
