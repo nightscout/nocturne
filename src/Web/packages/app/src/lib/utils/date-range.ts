@@ -37,22 +37,47 @@ function toDay(value: string | Date): string {
   return typeof value === "string" ? dayPart(value) : toDayString(value);
 }
 
+/** Whether `value` names a day this module can resolve to instants. */
+export function isDayString(value: string | null | undefined): value is string {
+  if (!value) return false;
+  try {
+    parseDate(dayPart(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The effective range: explicit `from`/`to` win, otherwise the last `days`
- * (or `defaultDays`) calendar days ending today in `timeZone`.
+ * (or `defaultDays`) calendar days ending today in `timeZone`. A `from`/`to` pair
+ * that isn't a resolvable day — a hand-edited URL, say — falls through to the
+ * relative window rather than throwing.
  */
 export function resolveDayRange(
   input: DayRangeInput | null | undefined,
   defaultDays: number,
   timeZone: string = getLocalTimeZone()
 ): DayRangeStrings {
-  if (input?.from && input?.to) {
+  if (isDayString(input?.from) && isDayString(input?.to)) {
     return { from: dayPart(input.from), to: dayPart(input.to) };
   }
   const days = input?.days ?? defaultDays;
-  const end = today(timeZone);
+  const zone = isTimeZone(timeZone) ? timeZone : "UTC";
+  const end = today(zone);
   const start = end.subtract({ days: Math.max(1, days) - 1 });
   return { from: start.toString(), to: end.toString() };
+}
+
+/** Whether `timeZone` is an IANA zone this runtime knows. */
+export function isTimeZone(timeZone: string | null | undefined): timeZone is string {
+  if (!timeZone) return false;
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Midnight opening `day` in `timeZone`. */

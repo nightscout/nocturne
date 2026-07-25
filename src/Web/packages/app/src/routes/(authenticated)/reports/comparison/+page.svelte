@@ -14,7 +14,7 @@
   import { untrack } from "svelte";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
-  import { dayCount, startOfDay, toDayString } from "$lib/utils/date-range";
+  import { dayCount, isDayString, startOfDay, toDayString } from "$lib/utils/date-range";
 
   const PRESETS = [
     "last7-prior7",
@@ -111,20 +111,26 @@
     noScroll: true,
   });
 
-  /** The committed comparison, read out of the URL with the preset as fallback. */
+  /**
+   * The committed comparison, read out of the URL with the preset as fallback.
+   * A day that isn't resolvable falls back to the preset's rather than being fed
+   * to the queries.
+   */
   function readCommitted(): Periods {
     const preset = urlParams.preset ?? DEFAULT_PRESET;
     const fromPreset = computePreset(preset === "custom" ? DEFAULT_PRESET : preset);
+    const day = (value: string | null, fallback: string) =>
+      isDayString(value) ? value : fallback;
     return {
       a: {
         label: urlParams.aLabel ?? fromPreset.a.label,
-        from: urlParams.aFrom ?? fromPreset.a.from,
-        to: urlParams.aTo ?? fromPreset.a.to,
+        from: day(urlParams.aFrom, fromPreset.a.from),
+        to: day(urlParams.aTo, fromPreset.a.to),
       },
       b: {
         label: urlParams.bLabel ?? fromPreset.b.label,
-        from: urlParams.bFrom ?? fromPreset.b.from,
-        to: urlParams.bTo ?? fromPreset.b.to,
+        from: day(urlParams.bFrom, fromPreset.b.from),
+        to: day(urlParams.bTo, fromPreset.b.to),
       },
     };
   }

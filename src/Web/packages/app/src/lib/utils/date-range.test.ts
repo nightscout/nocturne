@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   dayCount,
   endOfDay,
+  isDayString,
+  isTimeZone,
   resolveDayRange,
   startOfDay,
   toDayString,
@@ -137,6 +139,48 @@ describe("resolveDayRange", () => {
   it("ignores a half-specified explicit range", () => {
     const range = resolveDayRange({ days: 7, from: "2026-07-01" }, 14, SYDNEY);
     expect(dayCount(range.from, range.to)).toBe(7);
+  });
+
+  it("falls back to the relative window for an unresolvable day", () => {
+    const range = resolveDayRange({ days: 7, from: "not-a-day", to: "2026-07-25" }, 14, SYDNEY);
+    expect(dayCount(range.from, range.to)).toBe(7);
+    expect(isDayString(range.from)).toBe(true);
+  });
+
+  it("falls back to UTC for an unrecognised timezone", () => {
+    const range = resolveDayRange({ days: 3 }, 14, "Mars/Olympus_Mons");
+    expect(dayCount(range.from, range.to)).toBe(3);
+  });
+});
+
+describe("isDayString", () => {
+  it("accepts a plain day", () => {
+    expect(isDayString("2026-07-25")).toBe(true);
+  });
+
+  it("accepts a full ISO instant", () => {
+    expect(isDayString("2026-07-25T09:31:00.000Z")).toBe(true);
+  });
+
+  it("rejects nothing, empty strings and nonsense", () => {
+    expect(isDayString(null)).toBe(false);
+    expect(isDayString(undefined)).toBe(false);
+    expect(isDayString("")).toBe(false);
+    expect(isDayString("not-a-day")).toBe(false);
+    expect(isDayString("2026-13-45")).toBe(false);
+  });
+});
+
+describe("isTimeZone", () => {
+  it("accepts an IANA zone", () => {
+    expect(isTimeZone(SYDNEY)).toBe(true);
+    expect(isTimeZone("UTC")).toBe(true);
+  });
+
+  it("rejects nothing and unrecognised zones", () => {
+    expect(isTimeZone(null)).toBe(false);
+    expect(isTimeZone("")).toBe(false);
+    expect(isTimeZone("Mars/Olympus_Mons")).toBe(false);
   });
 });
 

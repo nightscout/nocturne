@@ -38,14 +38,15 @@
   import { GlucoseChartCard } from "$lib/components/dashboard/glucose-chart";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { apsSnapshotToPrediction } from "$lib/utils/aps-snapshot-to-prediction";
-  import { startOfDay, toDayString } from "$lib/utils/date-range";
+  import { isDayString, startOfDay, toDayString } from "$lib/utils/date-range";
 
   // Get date from URL search params. The default is the local calendar day —
   // taking it from `toISOString()` names yesterday for anyone east of UTC.
   const today = toDayString();
-  const dateParam = $derived(
-    page.url.searchParams.get("date") ?? today
-  );
+  const dateParam = $derived.by(() => {
+    const fromUrl = page.url.searchParams.get("date");
+    return isDayString(fromUrl) ? fromUrl : today;
+  });
 
   // Create resource with automatic layout registration
   const dayDataResource = contextResource(

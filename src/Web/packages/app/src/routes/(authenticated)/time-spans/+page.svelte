@@ -8,7 +8,13 @@
   import { ChevronLeft, ChevronRight, ArrowLeft } from "lucide-svelte";
   import { StateSpansTimeline } from "$lib/components/dashboard/state-spans-timeline";
   import { getTimeSpansData } from "./data.remote";
-  import { dayCount as countDays, resolveDayRange, startOfDay, toDayString } from "$lib/utils/date-range";
+  import {
+    dayCount as countDays,
+    isDayString,
+    resolveDayRange,
+    startOfDay,
+    toDayString,
+  } from "$lib/utils/date-range";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
 
@@ -16,12 +22,14 @@
   // `toISOString()` named yesterday for anyone east of UTC.
   const defaults = resolveDayRange({ days: 7 }, 7);
 
-  const fromParam = $derived(
-    page.url.searchParams.get("from") ?? defaults.from
-  );
-  const toParam = $derived(
-    page.url.searchParams.get("to") ?? defaults.to
-  );
+  const fromParam = $derived.by(() => {
+    const fromUrl = page.url.searchParams.get("from");
+    return isDayString(fromUrl) ? fromUrl : defaults.from;
+  });
+  const toParam = $derived.by(() => {
+    const fromUrl = page.url.searchParams.get("to");
+    return isDayString(fromUrl) ? fromUrl : defaults.to;
+  });
 
   // Fetch data using remote function with date range
   const dataQuery = $derived(
