@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.CareLink.Mappers;
 using Nocturne.Connectors.CareLink.Models;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
@@ -791,21 +792,21 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
 
         try
         {
-            var secrets = new Dictionary<string, string> { ["refresh_token"] = currentRefreshToken };
+            // Merge rather than save outright: the stored secrets are one document, so writing
+            // only the session's own keys would drop the user's configured password.
+            var updates = new Dictionary<string, string?>
+            {
+                ["refresh_token"] = currentRefreshToken,
+                ["client_id"] = cached?.Metadata?.GetValueOrDefault("ClientId"),
+                ["token_url"] = cached?.Metadata?.GetValueOrDefault("TokenUrl"),
+                ["audience"] = cached?.Metadata?.GetValueOrDefault("Audience"),
+            };
 
-            var clientId = cached?.Metadata?.GetValueOrDefault("ClientId");
-            if (!string.IsNullOrEmpty(clientId))
-                secrets["client_id"] = clientId;
+            // A missing value means the session simply did not carry it, so leave what is stored.
+            foreach (var key in updates.Where(u => string.IsNullOrEmpty(u.Value)).Select(u => u.Key).ToList())
+                updates.Remove(key);
 
-            var tokenUrl = cached?.Metadata?.GetValueOrDefault("TokenUrl");
-            if (!string.IsNullOrEmpty(tokenUrl))
-                secrets["token_url"] = tokenUrl;
-
-            var audience = cached?.Metadata?.GetValueOrDefault("Audience");
-            if (!string.IsNullOrEmpty(audience))
-                secrets["audience"] = audience;
-
-            await _configService.SaveSecretsAsync("CareLink", secrets, "connector-runtime", ct);
+            await _configService.MergeSecretsAsync("CareLink", updates, "connector-runtime", ct);
             _logger.LogInformation("[{ConnectorSource}] Persisted updated refresh token", ConnectorSource);
             _initialRefreshToken = currentRefreshToken;
         }
