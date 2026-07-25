@@ -14,9 +14,12 @@ vi.mock("@sveltejs/kit", () => ({
   redirect: vi.fn(),
 }));
 
-const { getGlucoseColorContinuous, getGlucoseColorByMode } = await import(
-  "./chart-colors"
-);
+const {
+  getGlucoseColorContinuous,
+  getGlucoseColorByMode,
+  getGlucoseHeatmapFill,
+  GLUCOSE_HEATMAP_LEGEND_STOPS,
+} = await import("./chart-colors");
 
 describe("getGlucoseColorContinuous", () => {
   it("returns an oklch() string", () => {
@@ -40,6 +43,48 @@ describe("getGlucoseColorContinuous", () => {
     const at80 = getGlucoseColorContinuous(80);
     expect(at80).not.toBe(at70);
     expect(at80).not.toBe(at90);
+  });
+});
+
+describe("getGlucoseHeatmapFill", () => {
+  const first = GLUCOSE_HEATMAP_LEGEND_STOPS[0];
+  const last =
+    GLUCOSE_HEATMAP_LEGEND_STOPS[GLUCOSE_HEATMAP_LEGEND_STOPS.length - 1];
+
+  it("references only theme variables, never a literal colour", () => {
+    for (let mgdl = 20; mgdl <= 500; mgdl += 7) {
+      expect(getGlucoseHeatmapFill(mgdl)).toMatch(
+        /^(var\(--glucose-heatmap-\d\)|color-mix\(in srgb, var\(--glucose-heatmap-\d\) [\d.]+%, var\(--glucose-heatmap-\d\)\))$/
+      );
+    }
+  });
+
+  it("returns an anchor's own colour at that anchor", () => {
+    for (const stop of GLUCOSE_HEATMAP_LEGEND_STOPS) {
+      // Interior anchors mix at 0% of the stop below, which resolves to the anchor itself.
+      expect(getGlucoseHeatmapFill(stop.mgdl)).toContain(stop.color);
+    }
+  });
+
+  it("clamps outside the anchors", () => {
+    expect(getGlucoseHeatmapFill(0)).toBe(first.color);
+    expect(getGlucoseHeatmapFill(first.mgdl - 1)).toBe(first.color);
+    expect(getGlucoseHeatmapFill(last.mgdl + 1)).toBe(last.color);
+    expect(getGlucoseHeatmapFill(9999)).toBe(last.color);
+  });
+
+  it("weights the lower stop less the closer the value sits to the upper one", () => {
+    const share = (fill: string) => Number(fill.match(/ ([\d.]+)%/)![1]);
+    expect(share(getGlucoseHeatmapFill(75))).toBeGreaterThan(
+      share(getGlucoseHeatmapFill(95))
+    );
+  });
+
+  it("mixes the pair bracketing the value", () => {
+    // 85 mg/dL sits between the 70 and 100 anchors: stops 3 and 4.
+    expect(getGlucoseHeatmapFill(85)).toBe(
+      "color-mix(in srgb, var(--glucose-heatmap-3) 50.00%, var(--glucose-heatmap-4))"
+    );
   });
 });
 

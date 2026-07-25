@@ -9,6 +9,33 @@
   --glucose-high: oklch(0.65 0.18 270);
   --glucose-very-high: oklch(0.55 0.25 15);
 
+  /* Year-overview glucose heatmap — nine stops the report interpolates between
+     across 40–350 mg/dL. Unlike the buckets above these carry no threshold
+     meaning on their own: the hues are spread to keep neighbouring values in the
+     70–250 range distinguishable across a calendar grid. Stop-to-mg/dL mapping
+     lives with the interpolation in chart-colors.ts. */
+  --glucose-heatmap-1: #2563eb; /* blue-600 */
+  --glucose-heatmap-2: #3b82f6; /* blue-500 */
+  --glucose-heatmap-3: #06b6d4; /* cyan-500 */
+  --glucose-heatmap-4: #10b981; /* emerald-500 */
+  --glucose-heatmap-5: #84cc16; /* lime-500 */
+  --glucose-heatmap-6: #eab308; /* yellow-500 */
+  --glucose-heatmap-7: #f97316; /* orange-500 */
+  --glucose-heatmap-8: #ef4444; /* red-500 */
+  --glucose-heatmap-9: #b91c1c; /* red-700 */
+
+  /* Day-of-week series (week-to-week comparison). Qualitative: the hues separate
+     one weekday from another and say nothing about the readings. Okabe-Ito
+     derived, so the seven stay distinguishable under common colour vision
+     deficiencies. */
+  --weekday-sun: #808080;
+  --weekday-mon: #1e90ff;
+  --weekday-tue: #009e73;
+  --weekday-wed: #ff9a00;
+  --weekday-thu: #f0e442;
+  --weekday-fri: #ec7892;
+  --weekday-sat: #d55e00;
+
   /* Sensor-integrity cluster confidence (noise detection annotation bands) */
   --cluster-low: oklch(0.78 0.12 90);     /* muted amber */
   --cluster-medium: oklch(0.646 0.222 41.116); /* orange, == --glucose-low */

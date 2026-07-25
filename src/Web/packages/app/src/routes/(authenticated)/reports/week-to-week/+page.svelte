@@ -11,20 +11,11 @@
   import { DAY_KEYS, buildWeekdayBuckets } from "./week-to-week.utils";
 
   const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const DAY_COLORS = [
-    "#808080",
-    "#1e90ff",
-    "#009e73",
-    "#ff9a00",
-    "#f0e442",
-    "#ec7892",
-    "#d55e00",
-  ];
 
   const DAY_SERIES = DAY_KEYS.map((key, i) => ({
     key,
     label: DAY_LABELS[i],
-    color: DAY_COLORS[i],
+    color: `var(--weekday-${key})`,
   }));
 
   // Get shared date params from context (set by reports layout)

@@ -2,7 +2,7 @@
   import { goto } from "$app/navigation";
   import { browser } from "$app/environment";
   import { Loader2, CalendarDays } from "lucide-svelte";
-  import { scaleThreshold, scaleLinear } from "d3-scale";
+  import { scaleThreshold } from "d3-scale";
   import { Button } from "$lib/components/ui/button";
   import {
     getAvailableYears,
@@ -19,6 +19,10 @@
     GriTimelinePeriod,
   } from "$api/generated/nocturne-api-client";
   import { getUnitLabel } from "$lib/utils/formatting";
+  import {
+    GLUCOSE_HEATMAP_LEGEND_STOPS,
+    getGlucoseHeatmapFill,
+  } from "$lib/utils/chart-colors";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { onMount, untrack, tick } from "svelte";
@@ -92,33 +96,16 @@
       "var(--glucose-very-high)",
     ]);
 
-  /**
-   * Multi-hue heatmap scale — maximises perceptual distinction in the 70–250
-   * range
-   */
-  const HEATMAP_DOMAIN = [40, 54, 70, 100, 140, 180, 220, 260, 350];
-  const HEATMAP_COLORS = [
-    "#2563eb", // blue-600   — critically low
-    "#3b82f6", // blue-500   — very low
-    "#06b6d4", // cyan-500   — low
-    "#10b981", // emerald-500 — on target
-    "#84cc16", // lime-500   — upper in-range
-    "#eab308", // yellow-500  — entering high
-    "#f97316", // orange-500  — high
-    "#ef4444", // red-500    — very high
-    "#b91c1c", // red-700    — critically high
-  ];
-
-  const heatmapScale = scaleLinear<string>()
-    .domain(HEATMAP_DOMAIN)
-    .range(HEATMAP_COLORS)
-    .clamp(true);
+  // Ends of the heatmap ramp, which the legend maps onto its gradient bar.
+  const HEATMAP_MIN = GLUCOSE_HEATMAP_LEGEND_STOPS[0].mgdl;
+  const HEATMAP_MAX =
+    GLUCOSE_HEATMAP_LEGEND_STOPS[GLUCOSE_HEATMAP_LEGEND_STOPS.length - 1].mgdl;
 
   const LEGEND_W = 420;
   const LEGEND_THRESHOLDS = [70, 180, 250];
 
   function legendX(mgdl: number): number {
-    return ((mgdl - 40) / 310) * LEGEND_W;
+    return ((mgdl - HEATMAP_MIN) / (HEATMAP_MAX - HEATMAP_MIN)) * LEGEND_W;
   }
 
   /** CSS variable names for each metric's hue */
@@ -210,7 +197,7 @@
     if (!data) return "rgb(0 0 0 / 5%)";
 
     if (selectedMetric === "avgGlucose") {
-      if (data.value != null) return heatmapScale(data.value);
+      if (data.value != null) return getGlucoseHeatmapFill(data.value);
       if (data.filteredCount > 0) return "var(--muted)";
       return "rgb(0 0 0 / 5%)";
     }
@@ -586,8 +573,7 @@
       bind:selectedMetric
       {units}
       {METRIC_OPTIONS}
-      {HEATMAP_DOMAIN}
-      {HEATMAP_COLORS}
+      HEATMAP_STOPS={GLUCOSE_HEATMAP_LEGEND_STOPS}
       {LEGEND_W}
       {LEGEND_THRESHOLDS}
       {legendX}
