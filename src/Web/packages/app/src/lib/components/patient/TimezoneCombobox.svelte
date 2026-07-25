@@ -12,7 +12,8 @@
     placeholder?: string;
     disabled?: boolean;
     class?: string;
-    "aria-invalid"?: boolean;
+    "aria-invalid"?: boolean | "true" | "false";
+    "aria-describedby"?: string;
   }
 
   let {
@@ -22,6 +23,7 @@
     disabled = false,
     class: className,
     "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedby,
   }: Props = $props();
 
   const allTimezones: string[] =
@@ -54,6 +56,7 @@
         role="combobox"
         aria-expanded={popoverOpen}
         aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedby}
         class={cn("w-full justify-between font-normal", className)}
         {disabled}
         {...props}

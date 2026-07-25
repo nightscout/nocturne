@@ -16,15 +16,23 @@ vi.mock("runed", () => ({
 import { beforeNavigate } from "$app/navigation";
 import { z } from "zod";
 import { FormGuard } from "./form-guard.svelte";
+import { GENERIC_SUBMIT_ERROR } from "./submit-error";
 
 const schema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   age: z.number().min(0, "Age must be non-negative"),
 });
 
-function createMockForm() {
+/**
+ * Stands in for SvelteKit's `RemoteForm`. `submit()` resolves true on success
+ * and false when the server returned validation issues, and rejects when the
+ * handler threw — the three outcomes the real client runtime produces.
+ */
+function createMockForm(
+  submitOutcome: (() => Promise<boolean>) | undefined = async () => true
+) {
   let enhanceCallback: any;
-  const submitSpy = vi.fn();
+  const submitSpy = vi.fn(submitOutcome);
   return {
     pending: 0,
     result: null as any,
@@ -323,7 +331,6 @@ describe("FormGuard", () => {
 
     it("sets submitted and re-snapshots on success", async () => {
       const form = createMockForm();
-      form.result = { id: "1" };
       const guard = new FormGuard({
         form,
         schema,
@@ -335,6 +342,150 @@ describe("FormGuard", () => {
       await form._triggerEnhance();
       expect(guard.submitted).toBe(true);
       expect(guard.touched).toBe(false);
+      expect(guard.submitError).toBeNull();
+    });
+
+    it("runs the consumer callback only after a successful submit", async () => {
+      const callback = vi.fn(async () => {});
+      const form = createMockForm(async () => false);
+      const guard = new FormGuard({
+        form,
+        schema,
+        el: () => null,
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => ({ name: "Alice", age: 30 }),
+      });
+      guard.enhance(callback);
+      await form._triggerEnhance();
+      expect(callback).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("rejected submissions", () => {
+    // A returned value is NOT proof of success: `form.result` is set by any
+    // handler return value and persists from an earlier submission. Treating it
+    // as success re-snapshotted the form as clean, so the nav guard let the user
+    // walk away from unsaved edits.
+    it("stays dirty when the server returns validation issues", async () => {
+      const form = createMockForm(async () => false);
+      form.result = { id: "1" }; // left over from an earlier, successful save
+      const guard = new FormGuard({
+        form,
+        schema,
+        el: () => null,
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => ({ name: "Bob", age: 30 }),
+      });
+      guard.enhance();
+      await form._triggerEnhance();
+
+      expect(guard.submitted).toBe(false);
+      expect(guard.dirty).toBe(true);
+      expect(guard.snapshot).toEqual({ name: "Alice", age: 30 });
+    });
+
+    it("keeps the user's issues when the server returns validation issues", async () => {
+      const form = createMockForm(async () => false);
+      form.result = { id: "1" };
+      const guard = new FormGuard({
+        form,
+        schema,
+        el: () => null,
+        // Values pass the client schema but are rejected by the server.
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => ({ name: "Bob", age: 30 }),
+      });
+      guard.enhance();
+      await form._triggerEnhance();
+
+      expect(guard.touched).toBe(false); // $effect doesn't run in node
+      expect(guard.submitError).toBeNull();
+    });
+
+    it("surfaces a thrown handler error instead of letting it replace the page", async () => {
+      const form = createMockForm(async () => {
+        throw Object.assign(new Error("http error"), {
+          status: 400,
+          body: { message: "Diabetes type is required" },
+        });
+      });
+      const guard = new FormGuard({
+        form,
+        schema,
+        el: () => null,
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => ({ name: "Bob", age: 30 }),
+      });
+      guard.enhance();
+
+      // Must not reject: an unhandled rejection here makes SvelteKit render its
+      // error page over the form, losing everything the user typed.
+      await expect(form._triggerEnhance()).resolves.toBeUndefined();
+
+      expect(guard.submitError).toBe("Diabetes type is required");
+      expect(guard.submitted).toBe(false);
+      expect(guard.dirty).toBe(true);
+    });
+
+    it("falls back to a generic message for server faults", async () => {
+      const form = createMockForm(async () => {
+        throw Object.assign(new Error("boom"), {
+          status: 500,
+          body: { message: "Object reference not set to an instance" },
+        });
+      });
+      const guard = new FormGuard({
+        form,
+        schema,
+        el: () => null,
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => ({ name: "Bob", age: 30 }),
+      });
+      guard.enhance();
+      await form._triggerEnhance();
+
+      expect(guard.submitError).toBe(GENERIC_SUBMIT_ERROR);
+    });
+
+    it("uses the configured fallback message", async () => {
+      const form = createMockForm(async () => {
+        throw new Error("network down");
+      });
+      const guard = new FormGuard({
+        form,
+        schema,
+        el: () => null,
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => ({ name: "Bob", age: 30 }),
+        submitErrorMessage: "Couldn't save your patient record.",
+      });
+      guard.enhance();
+      await form._triggerEnhance();
+
+      expect(guard.submitError).toBe("Couldn't save your patient record.");
+    });
+
+    it("clears a previous submit error on the next attempt", async () => {
+      let fail = true;
+      const form = createMockForm(async () => {
+        if (fail) throw new Error("nope");
+        return true;
+      });
+      const guard = new FormGuard({
+        form,
+        schema,
+        el: () => null,
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => ({ name: "Bob", age: 30 }),
+      });
+      guard.enhance();
+      await form._triggerEnhance();
+      expect(guard.submitError).not.toBeNull();
+
+      fail = false;
+      await form._triggerEnhance();
+      expect(guard.submitError).toBeNull();
+      expect(guard.submitted).toBe(true);
     });
   });
 
