@@ -14,7 +14,8 @@
 import { useSearchParams } from "runed/kit";
 import { z } from "zod";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import { getContext, setContext, untrack } from "svelte";
+import { getContext, onDestroy, setContext, untrack } from "svelte";
+import { SvelteSet } from "svelte/reactivity";
 import {
   dayCount as countDays,
   endOfDay,
@@ -381,6 +382,41 @@ export function getDateParamsContext(): ReportsParamsReturn | undefined {
 }
 
 /**
+ * Whether the report on screen reads the shared date range.
+ *
+ * The layout offers the range button and Filters sheet on every report route, but
+ * Comparison, Year Overview, Day in Review, Data Quality and Compression Lows
+ * carry their own period controls and ignore it — changing the range there did
+ * nothing. Reports declare their use by asking for the context with a default
+ * window; consumers are tracked by token so an outgoing page unregistering after
+ * an incoming page registers cannot hide a control that is in use.
+ */
+export class SharedRangeUse {
+  #consumers = new SvelteSet<symbol>();
+
+  get consumed(): boolean {
+    return this.#consumers.size > 0;
+  }
+
+  add(token: symbol): void {
+    this.#consumers.add(token);
+  }
+
+  remove(token: symbol): void {
+    this.#consumers.delete(token);
+  }
+}
+
+const SHARED_RANGE_USE_KEY = Symbol("shared-range-use");
+
+/** Create and provide the shared-range-use flag. Call this in the reports layout. */
+export function createSharedRangeUse(): SharedRangeUse {
+  const use = new SharedRangeUse();
+  setContext(SHARED_RANGE_USE_KEY, use);
+  return use;
+}
+
+/**
  * Get the shared date params from context, throwing if not available.
  * Use this when you're certain the context has been set (e.g., in report pages).
  *
@@ -405,6 +441,15 @@ export function requireDateParamsContext(reportDefaultDays?: number): ReportsPar
   // Auto-adjust if this report has a different default and we're in default mode
   // Use untrack to read values without creating reactive dependencies that could
   // cause effect_update_depth_exceeded when this is called during component init
+  if (reportDefaultDays !== undefined) {
+    const use = getContext<SharedRangeUse | undefined>(SHARED_RANGE_USE_KEY);
+    if (use) {
+      const token = Symbol("shared-range-consumer");
+      use.add(token);
+      onDestroy(() => use.remove(token));
+    }
+  }
+
   untrack(() => {
     if (reportDefaultDays === undefined) return;
     if (params.isDefault && params.days !== reportDefaultDays) {
