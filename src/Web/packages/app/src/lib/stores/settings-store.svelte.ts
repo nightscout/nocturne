@@ -324,21 +324,6 @@ export class SettingsStore {
     }
   }
 
-  syncService(id: string): void {
-    if (this.services?.connectedServices) {
-      const service = this.services.connectedServices.find((s: ConnectedService) => s.id === id);
-      if (service) {
-        service.status = "syncing";
-        // Simulate sync completion
-        setTimeout(() => {
-          if (service) {
-            service.status = "connected";
-            service.lastSync = new Date();
-          }
-        }, 2000);
-      }
-    }
-  }
 }
 
 /**
