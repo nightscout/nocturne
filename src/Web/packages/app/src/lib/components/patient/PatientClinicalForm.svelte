@@ -44,15 +44,25 @@
   {/if}
 
   <div class="grid gap-4 @sm:grid-cols-2">
+    <!-- aria-required, not required: bits-ui puts `required` on a 1px hidden
+         input that still takes part in constraint validation, so an empty
+         select blocks the submit event with a bubble anchored off-screen — the
+         Save button would appear to do nothing. The requirement is enforced by
+         the guard's schema, which reports it on the field. -->
     <FormField
       label="Diabetes Type"
       id="diabetes-type"
       required
       issues={clinical.guard.issuesFor("diabetesType")}
     >
-      {#snippet control({ required, ...aria })}
-        <Select.Root type="single" name="diabetesType" {required} bind:value={clinical.diabetesType}>
-          <Select.Trigger {...aria}>
+      {#snippet control(field)}
+        <Select.Root type="single" name="diabetesType" bind:value={clinical.diabetesType}>
+          <Select.Trigger
+            id={field.id}
+            aria-required="true"
+            aria-invalid={field["aria-invalid"]}
+            aria-describedby={field["aria-describedby"]}
+          >
             {clinical.diabetesType
               ? (diabetesTypeLabels[clinical.diabetesType as DiabetesType] ?? clinical.diabetesType)
               : "Select type"}

@@ -90,9 +90,9 @@
 					id="food-edit-name"
 					name="name"
 					type="text"
+					required
 					class="w-full bg-transparent text-sm outline-none"
 					bind:value={draft.name}
-					required
 				/>
 			</div>
 		</div>
