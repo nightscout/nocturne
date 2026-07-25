@@ -92,7 +92,7 @@ public class MigrationController : ControllerBase
     /// Start a migration using saved connector credentials (e.g., after Nightscout connector setup).
     /// </summary>
     [HttpPost("start-from-connector/{connectorName}")]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetHistory"])]
     [ProducesResponseType(typeof(MigrationJobInfo), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<MigrationJobInfo>> StartFromConnector(
@@ -146,7 +146,7 @@ public class MigrationController : ControllerBase
 
     /// <inheritdoc cref="IMigrationJobService.CancelAsync"/>
     [HttpPost("{jobId:guid}/cancel")]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetStatus", "GetHistory"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CancelMigration(Guid jobId)

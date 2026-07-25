@@ -435,7 +435,14 @@ public class ServicesController : ControllerBase
     /// <returns>Sync result with success status and details</returns>
     [HttpPost("connectors/{id}/sync")]
     [RequireAdmin]
-    [RemoteCommand]
+    [RemoteCommand(
+        Invalidates = [
+            "GetServicesOverview",
+            "GetActiveDataSources",
+            "GetConnectorDataSummary",
+            "GetConnectorSyncStatus",
+        ]
+    )]
     [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
     [ProducesResponseType(400)]
     public async Task<
@@ -478,7 +485,14 @@ public class ServicesController : ControllerBase
     /// <returns>Sync result with success status and details.</returns>
     [HttpPost("connectors/{id}/reset-cursor")]
     [RequireAdmin]
-    [RemoteCommand]
+    [RemoteCommand(
+        Invalidates = [
+            "GetServicesOverview",
+            "GetActiveDataSources",
+            "GetConnectorDataSummary",
+            "GetConnectorSyncStatus",
+        ]
+    )]
     [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
     [ProducesResponseType(400)]
     public async Task<

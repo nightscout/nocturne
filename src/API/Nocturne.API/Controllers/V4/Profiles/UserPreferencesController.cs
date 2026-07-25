@@ -78,7 +78,7 @@ public class UserPreferencesController : ControllerBase
     /// <param name="request">The preferences to update</param>
     /// <returns>Updated preferences</returns>
     [HttpPatch]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetPreferences"])]
     [ProducesResponseType(typeof(UserPreferencesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
