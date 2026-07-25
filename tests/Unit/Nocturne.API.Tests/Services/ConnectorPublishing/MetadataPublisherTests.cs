@@ -87,6 +87,24 @@ public class MetadataPublisherTests
     }
 
     [Fact]
+    public async Task ReconcileConnectorFoodEntriesAsync_AttributesWithdrawalsToTheTenantOwner()
+    {
+        await CreatePublisher().ReconcileConnectorFoodEntriesAsync(
+            ["entry-1"], DateTimeOffset.UtcNow.AddDays(-7), DateTimeOffset.UtcNow,
+            "myfitnesspal-connector", WriteOrigin.Live);
+
+        _mockConnectorFoodEntryService.Verify(
+            s => s.MarkMissingAsDeletedAsync(
+                OwnerSubjectId,
+                "myfitnesspal-connector",
+                It.IsAny<DateTimeOffset>(),
+                It.IsAny<DateTimeOffset>(),
+                It.IsAny<IEnumerable<string>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task PublishConnectorFoodEntriesAsync_StillImportsWhenTheTenantHasNoOwner()
     {
         _mockTenantOwnerResolver

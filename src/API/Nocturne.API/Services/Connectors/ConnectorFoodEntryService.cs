@@ -242,7 +242,7 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
 
     /// <inheritdoc />
     public async Task<int> MarkMissingAsDeletedAsync(
-        string userId,
+        string? userId,
         string connectorSource,
         DateTimeOffset from,
         DateTimeOffset to,
@@ -286,9 +286,15 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
         await _context.SaveChangesAsync(cancellationToken);
 
         // Retiring the row is not enough on its own: any suggestion already raised for it is a
-        // separate record that stays live until it is withdrawn.
+        // separate record that stays live until it is withdrawn. Without a subject there is nobody
+        // whose suggestions could have been raised, so there is nothing to withdraw.
         foreach (var entry in removed)
         {
+            if (string.IsNullOrEmpty(userId))
+            {
+                break;
+            }
+
             try
             {
                 await _mealMatchingService.WithdrawSuggestionAsync(userId, entry.Id, cancellationToken);

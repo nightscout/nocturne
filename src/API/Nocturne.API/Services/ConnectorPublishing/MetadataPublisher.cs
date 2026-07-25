@@ -153,7 +153,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         try
         {
             return await _connectorFoodEntryService.MarkMissingAsDeletedAsync(
-                DefaultUserId,
+                await ResolveNotificationSubjectAsync(source, cancellationToken),
                 source,
                 from,
                 to,

@@ -34,7 +34,10 @@ public interface IConnectorFoodEntryService
     /// source exhaustively: absence from a partial read is not evidence of a deletion, and passing an
     /// incomplete list withdraws every entry it omitted.
     /// </remarks>
-    /// <param name="userId">The user whose match suggestions are withdrawn alongside</param>
+    /// <param name="userId">
+    /// Subject whose match suggestions are withdrawn alongside. Null when the caller has no subject;
+    /// the entries are still retired.
+    /// </param>
     /// <param name="connectorSource">Only entries from this connector are considered</param>
     /// <param name="from">Start of the window to reconcile, inclusive</param>
     /// <param name="to">End of the window to reconcile, inclusive</param>
@@ -42,7 +45,7 @@ public interface IConnectorFoodEntryService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The number of entries marked deleted</returns>
     Task<int> MarkMissingAsDeletedAsync(
-        string userId,
+        string? userId,
         string connectorSource,
         DateTimeOffset from,
         DateTimeOffset to,
