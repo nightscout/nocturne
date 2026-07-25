@@ -8,16 +8,17 @@
   import { ChevronLeft, ChevronRight, ArrowLeft } from "lucide-svelte";
   import { StateSpansTimeline } from "$lib/components/dashboard/state-spans-timeline";
   import { getTimeSpansData } from "./data.remote";
+  import { dayCount as countDays, resolveDayRange, startOfDay, toDayString } from "$lib/utils/date-range";
 
-  // Get date range from URL search params
-  const defaultFrom = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-  const defaultTo = new Date().toISOString().split("T")[0];
+  // Default range: the last 7 local calendar days. Deriving these from
+  // `toISOString()` named yesterday for anyone east of UTC.
+  const defaults = resolveDayRange({ days: 7 }, 7);
 
   const fromParam = $derived(
-    page.url.searchParams.get("from") ?? defaultFrom
+    page.url.searchParams.get("from") ?? defaults.from
   );
   const toParam = $derived(
-    page.url.searchParams.get("to") ?? defaultTo
+    page.url.searchParams.get("to") ?? defaults.to
   );
 
   // Fetch data using remote function with date range
@@ -26,19 +27,11 @@
   );
   const data = $derived(dataQuery.current);
 
-  // Parse dates for display and navigation
-  const fromDate = $derived(new Date(fromParam));
-  const toDate = $derived(new Date(toParam));
+  // Parse dates for display and navigation, as local days rather than UTC midnight
+  const fromDate = $derived(startOfDay(fromParam));
+  const toDate = $derived(startOfDay(toParam));
 
-  // Calculate number of days in range for display
-  const dayCount = $derived(
-    Math.max(
-      1,
-      Math.ceil(
-        (toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000)
-      ) + 1
-    )
-  );
+  const dayCount = $derived(countDays(fromParam, toParam));
 
   // Date range for the chart component
   const dateRange = $derived({
@@ -53,23 +46,15 @@
   let showOverrides = $state(true);
   let showActivities = $state(true);
 
-  // Date navigation - shift by the current range duration
-  function goToPreviousPeriod() {
-    const durationMs = toDate.getTime() - fromDate.getTime();
-    const newTo = new Date(fromDate.getTime() - 24 * 60 * 60 * 1000);
-    const newFrom = new Date(newTo.getTime() - durationMs);
+  /** Shift the window by whole days, keeping its length. */
+  function shiftPeriod(direction: -1 | 1) {
+    const anchor = direction === -1 ? fromDate : toDate;
+    const newFirst = new Date(anchor);
+    newFirst.setDate(newFirst.getDate() + direction * (direction === -1 ? dayCount : 1));
+    const newLast = new Date(newFirst);
+    newLast.setDate(newLast.getDate() + dayCount - 1);
     goto(
-      `/time-spans?from=${newFrom.toISOString().split("T")[0]}&to=${newTo.toISOString().split("T")[0]}`,
-      { invalidateAll: true }
-    );
-  }
-
-  function goToNextPeriod() {
-    const durationMs = toDate.getTime() - fromDate.getTime();
-    const newFrom = new Date(toDate.getTime() + 24 * 60 * 60 * 1000);
-    const newTo = new Date(newFrom.getTime() + durationMs);
-    goto(
-      `/time-spans?from=${newFrom.toISOString().split("T")[0]}&to=${newTo.toISOString().split("T")[0]}`,
+      `/time-spans?from=${toDayString(newFirst)}&to=${toDayString(newLast)}`,
       { invalidateAll: true }
     );
   }
@@ -112,7 +97,7 @@
 
         <!-- Date Navigation -->
         <div class="flex items-center gap-2">
-          <Button variant="outline" size="icon" onclick={goToPreviousPeriod}>
+          <Button variant="outline" size="icon" onclick={() => shiftPeriod(-1)}>
             <ChevronLeft class="h-4 w-4" />
           </Button>
           <div
@@ -120,7 +105,7 @@
           >
             <span class="text-lg font-medium">{dateRangeDisplay}</span>
           </div>
-          <Button variant="outline" size="icon" onclick={goToNextPeriod}>
+          <Button variant="outline" size="icon" onclick={() => shiftPeriod(1)}>
             <ChevronRight class="h-4 w-4" />
           </Button>
         </div>
