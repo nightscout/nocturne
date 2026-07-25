@@ -176,6 +176,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Alerts.Native.Test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Services.Demo.Generation", "src\Services\Nocturne.Services.Demo.Generation\Nocturne.Services.Demo.Generation.csproj", "{9C974379-4C52-46C8-8281-E574C5142B48}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.MyFitnessPal.Tests", "tests\Unit\Nocturne.Connectors.MyFitnessPal.Tests\Nocturne.Connectors.MyFitnessPal.Tests.csproj", "{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -906,6 +908,18 @@ Global
 		{9C974379-4C52-46C8-8281-E574C5142B48}.Release|x64.Build.0 = Release|Any CPU
 		{9C974379-4C52-46C8-8281-E574C5142B48}.Release|x86.ActiveCfg = Release|Any CPU
 		{9C974379-4C52-46C8-8281-E574C5142B48}.Release|x86.Build.0 = Release|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Debug|x64.Build.0 = Debug|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Debug|x86.Build.0 = Debug|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Release|x64.ActiveCfg = Release|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Release|x64.Build.0 = Release|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Release|x86.ActiveCfg = Release|Any CPU
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -983,5 +997,6 @@ Global
 		{A7A23EBB-850C-41DF-9FC9-8002DC06157F} = {B1C2D3E4-F5A6-7B8C-9D0E-1F2A3B4C5D6E}
 		{E34250B8-0520-4A11-B55E-272681FAB007} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 		{9C974379-4C52-46C8-8281-E574C5142B48} = {984BB9B3-3FA3-BE33-9484-CAC21695A33C}
+		{52A7C3FF-98DE-42E7-881F-24CEA5791CB8} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 	EndGlobalSection
 EndGlobal

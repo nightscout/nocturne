@@ -67,6 +67,8 @@ public enum ConnectorPropertyKey
 
     // MyFitnessPal-specific
     LookbackDays,
+    SyncCursor,
+    PageCursor,
 
     // Write-back
     WriteBackEnabled,
