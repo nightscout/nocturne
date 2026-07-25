@@ -7,7 +7,7 @@
     formatGlucoseDelta,
     bgLabel,
   } from "$lib/utils/formatting";
-  import { UNWIRED_ELEMENT_TYPES } from "$lib/clock-builder/types";
+  import { isUnwiredElementType } from "$lib/clock-builder/types";
   import { renderClockElementValue } from "$lib/components/clock/element-value";
   import { ArrowUp } from "lucide-svelte";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
@@ -471,7 +471,7 @@
     {#each config?.rows ?? [] as row, rowIndex (rowIndex)}
       <div class="flex items-center" style="gap: {2 * scale}px;">
         {#each row.elements ?? [] as element, elementIndex (elementIndex)}
-          {#if !(element.type === "chart" && element.chartConfig?.asBackground) && !UNWIRED_ELEMENT_TYPES.has(element.type)}
+          {#if !(element.type === "chart" && element.chartConfig?.asBackground) && !isUnwiredElementType(element.type)}
             {#if element.type === "chart"}
               {#if showCharts}
                 {@const inlineEngine = createChartDataEngine({

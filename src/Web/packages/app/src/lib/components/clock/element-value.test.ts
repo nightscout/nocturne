@@ -14,7 +14,7 @@ const ctx: ClockElementValueContext = {
   time: "14:05",
 };
 
-const el = (element: Partial<ClockElement>) => element as ClockElement;
+const el = (element: ClockElement): ClockElement => element;
 
 describe("renderClockElementValue", () => {
   it("renders the formatted glucose value", () => {

@@ -3,13 +3,12 @@ import type { TenantAlertSettingsResponse } from "$api-clients";
 import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
 
 const settings = (
-  overrides: Partial<TenantAlertSettingsResponse>
-): TenantAlertSettingsResponse =>
-  ({
-    dndManualActive: false,
-    dndScheduleEnabled: false,
-    ...overrides,
-  }) as TenantAlertSettingsResponse;
+  overrides: TenantAlertSettingsResponse
+): TenantAlertSettingsResponse => ({
+  dndManualActive: false,
+  dndScheduleEnabled: false,
+  ...overrides,
+});
 
 describe("isDndActiveNow", () => {
   it("is true only for a manual mute", () => {
@@ -26,7 +25,7 @@ describe("isDndActiveNow", () => {
           dndScheduleEnabled: true,
           dndScheduleStart: "22:00",
           dndScheduleEnd: "07:00",
-        } as Partial<TenantAlertSettingsResponse>)
+        })
       )
     ).toBe(false);
   });

@@ -202,6 +202,10 @@ export const UNWIRED_ELEMENT_TYPES: ReadonlySet<string> = new Set([
   "forecast",
 ]);
 
+export function isUnwiredElementType(type: string | undefined): boolean {
+  return type !== undefined && UNWIRED_ELEMENT_TYPES.has(type);
+}
+
 export const ELEMENT_GROUPS: ElementGroup[] = [
   {
     name: "Glucose",
