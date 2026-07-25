@@ -24,6 +24,7 @@ import {
 import { mergeChartData } from "$lib/utils/chart-data-merge";
 import type { TransformedChartData } from "$lib/utils/chart-data-transform";
 import { getGlucoseColor } from "$lib/utils/chart-colors";
+import { resolveGlucoseThresholds } from "$lib/constants/glucose-thresholds";
 import { bisector } from "d3";
 
 // ===== Data Point Types =====
@@ -540,7 +541,7 @@ export function createChartDataEngine(
     const base = serverChartData?.glucoseData ?? [];
     if (!serverChartData) return base as GlucosePoint[];
 
-    const thresholds = serverChartData.thresholds;
+    const thresholds = resolveGlucoseThresholds(serverChartData.thresholds);
     const fromMs = fullDataRange.from.getTime();
     const toMs = fullDataRange.to.getTime();
 
@@ -606,16 +607,15 @@ export function createChartDataEngine(
   );
 
   // ---- Thresholds ----
-  // `||` rather than `??` so a server-side 0 (no profile yet) falls back to
-  // the default rather than collapsing the lines onto the X axis.
-  const lowThreshold = $derived(serverChartData?.thresholds?.low || 55);
-  const highThreshold = $derived(serverChartData?.thresholds?.high || 180);
-  const veryHighThreshold = $derived(
-    serverChartData?.thresholds?.veryHigh || 250
+  // The tenant's own cut-points, with the shared fallback filling any the server
+  // omitted (it sends 0 when there is no profile yet).
+  const resolvedThresholds = $derived(
+    resolveGlucoseThresholds(serverChartData?.thresholds)
   );
-  const veryLowThreshold = $derived(
-    serverChartData?.thresholds?.veryLow || 40
-  );
+  const lowThreshold = $derived(resolvedThresholds.low);
+  const highThreshold = $derived(resolvedThresholds.high);
+  const veryHighThreshold = $derived(resolvedThresholds.veryHigh);
+  const veryLowThreshold = $derived(resolvedThresholds.veryLow);
   const glucoseYMax = $derived(
     serverChartData?.thresholds?.glucoseYMax || 300
   );
