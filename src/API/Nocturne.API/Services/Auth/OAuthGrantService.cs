@@ -14,6 +14,7 @@ namespace Nocturne.API.Services.Auth;
 public class OAuthGrantService : IOAuthGrantService
 {
     private readonly NocturneDbContext _dbContext;
+    private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
     private readonly IOAuthClientService _clientService;
     private readonly ILogger<OAuthGrantService> _logger;
 
@@ -21,14 +22,18 @@ public class OAuthGrantService : IOAuthGrantService
     /// Initialises a new <see cref="OAuthGrantService"/>.
     /// </summary>
     /// <param name="dbContext">Database context for grant persistence.</param>
+    /// <param name="dbContextFactory">Factory used by <see cref="IsGrantRevokedAsync"/>, which runs
+    /// during authentication and so cannot rely on the scoped context being tenant-pinned yet.</param>
     /// <param name="clientService">Used to resolve client metadata (currently unused in this implementation).</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthGrantService(
         NocturneDbContext dbContext,
+        IDbContextFactory<NocturneDbContext> dbContextFactory,
         IOAuthClientService clientService,
         ILogger<OAuthGrantService> logger)
     {
         _dbContext = dbContext;
+        _dbContextFactory = dbContextFactory;
         _clientService = clientService;
         _logger = logger;
     }
@@ -171,6 +176,28 @@ public class OAuthGrantService : IOAuthGrantService
         _logger.LogInformation(
             "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_tokens={TokenCount}",
             "grant_revoked", grantId, grant.SubjectId, refreshTokens.Count);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsGrantRevokedAsync(
+        Guid grantId,
+        Guid tenantId,
+        CancellationToken ct = default)
+    {
+        // A dedicated context pinned to the token's tenant: this runs inside the authentication
+        // handlers, which may hold a child scope whose context carries no tenant (and therefore no
+        // RLS tenant GUC), and an unpinned read would return nothing for every grant.
+        await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
+        db.TenantId = tenantId;
+
+        var state = await db.OAuthGrants
+            .AsNoTracking()
+            .Where(g => g.Id == grantId && g.TenantId == tenantId)
+            .Select(g => new { g.RevokedAt })
+            .FirstOrDefaultAsync(ct);
+
+        // No row means the grant was deleted, belongs to another tenant, or never existed.
+        return state is null || state.RevokedAt != null;
     }
 
     /// <inheritdoc />

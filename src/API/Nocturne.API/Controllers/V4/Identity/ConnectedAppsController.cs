@@ -77,9 +77,10 @@ public class ConnectedAppsController : ControllerBase
     }
 
     /// <summary>
-    /// Revoke a connected app. Soft-deletes the grant and invalidates all
-    /// associated refresh tokens; previously-issued access tokens become
-    /// unusable on next request via the revocation cache.
+    /// Revoke a connected app. Soft-deletes the grant and invalidates all associated refresh
+    /// tokens. Previously-issued access tokens carry the grant id and are rejected on their next
+    /// request, so no residual access survives the revocation. Access tokens minted before the
+    /// grant id was added to them are not covered and remain usable until they expire.
     /// </summary>
     /// <inheritdoc cref="IOAuthGrantService.RevokeGrantAsync"/>
     [HttpDelete("{grantId}")]

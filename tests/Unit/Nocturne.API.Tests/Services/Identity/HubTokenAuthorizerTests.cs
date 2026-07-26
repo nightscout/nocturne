@@ -27,15 +27,20 @@ public class HubTokenAuthorizerTests
 
     private readonly Mock<IJwtService> _jwtService = new();
     private readonly Mock<IOAuthTokenRevocationCache> _revocationCache = new();
+    private readonly Mock<IOAuthGrantService> _grantService = new();
     private readonly Mock<IAuthorizationService> _authorizationService = new();
 
     private HubTokenAuthorizer CreateAuthorizer() => new(
         _jwtService.Object,
         _revocationCache.Object,
+        _grantService.Object,
         _authorizationService.Object,
         NullLogger<HubTokenAuthorizer>.Instance);
 
-    private void SetupValidJwt(Guid? tenantId, params string[] scopes)
+    private void SetupValidJwt(Guid? tenantId, params string[] scopes) =>
+        SetupValidJwt(tenantId, grantId: null, scopes);
+
+    private void SetupValidJwt(Guid? tenantId, Guid? grantId, params string[] scopes)
     {
         _jwtService
             .Setup(s => s.ValidateAccessToken(JwtShapedToken))
@@ -43,6 +48,7 @@ public class HubTokenAuthorizerTests
             {
                 SubjectId = Guid.NewGuid(),
                 TenantId = tenantId,
+                GrantId = grantId,
                 Scopes = [.. scopes],
                 JwtId = "jti-1",
                 IssuedAt = DateTimeOffset.UtcNow,
@@ -96,6 +102,22 @@ public class HubTokenAuthorizerTests
     public async Task Jwt_without_required_scope_is_rejected()
     {
         SetupValidJwt(Tenant, OAuthScopes.TherapyRead);
+        var authorizer = CreateAuthorizer();
+
+        var result = await authorizer.IsTokenAuthorizedAsync(
+            JwtShapedToken, Tenant, OAuthScopes.GlucoseRead);
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Jwt_whose_grant_is_revoked_is_rejected()
+    {
+        var grantId = Guid.CreateVersion7();
+        SetupValidJwt(Tenant, grantId, OAuthScopes.GlucoseRead);
+        _grantService
+            .Setup(g => g.IsGrantRevokedAsync(grantId, Tenant, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
         var authorizer = CreateAuthorizer();
 
         var result = await authorizer.IsTokenAuthorizedAsync(

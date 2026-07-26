@@ -30,17 +30,20 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
 {
     private readonly IJwtService _jwtService;
     private readonly IOAuthTokenRevocationCache _revocationCache;
+    private readonly IOAuthGrantService _grantService;
     private readonly IAuthorizationService _authorizationService;
     private readonly ILogger<HubTokenAuthorizer> _logger;
 
     public HubTokenAuthorizer(
         IJwtService jwtService,
         IOAuthTokenRevocationCache revocationCache,
+        IOAuthGrantService grantService,
         IAuthorizationService authorizationService,
         ILogger<HubTokenAuthorizer> logger)
     {
         _jwtService = jwtService;
         _revocationCache = revocationCache;
+        _grantService = grantService;
         _authorizationService = authorizationService;
         _logger = logger;
     }
@@ -85,6 +88,14 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             && await _revocationCache.IsRevokedAsync(claims.JwtId))
         {
             _logger.LogDebug("Hub JWT has been revoked (jti: {Jti})", claims.JwtId);
+            return false;
+        }
+
+        // A grant revocation reaches outstanding access tokens through the grant id they carry.
+        if (claims.GrantId.HasValue
+            && await _grantService.IsGrantRevokedAsync(claims.GrantId.Value, connectionTenantId.Value))
+        {
+            _logger.LogDebug("Hub JWT's grant has been revoked (grant: {GrantId})", claims.GrantId);
             return false;
         }
 

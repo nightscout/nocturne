@@ -34,7 +34,9 @@ public interface IOAuthTokenService
     );
 
     /// <summary>
-    /// Revoke a token (access or refresh). Per RFC 7009, always succeeds.
+    /// Revoke a token. A refresh token is marked revoked in the database; an access token is
+    /// blocklisted by its <c>jti</c> for the remainder of its lifetime. The type hint is advisory —
+    /// both types are tried. Per RFC 7009, always succeeds, including when nothing matched.
     /// </summary>
     Task RevokeTokenAsync(
         string token,

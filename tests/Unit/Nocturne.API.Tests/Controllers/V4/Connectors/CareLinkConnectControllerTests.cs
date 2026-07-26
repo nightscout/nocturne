@@ -79,9 +79,10 @@ public sealed class CareLinkConnectControllerTests
                 It.IsAny<bool>(),
                 It.IsAny<Guid?>(),
                 It.IsAny<TimeSpan?>(),
-                It.IsAny<bool>()))
+                It.IsAny<bool>(),
+                It.IsAny<Guid?>()))
             .Callback((SubjectInfo s, IEnumerable<string> p, IEnumerable<string> _, IEnumerable<string> sc,
-                string? _, bool _, Guid? t, TimeSpan? l, bool _) =>
+                string? _, bool _, Guid? t, TimeSpan? l, bool _, Guid? _) =>
             {
                 subject = s;
                 permissions = p;
@@ -115,7 +116,7 @@ public sealed class CareLinkConnectControllerTests
             .Setup(j => j.GenerateAccessToken(
                 It.IsAny<SubjectInfo>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>(),
                 It.IsAny<IEnumerable<string>>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<Guid?>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>()))
+                It.IsAny<Guid?>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<Guid?>()))
             .Returns("t");
 
         var controller = Build(Tenant(), Auth());

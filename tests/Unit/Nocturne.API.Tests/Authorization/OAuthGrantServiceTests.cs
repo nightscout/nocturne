@@ -70,7 +70,23 @@ public class OAuthGrantServiceTests : IDisposable
 
     private OAuthGrantService CreateService(NocturneDbContext dbContext)
     {
-        return new OAuthGrantService(dbContext, _mockClientService.Object, _mockLogger.Object);
+        return new OAuthGrantService(
+            dbContext,
+            new TestDbContextFactory(_contextOptions, _testTenantId),
+            _mockClientService.Object,
+            _mockLogger.Object);
+    }
+
+    /// <summary>
+    /// Hands out tenant-pinned contexts over the shared in-memory connection, standing in for the
+    /// registered <see cref="IDbContextFactory{TContext}"/>.
+    /// </summary>
+    private sealed class TestDbContextFactory(
+        DbContextOptions<NocturneDbContext> options, Guid tenantId)
+        : IDbContextFactory<NocturneDbContext>
+    {
+        public NocturneDbContext CreateDbContext() =>
+            new(options) { TenantId = tenantId };
     }
 
     private NocturneDbContext CreateDbContext()

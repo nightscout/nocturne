@@ -32,6 +32,7 @@ public class OAuthAccessTokenHandlerTests
     private readonly Guid _subjectId = Guid.CreateVersion7();
 
     private readonly IJwtService _jwt;
+    private readonly Mock<IOAuthGrantService> _grantService = new();
     private readonly OAuthAccessTokenHandler _handler;
 
     public OAuthAccessTokenHandlerTests()
@@ -54,6 +55,7 @@ public class OAuthAccessTokenHandlerTests
         var services = new ServiceCollection();
         services.AddSingleton(_jwt);
         services.AddSingleton(revocationCache.Object);
+        services.AddSingleton(_grantService.Object);
         var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
         _handler = new OAuthAccessTokenHandler(scopeFactory, NullLogger<OAuthAccessTokenHandler>.Instance);
@@ -67,6 +69,16 @@ public class OAuthAccessTokenHandlerTests
             scopes: ["connectors:carelink:connect"],
             tenantId: _tenantId,
             lifetime: TimeSpan.FromMinutes(10));
+
+    /// <summary>An app token as the OAuth token endpoint mints it: scoped, pinned, grant-bound.</summary>
+    private string MintGrantBoundToken(Guid grantId) =>
+        _jwt.GenerateAccessToken(
+            new SubjectInfo { Id = _subjectId, Name = "Acme User" },
+            permissions: [],
+            roles: [],
+            scopes: [OAuthScopes.GlucoseRead],
+            tenantId: _tenantId,
+            grantId: grantId);
 
     /// <summary>JwtService refuses to mint already-expired tokens, so build one by hand.</summary>
     private string MintExpiredToken()
@@ -140,6 +152,39 @@ public class OAuthAccessTokenHandlerTests
     public async Task Rejects_an_expired_token()
     {
         var context = Request(MintExpiredToken(), Tenant());
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.Succeeded.Should().BeFalse();
+        result.ShouldSkip.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Accepts_a_grant_bound_token_while_its_grant_is_active()
+    {
+        var grantId = Guid.CreateVersion7();
+        _grantService
+            .Setup(g => g.IsGrantRevokedAsync(grantId, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var context = Request(MintGrantBoundToken(grantId), Tenant());
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.Succeeded.Should().BeTrue(result.Error);
+    }
+
+    [Fact]
+    public async Task Rejects_a_grant_bound_token_once_its_grant_is_revoked()
+    {
+        // Disconnecting a connected app revokes the grant; the app's still-valid access token must
+        // stop working on its next request rather than at natural expiry.
+        var grantId = Guid.CreateVersion7();
+        _grantService
+            .Setup(g => g.IsGrantRevokedAsync(grantId, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var context = Request(MintGrantBoundToken(grantId), Tenant());
 
         var result = await _handler.AuthenticateAsync(context);
 

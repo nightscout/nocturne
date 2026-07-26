@@ -117,7 +117,8 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
                 It.IsAny<bool>(),
                 It.IsAny<Guid?>(),
                 It.IsAny<TimeSpan?>(),
-                It.IsAny<bool>()))
+                It.IsAny<bool>(),
+                It.IsAny<Guid?>()))
             .Returns(jwt);
     }
 
@@ -145,7 +146,8 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             It.IsAny<bool>(),
             _testTenantId,
             It.IsAny<TimeSpan?>(),
-            It.IsAny<bool>()), Times.Once);
+            It.IsAny<bool>(),
+            It.IsAny<Guid?>()), Times.Once);
     }
 
     [Fact]

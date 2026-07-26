@@ -185,7 +185,8 @@ public class AuthorizationService : IAuthorizationService, IDisposable
             roles: [],
             scopes: grant.Scopes,
             tenantId: grant.TenantId,
-            lifetime: ExchangedJwtLifetime
+            lifetime: ExchangedJwtLifetime,
+            grantId: grant.Id
         );
 
         // Stamp last-used so grants exchanged for JWTs don't show as never used.

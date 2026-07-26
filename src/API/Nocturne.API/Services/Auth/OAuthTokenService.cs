@@ -19,6 +19,7 @@ public class OAuthTokenService : IOAuthTokenService
     private readonly IJwtService _jwtService;
     private readonly ISubjectService _subjectService;
     private readonly IOAuthGrantService _grantService;
+    private readonly IOAuthTokenRevocationCache _revocationCache;
     private readonly ILogger<OAuthTokenService> _logger;
 
     private static readonly TimeSpan AuthorizationCodeLifetime = TimeSpan.FromMinutes(10);
@@ -30,12 +31,14 @@ public class OAuthTokenService : IOAuthTokenService
     /// <param name="jwtService">Service for generating and validating JWT access tokens and refresh tokens.</param>
     /// <param name="subjectService">Service for resolving subject permissions and roles for token claims.</param>
     /// <param name="grantService">Service for persisting and querying OAuth consent grants.</param>
+    /// <param name="revocationCache">Blocklist of revoked access tokens, keyed by <c>jti</c>.</param>
     /// <param name="logger">The logger instance.</param>
     public OAuthTokenService(
         NocturneDbContext db,
         IJwtService jwtService,
         ISubjectService subjectService,
         IOAuthGrantService grantService,
+        IOAuthTokenRevocationCache revocationCache,
         ILogger<OAuthTokenService> logger
     )
     {
@@ -43,6 +46,7 @@ public class OAuthTokenService : IOAuthTokenService
         _jwtService = jwtService;
         _subjectService = subjectService;
         _grantService = grantService;
+        _revocationCache = revocationCache;
         _logger = logger;
     }
 
@@ -260,7 +264,8 @@ public class OAuthTokenService : IOAuthTokenService
             roles,
             grant.Scopes,
             grant.Client?.ClientId,
-            tenantId: grant.TenantId
+            tenantId: grant.TenantId,
+            grantId: grant.Id
         );
 
         var expiresIn = (int)_jwtService.GetAccessTokenLifetime().TotalSeconds;
@@ -276,27 +281,76 @@ public class OAuthTokenService : IOAuthTokenService
         CancellationToken ct = default
     )
     {
-        var tokenHash = _jwtService.HashRefreshToken(token);
-
-        // Try as refresh token first (or if hinted)
-        if (tokenTypeHint is null or "refresh_token")
+        // Per RFC 7009 Section 2.1 the hint is advisory: if it doesn't resolve the token, the
+        // server extends the search to the other types. Both types are therefore always tried.
+        if (await RevokeAsRefreshTokenAsync(token, ct))
         {
-            var refreshToken = await _db.OAuthRefreshTokens
-                .FirstOrDefaultAsync(t => t.TokenHash == tokenHash && t.RevokedAt == null, ct);
+            return;
+        }
 
-            if (refreshToken != null)
-            {
-                refreshToken.RevokedAt = DateTime.UtcNow;
-                await _db.SaveChangesAsync(ct);
-                _logger.LogInformation(
-                    "OAuthAudit: {Event} token_id={TokenId} grant_id={GrantId}",
-                    "refresh_token_revoked", refreshToken.Id, refreshToken.GrantId);
-                return;
-            }
+        if (await RevokeAsAccessTokenAsync(token, ct))
+        {
+            return;
         }
 
         // Per RFC 7009: always return success even if token not found
         _logger.LogDebug("Token revocation: token not found (this is normal per RFC 7009)");
+    }
+
+    /// <summary>
+    /// Revokes <paramref name="token"/> if it is a stored refresh token. Returns whether it was.
+    /// </summary>
+    private async Task<bool> RevokeAsRefreshTokenAsync(string token, CancellationToken ct)
+    {
+        var tokenHash = _jwtService.HashRefreshToken(token);
+
+        var refreshToken = await _db.OAuthRefreshTokens
+            .FirstOrDefaultAsync(t => t.TokenHash == tokenHash && t.RevokedAt == null, ct);
+
+        if (refreshToken == null)
+        {
+            return false;
+        }
+
+        refreshToken.RevokedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "OAuthAudit: {Event} token_id={TokenId} grant_id={GrantId}",
+            "refresh_token_revoked", refreshToken.Id, refreshToken.GrantId);
+        return true;
+    }
+
+    /// <summary>
+    /// Blocklists <paramref name="token"/> by its <c>jti</c> if it is a valid access-token JWT.
+    /// Returns whether it was. The blocklist entry lives only as long as the token would have,
+    /// which is all a stateless token needs.
+    /// </summary>
+    private async Task<bool> RevokeAsAccessTokenAsync(string token, CancellationToken ct)
+    {
+        if (token.Count(c => c == '.') != 2)
+        {
+            return false;
+        }
+
+        var validation = _jwtService.ValidateAccessToken(token);
+        if (!validation.IsValid || validation.Claims is null)
+        {
+            return false;
+        }
+
+        var claims = validation.Claims;
+        if (string.IsNullOrEmpty(claims.JwtId))
+        {
+            return false;
+        }
+
+        var remainingLifetime = claims.ExpiresAt - DateTimeOffset.UtcNow;
+        await _revocationCache.RevokeAsync(claims.JwtId, remainingLifetime, ct);
+
+        _logger.LogInformation(
+            "OAuthAudit: {Event} jti={Jti} grant_id={GrantId}",
+            "access_token_revoked", claims.JwtId, claims.GrantId);
+        return true;
     }
 
     /// <inheritdoc />
@@ -437,7 +491,8 @@ public class OAuthTokenService : IOAuthTokenService
             roles,
             grant.Scopes,
             grant.ClientId,
-            tenantId: grant.TenantId
+            tenantId: grant.TenantId,
+            grantId: grant.Id
         );
 
         // Generate and store refresh token

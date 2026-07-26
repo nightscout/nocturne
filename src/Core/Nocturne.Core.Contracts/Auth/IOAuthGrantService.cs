@@ -46,9 +46,20 @@ public interface IOAuthGrantService
     );
 
     /// <summary>
-    /// Revoke a grant (soft delete). Invalidates all associated refresh tokens.
+    /// Revoke a grant (soft delete). Invalidates all associated refresh tokens, and — because
+    /// access tokens carry their grant id — every outstanding access token minted from the grant.
     /// </summary>
     Task RevokeGrantAsync(Guid grantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Whether the grant is revoked, for authenticating an access token that carries a grant id.
+    /// A grant that cannot be found is reported as revoked.
+    /// </summary>
+    /// <param name="grantId">The grant id carried by the access token.</param>
+    /// <param name="tenantId">The tenant the presented token is pinned to, already verified against
+    /// the request's tenant by the caller. Used to scope the lookup.</param>
+    /// <param name="ct">Cancellation token</param>
+    Task<bool> IsGrantRevokedAsync(Guid grantId, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
     /// Update last-used tracking on a grant.

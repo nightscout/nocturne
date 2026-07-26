@@ -900,6 +900,13 @@ public class OAuthController : ControllerBase
                     return Ok(new TokenIntrospectionResponse { Active = false });
                 }
 
+                // A revoked grant takes its outstanding access tokens with it
+                if (claims is { GrantId: not null, TenantId: not null } &&
+                    await _grantService.IsGrantRevokedAsync(claims.GrantId.Value, claims.TenantId.Value))
+                {
+                    return Ok(new TokenIntrospectionResponse { Active = false });
+                }
+
                 return Ok(new TokenIntrospectionResponse
                 {
                     Active = true,

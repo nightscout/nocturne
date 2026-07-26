@@ -24,6 +24,7 @@ public class OAuthTokenServiceTests : IDisposable
     private readonly Mock<IJwtService> _mockJwtService;
     private readonly Mock<ISubjectService> _mockSubjectService;
     private readonly Mock<IOAuthGrantService> _mockGrantService;
+    private readonly Mock<IOAuthTokenRevocationCache> _mockRevocationCache;
     private readonly Mock<ILogger<OAuthTokenService>> _mockLogger;
 
     // Deterministic test values
@@ -61,6 +62,7 @@ public class OAuthTokenServiceTests : IDisposable
         _mockJwtService = new Mock<IJwtService>();
         _mockSubjectService = new Mock<ISubjectService>();
         _mockGrantService = new Mock<IOAuthGrantService>();
+        _mockRevocationCache = new Mock<IOAuthTokenRevocationCache>();
         _mockLogger = new Mock<ILogger<OAuthTokenService>>();
 
         SetupDefaultMocks();
@@ -85,7 +87,9 @@ public class OAuthTokenServiceTests : IDisposable
                 It.IsAny<string?>(),
                 It.IsAny<bool>(),
                 It.IsAny<Guid?>(),
-                It.IsAny<TimeSpan?>()))
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<bool>(),
+                It.IsAny<Guid?>()))
             .Returns(TestAccessToken);
         _mockJwtService.Setup(j => j.GetAccessTokenLifetime())
             .Returns(TimeSpan.FromHours(1));
@@ -125,6 +129,7 @@ public class OAuthTokenServiceTests : IDisposable
             _mockJwtService.Object,
             _mockSubjectService.Object,
             _mockGrantService.Object,
+            _mockRevocationCache.Object,
             _mockLogger.Object
         );
     }
@@ -577,6 +582,65 @@ public class OAuthTokenServiceTests : IDisposable
         _mockGrantService.Verify(g => g.RevokeGrantAsync(
             It.IsAny<Guid>(),
             It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ---------------------------------------------------------------
+    // RevokeTokenAsync tests
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public async Task RevokeTokenAsync_AccessToken_BlocklistsTheJti()
+    {
+        // RFC 7009 allows revoking an access token. It is a stateless JWT, so the only way to stop
+        // it before expiry is the jti blocklist.
+        const string accessToken = "header.payload.signature";
+        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(12);
+
+        _mockJwtService.Setup(j => j.HashRefreshToken(accessToken))
+            .Returns("no-such-refresh-token-hash");
+        _mockJwtService.Setup(j => j.ValidateAccessToken(accessToken))
+            .Returns(JwtValidationResult.Success(new JwtClaims
+            {
+                SubjectId = _testSubjectId,
+                JwtId = "jti-to-revoke",
+                IssuedAt = DateTimeOffset.UtcNow,
+                ExpiresAt = expiresAt,
+            }));
+
+        using var db = CreateDbContext();
+        var service = CreateService(db);
+
+        await service.RevokeTokenAsync(accessToken, "access_token");
+
+        _mockRevocationCache.Verify(c => c.RevokeAsync(
+            "jti-to-revoke",
+            It.Is<TimeSpan>(t => t > TimeSpan.Zero),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RevokeTokenAsync_RefreshTokenWithAccessTokenHint_StillRevokesIt()
+    {
+        // The hint is advisory per RFC 7009 Section 2.1: a wrong hint must not make revocation a
+        // no-op.
+        const string refreshToken = "opaque-refresh-token";
+        const string refreshTokenHash = "opaque-refresh-token-hash";
+
+        _mockJwtService.Setup(j => j.HashRefreshToken(refreshToken))
+            .Returns(refreshTokenHash);
+
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        var grantId = await SeedGrantAsync(db);
+        await SeedRefreshTokenAsync(db, refreshTokenHash, grantId: grantId);
+
+        var service = CreateService(db);
+
+        await service.RevokeTokenAsync(refreshToken, "access_token");
+
+        var stored = await db.OAuthRefreshTokens.FirstAsync(t => t.TokenHash == refreshTokenHash);
+        Assert.NotNull(stored.RevokedAt);
     }
 
     [Fact]

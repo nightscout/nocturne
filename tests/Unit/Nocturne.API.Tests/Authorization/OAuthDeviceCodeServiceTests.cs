@@ -512,7 +512,9 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
                 It.IsAny<string?>(),
                 It.IsAny<bool>(),
                 It.IsAny<Guid?>(),
-                It.IsAny<TimeSpan?>()))
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<bool>(),
+                It.IsAny<Guid?>()))
             .Returns(TestAccessToken);
         _mockJwtService.Setup(j => j.GetAccessTokenLifetime())
             .Returns(TimeSpan.FromHours(1));
@@ -535,6 +537,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
             _mockJwtService.Object,
             _mockSubjectService.Object,
             _mockGrantService.Object,
+            Mock.Of<IOAuthTokenRevocationCache>(),
             _mockLogger.Object
         );
     }

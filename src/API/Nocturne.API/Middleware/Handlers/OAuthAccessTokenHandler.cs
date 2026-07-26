@@ -113,6 +113,28 @@ public class OAuthAccessTokenHandler : IAuthHandler
             }
         }
 
+        // Reject tokens whose grant has been revoked. Access tokens are stateless, so a
+        // "Disconnect" on a connected app can only reach them through the grant id they carry.
+        if (claims.GrantId.HasValue)
+        {
+            if (!claims.TenantId.HasValue)
+            {
+                // Grant-bound tokens are always minted with their grant's tenant pin; one without
+                // a pin cannot have its grant checked, so it is not accepted.
+                _logger.LogWarning(
+                    "OAuth access token carries grant {GrantId} without a tenant pin", claims.GrantId);
+                return AuthResult.Failure("Token has been revoked");
+            }
+
+            var grantService = scope.ServiceProvider.GetRequiredService<IOAuthGrantService>();
+            if (await grantService.IsGrantRevokedAsync(claims.GrantId.Value, claims.TenantId.Value))
+            {
+                _logger.LogDebug(
+                    "OAuth access token's grant has been revoked (grant: {GrantId})", claims.GrantId);
+                return AuthResult.Failure("Token has been revoked");
+            }
+        }
+
         // Check revocation cache
         if (!string.IsNullOrEmpty(claims.JwtId))
         {
