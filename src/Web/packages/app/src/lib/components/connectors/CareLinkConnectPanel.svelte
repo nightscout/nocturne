@@ -20,6 +20,7 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { Label } from "$lib/components/ui/label";
   import { CheckCircle2, Copy, Download, ExternalLink, KeyRound, Monitor } from "lucide-svelte";
+  import { copyToClipboard } from "$lib/utils";
 
   // Stable rolling release that always holds the current installers (see desktop-release.yml).
   const DESKTOP_DOWNLOAD_URL =
@@ -133,7 +134,10 @@
 
   async function copyDesktopLinkCode() {
     if (!desktopLinkCode) return;
-    await navigator.clipboard.writeText(desktopLinkCode);
+    if (!(await copyToClipboard(desktopLinkCode))) {
+      error = "Couldn't copy the code to the clipboard. Copy it manually instead.";
+      return;
+    }
     desktopCopied = true;
     setTimeout(() => (desktopCopied = false), 2000);
   }

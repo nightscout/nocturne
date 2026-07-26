@@ -66,20 +66,24 @@ export function trendAngle(deltaPer5: number): number {
   return -clamped * 6;
 }
 
-/** Tailwind text-colour class for a trend direction, scaled by trend severity. */
+/**
+ * Text-colour class for a trend direction, scaled by trend severity.
+ *
+ * Uses the theme's status tokens rather than fixed Tailwind palette colours, so
+ * the arrow matches the chart in every theme instead of only the default one.
+ */
 export function deltaColorClass(direction: string): string {
   switch (direction) {
     case "DoubleUp":
     case "DoubleDown":
-      return "text-red-500";
+      return "text-status-critical";
     case "SingleUp":
     case "SingleDown":
-      return "text-orange-500";
     case "FortyFiveUp":
     case "FortyFiveDown":
-      return "text-yellow-500";
+      return "text-status-warning";
     case "Flat":
-      return "text-green-500";
+      return "text-status-normal";
     default:
       return "text-muted-foreground";
   }

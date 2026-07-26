@@ -7,6 +7,8 @@
   import { Label } from "$lib/components/ui/label";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
+  import { copyToClipboard } from "$lib/utils";
+  import { toast } from "svelte-sonner";
   import {
     Clock,
     Copy,
@@ -176,7 +178,10 @@
   }
 
   async function copyText(text: string, type: "code" | "url") {
-    await navigator.clipboard.writeText(text);
+    if (!(await copyToClipboard(text))) {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+      return;
+    }
     if (type === "code") {
       copiedCode = true;
       setTimeout(() => (copiedCode = false), 2000);

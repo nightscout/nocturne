@@ -153,12 +153,3 @@ export const directions = {
   "NOT COMPUTABLE": { label: "-", description: "Not computable" },
   "RATE OUT OF RANGE": { label: "⇕", description: "Rate out of range" },
 } as const;
-
-export function getDirectionInfo(
-  direction: string
-): (typeof directions)[keyof typeof directions] {
-  if (direction in directions) {
-    return directions[direction as keyof typeof directions];
-  }
-  return directions["NOT COMPUTABLE"];
-}

@@ -61,6 +61,21 @@
       logEntries = [];
     }
   });
+
+  /**
+   * A batch sync can partly succeed, so the outcome comes from the per-connector
+   * counts rather than a single boolean. `success: false` with no connectors
+   * attempted means the request itself failed.
+   */
+  const outcome = $derived.by(() => {
+    if (!manualSyncResult) return null;
+    const { totalConnectors, successfulConnectors, success } = manualSyncResult;
+    if (!success && totalConnectors === 0) return "request-failed";
+    if (totalConnectors === 0) return "nothing-to-sync";
+    if (successfulConnectors === 0) return "all-failed";
+    if (successfulConnectors < totalConnectors) return "partial";
+    return "all-succeeded";
+  });
 </script>
 
 <Dialog.Root bind:open>
@@ -100,19 +115,42 @@
           {/if}
         </div>
       {:else if manualSyncResult}
-        {#if manualSyncResult.success}
+        {@const elapsedSeconds = Math.round(
+          (new Date(manualSyncResult.endTime!).getTime() -
+            new Date(manualSyncResult.startTime!).getTime()) /
+            1000
+        )}
+        {@const counts = `${manualSyncResult.successfulConnectors} of ${manualSyncResult.totalConnectors} connectors synced in ${elapsedSeconds}s`}
+        {#if outcome === "all-succeeded"}
           <div class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4">
             <div class="flex items-center gap-2 text-green-800 dark:text-green-200">
               <CheckCircle class="h-5 w-5" />
-              <span class="font-medium">Sync completed successfully</span>
+              <span class="font-medium">Sync completed</span>
             </div>
             <p class="text-sm text-green-700 dark:text-green-300 mt-1">
-              {manualSyncResult.successfulConnectors} of {manualSyncResult.totalConnectors}
-              connectors synced in {Math.round(
-                (new Date(manualSyncResult.endTime!).getTime() -
-                  new Date(manualSyncResult.startTime!).getTime()) /
-                  1000
-              )}s
+              {counts}
+            </p>
+          </div>
+        {:else if outcome === "partial"}
+          <div class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4">
+            <div class="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+              <AlertCircle class="h-5 w-5" />
+              <span class="font-medium">
+                Sync finished with {manualSyncResult.failedConnectors} failed
+              </span>
+            </div>
+            <p class="text-sm text-amber-700 dark:text-amber-300 mt-1">
+              {counts}
+            </p>
+          </div>
+        {:else if outcome === "nothing-to-sync"}
+          <div class="rounded-lg border bg-muted/30 p-4">
+            <div class="flex items-center gap-2">
+              <AlertCircle class="h-5 w-5 text-muted-foreground" />
+              <span class="font-medium">Nothing to sync</span>
+            </div>
+            <p class="text-muted-foreground text-sm mt-1">
+              No enabled connectors were found.
             </p>
           </div>
         {:else}
@@ -122,7 +160,8 @@
               <span class="font-medium">Sync failed</span>
             </div>
             <p class="text-sm text-red-700 dark:text-red-300 mt-1">
-              {manualSyncResult.errorMessage}
+              {manualSyncResult.errorMessage ??
+                (outcome === "all-failed" ? counts : "The sync could not be started.")}
             </p>
           </div>
         {/if}

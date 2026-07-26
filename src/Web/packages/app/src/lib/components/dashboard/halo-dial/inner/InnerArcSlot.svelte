@@ -1,8 +1,7 @@
 <script lang="ts">
 	// Fallback to <path> due to no polar Chart context yet — revisit when HaloDial is wired in Task 4.8.
-	import { Tween } from "svelte/motion";
+	import { Tween, prefersReducedMotion } from "svelte/motion";
 	import { cubicOut } from "svelte/easing";
-	import { browser } from "$app/environment";
 	import { polar } from "../geometry";
 	import { HaloDialArcElement } from "../config";
 
@@ -22,10 +21,6 @@
 	const TRACK_OPACITY = 0.15;
 	const START_ANGLE = 180; // 6 o'clock
 
-	// Captured at mount; preference changes mid-session won't update the tween duration.
-	const reducedMotion =
-		browser &&
-		window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 	function colorFor(el: HaloDialArcElement): string {
 		switch (el) {
@@ -60,7 +55,8 @@
 	});
 
 	const tweenedSweep = Tween.of(() => targetSweep, {
-		duration: reducedMotion ? 0 : 600,
+		// Reactive, so toggling the OS setting takes effect without a reload.
+		duration: prefersReducedMotion.current ? 0 : 600,
 		easing: cubicOut,
 	});
 

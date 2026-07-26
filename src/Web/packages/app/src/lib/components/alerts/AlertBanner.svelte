@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
   import {
     getActiveAlerts,
     acknowledgeExcursion,
@@ -15,7 +14,6 @@
 
   let dismissedIds = $state<Set<string>>(new Set());
   let acknowledgingId = $state<string | null>(null);
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
 
   const visibleAlerts = $derived(
     (activeAlerts.current ?? []).filter(
@@ -64,17 +62,6 @@
     dismissedIds = new Set([...dismissedIds, id]);
   }
 
-  onMount(() => {
-    // The reactive query self-loads on first read; keep the surface fresh with
-    // a periodic refresh (aligned with FiringToast's polling cadence).
-    pollInterval = setInterval(() => activeAlerts.refresh(), 30000);
-  });
-
-  onDestroy(() => {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-    }
-  });
 </script>
 
 {#if visibleAlerts.length > 0}

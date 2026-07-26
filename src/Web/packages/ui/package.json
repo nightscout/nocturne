@@ -24,6 +24,7 @@
     "bits-ui": "^2.15.5",
     "layerchart": "2.0.1",
     "clsx": "^2.1.1",
+    "mode-watcher": "^1.1.0",
     "paneforge": "^1.0.2",
     "svelte": "^5.50.0",
     "svelte-check-native": "^0.2.0",

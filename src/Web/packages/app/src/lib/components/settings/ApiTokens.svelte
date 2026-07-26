@@ -24,6 +24,7 @@
     revoke as revokeGrant,
   } from "$lib/api/generated/directGrants.generated.remote";
   import type { DirectGrantDto } from "$api";
+  import { copyToClipboard } from "$lib/utils";
 
   // ============================================================================
   // Props
@@ -124,7 +125,10 @@
 
   async function copyToken() {
     if (createdToken) {
-      await navigator.clipboard.writeText(createdToken);
+      if (!(await copyToClipboard(createdToken))) {
+        errorMessage = "Couldn't copy the token to the clipboard. Copy it manually instead.";
+        return;
+      }
       copiedToken = true;
       setTimeout(() => (copiedToken = false), 2000);
     }

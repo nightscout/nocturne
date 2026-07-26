@@ -10,10 +10,26 @@
     onReview,
   }: {
     suggestion: SuggestedMealMatch;
-    onAccept: (suggestion: SuggestedMealMatch) => void;
-    onDismiss: (suggestion: SuggestedMealMatch) => void;
+    onAccept: (suggestion: SuggestedMealMatch) => Promise<void> | void;
+    onDismiss: (suggestion: SuggestedMealMatch) => Promise<void> | void;
     onReview: (suggestion: SuggestedMealMatch) => void;
   } = $props();
+
+  // Accepting or dismissing removes the row, but only once the refreshed
+  // suggestions come back. Until then a second click would send the command
+  // again, attributing the same food entry twice.
+  let pending = $state<"accept" | "dismiss" | null>(null);
+
+  async function run(action: "accept" | "dismiss", e: MouseEvent) {
+    e.stopPropagation();
+    if (pending) return;
+    pending = action;
+    try {
+      await (action === "accept" ? onAccept(suggestion) : onDismiss(suggestion));
+    } finally {
+      pending = null;
+    }
+  }
 </script>
 
 <div class="flex items-center justify-between gap-4">
@@ -34,17 +50,16 @@
       type="button"
       variant="ghost"
       size="sm"
-      onclick={(e: MouseEvent) => {
-        e.stopPropagation();
-        onDismiss(suggestion);
-      }}
+      disabled={pending !== null}
+      onclick={(e: MouseEvent) => run("dismiss", e)}
     >
-      Dismiss
+      {pending === "dismiss" ? "Dismissing…" : "Dismiss"}
     </Button>
     <Button
       type="button"
       variant="outline"
       size="sm"
+      disabled={pending !== null}
       onclick={(e: MouseEvent) => {
         e.stopPropagation();
         onReview(suggestion);
@@ -55,12 +70,10 @@
     <Button
       type="button"
       size="sm"
-      onclick={(e: MouseEvent) => {
-        e.stopPropagation();
-        onAccept(suggestion);
-      }}
+      disabled={pending !== null}
+      onclick={(e: MouseEvent) => run("accept", e)}
     >
-      Accept
+      {pending === "accept" ? "Accepting…" : "Accept"}
     </Button>
   </div>
 </div>

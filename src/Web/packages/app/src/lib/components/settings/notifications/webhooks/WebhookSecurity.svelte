@@ -2,6 +2,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Label } from "$lib/components/ui/label";
   import { Copy, Check } from "lucide-svelte";
+  import { copyToClipboard } from "$lib/utils";
+  import { toast } from "svelte-sonner";
 
   interface Props {
     secret: string;
@@ -19,7 +21,10 @@
 
   async function copySecret() {
     if (!secret) return;
-    await navigator.clipboard.writeText(secret);
+    if (!(await copyToClipboard(secret))) {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+      return;
+    }
     copied = true;
     setTimeout(() => {
       copied = false;

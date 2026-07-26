@@ -21,6 +21,8 @@
   import MealsTable from "$lib/components/meals/MealsTable.svelte";
   import MealBolusDialog from "$lib/components/meals/MealBolusDialog.svelte";
   import { coachmark } from "@nocturne/coach";
+  import { localDayStart, localDayEnd } from "$lib/utils/timezone";
+  import { Now } from "$lib/hooks/now.svelte";
 
   let dateRange = $state<{ from?: string; to?: string }>({});
   let filterMode = $state<"all" | "unattributed">("all");
@@ -61,23 +63,21 @@
   let isUnlinking = $state(false);
 
   const queryParams = $derived({
-    from: dateRange.from
-      ? new Date(dateRange.from + "T00:00:00").getTime()
-      : undefined,
-    to: dateRange.to
-      ? new Date(dateRange.to + "T00:00:00").getTime() + 86_400_000
-      : undefined,
+    from: dateRange.from ? localDayStart(dateRange.from).getTime() : undefined,
+    to: dateRange.to ? localDayEnd(dateRange.to).getTime() : undefined,
     attributed: filterMode === "unattributed" ? false : undefined,
   });
 
   const mealsQuery = $derived(getMeals(queryParams));
   const meals = $derived<MealEvent[]>(mealsQuery.current ?? []);
 
-  // Query for suggested meal matches using the endpoint
-  const today = new Date().toISOString().split("T")[0];
+  // Query for suggested meal matches using the endpoint. `now` keeps the
+  // unfiltered default on today's date for a page left open past midnight, and
+  // uses the viewer's local date rather than UTC.
+  const now = new Now();
   const suggestionsQueryParams = $derived({
-    from: dateRange.from ?? today,
-    to: dateRange.to ?? today,
+    from: dateRange.from ?? now.localDate,
+    to: dateRange.to ?? now.localDate,
   });
   const suggestionsQuery = $derived(
     getMealMatchingSuggestions(suggestionsQueryParams)
@@ -353,8 +353,9 @@
         timeOffsetMinutes: 0,
       });
       toast.success("Meal match accepted");
-      mealsQuery.refresh();
-      suggestionsQuery.refresh();
+      // Awaited so the row's pending state covers the refresh too, not just the
+      // command; otherwise the row is clickable again before it disappears.
+      await Promise.all([mealsQuery.refresh(), suggestionsQuery.refresh()]);
     } catch (err) {
       console.error("Failed to accept match:", err);
       toast.error("Failed to accept match");
@@ -365,7 +366,7 @@
     try {
       await dismissMatch({ foodEntryId: match.foodEntryId! });
       toast.success("Match dismissed");
-      suggestionsQuery.refresh();
+      await suggestionsQuery.refresh();
     } catch (err) {
       console.error("Failed to dismiss match:", err);
       toast.error("Failed to dismiss match");

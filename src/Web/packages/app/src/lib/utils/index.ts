@@ -16,59 +16,6 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SvelteComponent = any;
 
-/** Time utility functions */
-export const times = {
-  mins: (mins: number) => ({ msecs: mins * 60 * 1000 }),
-  hours: (hours: number) => ({ msecs: hours * 60 * 60 * 1000 }),
-  days: (days: number) => ({ msecs: days * 24 * 60 * 60 * 1000 }),
-};
-
-/** Unit conversion utilities */
-export const units = {
-  mgdlToMMOL: (mgdl: number): number => {
-    return Math.round((mgdl / 18.01559) * 10) / 10;
-  },
-  mmolToMGDL: (mmol: number): number => {
-    return Math.round(mmol * 18.01559);
-  },
-};
-
-/** Format time based on user settings */
-export function formatTime(
-  date: Date | number,
-  timeFormat: number = 12,
-  compact: boolean = false
-): string {
-  const options: Intl.DateTimeFormatOptions = {
-    hour: "numeric",
-    minute: "2-digit",
-  };
-  date = typeof date === "number" ? new Date(date) : date;
-
-  if (timeFormat === 24) {
-    options.hour12 = false;
-    return date.toLocaleTimeString(undefined, options);
-  }
-
-  if (compact) {
-    options.minute = "numeric";
-  }
-
-  return date.toLocaleTimeString(undefined, options).toLowerCase();
-}
-
-/** Calculate BG trend direction based on raw delta value */
-export function calculateDirection(delta: number): string {
-  if (delta > 8) return "DoubleUp";
-  if (delta > 5) return "SingleUp";
-  if (delta > 2) return "FortyFiveUp";
-  if (delta < -8) return "DoubleDown";
-  if (delta < -5) return "SingleDown";
-  if (delta < -2) return "FortyFiveDown";
-  return "Flat";
-}
-
-
 /** Get BG trend direction information */
 export function getDirectionInfo(direction?: Direction | string) {
   const directions: Partial<Record<
@@ -122,16 +69,6 @@ export function getDirectionInfo(direction?: Direction | string) {
   return directions[dirValue || Direction.Flat] || directions[Direction.Flat]!;
 }
 
-/** Check if data is stale based on timestamp */
-export function isDataStale(
-  timestamp: number,
-  thresholdMinutes: number = 15
-): boolean {
-  const now = Date.now();
-  const diffMinutes = (now - timestamp) / (60 * 1000);
-  return diffMinutes > thresholdMinutes;
-}
-
 /** Enhanced relative time formatting with internationalization support */
 const getRelativeTimeFormatter = (() => {
   let formatter: Intl.RelativeTimeFormat | null = null;
@@ -149,8 +86,17 @@ const getRelativeTimeFormatter = (() => {
   };
 })();
 
-/** Generate human-readable time ago string with enhanced internationalization */
-export function timeAgo(timestamp: number | string, locale?: string): string {
+/**
+ * Generate human-readable time ago string with enhanced internationalization
+ *
+ * @param nowMs Reference time. Pass a ticking value (see `Now`) where the
+ *   result is rendered, or the text freezes at the age it had on first render.
+ */
+export function timeAgo(
+  timestamp: number | string,
+  locale?: string,
+  nowMs?: number
+): string {
   // Validate input timestamp
   const timestampNum =
     typeof timestamp === "string" ? parseInt(timestamp) : timestamp;
@@ -160,7 +106,10 @@ export function timeAgo(timestamp: number | string, locale?: string): string {
 
   // Convert to DateValue using @internationalized/date for better timezone handling
   const inputDate = fromDate(new Date(timestampNum), getLocalTimeZone());
-  const currentDate = now(getLocalTimeZone());
+  const currentDate =
+    nowMs === undefined
+      ? now(getLocalTimeZone())
+      : fromDate(new Date(nowMs), getLocalTimeZone());
 
   // Calculate difference in milliseconds
   const diffMs = currentDate.toDate().getTime() - inputDate.toDate().getTime();
@@ -204,6 +153,7 @@ export function timeAgo(timestamp: number | string, locale?: string): string {
 // Re-export UI utilities from shared package
 export {
   cn,
+  copyToClipboard,
   type WithoutChild,
   type WithoutChildren,
   type WithoutChildrenOrChild,
@@ -216,6 +166,36 @@ export interface DateRange {
   start: string;
   /** ISO 8601 */
   end: string;
+}
+
+/**
+ * Base64-encode a string of any content.
+ *
+ * `btoa` throws on code points above U+00FF, so it cannot carry text the user
+ * typed — an accented or non-Latin name is enough to break it.
+ */
+export function encodeBase64Utf8(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+/**
+ * Decode a string produced by {@link encodeBase64Utf8}.
+ *
+ * Payloads written by plain `btoa` still decode: ASCII is identical in UTF-8,
+ * and a Latin-1 payload that isn't valid UTF-8 falls back to the byte-per-char
+ * reading `atob` gives.
+ */
+export function decodeBase64Utf8(encoded: string): string {
+  const binary = atob(encoded);
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return binary;
+  }
 }
 
 /**

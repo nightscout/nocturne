@@ -11,12 +11,13 @@
   import { getDefaultSettings } from "$lib/components/settings/constants";
   import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
-  import { browser } from "$app/environment";
+  import { browser, dev } from "$app/environment";
   import { beforeNavigate } from "$app/navigation";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import AlertBanner from "$lib/components/alerts/AlertBanner.svelte";
   import FiringToast from "$lib/components/alerts/FiringToast.svelte";
+  import { pollActiveAlerts } from "$lib/components/alerts/active-alerts-poll.svelte";
   import DemoBanner from "$lib/components/layout/DemoBanner.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
@@ -66,6 +67,10 @@
     const parts = window.location.hostname.split(".");
     if (parts.length > 2) tenantSlug = parts[0];
   });
+
+  // One poll for the alert surfaces this layout mounts (AlertBanner and
+  // FiringToast both read the same query).
+  pollActiveAlerts();
 
   const coachMarkAdapter = createCoachMarkAdapter();
 
@@ -231,7 +236,7 @@
 
           {#snippet failed(e, reset)}
             {@const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'An unexpected error occurred'}
-            {@const stack = e instanceof Error ? e.stack : undefined}
+            {@const stack = dev && e instanceof Error ? e.stack : undefined}
             <Card.Root class="mx-auto mt-10 max-w-2xl">
               <Card.Header>
                 <Card.Title>Something went wrong</Card.Title>

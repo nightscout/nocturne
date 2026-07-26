@@ -18,9 +18,8 @@
   import GlucoseTrack from "$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte";
   import ThresholdRules from "$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte";
   import { trendAngle } from "$lib/components/dashboard/halo-dial/geometry";
-  import { Tween } from "svelte/motion";
+  import { Tween, prefersReducedMotion } from "svelte/motion";
   import { cubicOut } from "svelte/easing";
-  import { browser } from "$app/environment";
   import ArrowRight from "lucide-svelte/icons/arrow-right";
 
   const realtimeStore = tryGetRealtimeStore();
@@ -87,14 +86,11 @@
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
   const hasData = $derived(!isLoading && rawCurrentBG > 0);
 
-  // Respect reduced motion preference
-  const reducedMotion =
-    browser &&
-    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
   // Smoothly animate the trend arrow rotation
   const arrowAngle = Tween.of(() => trendAngle(bgDelta), {
-    duration: reducedMotion ? 0 : 600,
+    // Reactive, so toggling the OS setting takes effect without a reload.
+    duration: prefersReducedMotion.current ? 0 : 600,
     easing: cubicOut,
   });
 </script>

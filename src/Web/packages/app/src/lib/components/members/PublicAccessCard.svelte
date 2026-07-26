@@ -3,6 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Switch } from "$lib/components/ui/switch";
+  import { copyToClipboard } from "$lib/utils";
   import {
     Globe,
     Lock,
@@ -124,7 +125,10 @@
 
   async function copyLink() {
     if (!share?.url) return;
-    await navigator.clipboard.writeText(share.url);
+    if (!(await copyToClipboard(share.url))) {
+      errorMessage = "Couldn't copy the link to the clipboard. Copy it manually instead.";
+      return;
+    }
     copied = true;
     setTimeout(() => (copied = false), 2000);
   }

@@ -23,6 +23,8 @@
   } from "lucide-svelte";
   import { submitIssue, getFallbackUrl } from "$lib/api/support.remote";
   import type { CreateIssueResponse } from "$api-clients";
+  import { copyToClipboard } from "$lib/utils";
+  import { toast } from "svelte-sonner";
 
   interface Props {
     open: boolean;
@@ -285,15 +287,14 @@
   }
 
   async function copyPreview() {
-    try {
-      await navigator.clipboard.writeText(generatePreviewMarkdown());
-      previewCopied = true;
-      setTimeout(() => {
-        previewCopied = false;
-      }, 2000);
-    } catch {
-      // Clipboard API may not be available
+    if (!(await copyToClipboard(generatePreviewMarkdown()))) {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+      return;
     }
+    previewCopied = true;
+    setTimeout(() => {
+      previewCopied = false;
+    }, 2000);
   }
 
   async function openFallback() {

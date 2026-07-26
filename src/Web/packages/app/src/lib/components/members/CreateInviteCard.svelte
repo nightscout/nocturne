@@ -16,6 +16,7 @@
   import { coachmark } from "@nocturne/coach";
   import { createInvite } from "$api/generated/tenants.generated.remote";
   import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
+  import { copyToClipboard } from "$lib/utils";
 
   interface Props {
     roles: TenantRoleDto[];
@@ -52,7 +53,10 @@
 
   async function copyInviteUrl() {
     if (createdInviteUrl) {
-      await navigator.clipboard.writeText(createdInviteUrl);
+      if (!(await copyToClipboard(createdInviteUrl))) {
+        errorMessage = "Couldn't copy the link to the clipboard. Copy it manually instead.";
+        return;
+      }
       copiedInvite = true;
       setTimeout(() => (copiedInvite = false), 2000);
     }

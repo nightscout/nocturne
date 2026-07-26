@@ -22,6 +22,7 @@
   } from "$lib/api/generated/audits.generated.remote";
   import AuditMutationsTable from "$lib/components/audit/AuditMutationsTable.svelte";
   import AuditReadsTable from "$lib/components/audit/AuditReadsTable.svelte";
+  import { localDayStart, localDayEnd } from "$lib/utils/timezone";
 
   // Permissions
   const effectivePermissions: string[] = $derived(
@@ -83,6 +84,13 @@
   // --- Tab state ---
   let activeTab = $state("mutations");
 
+  /**
+   * The log is fetched a page at a time while the tab badge shows the server's
+   * total, so without this the table quietly ends at the page limit and looks
+   * like the whole range.
+   */
+  const ROW_LIMIT = 500;
+
   // --- Mutation log server-side filters ---
   const defaultFrom = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   const defaultTo = new Date().toISOString().split("T")[0];
@@ -93,9 +101,9 @@
 
   const mutationsQuery = $derived(
     getMutationAuditLog({
-      from: new Date(mFrom),
-      to: new Date(mTo + "T23:59:59"),
-      limit: 500,
+      from: localDayStart(mFrom),
+      to: localDayEnd(mTo),
+      limit: ROW_LIMIT,
       offset: 0,
       sort: "created_at_desc",
     }),
@@ -111,9 +119,9 @@
 
   const readsQuery = $derived(
     getReadAccessAuditLog({
-      from: new Date(rFrom),
-      to: new Date(rTo + "T23:59:59"),
-      limit: 500,
+      from: localDayStart(rFrom),
+      to: localDayEnd(rTo),
+      limit: ROW_LIMIT,
       offset: 0,
       sort: "created_at_desc",
     }),
@@ -279,12 +287,20 @@
             bind:globalFilter={mGlobalFilter}
           />
         </Card.Content>
+        {#if mutationsTotal > mutations.length}
+          <Card.Footer class="border-t pt-4 text-sm text-muted-foreground">
+            Showing the {mutations.length} most recent of {mutationsTotal} entries in
+            this range. Narrow the dates to see the rest.
+          </Card.Footer>
+        {/if}
       </Card.Root>
     </Tabs.Content>
 
     <!-- === Read Access Log Tab === -->
     <Tabs.Content value="reads" class="space-y-4">
-      {#if !config?.readAuditEnabled && !readAuditEnabled}
+      <!-- Gated on the saved config, not the switch: flipping the switch without
+           saving would otherwise reveal an empty table the server isn't filling. -->
+      {#if !config?.readAuditEnabled}
         <!-- Empty state: read audit not enabled -->
         <Card.Root>
           <Card.Content class="flex flex-col items-center justify-center py-12 text-center">
@@ -358,6 +374,12 @@
               bind:globalFilter={rGlobalFilter}
             />
           </Card.Content>
+          {#if readsTotal > reads.length}
+            <Card.Footer class="border-t pt-4 text-sm text-muted-foreground">
+              Showing the {reads.length} most recent of {readsTotal} entries in this
+              range. Narrow the dates to see the rest.
+            </Card.Footer>
+          {/if}
         </Card.Root>
       {/if}
     </Tabs.Content>

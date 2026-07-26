@@ -16,6 +16,8 @@
   import PreludeQuickConnect from "$lib/components/PreludeQuickConnect.svelte";
   import type { UploaderApp } from "$lib/api/generated/nocturne-api-client";
   import { KeyRound } from "lucide-svelte";
+  import { copyToClipboard } from "$lib/utils";
+  import { toast } from "svelte-sonner";
   import {
     getUploaderName,
     getUploaderDescription,
@@ -42,8 +44,11 @@
     onRequestApiKey?.(getUploaderName(selectedUploader), ["health.readwrite"]);
   }
 
-  async function copyToClipboard(text: string, field: string) {
-    await navigator.clipboard.writeText(text);
+  async function copyField(text: string, field: string) {
+    if (!(await copyToClipboard(text))) {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+      return;
+    }
     copiedField = field;
     setTimeout(() => {
       copiedField = null;
@@ -108,7 +113,7 @@
                 size="icon"
                 onclick={() =>
                   typeof window !== "undefined" &&
-                  copyToClipboard(window.location.origin, "dialogUrl")}
+                  copyField(window.location.origin, "dialogUrl")}
               >
                 {#if copiedField === "dialogUrl"}
                   <Check class="h-4 w-4 text-green-500" />
@@ -138,12 +143,16 @@
 
         {#if selectedUploader.url}
           <div class="pt-4">
-            <Button variant="outline" class="w-full gap-2">
-              <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external uploader website URL from the API, not an internal app route -->
-              <a href={selectedUploader.url} target="_blank" rel="noopener" class="flex items-center gap-2">
-                <ExternalLink class="h-4 w-4" />
-                Visit {getUploaderName(selectedUploader)} Website
-              </a>
+            <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external uploader website URL from the API, not an internal app route -->
+            <Button
+              variant="outline"
+              class="w-full gap-2"
+              href={selectedUploader.url}
+              target="_blank"
+              rel="noopener"
+            >
+              <ExternalLink class="h-4 w-4" />
+              Visit {getUploaderName(selectedUploader)} Website
             </Button>
           </div>
         {/if}

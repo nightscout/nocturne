@@ -30,6 +30,9 @@
   import { Separator } from "$lib/components/ui/separator";
   import QRCode from "qrcode";
 
+  import { copyToClipboard } from "$lib/utils";
+
+  import { toast } from "svelte-sonner";
   interface Props {
     app: UploaderApp | null;
     setupResponse: UploaderSetupResponse | null;
@@ -85,8 +88,11 @@
     }
   }
 
-  async function copyToClipboard(text: string, field: string) {
-    await navigator.clipboard.writeText(text);
+  async function copyField(text: string, field: string) {
+    if (!(await copyToClipboard(text))) {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+      return;
+    }
     copiedField = field;
     setTimeout(() => {
       copiedField = null;
@@ -481,7 +487,7 @@
               <Button
                 variant="outline"
                 size="icon"
-                onclick={() => setupResponse?.baseUrl && copyToClipboard(setupResponse.baseUrl, 'url')}
+                onclick={() => setupResponse?.baseUrl && copyField(setupResponse.baseUrl, 'url')}
               >
                 {#if copiedField === 'url'}
                   <Check class="h-4 w-4 text-green-500" />
@@ -508,7 +514,7 @@
                 <Button
                   variant="outline"
                   size="icon"
-                  onclick={() => apiToken && copyToClipboard(apiToken, 'token')}
+                  onclick={() => apiToken && copyField(apiToken, 'token')}
                 >
                   {#if copiedField === 'token'}
                     <Check class="h-4 w-4 text-green-500" />

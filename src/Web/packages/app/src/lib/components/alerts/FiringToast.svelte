@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
   import {
     getActiveAlerts,
     snoozeInstance,
@@ -11,11 +10,12 @@
   import { Bell, BellOff, X } from "lucide-svelte";
   import { severity } from "./severity";
   import { formatTimeSince } from "./alertTime";
+  import { Now } from "$lib/hooks/now.svelte";
 
   /**
-   * App-wide fresh-fire toast. Polls the active-alerts surface; whenever a new
-   * alert id appears (i.e. one we haven't shown before this session), surface a
-   * top-center toast with Snooze / Dismiss / Mute-rule actions.
+   * App-wide fresh-fire toast. Reads the shared active-alerts surface; whenever
+   * a new alert id appears (i.e. one we haven't shown before this session),
+   * surface a top-center toast with Snooze / Dismiss / Mute-rule actions.
    *
    * The component intentionally does _not_ show every active alert — that's the
    * persistent banner's job (currently <see cref="AlertBanner"/>). This is for
@@ -27,52 +27,38 @@
    * reflects it in the same round-trip.
    */
 
-  // Polling cadence — kept aligned with AlertBanner so we don't double-poll.
-  const POLL_MS = 10_000;
-
   // Toasts are appended whenever a new alert id appears; users dismiss them
   // explicitly. We don't auto-dismiss so the trust gesture is intentional.
   let queue = $state<ActiveExcursionResponse[]>([]);
-  // Tracks which ids we've already shown so a re-poll doesn't spawn dupes.
-  let seen = $state<Set<string>>(new Set());
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  // Which ids we've already shown, so a refresh doesn't spawn duplicates. Kept
+  // off $state: the effect below both reads and writes it, and nothing renders
+  // from it.
+  const seen = new Set<string>();
   // Reactive clock so each card's relative time ages while it sits on screen.
-  // Toasts never auto-dismiss and existing queue items aren't replaced on poll,
-  // so without this the label would freeze at first render.
-  let now = $state(Date.now());
+  // Toasts never auto-dismiss and existing queue items aren't replaced on
+  // refresh, so without this the label would freeze at first render.
+  const clock = new Now();
+  const now = $derived(clock.current);
 
-  async function poll(): Promise<void> {
-    now = Date.now();
-    try {
-      const result = await getActiveAlerts().run();
-      const list = Array.isArray(result) ? result : [];
-      const fresh: ActiveExcursionResponse[] = [];
-      for (const a of list) {
-        const id = a.id ?? "";
-        if (!id || seen.has(id) || a.acknowledgedAt) continue;
-        seen.add(id);
-        fresh.push(a);
-      }
-      if (fresh.length > 0) queue = [...fresh, ...queue];
-      // Remove toasts that were acknowledged elsewhere (other tab, banner, etc.)
-      const ackedIds = new Set(
-        list.filter((a) => a.acknowledgedAt).map((a) => a.id)
-      );
-      if (ackedIds.size > 0) queue = queue.filter((a) => !ackedIds.has(a.id));
-    } catch {
-      // Silent: polling shouldn't surface transient errors.
+  const activeAlerts = getActiveAlerts();
+
+  // The layout drives one shared poll of this query; react to whatever it
+  // returns rather than running a second timer at a different cadence.
+  $effect(() => {
+    const list = activeAlerts.current ?? [];
+    const fresh: ActiveExcursionResponse[] = [];
+    for (const a of list) {
+      const id = a.id ?? "";
+      if (!id || seen.has(id) || a.acknowledgedAt) continue;
+      seen.add(id);
+      fresh.push(a);
     }
-  }
-
-  onMount(() => {
-    // Defer the first poll out of render so the query's `.run()` is valid;
-    // setInterval ticks already run outside render.
-    queueMicrotask(poll);
-    pollTimer = setInterval(poll, POLL_MS);
-  });
-
-  onDestroy(() => {
-    if (pollTimer) clearInterval(pollTimer);
+    if (fresh.length > 0) queue = [...fresh, ...queue];
+    // Remove toasts that were acknowledged elsewhere (other tab, banner, etc.)
+    const ackedIds = new Set(
+      list.filter((a) => a.acknowledgedAt).map((a) => a.id)
+    );
+    if (ackedIds.size > 0) queue = queue.filter((a) => !ackedIds.has(a.id));
   });
 
   function dismiss(id: string): void {
@@ -108,7 +94,7 @@
         excursionId: id,
         request: { acknowledgedBy: "web_user" },
       }).updates(
-        getActiveAlerts().withOverride((current) =>
+        activeAlerts.withOverride((current) =>
           (current ?? []).map((a) =>
             a.id === id ? { ...a, acknowledgedAt: new Date() } : a
           )
