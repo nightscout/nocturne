@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -204,6 +205,7 @@ public class MemberInviteController : ControllerBase
     [HttpPost("{token}/accept")]
     [Authorize]
     [InviteTokenAuthorized]
+    [DenyDemoSubject]
     [RemoteCommand]
     [ProducesResponseType(typeof(AcceptMemberInviteResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

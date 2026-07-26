@@ -200,6 +200,57 @@ public class DemoTenantServiceResetTests : IDisposable
     }
 
     [Fact]
+    public async Task ConfigureAccessAsync_MarksTheDemoMemberAsADemoSubject()
+    {
+        var tenantId = SeedDemoTenant();
+
+        var subjectId = (await _service.FindDemoMemberSubjectIdAsync(tenantId))!.Value;
+
+        await using var db = new NocturneDbContext(_dbOptions);
+        var subject = await db.Subjects.SingleAsync(s => s.Id == subjectId);
+        subject.IsDemoSubject.Should().BeTrue(
+            "anyone can obtain a session for it, so endpoints that assume a real user must refuse it");
+    }
+
+    [Fact]
+    public async Task ResetAsync_RemovesMembershipsTheDemoSubjectAcquiredElsewhere()
+    {
+        // A visitor could accept a leaked invite to a real tenant. Publicly-obtainable
+        // credentials must not survive the reset against that tenant.
+        var tenantId = SeedDemoTenant();
+        var subjectId = (await _service.FindDemoMemberSubjectIdAsync(tenantId))!.Value;
+
+        var otherTenantId = Guid.CreateVersion7();
+        using (var db = new NocturneDbContext(_dbOptions))
+        {
+            db.Add(new TenantEntity
+            {
+                Id = otherTenantId,
+                Slug = "alice",
+                DisplayName = "Alice",
+                IsActive = true,
+            });
+            db.TenantMembers.Add(new TenantMemberEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = otherTenantId,
+                SubjectId = subjectId,
+            });
+            db.SaveChanges();
+        }
+
+        await _service.ResetAsync();
+
+        await using var check = new NocturneDbContext(_dbOptions);
+        (await check.TenantMembers.AnyAsync(m => m.SubjectId == subjectId))
+            .Should().BeFalse("the retired demo subject must hold no memberships anywhere");
+        (await check.Subjects.AnyAsync(s => s.Id == subjectId))
+            .Should().BeFalse("and the subject itself must be gone");
+        (await check.Tenants.AnyAsync(t => t.Id == otherTenantId))
+            .Should().BeTrue("the unrelated tenant must survive untouched");
+    }
+
+    [Fact]
     public async Task ResetAsync_ReturnsNull_WhenNoDemoTenantExists()
     {
         var result = await _service.ResetAsync();

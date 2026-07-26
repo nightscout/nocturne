@@ -261,12 +261,25 @@ public sealed class DemoTenantService
     }
 
     /// <summary>
-    /// Retires the demo member the reset has just unseated: deletes its refresh tokens,
-    /// so no visitor session outlives the reset and no visitor IP or user-agent is
-    /// retained, then deletes the subject itself once the cascade has left it with no
-    /// memberships. The membership check is a guard, not a formality — the subject row is
-    /// global, and only a demo-owned one is safe to remove.
+    /// Retires the demo member the reset has just unseated: deletes its refresh tokens, so
+    /// no visitor session outlives the reset and no visitor IP or user-agent is retained,
+    /// then deletes the subject itself along with any membership it picked up.
     /// </summary>
+    /// <remarks>
+    /// Only ever called with a subject read from the demo tenant's own membership; the
+    /// <see cref="SubjectEntity.IsDemoSubject"/> check makes that explicit rather than
+    /// implied, because this deletes a global row and must never reach a real account.
+    /// <para>
+    /// A membership outside the demo tenant is deleted rather than treated as a reason to
+    /// keep the subject: an account anyone can obtain a session for has no business holding
+    /// one, and leaving it would keep publicly-obtainable credentials alive against that
+    /// tenant across every reset.
+    /// </para>
+    /// <para>
+    /// <c>subjects</c> and <c>tenant_members</c> are not tenant-scoped, so these queries see
+    /// every tenant — which is what makes the cleanup complete.
+    /// </para>
+    /// </remarks>
     private async Task RetireDemoMemberAsync(Guid? subjectId, CancellationToken ct)
     {
         if (subjectId is null)
@@ -274,13 +287,27 @@ public sealed class DemoTenantService
 
         await using var db = await _factory.CreateDbContextAsync(ct);
 
+        var isDemoSubject = await db.Subjects
+            .AsNoTracking()
+            .Where(s => s.Id == subjectId.Value)
+            .Select(s => s.IsDemoSubject)
+            .FirstOrDefaultAsync(ct);
+
+        if (!isDemoSubject)
+        {
+            _logger.LogWarning(
+                "Subject {SubjectId} held the demo membership but is not a demo subject — leaving it in place",
+                subjectId);
+            return;
+        }
+
         await db.RefreshTokens
             .Where(t => t.SubjectId == subjectId.Value)
             .ExecuteDeleteAsync(ct);
 
-        var stillAMember = await db.TenantMembers.AnyAsync(m => m.SubjectId == subjectId.Value, ct);
-        if (stillAMember)
-            return;
+        await db.TenantMembers
+            .Where(m => m.SubjectId == subjectId.Value)
+            .ExecuteDeleteAsync(ct);
 
         await db.Subjects.Where(s => s.Id == subjectId.Value).ExecuteDeleteAsync(ct);
     }
@@ -329,6 +356,9 @@ public sealed class DemoTenantService
                 Name = DemoMemberName,
                 IsActive = true,
                 ApprovalStatus = "Approved",
+                // Anyone can obtain a session for this account, so it must be refused
+                // wherever "authenticated" is read as "a person who signed up".
+                IsDemoSubject = true,
             };
             db.Subjects.Add(subject);
             await db.SaveChangesAsync(ct);

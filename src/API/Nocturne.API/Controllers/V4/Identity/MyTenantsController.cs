@@ -81,6 +81,7 @@ public class MyTenantsController : ControllerBase
 
     /// <inheritdoc cref="ITenantService.CreateAsync"/>
     [HttpPost]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetMyTenants"])]
     [ProducesResponseType(typeof(TenantCreatedDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

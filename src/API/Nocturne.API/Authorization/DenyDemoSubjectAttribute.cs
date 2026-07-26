@@ -1,0 +1,47 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
+
+namespace Nocturne.API.Authorization;
+
+/// <summary>
+/// Refuses a request authenticated as a demo tenant's shared visitor account.
+/// </summary>
+/// <remarks>
+/// A demo session is handed to any anonymous caller, so the subject behind it is
+/// authenticated but stands for no one. Endpoints that read "authenticated" as "a person
+/// who signed up" — creating a tenant, accepting an invite, requesting membership — would
+/// otherwise let an anonymous visitor act as a platform user, and act as the <em>same</em>
+/// platform user as every other visitor.
+/// <para>
+/// Applied to the tenantless, subject-scoped endpoints, where a tenant's own permission
+/// checks cannot help because there is no tenant in the request to check against.
+/// </para>
+/// </remarks>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
+public sealed class DenyDemoSubjectAttribute : Attribute, IAsyncAuthorizationFilter
+{
+    public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
+    {
+        if (context.HttpContext.Items["AuthContext"] is not AuthContext { SubjectId: { } subjectId })
+            return;
+
+        var factory = context.HttpContext.RequestServices
+            .GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+
+        await using var db = await factory.CreateDbContextAsync(context.HttpContext.RequestAborted);
+
+        var isDemoSubject = await db.Subjects
+            .AsNoTracking()
+            .Where(s => s.Id == subjectId)
+            .Select(s => s.IsDemoSubject)
+            .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
+
+        if (isDemoSubject)
+        {
+            context.Result = new ForbidResult();
+        }
+    }
+}

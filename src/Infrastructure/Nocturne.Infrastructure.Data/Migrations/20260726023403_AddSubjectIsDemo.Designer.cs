@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Nocturne.Infrastructure.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    partial class NocturneDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260726023403_AddSubjectIsDemo")]
+    partial class AddSubjectIsDemo
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1162,10 +1165,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("BackfillLowWaterMarks")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("backfill_low_water_marks");
-
                     b.Property<string>("ConfigurationJson")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -1357,69 +1356,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_connector_food_entries_tenant_source_id");
 
                     b.ToTable("connector_food_entries");
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ConnectorResetJobEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<int>("CompletedConnectors")
-                        .HasColumnType("integer")
-                        .HasColumnName("completed_connectors");
-
-                    b.Property<string>("ConnectorsJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("connectors_json");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("error_message");
-
-                    b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at");
-
-                    b.Property<string>("State")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("state");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<string>("TenantSlug")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("tenant_slug");
-
-                    b.Property<int>("TotalConnectors")
-                        .HasColumnType("integer")
-                        .HasColumnName("total_connectors");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("State")
-                        .HasDatabaseName("ix_connector_reset_jobs_state");
-
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("ix_connector_reset_jobs_tenant");
-
-                    b.ToTable("connector_reset_jobs");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.DataSourceMetadataEntity", b =>
@@ -2304,10 +2240,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
                     b.Property<DateTime?>("DateRangeEnd")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("date_range_end");
@@ -2324,17 +2256,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("error_message");
 
-                    b.Property<string>("Mode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("mode");
-
-                    b.Property<string>("SourceDescription")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("source_description");
-
                     b.Property<Guid>("SourceId")
                         .HasColumnType("uuid")
                         .HasColumnName("source_id");
@@ -2348,10 +2269,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("state");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
 
                     b.Property<int>("TreatmentsMigrated")
                         .HasColumnType("integer")
@@ -2368,9 +2285,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("State")
                         .HasDatabaseName("ix_migration_runs_state");
-
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("ix_migration_runs_tenant");
 
                     b.HasIndex("SourceId", "State")
                         .HasDatabaseName("ix_migration_runs_source_state");
@@ -2428,10 +2342,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("source_identifier");
 
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt")
@@ -2444,9 +2354,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Mode")
                         .HasDatabaseName("ix_migration_sources_mode");
 
-                    b.HasIndex("TenantId", "SourceIdentifier")
+                    b.HasIndex("SourceIdentifier")
                         .IsUnique()
-                        .HasDatabaseName("ix_migration_sources_tenant_identifier");
+                        .HasDatabaseName("ix_migration_sources_identifier");
 
                     b.ToTable("migration_sources");
                 });
@@ -4531,8 +4441,8 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnName("share_last_accessed_at");
 
                     b.Property<string>("ShareToken")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("share_token");
 
                     b.Property<DateTime?>("ShareTokenSetAt")
@@ -4797,10 +4707,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_used_at");
 
-                    b.Property<long?>("LastUsedStep")
-                        .HasColumnType("bigint")
-                        .HasColumnName("last_used_step");
-
                     b.Property<byte[]>("SecretKey")
                         .IsRequired()
                         .HasColumnType("bytea")
@@ -4815,38 +4721,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("SubjectId");
 
                     b.ToTable("totp_credentials");
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TotpStepUpTokenEntity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime?>("ConsumedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("consumed_at");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expires_at");
-
-                    b.Property<Guid>("SubjectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("subject_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ExpiresAt");
-
-                    b.HasIndex("SubjectId");
-
-                    b.ToTable("totp_step_up_tokens");
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TrackerDefinitionEntity", b =>
@@ -8230,15 +8104,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ChatIdentityDirectoryEntry", b =>
-                {
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.ClientDeviceEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.OAuthGrantEntity", null)
@@ -8838,17 +8703,6 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "Subject")
                         .WithMany("TotpCredentials")
-                        .HasForeignKey("SubjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Subject");
-                });
-
-            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.TotpStepUpTokenEntity", b =>
-                {
-                    b.HasOne("Nocturne.Infrastructure.Data.Entities.SubjectEntity", "Subject")
-                        .WithMany()
                         .HasForeignKey("SubjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

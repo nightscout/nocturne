@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
@@ -25,6 +26,7 @@ public class MembershipRequestController(
     /// </summary>
     [HttpPost]
     [Authorize]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetMyRequest"])]
     [ProducesResponseType(typeof(CreateMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

@@ -88,6 +88,18 @@ public class SubjectEntity : IEntityTimestamped
     public bool IsSystemSubject { get; set; }
 
     /// <summary>
+    /// Whether this subject is a demo tenant's shared visitor account.
+    /// </summary>
+    /// <remarks>
+    /// Anyone can obtain a session for it (see <c>DemoSessionController</c>), so it is
+    /// authenticated but stands for no one. Endpoints that treat "authenticated" as
+    /// "a person who signed up" — creating a tenant, accepting an invite, requesting
+    /// membership — must refuse it; see <c>DenyDemoSubjectAttribute</c>.
+    /// </remarks>
+    [Column("is_demo_subject")]
+    public bool IsDemoSubject { get; set; }
+
+    /// <summary>
     /// System tracking: when record was created
     /// </summary>
     [Column("created_at")]

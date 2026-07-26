@@ -1,3 +1,4 @@
+using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -56,6 +57,7 @@ public class PlatformController : ControllerBase
     /// Requires OperatorConfiguration.AllowSelfServiceCreation to be enabled.
     /// </summary>
     [HttpPost("tenants")]
+    [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetTenants"])]
     [ProducesResponseType(typeof(TenantCreatedDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
