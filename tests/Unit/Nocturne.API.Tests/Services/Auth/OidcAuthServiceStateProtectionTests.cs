@@ -68,8 +68,13 @@ public class OidcAuthServiceStateProtectionTests
 
     /// <summary>
     /// Builds the state an attacker can construct unaided: plain base64url JSON, naming any
-    /// subject it likes. This is exactly what the pre-fix <c>EncodeState</c> produced.
+    /// subject and tenant it likes. This is exactly what the pre-fix <c>EncodeState</c> produced.
     /// </summary>
+    /// <remarks>
+    /// The slug is populated so <see cref="TryReadTenantSlug_ForAStateThisInstanceDidNotIssue_ReturnsNull"/>
+    /// has something to find if the protector is ever bypassed. Without it that test passes
+    /// against a plain decoder too, because there is no slug in the payload either way.
+    /// </remarks>
     private static string ForgeState(string intent, Guid subjectId) =>
         Base64Url.Encode(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
@@ -80,6 +85,7 @@ public class OidcAuthServiceStateProtectionTests
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             Intent = intent,
             SubjectId = subjectId,
+            TenantSlug = "forged-tenant",
         })));
 
     [Fact]
