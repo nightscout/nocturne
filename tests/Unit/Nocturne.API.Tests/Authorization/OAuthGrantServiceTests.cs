@@ -296,6 +296,107 @@ public class OAuthGrantServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateGrantAsync_EvictsTheCachedGuestSession()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db,
+            grantType: OAuthGrantTypes.Guest,
+            scopes: [OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead]);
+
+        // The cached session carries the grant's scopes, so narrowing them has to take effect now
+        // rather than at the end of the 30-second TTL. Same structural hole as the DELETE path: this
+        // method filters on the grant id and the owning subject with no GrantType filter, and a guest
+        // grant's SubjectId is the data owner.
+        _guestSessionCache.Set(
+            _testTenantId,
+            grantId,
+            new GuestSessionInfo(
+                grantId,
+                _testTenantId,
+                _ownerSubjectId,
+                [OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead],
+                null,
+                DateTime.UtcNow.AddHours(1)));
+
+        var service = CreateService(db);
+        var result = await service.UpdateGrantAsync(
+            grantId, _ownerSubjectId, scopes: [OAuthScopes.GlucoseRead]);
+
+        result!.Scopes.Should().Equal([OAuthScopes.GlucoseRead]);
+        _guestSessionCache.TryGet(_testTenantId, grantId, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UpdateGrantAsync_RefusesToWidenAGuestGrant()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db,
+            grantType: OAuthGrantTypes.Guest,
+            scopes: [OAuthScopes.GlucoseRead]);
+
+        var service = CreateService(db);
+
+        // A guest link is a read-only share with no account behind it. The data owner it belongs to
+        // reaches it here, so the cap has to hold against the owner too.
+        foreach (var widened in new[] { OAuthScopes.FullAccess, OAuthScopes.GlucoseReadWrite })
+        {
+            var attempt = () => service.UpdateGrantAsync(
+                grantId, _ownerSubjectId, scopes: [widened]);
+
+            await attempt.Should().ThrowAsync<ArgumentException>()
+                .Where(e => e.Message.Contains("not allowed for guest links"));
+        }
+
+        var entity = await db.OAuthGrants.AsNoTracking().FirstAsync(g => g.Id == grantId);
+        entity.Scopes.Should().Equal([OAuthScopes.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task UpdateGrantAsync_RefusesAnUnrecognisedScope()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db, scopes: [OAuthScopes.GlucoseRead]);
+
+        var service = CreateService(db);
+
+        // OAuthController.UpdateGrant catches ArgumentException as invalid_scope; nothing threw it
+        // before, so the API advertised validation it did not perform.
+        var attempt = () => service.UpdateGrantAsync(
+            grantId, _ownerSubjectId, scopes: ["glucose.everything"]);
+
+        await attempt.Should().ThrowAsync<ArgumentException>()
+            .Where(e => e.Message.Contains("not a recognised scope"));
+
+        var entity = await db.OAuthGrants.AsNoTracking().FirstAsync(g => g.Id == grantId);
+        entity.Scopes.Should().Equal([OAuthScopes.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task UpdateGrantAsync_AllowsAWriteScopeOnAnAppGrant()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db,
+            grantType: OAuthGrantTypes.App,
+            scopes: [OAuthScopes.GlucoseRead]);
+
+        var service = CreateService(db);
+        var result = await service.UpdateGrantAsync(
+            grantId, _ownerSubjectId, scopes: [OAuthScopes.FullAccess]);
+
+        // The guest cap is scoped to guest grants: an app grant is still whatever the user consented
+        // to, including full access.
+        result!.Scopes.Should().Equal([OAuthScopes.FullAccess]);
+    }
+
+    [Fact]
     public async Task UpdateGrantAsync_ReturnsNullForWrongOwner()
     {
         using var db = CreateDbContext();

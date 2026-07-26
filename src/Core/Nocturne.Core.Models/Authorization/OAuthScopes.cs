@@ -149,6 +149,19 @@ public static class OAuthScopes
         new HashSet<string>(ValidRequestScopes.Concat(TenantPermissions.All));
 
     /// <summary>
+    /// The scopes a guest grant may hold. A guest link is a short-lived share of one person's data
+    /// with no account behind it, so it is capped at read and cannot be widened past this set by
+    /// anyone — including the data owner whose subject id the grant records.
+    /// </summary>
+    /// <seealso cref="ValidateGrantScopes"/>
+    public static readonly IReadOnlySet<string> AllowedGuestScopes =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            GlucoseRead, TreatmentsRead, DevicesRead, TherapyRead, HeartRateRead, StepCountRead,
+            SleepRead, AlertsRead, ReportsRead, IdentityRead, HealthRead,
+        };
+
+    /// <summary>
     /// Expansion of the health.read convenience alias.
     /// </summary>
     public static readonly IReadOnlyList<string> HealthReadExpansion = new[]
@@ -214,6 +227,43 @@ public static class OAuthScopes
     public static bool TryGetImpliedReadScope(string readWriteScope, out string readScope)
     {
         return ReadWriteImpliesRead.TryGetValue(readWriteScope, out readScope!);
+
+    /// <summary>
+    /// The scope list to store on a grant of <paramref name="grantType"/>: deduplicated, ordered, every
+    /// scope in the vocabulary, and — for a guest grant — within <see cref="AllowedGuestScopes"/>.
+    /// </summary>
+    /// <param name="scopes">The requested scopes.</param>
+    /// <param name="grantType">The grant's type, from the <c>GrantType*</c> constants.</param>
+    /// <returns>The scopes to store.</returns>
+    /// <exception cref="ArgumentException">
+    /// A scope is not a recognised scope, or is wider than the grant type may hold. Callers surface
+    /// this as <c>invalid_scope</c>.
+    /// </exception>
+    /// <remarks>
+    /// Both paths that take a grant's scopes from a caller go through here — creating a guest link and
+    /// updating a grant — so the cap on a guest link holds whichever one the scopes arrive on. The
+    /// authorization-code and device-code flows validate the requested scopes before a grant is
+    /// created and do not reach a guest grant.
+    /// </remarks>
+    public static List<string> ValidateGrantScopes(IEnumerable<string> scopes, string grantType)
+    {
+        var requested = scopes.Distinct().OrderBy(s => s).ToList();
+
+        foreach (var scope in requested)
+        {
+            if (!IsValid(scope))
+            {
+                throw new ArgumentException($"Scope '{scope}' is not a recognised scope.");
+            }
+
+            if (grantType == GrantTypeGuest && !AllowedGuestScopes.Contains(scope))
+            {
+                throw new ArgumentException(
+                    $"Scope '{scope}' is not allowed for guest links. Only read scopes are permitted.");
+            }
+        }
+
+        return requested;
     }
 
     /// <summary>

@@ -280,10 +280,20 @@ public class OAuthGrantService : IOAuthGrantService
 
         if (scopes != null)
         {
-            grant.Scopes = scopes.Distinct().OrderBy(s => s).ToList();
+            // This method filters on the grant id and the owning subject only, with no GrantType
+            // filter, and a guest grant records the DATA OWNER's subject id — so the owner reaches
+            // their own guest link here. ValidateGrantScopes rejects a scope outside the vocabulary
+            // and caps a guest grant at the read scopes a guest link may hold, so a read-only share
+            // cannot be turned into full access by a PATCH.
+            grant.Scopes = OAuthScopes.ValidateGrantScopes(scopes, grant.GrantType);
         }
 
         await _dbContext.SaveChangesAsync(ct);
+
+        // The cached guest session carries the grant's scopes, so narrowing a guest link's scopes
+        // would otherwise leave the wider set live for the rest of the 30-second TTL. Mirrors
+        // RevokeGrantAsync, and for the same reason: this path never enters GuestLinkService.
+        _guestSessionCache.Evict(grant.TenantId, grant.Id);
 
         _logger.LogInformation(
             "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId}",

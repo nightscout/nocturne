@@ -816,6 +816,7 @@ public class OAuthController : ControllerBase
     [HttpPatch("grants/{grantId}")]
     [Consumes("application/json")]
     [ProducesResponseType(typeof(OAuthGrantDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OAuthError), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<OAuthGrantDto>> UpdateGrant(
         Guid grantId,
@@ -863,6 +864,8 @@ public class OAuthController : ControllerBase
         }
         catch (ArgumentException ex)
         {
+            // OAuthScopes.ValidateGrantScopes rejects a scope outside the vocabulary, and a scope
+            // wider than the grant type may hold — a guest link is capped at read.
             return BadRequest(new OAuthError
             {
                 Error = "invalid_scope",
