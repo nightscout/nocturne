@@ -11,9 +11,13 @@ namespace Nocturne.API.Tests.Services.Alerts.Webhooks;
 /// </summary>
 public class WebhookDestinationTests
 {
+    // IP literals only: a hostname would make the assertion depend on the test machine's
+    // DNS, and resolution now fails closed.
     [Theory]
-    [InlineData("https://hooks.example.com/nocturne")]
+    [InlineData("https://93.184.216.34/nocturne")]
     [InlineData("http://93.184.216.34/hook")]
+    [InlineData("https://8.8.8.8:8443/hook")]
+    [InlineData("https://[2606:2800:220:1:248:1893:25c8:1946]/hook")]
     public void IsAllowed_AllowsPubliclyRoutableHttpDestinations(string url) =>
         WebhookDestination.IsAllowed(url).Should().BeTrue();
 
@@ -30,6 +34,15 @@ public class WebhookDestinationTests
     [InlineData("http://[fd00::1]/")]                              // IPv6 unique-local
     public void IsAllowed_RejectsInternalDestinations(string url) =>
         WebhookDestination.IsAllowed(url).Should().BeFalse();
+
+    [Fact]
+    public void IsAllowed_RejectsAnUnresolvableHost()
+    {
+        // Fail closed: a name this process cannot resolve may still be resolvable by the
+        // HTTP stack (container DNS, service discovery), so "nothing to check" must deny.
+        WebhookDestination.IsAllowed("https://nonexistent.invalid/hook").Should().BeFalse();
+        WebhookDestination.IsAllowed("http://_http.nocturne-api/hook").Should().BeFalse();
+    }
 
     [Theory]
     [InlineData("file:///etc/passwd")]

@@ -17,6 +17,13 @@ public class WebhookRequestSender(
     ILogger<WebhookRequestSender> logger)
 {
     /// <summary>
+    /// Name of the HTTP client used for webhook delivery. Configured not to follow
+    /// redirects, so <see cref="WebhookDestination"/>'s verdict on the URL cannot be
+    /// walked past by the target answering 3xx.
+    /// </summary>
+    public const string HttpClientName = "Webhook";
+
+    /// <summary>
     /// Posts <paramref name="payload"/> to each URL in <paramref name="urls"/>.
     /// </summary>
     /// <param name="urls">The destination webhook URLs to POST to.</param>
@@ -38,7 +45,7 @@ public class WebhookRequestSender(
         CancellationToken cancellationToken = default
     )
     {
-        var httpClient = httpClientFactory.CreateClient();
+        var httpClient = httpClientFactory.CreateClient(HttpClientName);
         var failures = new List<string>();
         var urlList = urls.Where(url => !string.IsNullOrWhiteSpace(url)).ToList();
 

@@ -106,17 +106,20 @@ public sealed class ScalarAuthProvider
     {
         try
         {
-            var origin = ParseOrigin(context);
-            if (origin is null)
+            var scheme = ParseScheme(context);
+            if (scheme is null)
                 return;
 
-            var tenant = await ResolveTenantAsync(origin, context.RequestAborted);
-            if (tenant is null)
+            var resolved = await ResolveAsync(context.Request.Host, scheme, context.RequestAborted);
+            if (resolved is null)
                 return;
 
-            // Built from the same validated origin the tenant was resolved from, then
-            // held to the same rules as a redirect URI submitted through registration.
-            var redirectUri = origin.ScalarUri;
+            var (tenant, redirectUri) = resolved.Value;
+
+            // Belt and braces: the URI is assembled from configuration and the tenant's
+            // own slug, so this should never fail. It is the same gate a redirect URI
+            // submitted through client registration passes, and it is what stops a
+            // cleartext http URI being registered for a public host.
             if (!_redirectUriValidator.IsValidForRegistration(redirectUri))
             {
                 _logger.LogWarning("Rejected Scalar redirect URI for tenant {TenantId}", tenant.Id);
@@ -152,74 +155,106 @@ public sealed class ScalarAuthProvider
     }
 
     /// <summary>
-    /// The request's public origin, parsed into validated parts.
+    /// Returns the request's scheme, or <see langword="null"/> when it is not http(s).
     /// </summary>
     /// <remarks>
-    /// Tenant resolution and redirect-URI construction must be driven by the same
-    /// validated value. Reading the forwarded headers separately in each — one
-    /// normalizing the host, the other interpolating it raw — let a single header
-    /// satisfy the tenant check while carrying a different effective authority
-    /// (<c>alice.example.com:443@attacker.example</c> parses as userinfo plus the
-    /// attacker's host), which persisted an attacker-controlled OAuth redirect URI.
+    /// Read from <see cref="HttpRequest.Scheme"/>, which <c>UseForwardedHeaders</c> has
+    /// already set from <c>X-Forwarded-Proto</c> — reading the header again here would
+    /// pick a different entry from the one the rest of the pipeline used.
     /// </remarks>
-    private sealed record RequestOrigin(string Scheme, string Host, int? Port)
+    private static string? ParseScheme(HttpContext context)
     {
-        public string Authority => Port is null ? Host : $"{Host}:{Port}";
-
-        public string ScalarUri => $"{Scheme}://{Authority}/scalar";
+        var scheme = context.Request.Scheme?.ToLowerInvariant();
+        return scheme is "http" or "https" ? scheme : null;
     }
 
     /// <summary>
-    /// Parses the request's public origin from the forwarded headers, or
-    /// <see langword="null"/> when it is not a single well-formed http(s) origin.
+    /// Resolves the tenant the docs were opened on and the redirect URI to register for
+    /// it, or <see langword="null"/> when <paramref name="requestHost"/> is not an origin
+    /// this deployment serves.
     /// </summary>
     /// <remarks>
-    /// The forwarded headers are client-controllable — the gateway passes them through
-    /// untouched — so the host is rebuilt from a validated name and port rather than
-    /// used as a string. Credentials, paths, and multi-value lists are rejected outright
-    /// rather than normalized, because anything that needs normalizing here is not a
-    /// host this deployment serves.
+    /// The request host is client-controllable: the gateway forwards
+    /// <c>X-Forwarded-Host</c> untouched and <c>UseForwardedHeaders</c> runs with no
+    /// trusted-proxy list, so it decides <see cref="HttpRequest.Host"/>. It is therefore
+    /// used only to <em>select</em> a tenant, never to build the redirect URI — that is
+    /// assembled from the configured base domain and the tenant's own slug as stored, so
+    /// the only byte of it a caller influences is the scheme, which
+    /// <see cref="RedirectUriValidator"/> then gates. Without this, a host belonging to
+    /// nobody (<c>attacker.example</c>) fell through to the sole-tenant branch below and
+    /// registered an attacker-controlled OAuth redirect URI on that tenant.
+    /// <para>
+    /// Returns <see langword="null"/> for the apex with more than one tenant, an unknown
+    /// slug, an inactive tenant, and for a public share host — a share grants read-only
+    /// anonymous access and must not be handed a client or a token.
+    /// </para>
     /// </remarks>
-    private static RequestOrigin? ParseOrigin(HttpContext context)
+    private async Task<(TenantEntity Tenant, string RedirectUri)?> ResolveAsync(
+        HostString requestHost, string scheme, CancellationToken ct)
     {
-        var rawScheme = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault()
-                        ?? context.Request.Scheme;
-        var scheme = rawScheme.Trim().ToLowerInvariant();
-        if (scheme is not (("http") or "https"))
+        var (baseHost, basePort) = SplitHostPort(_baseDomain.BaseDomain);
+        if (baseHost is null || string.IsNullOrEmpty(requestHost.Host))
             return null;
 
-        var rawHost = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(rawHost))
-            rawHost = context.Request.Host.Value;
-
-        rawHost = rawHost.Trim();
-        if (rawHost.AsSpan().IndexOfAny(ForbiddenHostChars) >= 0)
+        // The port has to be the one the deployment is served on, so a caller cannot
+        // register extra origins that differ only by port.
+        if (requestHost.Port != basePort)
             return null;
 
-        var (host, port) = SplitHostPort(rawHost);
-        if (host is null)
+        var slug = SubdomainParser.Extract(requestHost.Host, baseHost);
+
+        if (slug is not null && slug.EndsWith(".share", StringComparison.OrdinalIgnoreCase))
             return null;
 
-        // Rejects anything that is not a DNS name or IP literal, so the value can only
-        // ever be interpolated back as the host it was validated as.
-        if (Uri.CheckHostName(host) == UriHostNameType.Unknown)
-            return null;
+        await using var db = await _factory.CreateDbContextAsync(ct);
 
-        return new RequestOrigin(scheme, host, port);
+        TenantEntity? tenant;
+        if (slug is null)
+        {
+            // Apex. Single-tenant installs serve everything from it; anything that is not
+            // the configured apex is not ours to register a redirect URI for.
+            if (!requestHost.Host.Equals(baseHost, StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var soleTenants = await db.Set<TenantEntity>()
+                .AsNoTracking()
+                .Where(t => t.IsActive)
+                .OrderBy(t => t.Id)
+                .Take(2)
+                .ToListAsync(ct);
+
+            if (soleTenants.Count != 1)
+                return null;
+
+            tenant = soleTenants[0];
+        }
+        else
+        {
+            tenant = await db.Set<TenantEntity>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Slug == slug && t.IsActive, ct);
+
+            if (tenant is null)
+                return null;
+        }
+
+        var canonicalHost = slug is null ? baseHost : $"{tenant.Slug}.{baseHost}";
+        var authority = basePort is null ? canonicalHost : $"{canonicalHost}:{basePort}";
+
+        return (tenant, $"{scheme}://{authority}/scalar");
     }
 
     /// <summary>
-    /// Characters that never appear in a bare host and would change which authority a
-    /// URI built from it addresses: credentials, list separators, and path/query starts.
-    /// </summary>
-    private static readonly char[] ForbiddenHostChars = ['@', ',', ' ', '\t', '/', '\\', '?', '#'];
-
-    /// <summary>
-    /// Splits <c>host[:port]</c>. Returns a null host when the value carries more than
-    /// one colon (and is not a bracketed IPv6 literal) or an unparseable port.
+    /// Splits a configured <c>host[:port]</c>. Returns a null host when the value carries
+    /// more than one colon (and is not a bracketed IPv6 literal) or an unparseable port.
     /// </summary>
     private static (string? Host, int? Port) SplitHostPort(string value)
     {
+        if (string.IsNullOrWhiteSpace(value))
+            return (null, null);
+
+        value = value.Trim();
+
         if (value.StartsWith('['))
         {
             var close = value.IndexOf(']');
@@ -244,39 +279,6 @@ public sealed class ScalarAuthProvider
             return (null, null);
 
         return (parts[0], port);
-    }
-
-    /// <summary>
-    /// Resolves the tenant for the given origin. Returns <see langword="null"/> for the
-    /// apex with more than one tenant, an unknown slug, an inactive tenant, or a public
-    /// share host — a share grants read-only anonymous access and must not be handed a
-    /// client or a token.
-    /// </summary>
-    private async Task<TenantEntity?> ResolveTenantAsync(RequestOrigin origin, CancellationToken ct)
-    {
-        var slug = SubdomainParser.Extract(origin.Host, _baseDomain.BaseDomain);
-
-        if (slug is not null && slug.EndsWith(".share", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        await using var db = await _factory.CreateDbContextAsync(ct);
-
-        if (slug is null)
-        {
-            // Single-tenant installs serve everything from the apex.
-            var soleTenants = await db.Set<TenantEntity>()
-                .AsNoTracking()
-                .Where(t => t.IsActive)
-                .OrderBy(t => t.Id)
-                .Take(2)
-                .ToListAsync(ct);
-
-            return soleTenants.Count == 1 ? soleTenants[0] : null;
-        }
-
-        return await db.Set<TenantEntity>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Slug == slug && t.IsActive, ct);
     }
 
     /// <summary>

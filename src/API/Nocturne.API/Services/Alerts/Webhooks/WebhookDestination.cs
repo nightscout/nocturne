@@ -35,13 +35,15 @@ public static class WebhookDestination
         if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
             return false;
 
-        foreach (var address in ResolveAddresses(uri))
-        {
-            if (!IsPubliclyRoutable(address))
-                return false;
-        }
+        var addresses = ResolveAddresses(uri);
 
-        return true;
+        // Fail closed on an empty result. A name this process cannot resolve is not
+        // necessarily unreachable — the HTTP stack may resolve it by other means — so
+        // "no addresses to check" must deny rather than allow.
+        if (addresses.Count == 0)
+            return false;
+
+        return addresses.All(IsPubliclyRoutable);
     }
 
     private static IReadOnlyList<IPAddress> ResolveAddresses(Uri uri)
@@ -55,8 +57,6 @@ public static class WebhookDestination
         }
         catch (SocketException)
         {
-            // Unresolvable: nothing to reach, so nothing to protect against. Treat it as
-            // allowed and let the send fail and be reported as a failed URL.
             return [];
         }
         catch (ArgumentException)

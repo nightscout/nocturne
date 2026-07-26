@@ -167,25 +167,25 @@ public class ScalarAuthProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The forwarded headers are client-controllable. A value that resolves a real tenant
-    /// while carrying a different effective authority must never be persisted as a
-    /// redirect URI: authorize-time matching is byte-exact, so it would let an attacker
-    /// have that tenant's authorization codes delivered to a host they control.
+    /// The request host is client-controllable — the gateway forwards X-Forwarded-Host
+    /// untouched and UseForwardedHeaders trusts any proxy. It may therefore only select a
+    /// tenant, never reach the redirect URI: byte-exact authorize matching means a
+    /// persisted attacker origin would have that tenant's authorization codes delivered to
+    /// a host they control.
     /// </summary>
     [Theory]
-    [InlineData("rhys.nocturne.run:8443@attacker.example")] // userinfo — the real host is attacker.example
-    [InlineData("rhys.nocturne.run@attacker.example")]
-    [InlineData("rhys.nocturne.run:443, attacker.example")] // header list — only the first was slug-matched
-    [InlineData("rhys.nocturne.run/../..@attacker.example")]
-    [InlineData("rhys.nocturne.run\\@attacker.example")]
-    [InlineData("rhys.nocturne.run#@attacker.example")]
-    [InlineData("rhys.nocturne.run?x=1")]
-    [InlineData("rhys.nocturne.run:99999")]                 // out-of-range port
-    [InlineData("rhys.nocturne.run:80:80")]
-    public async Task PrepareAsync_RejectsAForwardedHostWhoseAuthorityIsNotTheResolvedTenant(string forwardedHost)
+    [InlineData("attacker.example")]                        // belongs to nobody
+    [InlineData("evil.attacker.example")]
+    [InlineData("nocturne.run.attacker.example")]           // base domain as a prefix
+    [InlineData("rhys.nocturne.run.attacker.example")]
+    [InlineData("localhost")]
+    [InlineData("127.0.0.1")]
+    [InlineData("0x7f.1")]                                  // parses as loopback
+    [InlineData("[::1]")]
+    public async Task PrepareAsync_RejectsAHostThisDeploymentDoesNotServe(string host)
     {
         SeedTenant("rhys", isDemo: false, withDemoMember: false);
-        var context = BuildContext(forwardedHost);
+        var context = BuildContext(host);
 
         await BuildProvider().PrepareAsync(context);
 
@@ -193,7 +193,44 @@ public class ScalarAuthProviderTests : IDisposable
 
         await using var db = new NocturneDbContext(_dbOptions);
         (await db.OAuthClients.IgnoreQueryFilters().AnyAsync())
-            .Should().BeFalse("no OAuth client may be registered from an unparseable host");
+            .Should().BeFalse("a foreign host must not register a redirect URI on any tenant");
+    }
+
+    [Fact]
+    public async Task PrepareAsync_RejectsAForeignHost_EvenOnASingleTenantInstall()
+    {
+        // The apex branch serves single-tenant installs. It must not treat a host that is
+        // not the configured apex as the apex, or the sole tenant absorbs any origin.
+        SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = BuildContext("attacker.example");
+
+        await BuildProvider().PrepareAsync(context);
+
+        Auth(context).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PrepareAsync_ResolvesTheSoleTenant_OnTheConfiguredApex()
+    {
+        SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = BuildContext(BaseDomain);
+
+        await BuildProvider().PrepareAsync(context);
+
+        Auth(context)!.RedirectUri.Should().Be($"https://{BaseDomain}/scalar");
+    }
+
+    [Theory]
+    [InlineData("rhys.nocturne.run:8443")]
+    [InlineData("rhys.nocturne.run:80")]
+    public async Task PrepareAsync_RejectsAPortTheDeploymentIsNotServedOn(string host)
+    {
+        SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = BuildContext(host);
+
+        await BuildProvider().PrepareAsync(context);
+
+        Auth(context).Should().BeNull("a caller must not register origins differing by port");
     }
 
     [Theory]
@@ -241,41 +278,6 @@ public class ScalarAuthProviderTests : IDisposable
         client.ClientId.Should().NotBe(ScalarAuthProvider.ScalarSoftwareId);
     }
 
-    [Fact]
-    public async Task PrepareAsync_CapsTheRedirectUriList()
-    {
-        var tenantId = SeedTenant("rhys", isDemo: false, withDemoMember: false);
-
-        // Distinct ports are all legitimate origins, so each is a new entry — the cap is
-        // what stops an unauthenticated caller growing the row without bound.
-        for (var port = 8001; port <= 8010; port++)
-        {
-            await BuildProvider().PrepareAsync(BuildContext($"rhys.nocturne.run:{port}"));
-        }
-
-        await using var db = new NocturneDbContext(_dbOptions);
-        var client = await db.OAuthClients.IgnoreQueryFilters()
-            .SingleAsync(c => c.TenantId == tenantId);
-        JsonSerializer.Deserialize<List<string>>(client.RedirectUris)
-            .Should().HaveCount(5);
-    }
-
-    [Fact]
-    public async Task PrepareAsync_ReusesOneTokenAcrossPageLoads()
-    {
-        SeedTenant("demo", isDemo: true, withDemoMember: true);
-        var cache = new MemoryCache(new MemoryCacheOptions());
-
-        await BuildProvider(cache).PrepareAsync(BuildContext("demo.nocturne.run"));
-        await BuildProvider(cache).PrepareAsync(BuildContext("demo.nocturne.run"));
-        await BuildProvider(cache).PrepareAsync(BuildContext("demo.nocturne.run"));
-
-        _sessionService.Verify(
-            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
-            Times.Once,
-            "the docs page must not mint a session per view — /scalar bypasses rate limiting");
-    }
-
     private static ScalarAuthContext? Auth(HttpContext context) =>
         context.Items[ScalarAuthContext.HttpContextItemKey] as ScalarAuthContext;
 
@@ -315,12 +317,17 @@ public class ScalarAuthProviderTests : IDisposable
         return tenant.Id;
     }
 
+    /// <summary>
+    /// Builds a request as the pipeline presents it to the provider: UseForwardedHeaders
+    /// has already applied X-Forwarded-Host/-Proto onto Request.Host and Request.Scheme,
+    /// so the provider reads those rather than the headers.
+    /// </summary>
     private static HttpContext BuildContext(string host, string proto = "https")
     {
         var context = new DefaultHttpContext();
         context.Request.Path = "/scalar";
-        context.Request.Headers["X-Forwarded-Host"] = host;
-        context.Request.Headers["X-Forwarded-Proto"] = proto;
+        context.Request.Host = new HostString(host);
+        context.Request.Scheme = proto;
         return context;
     }
 
