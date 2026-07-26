@@ -235,6 +235,7 @@ public static class ServiceRegistrationExtensions
             }, "Operator:Support:AccountBilling:Url is required when AccountBilling is configured");
 
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
+        services.AddScoped<ITenantOwnerResolver, TenantOwnerResolver>();
         services.AddScoped<ITenantMemberService, TenantMemberService>();
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<ITenantService, TenantService>();

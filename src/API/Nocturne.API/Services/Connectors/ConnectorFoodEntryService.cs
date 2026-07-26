@@ -32,7 +32,7 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
     }
 
     public async Task<IReadOnlyList<ConnectorFoodEntry>> ImportAsync(
-        string userId,
+        string? userId,
         IEnumerable<ConnectorFoodEntryImport> imports,
         CancellationToken cancellationToken = default
     )
@@ -181,7 +181,9 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
             .Select(r => r.Id)
             .ToList();
 
-        if (newEntryIds.Count > 0)
+        // Importing does not depend on having someone to notify, so a tenant without a resolvable
+        // owner still gets its entries and its suggestion list; only the notifications are skipped.
+        if (newEntryIds.Count > 0 && !string.IsNullOrEmpty(userId))
         {
             try
             {
