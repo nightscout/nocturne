@@ -8,6 +8,9 @@ const LABEL_MAP: Record<string, string> = {
   compression_low_detected_subtitle:
     "Possible overnight compression lows are ready to review",
   review: "Review",
+  share_link_reset: "Your sharing link has been reset",
+  share_link_reset_subtitle:
+    "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",
 };
 
 /** Resolve a notification title/subtitle/action label, mapping known i18n keys

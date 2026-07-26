@@ -114,6 +114,15 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
+            Type = "sharing.link_reset",
+            Category = NotificationCategory.ActionRequired,
+            DefaultUrgency = NotificationUrgency.Info,
+            Icon = "link",
+            Source = "sharing"
+        });
+
+        registry.Register(new NotificationTemplate
+        {
             Type = "membership.denied",
             Category = NotificationCategory.Informational,
             DefaultUrgency = NotificationUrgency.Info,

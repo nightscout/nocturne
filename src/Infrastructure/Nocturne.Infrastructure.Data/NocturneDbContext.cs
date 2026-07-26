@@ -17,12 +17,26 @@ namespace Nocturne.Infrastructure.Data;
 /// </summary>
 public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 {
+    private readonly DbContextOptions<NocturneDbContext> _options;
+
     /// <summary>
     /// Initializes a new instance of the NocturneDbContext class
     /// </summary>
     /// <param name="options">The options for this context</param>
     public NocturneDbContext(DbContextOptions<NocturneDbContext> options)
-        : base(options) { }
+        : base(options)
+    {
+        _options = options;
+    }
+
+    /// <summary>
+    /// The application service provider these options were built with, or null when the context was
+    /// constructed from a bare <see cref="DbContextOptionsBuilder{TContext}"/> (design-time, tests).
+    /// Read during <see cref="OnModelCreating"/> to resolve services the model itself depends on.
+    /// </summary>
+    private IServiceProvider? ApplicationServices =>
+        _options.FindExtension<Microsoft.EntityFrameworkCore.Infrastructure.CoreOptionsExtension>()
+            ?.ApplicationServiceProvider;
 
     /// <summary>
     /// The current tenant ID. Set per-request by the DI factory.
@@ -593,6 +607,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         // Configure table-specific settings
         ConfigureEntities(modelBuilder);
+
+        // The TOTP shared secret is a permanent second factor, so the column holds a Data
+        // Protection payload rather than the seed. Configured here rather than in the static
+        // ConfigureEntities because the converter closes over a runtime-resolved protector.
+        modelBuilder
+            .Entity<TotpCredentialEntity>()
+            .Property(e => e.SecretKey)
+            .HasConversion(
+                Security.TotpSecretProtection.CreateConverter(
+                    Security.TotpSecretProtection.CreateProtector(ApplicationServices)));
 
         // Configure per-tenant global query filters
         ConfigureTenantFilters(modelBuilder);

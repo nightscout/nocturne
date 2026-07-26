@@ -53,6 +53,10 @@
   let errorMessage = $state<string | null>(null);
   let scopeWritesInFlight = $state(0);
 
+  // The server stores only a fingerprint of the link, so it can return the URL once — when the
+  // link is created. Held here for the rest of the visit; a reload shows the hidden state.
+  let revealedUrl = $state<string | null>(null);
+
   const sharedLabels = $derived(
     publicDataCategories.filter((c) => scopes.includes(c.scope)).map((c) => c.name.toLowerCase()),
   );
@@ -66,8 +70,11 @@
     errorMessage = null;
     pendingEnabled = on;
     try {
-      if (on) await rotateShareLink();
-      else await disableShareLink();
+      if (on) revealedUrl = (await rotateShareLink()).url ?? null;
+      else {
+        await disableShareLink();
+        revealedUrl = null;
+      }
     } catch {
       errorMessage = on
         ? "Couldn't create the link. Please try again."
@@ -83,7 +90,7 @@
     errorMessage = null;
     confirmingRotate = false;
     try {
-      await rotateShareLink();
+      revealedUrl = (await rotateShareLink()).url ?? null;
     } catch {
       errorMessage = "Couldn't regenerate the link. Please try again.";
     } finally {
@@ -124,8 +131,8 @@
   }
 
   async function copyLink() {
-    if (!share?.url) return;
-    if (!(await copyToClipboard(share.url))) {
+    if (!revealedUrl) return;
+    if (!(await copyToClipboard(revealedUrl))) {
       errorMessage = "Couldn't copy the link to the clipboard. Copy it manually instead.";
       return;
     }
@@ -190,17 +197,25 @@
               class="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-background px-3 font-mono text-sm"
             >
               <LinkIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span class="truncate">{share?.url ?? ""}</span>
+              {#if revealedUrl}
+                <span class="truncate">{revealedUrl}</span>
+              {:else}
+                <span class="truncate font-sans text-muted-foreground">
+                  Your link is only shown when you create it
+                </span>
+              {/if}
             </div>
             <div class="flex gap-2">
-              <Button variant="outline" class="shrink-0" onclick={copyLink}>
-                {#if copied}
-                  <Check class="mr-1.5 h-4 w-4 text-green-600" />
-                {:else}
-                  <Copy class="mr-1.5 h-4 w-4" />
-                {/if}
-                Copy
-              </Button>
+              {#if revealedUrl}
+                <Button variant="outline" class="shrink-0" onclick={copyLink}>
+                  {#if copied}
+                    <Check class="mr-1.5 h-4 w-4 text-green-600" />
+                  {:else}
+                    <Copy class="mr-1.5 h-4 w-4" />
+                  {/if}
+                  Copy
+                </Button>
+              {/if}
               <Button
                 variant="ghost"
                 class="shrink-0"
@@ -232,10 +247,19 @@
                 </Button>
               </div>
             </div>
-          {:else}
+          {:else if revealedUrl}
             <p class="text-xs text-muted-foreground">
               Anyone you send this link to can open the read-only view — no sign-in
-              needed. Last viewed {formatDate(share?.lastAccessedAt)}.
+              needed. Copy it now: it isn't shown again after you leave this page.
+              Last viewed {formatDate(share?.lastAccessedAt)}.
+            </p>
+          {:else}
+            <p class="text-xs text-muted-foreground">
+              Anyone who already has your link can open the read-only view — no
+              sign-in needed. To get a link you can send, regenerate it; that also
+              stops the previous one from working. Last viewed {formatDate(
+                share?.lastAccessedAt,
+              )}.
             </p>
           {/if}
         </div>

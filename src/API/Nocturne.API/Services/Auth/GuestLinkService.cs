@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -279,11 +280,8 @@ public class GuestLinkService : IGuestLinkService
         return $"{code[..3]}-{code[3..]}";
     }
 
-    private static string HashCode(string code)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(code.ToUpperInvariant()));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
+    /// <summary>Digest of a guest code. Codes are displayed uppercase but typed either way.</summary>
+    private static string HashCode(string code) => CredentialHash.Sha256Hex(code.ToUpperInvariant());
 
     private static GuestLinkInfo MapToInfo(OAuthGrantEntity entity)
     {

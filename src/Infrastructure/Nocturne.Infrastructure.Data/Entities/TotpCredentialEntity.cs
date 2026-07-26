@@ -25,7 +25,9 @@ public class TotpCredentialEntity
     public Guid SubjectId { get; set; }
 
     /// <summary>
-    /// The TOTP secret key used to generate one-time passwords
+    /// The TOTP secret key used to generate one-time passwords. Stored as a Data Protection
+    /// payload via the value converter registered in <c>NocturneDbContext.OnModelCreating</c>
+    /// (see <c>TotpSecretProtection</c>); this property always holds the decrypted secret.
     /// </summary>
     [Required]
     [Column("secret_key")]

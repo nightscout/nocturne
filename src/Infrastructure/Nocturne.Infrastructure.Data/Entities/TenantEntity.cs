@@ -60,12 +60,14 @@ public class TenantEntity : ISystemTimestamped
     public bool IsDemo { get; set; }
 
     /// <summary>
-    /// Unguessable token for the tenant's public read-only dashboard, served at
-    /// {token}.share.{baseDomain}. Null when public sharing is disabled. Rotating replaces the
-    /// value and evicts the resolution cache, so the previous link stops resolving.
+    /// SHA-256 hex digest (<see cref="Security.CredentialHash.ShareToken"/>) of the unguessable
+    /// token for the tenant's public read-only dashboard, served at {token}.share.{baseDomain}.
+    /// Null when public sharing is disabled. The token itself is never stored: it is returned once
+    /// when the link is generated and resolved thereafter by digest. Rotating replaces the value
+    /// and evicts the resolution cache, so the previous link stops resolving.
     /// </summary>
     [Column("share_token")]
-    [MaxLength(32)]
+    [MaxLength(Security.CredentialHash.HexLength)]
     public string? ShareToken { get; set; }
 
     /// <summary>When <see cref="ShareToken"/> was last minted or rotated.</summary>

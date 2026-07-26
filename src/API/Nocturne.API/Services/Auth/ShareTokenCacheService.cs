@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -13,8 +14,11 @@ namespace Nocturne.API.Services.Auth;
 /// <remarks>
 /// Only successful lookups are cached (2-minute TTL). Misses are never cached: a brute-force
 /// sweep uses distinct tokens, so caching misses would bloat memory without preventing the
-/// per-token database hit — that is the job of rate limiting. Call <see cref="Evict"/> when a
+/// per-token database hit — that is the job of rate limiting. Call <see cref="EvictByHash"/> when a
 /// token is rotated or removed so the previous link stops resolving immediately.
+///
+/// The token is only ever stored and cached as its SHA-256 digest, so neither the database nor the
+/// cache holds a value that can be replayed as a share link.
 /// </remarks>
 public sealed class ShareTokenCacheService
 {
@@ -40,7 +44,8 @@ public sealed class ShareTokenCacheService
     /// </summary>
     public async Task<TenantContext?> ResolveByTokenAsync(string token)
     {
-        var cacheKey = CacheKey(token);
+        var tokenHash = CredentialHash.ShareToken(token);
+        var cacheKey = CacheKey(tokenHash);
 
         if (_cache.TryGetValue(cacheKey, out TenantContext? cached))
             return cached;
@@ -49,7 +54,7 @@ public sealed class ShareTokenCacheService
 
         var tenant = await dbContext.Tenants
             .AsNoTracking()
-            .Where(t => t.ShareToken == token)
+            .Where(t => t.ShareToken == tokenHash)
             .Select(t => new { t.Id, t.Slug, t.DisplayName, t.IsActive, t.IsDemo })
             .FirstOrDefaultAsync();
 
@@ -83,8 +88,11 @@ public sealed class ShareTokenCacheService
         return tenantContext;
     }
 
-    /// <summary>Evicts the cached resolution for a token. Call on rotate or disable.</summary>
-    public void Evict(string token) => _cache.Remove(CacheKey(token));
+    /// <summary>
+    /// Evicts the cached resolution for a stored token digest. Call on rotate or disable, passing
+    /// the value held in <c>tenants.share_token</c>.
+    /// </summary>
+    public void EvictByHash(string tokenHash) => _cache.Remove(CacheKey(tokenHash));
 
-    private static string CacheKey(string token) => $"share-token:{token}";
+    private static string CacheKey(string tokenHash) => $"share-token:{tokenHash}";
 }

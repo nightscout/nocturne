@@ -5,6 +5,7 @@ using Nocturne.API.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -16,7 +17,16 @@ namespace Nocturne.API.Services.Auth;
 /// </summary>
 public interface IShareLinkService
 {
+    /// <summary>
+    /// Reports the link's state. <see cref="ShareLinkDto.Url"/> is always null — only the token's
+    /// digest is stored, so the URL is knowable only to the caller of <see cref="RotateAsync"/>.
+    /// </summary>
     Task<ShareLinkDto> GetAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Mints a new token, replacing any existing one, and returns the resulting
+    /// <see cref="ShareLinkDto.Url"/>. This is the only call that can return the URL.
+    /// </summary>
     Task<ShareLinkDto> RotateAsync(Guid tenantId, CancellationToken ct = default);
     Task<ShareLinkDto> DisableAsync(Guid tenantId, CancellationToken ct = default);
     Task<ShareLinkDto> SetFullHistoryAsync(Guid tenantId, bool fullHistory, CancellationToken ct = default);
@@ -79,8 +89,8 @@ public sealed class ShareLinkService : IShareLinkService
         var member = await GetPublicMemberAsync(tenantId, ct)
             ?? throw new InvalidOperationException("Public subject membership not found");
 
-        var oldToken = tenant.ShareToken;
-        var wasEnabled = oldToken != null;
+        var oldTokenHash = tenant.ShareToken;
+        var wasEnabled = oldTokenHash != null;
         var newToken = await GenerateUniqueTokenAsync(ct);
         var now = DateTime.UtcNow;
 
@@ -93,17 +103,18 @@ public sealed class ShareLinkService : IShareLinkService
             member.LimitTo24Hours = true;
         }
 
-        tenant.ShareToken = newToken;
+        tenant.ShareToken = CredentialHash.ShareToken(newToken);
         tenant.ShareTokenSetAt = now;
         member.SysUpdatedAt = now;
 
         await _dbContext.SaveChangesAsync(ct);
 
-        if (oldToken != null)
-            _shareTokenCache.Evict(oldToken);
+        if (oldTokenHash != null)
+            _shareTokenCache.EvictByHash(oldTokenHash);
         _publicAccessCache.Evict(tenantId);
 
-        return ToDto(tenant, member);
+        // The only moment the URL can be produced: the token itself is not stored.
+        return ToDto(tenant, member, newToken);
     }
 
     public async Task<ShareLinkDto> DisableAsync(Guid tenantId, CancellationToken ct = default)
@@ -111,7 +122,7 @@ public sealed class ShareLinkService : IShareLinkService
         var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, ct)
             ?? throw new InvalidOperationException($"Tenant {tenantId} not found");
         var member = await GetPublicMemberAsync(tenantId, ct);
-        var oldToken = tenant.ShareToken;
+        var oldTokenHash = tenant.ShareToken;
 
         tenant.ShareToken = null;
         tenant.ShareTokenSetAt = null;
@@ -127,8 +138,8 @@ public sealed class ShareLinkService : IShareLinkService
 
         await _dbContext.SaveChangesAsync(ct);
 
-        if (oldToken != null)
-            _shareTokenCache.Evict(oldToken);
+        if (oldTokenHash != null)
+            _shareTokenCache.EvictByHash(oldTokenHash);
         _publicAccessCache.Evict(tenantId);
 
         return ToDto(tenant, member);
@@ -186,12 +197,17 @@ public sealed class ShareLinkService : IShareLinkService
             .FirstOrDefaultAsync(m => m.TenantId == tenantId
                 && m.Subject!.IsSystemSubject && m.Subject.Name == PublicSubjectName, ct);
 
+    /// <summary>
+    /// Mints a token whose digest is not already stored. Returns the token itself; the caller
+    /// stores <see cref="CredentialHash.ShareToken"/> of it.
+    /// </summary>
     private async Task<string> GenerateUniqueTokenAsync(CancellationToken ct)
     {
         for (var attempt = 0; attempt < MaxTokenAttempts; attempt++)
         {
             var candidate = _tokenGenerator.Generate();
-            var exists = await _dbContext.Tenants.AnyAsync(t => t.ShareToken == candidate, ct);
+            var candidateHash = CredentialHash.ShareToken(candidate);
+            var exists = await _dbContext.Tenants.AnyAsync(t => t.ShareToken == candidateHash, ct);
             if (!exists)
                 return candidate;
         }
@@ -199,10 +215,15 @@ public sealed class ShareLinkService : IShareLinkService
         throw new InvalidOperationException("Unable to generate a unique share token after several attempts");
     }
 
-    private ShareLinkDto ToDto(TenantEntity tenant, TenantMemberEntity? member) => new()
+    /// <summary>
+    /// Projects the share link. <paramref name="token"/> is supplied only by the rotate path, which
+    /// has just minted it; every other path can only report that a link exists, because the stored
+    /// value is a digest and the URL cannot be reconstructed from it.
+    /// </summary>
+    private ShareLinkDto ToDto(TenantEntity tenant, TenantMemberEntity? member, string? token = null) => new()
     {
         Enabled = tenant.ShareToken != null,
-        Url = tenant.ShareToken != null ? $"https://{tenant.ShareToken}.share.{_baseDomain}" : null,
+        Url = token != null ? $"https://{token}.share.{_baseDomain}" : null,
         FullHistory = member is { LimitTo24Hours: false },
         Scopes = ComputeScopes(member),
         LastAccessedAt = tenant.ShareLastAccessedAt,

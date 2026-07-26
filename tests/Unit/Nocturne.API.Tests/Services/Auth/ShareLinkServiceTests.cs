@@ -13,6 +13,7 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -84,9 +85,24 @@ public sealed class ShareLinkServiceTests : IDisposable
         var dto = await _service.RotateAsync(TenantId);
 
         dto.Enabled.Should().BeTrue();
+        dto.Url.Should().MatchRegex(@"^https://[0-9a-z]+\.share\.nocturne\.run$");
+
+        // The URL carries the token; the column carries only its digest.
+        var token = new Uri(dto.Url!).Host.Split('.')[0];
         var tenant = await _db.Tenants.AsNoTracking().FirstAsync(t => t.Id == TenantId);
-        tenant.ShareToken.Should().NotBeNullOrEmpty();
-        dto.Url.Should().Be($"https://{tenant.ShareToken}.share.nocturne.run");
+        tenant.ShareToken.Should().Be(CredentialHash.ShareToken(token))
+            .And.NotBe(token);
+    }
+
+    [Fact]
+    public async Task Get_reports_the_link_as_enabled_without_revealing_the_url()
+    {
+        await _service.RotateAsync(TenantId);
+
+        var dto = await _service.GetAsync(TenantId);
+
+        dto.Enabled.Should().BeTrue();
+        dto.Url.Should().BeNull("the token is not stored, so the URL cannot be reproduced");
     }
 
     [Fact]

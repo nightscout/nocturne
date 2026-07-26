@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Security;
 
 namespace Nocturne.API.Services.Auth;
 
@@ -65,14 +66,16 @@ public sealed class ShareTokenBackfillService : IHostedService
             var now = DateTime.UtcNow;
             foreach (var tenant in tenants)
             {
-                string token;
+                // Only the digest is stored, so the minted token is not recoverable afterwards and
+                // is never logged. The owner generates a link of their own to obtain a URL.
+                string digest;
                 do
                 {
-                    token = generator.Generate();
+                    digest = CredentialHash.ShareToken(generator.Generate());
                 }
-                while (!used.Add(token));
+                while (!used.Add(digest));
 
-                tenant.ShareToken = token;
+                tenant.ShareToken = digest;
                 tenant.ShareTokenSetAt = now;
             }
 

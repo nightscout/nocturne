@@ -9,6 +9,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Security;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -110,6 +111,9 @@ public sealed class ShareTokenBackfillServiceTests : IDisposable
         var priv = db.Tenants.Single(t => t.Id == _privateTenantId);
 
         pub.ShareToken.Should().NotBeNullOrEmpty();
+        pub.ShareToken.Should()
+            .HaveLength(CredentialHash.HexLength).And.MatchRegex("^[0-9a-f]+$",
+                "the backfill stores the token's digest, never the token");
         pub.ShareTokenSetAt.Should().NotBeNull();
         priv.ShareToken.Should().BeNull("a tenant that was never public must not get a link");
     }

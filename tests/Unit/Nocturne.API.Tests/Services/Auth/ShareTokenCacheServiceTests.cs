@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Auth;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Security;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -37,7 +38,13 @@ public sealed class ShareTokenCacheServiceTests : IDisposable
 
         using var seed = _factory.CreateDbContext();
         seed.Database.EnsureCreated();
-        seed.Tenants.Add(new TenantEntity { Id = _tenantId, Slug = "acme", DisplayName = "Acme", ShareToken = Token });
+        seed.Tenants.Add(new TenantEntity
+        {
+            Id = _tenantId,
+            Slug = "acme",
+            DisplayName = "Acme",
+            ShareToken = CredentialHash.ShareToken(Token),
+        });
         seed.SaveChanges();
     }
 
@@ -109,20 +116,44 @@ public sealed class ShareTokenCacheServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Evict_makes_a_rotated_token_stop_resolving()
+    public async Task EvictByHash_makes_a_rotated_token_stop_resolving()
     {
         var service = Service();
         (await service.ResolveByTokenAsync(Token)).Should().NotBeNull(); // caches the hit
 
-        // Rotate in the DB, then evict the cached entry for the old token.
+        // Rotate in the DB, then evict the cached entry keyed by the old token's digest.
         using (var db = _factory.CreateDbContext())
         {
-            db.Tenants.Single(t => t.Id == _tenantId).ShareToken = "newtoken0000";
+            db.Tenants.Single(t => t.Id == _tenantId).ShareToken =
+                CredentialHash.ShareToken("newtoken0000");
             db.SaveChanges();
         }
-        service.Evict(Token);
+        service.EvictByHash(CredentialHash.ShareToken(Token));
 
         (await service.ResolveByTokenAsync(Token)).Should().BeNull();
         (await service.ResolveByTokenAsync("newtoken0000"))!.TenantId.Should().Be(_tenantId);
+    }
+
+    [Fact]
+    public async Task ResolveByTokenAsync_does_not_resolve_a_token_stored_as_plaintext()
+    {
+        using (var db = _factory.CreateDbContext())
+        {
+            db.Tenants.Single(t => t.Id == _tenantId).ShareToken = Token;
+            db.SaveChanges();
+        }
+
+        (await Service().ResolveByTokenAsync(Token)).Should().BeNull(
+            "lookup is by digest, so a plaintext column value is not a usable credential");
+    }
+
+    [Fact]
+    public void The_stored_share_token_is_not_the_token()
+    {
+        using var db = _factory.CreateDbContext();
+        var stored = db.Tenants.Single(t => t.Id == _tenantId).ShareToken;
+
+        stored.Should().NotBe(Token);
+        stored.Should().HaveLength(CredentialHash.HexLength).And.MatchRegex("^[0-9a-f]+$");
     }
 }
