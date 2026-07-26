@@ -133,7 +133,7 @@
     errorMessage = null;
 
     try {
-      const response = await registerOptions({ subjectId: user.subjectId, username: user.name });
+      const response = await registerOptions({ username: user.name });
       const options = JSON.parse(response.options ?? "");
       const challengeToken = response.challengeToken ?? "";
 

@@ -108,15 +108,96 @@ public class PasskeyController : ControllerBase
             return Problem(detail: "Username is required", statusCode: 400, title: "Bad Request");
         }
 
+        var subjectId = await ResolveRegistrationSubjectAsync(request.Username);
+        if (subjectId == null)
+        {
+            // Deliberately not distinguishing "no such username" from "that account already
+            // has a credential", matching RecoveryVerify's non-disclosure.
+            return Problem(
+                detail: "Cannot register a passkey for this account",
+                statusCode: 400, title: "Bad Request");
+        }
+
         var tenantId = _tenantAccessor.TenantId;
         var result = await _passkeyService.GenerateRegistrationOptionsAsync(
-            request.SubjectId, request.Username, tenantId);
+            subjectId.Value, request.Username, tenantId);
 
         return Ok(new PasskeyOptionsResponse
         {
             Options = result.OptionsJson,
             ChallengeToken = result.ChallengeToken,
         });
+    }
+
+    /// <summary>
+    /// Resolves which subject a registration ceremony is allowed to bind a credential to.
+    /// </summary>
+    /// <param name="username">The account named on the request.</param>
+    /// <returns>The subject to register against, or <see langword="null"/> when none qualifies.</returns>
+    /// <remarks>
+    /// <para>
+    /// The request deliberately gets no say in this. The subject id is sealed into the challenge
+    /// token here and nothing downstream re-checks it, so honouring a caller-supplied one let an
+    /// anonymous caller bind their own authenticator to any subject whose id they knew and then
+    /// log in as them.
+    /// </para>
+    /// <para>
+    /// Three flows legitimately reach this endpoint, in precedence order: adding a passkey to
+    /// your own account, re-registering after spending a recovery code, and claiming an account
+    /// that holds no credential at all (first owner on a fresh install, or an orphaned subject
+    /// while the instance is in recovery mode).
+    /// </para>
+    /// </remarks>
+    private async Task<Guid?> ResolveRegistrationSubjectAsync(string username)
+    {
+        var auth = HttpContext.GetAuthContext();
+        if (auth is { IsAuthenticated: true, SubjectId: not null })
+            return auth.SubjectId;
+
+        if (TryReadRecoverySessionSubject() is { } recoverySubjectId)
+            return recoverySubjectId;
+
+        return await FindCredentiallessSubjectAsync(username);
+    }
+
+    /// <summary>
+    /// Reads the subject out of the short-lived recovery session minted by
+    /// <see cref="RecoveryVerify"/>, which is the proof that a recovery code was spent.
+    /// </summary>
+    private Guid? TryReadRecoverySessionSubject()
+    {
+        var token = Request.Cookies[RecoveryCookieName];
+        if (string.IsNullOrEmpty(token))
+            return null;
+
+        var validation = _jwtService.ValidateAccessToken(token);
+        if (!validation.IsValid || validation.Claims is null)
+            return null;
+
+        return validation.Claims.Permissions.Contains("passkey:manage")
+            ? validation.Claims.SubjectId
+            : null;
+    }
+
+    /// <summary>
+    /// Finds the named subject in the current tenant only if it holds no passkey and no OIDC
+    /// identity. Such a subject cannot currently be logged into by anyone, so binding the first
+    /// credential to it takes nothing over — this is the same condition
+    /// <see cref="GetAuthStatus"/> reports as setup-required or recovery mode.
+    /// </summary>
+    private async Task<Guid?> FindCredentiallessSubjectAsync(string username)
+    {
+        var tenantId = _tenantAccessor.TenantId;
+
+        return await _dbContext.TenantMembers
+            .Where(tm => tm.TenantId == tenantId)
+            .Select(tm => tm.Subject!)
+            .Where(s => s.Username == username && s.IsActive && !s.IsSystemSubject)
+            .Where(s =>
+                !_dbContext.PasskeyCredentials.Any(c => c.SubjectId == s.Id) &&
+                !_dbContext.SubjectOidcIdentities.Any(o => o.SubjectId == s.Id))
+            .Select(s => (Guid?)s.Id)
+            .FirstOrDefaultAsync();
     }
 
     /// <summary>
@@ -803,7 +884,11 @@ public class PasskeyOptionsResponse
 /// </summary>
 public class PasskeyRegisterOptionsRequest
 {
-    public Guid SubjectId { get; set; }
+    /// <remarks>
+    /// Names the account only for the credentialless-claim flow. There is deliberately no
+    /// subject id here — the server resolves the subject, because a caller-supplied one is an
+    /// anonymous account-takeover.
+    /// </remarks>
     public string Username { get; set; } = string.Empty;
 }
 
