@@ -39,6 +39,22 @@ public static class AuthorizationConfiguration
         {
             options.AddPolicy(PolicyNames.HasPermissions, hasPermissionsPolicy);
             options.FallbackPolicy = hasPermissionsPolicy;
+
+            // DefaultPolicy is deliberately left at the framework's RequireAuthenticatedUser.
+            // Adding HasPermissionsRequirement to it looks like a tightening but is unsatisfiable
+            // on the tenantless surface: those paths resolve no TenantContext, so
+            // MemberScopeMiddleware returns before rebuilding the trie, leaving whatever
+            // AuthenticationMiddleware built from the subject's *global* roles. A member who
+            // joined by invite has none, so the trie is empty and every bare-[Authorize]
+            // tenantless endpoint 403s — including the apex tenant list, the cross-tenant
+            // overview, and first-tenant creation.
+            //
+            // This leaves a gap that is OPEN, not covered elsewhere: a member of the resolved
+            // tenant holding a zero-permission role (the Denied seed role) has an empty trie and
+            // empty scopes, and can still read any bare-[Authorize] endpoint. Most of
+            // Controllers/V4 carries no scope attribute today, so per-action gating does not yet
+            // close it. Closing it belongs with those attributes rather than here, because a
+            // DefaultPolicy strong enough to catch it also breaks the tenantless surface above.
         });
 
         return services;

@@ -439,8 +439,13 @@ app.UseMiddleware<AuditContextMiddleware>();
 // Add site security middleware (enforces authentication when site lockdown is enabled)
 app.UseMiddleware<SiteSecurityMiddleware>();
 
-// Add authentication and authorization middleware
-app.UseAuthentication();
+// AuthenticationMiddleware above is the only authenticator. UseAuthentication() is deliberately
+// absent: it runs the JwtBearer scheme and assigns its principal over whatever the chain decided,
+// and that scheme validates strictly less (no issuer or audience check, no tenant pin, no
+// revocation check) while trusting the same signing key. It would therefore re-admit exactly the
+// tokens the chain rejects — a token pinned to another tenant, or one that has been revoked — and
+// undo the membership rejection in SetUnauthenticated. The scheme stays registered only so
+// UseAuthorization has a challenge scheme to produce a 401 with.
 app.UseAuthorization();
 
 // Add rate limiting

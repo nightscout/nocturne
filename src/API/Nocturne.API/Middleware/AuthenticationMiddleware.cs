@@ -362,6 +362,13 @@ public class AuthenticationMiddleware
         context.Items["PermissionTrie"] = new PermissionTrie();
         context.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>();
         context.Items["AuthenticationContext"] = MapToLegacyContext(authContext);
+
+        // Clearing Items is not enough: this method is also the tenant-membership rejection
+        // path, and by then the principal above has already been built. [Authorize] reads
+        // HttpContext.User, not Items, so leaving a populated principal here authenticates a
+        // rejected caller against any endpoint whose only gate is [Authorize].
+        context.User = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity());
     }
 
     /// <summary>
