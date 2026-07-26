@@ -222,9 +222,15 @@ public class ConnectorFoodEntryService : IConnectorFoodEntryService
 
         await _context.SaveChangesAsync(cancellationToken);
 
+        // Process new entries for meal matching
+        var newEntryIds = results
+            .Where(r => r.Status == ConnectorFoodEntryStatus.Pending)
+            .Select(r => r.Id)
+            .ToList();
+
         // Importing does not depend on having someone to notify, so a tenant without a resolvable
         // owner still gets its entries and its suggestion list; only the notifications are skipped.
-        if (idsForMatching.Count > 0 && !string.IsNullOrEmpty(userId))
+        if (newEntryIds.Count > 0 && !string.IsNullOrEmpty(userId))
         {
             try
             {
