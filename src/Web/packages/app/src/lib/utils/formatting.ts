@@ -176,6 +176,35 @@ export function time(date: Date | number, compact?: boolean): string {
   return d.toLocaleTimeString(locale(), options);
 }
 
+/**
+ * Coarse relative age for a "last seen" or "last synced" field: "Just now",
+ * "12m ago", "3h ago", "2d ago", then an absolute date past a week.
+ *
+ * This is the short form. `formatTimeSince` in the alerts folder is minute-
+ * precise ("3h 5m ago") because an alert card is read while it is firing; use
+ * this one everywhere else so the same age doesn't render two ways on one row.
+ *
+ * @param now Reference time. Pass a ticking value (see `Now`) where the result
+ *   is rendered, or the text freezes at the age it had on first render.
+ */
+export function lastSeen(
+  date: Date | string | undefined | null,
+  now: number = Date.now()
+): string {
+  if (!date) return "Never";
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "Never";
+
+  const minutes = Math.floor((now - d.getTime()) / 60000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString(locale());
+}
+
 /** Format elapsed time as minutes ago using the user's language preference. */
 export function minutesAgo(from: number, to: number = Date.now()): string {
   const minutes = Math.max(0, Math.floor((to - from) / 60000));

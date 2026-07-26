@@ -3,9 +3,8 @@
   // can use <Spline>/<Arc> with per-vertex coloring; currently each child
   // falls back to plain <path>. See sibling components' "Fallback to <path>"
   // comments for the matching deferral.
-  import { Tween } from "svelte/motion";
+  import { Tween, prefersReducedMotion } from "svelte/motion";
   import { cubicOut } from "svelte/easing";
-  import { browser } from "$app/environment";
   import { getContext } from "svelte";
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import type { SettingsStore } from "$lib/stores/settings-store.svelte";
@@ -163,11 +162,9 @@
 
   const predictionValues = $derived(pickCurveValues(predictions));
 
-  // ---------- Center BG count-up ----------
-  const reducedMotion =
-    browser && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const tweenedBg = Tween.of(() => Math.round(currentBg), {
-    duration: reducedMotion ? 0 : 600,
+    // Reactive, so toggling the OS setting takes effect without a reload.
+    duration: prefersReducedMotion.current ? 0 : 600,
     easing: cubicOut,
   });
 

@@ -257,9 +257,11 @@
           </DataSourceRow>
         {:else}
           <!-- Not connected and no data - show with configure button -->
-          <a
-            href="/settings/connectors/{connector.id?.toLowerCase()}"
-            class="flex items-center gap-4 p-4 rounded-lg border bg-muted/30 hover:border-primary/50 hover:bg-accent/50 transition-colors group"
+          <!-- The documentation link is a sibling of the configure link, not a
+               descendant: nesting an anchor inside an anchor is invalid and
+               leaves the inner one unreachable by keyboard. -->
+          <div
+            class="group relative flex items-center gap-4 p-4 rounded-lg border bg-muted/30 transition-colors hover:border-primary/50 hover:bg-accent/50 focus-within:border-primary/50"
           >
             <div
               class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
@@ -268,7 +270,12 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-medium">{connector.name}</span>
+                <a
+                  href="/settings/connectors/{connector.id?.toLowerCase()}"
+                  class="font-medium before:absolute before:inset-0 before:content-[''] hover:underline"
+                >
+                  {connector.name}
+                </a>
                 <Badge variant="outline" class="text-xs">
                   Not Configured
                 </Badge>
@@ -277,27 +284,24 @@
                 {connector.description}
               </p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="relative flex items-center gap-2">
               {#if connector.documentationUrl}
                 <Button
                   variant="ghost"
                   size="sm"
-                  onclick={(e: MouseEvent) => e.stopPropagation()}
+                  href={connector.documentationUrl}
+                  target="_blank"
+                  rel="noopener"
+                  aria-label="{connector.name} documentation"
                 >
-                  <a
-                    href={connector.documentationUrl}
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    <ExternalLink class="h-4 w-4" />
-                  </a>
+                  <ExternalLink class="h-4 w-4" />
                 </Button>
               {/if}
               <ChevronRight
                 class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors"
               />
             </div>
-          </a>
+          </div>
         {/if}
       {/each}
     </div>

@@ -143,12 +143,16 @@
 
         {#if selectedUploader.url}
           <div class="pt-4">
-            <Button variant="outline" class="w-full gap-2">
-              <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external uploader website URL from the API, not an internal app route -->
-              <a href={selectedUploader.url} target="_blank" rel="noopener" class="flex items-center gap-2">
-                <ExternalLink class="h-4 w-4" />
-                Visit {getUploaderName(selectedUploader)} Website
-              </a>
+            <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external uploader website URL from the API, not an internal app route -->
+            <Button
+              variant="outline"
+              class="w-full gap-2"
+              href={selectedUploader.url}
+              target="_blank"
+              rel="noopener"
+            >
+              <ExternalLink class="h-4 w-4" />
+              Visit {getUploaderName(selectedUploader)} Website
             </Button>
           </div>
         {/if}

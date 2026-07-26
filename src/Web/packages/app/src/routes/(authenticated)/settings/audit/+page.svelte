@@ -84,6 +84,13 @@
   // --- Tab state ---
   let activeTab = $state("mutations");
 
+  /**
+   * The log is fetched a page at a time while the tab badge shows the server's
+   * total, so without this the table quietly ends at the page limit and looks
+   * like the whole range.
+   */
+  const ROW_LIMIT = 500;
+
   // --- Mutation log server-side filters ---
   const defaultFrom = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   const defaultTo = new Date().toISOString().split("T")[0];
@@ -96,7 +103,7 @@
     getMutationAuditLog({
       from: localDayStart(mFrom),
       to: localDayEnd(mTo),
-      limit: 500,
+      limit: ROW_LIMIT,
       offset: 0,
       sort: "created_at_desc",
     }),
@@ -114,7 +121,7 @@
     getReadAccessAuditLog({
       from: localDayStart(rFrom),
       to: localDayEnd(rTo),
-      limit: 500,
+      limit: ROW_LIMIT,
       offset: 0,
       sort: "created_at_desc",
     }),
@@ -280,6 +287,12 @@
             bind:globalFilter={mGlobalFilter}
           />
         </Card.Content>
+        {#if mutationsTotal > mutations.length}
+          <Card.Footer class="border-t pt-4 text-sm text-muted-foreground">
+            Showing the {mutations.length} most recent of {mutationsTotal} entries in
+            this range. Narrow the dates to see the rest.
+          </Card.Footer>
+        {/if}
       </Card.Root>
     </Tabs.Content>
 
@@ -359,6 +372,12 @@
               bind:globalFilter={rGlobalFilter}
             />
           </Card.Content>
+          {#if readsTotal > reads.length}
+            <Card.Footer class="border-t pt-4 text-sm text-muted-foreground">
+              Showing the {reads.length} most recent of {readsTotal} entries in this
+              range. Narrow the dates to see the rest.
+            </Card.Footer>
+          {/if}
         </Card.Root>
       {/if}
     </Tabs.Content>

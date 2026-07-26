@@ -13,6 +13,7 @@
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { formatSyncMessage } from "$lib/utils/sync-messages";
   import type { SyncMessageType } from "$lib/websocket/types";
+  import { lastSeen as formatAge } from "$lib/utils/formatting";
 
   export type DataSourceStatus =
     | "active"
@@ -127,19 +128,6 @@
     }
   }
 
-  function formatLastSeen(date?: Date): string {
-    if (!date) return "Never";
-    const d = new Date(date);
-    const diff = Date.now() - d.getTime();
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return "Just now";
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return d.toLocaleDateString();
-  }
 
   function formatRelativeTime(date: Date | undefined): string {
     if (!date) return "Never";
@@ -347,7 +335,7 @@
 
           <span class="mx-1">&middot;</span>
           <Clock class="inline h-3 w-3" />
-          {formatLastSeen(lastSuccessfulSync ?? lastSeen)}
+          {formatAge(lastSuccessfulSync ?? lastSeen)}
         </p>
         {/if}
         {#if syncProgress?.phase === "Syncing" && Object.keys(syncProgress.itemsSyncedSoFar).length > 0}

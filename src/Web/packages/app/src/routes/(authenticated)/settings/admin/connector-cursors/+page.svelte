@@ -125,6 +125,10 @@
 
   async function pollJob() {
     if (!activeJobId) return;
+    // Callers that poll on demand (cancelJob) would otherwise leave the pending
+    // timer running and end up with two chains, only one of which stopPolling
+    // can reach.
+    stopPolling();
     try {
       // One-shot fetch each tick — .run() re-executes every call, bypassing query memoisation.
       const status = await getResetJobStatus(activeJobId).run();

@@ -177,10 +177,17 @@
       rules.map((r) => [r.id ?? "", r.name ?? "(unnamed)"]),
     )}
     {@const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000}
-    {@const firedThisWeek = (history?.items ?? []).filter((h) => {
+    {@const fetchedHistory = history?.items ?? []}
+    {@const firedThisWeek = fetchedHistory.filter((h) => {
       const t = h.startedAt ? new Date(h.startedAt).getTime() : NaN;
       return Number.isFinite(t) && t >= cutoff;
     }).length}
+    <!-- The endpoint has no date filter, so the week is counted within one page
+         of history. When every row on that page is inside the week and the
+         server holds more, the real total is higher than we can see. -->
+    {@const firedThisWeekIsFloor =
+      firedThisWeek === fetchedHistory.length &&
+      (history?.totalCount ?? 0) > fetchedHistory.length}
 
     <!-- Do Not Disturb notice, shown only while a manual mute is in effect. -->
     {#if dnd && isDndActiveNow(dnd)}
@@ -213,7 +220,9 @@
         <Card class="transition-colors hover:bg-muted/40">
           <CardContent>
             <p class="text-xs uppercase tracking-wider text-muted-foreground">Fired this week</p>
-            <p class="mt-1 text-2xl font-bold tabular-nums">{firedThisWeek}</p>
+            <p class="mt-1 text-2xl font-bold tabular-nums">
+              {firedThisWeek}{firedThisWeekIsFloor ? "+" : ""}
+            </p>
           </CardContent>
         </Card>
       </a>

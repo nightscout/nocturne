@@ -17,6 +17,7 @@
   import { Button } from "$lib/components/ui/button";
   import AlertBanner from "$lib/components/alerts/AlertBanner.svelte";
   import FiringToast from "$lib/components/alerts/FiringToast.svelte";
+  import { pollActiveAlerts } from "$lib/components/alerts/active-alerts-poll.svelte";
   import DemoBanner from "$lib/components/layout/DemoBanner.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
@@ -66,6 +67,10 @@
     const parts = window.location.hostname.split(".");
     if (parts.length > 2) tenantSlug = parts[0];
   });
+
+  // One poll for the alert surfaces this layout mounts (AlertBanner and
+  // FiringToast both read the same query).
+  pollActiveAlerts();
 
   const coachMarkAdapter = createCoachMarkAdapter();
 

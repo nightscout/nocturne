@@ -99,6 +99,17 @@ export class RealtimeStore {
   private backgroundPollInterval: ReturnType<typeof setInterval> | null = null;
   private static readonly BACKGROUND_POLL_MS = 30_000; // 30s — browsers throttle setInterval to ~60s in hidden tabs, so aim for ~1 poll per minute worst-case
 
+  /** Whether a working socket has ever been established this session, so the
+   *  expected first connect isn't announced as a recovery. */
+  private hasEverConnected = false;
+  /** Whether the user has been told the connection is down, so the recovery
+   *  notice only appears if there was a loss to recover from. */
+  private announcedDisconnect = false;
+  private disconnectNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Socket.io disconnects on transport churn and page teardown, so wait to see
+   *  whether the loss is real before interrupting the user. */
+  private static readonly DISCONNECT_NOTICE_DELAY_MS = 10_000;
+
   /** Foreground safety-net poll: runs while the tab is visible to recover from a
    *  silently-stalled ("zombie") socket the browser still believes is connected. */
   private foregroundPollInterval: ReturnType<typeof setInterval> | null = null;
@@ -443,14 +454,27 @@ export class RealtimeStore {
   /** Setup WebSocket event handlers */
   private setupEventHandlers(): void {
     this.websocketClient.on("connect", () => {
-      toast.success("Connected to real-time data");
+      this.clearDisconnectNotice();
+      // Connecting on page load is expected and needs no announcement; only
+      // report a recovery from a loss the user was actually told about.
+      if (this.announcedDisconnect) {
+        toast.success("Reconnected to real-time data");
+        this.announcedDisconnect = false;
+      }
+      this.hasEverConnected = true;
       // Always force backfill on reconnection — any disconnection may have
       // caused missed data, even if the gap was under 5 minutes.
       this.performBackfillIfNeeded(true);
     });
 
     this.websocketClient.on("disconnect", () => {
-      toast.warning("Real-time data disconnected");
+      if (!this.hasEverConnected || this.announcedDisconnect) return;
+      if (this.disconnectNoticeTimer) return;
+      this.disconnectNoticeTimer = setTimeout(() => {
+        this.disconnectNoticeTimer = null;
+        this.announcedDisconnect = true;
+        toast.warning("Real-time data disconnected");
+      }, RealtimeStore.DISCONNECT_NOTICE_DELAY_MS);
     });
 
     this.websocketClient.on("connect_error", () => {
@@ -847,8 +871,16 @@ export class RealtimeStore {
     }
   }
 
+  private clearDisconnectNotice(): void {
+    if (this.disconnectNoticeTimer) {
+      clearTimeout(this.disconnectNoticeTimer);
+      this.disconnectNoticeTimer = null;
+    }
+  }
+
   /** Cleanup */
   destroy(): void {
+    this.clearDisconnectNotice();
     if (this.timeInterval) {
       clearInterval(this.timeInterval);
     }

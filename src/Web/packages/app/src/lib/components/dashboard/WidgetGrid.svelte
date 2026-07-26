@@ -2,6 +2,7 @@
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";
   import { DEFAULT_TOP_WIDGETS } from "$lib/types/dashboard-widgets";
   import type { Component } from "svelte";
+  import WidgetCard from "./widgets/WidgetCard.svelte";
 
   interface Props {
     /** Ordered list of widget IDs to display */
@@ -43,8 +44,20 @@
   {#each displayWidgets as widgetId (widgetId)}
     {@const promise = loadWidget(widgetId)}
     {#if promise}
-      {#await promise then WidgetComponent}
+      {#await promise}
+        <WidgetCard title="Loading">
+          <div class="bg-muted h-7 w-20 animate-pulse rounded"></div>
+        </WidgetCard>
+      {:then WidgetComponent}
         <WidgetComponent />
+      {:catch}
+        <!-- A dynamic import fails on a stale chunk after a deploy. Without a
+             catch the slot renders nothing, forever, with no trace of why. -->
+        <WidgetCard title="Widget unavailable">
+          <p class="text-muted-foreground text-xs">
+            This widget couldn't be loaded. Reload the page to try again.
+          </p>
+        </WidgetCard>
       {/await}
     {/if}
   {/each}

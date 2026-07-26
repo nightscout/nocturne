@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { Tween } from "svelte/motion";
+	import { Tween, prefersReducedMotion } from "svelte/motion";
 	import { cubicOut } from "svelte/easing";
-	import { browser } from "$app/environment";
 	import { trendAngle, CENTER, RING_RADIUS } from "../geometry";
 
 	let {
@@ -10,13 +9,10 @@
 		stale,
 	}: { delta: number; color: string; stale: boolean } = $props();
 
-	// Captured at mount; preference changes mid-session won't update the tween duration.
-	const reducedMotion =
-		browser &&
-		window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 	const angle = Tween.of(() => trendAngle(delta), {
-		duration: reducedMotion ? 0 : 600,
+		// Reactive, so toggling the OS setting takes effect without a reload.
+		duration: prefersReducedMotion.current ? 0 : 600,
 		easing: cubicOut,
 	});
 </script>
