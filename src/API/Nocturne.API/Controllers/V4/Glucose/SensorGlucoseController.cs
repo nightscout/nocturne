@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Glucose;
@@ -8,6 +9,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 
@@ -37,6 +39,10 @@ public class SensorGlucoseController(
     ILogger<SensorGlucoseController> logger)
     : V4CrudControllerBase<SensorGlucose, UpsertSensorGlucoseRequest, UpsertSensorGlucoseRequest, ISensorGlucoseRepository>(repo)
 {
+    /// <inheritdoc/>
+    /// <remarks>CGM readings are glucose data; the legacy equivalent is a v1 entry.</remarks>
+    public override string WriteScope => OAuthScopes.GlucoseReadWrite;
+
     /// <summary>
     /// Lists sensor glucose readings. Adds an optional <c>patientDeviceId</c> query filter on top of the base
     /// list surface: when set, results are that registered device's raw readings (canonical stream selection is
@@ -161,8 +167,10 @@ public class SensorGlucoseController(
     /// Create multiple sensor glucose readings in bulk (max 1000).
     /// </summary>
     [HttpPost("bulk")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(SensorGlucose[]), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<SensorGlucose[]>> CreateSensorGlucoseBulk(
         [FromBody] UpsertSensorGlucoseRequest[] requests,
         CancellationToken ct = default)

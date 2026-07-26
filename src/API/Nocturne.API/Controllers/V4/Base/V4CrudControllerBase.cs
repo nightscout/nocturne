@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 
@@ -21,17 +23,27 @@ namespace Nocturne.API.Controllers.V4.Base;
 /// post-creation side effects (e.g., alert evaluation).
 /// Create and update methods are annotated with <see cref="RemoteFormAttribute"/>;
 /// delete uses <see cref="RemoteCommandAttribute"/>.
+/// Every write action is gated on <see cref="WriteScope"/>, which derived controllers must declare.
 /// </remarks>
 /// <seealso cref="V4ReadOnlyControllerBase{TModel, TRepository}"/>
 /// <seealso cref="IV4Record"/>
 /// <seealso cref="IV4Repository{TModel}"/>
+/// <seealso cref="RequireDeclaredWriteScopeAttribute"/>
 public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateRequest, TRepository>(TRepository repository)
-    : V4ReadOnlyControllerBase<TModel, TRepository>(repository)
+    : V4ReadOnlyControllerBase<TModel, TRepository>(repository), IWriteScopedController
     where TModel : class, IV4Record
     where TCreateRequest : class
     where TUpdateRequest : class
     where TRepository : IV4Repository<TModel>
 {
+    /// <summary>
+    /// The OAuth readwrite scope for this controller's data category (see <see cref="OAuthScopes"/>),
+    /// required by every write action. Abstract so a new V4 CRUD controller cannot ship without
+    /// declaring one: the class-level <c>[Authorize]</c> is satisfied by read-only credentials
+    /// (guest links, follower and public-share grants), which must not be able to write.
+    /// </summary>
+    public abstract string WriteScope { get; }
+
     /// <summary>
     /// Maps a create request DTO to the domain model.
     /// </summary>
@@ -58,8 +70,10 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// </remarks>
     [HttpPost]
     [RemoteForm]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public virtual async Task<ActionResult<TModel>> Create([FromBody] TCreateRequest request, CancellationToken ct = default)
     {
         var model = MapCreateToModel(request);
@@ -83,8 +97,10 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// </remarks>
     [HttpPut("{id:guid}")]
     [RemoteForm]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public virtual async Task<ActionResult<TModel>> Update(Guid id, [FromBody] TUpdateRequest request, CancellationToken ct = default)
     {
@@ -114,7 +130,9 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <remarks>Returns `204 No Content` on success, or `404 Not Found` if no record with the given <paramref name="id"/> exists.</remarks>
     [HttpDelete("{id:guid}")]
     [RemoteCommand]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public virtual async Task<ActionResult> Delete(Guid id, CancellationToken ct = default)
     {
@@ -151,7 +169,9 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <remarks>Returns `200 OK` with the restored record, or `404 Not Found` if no soft-deleted record with the given <paramref name="id"/> exists.</remarks>
     [HttpPost("{id:guid}/restore")]
     [RemoteCommand]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public virtual async Task<ActionResult<TModel>> Restore(Guid id, CancellationToken ct = default)
     {
@@ -173,7 +193,9 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <remarks>Returns `200 OK` with the restored records. IDs that don't match a soft-deleted record are silently ignored.</remarks>
     [HttpPost("restore")]
     [RemoteCommand]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public virtual async Task<ActionResult<IEnumerable<TModel>>> BulkRestore(
         [FromBody] Guid[] ids, CancellationToken ct = default)
     {

@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 
@@ -41,6 +43,14 @@ public class DeviceEventController(
     IPatientDeviceStamper deviceStamper)
     : V4CrudControllerBase<DeviceEvent, UpsertDeviceEventRequest, UpsertDeviceEventRequest, IDeviceEventRepository>(repo)
 {
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Device events record hardware lifecycle (site/sensor/reservoir/battery changes) and sit under
+    /// the <c>devices.read</c> share category, so they follow devices rather than the treatments
+    /// category their legacy event types came from.
+    /// </remarks>
+    public override string WriteScope => OAuthScopes.DevicesReadWrite;
+
     /// <summary>
     /// Lists device events. Adds an optional <c>patientDeviceId</c> query filter on top of the base list
     /// surface: when set, only events linked to that registered device are returned. Pagination totals
@@ -185,7 +195,9 @@ public class DeviceEventController(
     /// Delete a device event by its external sync identifier (dataSource + syncIdentifier pair).
     /// </summary>
     [HttpDelete("by-sync-id")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> DeleteBySyncIdentifier(

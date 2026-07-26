@@ -316,6 +316,37 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
     }
 
     [Fact]
+    public async Task GuestSession_CannotWriteV4SensorGlucose()
+    {
+        // The V4 plane carries only [Authorize], which a guest session satisfies. Enforcement is
+        // the per-controller write scope (RequireDeclaredWriteScopeAttribute), not the RLS policies:
+        // the share policy is FOR SELECT and the tenant policy's WITH CHECK admits the write.
+        var code = await CreateGuestLinkCodeAsync();
+
+        var handler = new HttpClientHandler { UseCookies = true };
+        using var cookieClient = new HttpClient(handler)
+        {
+            BaseAddress = ApiClient.BaseAddress
+        };
+
+        var activateResponse = await cookieClient.PostAsJsonAsync("/api/v4/guest-links/activate", new
+        {
+            code
+        });
+        activateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await cookieClient.PostAsJsonAsync("/api/v4/glucose/sensor", new
+        {
+            timestamp = DateTimeOffset.UtcNow,
+            mgdl = 120.0,
+            device = "fabricated",
+        });
+
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden);
+        Log($"Guest session V4 glucose write rejected, status: {response.StatusCode}");
+    }
+
+    [Fact]
     public async Task GuestSession_CannotAccessAdminEndpoints()
     {
         // Arrange - create and activate a guest link with cookie-enabled client

@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 
@@ -39,6 +41,10 @@ public class BasalInjectionController(
 {
     private const double UnitsHardCeiling = 500.0;
     private const int FutureToleranceMinutes = 5;
+
+    /// <inheritdoc/>
+    /// <remarks>Basal injections are treatments; the legacy equivalent is a v1 insulin treatment.</remarks>
+    public override string WriteScope => OAuthScopes.TreatmentsReadWrite;
 
     /// <inheritdoc/>
     public override async Task<ActionResult<BasalInjection>> Create(
@@ -144,8 +150,10 @@ public class BasalInjectionController(
     /// failures reject the whole request with `400 Bad Request` before anything is persisted.
     /// </remarks>
     [HttpPost("bulk")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(BasalInjection[]), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<BasalInjection[]>> CreateBasalInjectionsBulk(
         [FromBody] CreateBasalInjectionRequest[] requests,
         CancellationToken ct = default)

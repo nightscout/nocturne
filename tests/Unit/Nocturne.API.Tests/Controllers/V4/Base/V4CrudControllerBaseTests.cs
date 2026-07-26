@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Moq;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Xunit;
 using Nocturne.Core.Contracts.V4;
@@ -47,6 +48,8 @@ public interface ITestRecordRepository : IV4Repository<TestRecord>;
 public class TestCrudController(ITestRecordRepository repository)
     : V4CrudControllerBase<TestRecord, TestCreateRequest, TestUpdateRequest, ITestRecordRepository>(repository)
 {
+    public override string WriteScope => OAuthScopes.GlucoseReadWrite;
+
     protected override TestRecord MapCreateToModel(TestCreateRequest request) => new()
     {
         Timestamp = request.Timestamp,

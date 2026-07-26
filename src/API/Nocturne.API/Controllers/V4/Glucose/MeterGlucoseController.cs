@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Controllers.V4.Glucose;
@@ -29,6 +30,10 @@ namespace Nocturne.API.Controllers.V4.Glucose;
 public class MeterGlucoseController(IMeterGlucoseRepository repo)
     : V4CrudControllerBase<MeterGlucose, UpsertMeterGlucoseRequest, UpsertMeterGlucoseRequest, IMeterGlucoseRepository>(repo)
 {
+    /// <inheritdoc/>
+    /// <remarks>Meter readings are glucose data; the legacy equivalent is a v1 <c>mbg</c> entry.</remarks>
+    public override string WriteScope => OAuthScopes.GlucoseReadWrite;
+
     /// <inheritdoc/>
     /// <remarks>Response is cached for 120 seconds, varied by all query parameters.</remarks>
     [ResponseCache(Duration = 120, VaryByQueryKeys = new[] { "*" })]

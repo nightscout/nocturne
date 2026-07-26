@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 
@@ -33,6 +35,10 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 public class BolusController(IBolusRepository repo, IPatientInsulinRepository insulinRepo)
     : V4CrudControllerBase<Bolus, CreateBolusRequest, UpdateBolusRequest, IBolusRepository>(repo)
 {
+    /// <inheritdoc/>
+    /// <remarks>Boluses are treatments; the legacy equivalent is a v1 insulin treatment.</remarks>
+    public override string WriteScope => OAuthScopes.TreatmentsReadWrite;
+
     /// <inheritdoc/>
     /// <remarks>Response is cached for 90 seconds, varying by all query parameters.</remarks>
     [ResponseCache(Duration = 90, VaryByQueryKeys = new[] { "*" })]
@@ -152,8 +158,10 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
     /// is persisted.
     /// </remarks>
     [HttpPost("bulk")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(Bolus[]), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<Bolus[]>> CreateBolusesBulk(
         [FromBody] CreateBolusRequest[] requests,
         CancellationToken ct = default)
@@ -186,7 +194,9 @@ public class BolusController(IBolusRepository repo, IPatientInsulinRepository in
     /// Delete a bolus by its external sync identifier (dataSource + syncIdentifier pair).
     /// </summary>
     [HttpDelete("by-sync-id")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> DeleteBySyncIdentifier(

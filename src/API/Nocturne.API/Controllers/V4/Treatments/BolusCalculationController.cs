@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Controllers.V4.Treatments;
@@ -28,6 +29,10 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 public class BolusCalculationController(IBolusCalculationRepository repo)
     : V4CrudControllerBase<BolusCalculation, UpsertBolusCalculationRequest, UpsertBolusCalculationRequest, IBolusCalculationRepository>(repo)
 {
+    /// <inheritdoc/>
+    /// <remarks>Bolus calculations sit in the treatments share category alongside the boluses they explain.</remarks>
+    public override string WriteScope => OAuthScopes.TreatmentsReadWrite;
+
     protected override BolusCalculation MapCreateToModel(UpsertBolusCalculationRequest request) => new()
     {
         Timestamp = request.Timestamp.UtcDateTime,
