@@ -16,6 +16,7 @@ public class OAuthGrantService : IOAuthGrantService
     private readonly NocturneDbContext _dbContext;
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
     private readonly IOAuthClientService _clientService;
+    private readonly GuestSessionCacheService _guestSessionCache;
     private readonly ILogger<OAuthGrantService> _logger;
 
     /// <summary>
@@ -25,16 +26,19 @@ public class OAuthGrantService : IOAuthGrantService
     /// <param name="dbContextFactory">Factory used by <see cref="IsGrantRevokedAsync"/>, which runs
     /// during authentication and so cannot rely on the scoped context being tenant-pinned yet.</param>
     /// <param name="clientService">Used to resolve client metadata (currently unused in this implementation).</param>
+    /// <param name="guestSessionCache">Cache evicted when a grant is revoked, so a revoked guest link stops resolving.</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthGrantService(
         NocturneDbContext dbContext,
         IDbContextFactory<NocturneDbContext> dbContextFactory,
         IOAuthClientService clientService,
+        GuestSessionCacheService guestSessionCache,
         ILogger<OAuthGrantService> logger)
     {
         _dbContext = dbContext;
         _dbContextFactory = dbContextFactory;
         _clientService = clientService;
+        _guestSessionCache = guestSessionCache;
         _logger = logger;
     }
 
@@ -172,6 +176,13 @@ public class OAuthGrantService : IOAuthGrantService
         }
 
         await _dbContext.SaveChangesAsync(ct);
+
+        // Guest sessions are cached for 30 seconds, so revoking the grant is not enough on its
+        // own. Evicting here rather than in GuestLinkService covers every revoke path: a guest
+        // grant's SubjectId is the data owner, and DeleteGrant filters only on SubjectId, so the
+        // owner can revoke their own guest link through the OAuth grants API without ever
+        // entering GuestLinkService.
+        _guestSessionCache.Evict(grant.TenantId, grant.Id);
 
         _logger.LogInformation(
             "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_tokens={TokenCount}",

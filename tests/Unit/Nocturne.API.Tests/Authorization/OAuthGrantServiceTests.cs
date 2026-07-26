@@ -1,9 +1,12 @@
+using FluentAssertions;
 using System.Data.Common;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Auth;
+using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -23,6 +26,8 @@ public class OAuthGrantServiceTests : IDisposable
     private readonly DbContextOptions<NocturneDbContext> _contextOptions;
     private readonly Mock<IOAuthClientService> _mockClientService;
     private readonly Mock<ILogger<OAuthGrantService>> _mockLogger;
+    private readonly GuestSessionCacheService _guestSessionCache =
+        new(new MemoryCache(new MemoryCacheOptions()));
 
     private const string TestClientId = "test-client-id";
 
@@ -74,6 +79,7 @@ public class OAuthGrantServiceTests : IDisposable
             dbContext,
             new TestDbContextFactory(_contextOptions, _testTenantId),
             _mockClientService.Object,
+            _guestSessionCache,
             _mockLogger.Object);
     }
 
@@ -191,6 +197,30 @@ public class OAuthGrantServiceTests : IDisposable
 
         var entity = await db.OAuthGrants.FirstAsync(g => g.Id == grantId);
         Assert.NotNull(entity.RevokedAt);
+    }
+
+    [Fact]
+    public async Task RevokeGrantAsync_EvictsTheCachedGuestSession()
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
+        var grantId = await SeedGrantAsync(db);
+
+        // A guest grant's SubjectId is the data owner, and DELETE /api/oauth/grants/{id} filters
+        // only on SubjectId — so the owner can revoke a guest link through this service without
+        // GuestLinkService being involved. Without eviction here the guest keeps reading health
+        // data until the cache entry expires.
+        _guestSessionCache.Set(
+            _testTenantId,
+            grantId,
+            new GuestSessionInfo(
+                grantId, _testTenantId, _ownerSubjectId, [], null, DateTime.UtcNow.AddHours(1)));
+
+        var service = CreateService(db);
+        await service.RevokeGrantAsync(grantId);
+
+        _guestSessionCache.TryGet(_testTenantId, grantId, out _).Should().BeFalse();
     }
 
     [Fact]
