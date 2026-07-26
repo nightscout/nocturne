@@ -1,8 +1,6 @@
-using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.Options;
-using Nocturne.API.Helpers;
 using Nocturne.API.Multitenancy;
+using Nocturne.Core.Contracts.Auth;
 
 namespace Nocturne.API.Middleware;
 
@@ -21,8 +19,10 @@ namespace Nocturne.API.Middleware;
 /// <see cref="MemberScopeMiddleware"/>, <see cref="SiteSecurityMiddleware"/>.
 /// </para>
 /// <para>
-/// Extracts the tenant slug from the base64-encoded OIDC <c>state</c> query parameter
-/// and issues a 302 redirect to the correct <c>{slug}.{baseDomain}</c> URL.
+/// Reads the tenant slug out of the protected OIDC <c>state</c> query parameter via
+/// <see cref="IOidcAuthService.TryReadTenantSlug"/> and issues a 302 redirect to the correct
+/// <c>{slug}.{baseDomain}</c> URL. The slug comes from the authenticated state rather than
+/// from a caller-supplied parameter, so the redirect target is one this instance issued.
 /// </para>
 /// </remarks>
 /// <seealso cref="Multitenancy.TenantResolutionMiddleware"/>
@@ -88,7 +88,8 @@ public partial class OidcCallbackRedirectMiddleware
             return;
         }
 
-        var tenantSlug = ExtractTenantSlug(stateParam);
+        var oidcAuthService = context.RequestServices.GetRequiredService<IOidcAuthService>();
+        var tenantSlug = oidcAuthService.TryReadTenantSlug(stateParam);
         if (string.IsNullOrEmpty(tenantSlug))
         {
             await _next(context);
@@ -116,25 +117,6 @@ public partial class OidcCallbackRedirectMiddleware
     {
         var value = path.Value ?? "";
         return CallbackPaths.Any(p => value.Equals(p, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string? ExtractTenantSlug(string encoded)
-    {
-        try
-        {
-            var bytes = Base64Url.Decode(encoded);
-            var json = Encoding.UTF8.GetString(bytes);
-
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("TenantSlug", out var prop))
-                return prop.GetString();
-
-            return null;
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(@"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$")]
