@@ -13,11 +13,17 @@ namespace Nocturne.API.Controllers.V4.Admin;
 
 /// <summary>
 /// Internal admin controller for demo tenant lifecycle management.
-/// Called only by the demo background service (service-to-service); not exposed through the gateway.
 /// </summary>
+/// <remarks>
+/// Called by the demo background service, which authenticates with the instance key — that
+/// yields the <c>platform_admin</c> role, so no caller change was needed to gate this. It was
+/// previously <c>[AllowAnonymous]</c> on the assumption it was unreachable from outside; it is
+/// in fact tenantless-allowed and reachable through the web app's <c>/api</c> proxy, which made
+/// demo-tenant provisioning and deletion anonymous operations.
+/// </remarks>
 [ApiController]
 [Route("api/v4/admin/demo")]
-[AllowAnonymous]
+[Authorize(Roles = "platform_admin")]
 [ApiExplorerSettings(IgnoreApi = true)]
 public class DemoAdminController : ControllerBase
 {
