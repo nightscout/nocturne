@@ -20,6 +20,7 @@ using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Devices;
+using Nocturne.API.Services.Docs;
 using Nocturne.API.Services.Effects;
 using Nocturne.API.Services.Entries;
 using Nocturne.API.Services.Glucose;
@@ -245,6 +246,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();
         services.AddScoped<DemoTenantService>();
+        services.AddScoped<ScalarAuthProvider>();
 
         // Shared by InstanceKeyHandler (authentication) and TenantSetupMiddleware
         // (setup-gate bypass) so instance-key validation rules live in one place.

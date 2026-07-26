@@ -13,7 +13,9 @@ using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.DevOnly;
+using Nocturne.API.Services.Docs;
 using Nocturne.API.Services.Seeding;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.API.Extensions;
 using Nocturne.API.Filters;
@@ -408,6 +410,13 @@ app.Use(async (context, next) =>
         var endpoint = context.GetEndpoint();
         if (endpoint != null)
         {
+            // Scalar's options delegate is synchronous, so the per-tenant auth context
+            // (OAuth client, demo bearer token) is resolved here and stashed on Items.
+            if (context.Request.Path.StartsWithSegments("/scalar", StringComparison.OrdinalIgnoreCase))
+            {
+                await context.RequestServices.GetRequiredService<ScalarAuthProvider>().PrepareAsync(context);
+            }
+
             await endpoint.RequestDelegate!(context);
             return;
         }
@@ -477,7 +486,7 @@ app.MapOpenApi();
 var scalarCss = app.Configuration["SCALAR_CUSTOM_CSS"];
 
 // Scalar interactive API docs at /scalar/{documentName}
-app.MapScalarApiReference(options =>
+app.MapScalarApiReference((options, httpContext) =>
 {
     options.WithTheme(ScalarTheme.Mars);
     options.WithOpenApiRoutePattern("/openapi/{documentName}.json");
@@ -488,19 +497,37 @@ app.MapScalarApiReference(options =>
         options.WithCustomCss(scalarCss);
     options.EnablePersistentAuthentication();
 
+    // Resolved per request by ScalarAuthProvider; absent when the host resolves to no
+    // tenant (a bare instance, or a share host), in which case the reference still
+    // renders and only "Send request" is unusable.
+    var scalarAuth = httpContext.Items[ScalarAuthContext.HttpContextItemKey] as ScalarAuthContext;
+
     // Pre-configure authentication so Scalar's "Authorize" UI works out of the box.
     options
         .AddPreferredSecuritySchemes("oauth2", "bearer", "apiSecret")
         .AddAuthorizationCodeFlow("oauth2", flow =>
         {
-            flow.ClientId = "scalar";
+            // The client is registered per tenant against this exact redirect URI;
+            // authorize-time matching is byte-exact.
+            flow.ClientId = scalarAuth?.ClientId ?? ScalarAuthProvider.ScalarClientId;
+            if (scalarAuth is not null)
+                flow.RedirectUri = scalarAuth.RedirectUri;
             flow.Pkce = Pkce.Sha256;
-            flow.SelectedScopes = ["*"];
+            flow.SelectedScopes = [OAuthScopes.FullAccess];
         })
         .AddApiKeyAuthentication("apiSecret", apiKey =>
         {
             apiKey.Value = string.Empty;
         });
+
+    // On a demo tenant, hand Scalar a token for the shared demo member so requests work
+    // with no sign-in step. Never populated for a real tenant.
+    if (scalarAuth?.BearerToken is { Length: > 0 } demoToken)
+    {
+        options
+            .AddPreferredSecuritySchemes("bearer", "oauth2", "apiSecret")
+            .WithHttpBearerAuthentication(bearer => bearer.Token = demoToken);
+    }
 });
 
 // Add root endpoint to serve a basic info page
