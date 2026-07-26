@@ -1,7 +1,7 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageLoad } from "./$types";
 
-// Redirect grants to security page (now focuses on Followers & Sharing)
+// Grants are managed within the unified Members page, alongside roles and sharing.
 export const load: PageLoad = async () => {
-  throw redirect(308, "/settings/security");
+  redirect(308, "/settings/members");
 };

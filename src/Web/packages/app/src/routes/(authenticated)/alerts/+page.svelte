@@ -17,10 +17,8 @@
   } from "$api/generated/tenantAlertSettings.generated.remote";
   import type {
     AlertRuleResponse,
-    ActiveExcursionResponse,
     TenantAlertSettingsResponse,
   } from "$api-clients";
-  import { AlertRuleSeverity } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
   import {
@@ -34,7 +32,8 @@
   import { Bell, Plus, AlertTriangle, Check, Loader2 } from "lucide-svelte";
 
   import AlertRuleRow from "$lib/components/alerts/AlertRuleRow.svelte";
-  import ArmedStatusStrip from "$lib/components/alerts/ArmedStatusStrip.svelte";
+  import DndNoticeStrip from "$lib/components/alerts/DndNoticeStrip.svelte";
+  import { isDndActiveNow } from "$lib/components/alerts/dnd";
 
   // ---- Queries ----
   const rulesQuery = getRules();
@@ -48,20 +47,6 @@
   let testingRuleId = $state<string | null>(null);
   let acknowledging = $state(false);
   let disablingDnd = $state(false);
-
-  function deriveArmedState(
-    s: TenantAlertSettingsResponse | null,
-    active: ActiveExcursionResponse[],
-  ): "ok" | "warn" | "bad" | "dnd" {
-    // Lightweight heuristic — we don't (yet) have a per-channel health
-    // probe surfaced through the API, so this is currently driven entirely
-    // by DND state and active-alert count. Wire to channel health when the
-    // backend exposes it.
-    if (s?.dndManualActive || s?.dndScheduleEnabled) return "dnd";
-    if (active.length === 0) return "ok";
-    if (active.some((a) => a.severity === AlertRuleSeverity.Critical)) return "bad";
-    return "warn";
-  }
 
   // ---- Mutations ----
   async function handleToggleRule(ruleId: string): Promise<void> {
@@ -98,10 +83,12 @@
   ): Promise<void> {
     disablingDnd = true;
     try {
+      // Clears the manual mute only; the configured quiet-hours window is left
+      // in place.
       await updateTenantAlertSettings({
         dndManualActive: false,
         dndManualUntil: undefined,
-        dndScheduleEnabled: false,
+        dndScheduleEnabled: current.dndScheduleEnabled,
         dndScheduleStart: current.dndScheduleStart,
         dndScheduleEnd: current.dndScheduleEnd,
       });
@@ -186,7 +173,6 @@
     {@const dnd = (await dndQuery) ?? null}
     {@const enabledCount = rules.filter((r) => r.isEnabled).length}
     {@const totalCount = rules.length}
-    {@const armedState = deriveArmedState(dnd, activeAlerts)}
     {@const ruleNamesById = new Map(
       rules.map((r) => [r.id ?? "", r.name ?? "(unnamed)"]),
     )}
@@ -196,11 +182,10 @@
       return Number.isFinite(t) && t >= cutoff;
     }).length}
 
-    <!-- Armed status strip — only meaningful once at least one rule exists. -->
-    {#if totalCount > 0}
-      <ArmedStatusStrip
-        state={armedState}
-        onDisableDnd={armedState === "dnd" && dnd ? () => handleDisableDnd(dnd) : undefined}
+    <!-- Do Not Disturb notice, shown only while a manual mute is in effect. -->
+    {#if dnd && isDndActiveNow(dnd)}
+      <DndNoticeStrip
+        onDisableDnd={() => handleDisableDnd(dnd)}
         {disablingDnd}
       />
     {/if}

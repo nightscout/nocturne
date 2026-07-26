@@ -39,10 +39,12 @@
   import IssueCreatorDialog from "$lib/components/support/IssueCreatorDialog.svelte";
   import { getCoachMarkContext } from "@nocturne/coach";
   import { toast } from "svelte-sonner";
+  import {
+    buildDiagnosticReport,
+    readDiagnosticDevice,
+  } from "./diagnostic-report";
 
   let includeDeviceInfo = $state(true);
-  let includeRecentLogs = $state(true);
-  let includeSettings = $state(false);
   let additionalDetails = $state("");
   let logsCopied = $state(false);
 
@@ -159,23 +161,15 @@
   }
 
   function generateDiagnosticReport(): string {
-    const report = {
+    return buildDiagnosticReport({
       timestamp: new Date().toISOString(),
-      version: "1.0.0",
-      userAgent:
-        typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
-      platform:
-        typeof navigator !== "undefined" ? navigator.platform : "unknown",
-      screenSize:
-        typeof window !== "undefined"
-          ? `${window.innerWidth}x${window.innerHeight}`
-          : "unknown",
-      deviceInfo: includeDeviceInfo,
-      recentLogs: includeRecentLogs,
-      settingsIncluded: includeSettings,
-      additionalDetails: additionalDetails,
-    };
-    return JSON.stringify(report, null, 2);
+      build: status
+        ? { version: status.version, head: status.head, build: status.build }
+        : null,
+      includeDeviceInfo,
+      device: readDiagnosticDevice(),
+      additionalDetails,
+    });
   }
 
   function handleSupportAction(template: string, accountBillingMode?: string | null) {
@@ -378,26 +372,6 @@
             </p>
           </div>
           <Switch bind:checked={includeDeviceInfo} />
-        </div>
-
-        <div class="flex items-center justify-between">
-          <div class="space-y-0.5">
-            <Label>Include recent logs</Label>
-            <p class="text-sm text-muted-foreground">
-              API calls, errors, and debug information
-            </p>
-          </div>
-          <Switch bind:checked={includeRecentLogs} />
-        </div>
-
-        <div class="flex items-center justify-between">
-          <div class="space-y-0.5">
-            <Label>Include settings</Label>
-            <p class="text-sm text-muted-foreground">
-              Your configuration (excludes passwords/tokens)
-            </p>
-          </div>
-          <Switch bind:checked={includeSettings} />
         </div>
       </div>
 

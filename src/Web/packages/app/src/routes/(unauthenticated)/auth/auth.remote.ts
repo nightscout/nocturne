@@ -11,10 +11,13 @@
  */
 
 import { z } from "zod";
-import { query, command, getRequestEvent } from "$app/server";
+import { query, command, form, getRequestEvent } from "$app/server";
+import { invalid, redirect } from "@sveltejs/kit";
 
 import type { OidcProviderInfo } from "$lib/api/generated/nocturne-api-client";
-import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import { clearAuthCookies } from "$lib/config/auth-cookies";
+import { errorStatus } from "$lib/forms/submit-error";
+import { safeReturnUrl } from "$lib/server/return-url";
 
 // ============================================================================
 // Helper Functions
@@ -212,23 +215,109 @@ export const logoutSession = command(z.string().optional(), async (_providerId) 
     // Try to revoke on the backend
     await api.oidc.logout();
 
-    // Clear all auth cookies
-    event.cookies.delete(AUTH_COOKIE_NAMES.accessToken, { path: "/" });
-    event.cookies.delete(AUTH_COOKIE_NAMES.refreshToken, { path: "/" });
-    event.cookies.delete("IsAuthenticated", { path: "/" });
+    clearAuthCookies(event.cookies);
 
     return { success: true };
   } catch (error) {
     console.error("Failed to logout:", error);
 
     // Still clear cookies even if backend call fails
-    event.cookies.delete(AUTH_COOKIE_NAMES.accessToken, { path: "/" });
-    event.cookies.delete(AUTH_COOKIE_NAMES.refreshToken, { path: "/" });
-    event.cookies.delete("IsAuthenticated", { path: "/" });
+    clearAuthCookies(event.cookies);
 
     return { success: true };
   }
 });
+
+// ============================================================================
+// Form Functions
+// ============================================================================
+
+/**
+ * The credential fields shared by the code-based sign-in forms. `returnUrl` is
+ * a hidden field so a submission without JavaScript lands where the user
+ * started; it's reduced to a same-origin path before being used.
+ */
+const codeSignInSchema = z.object({
+  username: z.string().trim().min(1, "Enter your username"),
+  code: z.string().trim().min(1, "Enter your code"),
+  returnUrl: z.string().optional(),
+});
+
+/**
+ * Sign in with a recovery code.
+ *
+ * Runs entirely on the server, so it works with JavaScript disabled: the
+ * browser posts the form, the handler redirects on success, and a rejected code
+ * comes back as a field-level issue on the re-rendered page.
+ */
+export const signInWithRecoveryCode = form(
+  codeSignInSchema,
+  async (data, issue) => {
+    const api = getApiClient();
+
+    let verified = false;
+    try {
+      const result = await api.passkey.recoveryVerify({
+        username: data.username,
+        code: data.code,
+      });
+      verified = result?.success === true;
+    } catch (err) {
+      // Log the status only: the response carries the submitted credentials.
+      console.error(
+        "Recovery code sign-in failed with status:",
+        errorStatus(err) ?? "none"
+      );
+    }
+
+    // The API deliberately doesn't say which of the two was wrong.
+    if (!verified) {
+      invalid(issue.code("That username and recovery code don't match."));
+    }
+
+    redirect(303, safeReturnUrl(data.returnUrl));
+  }
+);
+
+/**
+ * Sign in with a code from an authenticator app. Server-side for the same
+ * reason as {@link signInWithRecoveryCode}.
+ */
+export const signInWithAuthenticator = form(
+  codeSignInSchema.extend({
+    code: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app"),
+  }),
+  async (data, issue) => {
+    const api = getApiClient();
+
+    let verified = false;
+    try {
+      const result = await api.totp.login({
+        username: data.username,
+        code: data.code,
+      });
+      verified = result?.success === true;
+    } catch (err) {
+      console.error(
+        "Authenticator sign-in failed with status:",
+        errorStatus(err) ?? "none"
+      );
+    }
+
+    if (!verified) {
+      invalid(
+        issue.code(
+          "That code wasn't accepted. Codes expire after 30 seconds — try the current one."
+        )
+      );
+    }
+
+    redirect(303, safeReturnUrl(data.returnUrl));
+  }
+);
 
 /**
  * Set auth cookies after successful passkey login.

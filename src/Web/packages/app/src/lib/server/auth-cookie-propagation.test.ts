@@ -107,6 +107,39 @@ describe("propagateAuthCookies", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("propagates the guest session cookie", () => {
+    const { cookies, calls } = createRecordingCookies();
+
+    propagateAuthCookies(
+      [
+        `${AUTH_COOKIE_NAMES.guestSession}=encrypted-grant; Path=/; HttpOnly; Secure; SameSite=Lax`,
+      ],
+      cookies
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      op: "set",
+      name: AUTH_COOKIE_NAMES.guestSession,
+      value: "encrypted-grant",
+      opts: { path: "/", httpOnly: true, secure: true, sameSite: "lax" },
+    });
+  });
+
+  it("propagates the guest session cookie's deletion", () => {
+    const { cookies, calls } = createRecordingCookies();
+
+    propagateAuthCookies(
+      [`${AUTH_COOKIE_NAMES.guestSession}=; Path=/; Max-Age=0`],
+      cookies
+    );
+
+    expect(calls[0]).toMatchObject({
+      op: "delete",
+      name: AUTH_COOKIE_NAMES.guestSession,
+    });
+  });
+
   it("propagates cookie deletion when the server expires an auth cookie", () => {
     const { cookies, calls } = createRecordingCookies();
 

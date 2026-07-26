@@ -25,7 +25,7 @@ public class MembershipRequestController(
     /// </summary>
     [HttpPost]
     [Authorize]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetMyRequest"])]
     [ProducesResponseType(typeof(CreateMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateRequest(
@@ -90,7 +90,7 @@ public class MembershipRequestController(
     /// </summary>
     [HttpPost("{id:guid}/approve")]
     [Authorize]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetPendingRequests"])]
     [ProducesResponseType(typeof(DecideMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -121,7 +121,7 @@ public class MembershipRequestController(
     /// </summary>
     [HttpPost("{id:guid}/deny")]
     [Authorize]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetPendingRequests"])]
     [ProducesResponseType(typeof(DecideMembershipRequestResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

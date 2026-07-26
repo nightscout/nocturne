@@ -8,6 +8,9 @@
   import * as bw from "$api/generated/bodyWeights.generated.remote";
   import type { BodyWeight } from "$api";
 
+  // create/deleteBodyWeight declare a GetBodyWeights invalidation, but it refreshes
+  // getBodyWeights(undefined) — a different cache key from this subscription — so each
+  // mutation below refreshes this query itself.
   const weightsQuery = bw.getBodyWeights({ count: 100, skip: 0 });
   const entries = $derived<BodyWeight[]>(weightsQuery.current ?? []);
 
@@ -39,6 +42,7 @@
         weightKg: kg,
         mills: newDate ? new Date(newDate).getTime() : Date.now(),
       });
+      await weightsQuery.refresh();
       newWeightKg = "";
       newDate = "";
     } catch (e) {
@@ -54,6 +58,7 @@
     if (!entry?.id) return;
     try {
       await bw.deleteBodyWeight(entry.id);
+      await weightsQuery.refresh();
     } catch (e) {
       errorMessage = (e as { message?: string })?.message ?? "Failed to delete entry";
     }

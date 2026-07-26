@@ -2,25 +2,30 @@
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import { FormError, FormField } from "$lib/forms";
   import {
     ShieldAlert,
     Fingerprint,
     Loader2,
-    AlertTriangle,
     Check,
-    Copy,
-    ShieldCheck,
   } from "lucide-svelte";
-  import { startRegistration } from "@simplewebauthn/browser";
+  import {
+    startRegistration,
+    type PublicKeyCredentialCreationOptionsJSON,
+  } from "@simplewebauthn/browser";
   import {
     registerOptions,
     registerComplete,
   } from "$lib/api/generated/passkeys.generated.remote";
+  import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
+  import {
+    describePasskeyError,
+    parseCeremonyOptions,
+  } from "$lib/components/auth/passkey-errors";
   import { goto } from "$app/navigation";
 
-  // Steps: identify -> register -> codes -> done
-  type Step = "identify" | "register" | "codes" | "done";
+  // Steps: identify -> codes -> done
+  type Step = "identify" | "codes" | "done";
   let step = $state<Step>("identify");
 
   // Form state
@@ -29,27 +34,44 @@
   let isRegistering = $state(false);
   let errorMessage = $state<string | null>(null);
   let recoveryCodes = $state<string[]>([]);
-  let codesCopied = $state(false);
 
   // In recovery mode, we need to find the orphaned subject.
   // The register/options endpoint will look up the subject by username.
   // For now, we collect username + display name and attempt registration.
 
-  async function handleRegister() {
-    if (!username.trim()) {
-      errorMessage = "Username is required.";
-      return;
+  /**
+   * The completion response only carries recovery codes when the account had
+   * none, so the field is absent from the generated response type.
+   */
+  function readRecoveryCodes(result: unknown): string[] {
+    if (!result || typeof result !== "object" || !("recoveryCodes" in result)) {
+      return [];
     }
+    const { recoveryCodes: codes } = result;
+    if (!Array.isArray(codes)) return [];
+    return codes.filter((code): code is string => typeof code === "string");
+  }
+
+  /**
+   * Registers a replacement passkey for the account named in the form. The
+   * WebAuthn ceremony runs in the browser, so this step needs JavaScript; the
+   * form is here for Enter-to-submit, required-field checks and autofill.
+   */
+  async function handleRegister(event: SubmitEvent) {
+    event.preventDefault();
+    if (isRegistering || !username.trim()) return;
 
     isRegistering = true;
     errorMessage = null;
 
     try {
-      // registerOptions will find the subject by username
+      // registerOptions finds the account by username
       const response = await registerOptions({
         username: username.trim(),
       });
-      const options = JSON.parse(response.options ?? "");
+      const options = parseCeremonyOptions<PublicKeyCredentialCreationOptionsJSON>(
+        response.options
+      );
       const challengeToken = response.challengeToken ?? "";
 
       const attestation = await startRegistration({ optionsJSON: options });
@@ -60,27 +82,18 @@
         label: `${displayName.trim() || username.trim()}'s passkey`,
       });
 
-      // Check if recovery codes were returned
-      if (result && "recoveryCodes" in result) {
-        recoveryCodes = (result as any).recoveryCodes ?? [];
-      }
+      recoveryCodes = readRecoveryCodes(result);
 
       step = recoveryCodes.length > 0 ? "codes" : "done";
     } catch (err) {
-      errorMessage =
-        err instanceof Error ? err.message : "Failed to register passkey. Check that your username is correct.";
+      console.error("Recovery-mode passkey registration failed:", err);
+      errorMessage = describePasskeyError(
+        err,
+        "register",
+        "We couldn't register a passkey. Check that the username is correct and try again."
+      );
     } finally {
       isRegistering = false;
-    }
-  }
-
-  async function copyRecoveryCodes() {
-    const text = recoveryCodes.join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-      codesCopied = true;
-    } catch {
-      codesCopied = true;
     }
   }
 
@@ -106,45 +119,50 @@
     </Card.Header>
 
     <Card.Content>
-      {#if step === "identify" || step === "register"}
-        <div class="space-y-4">
-          <div class="space-y-2">
-            <Label for="recovery-username">Username</Label>
-            <Input
-              id="recovery-username"
-              type="text"
-              placeholder="your-username"
-              bind:value={username}
-              disabled={isRegistering}
-            />
-          </div>
+      {#if step === "identify"}
+        <form class="space-y-4" onsubmit={handleRegister}>
+          <FormField label="Username" id="recovery-username" required>
+            {#snippet control(field)}
+              <Input
+                {...field}
+                name="username"
+                type="text"
+                placeholder="your-username"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck={false}
+                autofocus
+                bind:value={username}
+                disabled={isRegistering}
+              />
+            {/snippet}
+          </FormField>
 
-          <div class="space-y-2">
-            <Label for="recovery-display-name">Display name</Label>
-            <Input
-              id="recovery-display-name"
-              type="text"
-              placeholder="Your name"
-              bind:value={displayName}
-              disabled={isRegistering}
-            />
-            <p class="text-xs text-muted-foreground">
-              Optional. Updates your display name if provided.
-            </p>
-          </div>
+          <FormField
+            label="Display name"
+            id="recovery-display-name"
+            description="Optional. Updates your display name if provided."
+          >
+            {#snippet control(field)}
+              <Input
+                {...field}
+                name="displayName"
+                type="text"
+                placeholder="Your name"
+                autocomplete="name"
+                bind:value={displayName}
+                disabled={isRegistering}
+              />
+            {/snippet}
+          </FormField>
 
-          {#if errorMessage}
-            <div class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-              <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-              <p class="text-sm text-destructive">{errorMessage}</p>
-            </div>
-          {/if}
+          <FormError issues={errorMessage} focusOnShow />
 
           <Button
+            type="submit"
             class="w-full"
             size="lg"
             disabled={!username.trim() || isRegistering}
-            onclick={handleRegister}
           >
             {#if isRegistering}
               <Loader2 class="mr-2 h-5 w-5 animate-spin" />
@@ -154,7 +172,7 @@
               Register passkey
             {/if}
           </Button>
-        </div>
+        </form>
       {:else if step === "codes"}
         <div class="space-y-4">
           <div class="flex items-start gap-3 rounded-md border border-green-500/20 bg-green-500/5 p-3">
@@ -164,47 +182,7 @@
             </p>
           </div>
 
-          <div class="space-y-3">
-            <div class="flex items-center gap-2">
-              <ShieldCheck class="h-5 w-5 text-primary" />
-              <h3 class="font-medium">Recovery Codes</h3>
-            </div>
-            <p class="text-sm text-muted-foreground">
-              Save these recovery codes in a safe place. Each code can only be used once.
-            </p>
-
-            <div class="grid grid-cols-2 gap-2 rounded-lg border bg-muted/50 p-4">
-              {#each recoveryCodes as code}
-                <code class="rounded bg-background px-2 py-1 text-center text-sm font-mono">
-                  {code}
-                </code>
-              {/each}
-            </div>
-
-            <Button
-              variant={codesCopied ? "outline" : "default"}
-              class="w-full"
-              onclick={copyRecoveryCodes}
-            >
-              {#if codesCopied}
-                <Check class="mr-2 h-4 w-4" />
-                Codes copied
-              {:else}
-                <Copy class="mr-2 h-4 w-4" />
-                Copy recovery codes
-              {/if}
-            </Button>
-
-            {#if codesCopied}
-              <Button class="w-full" onclick={handleContinue}>
-                Continue
-              </Button>
-            {:else}
-              <p class="text-center text-xs text-muted-foreground">
-                Copy your recovery codes before continuing.
-              </p>
-            {/if}
-          </div>
+          <RecoveryCodes codes={recoveryCodes} onContinue={handleContinue} />
         </div>
       {:else if step === "done"}
         <div class="space-y-4">

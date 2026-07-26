@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
+  import { FormField } from "$lib/forms";
   import { DiabetesType, BiologicalSex } from "$api";
   import { diabetesTypeLabels, biologicalSexLabels } from "./labels";
   import { ClinicalState } from "./state.svelte";
@@ -26,7 +26,7 @@
   class="@container"
   bind:this={formEl}
   {...clinical.guard.enhance(async () => {
-    if (clinical.form.result) await clinical.weight.save();
+    await clinical.weight.save();
   })}
 >
   <!-- Hidden fields for read-only record data -->
@@ -44,136 +44,165 @@
   {/if}
 
   <div class="grid gap-4 @sm:grid-cols-2">
-    <div class="space-y-2">
-      <Label for="diabetes-type">Diabetes Type</Label>
-      <Select.Root type="single" name="diabetesType" bind:value={clinical.diabetesType}>
-        <Select.Trigger id="diabetes-type" aria-invalid={clinical.guard.issuesFor("diabetesType").length > 0}>
-          {clinical.diabetesType
-            ? (diabetesTypeLabels[clinical.diabetesType as DiabetesType] ?? clinical.diabetesType)
-            : "Select type"}
-        </Select.Trigger>
-        <Select.Content>
-          {#each Object.entries(diabetesTypeLabels) as [value, label]}
-            <Select.Item {value} {label} />
-          {/each}
-        </Select.Content>
-      </Select.Root>
-      {#each clinical.guard.issuesFor("diabetesType") as issue}
-        <p class="text-sm text-destructive">{issue.message}</p>
-      {/each}
-    </div>
+    <!-- aria-required, not required: bits-ui puts `required` on a 1px hidden
+         input that still takes part in constraint validation, so an empty
+         select blocks the submit event with a bubble anchored off-screen — the
+         Save button would appear to do nothing. The requirement is enforced by
+         the guard's schema, which reports it on the field. -->
+    <FormField
+      label="Diabetes Type"
+      id="diabetes-type"
+      required
+      issues={clinical.guard.issuesFor("diabetesType")}
+    >
+      {#snippet control(field)}
+        <Select.Root type="single" name="diabetesType" bind:value={clinical.diabetesType}>
+          <Select.Trigger
+            id={field.id}
+            aria-required="true"
+            aria-invalid={field["aria-invalid"]}
+            aria-describedby={field["aria-describedby"]}
+          >
+            {clinical.diabetesType
+              ? (diabetesTypeLabels[clinical.diabetesType as DiabetesType] ?? clinical.diabetesType)
+              : "Select type"}
+          </Select.Trigger>
+          <Select.Content>
+            {#each Object.entries(diabetesTypeLabels) as [value, label]}
+              <Select.Item {value} {label} />
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      {/snippet}
+    </FormField>
 
     {#if clinical.diabetesType === DiabetesType.Other}
-      <div class="space-y-2">
-        <Label for="diabetes-type-other">Specify Type</Label>
-        <Input
-          id="diabetes-type-other"
-          name="diabetesTypeOther"
-          bind:value={clinical.diabetesTypeOther}
-          placeholder="e.g. Type 3c"
-        />
-      </div>
+      <FormField label="Specify Type" id="diabetes-type-other">
+        {#snippet control(field)}
+          <Input
+            {...field}
+            name="diabetesTypeOther"
+            bind:value={clinical.diabetesTypeOther}
+            placeholder="e.g. Type 3c"
+          />
+        {/snippet}
+      </FormField>
     {/if}
 
-    <div class="space-y-2">
-      <Label for="diagnosis-date">Diagnosis Date</Label>
-      <Input
-        id="diagnosis-date"
-        name="diagnosisDate"
-        type="date"
-        bind:value={clinical.diagnosisDate}
-      />
-    </div>
+    <FormField label="Diagnosis Date" id="diagnosis-date">
+      {#snippet control(field)}
+        <Input
+          {...field}
+          name="diagnosisDate"
+          type="date"
+          autocomplete="off"
+          bind:value={clinical.diagnosisDate}
+        />
+      {/snippet}
+    </FormField>
 
-    <div class="space-y-2">
-      <Label for="date-of-birth">Date of Birth</Label>
-      <Input
-        id="date-of-birth"
-        name="dateOfBirth"
-        type="date"
-        bind:value={clinical.dateOfBirth}
-      />
-    </div>
+    <FormField label="Date of Birth" id="date-of-birth">
+      {#snippet control(field)}
+        <Input
+          {...field}
+          name="dateOfBirth"
+          type="date"
+          autocomplete="bday"
+          bind:value={clinical.dateOfBirth}
+        />
+      {/snippet}
+    </FormField>
 
-    <div class="space-y-2">
-      <Label for="sex">Sex</Label>
-      <Select.Root type="single" name="sex" bind:value={clinical.sex}>
-        <Select.Trigger id="sex">
-          {clinical.sex
-            ? (biologicalSexLabels[clinical.sex as BiologicalSex] ?? clinical.sex)
-            : "Select sex"}
-        </Select.Trigger>
-        <Select.Content>
-          <Select.Item value="" label="Prefer not to say" />
-          {#each Object.entries(biologicalSexLabels) as [value, label]}
-            <Select.Item {value} {label} />
-          {/each}
-        </Select.Content>
-      </Select.Root>
-      <p class="text-xs text-muted-foreground">
-        Biological sex, used with your age to show sex-specific typical ranges in sleep reports. Separate from pronouns.
-      </p>
-    </div>
+    <FormField
+      label="Sex"
+      id="sex"
+      description="Biological sex, used with your age to show sex-specific typical ranges in sleep reports. Separate from pronouns."
+    >
+      {#snippet control(field)}
+        <Select.Root type="single" name="sex" bind:value={clinical.sex}>
+          <Select.Trigger {...field}>
+            {clinical.sex
+              ? (biologicalSexLabels[clinical.sex as BiologicalSex] ?? clinical.sex)
+              : "Select sex"}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="" label="Prefer not to say" />
+            {#each Object.entries(biologicalSexLabels) as [value, label]}
+              <Select.Item {value} {label} />
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      {/snippet}
+    </FormField>
 
-    <div class="space-y-2">
-      <Label for="preferred-name">Preferred Name</Label>
-      <Input
-        id="preferred-name"
-        name="preferredName"
-        bind:value={clinical.preferredName}
-        placeholder="How you'd like to be addressed"
-      />
-    </div>
+    <FormField label="Preferred Name" id="preferred-name">
+      {#snippet control(field)}
+        <Input
+          {...field}
+          name="preferredName"
+          autocomplete="nickname"
+          bind:value={clinical.preferredName}
+          placeholder="How you'd like to be addressed"
+        />
+      {/snippet}
+    </FormField>
 
-    <div class="space-y-2">
-      <Label for="pronouns">Pronouns</Label>
-      <Input
-        id="pronouns"
-        name="pronouns"
-        bind:value={clinical.pronouns}
-        placeholder="e.g. she/her, he/him, they/them"
-      />
-    </div>
+    <FormField label="Pronouns" id="pronouns">
+      {#snippet control(field)}
+        <Input
+          {...field}
+          name="pronouns"
+          bind:value={clinical.pronouns}
+          placeholder="e.g. she/her, he/him, they/them"
+        />
+      {/snippet}
+    </FormField>
 
-    <div class="space-y-2 @sm:col-span-2">
-      <Label for="timezone">Timezone</Label>
-      <input type="hidden" name="timezone" value={clinical.timezone} />
-      <TimezoneCombobox
-        id="timezone"
-        bind:value={clinical.timezone}
-        aria-invalid={clinical.guard.issuesFor("timezone").length > 0}
-        placeholder="Search timezones..."
-      />
-      {#if clinical.timezoneAutoDetected}
-        <p class="text-xs text-muted-foreground">
-          Auto-detected from your browser. Save to confirm — alerts with time-of-day rules use this to interpret window hours in your local time, starting from when you save.
-        </p>
-      {:else}
-        <p class="text-xs text-muted-foreground">
-          Used by alerts, schedules, and analytics. Changing it takes effect from when you save — past data isn't reinterpreted.
-        </p>
-      {/if}
-      {#each clinical.guard.issuesFor("timezone") as issue}
-        <p class="text-sm text-destructive">{issue.message}</p>
-      {/each}
-    </div>
+    <FormField
+      label="Timezone"
+      id="timezone"
+      class="@sm:col-span-2"
+      issues={clinical.guard.issuesFor("timezone")}
+    >
+      {#snippet control(field)}
+        <input type="hidden" name="timezone" value={clinical.timezone} />
+        <TimezoneCombobox
+          id={field.id}
+          aria-invalid={field["aria-invalid"]}
+          aria-describedby={field["aria-describedby"]}
+          bind:value={clinical.timezone}
+          placeholder="Search timezones..."
+        />
+      {/snippet}
+      {#snippet hint()}
+        {#if clinical.timezoneAutoDetected}
+          <p class="text-xs text-muted-foreground">
+            Auto-detected from your browser. Save to confirm — alerts with time-of-day rules use this to interpret window hours in your local time, starting from when you save.
+          </p>
+        {:else}
+          <p class="text-xs text-muted-foreground">
+            Used by alerts, schedules, and analytics. Changing it takes effect from when you save — past data isn't reinterpreted.
+          </p>
+        {/if}
+      {/snippet}
+    </FormField>
 
-    <div class="space-y-2">
-      <Label for="weight">Weight (kg)</Label>
-      <Input
-        id="weight"
-        type="number"
-        step="0.1"
-        min="0"
-        bind:value={clinical.weight.weightKg}
-        placeholder="e.g. 70"
-      />
-      <p class="text-xs text-muted-foreground">
-        Recorded to your weight history when you save — only if it's changed.
-      </p>
-      {#if clinical.weight.saveError}
-        <p class="text-sm text-destructive">{clinical.weight.saveError}</p>
-      {/if}
-    </div>
+    <FormField
+      label="Weight (kg)"
+      id="weight"
+      description="Recorded to your weight history when you save — only if it's changed."
+      issues={clinical.weight.saveError}
+    >
+      {#snippet control(field)}
+        <Input
+          {...field}
+          type="number"
+          step="0.1"
+          min="0"
+          bind:value={clinical.weight.weightKg}
+          placeholder="e.g. 70"
+        />
+      {/snippet}
+    </FormField>
   </div>
 </form>

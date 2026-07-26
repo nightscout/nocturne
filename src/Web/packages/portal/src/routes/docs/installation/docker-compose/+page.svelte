@@ -2,6 +2,7 @@
     import SystemRequirements from "$lib/components/docs/SystemRequirements.svelte";
     import VerificationSteps from "$lib/components/docs/VerificationSteps.svelte";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
+    import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
     import envExample from "$lib/release/docker-compose/.env.example?raw";
@@ -108,4 +109,6 @@
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Next Steps</h2>
     <NextSteps />
+
+    <SupportNocturne />
 </div>

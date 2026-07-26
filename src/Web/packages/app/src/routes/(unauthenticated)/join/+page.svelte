@@ -7,7 +7,10 @@
     AlertTriangle,
     UserPlus,
   } from "lucide-svelte";
-  import { startRegistration } from "@simplewebauthn/browser";
+  import {
+    startRegistration,
+    type PublicKeyCredentialCreationOptionsJSON,
+  } from "@simplewebauthn/browser";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import {
@@ -26,6 +29,11 @@
   import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
   import OidcProviderButtons from "$lib/components/auth/OidcProviderButtons.svelte";
   import PasskeyRegistrationForm from "$lib/components/auth/PasskeyRegistrationForm.svelte";
+  import {
+    describePasskeyError,
+    parseCeremonyOptions,
+  } from "$lib/components/auth/passkey-errors";
+  import { FormError } from "$lib/forms";
 
   // ── URL params ────────────────────────────────────────────────────
   const token = $derived(page.url.searchParams.get("token") ?? "");
@@ -67,7 +75,9 @@
         acceptError = result.errorDescription ?? "Failed to accept invite.";
       }
     } catch (err) {
-      acceptError = err instanceof Error ? err.message : "Failed to accept invite.";
+      console.error("Accepting the invite failed:", err);
+      acceptError =
+        "We couldn't add you to this instance. Please try again in a moment.";
     } finally {
       isAccepting = false;
     }
@@ -102,7 +112,9 @@
         username,
         displayName,
       });
-      const options = JSON.parse(response.options ?? "");
+      const options = parseCeremonyOptions<PublicKeyCredentialCreationOptionsJSON>(
+        response.options
+      );
       const challengeToken = response.challengeToken ?? "";
 
       const attestation = await startRegistration({ optionsJSON: options });
@@ -124,8 +136,12 @@
       registrationComplete = true;
       recoveryCodes = result.recoveryCodes ?? [];
     } catch (err) {
-      passkeyError =
-        err instanceof Error ? err.message : "Failed to register passkey.";
+      console.error("Passkey registration from invite failed:", err);
+      passkeyError = describePasskeyError(
+        err,
+        "register",
+        "We couldn't create your account. Please try again."
+      );
     } finally {
       isRegistering = false;
     }
@@ -206,16 +222,7 @@
 
       <Card.Content>
         <div class="space-y-4">
-          {#if acceptError}
-            <div
-              class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-            >
-              <AlertTriangle
-                class="mt-0.5 h-4 w-4 shrink-0 text-destructive"
-              />
-              <p class="text-sm text-destructive">{acceptError}</p>
-            </div>
-          {/if}
+          <FormError issues={acceptError} focusOnShow />
 
           <Button
             class="w-full"
@@ -255,16 +262,7 @@
 
       <Card.Content>
         <div class="space-y-4">
-          {#if passkeyError}
-            <div
-              class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
-            >
-              <AlertTriangle
-                class="mt-0.5 h-4 w-4 shrink-0 text-destructive"
-              />
-              <p class="text-sm text-destructive">{passkeyError}</p>
-            </div>
-          {/if}
+          <FormError issues={passkeyError} focusOnShow />
 
           {#if hasOidc && oidc}
             <OidcProviderButtons

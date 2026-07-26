@@ -9,6 +9,9 @@
     Globe,
     ArrowLeft,
   } from "lucide-svelte";
+  // Quote the sign-in controls by name — this is the page a locked-out person
+  // reaches, so the names have to match what they're looking at.
+  import { signInMethodLabels } from "$lib/components/auth/labels";
 </script>
 
 <svelte:head>
@@ -50,9 +53,11 @@
           remember.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          On the login page, tap <strong>Sign in with passkey</strong> and
-          follow your device's prompt. If you have multiple accounts, choose
-          <strong>Sign in with username</strong> and enter your username first.
+          On the login page, tap
+          <strong>{signInMethodLabels.passkey}</strong> and follow your device's
+          prompt. If you have multiple accounts, choose
+          <strong>{signInMethodLabels.username}</strong> and enter your username
+          first.
         </p>
       </Card.Content>
     </Card.Root>
@@ -75,10 +80,10 @@
           seconds.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          On the login page, choose <strong>Sign in with authenticator</strong>,
-          enter your username, then type the code shown in your authenticator
-          app. You can set up an authenticator in your account settings after
-          signing in.
+          On the login page, choose
+          <strong>{signInMethodLabels.authenticator}</strong>, enter your
+          username, then type the code shown in your authenticator app. You can
+          set up an authenticator in your account settings after signing in.
         </p>
       </Card.Content>
     </Card.Root>
@@ -102,9 +107,9 @@
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
           On the login page, choose
-          <strong>Sign in with recovery code</strong>, enter your username and
-          one of your remaining codes. Each code can only be used once, so cross
-          it off your list after use.
+          <strong>{signInMethodLabels.recoveryCode}</strong>, enter your username
+          and one of your remaining codes. Each code can only be used once, so
+          cross it off your list after use.
         </p>
       </Card.Content>
     </Card.Root>

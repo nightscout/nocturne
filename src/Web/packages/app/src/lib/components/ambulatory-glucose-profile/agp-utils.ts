@@ -2,9 +2,6 @@ import { convertToDisplayUnits } from "$lib/utils/formatting";
 import type { GlucoseUnits } from "$lib/stores/appearance-store.svelte";
 import type { AveragedStats } from "$lib/api";
 
-/** Standard AGP low threshold in mg/dL (clinical hypoglycemia) */
-export const AGP_LOW_THRESHOLD = 70;
-
 /** Format an hour (0-23) as a time string */
 export function formatHour(hour: number, is24Hour: boolean): string {
   // Axis ticks can arrive fractional during interpolation; snap to the nearest

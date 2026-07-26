@@ -46,7 +46,7 @@ export const GET: RequestHandler = async (event) => {
   const httpClient = createServerHttpClient(event.fetch, {
     accessToken: event.cookies.get(AUTH_COOKIE_NAMES.accessToken),
     refreshToken: event.cookies.get(AUTH_COOKIE_NAMES.refreshToken),
-    guestSessionToken: event.cookies.get("nocturne-guest-session"),
+    guestSessionToken: event.cookies.get(AUTH_COOKIE_NAMES.guestSession),
     platformAccessToken: event.cookies.get(AUTH_COOKIE_NAMES.platformAccess),
     hashedInstanceKey: getHashedInstanceKey(),
     extraHeaders: {

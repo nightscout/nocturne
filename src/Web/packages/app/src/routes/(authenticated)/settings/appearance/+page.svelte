@@ -37,6 +37,9 @@
     setSourceDefaults,
   } from "$api/generated/glucoseProcessingSettings.generated.remote";
   import GlucoseSourceDefaultsDialog from "$lib/components/settings/GlucoseSourceDefaultsDialog.svelte";
+  import type { FeatureSettings } from "$lib/api/generated/nocturne-api-client";
+  import { getUiSettings, saveFeatureSettings } from "$api/ui-settings.remote";
+  import { toast } from "svelte-sonner";
   import {
     Card,
     CardContent,
@@ -149,6 +152,32 @@
       }>,
     );
   let sourceDefaultsDialogOpen = $state(false);
+
+  // Chart range and tracker pills persist server-side. They used to only mutate
+  // the in-memory settings store, which nothing ever saved, so the dashboard
+  // picked the change up live and then lost it on reload.
+  const uiSettingsQuery = getUiSettings();
+  const featureSettings = $derived(uiSettingsQuery.current?.features);
+  const focusHours = $derived(featureSettings?.display?.focusHours ?? 12);
+  const trackerPillsEnabled = $derived(featureSettings?.trackerPills?.enabled ?? true);
+
+  /** Persists the whole features section, merging the patch over what's stored. */
+  async function saveFeatures(patch: Partial<FeatureSettings>) {
+    const current = featureSettings ?? {};
+    try {
+      await saveFeatureSettings({
+        ...current,
+        display: { ...current.display, ...patch.display },
+        trackerPills: { ...current.trackerPills, ...patch.trackerPills },
+      });
+      // The dashboard still reads these through the shared settings store; reload
+      // it so the change it renders matches what was persisted.
+      await store.reload();
+    } catch {
+      toast.error("Could not save. Check your connection and try again.");
+      await uiSettingsQuery.refresh();
+    }
+  }
 </script>
 
 <svelte:head>
@@ -593,18 +622,12 @@
             <FormLabel>Default chart range</FormLabel>
             <Select
               type="single"
-              value={String(store.features?.display?.focusHours ?? 12)}
-              onValueChange={(value: string) => {
-                if (!store.features) return;
-                if (!store.features.display) {
-                  store.features.display = {};
-                }
-                store.features.display.focusHours = parseInt(value);
-                store.markChanged();
-              }}
+              value={String(focusHours)}
+              onValueChange={(value: string) =>
+                saveFeatures({ display: { focusHours: parseInt(value) } })}
             >
               <SelectTrigger>
-                <span>{store.features?.display?.focusHours ?? 12} hours</span>
+                <span>{focusHours} hours</span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="2">2 hours</SelectItem>
@@ -955,17 +978,9 @@
             </p>
           </div>
           <Switch
-            checked={store.features?.trackerPills?.enabled ?? true}
-            onCheckedChange={(checked: boolean) => {
-              if (!store.features) return;
-              if (!store.features.trackerPills) {
-                store.features.trackerPills = {
-                  enabled: true,
-                };
-              }
-              store.features.trackerPills.enabled = checked;
-              store.markChanged();
-            }}
+            checked={trackerPillsEnabled}
+            onCheckedChange={(checked: boolean) =>
+              saveFeatures({ trackerPills: { enabled: checked } })}
           />
         </div>
 

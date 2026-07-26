@@ -1,6 +1,8 @@
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Identity;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
@@ -19,8 +21,6 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 /// <seealso cref="IMetadataPublisher"/>
 internal sealed class MetadataPublisher : IMetadataPublisher
 {
-    private const string DefaultUserId = "default";
-
     private readonly IProfileWriteService _profileWriteService;
     private readonly IFoodService _foodService;
     private readonly IConnectorFoodEntryService _connectorFoodEntryService;
@@ -28,6 +28,8 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     private readonly IStateSpanService _stateSpanService;
     private readonly ISystemEventRepository _systemEventRepository;
     private readonly INoteRepository _noteRepository;
+    private readonly ITenantOwnerResolver _tenantOwnerResolver;
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<MetadataPublisher> _logger;
 
     public MetadataPublisher(
@@ -38,6 +40,8 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         IStateSpanService stateSpanService,
         ISystemEventRepository systemEventRepository,
         INoteRepository noteRepository,
+        ITenantOwnerResolver tenantOwnerResolver,
+        ITenantAccessor tenantAccessor,
         ILogger<MetadataPublisher> logger)
     {
         _profileWriteService = profileWriteService ?? throw new ArgumentNullException(nameof(profileWriteService));
@@ -47,7 +51,40 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         _stateSpanService = stateSpanService ?? throw new ArgumentNullException(nameof(stateSpanService));
         _systemEventRepository = systemEventRepository ?? throw new ArgumentNullException(nameof(systemEventRepository));
         _noteRepository = noteRepository ?? throw new ArgumentNullException(nameof(noteRepository));
+        _tenantOwnerResolver = tenantOwnerResolver ?? throw new ArgumentNullException(nameof(tenantOwnerResolver));
+        _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    /// <summary>
+    /// The subject a connector's food entries are attributed to, so the match suggestions they raise
+    /// reach a real person. A sync has no user of its own, and the UI lists notifications for the
+    /// signed-in subject, so anything else is filed where nobody will ever see it.
+    /// </summary>
+    private async Task<string?> ResolveNotificationSubjectAsync(
+        string source,
+        CancellationToken cancellationToken)
+    {
+        if (!_tenantAccessor.IsResolved)
+        {
+            _logger.LogWarning(
+                "No tenant resolved while publishing for {Source}; cannot attribute its notifications",
+                source);
+            return null;
+        }
+
+        var subjectId = await _tenantOwnerResolver.GetOwnerSubjectIdAsync(
+            _tenantAccessor.TenantId, cancellationToken);
+
+        if (subjectId == null)
+        {
+            _logger.LogWarning(
+                "Tenant {TenantId} has no owner; {Source} food entries will import without match suggestions",
+                _tenantAccessor.TenantId,
+                source);
+        }
+
+        return subjectId;
     }
 
     public async Task<bool> PublishProfilesAsync(
@@ -94,7 +131,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         try
         {
             return await _connectorFoodEntryService.ImportAsync(
-                DefaultUserId,
+                await ResolveNotificationSubjectAsync(source, cancellationToken),
                 entries,
                 cancellationToken);
         }

@@ -5,7 +5,10 @@
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
+    bgLabel,
   } from "$lib/utils/formatting";
+  import { isUnwiredElementType } from "$lib/clock-builder/types";
+  import { renderClockElementValue } from "$lib/components/clock/element-value";
   import { ArrowUp } from "lucide-svelte";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
   import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
@@ -33,6 +36,10 @@
     type Vec2,
   } from "$lib/components/clock/screensaver-math";
   import ScreensaverPulse, { PULSE_DURATION_MS } from "$lib/components/clock/ScreensaverPulse.svelte";
+  import {
+    isClockReadingStale,
+    readingAgeLabel,
+  } from "$lib/components/clock/staleness";
 
   interface Props {
     config: ClockFaceConfig;
@@ -75,23 +82,6 @@
   const displayBG = $derived(formatGlucoseValue(currentBG, units));
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
 
-  // Calculate staleness
-  const isStale = $derived.by(() => {
-    if (!config?.settings?.staleMinutes) return false;
-    if (config.settings.staleMinutes === 0) return false;
-    const diff = Date.now() - lastUpdated;
-    const mins = Math.floor(diff / 60000);
-    return mins >= config.settings.staleMinutes;
-  });
-
-  // Time since last reading
-  const timeSince = $derived.by(() => {
-    const diff = Date.now() - lastUpdated;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "now";
-    return `${mins}m`;
-  });
-
   // Current time state
   let currentTime = $state(new Date());
   $effect(() => {
@@ -101,6 +91,18 @@
     }, 1000);
     return () => clearInterval(interval);
   });
+
+  // Reading age, driven by the ticker above so it advances while the CGM is silent.
+  const isStale = $derived(
+    isClockReadingStale(
+      config?.settings?.staleMinutes,
+      lastUpdated,
+      currentTime.getTime()
+    )
+  );
+  const timeSince = $derived(
+    readingAgeLabel(lastUpdated, currentTime.getTime())
+  );
 
   // Format time based on 12h/24h preference
   function formatTime(format: string | undefined): string {
@@ -220,32 +222,13 @@
 
   // Render element value (for text-based elements, not arrow/tracker)
   function renderElementValue(element: ClockElement): string {
-    switch (element.type) {
-      case "sg":
-        return String(displayBG);
-      case "delta":
-        return `${bgDelta > 0 ? "+" : ""}${displayDelta}${element.showUnits !== false ? "" : ""}`;
-      case "arrow":
-        return ""; // Handled separately with Lucide icon
-      case "age":
-        return `${timeSince} ago`;
-      case "time":
-        return formatTime(element.format);
-      case "iob":
-        return "--U";
-      case "cob":
-        return "--g";
-      case "basal":
-        return "0.8U/h";
-      case "forecast":
-        return `${currentBG + 10}`;
-      case "tracker":
-        return ""; // Handled separately with icon + time
-      case "text":
-        return element.text || "";
-      default:
-        return "";
-    }
+    return renderClockElementValue(element, {
+      displayBG: String(displayBG),
+      displayDelta,
+      unitLabel: bgLabel(),
+      age: timeSince,
+      time: formatTime(element.format),
+    });
   }
 
   // Background chart element
@@ -488,7 +471,7 @@
     {#each config?.rows ?? [] as row, rowIndex (rowIndex)}
       <div class="flex items-center" style="gap: {2 * scale}px;">
         {#each row.elements ?? [] as element, elementIndex (elementIndex)}
-          {#if !(element.type === "chart" && element.chartConfig?.asBackground)}
+          {#if !(element.type === "chart" && element.chartConfig?.asBackground) && !isUnwiredElementType(element.type)}
             {#if element.type === "chart"}
               {#if showCharts}
                 {@const inlineEngine = createChartDataEngine({

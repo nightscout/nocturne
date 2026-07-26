@@ -26,6 +26,11 @@ const AUTH_COOKIE_SET: ReadonlySet<string> = new Set([
   AUTH_COOKIE_NAMES.accessToken,
   AUTH_COOKIE_NAMES.refreshToken,
   AUTH_COOKIE_NAMES.isAuthenticated,
+  // Guest sessions are established by a server-side remote function, so the
+  // API's Set-Cookie has to be forwarded or the visitor never gets a session.
+  // Its deletions matter too: the API clears it once the grant is revoked or
+  // expired, which stops the browser resending a dead cookie.
+  AUTH_COOKIE_NAMES.guestSession,
 ]);
 
 /**

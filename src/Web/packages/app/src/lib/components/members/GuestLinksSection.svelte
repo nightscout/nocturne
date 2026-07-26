@@ -38,7 +38,7 @@
 
   // UI state
   let showDismissed = $state(false);
-  let removingIds = $state(new Set<string>());
+  let pendingIds = $state(new Set<string>());
 
   // Query
   const guestLinksQuery = $derived(
@@ -46,9 +46,7 @@
   );
   const allLinks = $derived(guestLinksQuery?.current ?? []);
   const guestLinks = $derived(
-    (showDismissed ? allLinks : allLinks.filter((l) => !l.dismissedAt)).filter(
-      (l) => !removingIds.has(l.id!)
-    )
+    showDismissed ? allLinks : allLinks.filter((l) => !l.dismissedAt)
   );
   const dismissedCount = $derived(allLinks.filter((l) => l.dismissedAt).length);
   let showCreateForm = $state(false);
@@ -188,24 +186,28 @@
     }
   }
 
-  async function handleDismiss(id: string) {
-    removingIds = new Set([...removingIds, id]);
+  /**
+   * Run a guest-link mutation and pull the updated list. The commands' declared
+   * GetGuestLinks invalidation refreshes `getGuestLinks(undefined)`, which is a
+   * different cache key from the `{ includeDismissed: true }` this component
+   * subscribes with, so the refresh has to be issued here.
+   */
+  async function mutateLink(id: string, run: (id: string) => Promise<unknown>) {
+    pendingIds = new Set([...pendingIds, id]);
     try {
-      await dismissGuestLink(id);
-    } catch {
-      // Restore on failure
-      removingIds = new Set([...removingIds].filter((x) => x !== id));
+      await run(id);
+      await guestLinksQuery?.refresh();
+    } finally {
+      pendingIds = new Set([...pendingIds].filter((x) => x !== id));
     }
   }
 
+  async function handleDismiss(id: string) {
+    await mutateLink(id, dismissGuestLink);
+  }
+
   async function handleRevoke(id: string) {
-    removingIds = new Set([...removingIds, id]);
-    try {
-      await revokeGuestLink(id);
-    } catch {
-      // Restore on failure
-      removingIds = new Set([...removingIds].filter((x) => x !== id));
-    }
+    await mutateLink(id, revokeGuestLink);
   }
 
   let reissuingId = $state<string | null>(null);
@@ -481,6 +483,7 @@
                     variant="ghost"
                     size="sm"
                     class="text-destructive hover:text-destructive shrink-0"
+                    disabled={pendingIds.has(link.id!)}
                     onclick={() => handleRevoke(link.id!)}
                   >
                     <X class="mr-1 h-3.5 w-3.5" />
@@ -491,6 +494,7 @@
                     variant="ghost"
                     size="sm"
                     class="text-muted-foreground hover:text-foreground shrink-0"
+                    disabled={pendingIds.has(link.id!)}
                     onclick={() => handleDismiss(link.id!)}
                   >
                     <EyeOff class="mr-1 h-3.5 w-3.5" />

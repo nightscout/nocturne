@@ -31,10 +31,9 @@
 
   interface Props {
     user: User;
-    onLogout: () => void;
   }
 
-  const { user, onLogout }: Props = $props();
+  const { user }: Props = $props();
 
   const authStore = getAuthStore();
 
@@ -258,13 +257,11 @@
       <Settings class="mr-2 h-4 w-4" />
       Back to Settings
     </Button>
-    <Button
-      variant="destructive"
-      onclick={onLogout}
-      class="w-full @sm:w-auto"
-    >
-      <LogOut class="mr-2 h-4 w-4" />
-      Log Out
-    </Button>
+    <form method="POST" action="/auth/logout" class="w-full @sm:w-auto">
+      <Button variant="destructive" type="submit" class="w-full">
+        <LogOut class="mr-2 h-4 w-4" />
+        Log Out
+      </Button>
+    </form>
   </Card.Footer>
 </Card.Root>

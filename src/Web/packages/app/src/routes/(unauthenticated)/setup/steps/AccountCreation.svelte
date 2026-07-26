@@ -1,6 +1,9 @@
 <script lang="ts">
-  import { AlertTriangle, Check, Fingerprint, Loader2, UserPlus } from "lucide-svelte";
-  import { startRegistration } from "@simplewebauthn/browser";
+  import { Check, Fingerprint, Loader2, UserPlus } from "lucide-svelte";
+  import {
+    startRegistration,
+    type PublicKeyCredentialCreationOptionsJSON,
+  } from "@simplewebauthn/browser";
   import {
     getAuthState,
     getOidcProviders,
@@ -12,12 +15,15 @@
     setupOwnerOidc,
     validateSetupUsername,
   } from "../setup.remote";
-  import { Debounced } from "runed";
+  import { FormError, FormField, useAvailability } from "$lib/forms";
+  import {
+    describePasskeyError,
+    parseCeremonyOptions,
+  } from "$lib/components/auth/passkey-errors";
   import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
   import OidcProviderButtons from "$lib/components/auth/OidcProviderButtons.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
 
   let {
     onComplete,
@@ -47,56 +53,16 @@
   let username = $state("");
 
   // ── Username validation ─────────────────────────────────────────────
-  let usernameError = $state<string | null>(null);
-  let usernameValid = $state(false);
-  let validatingUsername = $state(false);
-
   const normalizedUsername = $derived(username.trim().toLowerCase());
-  const debouncedUsername = new Debounced(() => normalizedUsername, 400);
 
-  $effect(() => {
-    const value = normalizedUsername;
-
-    // Reset on every keystroke
-    usernameError = null;
-    usernameValid = false;
-
-    if (!value) return;
-    if (value.length < 3) {
-      usernameError = "Username must be at least 3 characters";
-      return;
-    }
-
-    // Still waiting for debounce to settle
-    if (debouncedUsername.current !== value) {
-      validatingUsername = true;
-      return;
-    }
-
-    const result = validateSetupUsername({ username: value });
-
-    // loading=true: fetch in progress; !current: result not yet populated
-    if (result.loading || !result.current) {
-      validatingUsername = true;
-      return;
-    }
-
-    validatingUsername = false;
-
-    if (result.error) {
-      usernameError = "Could not validate username";
-      return;
-    }
-
-    if (result.current.isValid) {
-      usernameValid = true;
-    } else {
-      usernameError = result.current.message ?? "Invalid username";
-    }
-  });
+  const availability = useAvailability(
+    () => normalizedUsername,
+    (value) => validateSetupUsername({ username: value }),
+    { label: "Username" },
+  );
 
   const canSubmit = $derived(
-    displayName.trim().length > 0 && usernameValid,
+    displayName.trim().length > 0 && availability.valid,
   );
 
   // ── OIDC login ───────────────────────────────────────────────────
@@ -118,7 +84,9 @@
       });
       window.location.href = result.authorizationUrl ?? "/setup";
     } catch (err) {
-      oidcError = err instanceof Error ? err.message : "Failed to start OIDC login.";
+      console.error("Starting the external sign-in failed:", err);
+      oidcError =
+        "We couldn't start sign-in with that provider. Please try again.";
       isRedirecting = false;
       selectedProvider = null;
     }
@@ -130,8 +98,14 @@
   let recoveryCodes = $state<string[]>([]);
   let passkeyError = $state<string | null>(null);
 
-  async function handlePasskeyRegister() {
-    if (!canSubmit) return;
+  /**
+   * Creates the owner account. The WebAuthn ceremony runs in the browser, so
+   * this step needs JavaScript; the form gives it Enter-to-submit, the
+   * browser's required-field checks and autofill.
+   */
+  async function handlePasskeyRegister(event: SubmitEvent) {
+    event.preventDefault();
+    if (!canSubmit || isRedirecting || isRegistering) return;
     isRegistering = true;
     passkeyError = null;
 
@@ -140,7 +114,9 @@
         username: username.trim().toLowerCase(),
         displayName: displayName.trim(),
       });
-      const options = JSON.parse(response.options ?? "");
+      const options = parseCeremonyOptions<PublicKeyCredentialCreationOptionsJSON>(
+        response.options
+      );
       const challengeToken = response.challengeToken ?? "";
 
       const attestation = await startRegistration({ optionsJSON: options });
@@ -161,8 +137,12 @@
       registrationComplete = true;
       recoveryCodes = result.recoveryCodes ?? [];
     } catch (err) {
-      passkeyError =
-        err instanceof Error ? err.message : "Failed to create account.";
+      console.error("Owner passkey registration failed:", err);
+      passkeyError = describePasskeyError(
+        err,
+        "register",
+        "We couldn't create your account. Please try again."
+      );
     } finally {
       isRegistering = false;
     }
@@ -215,61 +195,73 @@
         <Loader2 class="h-8 w-8 animate-spin text-white/40" />
       </div>
     {:else if !isAuthenticated}
-      <div class="space-y-4">
-        {#if errorMessage}
-          <div
-            class="flex items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/5 p-4"
-          >
-            <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
-            <p class="text-sm text-red-400">{errorMessage}</p>
-          </div>
-        {/if}
+      <form class="space-y-4" onsubmit={handlePasskeyRegister}>
+        <FormError issues={errorMessage} focusOnShow />
 
         <!-- Shared form fields -->
-        <div class="space-y-2">
-          <Label for="display-name" class="text-white/70">Display name</Label>
-          <Input
-            id="display-name"
-            type="text"
-            placeholder="Your name"
-            bind:value={displayName}
-            disabled={isRedirecting || isRegistering}
-            class="bg-white/5 border-white/10 text-white placeholder:text-white/25"
-          />
-          <p class="text-xs text-white/30">
-            This is how you will appear to others.
-          </p>
-        </div>
+        <FormField
+          label="Display name"
+          id="display-name"
+          required
+          labelClass="text-white/70"
+          description="This is how you will appear to others."
+        >
+          {#snippet control(field)}
+            <Input
+              {...field}
+              name="displayName"
+              type="text"
+              placeholder="Your name"
+              autocomplete="name"
+              autofocus
+              bind:value={displayName}
+              disabled={isRedirecting || isRegistering}
+              class="bg-white/5 border-white/10 text-white placeholder:text-white/25"
+            />
+          {/snippet}
+        </FormField>
 
-        <div class="space-y-2">
-          <Label for="pk-username" class="text-white/70">Username</Label>
-          <Input
-            id="pk-username"
-            type="text"
-            placeholder="your-username"
-            bind:value={username}
-            disabled={isRedirecting || isRegistering}
-            class="bg-white/5 border-white/10 text-white placeholder:text-white/25 {usernameError
-              ? 'border-red-500/50'
-              : usernameValid
-                ? 'border-green-500/50'
-                : ''}"
-          />
-          {#if validatingUsername}
-            <p class="text-xs text-white/40">Checking availability...</p>
-          {:else if usernameError}
-            <p class="text-xs text-red-400">{usernameError}</p>
-          {:else if usernameValid}
-            <p class="flex items-center gap-1.5 text-xs text-green-400">
-              <Check class="h-3 w-3" />
-              Available
-            </p>
-          {:else}
-            <p class="text-xs text-white/30">
-              3-32 characters: letters, numbers, dots, underscores, and hyphens.
-            </p>
-          {/if}
-        </div>
+        <FormField
+          label="Username"
+          id="pk-username"
+          required
+          labelClass="text-white/70"
+          issues={availability.error}
+        >
+          {#snippet control(field)}
+            <Input
+              {...field}
+              name="username"
+              type="text"
+              placeholder="your-username"
+              autocomplete="username"
+              autocapitalize="none"
+              spellcheck={false}
+              minlength={3}
+              bind:value={username}
+              disabled={isRedirecting || isRegistering}
+              class="bg-white/5 border-white/10 text-white placeholder:text-white/25 {availability.error
+                ? 'border-red-500/50'
+                : availability.valid
+                  ? 'border-green-500/50'
+                  : ''}"
+            />
+          {/snippet}
+          {#snippet hint()}
+            {#if availability.validating}
+              <p class="text-xs text-white/40">Checking availability...</p>
+            {:else if availability.valid}
+              <p class="flex items-center gap-1.5 text-xs text-green-400">
+                <Check class="h-3 w-3" />
+                Available
+              </p>
+            {:else}
+              <p class="text-xs text-white/30">
+                3-32 characters: letters, numbers, dots, underscores, and hyphens.
+              </p>
+            {/if}
+          {/snippet}
+        </FormField>
 
         <!-- Auth method buttons -->
         {#if hasOidc && oidc}
@@ -283,10 +275,10 @@
         {/if}
 
         <Button
+          type="submit"
           class="w-full"
           size="lg"
           disabled={!canSubmit || isRedirecting || isRegistering}
-          onclick={handlePasskeyRegister}
         >
           {#if isRegistering}
             <Loader2 class="mr-2 h-5 w-5 animate-spin" />
@@ -296,7 +288,7 @@
             Create account with passkey
           {/if}
         </Button>
-      </div>
+      </form>
     {/if}
   </div>
 </div>

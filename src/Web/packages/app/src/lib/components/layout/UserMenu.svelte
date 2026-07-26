@@ -42,10 +42,6 @@
       .slice(0, 2);
   }
 
-  /** Handle logout */
-  function handleLogout() {
-    goto("/auth/logout");
-  }
 </script>
 
 {#if user}
@@ -145,13 +141,17 @@
 
       <DropdownMenu.Separator />
 
-      <DropdownMenu.Item
-        onclick={handleLogout}
-        class="text-destructive focus:text-destructive"
-      >
-        <LogOut class="mr-2 h-4 w-4" />
-        <span>Log out</span>
-      </DropdownMenu.Item>
+      <!-- display:contents keeps the form out of the menu's layout box -->
+      <form method="POST" action="/auth/logout" class="contents">
+        <DropdownMenu.Item class="w-full text-destructive focus:text-destructive">
+          {#snippet child({ props }: { props: Record<string, unknown> })}
+            <button {...props} type="submit">
+              <LogOut class="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </button>
+          {/snippet}
+        </DropdownMenu.Item>
+      </form>
     </DropdownMenu.Content>
   </DropdownMenu.Root>
   {#if isGuestSession}

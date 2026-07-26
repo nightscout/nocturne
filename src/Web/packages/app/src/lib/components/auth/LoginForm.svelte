@@ -9,21 +9,29 @@
     Fingerprint,
     User,
     KeyRound,
-    AlertTriangle,
     Smartphone,
     ShieldAlert,
   } from "lucide-svelte";
   import * as InputOTP from "$lib/components/ui/input-otp";
-  import { login as totpLogin } from "$lib/api/generated/totps.generated.remote";
-  import { startAuthentication } from "@simplewebauthn/browser";
-  import { getOidcProviders, setAuthCookies } from "$routes/(unauthenticated)/auth/auth.remote";
+  import { FormError, FormField, useSubmission } from "$lib/forms";
+  import {
+    startAuthentication,
+    type PublicKeyCredentialRequestOptionsJSON,
+  } from "@simplewebauthn/browser";
+  import {
+    getOidcProviders,
+    setAuthCookies,
+    signInWithAuthenticator,
+    signInWithRecoveryCode,
+  } from "$routes/(unauthenticated)/auth/auth.remote";
   import {
     discoverableLoginOptions,
     loginOptions,
     loginComplete,
-    recoveryVerify,
   } from "$lib/api/generated/passkeys.generated.remote";
   import { goto, invalidateAll } from "$app/navigation";
+  import { describePasskeyError, parseCeremonyOptions } from "./passkey-errors";
+  import { signInMethodLabels } from "./labels";
 
   interface Props {
     returnUrl?: string;
@@ -38,17 +46,32 @@
   type LoginMode = "default" | "username" | "recovery" | "totp";
   let mode = $state<LoginMode>("default");
   let isLoading = $state(false);
-  let errorMessage = $state<string | null>(null);
   let isRedirecting = $state(false);
   let selectedProvider = $state<string | null>(null);
 
+  /**
+   * Errors from the two passkey ceremonies. The code-based forms carry their own
+   * errors on the remote form's fields.
+   */
+  let passkeyError = $state<string | null>(null);
+
+  const recovery = useSubmission({
+    fallback: "We couldn't sign you in just now. Please try again.",
+  });
+  const authenticator = useSubmission({
+    fallback: "We couldn't sign you in just now. Please try again.",
+  });
+
   // Browser support
-  let passkeysSupported = $state(typeof window !== "undefined" && window.PublicKeyCredential !== undefined);
+  let passkeysSupported = $state(
+    typeof window !== "undefined" && window.PublicKeyCredential !== undefined
+  );
 
   // Form fields
   let username = $state("");
-  let recoveryCode = $state("");
   let totpCode = $state("");
+  /** Submitted from the code field's onComplete, so a full code submits itself. */
+  let totpFormEl = $state<HTMLFormElement | null>(null);
 
   async function handleAuthResult(result: {
     success?: boolean;
@@ -59,7 +82,8 @@
     error?: string;
   }) {
     if (!result.success) {
-      errorMessage = result.error || "Authentication failed";
+      passkeyError =
+        result.error ?? "We couldn't sign you in. Please try again.";
       return;
     }
 
@@ -82,13 +106,20 @@
     }
   }
 
-  async function handleDiscoverableLogin() {
+  /**
+   * Discoverable ("just tap the button") passkey sign-in. The WebAuthn ceremony
+   * runs in the browser, so this path can't work without JavaScript.
+   */
+  async function handleDiscoverableLogin(event: SubmitEvent) {
+    event.preventDefault();
     isLoading = true;
-    errorMessage = null;
+    passkeyError = null;
 
     try {
       const response = await discoverableLoginOptions();
-      const options = JSON.parse(response.options ?? "");
+      const options = parseCeremonyOptions<PublicKeyCredentialRequestOptionsJSON>(
+        response.options
+      );
       const challengeToken = response.challengeToken ?? "";
 
       const assertion = await startAuthentication({ optionsJSON: options });
@@ -99,24 +130,24 @@
       });
       await handleAuthResult(result);
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Authentication failed";
+      console.error("Discoverable passkey sign-in failed:", err);
+      passkeyError = describePasskeyError(err, "login");
     } finally {
       isLoading = false;
     }
   }
 
-  async function handleUsernameLogin() {
-    if (!username.trim()) {
-      errorMessage = "Please enter your username";
-      return;
-    }
-
+  /** Username-first passkey sign-in. Also JavaScript-only, same reason. */
+  async function handleUsernameLogin(event: SubmitEvent) {
+    event.preventDefault();
     isLoading = true;
-    errorMessage = null;
+    passkeyError = null;
 
     try {
       const response = await loginOptions({ username: username.trim() });
-      const options = JSON.parse(response.options ?? "");
+      const options = parseCeremonyOptions<PublicKeyCredentialRequestOptionsJSON>(
+        response.options
+      );
       const challengeToken = response.challengeToken ?? "";
 
       const assertion = await startAuthentication({ optionsJSON: options });
@@ -127,44 +158,8 @@
       });
       await handleAuthResult(result);
     } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Authentication failed";
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  async function handleRecoveryCode() {
-    if (!username.trim() || !recoveryCode.trim()) {
-      errorMessage = "Please enter your username and recovery code";
-      return;
-    }
-
-    isLoading = true;
-    errorMessage = null;
-
-    try {
-      const result = await recoveryVerify({ username: username.trim(), code: recoveryCode.trim() });
-      await handleAuthResult(result);
-    } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Recovery code verification failed";
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  async function handleTotpLogin() {
-    if (isLoading) return;
-    if (!username.trim() || totpCode.length !== 6) {
-      errorMessage = "Please enter your username and 6-digit code";
-      return;
-    }
-    isLoading = true;
-    errorMessage = null;
-    try {
-      const result = await totpLogin({ username: username.trim(), code: totpCode });
-      await handleAuthResult(result);
-    } catch (err) {
-      errorMessage = err instanceof Error ? err.message : "Authentication failed";
+      console.error("Username passkey sign-in failed:", err);
+      passkeyError = describePasskeyError(err, "login");
     } finally {
       isLoading = false;
     }
@@ -190,7 +185,9 @@
 
   function switchMode(newMode: LoginMode) {
     mode = newMode;
-    errorMessage = null;
+    passkeyError = null;
+    recovery.clear();
+    authenticator.clear();
   }
 </script>
 
@@ -204,6 +201,39 @@
   {:else}
     <ExternalLink class="mr-2 h-4 w-4" />
   {/if}
+{/snippet}
+
+{#snippet otherMethodLinks()}
+  <Button
+    variant="link"
+    size="sm"
+    class="h-auto p-0 text-xs"
+    onclick={() => switchMode("totp")}
+    disabled={isLoading}
+  >
+    {signInMethodLabels.authenticator}
+  </Button>
+  <Button
+    variant="link"
+    size="sm"
+    class="h-auto p-0 text-xs"
+    onclick={() => switchMode("recovery")}
+    disabled={isLoading}
+  >
+    {signInMethodLabels.recoveryCode}
+  </Button>
+{/snippet}
+
+{#snippet backToSignIn(label: string)}
+  <Button
+    variant="link"
+    size="sm"
+    class="h-auto p-0 text-xs"
+    onclick={() => switchMode("default")}
+    disabled={isLoading}
+  >
+    {label}
+  </Button>
 {/snippet}
 
 {#if oidcQuery.loading}
@@ -224,31 +254,29 @@
       </div>
     {/if}
 
-    {#if errorMessage}
-      <div class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-        <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-        <p class="text-sm text-destructive">{errorMessage}</p>
-      </div>
-    {/if}
+    <FormError issues={passkeyError} focusOnShow />
 
     {#if mode === "default"}
-      <!-- Primary: Discoverable passkey login -->
-      <Button
-        class="w-full h-12"
-        size="lg"
-        disabled={isLoading || isRedirecting || !passkeysSupported}
-        onclick={handleDiscoverableLogin}
-      >
-        {#if isLoading}
-          <Loader2 class="mr-2 h-5 w-5 animate-spin" />
-          Waiting for passkey...
-        {:else}
-          <Fingerprint class="mr-2 h-5 w-5" />
-          Sign in with passkey
-        {/if}
-      </Button>
+      <!-- Primary: discoverable passkey sign-in. Needs JavaScript for the
+           WebAuthn ceremony, so there is no server-side counterpart. -->
+      <form onsubmit={handleDiscoverableLogin}>
+        <Button
+          type="submit"
+          class="w-full h-12"
+          size="lg"
+          disabled={isLoading || isRedirecting || !passkeysSupported}
+        >
+          {#if isLoading}
+            <Loader2 class="mr-2 h-5 w-5 animate-spin" />
+            Waiting for passkey...
+          {:else}
+            <Fingerprint class="mr-2 h-5 w-5" />
+            {signInMethodLabels.passkey}
+          {/if}
+        </Button>
+      </form>
 
-      <!-- Secondary: Username-based login -->
+      <!-- Secondary: username-based sign-in -->
       <Button
         variant="outline"
         class="w-full"
@@ -256,7 +284,7 @@
         onclick={() => switchMode("username")}
       >
         <User class="mr-2 h-4 w-4" />
-        Sign in with username
+        {signInMethodLabels.username}
       </Button>
 
       {#if hasOidc && oidc}
@@ -293,50 +321,37 @@
       {/if}
 
       <div class="flex justify-center gap-3 text-xs">
-        <Button
-          variant="link"
-          size="sm"
-          class="h-auto p-0 text-xs"
-          onclick={() => switchMode("totp")}
-          disabled={isLoading}
-        >
-          Use authenticator app
-        </Button>
-        <Button
-          variant="link"
-          size="sm"
-          class="h-auto p-0 text-xs"
-          onclick={() => switchMode("recovery")}
-          disabled={isLoading}
-        >
-          Use a recovery code
-        </Button>
+        {@render otherMethodLinks()}
       </div>
 
     {:else if mode === "username"}
-      <!-- Username-based passkey login -->
-      <div class="space-y-3">
-        <div class="space-y-2">
-          <Label for="username">Username</Label>
-          <div class="relative">
-            <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="username"
-              type="text"
-              placeholder="your-username"
-              class="pl-10"
-              bind:value={username}
-              disabled={isLoading}
-              onkeydown={(e: KeyboardEvent) =>
-                e.key === "Enter" && handleUsernameLogin()}
-            />
-          </div>
-        </div>
+      <!-- Username-first passkey sign-in. JavaScript-only, as above. -->
+      <form onsubmit={handleUsernameLogin} class="space-y-3">
+        <FormField label="Username" id="username" required>
+          {#snippet control(field)}
+            <div class="relative">
+              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                {...field}
+                name="username"
+                type="text"
+                placeholder="your-username"
+                class="pl-10"
+                autocomplete="username webauthn"
+                autocapitalize="none"
+                spellcheck={false}
+                autofocus
+                bind:value={username}
+                disabled={isLoading}
+              />
+            </div>
+          {/snippet}
+        </FormField>
 
         <Button
+          type="submit"
           class="w-full"
           disabled={isLoading || !username.trim() || !passkeysSupported}
-          onclick={handleUsernameLogin}
         >
           {#if isLoading}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
@@ -346,123 +361,142 @@
             Continue with passkey
           {/if}
         </Button>
-      </div>
+      </form>
 
       <div class="flex justify-between text-xs">
-        <Button
-          variant="link"
-          size="sm"
-          class="h-auto p-0 text-xs"
-          onclick={() => switchMode("default")}
-          disabled={isLoading}
-        >
-          Back
-        </Button>
+        {@render backToSignIn("Back")}
         <div class="flex gap-3">
-          <Button
-            variant="link"
-            size="sm"
-            class="h-auto p-0 text-xs"
-            onclick={() => switchMode("totp")}
-            disabled={isLoading}
-          >
-            Use authenticator app
-          </Button>
-          <Button
-            variant="link"
-            size="sm"
-            class="h-auto p-0 text-xs"
-            onclick={() => switchMode("recovery")}
-            disabled={isLoading}
-          >
-            Use a recovery code
-          </Button>
+          {@render otherMethodLinks()}
         </div>
       </div>
 
     {:else if mode === "recovery"}
-      <!-- Recovery code login -->
-      <div class="space-y-3">
-        <div class="space-y-2">
-          <Label for="recovery-username">Username</Label>
-          <div class="relative">
-            <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="recovery-username"
-              type="text"
-              placeholder="your-username"
-              class="pl-10"
-              bind:value={username}
-              disabled={isLoading}
-            />
-          </div>
-        </div>
+      <!-- Recovery-code sign-in. Verified entirely on the server, so this posts
+           and works with JavaScript disabled. -->
+      <form
+        class="space-y-3"
+        {...signInWithRecoveryCode.enhance(async ({ submit }) => {
+          await recovery.run(submit, onSuccess);
+        })}
+      >
+        <input type="hidden" name="returnUrl" value={returnUrl} />
 
-        <div class="space-y-2">
-          <Label for="recovery-code">Recovery code</Label>
-          <div class="relative">
-            <KeyRound class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="recovery-code"
-              type="text"
-              placeholder="XXXX-XXXX"
-              class="pl-10 font-mono"
-              bind:value={recoveryCode}
-              disabled={isLoading}
-              onkeydown={(e: KeyboardEvent) =>
-                e.key === "Enter" && handleRecoveryCode()}
-            />
-          </div>
-        </div>
+        <FormError issues={recovery.error} focusOnShow />
+
+        <FormField
+          label="Username"
+          id="recovery-username"
+          required
+          issues={signInWithRecoveryCode.fields.username.issues()}
+        >
+          {#snippet control(field)}
+            <div class="relative">
+              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                {...field}
+                name="username"
+                type="text"
+                placeholder="your-username"
+                class="pl-10"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck={false}
+                autofocus
+                bind:value={username}
+              />
+            </div>
+          {/snippet}
+        </FormField>
+
+        <FormField
+          label="Recovery code"
+          id="recovery-code"
+          required
+          issues={signInWithRecoveryCode.fields.code.issues()}
+        >
+          {#snippet control(field)}
+            <div class="relative">
+              <KeyRound class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                {...field}
+                name="code"
+                type="text"
+                placeholder="XXXX-XXXX"
+                class="pl-10 font-mono"
+                autocomplete="one-time-code"
+                autocapitalize="characters"
+                spellcheck={false}
+              />
+            </div>
+          {/snippet}
+        </FormField>
 
         <Button
+          type="submit"
           class="w-full"
-          disabled={isLoading || !username.trim() || !recoveryCode.trim()}
-          onclick={handleRecoveryCode}
+          disabled={signInWithRecoveryCode.pending > 0}
         >
-          {#if isLoading}
+          {#if signInWithRecoveryCode.pending > 0}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Verifying...
           {:else}
             Verify recovery code
           {/if}
         </Button>
-      </div>
+      </form>
 
       <div class="text-center">
-        <Button
-          variant="link"
-          size="sm"
-          class="h-auto p-0 text-xs"
-          onclick={() => switchMode("default")}
-          disabled={isLoading}
-        >
-          Back to sign in
-        </Button>
+        {@render backToSignIn("Back to sign in")}
       </div>
 
     {:else if mode === "totp"}
-      <!-- TOTP authenticator login -->
-      <div class="space-y-3">
-        <div class="space-y-2">
-          <Label for="totp-username">Username</Label>
-          <div class="relative">
-            <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="totp-username"
-              type="text"
-              placeholder="your-username"
-              class="pl-10"
-              bind:value={username}
-              disabled={isLoading}
-            />
-          </div>
-        </div>
+      <!-- Authenticator-app sign-in. Also verified on the server. -->
+      <form
+        bind:this={totpFormEl}
+        class="space-y-3"
+        {...signInWithAuthenticator.enhance(async ({ submit }) => {
+          await authenticator.run(submit, onSuccess);
+        })}
+      >
+        <input type="hidden" name="returnUrl" value={returnUrl} />
+
+        <FormError issues={authenticator.error} focusOnShow />
+
+        <FormField
+          label="Username"
+          id="totp-username"
+          required
+          issues={signInWithAuthenticator.fields.username.issues()}
+        >
+          {#snippet control(field)}
+            <div class="relative">
+              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                {...field}
+                name="username"
+                type="text"
+                placeholder="your-username"
+                class="pl-10"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck={false}
+                autofocus
+                bind:value={username}
+              />
+            </div>
+          {/snippet}
+        </FormField>
 
         <div class="space-y-2">
-          <Label>Authenticator code</Label>
+          <Label for="totp-code-input">Authenticator code</Label>
           <div class="flex justify-center">
-            <InputOTP.Root maxlength={6} bind:value={totpCode} onComplete={handleTotpLogin}>
+            <InputOTP.Root
+              name="code"
+              inputId="totp-code-input"
+              maxlength={6}
+              bind:value={totpCode}
+              onComplete={() => totpFormEl?.requestSubmit()}
+            >
               {#snippet children({
                 cells,
               }: {
@@ -482,14 +516,21 @@
               {/snippet}
             </InputOTP.Root>
           </div>
+          {#each signInWithAuthenticator.fields.code.issues() ?? [] as issue}
+            <p role="alert" class="text-center text-sm text-destructive">
+              {issue.message}
+            </p>
+          {/each}
         </div>
 
         <Button
+          type="submit"
           class="w-full"
-          disabled={isLoading || !username.trim() || totpCode.length !== 6}
-          onclick={handleTotpLogin}
+          disabled={signInWithAuthenticator.pending > 0 ||
+            !username.trim() ||
+            totpCode.length !== 6}
         >
-          {#if isLoading}
+          {#if signInWithAuthenticator.pending > 0}
             <Loader2 class="mr-2 h-4 w-4 animate-spin" />
             Verifying...
           {:else}
@@ -497,18 +538,10 @@
             Verify
           {/if}
         </Button>
-      </div>
+      </form>
 
       <div class="text-center">
-        <Button
-          variant="link"
-          size="sm"
-          class="h-auto p-0 text-xs"
-          onclick={() => switchMode("default")}
-          disabled={isLoading}
-        >
-          Back to sign in
-        </Button>
+        {@render backToSignIn("Back to sign in")}
       </div>
     {/if}
   </div>

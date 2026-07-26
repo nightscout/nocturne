@@ -37,7 +37,7 @@ public class GuestLinkController : ControllerBase
     /// </summary>
     [HttpPost]
     [Authorize]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetGuestLinks"])]
     [ProducesResponseType(typeof(GuestLinkCreationResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

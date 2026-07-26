@@ -1,9 +1,8 @@
 <script lang="ts">
   import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
   import { Button } from "$lib/components/ui/button";
-  import { Check, Loader2, AlertTriangle, ArrowRight } from "lucide-svelte";
-  import { Debounced } from "runed";
+  import { Check, Loader2, ArrowRight } from "lucide-svelte";
+  import { FormError, FormField, useAvailability } from "$lib/forms";
   import { setupTenant, validateSetupSlug, setSetupTenantSlug } from "../setup.remote";
 
   let {
@@ -14,58 +13,25 @@
 
   let slug = $state("");
   let displayName = $state("");
-  let slugError = $state<string | null>(null);
-  let slugValid = $state(false);
-  let validating = $state(false);
   let submitting = $state(false);
   let submitError = $state<string | null>(null);
 
   const normalizedSlug = $derived(slug.trim().toLowerCase());
-  const debouncedSlug = new Debounced(() => normalizedSlug, 400);
 
-  $effect(() => {
-    const value = normalizedSlug;
+  const availability = useAvailability(
+    () => normalizedSlug,
+    (value) => validateSetupSlug({ slug: value }),
+    { label: "Slug" },
+  );
 
-    // Reset on every keystroke
-    slugError = null;
-    slugValid = false;
-
-    if (!value) return;
-    if (value.length < 3) {
-      slugError = "Slug must be at least 3 characters";
-      return;
-    }
-
-    // Still waiting for debounce to settle
-    if (debouncedSlug.current !== value) {
-      validating = true;
-      return;
-    }
-
-    const result = validateSetupSlug({ slug: value });
-
-    // loading=true: fetch in progress; !current: result not yet populated
-    if (result.loading || !result.current) {
-      validating = true;
-      return;
-    }
-
-    validating = false;
-
-    if (result.error) {
-      slugError = "Could not validate slug";
-      return;
-    }
-
-    if (result.current.isValid) {
-      slugValid = true;
-    } else {
-      slugError = result.current.message ?? "Invalid slug";
-    }
-  });
-
-  async function handleSubmit() {
-    if (!slugValid || !displayName.trim()) return;
+  /**
+   * Creates the instance. The wizard advances through client state, so this
+   * step needs JavaScript; the form is here for Enter-to-submit and the
+   * browser's own required-field checks.
+   */
+  async function handleSubmit(event: SubmitEvent) {
+    event.preventDefault();
+    if (!canSubmit) return;
     submitting = true;
     submitError = null;
 
@@ -77,15 +43,16 @@
       await setSetupTenantSlug(normalizedSlug);
       onComplete(normalizedSlug);
     } catch (err) {
+      console.error("Creating the instance failed:", err);
       submitError =
-        err instanceof Error ? err.message : "Failed to create tenant.";
+        "We couldn't create your instance. Please try again in a moment.";
     } finally {
       submitting = false;
     }
   }
 
   const canSubmit = $derived(
-    slugValid && displayName.trim().length > 0 && !submitting
+    availability.valid && displayName.trim().length > 0 && !submitting
   );
 </script>
 
@@ -111,60 +78,70 @@
   </div>
 
   <!-- Form -->
-  <div class="w-full max-w-md space-y-6">
-    {#if submitError}
-      <div
-        class="flex items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/5 p-4"
-      >
-        <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
-        <p class="text-sm text-red-400">{submitError}</p>
-      </div>
-    {/if}
+  <form class="w-full max-w-md space-y-6" onsubmit={handleSubmit}>
+    <FormError issues={submitError} focusOnShow />
 
-    <div class="space-y-2">
-      <Label for="setup-slug" class="text-white/70">Slug</Label>
-      <Input
-        id="setup-slug"
-        bind:value={slug}
-        placeholder="my-instance"
-        class="font-mono bg-white/5 border-white/10 text-white placeholder:text-white/25 {slugError
-          ? 'border-red-500/50'
-          : slugValid
-            ? 'border-green-500/50'
-            : ''}"
-      />
-      {#if validating}
-        <p class="text-xs text-white/40">Checking availability...</p>
-      {:else if slugError}
-        <p class="text-xs text-red-400">{slugError}</p>
-      {:else if slugValid}
-        <p class="flex items-center gap-1.5 text-xs text-green-400">
-          <Check class="h-3 w-3" />
-          Available
-        </p>
-      {:else}
-        <p class="text-xs text-white/30">
-          Lowercase letters, numbers, and hyphens. At least 3 characters.
-        </p>
-      {/if}
-    </div>
+    <FormField
+      label="Slug"
+      id="setup-slug"
+      required
+      labelClass="text-white/70"
+      issues={availability.error}
+    >
+      {#snippet control(field)}
+        <Input
+          {...field}
+          name="slug"
+          bind:value={slug}
+          placeholder="my-instance"
+          autocomplete="off"
+          autocapitalize="none"
+          spellcheck={false}
+          autofocus
+          minlength={3}
+          class="font-mono bg-white/5 border-white/10 text-white placeholder:text-white/25 {availability.error
+            ? 'border-red-500/50'
+            : availability.valid
+              ? 'border-green-500/50'
+              : ''}"
+        />
+      {/snippet}
+      {#snippet hint()}
+        {#if availability.validating}
+          <p class="text-xs text-white/40">Checking availability...</p>
+        {:else if availability.valid}
+          <p class="flex items-center gap-1.5 text-xs text-green-400">
+            <Check class="h-3 w-3" />
+            Available
+          </p>
+        {:else}
+          <p class="text-xs text-white/30">
+            Lowercase letters, numbers, and hyphens. At least 3 characters.
+          </p>
+        {/if}
+      {/snippet}
+    </FormField>
 
-    <div class="space-y-2">
-      <Label for="setup-display-name" class="text-white/70">
-        Instance name
-      </Label>
-      <Input
-        id="setup-display-name"
-        bind:value={displayName}
-        placeholder="My Nocturne"
-        class="bg-white/5 border-white/10 text-white placeholder:text-white/25"
-      />
-      <p class="text-xs text-white/30">
-        A friendly name shown in the UI. You can change this anytime.
-      </p>
-    </div>
+    <FormField
+      label="Instance name"
+      id="setup-display-name"
+      required
+      labelClass="text-white/70"
+      description="A friendly name shown in the UI. You can change this anytime."
+    >
+      {#snippet control(field)}
+        <Input
+          {...field}
+          name="displayName"
+          bind:value={displayName}
+          placeholder="My Nocturne"
+          autocomplete="organization"
+          class="bg-white/5 border-white/10 text-white placeholder:text-white/25"
+        />
+      {/snippet}
+    </FormField>
 
-    <Button class="w-full" onclick={handleSubmit} disabled={!canSubmit}>
+    <Button type="submit" class="w-full" disabled={!canSubmit}>
       {#if submitting}
         <Loader2 class="mr-2 h-4 w-4 animate-spin" />
         Creating instance...
@@ -173,5 +150,5 @@
         <ArrowRight class="ml-2 h-4 w-4" />
       {/if}
     </Button>
-  </div>
+  </form>
 </div>

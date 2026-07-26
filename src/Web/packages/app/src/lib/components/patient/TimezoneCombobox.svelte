@@ -12,7 +12,8 @@
     placeholder?: string;
     disabled?: boolean;
     class?: string;
-    "aria-invalid"?: boolean;
+    "aria-invalid"?: boolean | "true" | "false";
+    "aria-describedby"?: string;
   }
 
   let {
@@ -22,6 +23,7 @@
     disabled = false,
     class: className,
     "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedby,
   }: Props = $props();
 
   const allTimezones: string[] =
@@ -47,16 +49,20 @@
 
 <Popover.Root bind:open={popoverOpen}>
   <Popover.Trigger>
+    <!-- The caller's id is applied after Popover's own props: Popover.Trigger
+         generates an id of its own, and whichever comes last wins. A label's
+         `for` targets the caller's id. -->
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
-        {id}
         variant="outline"
         role="combobox"
         aria-expanded={popoverOpen}
         aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedby}
         class={cn("w-full justify-between font-normal", className)}
         {disabled}
         {...props}
+        {...id ? { id } : {}}
       >
         {#if value}
           <span>{value}</span>

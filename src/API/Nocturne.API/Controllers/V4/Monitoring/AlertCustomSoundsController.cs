@@ -38,7 +38,7 @@ public class AlertCustomSoundsController : ControllerBase
     /// Upload a custom alert sound file.
     /// </summary>
     [HttpPost]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetSounds"])]
     [RequestSizeLimit(512_000)]
     [ProducesResponseType(typeof(AlertCustomSoundResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

@@ -14,6 +14,10 @@
     Loader2,
   } from "lucide-svelte";
   import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";
+  import {
+    isClockReadingStale,
+    readingAgeLabel,
+  } from "$lib/components/clock/staleness";
   import type { ClockFaceConfig } from "$lib/api";
   import { getById as getClockFaceById } from "$api/generated/clockFaces.generated.remote";
 
@@ -66,23 +70,6 @@
       });
   });
 
-  // Calculate staleness
-  const isStale = $derived.by(() => {
-    if (!clockConfig?.settings?.staleMinutes) return false;
-    if (clockConfig.settings.staleMinutes === 0) return false;
-    const diff = Date.now() - lastUpdated;
-    const mins = Math.floor(diff / 60000);
-    return mins >= clockConfig.settings.staleMinutes;
-  });
-
-  // Time since last reading
-  const timeSince = $derived.by(() => {
-    const diff = Date.now() - lastUpdated;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "now";
-    return `${mins}m`;
-  });
-
   // Current time state
   let currentTime = $state(new Date());
   $effect(() => {
@@ -92,6 +79,18 @@
     }, 1000);
     return () => clearInterval(interval);
   });
+
+  // Reading age, driven by the ticker above so it advances while the CGM is silent.
+  const isStale = $derived(
+    isClockReadingStale(
+      clockConfig?.settings?.staleMinutes,
+      lastUpdated,
+      currentTime.getTime()
+    )
+  );
+  const timeSince = $derived(
+    readingAgeLabel(lastUpdated, currentTime.getTime())
+  );
 
   // Format time based on 12h/24h preference
   function formatTime(): string {

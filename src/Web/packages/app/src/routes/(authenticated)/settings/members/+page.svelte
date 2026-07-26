@@ -115,7 +115,6 @@
   let showCreateInvite = $state(false);
   let errorMessage = $state<string | null>(null);
   let successMessage = $state<string | null>(null);
-  let removingMemberIds = $state(new Set<string>());
 
   // --- Member edit state ---
   let expandedMember = $state<string | null>(null);
@@ -130,9 +129,7 @@
   // Visible members — system subjects (e.g. Public) are managed via the
   // public access card above, not as removable/editable cards.
   const visibleMembers = $derived(
-    allMembers.filter(
-      (m) => !m.isSystemSubject && !removingMemberIds.has(m.subjectId!),
-    ),
+    allMembers.filter((m) => !m.isSystemSubject),
   );
 
   function clearMessages() {
@@ -176,6 +173,9 @@
     errorMessage = null;
     try {
       await approveRequest({ id: requestId, request: { roleIds } });
+      // The approved requester becomes a member; GetMembers is on another
+      // controller so ApproveRequest's Invalidates cannot name it.
+      await membersQuery.refresh();
       successMessage = "Membership request approved.";
       clearMessages();
     } catch {
@@ -275,7 +275,7 @@
         />
       {/if}
 
-      {#if visibleMembers.length === 0 && removingMemberIds.size === 0}
+      {#if visibleMembers.length === 0}
         <Card.Root>
           <Card.Content class="flex flex-col items-center justify-center py-12 text-center">
             <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
@@ -313,15 +313,16 @@
               }}
               onRemove={async () => {
                 if (!tenantId || !member.subjectId) return;
-                removingMemberIds = new Set([...removingMemberIds, member.subjectId]);
                 errorMessage = null;
                 try {
                   await removeMember({ id: tenantId, subjectId: member.subjectId });
+                  // GetMembers lives on MemberInviteController, so RemoveMember's
+                  // Invalidates cannot name it — refresh from here.
+                  await membersQuery.refresh();
                   successMessage = "Member removed successfully.";
                   clearMessages();
                 } catch (e) {
                   errorMessage = messageFrom(e, "Failed to remove member. Please try again.");
-                  removingMemberIds = new Set([...removingMemberIds].filter(x => x !== member.subjectId));
                   clearMessages();
                 }
               }}

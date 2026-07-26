@@ -113,6 +113,8 @@ export class ClinicalState {
         timezone: this.timezone,
       }),
       navBlockMessage: "You have unsaved changes. Leave anyway?",
+      submitErrorMessage:
+        "We couldn't save your patient record. Your changes are still here — please try again.",
       onreset: (snapshot) => {
         this.diabetesType = snapshot.diabetesType;
         this.diabetesTypeOther = snapshot.diabetesTypeOther ?? "";

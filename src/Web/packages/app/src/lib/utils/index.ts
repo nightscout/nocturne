@@ -122,37 +122,6 @@ export function getDirectionInfo(direction?: Direction | string) {
   return directions[dirValue || Direction.Flat] || directions[Direction.Flat]!;
 }
 
-/** Determine BG status level based on thresholds */
-export function getBGStatus(value: number, thresholds: any) {
-  if (!thresholds) {
-    thresholds = {
-      bgHigh: 180,
-      bgTargetTop: 140,
-      bgTargetBottom: 80,
-      bgLow: 55,
-    };
-  }
-
-  if (value >= thresholds.bgHigh) return "urgent-high";
-  if (value <= thresholds.bgLow) return "urgent-low";
-  if (value > thresholds.bgTargetTop) return "high";
-  if (value < thresholds.bgTargetBottom) return "low";
-  return "in-range";
-}
-
-/** Get color class for BG status */
-export function getBGColorClass(status: string) {
-  const colors: Record<string, string> = {
-    "urgent-high": "bg-red-500 text-white",
-    "urgent-low": "bg-red-500 text-white",
-    high: "bg-orange-500 text-white",
-    low: "bg-yellow-500 text-black",
-    "in-range": "bg-green-500 text-white",
-  };
-
-  return colors[status] || "bg-gray-500 text-white";
-}
-
 /** Check if data is stale based on timestamp */
 export function isDataStale(
   timestamp: number,

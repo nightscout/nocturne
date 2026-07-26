@@ -20,21 +20,31 @@ const { HaloDialColorMode } = await import("$lib/api");
 describe("bgColorDiscrete", () => {
   it("returns very-low CSS var below the very-low threshold", () => {
     expect(bgColorDiscrete(35)).toBe("var(--glucose-very-low)");
+    expect(bgColorDiscrete(53)).toBe("var(--glucose-very-low)");
   });
 
   it("returns low CSS var between very-low and low thresholds", () => {
-    expect(bgColorDiscrete(50)).toBe("var(--glucose-low)");
+    expect(bgColorDiscrete(54)).toBe("var(--glucose-low)");
+    expect(bgColorDiscrete(60)).toBe("var(--glucose-low)");
+    // The whole 55-69 band used to render in-range because the dial's `low`
+    // threshold was 55 rather than the app's time-in-range floor of 70.
+    expect(bgColorDiscrete(69)).toBe("var(--glucose-low)");
   });
 
   it("returns in-range CSS var inside the target band", () => {
+    expect(bgColorDiscrete(70)).toBe("var(--glucose-in-range)");
     expect(bgColorDiscrete(120)).toBe("var(--glucose-in-range)");
+    expect(bgColorDiscrete(180)).toBe("var(--glucose-in-range)");
   });
 
   it("returns high CSS var above target but below very-high", () => {
+    expect(bgColorDiscrete(181)).toBe("var(--glucose-high)");
     expect(bgColorDiscrete(200)).toBe("var(--glucose-high)");
+    expect(bgColorDiscrete(250)).toBe("var(--glucose-high)");
   });
 
   it("returns very-high CSS var above the very-high threshold", () => {
+    expect(bgColorDiscrete(251)).toBe("var(--glucose-very-high)");
     expect(bgColorDiscrete(300)).toBe("var(--glucose-very-high)");
   });
 });

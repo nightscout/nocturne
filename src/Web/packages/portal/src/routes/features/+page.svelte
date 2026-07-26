@@ -236,7 +236,7 @@
                     "A handful of reports, all built in 2014",
                     "Each device needs a separate uploader app",
                     "Alarms = an on/off threshold, nothing more",
-                    "Username & password — for life",
+                    "API secrets that you can't remember",
                     "Slows down after a year of readings",
                 ] as line (line)}
                     <div class="flex items-center gap-3 text-[1rem] text-muted-foreground/70">

@@ -66,7 +66,11 @@ public class ProfileController : ControllerBase
     /// </summary>
     [HttpGet("summary")]
     [RemoteQuery]
-    [ResponseCache(Duration = 300, VaryByQueryKeys = new[] { "*" })]
+    // Never cached: profile mutations invalidate the client-side query, but a
+    // cached body could answer the refetch with therapy settings up to the cache
+    // duration old, so edited target ranges and the active-profile badge would
+    // read as unchanged. Matches PredictionController.GetProfileSnapshot.
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     [ProducesResponseType(typeof(ProfileSummary), StatusCodes.Status200OK)]
     public async Task<ActionResult<ProfileSummary>> GetProfileSummary(
         [FromQuery] DateTime? from = null,

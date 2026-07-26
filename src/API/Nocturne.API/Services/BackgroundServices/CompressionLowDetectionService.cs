@@ -7,6 +7,7 @@ using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -724,20 +725,10 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
     /// <param name="scopedProvider">Scoped service provider for database access.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The owner's subject ID as a string, or <see langword="null"/>.</returns>
-    private async Task<string?> GetTenantOwnerSubjectIdAsync(
+    private static Task<string?> GetTenantOwnerSubjectIdAsync(
         Guid tenantId,
         IServiceProvider scopedProvider,
-        CancellationToken cancellationToken)
-    {
-        var factory = scopedProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var context = await factory.CreateDbContextAsync(cancellationToken);
-
-        var ownerSubjectId = await context.TenantMembers.AsNoTracking()
-            .Where(tm => tm.TenantId == tenantId
-                && tm.MemberRoles.Any(mr => mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner))
-            .Select(tm => tm.SubjectId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return ownerSubjectId == Guid.Empty ? null : ownerSubjectId.ToString();
-    }
+        CancellationToken cancellationToken) =>
+        scopedProvider.GetRequiredService<ITenantOwnerResolver>()
+            .GetOwnerSubjectIdAsync(tenantId, cancellationToken);
 }

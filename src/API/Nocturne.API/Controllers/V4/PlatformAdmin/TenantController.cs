@@ -148,7 +148,7 @@ public class TenantController : ControllerBase
 
     /// <inheritdoc cref="IMemberInviteService.CreateInviteAsync"/>
     [HttpPost("{id:guid}/invites")]
-    [RemoteCommand(Invalidates = ["GetById"])]
+    [RemoteCommand(Invalidates = ["GetById", "ListInvites"])]
     [ProducesResponseType(typeof(MemberInviteResult), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateInvite(

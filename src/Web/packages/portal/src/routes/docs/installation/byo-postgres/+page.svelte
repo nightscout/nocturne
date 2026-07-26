@@ -1,6 +1,7 @@
 <script lang="ts">
     import { Database } from "@lucide/svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
+    import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import bootstrapSql from "$lib/release/bootstrap-roles.sql?raw";
 </script>
 
@@ -106,4 +107,6 @@
             <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">postgres</code> user.
         </li>
     </ul>
+
+    <SupportNocturne />
 </div>

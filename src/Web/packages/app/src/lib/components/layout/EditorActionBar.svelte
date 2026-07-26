@@ -3,9 +3,12 @@
 
   // Header for save-gated editors. The save action stays on screen while the
   // form scrolls: the header is sticky at the top on md+, and on small screens
-  // the actions move to a bar pinned at the bottom of the viewport (where the
-  // thumb is and clear of the fixed top MobileHeader). One responsive markup,
-  // no separate mobile variant.
+  // the actions container is taken out of flow and pinned to the bottom of the
+  // viewport (where the thumb is and clear of the fixed top MobileHeader). One
+  // responsive markup, no separate mobile variant.
+  //
+  // The `actions` snippet is rendered exactly once, so an `id`, `bind:this` or
+  // `autofocus` inside it stays unique.
   //
   // Consuming pages must leave room for the mobile bottom bar by adding
   // `max-md:pb-24` to their scroll container.
@@ -24,15 +27,10 @@
   <div class="flex min-w-0 items-center gap-2">
     {@render leading?.()}
   </div>
-  <!-- Desktop: actions live in the sticky header -->
-  <div class="hidden shrink-0 items-center gap-2 md:flex">
+  <!-- md+: in the sticky header. Below md: pinned to the bottom of the viewport -->
+  <div
+    class="flex shrink-0 items-center justify-end gap-2 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-40 max-md:border-t max-md:border-border max-md:bg-background/95 max-md:px-4 max-md:py-3 max-md:backdrop-blur"
+  >
     {@render actions()}
   </div>
-</div>
-
-<!-- Mobile: actions pinned to the bottom of the viewport -->
-<div
-  class="fixed inset-x-0 bottom-0 z-40 flex items-center justify-end gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur md:hidden"
->
-  {@render actions()}
 </div>

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
@@ -38,6 +37,7 @@
   );
 
   // Loading/error states
+  let logoutForm = $state<HTMLFormElement | undefined>(undefined);
   let isRevoking = $state<string | null>(null);
   let isRevokingOthers = $state(false);
   let errorMessage = $state<string | null>(null);
@@ -66,8 +66,9 @@
     try {
       await revoke(sessionId);
       if (isCurrent) {
-        // Revoking the current session is a logout.
-        goto("/auth/logout");
+        // Revoking the current session is a logout — submit the POST-only
+        // logout endpoint so the session cookies are cleared too.
+        logoutForm?.requestSubmit();
         return;
       }
       successMessage = "Session signed out.";
@@ -96,6 +97,10 @@
     }
   }
 </script>
+
+<!-- Revoking this device's session finishes as a logout; POST so the endpoint
+     stays unreachable by cross-site GET. -->
+<form method="POST" action="/auth/logout" bind:this={logoutForm} hidden></form>
 
 <div class="space-y-4">
   <div class="flex items-start justify-between gap-4">

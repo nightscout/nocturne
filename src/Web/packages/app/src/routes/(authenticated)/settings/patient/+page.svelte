@@ -1,12 +1,10 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
+  import { FormActions } from "$lib/forms";
   import {
     HeartPulse,
     Cpu,
     Syringe,
-    Save,
-    Loader2,
   } from "lucide-svelte";
   import {
     PatientClinicalForm,
@@ -68,21 +66,17 @@
       <PatientClinicalForm onstate={handleState} />
     </Card.Content>
     <Card.Footer class="border-t pt-6">
-      <Button
-        type="submit"
-        form="clinical-form"
+      <FormActions
+        class="w-full"
+        formId="clinical-form"
+        submitLabel="Save Changes"
+        form={clinicalState?.form}
+        pending={!!clinicalState?.weight.saving}
+        error={clinicalState?.guard.submitError}
+        focusError
         disabled={!clinicalState?.record
-          || (!clinicalState?.guard.dirty && !clinicalState?.weight.dirty)
-          || !!clinicalState?.form.pending
-          || !!clinicalState?.weight.saving}
-      >
-        {#if clinicalState?.form.pending || clinicalState?.weight.saving}
-          <Loader2 class="mr-2 h-4 w-4 animate-spin" />
-        {:else}
-          <Save class="mr-2 h-4 w-4" />
-        {/if}
-        Save Changes
-      </Button>
+          || (!clinicalState?.guard.dirty && !clinicalState?.weight.dirty)}
+      />
     </Card.Footer>
   </Card.Root>
 
