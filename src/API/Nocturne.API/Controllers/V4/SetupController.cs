@@ -356,6 +356,16 @@ public partial class SetupController : ControllerBase
             return Redirect("/setup?error=missing_parameters");
         }
 
+        // The sibling setup endpoints all gate on this; without it the callback is the one
+        // setup route that stays live on an established instance, and it both links an
+        // identity and issues a session for whatever subject the state names.
+        var (_, setupClosed) = await GetSoleTenantWithoutOwnerAsync(ct);
+        if (setupClosed != null)
+        {
+            ClearOidcStateCookie();
+            return Redirect("/setup?error=setup_already_complete");
+        }
+
         var expectedState = Request.Cookies[_oidcOptions.Cookie.StateCookieName];
         ClearOidcStateCookie();
 

@@ -746,6 +746,58 @@ public class SetupControllerTests : IDisposable
         subject.IsPlatformAdmin.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task OidcCallback_WhenSetupAlreadyComplete_DoesNotProcessTheCallback()
+    {
+        // Every sibling setup endpoint dead-ends once an owner holds credentials. Without the
+        // same guard here this callback stays live for the life of the instance, and it links
+        // an identity and issues a session for whatever subject the state names.
+        await SeedConfiguredTenantAsync("established", "Established");
+        SetOidcStateCookieOnRequest("expected-state");
+
+        var result = await _controller.OidcCallback(
+            code: "auth-code", state: "expected-state", error: null, error_description: null,
+            ct: CancellationToken.None);
+
+        result.Should().BeOfType<RedirectResult>()
+            .Which.Url.Should().Contain("setup_already_complete");
+        _oidcAuthService.Verify(
+            s => s.HandleSetupCallbackAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string?>(), It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task OidcCallback_WhenTheCallbackNamesANonOwnerSubject_DoesNotGrantPlatformAdmin()
+    {
+        // The grant re-derives eligibility instead of trusting the subject it is handed, so a
+        // subject that does not hold the tenant's owner role gets nothing.
+        await SeedSoleTenantWithOwnerRoleAsync();
+        var bystanderId = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = bystanderId, Name = "Bystander", Username = "bystander",
+            IsActive = true, IsSystemSubject = false,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        SetOidcStateCookieOnRequest("expected-state");
+        _oidcAuthService
+            .Setup(s => s.HandleSetupCallbackAsync(
+                "auth-code", "expected-state", "expected-state",
+                It.IsAny<string?>(), It.IsAny<string?>()))
+            .ReturnsAsync(OidcSetupCallbackResult.Succeeded(
+                bystanderId, new OidcTokenResponse { AccessToken = "at", RefreshToken = "rt", ExpiresIn = 3600 }));
+
+        await _controller.OidcCallback(
+            code: "auth-code", state: "expected-state", error: null, error_description: null,
+            ct: CancellationToken.None);
+
+        var bystander = await FreshContext().Subjects.SingleAsync(s => s.Id == bystanderId);
+        bystander.IsPlatformAdmin.Should().BeFalse();
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private NocturneDbContext FreshContext() => new(_dbOptions);

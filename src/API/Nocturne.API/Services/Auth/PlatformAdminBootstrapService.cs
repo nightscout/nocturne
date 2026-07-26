@@ -133,10 +133,18 @@ public class PlatformAdminBootstrapService
     /// so a fresh install is administrable without restarting the API.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Declines when the operator pinned the choice through <c>Platform:AdminSubjectIds</c>,
     /// and when the instance already has a platform admin — an established instance must not
-    /// hand the flag to whoever runs setup. Takes the subject explicitly rather than
-    /// re-deriving the oldest tenant's owner, so the grant cannot land on a different subject.
+    /// hand the flag to whoever runs setup.
+    /// </para>
+    /// <para>
+    /// The caller names the subject, but this method re-derives whether that subject is
+    /// eligible rather than taking its word: the instance must still be a single-tenant
+    /// install and the subject must hold that tenant's <c>owner</c> role. A privilege grant
+    /// shouldn't depend on every present and future call site having checked setup state
+    /// first, and the setup OIDC callback in particular is reachable anonymously.
+    /// </para>
     /// </remarks>
     /// <param name="subjectId">The owner subject that just bound a credential.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -151,6 +159,24 @@ public class PlatformAdminBootstrapService
 
         if (await db.Subjects.AnyAsync(s => s.IsPlatformAdmin, cancellationToken))
             return false;
+
+        // More than one tenant means this is not a fresh install, whatever the caller thinks.
+        if (await db.Tenants.Take(2).CountAsync(cancellationToken) != 1)
+            return false;
+
+        var isTenantOwner = await db.TenantMembers
+            .AnyAsync(
+                tm => tm.SubjectId == subjectId
+                    && tm.MemberRoles.Any(mr => mr.TenantRole!.Slug == "owner"),
+                cancellationToken);
+
+        if (!isTenantOwner)
+        {
+            _logger.LogWarning(
+                "Declined to grant platform admin to subject {SubjectId}: it does not hold the " +
+                "owner role on the sole tenant", subjectId);
+            return false;
+        }
 
         var granted = await GrantAsync(db, subjectId, cancellationToken) > 0;
 
