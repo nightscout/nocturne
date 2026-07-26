@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Constants;
@@ -29,6 +30,7 @@ public class OidcAuthService : IOidcAuthService
     private readonly IRefreshTokenService _refreshTokenService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITenantMemberService _tenantMemberService;
+    private readonly IDataProtector _stateProtector;
     private readonly OidcOptions _options;
     private readonly IConfiguration _configuration;
     private readonly ILogger<OidcAuthService> _logger;
@@ -43,6 +45,7 @@ public class OidcAuthService : IOidcAuthService
     /// <param name="refreshTokenService">Service for validating refresh tokens (non-rotation refresh path only).</param>
     /// <param name="httpClientFactory">Factory for the <c>OidcProvider</c> named HTTP client.</param>
     /// <param name="tenantMemberService">Service for verifying tenant membership before issuing a login session.</param>
+    /// <param name="dataProtectionProvider">Provider for the protector that authenticates the state parameter.</param>
     /// <param name="options">OIDC session and state configuration options.</param>
     /// <param name="configuration">Application configuration for reading the base URL.</param>
     /// <param name="logger">Logger instance.</param>
@@ -54,6 +57,7 @@ public class OidcAuthService : IOidcAuthService
         IRefreshTokenService refreshTokenService,
         IHttpClientFactory httpClientFactory,
         ITenantMemberService tenantMemberService,
+        IDataProtectionProvider dataProtectionProvider,
         IOptions<OidcOptions> options,
         IConfiguration configuration,
         ILogger<OidcAuthService> logger
@@ -66,6 +70,7 @@ public class OidcAuthService : IOidcAuthService
         _refreshTokenService = refreshTokenService;
         _httpClientFactory = httpClientFactory;
         _tenantMemberService = tenantMemberService;
+        _stateProtector = dataProtectionProvider.CreateProtector("Nocturne.Oidc.State");
         _options = options.Value;
         _configuration = configuration;
         _logger = logger;
@@ -75,7 +80,6 @@ public class OidcAuthService : IOidcAuthService
     public async Task<OidcAuthorizationRequest> GenerateAuthorizationUrlAsync(
         Guid? providerId,
         string? returnUrl = null,
-        string? state = null,
         string? tenantSlug = null
     )
     {
@@ -119,14 +123,13 @@ public class OidcAuthService : IOidcAuthService
             TenantSlug = tenantSlug,
         };
 
-        return await BuildAuthorizationUrlAsync(provider, stateData, returnUrl, state);
+        return await BuildAuthorizationUrlAsync(provider, stateData, returnUrl);
     }
 
     private async Task<OidcAuthorizationRequest> BuildAuthorizationUrlAsync(
         OidcProvider provider,
         OidcStateData stateData,
         string? returnUrl,
-        string? state = null,
         string callbackPath = LoginCallbackPath
     )
     {
@@ -136,7 +139,7 @@ public class OidcAuthService : IOidcAuthService
                 $"Could not fetch OIDC discovery document for {provider.Name}"
             );
 
-        state ??= EncodeState(stateData);
+        var state = EncodeState(stateData);
 
         var redirectUri = GetRedirectUri(callbackPath);
         var authUrl = BuildAuthorizationUrl(
@@ -191,7 +194,8 @@ public class OidcAuthService : IOidcAuthService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to decode OIDC state");
+            // Also the forgery path: an unprotectable state was not issued by this instance.
+            _logger.LogWarning(ex, "Rejected an OIDC state that failed to decode");
             return CallbackParseResult.Fail("invalid_state", "Invalid state format");
         }
 
@@ -241,7 +245,9 @@ public class OidcAuthService : IOidcAuthService
             {
                 idTokenClaims = ParseIdToken(providerTokens.IdToken);
 
-                if (!string.IsNullOrEmpty(stateData.Nonce) && idTokenClaims.Nonce != stateData.Nonce)
+                // Required, not conditional: every state this service issues carries a nonce, so
+                // an absent one means the ID token cannot be bound to this authorization request.
+                if (string.IsNullOrEmpty(stateData.Nonce) || idTokenClaims.Nonce != stateData.Nonce)
                 {
                     return CallbackParseResult.Fail("invalid_nonce", "ID token nonce mismatch");
                 }
@@ -307,14 +313,38 @@ public class OidcAuthService : IOidcAuthService
         // identity is not a member of the tenant being logged into. The per-request
         // membership gate in AuthenticationMiddleware would block this subject's data
         // access anyway, but only after a session (and a "logged in" UI) already existed.
-        if (currentTenantId is { } tenantId
-            && !await _tenantMemberService.IsMemberAsync(subject.Id, tenantId))
+        //
+        // Two conditions, because either one alone leaves a gap.
+        //
+        // A resolved tenant always requires membership. A callback delivered to a tenant
+        // subdomain resolves that tenant wherever the login started, so an apex-minted state
+        // (no slug) replayed at {tenant}.{basedomain} arrives here with a tenant resolved;
+        // keying only off the slug would skip the check for exactly that case.
+        //
+        // A state that names a tenant also requires one to have resolved. Such a state was
+        // minted by a tenant login and must have been bounced to that subdomain, so an
+        // unresolved tenant means something upstream failed — and treating that as "nothing to
+        // check" is how the gate silently disappeared when the state encoding changed.
+        if (currentTenantId is { } tenantId)
         {
-            _logger.LogWarning(
-                "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
-                subject.Id,
-                tenantId);
-            return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
+            if (!await _tenantMemberService.IsMemberAsync(subject.Id, tenantId))
+            {
+                _logger.LogWarning(
+                    "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
+                    subject.Id,
+                    tenantId);
+                return OidcCallbackResult.NotAMember(subject.Id, stateData.ReturnUrl);
+            }
+        }
+        else if (!string.IsNullOrEmpty(stateData.TenantSlug))
+        {
+            _logger.LogError(
+                "OIDC login denied: state was minted for tenant '{TenantSlug}' but no tenant "
+                    + "resolved on the callback, so membership could not be verified",
+                stateData.TenantSlug);
+            return OidcCallbackResult.Failed(
+                "invalid_state",
+                "The login could not be completed against the tenant it was started from.");
         }
 
         // Update last login
@@ -1032,30 +1062,53 @@ public class OidcAuthService : IOidcAuthService
     }
 
     /// <summary>
-    /// Serialises an <see cref="OidcStateData"/> object to a URL-safe Base64 string.
+    /// Serialises an <see cref="OidcStateData"/> object to an authenticated, URL-safe state string.
     /// </summary>
     /// <param name="data">The state data to encode.</param>
-    /// <returns>URL-safe Base64-encoded JSON state string.</returns>
-    private static string EncodeState(OidcStateData data)
-    {
-        var json = JsonSerializer.Serialize(data);
-        var bytes = Encoding.UTF8.GetBytes(json);
-        return Base64Url.Encode(bytes);
-    }
+    /// <returns>A data-protected state string.</returns>
+    /// <remarks>
+    /// The payload is protected rather than plain-encoded because the callback trusts what it
+    /// carries. <c>Intent</c> selects which flow runs and <c>SubjectId</c> names the account an
+    /// identity is bound to, so an unauthenticated blob lets a caller mint state for any subject.
+    /// The state cookie is a CSRF defence, not an integrity one — a caller acting as its own HTTP
+    /// client supplies both halves of the double-submit.
+    /// </remarks>
+    private string EncodeState(OidcStateData data) =>
+        _stateProtector.Protect(JsonSerializer.Serialize(data));
 
     /// <summary>
-    /// Deserialises an <see cref="OidcStateData"/> object from a URL-safe Base64 string.
+    /// Deserialises an <see cref="OidcStateData"/> object from a protected state string.
     /// </summary>
-    /// <param name="encoded">URL-safe Base64-encoded state string produced by <see cref="EncodeState"/>.</param>
+    /// <param name="encoded">State string produced by <see cref="EncodeState"/>.</param>
     /// <returns>The decoded <see cref="OidcStateData"/>.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the state cannot be deserialised.</exception>
-    private static OidcStateData DecodeState(string encoded)
+    /// <exception cref="System.Security.Cryptography.CryptographicException">
+    /// Thrown when the state was not produced by this instance's key ring, including any attempt
+    /// to forge or tamper with it.
+    /// </exception>
+    private OidcStateData DecodeState(string encoded)
     {
-        var bytes = Base64Url.Decode(encoded);
-        var json = Encoding.UTF8.GetString(bytes);
+        var json = _stateProtector.Unprotect(encoded);
 
         return JsonSerializer.Deserialize<OidcStateData>(json)
             ?? throw new InvalidOperationException("Invalid state data");
+    }
+
+    /// <inheritdoc />
+    public string? TryReadTenantSlug(string state)
+    {
+        if (string.IsNullOrEmpty(state))
+            return null;
+
+        try
+        {
+            return DecodeState(state).TenantSlug;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not read a tenant slug from the OIDC state");
+            return null;
+        }
     }
 
     /// <summary>

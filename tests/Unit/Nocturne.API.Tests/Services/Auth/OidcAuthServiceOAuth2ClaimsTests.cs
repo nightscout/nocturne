@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using FluentAssertions;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -41,6 +42,7 @@ public class OidcAuthServiceOAuth2ClaimsTests
             new Mock<IRefreshTokenService>().Object,
             _httpFactory.Object,
             new Mock<ITenantMemberService>().Object,
+            new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
             new Mock<IConfiguration>().Object,
             NullLogger<OidcAuthService>.Instance);
