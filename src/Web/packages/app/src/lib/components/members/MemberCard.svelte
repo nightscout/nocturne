@@ -9,7 +9,6 @@
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
   import * as Collapsible from "$lib/components/ui/collapsible";
-  import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     Trash2,
     Clock,
@@ -48,6 +47,13 @@
     onSaveLimitTo24Hours,
     onRemove,
   }: Props = $props();
+
+  /**
+   * The server refuses role and permission changes to the caller's own membership, so the
+   * editor is not offered on your own row. Without this the card still rendered every
+   * checkbox and a Save that always failed.
+   */
+  const isSelf = $derived(!!currentSubjectId && member.subjectId === currentSubjectId);
 
   let editingRoleIds = $state<string[]>([]);
   let editingPermissions = $state<string[]>([]);
@@ -184,43 +190,29 @@
     </div>
   </Card.Header>
 
-  {#if isExpanded && canEditRoles}
+  {#if isExpanded && canEditRoles && isSelf}
+    <Card.Content class="border-t pt-4">
+      <p class="text-sm text-muted-foreground">
+        You cannot change your own roles or permissions. Ask another member who can manage
+        members to change them for you.
+      </p>
+    </Card.Content>
+  {:else if isExpanded && canEditRoles}
     <Card.Content class="space-y-4 border-t pt-4">
       <!-- Role selection -->
       <div class="space-y-2">
         <Label>Roles</Label>
         <div class="grid gap-2 @sm:grid-cols-2">
           {#each roles as role (role.id)}
-            {@const isOwnerSelf = role.slug === "owner" && member.subjectId === currentSubjectId}
-            {@const isOwnerRole = editingRoleIds.includes(role.id ?? '')}
             <div class="flex items-center gap-2">
-              {#if isOwnerSelf}
-                <Tooltip.Provider>
-                  <Tooltip.Root>
-                    <Tooltip.Trigger>
-                      <Checkbox
-                        id="member-role-{member.subjectId}-{role.id}"
-                        checked={isOwnerRole}
-                        disabled
-                      />
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>
-                      The owner role cannot be removed from yourself
-                    </Tooltip.Content>
-                  </Tooltip.Root>
-                </Tooltip.Provider>
-              {:else}
-                <Checkbox
-                  id="member-role-{member.subjectId}-{role.id}"
-                  checked={editingRoleIds.includes(role.id ?? '')}
-                  onCheckedChange={() => toggleRole(role.id ?? '')}
-                />
-              {/if}
+              <Checkbox
+                id="member-role-{member.subjectId}-{role.id}"
+                checked={editingRoleIds.includes(role.id ?? '')}
+                onCheckedChange={() => toggleRole(role.id ?? '')}
+              />
               <label
                 for="member-role-{member.subjectId}-{role.id}"
-                class="text-sm text-foreground select-none"
-                class:cursor-pointer={!isOwnerSelf}
-                class:opacity-60={isOwnerSelf}
+                class="cursor-pointer text-sm text-foreground select-none"
               >
                 {role.name}
               </label>
