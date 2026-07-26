@@ -33,13 +33,17 @@ public sealed class DenyDemoSubjectAttribute : Attribute, IAsyncAuthorizationFil
 
         await using var db = await factory.CreateDbContextAsync(context.HttpContext.RequestAborted);
 
+        // Nullable projection so a missing row is distinguishable from false, and refuse it:
+        // an access token is a self-contained JWT with no revocation check, so a subject
+        // deleted mid-token — which every demo reset does — would otherwise read as "not a
+        // demo subject" and be waved through.
         var isDemoSubject = await db.Subjects
             .AsNoTracking()
             .Where(s => s.Id == subjectId)
-            .Select(s => s.IsDemoSubject)
+            .Select(s => (bool?)s.IsDemoSubject)
             .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
 
-        if (isDemoSubject)
+        if (isDemoSubject is null or true)
         {
             context.Result = new ForbidResult();
         }

@@ -75,12 +75,12 @@ public class DemoSessionController : ControllerBase
         if (subjectId is null)
             return NotFound();
 
+        // No IP or user-agent: every visitor shares this subject, and the session list at
+        // /api/v4/account/sessions is readable by any member of it — recording them would
+        // show each visitor the addresses of everyone else currently using the demo.
         var session = await _sessionService.IssueSessionAsync(
             subjectId.Value,
-            new SessionContext(
-                DeviceDescription: "demo-visitor",
-                IpAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
-                UserAgent: Request.Headers.UserAgent.FirstOrDefault()),
+            new SessionContext(DeviceDescription: "demo-visitor"),
             ct);
 
         Response.SetSessionCookies(session, _oidcOptions.Value);

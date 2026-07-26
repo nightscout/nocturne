@@ -382,12 +382,11 @@ public sealed class ScalarAuthProvider
         if (_cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
             return cached;
 
+        // No IP or user-agent — see DemoSessionController: the demo subject is shared, and its
+        // session list is readable by anyone holding a demo session.
         var session = await _sessionService.IssueSessionAsync(
             subjectId.Value,
-            new SessionContext(
-                DeviceDescription: "demo-scalar",
-                IpAddress: context.Connection.RemoteIpAddress?.ToString(),
-                UserAgent: context.Request.Headers.UserAgent.FirstOrDefault()),
+            new SessionContext(DeviceDescription: "demo-scalar"),
             context.RequestAborted);
 
         // Expire ahead of the access token itself so a cached value is never handed out

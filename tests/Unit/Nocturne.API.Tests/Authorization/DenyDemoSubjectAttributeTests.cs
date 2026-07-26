@@ -77,14 +77,16 @@ public class DenyDemoSubjectAttributeTests : IDisposable
     }
 
     [Fact]
-    public async Task OnAuthorizationAsync_AllowsASubjectThatNoLongerExists()
+    public async Task OnAuthorizationAsync_ForbidsASubjectThatNoLongerExists()
     {
-        // A deleted subject cannot be a demo subject; leave the outcome to the pipeline.
+        // Access tokens are self-contained JWTs with no revocation check, and every demo
+        // reset deletes the demo subject — a missing row must not read as "not a demo
+        // subject" and be waved through.
         var context = BuildContext(Guid.CreateVersion7());
 
         await new DenyDemoSubjectAttribute().OnAuthorizationAsync(context);
 
-        context.Result.Should().BeNull();
+        context.Result.Should().BeOfType<ForbidResult>();
     }
 
     private Guid SeedSubject(bool isDemoSubject)
