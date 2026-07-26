@@ -95,7 +95,7 @@ public class DeduplicationController : ControllerBase
 
     /// <inheritdoc cref="IDeduplicationService.CancelJobAsync"/>
     [HttpPost("cancel/{jobId:guid}")]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetJobStatus"])]
     [ProducesResponseType(typeof(CancelJobResponse), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]

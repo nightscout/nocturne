@@ -426,7 +426,7 @@ public class OidcController : ControllerBase
     /// <response code="404">Identity not found.</response>
     /// <response code="409">Cannot remove the last primary sign-in method.</response>
     [HttpDelete("link/identities/{identityId:guid}")]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetLinkedIdentities"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

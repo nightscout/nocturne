@@ -14,9 +14,7 @@ vi.mock("$lib/stores/appearance-store.svelte", () => ({
 	glucoseUnits: { current: "mg/dl" },
 }));
 
-const { formatHour, transformStats, AGP_LOW_THRESHOLD } = await import(
-	"./agp-utils"
-);
+const { formatHour, transformStats } = await import("./agp-utils");
 
 // ---------------------------------------------------------------------------
 // formatHour
@@ -68,15 +66,6 @@ describe("formatHour", () => {
 			expect(formatHour(23.6, false)).toBe("12am");
 			expect(formatHour(23.6, true)).toBe("00:00");
 		});
-	});
-});
-
-// ---------------------------------------------------------------------------
-// AGP_LOW_THRESHOLD
-// ---------------------------------------------------------------------------
-describe("AGP_LOW_THRESHOLD", () => {
-	it("is 70 mg/dL (clinical hypoglycemia, not Level 2 at 55)", () => {
-		expect(AGP_LOW_THRESHOLD).toBe(70);
 	});
 });
 

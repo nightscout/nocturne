@@ -5070,7 +5070,10 @@
             "description": ""
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetJobStatus"
+        ]
       }
     },
     "/api/v4/admin/deduplication/entries/{entryId}/sources": {
@@ -5675,7 +5678,10 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetHistory"
+        ]
       }
     },
     "/api/v4/migration/{jobId}/status": {
@@ -5754,7 +5760,11 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetStatus",
+          "GetHistory"
+        ]
       }
     },
     "/api/v4/migration/history": {
@@ -8796,7 +8806,10 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPreferences"
+        ]
       }
     },
     "/api/v4/admin/access-requests": {
@@ -8868,7 +8881,10 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPendingRequests"
+        ]
       }
     },
     "/api/v4/admin/access-requests/{subjectId}/deny": {
@@ -8904,7 +8920,10 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPendingRequests"
+        ]
       }
     },
     "/api/v4/admin/connectors/{tenantId}": {
@@ -9627,7 +9646,8 @@
         },
         "x-remote-type": "command",
         "x-remote-invalidates": [
-          "GetById"
+          "GetById",
+          "ListInvites"
         ]
       },
       "get": {
@@ -10991,7 +11011,13 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetServicesOverview",
+          "GetActiveDataSources",
+          "GetConnectorDataSummary",
+          "GetConnectorSyncStatus"
+        ]
       }
     },
     "/api/v4/services/connectors/{id}/reset-cursor": {
@@ -11049,7 +11075,13 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetServicesOverview",
+          "GetActiveDataSources",
+          "GetConnectorDataSummary",
+          "GetConnectorSyncStatus"
+        ]
       }
     },
     "/api/v4/services/connectors/{id}/sync-status": {
@@ -11592,7 +11624,10 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetSounds"
+        ]
       },
       "get": {
         "tags": [
@@ -14191,7 +14226,10 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetGuestLinks"
+        ]
       },
       "get": {
         "tags": [
@@ -14792,7 +14830,10 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetMyRequest"
+        ]
       },
       "get": {
         "tags": [
@@ -14913,7 +14954,10 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPendingRequests"
+        ]
       }
     },
     "/api/v4/membership-requests/{id}/deny": {
@@ -14967,7 +15011,10 @@
             }
           }
         },
-        "x-remote-type": "command"
+        "x-remote-type": "command",
+        "x-remote-invalidates": [
+          "GetPendingRequests"
+        ]
       }
     },
     "/api/v4/membership-requests/settings": {
@@ -21517,6 +21564,7 @@
         },
         "x-remote-type": "command",
         "x-remote-invalidates": [
+          "GetConfiguration",
           "GetAllConnectorStatus"
         ]
       }

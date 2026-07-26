@@ -35,6 +35,10 @@
   let errorMessage = $state<string | null>(null);
   let recoveryCodes = $state<string[]>([]);
 
+  // In recovery mode, we need to find the orphaned subject.
+  // The register/options endpoint will look up the subject by username.
+  // For now, we collect username + display name and attempt registration.
+
   /**
    * The completion response only carries recovery codes when the account had
    * none, so the field is absent from the generated response type.

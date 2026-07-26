@@ -58,7 +58,7 @@ public class AccessRequestController(
 
     /// <inheritdoc cref="ITenantService.AddMemberAsync"/>
     [HttpPost("{subjectId:guid}/approve")]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetPendingRequests"])]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Approve(
@@ -123,7 +123,7 @@ public class AccessRequestController(
 
     /// <inheritdoc cref="ISubjectService.DeleteSubjectAsync"/>
     [HttpPost("{subjectId:guid}/deny")]
-    [RemoteCommand]
+    [RemoteCommand(Invalidates = ["GetPendingRequests"])]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Deny(Guid subjectId, CancellationToken ct)

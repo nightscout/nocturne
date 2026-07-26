@@ -1,5 +1,6 @@
 import type { DashboardChartData } from '$lib/api/generated/nocturne-api-client';
 import { resolveChartColor, getGlucoseColor } from '$lib/utils/chart-colors';
+import { resolveGlucoseThresholds } from '$lib/constants/glucose-thresholds';
 
 /**
  * Transform raw NSwag DashboardChartData into the shape consumed by chart components.
@@ -45,26 +46,21 @@ export function transformChartData(data: DashboardChartData) {
 		maxIob: data.maxIob ?? 5.0,
 		maxCob: data.maxCob ?? 100.0,
 
-		// `||` rather than `??` so a server-side 0 (which we treat as "missing":
-		// no profile yet for that historical instant) falls back to the safe
-		// default rather than rendering threshold lines pinned at the axis.
+		// A server-side 0 means "no profile yet for that historical instant";
+		// `resolveGlucoseThresholds` and the `||` below treat it as missing so
+		// threshold lines aren't pinned at the axis.
 		glucoseData: (data.glucoseData ?? []).map((p) => ({
 			time: new Date(p.time ?? 0),
 			sgv: p.sgv ?? 0,
 			direction: p.direction,
 			dataSource: p.dataSource,
-			color: getGlucoseColor(p.sgv ?? 0, {
-				low: data.thresholds?.low || 55,
-				high: data.thresholds?.high || 180,
-				veryLow: data.thresholds?.veryLow || 54,
-				veryHigh: data.thresholds?.veryHigh || 250,
-			}),
+			color: getGlucoseColor(
+				p.sgv ?? 0,
+				resolveGlucoseThresholds(data.thresholds)
+			),
 		})),
 		thresholds: {
-			low: data.thresholds?.low || 55,
-			high: data.thresholds?.high || 180,
-			veryLow: data.thresholds?.veryLow || 54,
-			veryHigh: data.thresholds?.veryHigh || 250,
+			...resolveGlucoseThresholds(data.thresholds),
 			glucoseYMax: data.thresholds?.glucoseYMax || 300,
 			// Personal target reference line; null when no profile is available.
 			targetLow: data.thresholds?.targetLow ?? null,

@@ -7,6 +7,7 @@
   } from "$api/generated/tenantAlertSettings.generated.remote";
   import type { TenantAlertSettingsResponse } from "$api-clients";
   import { Bell, BellOff, Settings as SettingsIcon, Loader2 } from "lucide-svelte";
+  import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
 
   interface Props {
     /** Called after navigating away (e.g. to close a parent popover). */
@@ -54,15 +55,15 @@
   // `.run()` rejects during the render flush, so defer the bootstrap to a microtask.
   onMount(() => queueMicrotask(load));
 
-  let isActive = $derived(
-    !!settings && (settings.dndManualActive || settings.dndScheduleEnabled),
-  );
+  // Only the manual mute is knowable as "on now"; a configured schedule reads as
+  // "Scheduled" without muting the bell. See lib/components/alerts/dnd.ts.
+  let isActive = $derived(isDndActiveNow(settings));
   let label = $derived(
     settings?.dndManualActive
       ? settings.dndManualUntil
         ? `Until ${new Date(settings.dndManualUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
         : "On"
-      : settings?.dndScheduleEnabled
+      : isDndScheduleConfigured(settings)
         ? "Scheduled"
         : "Off",
   );
@@ -88,7 +89,7 @@
     <div class="mt-1 rounded border bg-muted/30 p-1">
       {#if loading}
         <div class="px-2 py-1.5 text-sm text-muted-foreground">Loading…</div>
-      {:else if isActive && settings?.dndManualActive}
+      {:else if isActive}
         <button
           type="button"
           class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"

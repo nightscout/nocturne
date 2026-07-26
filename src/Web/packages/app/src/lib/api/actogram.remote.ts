@@ -7,6 +7,7 @@ import { getRequestEvent, query } from '$app/server';
 import { z } from 'zod';
 import { error } from '@sveltejs/kit';
 import { getGlucoseColor } from '$lib/utils/chart-colors';
+import { resolveGlucoseThresholds } from '$lib/constants/glucose-thresholds';
 
 const actogramSchema = z.object({
 	from: z.number(),
@@ -21,10 +22,7 @@ export const getActogramData = query(actogramSchema, async ({ from, to }) => {
 		const data = await apiClient.actogram.getActogram(from, to);
 
 		const thresholds = {
-			low: data.thresholds?.low ?? 70,
-			high: data.thresholds?.high ?? 180,
-			veryLow: data.thresholds?.veryLow ?? 54,
-			veryHigh: data.thresholds?.veryHigh ?? 250,
+			...resolveGlucoseThresholds(data.thresholds),
 			glucoseYMax: data.thresholds?.glucoseYMax ?? 300,
 		};
 

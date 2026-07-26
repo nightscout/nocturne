@@ -326,7 +326,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="request">Request containing the active state</param>
     /// <param name="ct">Cancellation token</param>
     [HttpPatch("{connectorName}/active")]
-    [RemoteCommand(Invalidates = ["GetAllConnectorStatus"])]
+    [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> SetActive(
         string connectorName,

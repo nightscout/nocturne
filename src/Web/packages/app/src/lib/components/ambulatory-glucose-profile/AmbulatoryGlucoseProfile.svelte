@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DEFAULT_THRESHOLDS } from "$lib/constants";
+  import { FALLBACK_GLUCOSE_THRESHOLDS } from "$lib/constants/glucose-thresholds";
   import { AreaChart, Tooltip } from "layerchart";
   import { BarChart3 } from "lucide-svelte";
   import {
@@ -11,7 +11,6 @@
   import {
     formatHour as _formatHour,
     transformStats,
-    AGP_LOW_THRESHOLD,
     type AgpDataPoint,
   } from "./agp-utils";
 
@@ -35,10 +34,10 @@
 
   // Convert threshold values to display units
   const lowThreshold = $derived(
-    convertToDisplayUnits(AGP_LOW_THRESHOLD, units)
+    convertToDisplayUnits(FALLBACK_GLUCOSE_THRESHOLDS.low, units)
   );
   const highThreshold = $derived(
-    convertToDisplayUnits(DEFAULT_THRESHOLDS.high ?? 180, units)
+    convertToDisplayUnits(FALLBACK_GLUCOSE_THRESHOLDS.high, units)
   );
 
   // Time format for X-axis labels
