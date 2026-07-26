@@ -249,6 +249,13 @@ public class CountController : ControllerBase
     /// <param name="type">Additional type filter (for entries: sgv, mbg, cal)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Count of records matching the criteria</returns>
+    /// <remarks>
+    /// The scope requirement is an OR across every storage this route can serve, because the
+    /// storage is a route parameter. It therefore lets a grant scoped to one category learn a
+    /// row COUNT for another; the per-storage sibling routes above (<c>entries/where</c>,
+    /// <c>treatments/where</c>, …) are each gated on their own category. Narrowing this route
+    /// needs a per-storage check inside the action.
+    /// </remarks>
     [HttpGet("{storage}/where")]
     [NightscoutEndpoint("/api/v1/count/:storage/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]

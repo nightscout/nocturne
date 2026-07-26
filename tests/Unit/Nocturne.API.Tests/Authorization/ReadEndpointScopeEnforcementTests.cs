@@ -26,24 +26,21 @@ public class ReadEndpointScopeEnforcementTests
     /// <summary>
     /// Controllers exempt from the per-action RequireScope rule, with justification.
     /// </summary>
+    /// <remarks>
+    /// Deliberately minimal. Controllers carrying <c>[AllowAnonymous]</c> (V1/V3 <c>StatusController</c>,
+    /// <c>VersionsController</c>, <c>VersionController</c>, V1 <c>AuthenticationController</c>,
+    /// V3 <c>LastModifiedController</c>) and write-only controllers (<c>AlexaController</c>, a read
+    /// exposed over POST that runs its own permission check) are skipped by the scan itself, so
+    /// listing them here would only create a way for a later change to silently lose its gate.
+    /// <see cref="ExemptControllers_AreStillNeeded"/> guards that.
+    /// </remarks>
     private static readonly HashSet<string> ExemptControllers = new()
     {
-        // Whole-controller [AllowAnonymous] compatibility surfaces that expose no tenant data:
-        // Nightscout clients probe these before they hold any credential.
-        "StatusController",        // V1 + V3 /status — server capabilities and settings echo
-        "VersionsController",      // V1 /api/versions
-        "VersionController",       // V3 /version
-        "AuthenticationController",// V1 /verifyauth — reports whether the caller's own secret works
-        "LastModifiedController",  // V3 /lastmodified — per-collection high-water marks
-
-        // Self-introspection only: class-level [Authorize] means an authenticated caller, and the
-        // responses describe that caller's OWN grants, so there is no cross-category read to gate.
-        // Every subject/role management action on it already carries [RequireAdmin].
+        // Self-introspection only. Class-level [Authorize] already requires an authenticated
+        // caller, and GetAllPermissions/GetPermissionTrie describe that caller's OWN grants — there
+        // is no cross-category tenant read to scope. Its subject/role management actions each carry
+        // [RequireAdmin], and its token-exchange action is explicitly [AllowAnonymous].
         "AuthorizationController",
-
-        // Reflection cannot see the gate: the actions are authorized per-storage inside the
-        // action body rather than by attribute.
-        "AlexaController",        // read exposed over POST; performs its own permission check
     };
 
     [Fact]
@@ -101,6 +98,43 @@ public class ReadEndpointScopeEnforcementTests
             "every V1/V2/V3 read endpoint must carry [RequireScope] or [RequirePermission] so a " +
             "grant scoped to one data category cannot read every other category. " +
             "Unprotected: " + string.Join("; ", violations));
+    }
+
+    /// <summary>
+    /// Guards the allow-list itself: an entry that no longer needs to be there would silently
+    /// exempt a controller that had lost its gate.
+    /// </summary>
+    [Fact]
+    public void ExemptControllers_AreStillNeeded()
+    {
+        var assembly = typeof(RequireScopeAttribute).Assembly;
+
+        foreach (var name in ExemptControllers)
+        {
+            var type = assembly.GetTypes().SingleOrDefault(t =>
+                t.Name == name
+                && t.Namespace is "Nocturne.API.Controllers.V1"
+                    or "Nocturne.API.Controllers.V2" or "Nocturne.API.Controllers.V3");
+
+            type.Should().NotBeNull($"{name} is exempted but no longer exists in V1/V2/V3");
+            type!.GetCustomAttribute<AllowAnonymousAttribute>().Should().BeNull(
+                $"{name} is [AllowAnonymous], which the scan already skips — remove the exemption");
+
+            var ungatedReads = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Where(m => m.GetCustomAttributes<HttpMethodAttribute>()
+                    .SelectMany(a => a.HttpMethods)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                    .Overlaps(ReadVerbs))
+                .Where(m => m.GetCustomAttribute<AllowAnonymousAttribute>() == null)
+                .Where(m => m.GetCustomAttribute<RequireScopeAttribute>() == null
+                            && m.GetCustomAttribute<RequirePermissionAttribute>() == null
+                            && type.GetCustomAttribute<RequireScopeAttribute>() == null
+                            && type.GetCustomAttribute<RequirePermissionAttribute>() == null)
+                .ToList();
+
+            ungatedReads.Should().NotBeEmpty(
+                $"{name} now gates every read action, so its exemption is stale — remove it");
+        }
     }
 
     /// <summary>
