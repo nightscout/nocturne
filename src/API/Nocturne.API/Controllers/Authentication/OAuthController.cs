@@ -249,6 +249,29 @@ public class OAuthController : ControllerBase
             });
         }
 
+        // Find the client. Resolved before the approval decision is read: every exit from this
+        // action that redirects to request.RedirectUri needs the URI proven to belong to the client
+        // first, or the endpoint is an open redirect off a first-party origin.
+        var client = await _clientService.GetClientAsync(request.ClientId);
+        if (client == null)
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_client",
+                ErrorDescription = "Unknown client_id.",
+            });
+        }
+
+        // Re-validate redirect URI to prevent manipulation between GET and POST
+        if (!await _clientService.ValidateRedirectUriAsync(request.ClientId, request.RedirectUri))
+        {
+            return BadRequest(new OAuthError
+            {
+                Error = "invalid_request",
+                ErrorDescription = "Invalid redirect_uri for this client.",
+            });
+        }
+
         // If user denied
         if (!request.Approved)
         {
@@ -270,27 +293,6 @@ public class OAuthController : ControllerBase
             {
                 Error = "invalid_scope",
                 ErrorDescription = "No valid scopes were approved.",
-            });
-        }
-
-        // Find the client
-        var client = await _clientService.GetClientAsync(request.ClientId);
-        if (client == null)
-        {
-            return BadRequest(new OAuthError
-            {
-                Error = "invalid_client",
-                ErrorDescription = "Unknown client_id.",
-            });
-        }
-
-        // Re-validate redirect URI to prevent manipulation between GET and POST
-        if (!await _clientService.ValidateRedirectUriAsync(request.ClientId, request.RedirectUri))
-        {
-            return BadRequest(new OAuthError
-            {
-                Error = "invalid_request",
-                ErrorDescription = "Invalid redirect_uri for this client.",
             });
         }
 
@@ -677,6 +679,12 @@ public class OAuthController : ControllerBase
         return Redirect(redirectUrl);
     }
 
+    /// <summary>
+    /// Redirects to the client's registered <paramref name="redirectUri"/> with an OAuth error.
+    /// Performs no validation of its own: callers must have already proven the URI is registered to
+    /// the client (<see cref="IOAuthClientService.ValidateRedirectUriAsync"/>), otherwise this
+    /// redirects wherever the request asked.
+    /// </summary>
     private ActionResult RedirectWithError(
         string redirectUri,
         string error,
