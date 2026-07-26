@@ -117,6 +117,26 @@
           The device will not be granted access.
         </Card.Description>
       </Card.Header>
+    {:else if deviceInfo?.isExpired}
+      <!-- State 2a: Looked up, but the code is past its expiry -->
+      <Card.Header class="space-y-1 text-center">
+        <div
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
+        >
+          <AlertTriangle class="h-6 w-6 text-muted-foreground" />
+        </div>
+        <Card.Title class="text-2xl font-bold">Code Expired</Card.Title>
+        <Card.Description>
+          This code is no longer valid. Start the sign-in again on your device to
+          get a new one.
+        </Card.Description>
+      </Card.Header>
+
+      <Card.Content>
+        <Button href="/oauth/device" data-sveltekit-reload class="w-full">
+          Enter a different code
+        </Button>
+      </Card.Content>
     {:else if deviceInfo}
       <!-- State 2: Consent / Approval -->
       <Card.Header class="space-y-1 text-center">

@@ -14,6 +14,7 @@
     Zap,
   } from "lucide-svelte";
   import { timeAgo } from "$lib/utils";
+  import { Now } from "$lib/hooks/now.svelte";
   import { formatGlucoseDelta, getUnitLabel, time } from "$lib/utils/formatting";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
@@ -38,6 +39,11 @@
   const displayBgDelta = $derived(formatGlucoseDelta(rawBgDelta, units));
   const unitLabel = $derived(getUnitLabel(units));
   const displayLastUpdated = $derived(lastUpdated ?? realtimeStore.lastUpdated);
+
+  // `timeAgo` reads the clock once; re-derive it on a tick so the age
+  // on screen keeps up with the reading it describes.
+  const now = new Now();
+  const age = $derived(timeAgo(displayLastUpdated, undefined, now.current));
 
   // Battery data
   const batteryStatusPromise = $derived(
@@ -85,7 +91,7 @@
       </CardHeader>
       <CardContent>
         <div class="text-2xl font-bold">
-          {timeAgo(displayLastUpdated)}
+          {age}
         </div>
         <p class="text-xs text-muted-foreground">
           {time(displayLastUpdated)}
@@ -101,7 +107,7 @@
       </CardHeader>
       <CardContent>
         <div class="text-2xl font-bold">
-          {timeAgo(displayLastUpdated)}
+          {age}
         </div>
         {#if hasDevices && currentStatus?.min}
           <div class="flex items-center gap-2 mt-1">
@@ -144,7 +150,7 @@
       </CardHeader>
       <CardContent>
         <div class="text-2xl font-bold">
-          {timeAgo(displayLastUpdated)}
+          {age}
         </div>
         <p class="text-xs text-muted-foreground">
           {time(displayLastUpdated)}

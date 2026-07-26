@@ -236,7 +236,7 @@
 
       const endTime = new Date();
       manualSyncResult = {
-        success: successes > 0,
+        success: successes === connectorsToSync.length,
         totalConnectors: connectorsToSync.length,
         successfulConnectors: successes,
         failedConnectors: connectorsToSync.length - successes,
@@ -582,6 +582,30 @@
                 <Link2 class="h-4 w-4" />
                 Run Deduplication
               {/if}
+            </Button>
+          </div>
+        </div>
+
+        <div class="flex items-start gap-4 p-4 rounded-lg border bg-card">
+          <div
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
+          >
+            <Sparkles class="h-5 w-5 text-primary" />
+          </div>
+          <div class="flex-1">
+            <h4 class="font-medium">Remove Demo Data</h4>
+            <p class="text-sm text-muted-foreground mt-1">
+              Delete the sample readings and treatments that were generated to
+              show you around. Your own data is not affected.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              class="mt-3 gap-2"
+              onclick={() => (showDemoDataDialog = true)}
+            >
+              <Sparkles class="h-4 w-4" />
+              Remove Demo Data
             </Button>
           </div>
         </div>

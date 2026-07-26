@@ -8,8 +8,10 @@
     BatteryWarning,
     Zap,
   } from "lucide-svelte";
+  import { onMount } from "svelte";
   import { timeAgo } from "$lib/utils";
   import { time } from "$lib/utils/formatting";
+  import { Now } from "$lib/hooks/now.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
 
@@ -23,10 +25,20 @@
   const realtimeStore = getRealtimeStore();
   const displayLastUpdated = $derived(lastUpdated ?? realtimeStore.lastUpdated);
 
-  // Battery data
-  const batteryStatusPromise = $derived(
-    getCurrentBatteryStatus({ recentMinutes: 30 })
-  );
+  // `timeAgo` reads the clock once, so the age has to be re-derived on a tick
+  // or it stays at whatever it said when the widget first rendered.
+  const now = new Now();
+  const age = $derived(timeAgo(displayLastUpdated, undefined, now.current));
+
+  // Awaiting a remote query in the template reads the hydration cache during
+  // hydration and throws hydratable_missing_but_required; creating the query in
+  // onMount defers the fetch past hydration, as TddWidget does.
+  let batteryStatusPromise = $state<ReturnType<
+    typeof getCurrentBatteryStatus
+  > | null>(null);
+  onMount(() => {
+    batteryStatusPromise = getCurrentBatteryStatus({ recentMinutes: 30 });
+  });
 
   // Get battery icon component based on level
   function getBatteryIconComponent(level: number | undefined) {
@@ -47,10 +59,20 @@
   }
 </script>
 
+{#if !batteryStatusPromise}
+  <WidgetCard title="Last Updated">
+    <div class="text-2xl font-bold">
+      {age}
+    </div>
+    <p class="text-xs text-muted-foreground">
+      {time(displayLastUpdated)}
+    </p>
+  </WidgetCard>
+{:else}
 {#await batteryStatusPromise}
   <WidgetCard title="Last Updated">
     <div class="text-2xl font-bold">
-      {timeAgo(displayLastUpdated)}
+      {age}
     </div>
     <p class="text-xs text-muted-foreground">
       {time(displayLastUpdated)}
@@ -61,7 +83,7 @@
     currentStatus && Object.keys(currentStatus.devices ?? {}).length > 0}
   <WidgetCard title="Last Updated">
     <div class="text-2xl font-bold">
-      {timeAgo(displayLastUpdated)}
+      {age}
     </div>
     {#if hasDevices && currentStatus?.min}
       <div class="flex items-center gap-2 mt-1">
@@ -97,10 +119,11 @@
 {:catch}
   <WidgetCard title="Last Updated">
     <div class="text-2xl font-bold">
-      {timeAgo(displayLastUpdated)}
+      {age}
     </div>
     <p class="text-xs text-muted-foreground">
       {time(displayLastUpdated)}
     </p>
   </WidgetCard>
 {/await}
+{/if}

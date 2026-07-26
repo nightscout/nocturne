@@ -19,6 +19,7 @@
   import IntegrationsTabContent from "$lib/components/admin/IntegrationsTabContent.svelte";
   import OidcProvidersTabContent from "$lib/components/admin/OidcProvidersTabContent.svelte";
   import OidcProviderDialog from "$lib/components/admin/OidcProviderDialog.svelte";
+  import { errorMessage } from "$lib/forms/submit-error";
   import type {
     TenantRoleDto,
     OidcProviderResponse,
@@ -103,11 +104,9 @@
       await oidcRemote.remove(p.id);
       await loadOidcData();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to delete provider";
-      oidcError = message.includes("would_lock_out_users")
-        ? "Deleting this provider would lock out all users."
-        : message;
+      // A 409 from the lock-out guard arrives as an HttpError, which does not
+      // extend Error; its body carries the message written for the user.
+      oidcError = errorMessage(err) ?? "Failed to delete provider.";
     }
   }
 
@@ -121,11 +120,7 @@
       }
       await loadOidcData();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to toggle provider";
-      oidcError = message.includes("would_lock_out_users")
-        ? "Disabling this provider would lock out all users."
-        : message;
+      oidcError = errorMessage(err) ?? "Failed to change whether this provider is enabled.";
     }
   }
 

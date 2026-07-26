@@ -1,4 +1,28 @@
 /**
+ * First instant of a `YYYY-MM-DD` date in the browser's local time.
+ *
+ * `new Date("2026-03-29")` is parsed as UTC midnight while
+ * `new Date("2026-03-29T00:00:00")` is parsed as local midnight, so a range
+ * built from a bare date string and a time-bearing one is skewed by the
+ * viewer's offset.
+ */
+export function localDayStart(dateStr: string): Date {
+	return new Date(dateStr + 'T00:00:00');
+}
+
+/**
+ * Last instant of a `YYYY-MM-DD` date in the browser's local time. Derived from
+ * the following local midnight rather than a fixed 24 hours, so it holds across
+ * the 23- and 25-hour days either side of a DST change.
+ */
+export function localDayEnd(dateStr: string): Date {
+	const start = localDayStart(dateStr);
+	const nextDay = new Date(start);
+	nextDay.setDate(nextDay.getDate() + 1);
+	return new Date(nextDay.getTime() - 1);
+}
+
+/**
  * Compute UTC start/end of a local day for a given IANA timezone.
  * Falls back to UTC if timezone is not provided.
  */

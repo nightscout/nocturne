@@ -33,6 +33,7 @@
   import type { TenantDetailDto, TenantMemberDto } from "$api";
   import { getCurrentTenantId } from "../../current-tenant.remote";
   import { getTransitionStatus } from "$api/generated/platforms.generated.remote";
+  import { errorMessage } from "$lib/forms/submit-error";
 
   const tenantIdQuery = getCurrentTenantId();
   const currentTenantId = $derived(tenantIdQuery.current ?? undefined);
@@ -144,10 +145,8 @@
         ),
       };
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      platformAdminError = message.includes("last_platform_admin")
-        ? "Cannot demote the last platform admin. Promote another user first."
-        : "Failed to update platform admin status.";
+      platformAdminError =
+        errorMessage(err) ?? "Failed to update platform admin status.";
     } finally {
       platformAdminSavingId = null;
     }

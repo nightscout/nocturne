@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { getAnalysisDetail } from "../data.remote";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
+  import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
 
   // Get ID from route params (guaranteed to exist in [id] route)
   const analysisId = $derived(page.params.id ?? "");
@@ -11,55 +12,6 @@
   const analysisQuery = $derived(getAnalysisDetail(analysisId));
 
   const analysis = $derived(analysisQuery.current?.analysis ?? {});
-
-  // Helper to get match type display
-  function getMatchTypeDisplay(matchType: number) {
-    const types = [
-      {
-        value: 0,
-        label: "Perfect Match",
-        class:
-          "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-      },
-      {
-        value: 1,
-        label: "Minor Differences",
-        class: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
-      },
-      {
-        value: 2,
-        label: "Major Differences",
-        class:
-          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-      },
-      {
-        value: 3,
-        label: "Critical Differences",
-        class: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-      },
-      {
-        value: 4,
-        label: "Nightscout Missing",
-        class: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
-      },
-      {
-        value: 5,
-        label: "Nocturne Missing",
-        class: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
-      },
-      {
-        value: 6,
-        label: "Both Missing",
-        class: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
-      },
-      {
-        value: 7,
-        label: "Comparison Error",
-        class: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-      },
-    ];
-    return types.find((t) => t.value === matchType) || types[0];
-  }
 
   // Helper to get discrepancy type display
   function getDiscrepancyTypeDisplay(type: number | undefined) {
@@ -94,7 +46,7 @@
     minor: analysis.discrepancies?.filter((d: any) => d.severity === 0) || [],
   });
 
-  const matchType = $derived(getMatchTypeDisplay(analysis.overallMatch ?? 0));
+  const matchType = $derived(getMatchTypeDisplay(analysis.overallMatch));
 </script>
 
 <div class="@container container mx-auto p-6 space-y-6">
@@ -126,7 +78,7 @@
         <span
           class="inline-block px-3 py-1 text-sm font-semibold rounded-full {matchType.class}"
         >
-          {matchType.label}
+          {matchType.longLabel}
         </span>
       </div>
       <div>

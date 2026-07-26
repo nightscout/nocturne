@@ -86,8 +86,17 @@ const getRelativeTimeFormatter = (() => {
   };
 })();
 
-/** Generate human-readable time ago string with enhanced internationalization */
-export function timeAgo(timestamp: number | string, locale?: string): string {
+/**
+ * Generate human-readable time ago string with enhanced internationalization
+ *
+ * @param nowMs Reference time. Pass a ticking value (see `Now`) where the
+ *   result is rendered, or the text freezes at the age it had on first render.
+ */
+export function timeAgo(
+  timestamp: number | string,
+  locale?: string,
+  nowMs?: number
+): string {
   // Validate input timestamp
   const timestampNum =
     typeof timestamp === "string" ? parseInt(timestamp) : timestamp;
@@ -97,7 +106,10 @@ export function timeAgo(timestamp: number | string, locale?: string): string {
 
   // Convert to DateValue using @internationalized/date for better timezone handling
   const inputDate = fromDate(new Date(timestampNum), getLocalTimeZone());
-  const currentDate = now(getLocalTimeZone());
+  const currentDate =
+    nowMs === undefined
+      ? now(getLocalTimeZone())
+      : fromDate(new Date(nowMs), getLocalTimeZone());
 
   // Calculate difference in milliseconds
   const diffMs = currentDate.toDate().getTime() - inputDate.toDate().getTime();
@@ -154,6 +166,36 @@ export interface DateRange {
   start: string;
   /** ISO 8601 */
   end: string;
+}
+
+/**
+ * Base64-encode a string of any content.
+ *
+ * `btoa` throws on code points above U+00FF, so it cannot carry text the user
+ * typed — an accented or non-Latin name is enough to break it.
+ */
+export function encodeBase64Utf8(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+/**
+ * Decode a string produced by {@link encodeBase64Utf8}.
+ *
+ * Payloads written by plain `btoa` still decode: ASCII is identical in UTF-8,
+ * and a Latin-1 payload that isn't valid UTF-8 falls back to the byte-per-char
+ * reading `atob` gives.
+ */
+export function decodeBase64Utf8(encoded: string): string {
+  const binary = atob(encoded);
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return binary;
+  }
 }
 
 /**

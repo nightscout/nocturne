@@ -14,6 +14,7 @@
   } from "lucide-svelte";
   import { OidcProviderType } from "$api";
   import type { OidcProviderResponse, OidcProviderTestResult, TenantRoleDto } from "$api";
+  import { errorMessage } from "$lib/forms/submit-error";
 
   const OIDC_SCOPES = "openid profile email";
 
@@ -190,11 +191,7 @@
       await onSave(providerData);
       open = false;
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to save provider";
-      providerDialogError = message.includes("would_lock_out_users")
-        ? "This change would lock out all users. Ensure at least one authentication method remains available."
-        : message;
+      providerDialogError = errorMessage(err) ?? "Failed to save provider.";
     } finally {
       providerSaving = false;
     }

@@ -16,6 +16,9 @@
     Pencil,
   } from "lucide-svelte";
   import { timeAgo } from "$lib/utils";
+  import { Now } from "$lib/hooks/now.svelte";
+
+  const now = new Now();
   import { deviceKindLabel } from "$lib/utils/device-kind-labels";
   import {
     getDevices,
@@ -270,7 +273,7 @@
             {#if device.lastSeenAt}
               <span class="flex items-center gap-1.5">
                 <Clock class="h-3 w-3" />
-                Last seen {timeAgo(new Date(device.lastSeenAt).getTime())}
+                Last seen {timeAgo(new Date(device.lastSeenAt).getTime(), undefined, now.current)}
               </span>
             {/if}
           </div>

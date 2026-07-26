@@ -12,6 +12,7 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Separator } from "$lib/components/ui/separator";
   import { ListChecks, Plus, ArrowLeft, X } from "lucide-svelte";
+  import { decodeBase64Utf8, encodeBase64Utf8 } from "$lib/utils";
 
   interface PackingItem {
     c: string; // category
@@ -24,7 +25,7 @@
     try {
       const encoded = page.url.searchParams.get("d");
       if (!encoded) return [];
-      return JSON.parse(atob(decodeURIComponent(encoded)));
+      return JSON.parse(decodeBase64Utf8(decodeURIComponent(encoded)));
     } catch {
       return [];
     }
@@ -78,7 +79,7 @@
   }
 
   function updateUrl() {
-    const encoded = btoa(JSON.stringify(items));
+    const encoded = encodeBase64Utf8(JSON.stringify(items));
     const url = new URL(page.url);
     url.searchParams.set("d", encodeURIComponent(encoded));
     goto(url.toString(), { replaceState: true, noScroll: true });

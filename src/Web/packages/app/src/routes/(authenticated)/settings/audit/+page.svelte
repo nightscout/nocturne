@@ -22,6 +22,7 @@
   } from "$lib/api/generated/audits.generated.remote";
   import AuditMutationsTable from "$lib/components/audit/AuditMutationsTable.svelte";
   import AuditReadsTable from "$lib/components/audit/AuditReadsTable.svelte";
+  import { localDayStart, localDayEnd } from "$lib/utils/timezone";
 
   // Permissions
   const effectivePermissions: string[] = $derived(
@@ -93,8 +94,8 @@
 
   const mutationsQuery = $derived(
     getMutationAuditLog({
-      from: new Date(mFrom),
-      to: new Date(mTo + "T23:59:59"),
+      from: localDayStart(mFrom),
+      to: localDayEnd(mTo),
       limit: 500,
       offset: 0,
       sort: "created_at_desc",
@@ -111,8 +112,8 @@
 
   const readsQuery = $derived(
     getReadAccessAuditLog({
-      from: new Date(rFrom),
-      to: new Date(rTo + "T23:59:59"),
+      from: localDayStart(rFrom),
+      to: localDayEnd(rTo),
       limit: 500,
       offset: 0,
       sort: "created_at_desc",
