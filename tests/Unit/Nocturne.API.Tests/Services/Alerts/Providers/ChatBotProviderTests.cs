@@ -180,24 +180,39 @@ public class ChatBotProviderTests
     }
 
     [Fact]
-    public async Task SendAsync_FallsBackToBaseUrl_WhenWebUrlNotConfigured()
+    public async Task SendAsync_PostsToTheInternalWebAddress()
     {
-        // Arrange -- no WEB_URL (the nocturne-cloud deployment shape), only the
-        // public base URL, which routes /api/v4/bot/dispatch to web via the gateway.
+        // Arrange -- WEB_URL is the web app's address on the deployment's internal
+        // network, so the dispatch never leaves it.
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler, webUrl: "http://nocturne-web:5173");
+
+        // Act
+        await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        // Assert
+        handler.CapturedRequest!.RequestUri!.ToString()
+            .Should().Be("http://nocturne-web:5173/api/v4/bot/dispatch");
+    }
+
+    [Fact]
+    public async Task SendAsync_DoesNotFallBackToThePublicBaseUrl()
+    {
+        // Arrange -- only the public base URL is configured. An edge proxy in front of
+        // it strips X-Instance-Key/X-Instance-Service (the /api/** prefix is
+        // internet-reachable), so dispatching there would 401 and drop the alert.
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
         var provider = CreateProvider(handler, webUrl: "", baseUrl: "https://nocturne.run");
 
         // Act
         await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
 
-        // Assert
-        handler.CapturedRequest.Should().NotBeNull();
-        handler.CapturedRequest!.RequestUri!.ToString()
-            .Should().Be("https://nocturne.run/api/v4/bot/dispatch");
+        // Assert -- no request at all, rather than one to the public URL
+        handler.CapturedRequest.Should().BeNull();
     }
 
     [Fact]
-    public async Task SendAsync_LogsWarning_WhenNeitherUrlConfigured()
+    public async Task SendAsync_LogsWarning_WhenWebUrlNotConfigured()
     {
         // Arrange
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK);

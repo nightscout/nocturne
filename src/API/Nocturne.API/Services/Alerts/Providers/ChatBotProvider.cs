@@ -14,11 +14,14 @@ namespace Nocturne.API.Services.Alerts.Providers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The bot endpoint is derived from <c>WEB_URL</c> when set (the internal web
-/// endpoint wired by the AppHost), otherwise from the deployment's public base
-/// URL (<see cref="ServiceNames.ConfigKeys.BaseUrl"/>) — which reaches the same
-/// SvelteKit dispatch route through the gateway. Delivery is skipped with a
-/// warning when neither is configured.
+/// The bot endpoint is derived from <c>WEB_URL</c>, which names the web app's
+/// deployment-internal address (the AppHost wires it from the web resource's
+/// endpoint; the Compose bundles set <c>http://nocturne-web:&lt;port&gt;</c>).
+/// Delivery is skipped with a warning when it is unset. The deployment's public
+/// base URL (<see cref="ServiceNames.ConfigKeys.BaseUrl"/>) is deliberately not
+/// used as a fallback: an edge proxy fronting that URL strips the instance-key
+/// service headers below, because the same <c>/api/**</c> prefix is reachable from
+/// the internet, and the dispatch would arrive unauthenticated and be rejected.
 /// </para>
 /// <para>
 /// The dispatch route is reachable from the internet through the gateway, so the
@@ -66,15 +69,13 @@ internal sealed class ChatBotProvider(
     /// <param name="ct">Cancellation token.</param>
     public async Task SendAsync(Guid deliveryId, ChannelType channelType, string destination, AlertPayload payload, CancellationToken ct)
     {
+        // Internal address only — see the remarks on this type for why the public
+        // base URL is not an acceptable substitute.
         var webUrl = configuration["WEB_URL"];
         if (string.IsNullOrEmpty(webUrl))
         {
-            webUrl = configuration[ServiceNames.ConfigKeys.BaseUrl];
-        }
-
-        if (string.IsNullOrEmpty(webUrl))
-        {
-            logger.LogWarning("Neither WEB_URL nor BaseUrl configured, cannot dispatch to chat bot");
+            logger.LogWarning(
+                "WEB_URL is not configured with the web app's internal address, cannot dispatch to chat bot");
             return;
         }
 
