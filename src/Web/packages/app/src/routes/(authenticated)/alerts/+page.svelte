@@ -34,6 +34,7 @@
   import AlertRuleRow from "$lib/components/alerts/AlertRuleRow.svelte";
   import DndNoticeStrip from "$lib/components/alerts/DndNoticeStrip.svelte";
   import { isDndActiveNow } from "$lib/components/alerts/dnd";
+  import { severity, severityLabel } from "$lib/components/alerts/severity";
 
   // ---- Queries ----
   const rulesQuery = getRules();
@@ -104,7 +105,7 @@
       // Optimistically badge every unacknowledged excursion so the card updates
       // at once; the command's GetActiveAlerts invalidation reconciles it in the
       // same round-trip (same pattern as AlertBanner/FiringToast).
-      await acknowledge({ acknowledgedBy: "web_user" }).updates(
+      await acknowledge({}).updates(
         activeAlertsQuery.withOverride((current) =>
           (current ?? []).map((a) =>
             a.acknowledgedAt ? a : { ...a, acknowledgedAt: new Date() },
@@ -257,9 +258,17 @@
         <CardContent class="space-y-2">
           {#each activeAlerts as a (a.id)}
             <div class="flex items-center gap-3 rounded-md border bg-background p-3">
-              <span class="h-2 w-2 rounded-full bg-status-critical" aria-hidden="true"></span>
+              <span
+                class="h-2 w-2 shrink-0 rounded-full {severity(a.severity, 'dot')}"
+                aria-hidden="true"
+              ></span>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium truncate">{a.ruleName ?? "Alert"}</p>
+                <p class="text-sm font-medium truncate">
+                  <span class="text-muted-foreground text-xs uppercase tracking-wider">
+                    {severityLabel(a.severity)}
+                  </span>
+                  {a.ruleName ?? "Alert"}
+                </p>
                 <p class="text-xs text-muted-foreground">
                   Since {a.startedAt ? new Date(a.startedAt).toLocaleTimeString() : "—"}
                 </p>

@@ -4,7 +4,6 @@
     snoozeInstance,
     acknowledgeExcursion,
   } from "$api/generated/alerts.generated.remote";
-  import { toggleRule } from "$api/generated/alertRules.generated.remote";
   import type { ActiveExcursionResponse } from "$api-clients";
   import { Button } from "$lib/components/ui/button";
   import { Bell, BellOff, X } from "lucide-svelte";
@@ -92,7 +91,7 @@
     return optimistic(id, () =>
       acknowledgeExcursion({
         excursionId: id,
-        request: { acknowledgedBy: "web_user" },
+        request: {},
       }).updates(
         activeAlerts.withOverride((current) =>
           (current ?? []).map((a) =>
@@ -103,13 +102,11 @@
     );
   }
 
-  function muteRule(id: string, ruleId: string | undefined): Promise<void> {
-    if (!ruleId) {
-      dismiss(id);
-      return Promise.resolve();
-    }
-    return optimistic(id, () => toggleRule(ruleId));
-  }
+  // "Mute the rule" used to call toggleRule, which disables the rule outright,
+  // tenant-wide, with no confirmation — a one-tap way to switch off a safety rule
+  // at 3am, and one that silently re-enabled a rule already disabled. Snoozing is
+  // the transient action; changing a rule now happens on the rule's own page,
+  // where the effect is labelled.
 </script>
 
 {#if queue.length > 0}
@@ -126,7 +123,7 @@
         <div class="flex items-start gap-2">
           <span
             class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full {severity(
-              'critical',
+              a.severity,
               'chip'
             )}"
           >
@@ -180,33 +177,38 @@
               >
                 1h
               </Button>
+              <!-- This one records the acknowledgement; the X beside it only
+                   closes the card. They used to read "Dismiss" and an unlabelled
+                   cross, which is the wrong pair of words for that difference. -->
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 class="h-7 px-2 text-xs ml-auto"
                 onclick={() => ack(a.id ?? "")}
-                title="Acknowledge"
               >
-                Dismiss
+                Acknowledge
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                class="h-7 px-2 text-xs"
-                onclick={() => muteRule(a.id ?? "", a.alertRuleId)}
-                title="Mute the rule"
-              >
-                <BellOff class="h-3.5 w-3.5" />
-              </Button>
+              {#if a.alertRuleId}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="h-7 px-2 text-xs"
+                  href="/alerts/{a.alertRuleId}"
+                  title="Open this rule's settings"
+                  aria-label="Open settings for {a.ruleName ?? 'this rule'}"
+                >
+                  <BellOff class="h-3.5 w-3.5" />
+                </Button>
+              {/if}
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 class="h-7 w-7"
                 onclick={() => dismiss(a.id ?? "")}
-                aria-label="Close"
+                aria-label="Close this notification without acknowledging"
               >
                 <X class="h-3.5 w-3.5" />
               </Button>

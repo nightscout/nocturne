@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -144,6 +145,7 @@ public class AlertsController : ControllerBase
                 e.AlertRuleId,
                 RuleName = e.AlertRule != null ? e.AlertRule.Name : string.Empty,
                 ConditionType = e.AlertRule != null ? e.AlertRule.ConditionType : AlertConditionType.Threshold,
+                Severity = e.AlertRule != null ? e.AlertRule.Severity : AlertRuleSeverity.Warning,
                 e.StartedAt,
                 EndedAt = e.EndedAt!.Value,
                 e.AcknowledgedAt,
@@ -164,6 +166,7 @@ public class AlertsController : ControllerBase
                 AlertRuleId = e.AlertRuleId,
                 RuleName = e.RuleName,
                 ConditionType = e.ConditionType,
+                Severity = e.Severity,
                 StartedAt = e.StartedAt,
                 EndedAt = e.EndedAt,
                 AcknowledgedAt = e.AcknowledgedAt,
@@ -173,6 +176,33 @@ public class AlertsController : ControllerBase
         };
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Who to record as having acknowledged an alert.
+    /// </summary>
+    /// <remarks>
+    /// Taken from the authenticated principal, not from the request. The web app
+    /// used to send a fixed "web_user", which made "who silenced the 3am low?"
+    /// unanswerable on a tenant with more than one caregiver — and any caller
+    /// could have claimed to be anyone. The request field is honoured only for
+    /// callers with no name claim at all (a machine token), where it is the only
+    /// information available.
+    /// </remarks>
+    private string ResolveAcknowledger(AcknowledgeRequest request)
+    {
+        var name = User.FindFirstValue(ClaimTypes.Name);
+        if (!string.IsNullOrWhiteSpace(name))
+            return name;
+
+        var subjectId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub");
+        if (!string.IsNullOrWhiteSpace(subjectId))
+            return subjectId;
+
+        return string.IsNullOrWhiteSpace(request.AcknowledgedBy)
+            ? "unknown"
+            : request.AcknowledgedBy;
     }
 
     /// <inheritdoc cref="IAlertAcknowledgementService.AcknowledgeAllAsync"/>
@@ -186,7 +216,7 @@ public class AlertsController : ControllerBase
 
         await _acknowledgementService.AcknowledgeAllAsync(
             tenantId,
-            request.AcknowledgedBy ?? "unknown",
+            ResolveAcknowledger(request),
             ct);
 
         return NoContent();
@@ -222,7 +252,7 @@ public class AlertsController : ControllerBase
         await _acknowledgementService.AcknowledgeExcursionAsync(
             tenantId,
             excursionId,
-            request.AcknowledgedBy ?? "unknown",
+            ResolveAcknowledger(request),
             broadcast: true,
             ct);
 
@@ -372,6 +402,13 @@ public class HistoryExcursionResponse
     public Guid AlertRuleId { get; set; }
     public string RuleName { get; set; } = string.Empty;
     public AlertConditionType ConditionType { get; set; } = AlertConditionType.Threshold;
+
+    /// <summary>
+    /// The rule's severity, so a history row can be read the same way as a live
+    /// one rather than showing every past fire identically.
+    /// </summary>
+    public AlertRuleSeverity Severity { get; set; } = AlertRuleSeverity.Warning;
+
     public DateTime StartedAt { get; set; }
     public DateTime EndedAt { get; set; }
     public DateTime? AcknowledgedAt { get; set; }

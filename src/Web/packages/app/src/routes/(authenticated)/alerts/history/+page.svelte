@@ -13,6 +13,7 @@
   import { ArrowLeft, History as HistoryIcon, Loader2 } from "lucide-svelte";
   import { formatDuration } from "$lib/components/alerts/alertTime";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
+  import { severity, severityLabel } from "$lib/components/alerts/severity";
 
   let page = $state(1);
   const historyQuery = $derived(getAlertHistory({ page, pageSize: 25 }));
@@ -120,7 +121,16 @@
   <div class="flex items-center gap-3 rounded-md border bg-background px-3 py-2">
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2">
+        <span
+          class="h-2 w-2 shrink-0 rounded-full {severity(h.severity, 'dot')}"
+          aria-hidden="true"
+        ></span>
         <span class="text-sm font-semibold truncate">{h.ruleName ?? "Alert"}</span>
+        <!-- Named as well as coloured, so history reads the same to a screen
+             reader as it does on screen. -->
+        <Badge variant="outline" class="text-[10px] shrink-0">
+          {severityLabel(h.severity)}
+        </Badge>
         {#if h.acknowledgedAt}
           <Badge variant="secondary" class="text-[10px]">Acknowledged</Badge>
         {/if}

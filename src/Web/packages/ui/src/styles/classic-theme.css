@@ -57,6 +57,7 @@
   --status-warning: oklch(0.9 0.18 105);    /* Yellow */
   --status-critical: oklch(0.55 0.25 29);   /* Red */
   --status-normal: oklch(0.8 0.35 142);     /* Neon green */
+  --status-info: oklch(0.75 0.2 250);       /* Blue */
 
   /* IOB */
   --iob-basal: rgba(0, 153, 255, 0.5);

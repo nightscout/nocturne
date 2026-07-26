@@ -4,21 +4,22 @@
     acknowledgeExcursion,
   } from "$api/generated/alerts.generated.remote";
   import { Button } from "$lib/components/ui/button";
-  import { AlertTriangle, X, Check } from "lucide-svelte";
+  import { AlertTriangle, Check } from "lucide-svelte";
   import { formatTimeSince } from "./alertTime";
+  import { severity, severityLabel } from "./severity";
 
   // Reactive query: reading `.current` subscribes this component, so an
   // optimistic withOverride from any acknowledge (here or the fresh-fire
   // toast) shows immediately and is reconciled by the single-flight refresh.
   const activeAlerts = getActiveAlerts();
 
-  let dismissedIds = $state<Set<string>>(new Set());
   let acknowledgingId = $state<string | null>(null);
 
+  // Acknowledging is the only way off this surface. The X that used to sit here
+  // hid a live, unacknowledged alert for the rest of the session while recording
+  // nothing server-side and halting no escalation.
   const visibleAlerts = $derived(
-    (activeAlerts.current ?? []).filter(
-      (a) => !a.acknowledgedAt && !dismissedIds.has(a.id ?? "")
-    )
+    (activeAlerts.current ?? []).filter((a) => !a.acknowledgedAt)
   );
 
   function getConditionLabel(conditionType: string | undefined): string {
@@ -45,7 +46,9 @@
       // visibleAlerts at once; the single-flight refresh confirms server-side.
       await acknowledgeExcursion({
         excursionId: id,
-        request: { acknowledgedBy: "web_user" },
+        // Who acknowledged is taken from the session server-side; sending a
+        // fixed "web_user" made this unanswerable on a multi-caregiver tenant.
+        request: {},
       }).updates(
         activeAlerts.withOverride((current) =>
           (current ?? []).map((a) =>
@@ -58,21 +61,27 @@
     }
   }
 
-  function handleDismiss(id: string) {
-    dismissedIds = new Set([...dismissedIds, id]);
-  }
-
 </script>
 
 {#if visibleAlerts.length > 0}
-  <div class="border-b border-destructive/20 bg-destructive/5">
+  <div class="border-b">
     {#each visibleAlerts as alert (alert.id)}
+      <!-- Coloured by the rule's own severity: styling every banner as
+           destructive made an info rule indistinguishable from a critical low. -->
       <div
-        class="container mx-auto flex items-center gap-3 px-4 py-2 max-w-7xl"
+        class="container mx-auto flex items-center gap-3 border-b px-4 py-2 max-w-7xl last:border-b-0 {severity(
+          alert.severity,
+          'strip'
+        )}"
       >
-        <AlertTriangle class="h-4 w-4 shrink-0 text-destructive" />
+        <AlertTriangle class="h-4 w-4 shrink-0" />
         <div class="flex-1 min-w-0">
-          <span class="text-sm font-medium text-destructive">
+          <!-- Named as well as coloured: colour alone is unavailable to a
+               screen reader and to anyone who can't distinguish these hues. -->
+          <span class="text-[10px] font-semibold uppercase tracking-wider">
+            {severityLabel(alert.severity)}
+          </span>
+          <span class="text-sm font-medium">
             {alert.ruleName ?? "Alert"}
           </span>
           <span class="text-sm text-muted-foreground mx-2">
@@ -95,14 +104,7 @@
               Acknowledge
             </Button>
           {/if}
-          <Button
-            variant="ghost"
-            size="sm"
-            class="h-7 w-7 p-0"
-            onclick={() => handleDismiss(alert.id ?? "")}
-          >
-            <X class="h-3 w-3" />
-          </Button>
+
         </div>
       </div>
     {/each}

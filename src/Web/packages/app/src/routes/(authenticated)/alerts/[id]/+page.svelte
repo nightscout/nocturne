@@ -46,7 +46,7 @@
   import AutoResolveSection from "$lib/components/alerts/AutoResolveSection.svelte";
   import ChannelsSection from "$lib/components/alerts/ChannelsSection.svelte";
   import ReplayPanel from "$lib/components/alerts/ReplayPanel.svelte";
-  import { severityLabel } from "$lib/components/alerts/severity";
+  import { severity, severityLabel } from "$lib/components/alerts/severity";
   import {
     parseRule,
     flattenSingleChildRoot,
@@ -602,7 +602,10 @@
                       title="Replay this day in the simulator"
                     >
                       <span
-                        class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
+                        class="h-1.5 w-1.5 shrink-0 rounded-full {severity(
+                          h.severity,
+                          'dot'
+                        )}"
                         aria-hidden="true"
                       ></span>
                       <span class="min-w-0 flex-1 truncate tabular-nums">

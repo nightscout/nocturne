@@ -57,6 +57,7 @@
   --status-warning: oklch(0.8 0.2 100);     /* Yellow */
   --status-critical: oklch(0.55 0.25 29);   /* Red */
   --status-normal: oklch(0.75 0.3 142);     /* Green */
+  --status-info: oklch(0.7 0.16 250);       /* Blue */
 
   /* IOB (Insulin on Board) */
   --iob-basal: rgba(51, 120, 197, 0.5);
