@@ -209,6 +209,94 @@ public class MemberScopeMiddlewareTests
     }
 
     [Fact]
+    public async Task OwnerMember_WithNarrowlyScopedOAuthToken_KeepsOnlyTheTokenScopes()
+    {
+        // A tenant owner who authorized a third-party app for glucose.read only. The owner's
+        // membership grants "*", but the access token is the consent boundary: widening to
+        // superuser here would hand the app write/delete on every resource.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Owner]);
+
+        var (context, provider) = BuildMemberContext(options, subjectId, [OAuthScopes.GlucoseRead]);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().Contain(OAuthScopes.GlucoseRead);
+        grantedScopes.Should().NotContain("*");
+        grantedScopes.Should().NotContain(OAuthScopes.TreatmentsReadWrite);
+        grantedScopes.Should().NotContain(OAuthScopes.TherapyReadWrite);
+
+        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        permissionTrie.Should().NotBeNull();
+        permissionTrie!.Check("api:entries:read").Should().BeTrue();
+        permissionTrie.Check("api:entries:create").Should().BeFalse();
+        permissionTrie.Check("api:profile:update").Should().BeFalse();
+        permissionTrie.Check("*").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OwnerMember_WithFullAccessOAuthToken_StillGetsSuperuser()
+    {
+        // The same owner consenting to full access keeps superuser: the credential's own scope
+        // list is what bounds it, and "*" bounds nothing.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Owner]);
+
+        var (context, provider) = BuildMemberContext(options, subjectId, [OAuthScopes.FullAccess]);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().Contain("*");
+
+        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        permissionTrie.Should().NotBeNull();
+        permissionTrie!.Check("*").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OwnerMember_WithNarrowlyScopedDirectGrant_KeepsOnlyTheTokenScopes()
+    {
+        // Same token, presented as a bearer/?token= direct grant instead of an OAuth JWT. It must
+        // resolve to the same narrow scopes it does in the api-secret header (AuthType.ApiKey).
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Owner]);
+
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, [OAuthScopes.GlucoseRead], AuthType.DirectGrant);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+    }
+
+    [Fact]
     public async Task NonOwnerMember_WithDeviceScopedToken_RetainsDeviceScopes()
     {
         // A caretaker running the desktop Companion: the OAuth token carries the device
@@ -358,7 +446,10 @@ public class MemberScopeMiddlewareTests
     /// scopes, as AuthenticationMiddleware would leave it. The caller disposes the provider.
     /// </summary>
     private static (DefaultHttpContext context, ServiceProvider provider) BuildMemberContext(
-        DbContextOptions<NocturneDbContext> options, Guid subjectId, List<string> tokenScopes)
+        DbContextOptions<NocturneDbContext> options,
+        Guid subjectId,
+        List<string> tokenScopes,
+        AuthType authType = AuthType.OAuthAccessToken)
     {
         var services = new ServiceCollection();
         services.AddScoped(_ => new NocturneDbContext(options));
@@ -368,7 +459,7 @@ public class MemberScopeMiddlewareTests
         context.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
-            AuthType = AuthType.OAuthAccessToken,
+            AuthType = authType,
             SubjectId = subjectId,
             TenantId = TestDatabaseSeeder.TenantId,
             Scopes = tokenScopes,

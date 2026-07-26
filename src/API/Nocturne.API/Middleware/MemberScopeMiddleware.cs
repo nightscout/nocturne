@@ -11,8 +11,9 @@ namespace Nocturne.API.Middleware;
 /// <summary>
 /// Middleware that resolves the authenticated user's tenant membership and applies
 /// RBAC-based permission restrictions. Effective permissions are the union of all
-/// role permissions + direct permissions. For non-superusers, effective permissions
-/// are intersected with the auth token's granted scopes via <see cref="OAuthScopes"/>.
+/// role permissions + direct permissions, intersected with the credential's granted scopes
+/// via <see cref="OAuthScopes"/>. Widening to superuser happens only for a <c>"*"</c> membership
+/// presented on an unscoped credential (see <see cref="UnscopedCredentialTypes"/>).
 /// Must run after <see cref="AuthenticationMiddleware"/>.
 /// </summary>
 /// <remarks>
@@ -37,6 +38,25 @@ public class MemberScopeMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<MemberScopeMiddleware> _logger;
+
+    /// <summary>
+    /// Credential types that carry no scope grant of their own — the authenticated human's own
+    /// interactive login. Tenant membership is the only authority for these, so a <c>"*"</c>
+    /// membership widens to superuser. Every other credential presents scopes that bound what it
+    /// may do (an OAuth access token's consented scopes, a direct grant's scopes, an API key's
+    /// grant scopes, a guest link's scopes) and is intersected with membership instead. Membership
+    /// resolution must never widen a scoped credential, or the consent decision is erased. Keyed on
+    /// the credential type rather than on "the scope list is empty" because an interactive OIDC
+    /// login carries the identity provider's own scopes (<c>openid</c>, <c>profile</c>), which are
+    /// not Nocturne data scopes. Types absent from this set are treated as scoped (fail closed).
+    /// </summary>
+    private static readonly IReadOnlySet<AuthType> UnscopedCredentialTypes = new HashSet<AuthType>
+    {
+        AuthType.SessionCookie,
+        AuthType.OidcToken,
+        AuthType.LegacyJwt,
+        AuthType.LegacyAccessToken,
+    };
 
     /// <summary>
     /// Creates a new instance of <see cref="MemberScopeMiddleware"/>.
@@ -140,7 +160,8 @@ public class MemberScopeMiddleware
         var directPermissions = membership.DirectPermissions ?? [];
         var effectivePermissions = rolePermissions.Union(directPermissions).ToHashSet();
 
-        if (effectivePermissions.Contains("*"))
+        if (effectivePermissions.Contains("*")
+            && UnscopedCredentialTypes.Contains(authContext.AuthType))
         {
             // Superuser — grant all scopes AND a wildcard permission trie. Both must be set:
             // GrantedScopes drives RequireScope checks, while the PermissionTrie drives the
@@ -150,6 +171,12 @@ public class MemberScopeMiddleware
             // is empty. Without rebuilding it here, HasPermissions-gated endpoints would 403
             // for a tenant superuser on their own tenant (matching the InstanceKey/PlatformAccess
             // branch above, which sets both).
+            //
+            // Restricted to <see cref="UnscopedCredentialTypes"/>: a scoped credential carries a
+            // consent boundary, and an owner's "*" membership must not widen past it. An owner who
+            // authorized a third-party app for glucose.read falls through to the intersection below
+            // and gets glucose.read, matching what the same credential resolves to when the token
+            // is presented in the api-secret header (AuthType.ApiKey, handled above).
             context.Items["GrantedScopes"] = (IReadOnlySet<string>)effectivePermissions;
 
             var superuserTrie = new PermissionTrie();
@@ -158,7 +185,10 @@ public class MemberScopeMiddleware
         }
         else
         {
-            // Intersect with auth token scopes
+            // Intersect with auth token scopes. OAuthScopes.Normalize expands a "*" membership to
+            // the full scope list, so a superuser on a scoped credential lands on exactly the
+            // credential's scopes; the "*" scope itself survives only when the credential carries
+            // full access.
             var normalizedMemberScopes = OAuthScopes.Normalize(effectivePermissions.ToList());
             var currentScopes = context.GetGrantedScopes();
             var restrictedScopes = normalizedMemberScopes
