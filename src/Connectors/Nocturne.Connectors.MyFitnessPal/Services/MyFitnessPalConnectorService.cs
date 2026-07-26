@@ -169,8 +169,8 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             }
         }
 
-        // Deliberately outside the publish branch: a window the user has emptied maps to no imports
-        // at all, and that is precisely when every entry stored for it needs withdrawing.
+        // Outside the publish branch: a window the user has emptied maps to no imports at all, and
+        // that case still has to withdraw every entry stored for it.
         if (result.Success && _connectorPublisher is { IsAvailable: true })
         {
             await WithdrawDeletedEntriesAsync(read, from, to, cancellationToken);
@@ -199,6 +199,9 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     private static DateTimeOffset AsUtc(DateTime value) =>
         new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
+    private static DateOnly? ParseEntryDate(string? date) =>
+        DateOnly.TryParse(date, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+
     /// <summary>
     /// Whether this sync should read the diary all the way back rather than stopping once the
     /// window looks covered.
@@ -217,7 +220,8 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
                 out var last))
             return true;
 
-        // A timestamp in the future means a clock moved; walking is the harmless reading.
+        // A timestamp in the future means a clock moved, which would otherwise suppress the walk
+        // until it caught up.
         return DateTimeOffset.UtcNow - last >= MyFitnessPalConstants.FullWalkInterval
                || last > DateTimeOffset.UtcNow;
     }
@@ -298,23 +302,22 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             if (connection == null)
                 return null;
 
-            DateOnly? newestOnPage = null;
-            foreach (var edge in connection.FoodDiaryEntryEdges)
-            {
-                var node = edge.FoodDiaryEntryNode;
-                if (node == null)
-                    continue;
+            // Deleted entries and non-active states carry none of the ActiveFoodDiaryEntry fields,
+            // and an entry with no parseable date cannot be placed in the window.
+            var dated = connection.FoodDiaryEntryEdges
+                .Where(edge => !string.Equals(
+                    edge.FoodDiaryEntryEdgeSync?.Operation, "DELETE", StringComparison.OrdinalIgnoreCase))
+                .Select(edge => edge.FoodDiaryEntryNode)
+                .OfType<MfpFoodDiaryEntryNode>()
+                .Select(node => (Node: node, Date: ParseEntryDate(node.Date)))
+                .Where(entry => entry.Date != null)
+                .ToList();
 
-                // Deleted entries and non-active states carry none of the ActiveFoodDiaryEntry fields.
-                if (string.Equals(edge.FoodDiaryEntryEdgeSync?.Operation, "DELETE", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (!DateOnly.TryParse(node.Date, CultureInfo.InvariantCulture, out var entryDate))
-                    continue;
+            entries.AddRange(dated.Select(entry => entry.Node));
 
-                entries.Add(node);
-                if (newestOnPage == null || entryDate > newestOnPage)
-                    newestOnPage = entryDate;
-            }
+            DateOnly? newestOnPage = dated.Count == 0
+                ? null
+                : dated.Max(entry => entry.Date!.Value);
 
             before = connection.FoodDiaryEntryPaging?.StartCursor;
 
@@ -363,11 +366,10 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     /// The entries a diary read produced, and whether the walk reached the end of the diary.
     /// </summary>
     /// <remarks>
-    /// Only a walk that ran out of pages can support the conclusion that an entry it never mentioned
-    /// no longer exists. Stopping early cannot: pages are ordered by modification rather than diary
-    /// date, so an entry belonging to a day the walk has already passed can still sit further back,
-    /// behind the point where the lookahead gave up. That makes the flag the difference between
-    /// proof and a plausible guess, and only proof may drive a withdrawal.
+    /// Only a walk that ran out of pages establishes that an entry it never mentioned no longer
+    /// exists. Stopping early does not: pages are ordered by modification rather than diary date,
+    /// so an entry belonging to a day the walk has already passed can sit further back, behind the
+    /// point where the lookahead gave up.
     /// </remarks>
     private sealed record DiaryRead(List<MfpFoodDiaryEntryNode> Entries, bool WalkedEntireDiary);
 
@@ -376,12 +378,11 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
     /// </summary>
     /// <remarks>
     /// Deleting an entry is how a mis-logged meal gets corrected, and publishing is an upsert, so
-    /// nothing else retires the stored copy or the match suggestion it keeps producing. Production
-    /// does not help: the sync stream's DELETE tombstones never arrive on the cursorless read this
-    /// connector performs — a full walk of a real account returned 1395 edges, every one an UPSERT —
-    /// so absence from a read is the only available evidence of a deletion, and only a read that
-    /// reached the end of the diary makes absence conclusive. An account whose history outgrows the
-    /// page budget therefore stops propagating deletions rather than guessing at them.
+    /// nothing else retires the stored copy or the match suggestion it keeps producing. The sync
+    /// stream's DELETE tombstones never arrive on the cursorless read this connector performs — a
+    /// full walk of a real account returned 1395 edges, every one an UPSERT — leaving absence from
+    /// a read as the only evidence, and only conclusive once the read reached the end of the diary.
+    /// An account whose history outgrows the page budget stops propagating deletions.
     /// </remarks>
     private async Task WithdrawDeletedEntriesAsync(
         DiaryRead read,

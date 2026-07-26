@@ -53,9 +53,9 @@ public class MyFitnessPalConnectorConfiguration : BaseConnectorConfiguration
     public int LookbackDays { get; set; } = 7;
 
     /// <summary>
-    ///     When the diary was last read all the way back to its first entry. Only such a read can
-    ///     establish that an entry it never mentioned has been deleted, and it is too expensive to
-    ///     repeat every cycle, so it runs on its own schedule. Maintained by the connector, not a
+    ///     When the diary was last read all the way back to its first entry. Only such a read
+    ///     establishes that an entry it never mentioned has been deleted; it runs on the schedule in
+    ///     <see cref="MyFitnessPalConstants.FullWalkInterval"/>. Maintained by the connector, not a
     ///     form field.
     /// </summary>
     [ConnectorProperty(ConnectorPropertyKey.LastFullWalkAt, Hidden = true)]

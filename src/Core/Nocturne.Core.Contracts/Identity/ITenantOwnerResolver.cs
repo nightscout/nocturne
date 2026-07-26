@@ -6,8 +6,8 @@ namespace Nocturne.Core.Contracts.Identity;
 /// <remarks>
 /// In-app notifications are keyed by subject id, not tenant id, so anything raised outside a request
 /// — a connector sync, a detection pass — has no user of its own and must borrow one. A placeholder
-/// is not viable: the UI lists notifications for the signed-in subject, so a notification filed under
-/// anything else is created, counted against rate limits, and never seen.
+/// subject does not work: the UI lists notifications for the signed-in subject, so one filed under
+/// any other value is still created and still counted against the per-source rate limit.
 /// </remarks>
 public interface ITenantOwnerResolver
 {

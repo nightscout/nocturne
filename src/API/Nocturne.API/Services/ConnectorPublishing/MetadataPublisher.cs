@@ -57,9 +57,8 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     }
 
     /// <summary>
-    /// The subject a connector's food entries are attributed to, so the match suggestions they raise
-    /// reach a real person. A sync has no user of its own, and the UI lists notifications for the
-    /// signed-in subject, so anything else is filed where nobody will ever see it.
+    /// The subject a connector's food entries, and the match suggestions they raise, are attributed
+    /// to. A sync has no user of its own, and the UI lists notifications by subject id.
     /// </summary>
     private async Task<string?> ResolveNotificationSubjectAsync(
         string source,

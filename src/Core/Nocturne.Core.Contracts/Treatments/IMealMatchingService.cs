@@ -41,8 +41,7 @@ public interface IMealMatchingService
     Task DismissMatchAsync(Guid foodEntryId, CancellationToken ct = default);
 
     /// <summary>
-    /// Withdraws any live match suggestion for a food entry that no longer exists upstream, so the
-    /// suggestion does not outlive the entry it refers to.
+    /// Withdraws any live match suggestion for a food entry that no longer exists upstream.
     /// </summary>
     /// <param name="userId">The user whose suggestion is withdrawn.</param>
     /// <param name="foodEntryId">The connector food entry that has gone away.</param>

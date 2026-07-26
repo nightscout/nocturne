@@ -75,8 +75,8 @@ public static class MyFitnessPalConstants
 
     /// <summary>
     ///     How often the lookahead is set aside and the diary is read all the way back to its first
-    ///     entry. Only such a read proves an entry has been deleted rather than merely not seen, but
-    ///     it costs a request per hundred entries of history, so it is not worth doing every cycle.
+    ///     entry. Only such a read establishes that an entry was deleted rather than merely not
+    ///     seen; it costs one request per hundred entries of history.
     /// </summary>
     public static readonly TimeSpan FullWalkInterval = TimeSpan.FromDays(1);
 
