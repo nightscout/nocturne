@@ -33,13 +33,16 @@ public class GuestLinkService : IGuestLinkService
         [OAuthScopes.HealthRead, OAuthScopes.TherapyRead, OAuthScopes.ReportsRead];
 
     private readonly NocturneDbContext _dbContext;
+    private readonly GuestSessionCacheService _sessionCache;
     private readonly ILogger<GuestLinkService> _logger;
 
     public GuestLinkService(
         NocturneDbContext dbContext,
+        GuestSessionCacheService sessionCache,
         ILogger<GuestLinkService> logger)
     {
         _dbContext = dbContext;
+        _sessionCache = sessionCache;
         _logger = logger;
     }
 
@@ -132,6 +135,7 @@ public class GuestLinkService : IGuestLinkService
 
         var session = new GuestSessionInfo(
             grant.Id,
+            grant.TenantId,
             grant.SubjectId,
             grant.Scopes.AsReadOnly(),
             grant.Label,
@@ -160,6 +164,7 @@ public class GuestLinkService : IGuestLinkService
 
         return new GuestSessionInfo(
             grant.Id,
+            grant.TenantId,
             grant.SubjectId,
             grant.Scopes.AsReadOnly(),
             grant.Label,
@@ -207,6 +212,8 @@ public class GuestLinkService : IGuestLinkService
         grant.RevokedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
 
+        _sessionCache.Evict(grant.TenantId, grant.Id);
+
         _logger.LogInformation("Guest link {GrantId} revoked by {RequestingSubjectId}", grantId, requestingSubjectId);
         return true;
     }
@@ -243,6 +250,8 @@ public class GuestLinkService : IGuestLinkService
 
         grant.DismissedAt = now;
         await _dbContext.SaveChangesAsync(ct);
+
+        _sessionCache.Evict(grant.TenantId, grant.Id);
 
         _logger.LogInformation("Guest link {GrantId} dismissed by {RequestingSubjectId}", grantId, requestingSubjectId);
         return true;

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
@@ -15,6 +16,7 @@ namespace Nocturne.API.Tests.Services;
 public class GuestLinkServiceTests : IDisposable
 {
     private readonly NocturneDbContext _dbContext;
+    private readonly GuestSessionCacheService _sessionCache;
     private readonly GuestLinkService _service;
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _dataOwnerId = Guid.CreateVersion7();
@@ -36,8 +38,11 @@ public class GuestLinkServiceTests : IDisposable
         });
         _dbContext.SaveChanges();
 
+        _sessionCache = new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()));
+
         _service = new GuestLinkService(
             _dbContext,
+            _sessionCache,
             NullLogger<GuestLinkService>.Instance);
     }
 
@@ -198,6 +203,53 @@ public class GuestLinkServiceTests : IDisposable
         var session = await _service.ValidateSessionAsync(created.Info.Id);
 
         session.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ValidateSessionAsync_CarriesGrantTenant()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Tenant Test", "https://example.com");
+        await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+
+        var session = await _service.ValidateSessionAsync(created.Info.Id);
+
+        session.Should().NotBeNull();
+        session!.TenantId.Should().Be(_tenantId);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_SessionCarriesGrantTenant()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Tenant Activate", "https://example.com");
+
+        var result = await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+
+        result.Session!.TenantId.Should().Be(_tenantId);
+    }
+
+    [Fact]
+    public async Task RevokeAsync_EvictsCachedSession()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Evict On Revoke", "https://example.com");
+        var activation = await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+        _sessionCache.Set(_tenantId, created.Info.Id, activation.Session);
+
+        await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
+
+        _sessionCache.TryGet(_tenantId, created.Info.Id, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DismissAsync_EvictsCachedSession()
+    {
+        var created = await _service.CreateGuestLinkAsync(_dataOwnerId, _creatorId, "Evict On Dismiss", "https://example.com");
+        var activation = await _service.ActivateAsync(created.Code, "1.2.3.4", "Agent");
+        await _service.RevokeAsync(created.Info.Id, _dataOwnerId);
+        _sessionCache.Set(_tenantId, created.Info.Id, activation.Session);
+
+        await _service.DismissAsync(created.Info.Id, _dataOwnerId);
+
+        _sessionCache.TryGet(_tenantId, created.Info.Id, out _).Should().BeFalse();
     }
 
     [Fact]

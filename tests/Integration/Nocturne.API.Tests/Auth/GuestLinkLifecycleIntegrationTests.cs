@@ -434,6 +434,52 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
         Log($"Guest session admin access rejected, status: {response.StatusCode}");
     }
 
+    [Fact]
+    public async Task GuestSession_ReplayedAtAnotherTenantHost_Rejected()
+    {
+        // Arrange - seed a second tenant to replay the session cookie against
+        var connStr = await GetPostgresConnectionStringAsync();
+        await using var conn = new NpgsqlConnection(connStr);
+        await conn.OpenAsync();
+
+        var victimSlug = $"victim-{Guid.NewGuid():N}"[..20];
+        await AuthTestHelpers.SeedTenantAsync(conn, victimSlug, "Victim Tenant");
+
+        var code = await CreateGuestLinkCodeAsync();
+
+        var handler = new HttpClientHandler { UseCookies = true };
+        using var cookieClient = new HttpClient(handler)
+        {
+            BaseAddress = ApiClient.BaseAddress
+        };
+
+        var activateResponse = await cookieClient.PostAsJsonAsync("/api/v4/guest-links/activate", new
+        {
+            code
+        });
+        activateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Warm the guest-session cache on the tenant the grant belongs to.
+        var ownTenantResponse = await cookieClient.GetAsync("/api/v1/entries/current");
+        ownTenantResponse.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+
+        var guestCookie = handler.CookieContainer
+            .GetCookies(ApiClient.BaseAddress!)
+            .Cast<System.Net.Cookie>()
+            .Single(c => c.Name == "nocturne-guest-session");
+
+        // Act - present the same cookie at the other tenant's host, inside the cache TTL
+        using var victimClient = AuthTestHelpers.CreateTenantClient(
+            Fixture, victimSlug, AuthTestHelpers.GetBaseDomain(ApiClient));
+        victimClient.DefaultRequestHeaders.Add("Cookie", $"{guestCookie.Name}={guestCookie.Value}");
+
+        var response = await victimClient.GetAsync("/api/v1/entries/current");
+
+        // Assert
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden);
+        Log($"Cross-tenant guest session replay rejected, status: {response.StatusCode}");
+    }
+
     #endregion
 
     #region Revoke Guest Link

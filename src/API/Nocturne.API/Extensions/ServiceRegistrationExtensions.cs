@@ -198,6 +198,7 @@ public static class ServiceRegistrationExtensions
 
         services.AddHostedService<AuthorizationSeedService>();
 
+        services.AddSingleton<GuestSessionCacheService>();
         services.AddSingleton<PublicAccessCacheService>();
         services.AddSingleton<ShareTokenCacheService>();
         services.AddSingleton<IShareTokenGenerator, ShareTokenGenerator>();

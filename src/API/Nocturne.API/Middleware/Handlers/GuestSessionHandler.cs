@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Caching.Memory;
+using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -9,14 +9,15 @@ namespace Nocturne.API.Middleware.Handlers;
 /// <summary>
 /// Authentication handler for guest session cookies. Validates an encrypted
 /// grant ID stored in the <c>nocturne-guest-session</c> cookie against
-/// <see cref="IGuestLinkService.ValidateSessionAsync"/>, with a 30-second
-/// memory cache to avoid per-request database hits.
+/// <see cref="IGuestLinkService.ValidateSessionAsync"/>, via
+/// <see cref="GuestSessionCacheService"/> to avoid per-request database hits.
+/// The resolved grant's tenant must match the tenant resolved for the request.
 /// </summary>
 public class GuestSessionHandler : IAuthHandler
 {
     private const string CookieName = "nocturne-guest-session";
     private const string ProtectorPurpose = "GuestSession";
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
+    private const string InvalidSessionError = "Guest session expired or revoked";
 
     /// <inheritdoc />
     public int Priority => 52;
@@ -26,7 +27,7 @@ public class GuestSessionHandler : IAuthHandler
 
     private readonly IDataProtector _protector;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IMemoryCache _cache;
+    private readonly GuestSessionCacheService _sessionCache;
     private readonly ILogger<GuestSessionHandler> _logger;
 
     /// <summary>
@@ -35,12 +36,12 @@ public class GuestSessionHandler : IAuthHandler
     public GuestSessionHandler(
         IDataProtectionProvider dataProtectionProvider,
         IServiceScopeFactory scopeFactory,
-        IMemoryCache cache,
+        GuestSessionCacheService sessionCache,
         ILogger<GuestSessionHandler> logger)
     {
         _protector = dataProtectionProvider.CreateProtector(ProtectorPurpose);
         _scopeFactory = scopeFactory;
-        _cache = cache;
+        _sessionCache = sessionCache;
         _logger = logger;
     }
 
@@ -70,31 +71,47 @@ public class GuestSessionHandler : IAuthHandler
             return AuthResult.Skip();
         }
 
+        // A guest grant belongs to exactly one tenant, so a session cannot be validated
+        // without a resolved tenant to validate it against.
+        if (context.Items["TenantContext"] is not TenantContext tenantCtx)
+        {
+            _logger.LogDebug("Guest session {GrantId} presented with no resolved tenant, clearing cookie", grantId);
+            ClearGuestSessionCookie(context);
+            return AuthResult.Failure(InvalidSessionError);
+        }
+
         // Check cache first, then validate against the database
-        var cacheKey = $"guest-session:{grantId}";
-        if (!_cache.TryGetValue(cacheKey, out GuestSessionInfo? session))
+        if (!_sessionCache.TryGet(tenantCtx.TenantId, grantId, out var session))
         {
             using var scope = _scopeFactory.CreateScope();
 
             // Propagate tenant context into the child scope so RLS allows
             // the oauth_grants query. Without this, the scoped DbContext has
             // TenantId = Guid.Empty and RLS silently filters out the row.
-            if (context.Items["TenantContext"] is TenantContext tenantCtx)
-            {
-                var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                tenantAccessor.SetTenant(tenantCtx);
-            }
+            var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
+            tenantAccessor.SetTenant(tenantCtx);
 
             var guestLinkService = scope.ServiceProvider.GetRequiredService<IGuestLinkService>();
             session = await guestLinkService.ValidateSessionAsync(grantId);
-            _cache.Set(cacheKey, session, CacheDuration);
+            _sessionCache.Set(tenantCtx.TenantId, grantId, session);
         }
 
         if (session is null)
         {
             _logger.LogDebug("Guest session {GrantId} is no longer valid, clearing cookie", grantId);
             ClearGuestSessionCookie(context);
-            return AuthResult.Failure("Guest session expired or revoked");
+            return AuthResult.Failure(InvalidSessionError);
+        }
+
+        // Re-bind the session to the resolved tenant independently of the cache key: the grant
+        // carries its own tenant, so a resolution reached by any route is still checked here.
+        if (session.TenantId != tenantCtx.TenantId)
+        {
+            _logger.LogWarning(
+                "Guest session {GrantId} belongs to tenant {GrantTenantId} but was presented to tenant {ResolvedTenantId}",
+                grantId, session.TenantId, tenantCtx.TenantId);
+            ClearGuestSessionCookie(context);
+            return AuthResult.Failure(InvalidSessionError);
         }
 
         var authContext = new AuthContext
