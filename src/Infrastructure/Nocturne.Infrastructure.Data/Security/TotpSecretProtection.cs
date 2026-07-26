@@ -54,12 +54,12 @@ public static class TotpSecretProtection
     /// (<c>0x09F0C9F0</c>, big-endian), i.e. the column already holds a protected payload.
     /// </summary>
     /// <remarks>
-    /// Used only by the one-pass encryption of pre-existing rows, to tell an unencrypted secret
-    /// from an already-encrypted one without attempting decryption — a failed decryption would be
-    /// ambiguous between "plaintext" and "protected under a key this instance has lost", and
-    /// re-protecting the latter would corrupt it. A random plaintext secret matches the header with
-    /// probability 2^-32; such a row is left alone and its next read fails, so the credential is
-    /// re-enrolled rather than silently trusted.
+    /// Exists so the one-pass encryption of pre-existing rows can tell an unencrypted secret from an
+    /// already-encrypted one without attempting decryption: a failed decryption is ambiguous between
+    /// "plaintext" and "protected under a key this instance has lost", and re-protecting the latter
+    /// would corrupt it. A random plaintext secret matches the header with probability 2^-32; such a
+    /// row is left alone and its next read fails, so the credential is re-enrolled rather than
+    /// silently trusted.
     /// </remarks>
     public static bool IsProtectedPayload(byte[] value) =>
         value.Length >= 4 && value[0] == 0x09 && value[1] == 0xF0 && value[2] == 0xC9 && value[3] == 0xF0;

@@ -13,6 +13,7 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Security;
 using Nocturne.Infrastructure.Data.Services;
 using Xunit;
 
@@ -57,7 +58,8 @@ public sealed class TenantResolutionMiddlewareShareTokenTests : IDisposable
             Id = _tenantId,
             Slug = Slug,
             DisplayName = "Acme",
-            ShareToken = ShareToken,
+            // The column holds the token's digest; the host still carries the token itself.
+            ShareToken = CredentialHash.ShareToken(ShareToken),
             ShareTokenSetAt = DateTime.UtcNow,
         });
         seed.SaveChanges();

@@ -46,12 +46,15 @@ public static class CredentialAtRestInitializationExtensions
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        // Buffered rather than streamed: the rewrite runs on this same connection, which cannot
+        // issue commands while a reader is open.
         var plaintextRows = new List<(Guid Id, byte[] Secret)>();
         var alreadyProtected = 0;
 
-        await using (var connection = await dataSource.OpenConnectionAsync(cancellationToken))
+        await using (var read = connection.CreateCommand())
         {
-            await using var read = connection.CreateCommand();
             read.CommandText = "SELECT id, secret_key FROM totp_credentials";
             await using var reader = await read.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
@@ -77,7 +80,6 @@ public static class CredentialAtRestInitializationExtensions
             return 0;
         }
 
-        await using (var connection = await dataSource.OpenConnectionAsync(cancellationToken))
         await using (var transaction = await connection.BeginTransactionAsync(cancellationToken))
         {
             foreach (var (id, secret) in plaintextRows)

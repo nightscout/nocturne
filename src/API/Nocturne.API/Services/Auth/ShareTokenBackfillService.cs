@@ -11,6 +11,9 @@ namespace Nocturne.API.Services.Auth;
 /// public access working at the new {token}.share.{baseDomain} URL (the URL changes; operators are
 /// expected to notify affected tenants). Idempotent: only tenants with a null share token are touched,
 /// so it is safe to run on every startup.
+///
+/// Only the token's digest is stored, so a backfilled link's URL is knowable to nobody: the owner
+/// generates their own link from settings to obtain one.
 /// </summary>
 public sealed class ShareTokenBackfillService : IHostedService
 {

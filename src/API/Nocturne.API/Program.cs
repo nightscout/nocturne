@@ -578,11 +578,9 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
     // Bring pre-existing credential columns onto their at-rest storage format. Runs after
     // migrations (it depends on the widened share_token column) and before the server accepts
     // requests, so no request can read a column in the old format.
-    {
-        using var scope = app.Services.CreateScope();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        await CredentialAtRestStartupTask.RunAsync(app.Services, logger);
-    }
+    await CredentialAtRestStartupTask.RunAsync(
+        app.Services,
+        app.Services.GetRequiredService<ILogger<Program>>());
 }
 else if (isNSwagGeneration)
 {
