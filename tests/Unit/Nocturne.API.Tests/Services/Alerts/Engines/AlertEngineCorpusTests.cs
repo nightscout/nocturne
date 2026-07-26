@@ -95,8 +95,11 @@ public class AlertEngineCorpusTests
             foreach (var (scenarioRule, snapshot) in scenario.Rules.Zip(snapshots))
             {
                 var evaluation = await engine.EvaluateRuleAsync(snapshot, context, options, ct);
+                var snoozeExtend = evaluation.Skipped
+                    ? null
+                    : await EngineTestHarness.EvaluateSnoozeAsync(engine, scenarioRule, context, ct);
                 ruleResults.Add(await EngineTestHarness.ToExpectedResultAsync(
-                    scenarioRule, evaluation, trackerRepo, timerStore, ct));
+                    scenarioRule, evaluation, trackerRepo, timerStore, snoozeExtend, ct));
             }
 
             expectedTicks.Add(new ExpectedTick { At = at, Rules = ruleResults });

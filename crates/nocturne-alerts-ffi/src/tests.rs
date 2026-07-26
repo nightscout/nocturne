@@ -114,10 +114,18 @@ fn load_scenario(path: &PathBuf) -> (ScenarioFile, Value) {
     (scenario, expected)
 }
 
-/// Drives one scenario through an evaluate-envelope function (C ABI or
+/// Drives one scenario through the evaluate-envelope functions (C ABI or
 /// UniFFI), threading the timers/tracker state envelopes between ticks exactly
 /// as a host would, and returns the assembled expected-file Value.
-fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> Value {
+///
+/// Two envelopes, because a host runs two: `evaluate` for the rule body on each
+/// reading, and `evaluate_node` under `root: "snooze"` for the sweep's
+/// smart-snooze predicate whenever the scenario configures snooze conditions.
+fn run_scenario(
+    scenario: &ScenarioFile,
+    evaluate: impl Fn(&Value) -> Value,
+    evaluate_node: impl Fn(&Value) -> Value,
+) -> Value {
     // Per-rule persisted state, plus the shared next-excursion ordinal.
     let mut timers: Map<String, Value> = Map::new(); // rule id -> timers object
     let mut trackers: Map<String, Value> = Map::new(); // rule id -> tracker object
@@ -164,7 +172,16 @@ fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> 
                         .as_u64()
                         .expect("next_excursion_ordinal present");
 
-                    response["result"].clone()
+                    let mut result = response["result"].clone();
+                    apply_snooze_step(
+                        rule,
+                        tick,
+                        &rule_id,
+                        &mut timers,
+                        &mut result,
+                        &evaluate_node,
+                    );
+                    result
                 })
                 .collect();
             json!({ "at": tick.at, "rules": rules })
@@ -178,9 +195,76 @@ fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> 
     })
 }
 
-/// Runs the full corpus through an evaluate-envelope function and pins every
-/// scenario against its committed `.expected.json` snapshot.
-fn assert_corpus_round_trips(evaluate: impl Fn(&Value) -> Value) {
+/// Folds the rule's smart-snooze predicate into its result object: wraps the
+/// configured conditions as `composite{and, conditions}`, evaluates them under
+/// `root: "snooze"` against the same threaded timer state, and records
+/// `snooze_extend` plus any timer ops after the rule body's.
+///
+/// A skipped rule (`signal_loss`) records nothing else, so there is nowhere to
+/// put a snooze result. Production does *not* skip it; the generator rejects
+/// that combination at authoring time, so no scenario reaches this branch with
+/// conditions configured.
+fn apply_snooze_step(
+    rule: &Value,
+    tick: &ScenarioTick,
+    rule_id: &str,
+    timers: &mut Map<String, Value>,
+    result: &mut Value,
+    evaluate_node: impl Fn(&Value) -> Value,
+) {
+    if result.get("skipped").is_some() {
+        return;
+    }
+    let Some(conditions) = rule
+        .get("snooze_conditions")
+        .and_then(Value::as_array)
+        .filter(|c| !c.is_empty())
+    else {
+        return;
+    };
+
+    let response = evaluate_node(&json!({
+        "schema_version": 1,
+        "rule_id": rule_id,
+        "node": {
+            "type": "composite",
+            "composite": { "operator": "and", "conditions": conditions },
+        },
+        "root": "snooze",
+        "context": tick.context,
+        "now": tick.at,
+        "timers": timers.get(rule_id).cloned().unwrap_or_else(|| json!({})),
+    }));
+    assert_eq!(
+        response["ok"],
+        Value::Bool(true),
+        "snooze step for rule {rule_id} at {}: {}",
+        tick.at,
+        response["error"]
+    );
+
+    timers.insert(rule_id.to_string(), response["timers"].clone());
+
+    let result = result.as_object_mut().expect("rule result is an object");
+    result.insert("snooze_extend".into(), response["value"].clone());
+
+    let ops = response["timer_ops"].as_array().expect("timer_ops array");
+    if !ops.is_empty() {
+        result
+            .entry("timer_ops")
+            .or_insert_with(|| json!([]))
+            .as_array_mut()
+            .expect("timer_ops is an array")
+            .extend(ops.iter().cloned());
+    }
+}
+
+/// Runs the full corpus through the evaluate envelopes and pins every scenario
+/// against its committed `.expected.json` snapshot.
+fn assert_corpus_round_trips(
+    evaluate: impl Fn(&Value) -> Value,
+    evaluate_node: impl Fn(&Value) -> Value,
+) {
     let scenario_paths = scenario_paths();
     assert!(
         scenario_paths.len() >= 100,
@@ -191,7 +275,7 @@ fn assert_corpus_round_trips(evaluate: impl Fn(&Value) -> Value) {
     let mut failed: Vec<String> = Vec::new();
     for path in &scenario_paths {
         let (scenario, expected) = load_scenario(path);
-        let actual = run_scenario(&scenario, &evaluate);
+        let actual = run_scenario(&scenario, &evaluate, &evaluate_node);
         if actual != expected {
             failed.push(format!(
                 "scenario {}: FFI output differs from expected snapshot",
@@ -210,7 +294,7 @@ fn assert_corpus_round_trips(evaluate: impl Fn(&Value) -> Value) {
 
 #[test]
 fn corpus_round_trips_through_c_abi() {
-    assert_corpus_round_trips(evaluate);
+    assert_corpus_round_trips(evaluate, evaluate_node);
 }
 
 #[test]
@@ -1149,6 +1233,11 @@ mod uniffi_surface {
             .expect("uniffi evaluate returned valid JSON")
     }
 
+    fn evaluate_node(request: &Value) -> Value {
+        serde_json::from_str(&uniffi_api::evaluate_node(request.to_string()))
+            .expect("uniffi evaluate_node returned valid JSON")
+    }
+
     #[test]
     fn version_matches_crate_version() {
         assert_eq!(uniffi_api::version(), env!("CARGO_PKG_VERSION"));
@@ -1156,18 +1245,34 @@ mod uniffi_surface {
 
     #[test]
     fn corpus_scenario_round_trips_through_uniffi_surface() {
-        // One full scenario threaded tick-by-tick through the uniffi-exported
-        // `evaluate`, pinned against the committed snapshot — same driver as
+        // Two scenarios threaded tick-by-tick through the uniffi-exported
+        // envelopes, pinned against the committed snapshots — same driver as
         // the C ABI corpus test. (The full corpus already runs through the C
         // ABI in this build; both paths share one envelope implementation.)
+        //
+        // A snooze scenario is included explicitly: it is the only shape that
+        // reaches `evaluate_node`, and this test is the in-repo proxy for
+        // prelude's Kotlin CorpusHarness, which drives exactly this surface.
         let paths = scenario_paths();
-        let (scenario, expected) = load_scenario(paths.first().expect("corpus is non-empty"));
-        let actual = run_scenario(&scenario, evaluate);
-        assert_eq!(
-            actual, expected,
-            "scenario {}: uniffi output differs from expected snapshot",
-            scenario.name
-        );
+        let first = paths.first().expect("corpus is non-empty").clone();
+        let snooze = paths
+            .iter()
+            .find(|p| {
+                p.file_stem()
+                    .is_some_and(|s| s.to_string_lossy().starts_with("snooze-"))
+            })
+            .expect("corpus has a snooze scenario")
+            .clone();
+
+        for path in [first, snooze] {
+            let (scenario, expected) = load_scenario(&path);
+            let actual = run_scenario(&scenario, evaluate, evaluate_node);
+            assert_eq!(
+                actual, expected,
+                "scenario {}: uniffi output differs from expected snapshot",
+                scenario.name
+            );
+        }
     }
 
     #[test]

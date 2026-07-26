@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "name": "snooze-trend-recovering-predicate",
+  "description": "a multi-leaf snooze predicate over trend and glucose: extend only while glucose is climbing AND has cleared a floor, so a low that is rising but still deep re-fires",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "snooze_conditions": [
+        {
+          "type": "rate_of_change",
+          "rate_of_change": {
+            "direction": "rising",
+            "rate": 0.5
+          }
+        },
+        {
+          "type": "threshold",
+          "threshold": {
+            "direction": "above",
+            "value": 60
+          }
+        }
+      ]
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 62,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": -1,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 64,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0.8,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_value": 58,
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "trend_rate": 1,
+        "last_reading_at": "2026-01-05T12:15:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    }
+  ]
+}

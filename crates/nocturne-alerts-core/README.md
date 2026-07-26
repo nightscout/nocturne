@@ -41,13 +41,13 @@ The crate is **pure evaluation**: no I/O, no clock, no persistence.
 | `eval` | one module per leaf family plus container evaluation (composite short-circuit, `not`, dispatch) |
 | `sustained` | timer state in/out and the `sustained` container |
 | `excursion` | excursion tracker state machine incl. force-close |
-| `engine` | `evaluate_tick` / `evaluate_rule` driver mirroring the orchestrator contract (root eval → leaf force-eval → tracker → unconditional auto-resolve) |
+| `engine` | `evaluate_rule` driver mirroring the orchestrator contract (root eval → leaf force-eval → tracker → unconditional auto-resolve), plus `evaluate_snooze_conditions` for the sweep's smart-snooze predicate under the `snooze` path root |
 
 ## Verification
 
 ```bash
 cd crates
-cargo test --workspace                          # parity corpus (103 scenarios) + unit tests
+cargo test --workspace                          # parity corpus (107 scenarios) + unit tests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
 ```

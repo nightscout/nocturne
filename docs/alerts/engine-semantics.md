@@ -347,7 +347,13 @@ contexts; window resolution, reading fetch, and fact-timeline capture stay host-
 - Smart snooze policy (extend/clear, max counts, trend-favorable heuristic) — but note
   snooze *conditions* are evaluated through the normal node dispatch with
   `CurrentPath = "snooze"`, wrapped as `composite{and, [conditions]}`; that evaluation
-  goes through the crate
+  goes through the crate.
+
+  The predicate is corpus-covered: a scenario rule may carry `snooze_conditions`, and the
+  runners record its truth as `snooze_extend` plus any timer ops the tree produced, after
+  the rule body's. Note the corpus is the *only* cross-engine check on this scope —
+  `ShadowAlertEngine` shadows `EvaluateRuleAsync` alone, so `EvaluateNodeAsync` (and its
+  `root` override) never diverge-logs against production traffic.
 - Rule CRUD, validation, `RuleReferenceResolver.FilterEvaluable`, topo-sort inputs
 
 ## 10. Known anomalies index

@@ -282,6 +282,35 @@ internal static class EngineTestHarness
     }
 
     /// <summary>
+    /// Drives the rule's smart-snooze conditions through the seam's auxiliary scope
+    /// (<c>EvaluateNodeAsync</c> under the <c>snooze</c> path root) — the call the sweep
+    /// makes, and the only corpus step that exercises a root-path override on either
+    /// adapter. Returns null when the rule configures no conditions.
+    /// </summary>
+    public static async Task<bool?> EvaluateSnoozeAsync(
+        IAlertEvaluationEngine engine,
+        ScenarioRule rule,
+        SensorContext context,
+        CancellationToken ct)
+    {
+        if (rule.SnoozeConditions is not { Count: > 0 } rawConditions)
+            return null;
+
+        var conditions = rawConditions
+            .Select(c => JsonSerializer.Deserialize<ConditionNode>(c.GetRawText(), EvaluatorJson.Options)
+                ?? throw new InvalidOperationException(
+                    $"Scenario rule '{rule.Name}' has a null snooze condition"))
+            .ToList();
+
+        return await engine.EvaluateNodeAsync(
+            rule.Id,
+            SnoozeConditionTree.Wrap(conditions),
+            context,
+            AlertConditionTypeNames.SnoozePathRoot,
+            ct);
+    }
+
+    /// <summary>
     /// Assembles an <see cref="ExpectedRuleResult"/> from a seam evaluation plus the
     /// observable state in the fakes — the same projection the corpus generator records.
     /// </summary>
@@ -290,6 +319,7 @@ internal static class EngineTestHarness
         AlertEngineEvaluation evaluation,
         InMemoryTrackerRepository trackerRepo,
         RecordingTimerStore timerStore,
+        bool? snoozeExtend,
         CancellationToken ct)
     {
         if (evaluation.Skipped)
@@ -318,6 +348,7 @@ internal static class EngineTestHarness
                     Excursion = trackerRepo.OrdinalOf(state.ActiveExcursionId),
                 },
             AutoResolved = evaluation.AutoResolved ? true : null,
+            SnoozeExtend = snoozeExtend,
             TimerOps = timerStore.DrainOps() is { Count: > 0 } ops ? ops : null,
         };
     }

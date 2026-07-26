@@ -96,6 +96,21 @@ public sealed class ScenarioRunner
         {
             // Orchestrator parity: no evaluator (e.g. signal_loss as a root type) means the
             // rule is skipped entirely — no tracker call, no auto-resolve.
+            //
+            // The snapshot records nothing else for a skipped rule, so there is nowhere to
+            // put a snooze result either. Production does NOT skip it: signal-loss rules open
+            // excursions via AlertSweepService.EvaluateSignalLossAsync, and
+            // CheckSnoozedInstancesAsync iterates instances with no filter on condition type.
+            // Rather than silently pin nothing, reject the combination at authoring time.
+            if (scenarioRule.SnoozeConditions is { Count: > 0 })
+            {
+                throw new InvalidOperationException(
+                    $"Scenario rule '{scenarioRule.Name}' has snooze_conditions on condition_type "
+                    + $"'{scenarioRule.ConditionType}', which the orchestrator skips. The snooze scope "
+                    + "cannot be snapshotted for a skipped rule even though the sweep does evaluate it "
+                    + "in production; cover it on an evaluable rule instead.");
+            }
+
             return new ExpectedRuleResult { RuleId = rule.Id, Skipped = true };
         }
 
@@ -122,6 +137,8 @@ public sealed class ScenarioRunner
             autoResolved = await TryAutoResolveAsync(rule, context, registry, tracker, ct);
         }
 
+        var snoozeExtend = await TryEvaluateSnoozeAsync(scenarioRule, context, registry, ct);
+
         var state = await trackerRepo.GetTrackerStateAsync(rule.Id, ct);
 
         return new ExpectedRuleResult
@@ -143,8 +160,39 @@ public sealed class ScenarioRunner
                     Excursion = trackerRepo.OrdinalOf(state.ActiveExcursionId),
                 },
             AutoResolved = autoResolved ? true : null,
+            SnoozeExtend = snoozeExtend,
             TimerOps = timerStore.DrainOps() is { Count: > 0 } ops ? ops : null,
         };
+    }
+
+    /// <summary>
+    /// Mirrors <c>AlertSweepService.EvaluateSnoozeConditionsAsync</c>. The sweep runs this
+    /// on its own cadence (when a snooze expires), not per reading; folding it into the tick
+    /// keeps the corpus one file per scenario while still pinning what the crate owns — the
+    /// <c>snooze</c> path root and the timer keys a <c>sustained</c> inside it produces.
+    /// </summary>
+    private static async Task<bool?> TryEvaluateSnoozeAsync(
+        ScenarioRule scenarioRule,
+        SensorContext context,
+        ConditionEvaluatorRegistry registry,
+        CancellationToken ct)
+    {
+        if (scenarioRule.SnoozeConditions is not { Count: > 0 } rawConditions)
+            return null;
+
+        var conditions = rawConditions
+            .Select(c => JsonSerializer.Deserialize<ConditionNode>(c.GetRawText(), EvaluatorJson.Options)
+                ?? throw new InvalidOperationException(
+                    $"Scenario rule '{scenarioRule.Name}' has a null snooze condition"))
+            .ToList();
+
+        var snoozeContext = context with
+        {
+            CurrentRuleId = scenarioRule.Id,
+            CurrentPath = AlertConditionTypeNames.SnoozePathRoot,
+        };
+
+        return await registry.EvaluateNodeAsync(SnoozeConditionTree.Wrap(conditions), snoozeContext, ct);
     }
 
     /// <summary>Mirrors <c>AlertOrchestrator.TryAutoResolveAsync</c>.</summary>

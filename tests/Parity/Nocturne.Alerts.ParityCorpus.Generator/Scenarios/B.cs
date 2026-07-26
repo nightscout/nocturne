@@ -34,7 +34,8 @@ public static class B
         int confirm = 1,
         int hysteresis = 0,
         string? autoResolveParams = null,
-        string? name = null) =>
+        string? name = null,
+        params string[] snoozeConditions) =>
         new()
         {
             Id = RId(id),
@@ -45,6 +46,9 @@ public static class B
             HysteresisMinutes = hysteresis,
             AutoResolveEnabled = autoResolveParams is not null,
             AutoResolveParams = autoResolveParams is null ? null : J(autoResolveParams),
+            SnoozeConditions = snoozeConditions.Length == 0
+                ? null
+                : snoozeConditions.Select(J).ToList(),
         };
 
     public static ScenarioTick Tick(DateTime at, ScenarioContext ctx) =>

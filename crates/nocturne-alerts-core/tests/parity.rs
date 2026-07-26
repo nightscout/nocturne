@@ -12,7 +12,9 @@ use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use nocturne_alerts_core::context::SensorContext;
-use nocturne_alerts_core::engine::{EngineState, Rule, RuleOutcome, evaluate_tick};
+use nocturne_alerts_core::engine::{
+    EngineState, Rule, RuleOutcome, evaluate_rule, evaluate_snooze_conditions,
+};
 use nocturne_alerts_core::excursion::{CloseReason, TransitionType};
 use nocturne_alerts_core::model::ConditionKind;
 use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind};
@@ -45,6 +47,11 @@ struct ScenarioRule {
     auto_resolve_enabled: bool,
     #[serde(default)]
     auto_resolve_params: Option<Value>,
+    /// The rule's smart-snooze conditions as stored (a flat array of full
+    /// ConditionNode objects). Absent or empty means the harness runs no
+    /// snooze step for this rule.
+    #[serde(default)]
+    snooze_conditions: Option<Vec<Value>>,
 }
 
 #[derive(Deserialize)]
@@ -87,7 +94,7 @@ fn timer_op_json(op: &TimerOp) -> Value {
     Value::Object(o)
 }
 
-fn outcome_json(outcome: &RuleOutcome) -> Value {
+fn outcome_json(outcome: &RuleOutcome, snooze_extend: Option<bool>) -> Value {
     let mut o = Map::new();
     o.insert("rule_id".into(), Value::String(outcome.rule_id.to_string()));
     if outcome.skipped {
@@ -148,6 +155,9 @@ fn outcome_json(outcome: &RuleOutcome) -> Value {
     if outcome.auto_resolved {
         o.insert("auto_resolved".into(), Value::Bool(true));
     }
+    if let Some(extend) = snooze_extend {
+        o.insert("snooze_extend".into(), Value::Bool(extend));
+    }
     if !outcome.timer_ops.is_empty() {
         o.insert(
             "timer_ops".into(),
@@ -182,10 +192,40 @@ fn run_scenario(scenario: &ScenarioFile) -> Value {
         .ticks
         .iter()
         .map(|tick| {
-            let outcomes = evaluate_tick(&rules, &tick.context, tick.at, &mut state);
+            // Per rule: the orchestrator's driver, then the sweep's snooze predicate —
+            // the same two-step composition the backend performs across its two
+            // schedules, and the order the C# corpus runner records timer ops in.
+            let outcomes: Vec<Value> = rules
+                .iter()
+                .zip(&scenario.rules)
+                .map(|(rule, source)| {
+                    let mut outcome = evaluate_rule(rule, &tick.context, tick.at, &mut state);
+                    let snooze_extend = match source.snooze_conditions.as_deref() {
+                        // A skipped rule (signal_loss) records nothing else, so there is
+                        // nowhere to put a snooze result. Production does not skip it —
+                        // the generator rejects the combination at authoring time so no
+                        // scenario can reach this arm with conditions configured.
+                        _ if outcome.skipped => None,
+                        Some(conditions) if !conditions.is_empty() => {
+                            let extend = evaluate_snooze_conditions(
+                                rule.id,
+                                conditions,
+                                &tick.context,
+                                tick.at,
+                                &mut state.timers,
+                            );
+                            outcome.timer_ops.extend(state.timers.drain_ops());
+                            Some(extend)
+                        }
+                        _ => None,
+                    };
+                    outcome_json(&outcome, snooze_extend)
+                })
+                .collect();
+
             json!({
                 "at": fmt_at(tick.at),
-                "rules": outcomes.iter().map(outcome_json).collect::<Vec<_>>(),
+                "rules": outcomes,
             })
         })
         .collect();

@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "name": "snooze-unknown-kinds",
+  "description": "silent-false and the not-over-unknown inversion hold under the snooze root exactly as they do in a rule body",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "unknown-child",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "snooze_conditions": [
+        {
+          "type": "nope"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "not-over-unknown",
+      "condition_type": "threshold",
+      "condition_params": {
+        "direction": "below",
+        "value": 70
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "snooze_conditions": [
+        {
+          "type": "not",
+          "not": {
+            "child": {
+              "type": "nope"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    }
+  ]
+}

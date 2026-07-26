@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "name": "snooze-sustained-separate-timer",
+  "description": "a sustained in the snooze conditions keys its timer under the snooze path root, so an identically shaped sustained in the rule body cannot share its row",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "sustained",
+      "condition_params": {
+        "minutes": 10,
+        "child": {
+          "type": "threshold",
+          "threshold": {
+            "direction": "below",
+            "value": 70
+          }
+        }
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false,
+      "snooze_conditions": [
+        {
+          "type": "sustained",
+          "sustained": {
+            "minutes": 10,
+            "child": {
+              "type": "threshold",
+              "threshold": {
+                "direction": "below",
+                "value": 70
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:10:00Z",
+      "context": {
+        "latest_value": 65,
+        "latest_timestamp": "2026-01-05T12:10:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:10:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:15:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:15:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:15:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false
+      }
+    }
+  ]
+}

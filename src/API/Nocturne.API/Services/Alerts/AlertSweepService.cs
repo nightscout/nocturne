@@ -338,8 +338,8 @@ public class AlertSweepService : BackgroundService
             var conditions = configsByInstance[instance.InstanceId].Conditions;
             if (conditions is null || conditions.Count == 0) continue;
 
-            var composite = new CompositeCondition("and", conditions);
-            var json = JsonSerializer.Serialize(composite, EvaluatorJson.Options);
+            var json = JsonSerializer.Serialize(
+                SnoozeConditionTree.Payload(conditions), EvaluatorJson.Options);
             syntheticRules.Add(new AlertRuleSnapshot(
                 instance.AlertRuleId,
                 tenantId,
@@ -381,9 +381,7 @@ public class AlertSweepService : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var engine = scope.ServiceProvider.GetRequiredService<IAlertEvaluationEngine>();
 
-        var node = new ConditionNode(
-            "composite",
-            Composite: new CompositeCondition("and", conditions));
+        var node = SnoozeConditionTree.Wrap(conditions);
 
         try
         {

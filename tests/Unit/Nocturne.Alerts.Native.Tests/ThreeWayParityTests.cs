@@ -98,7 +98,9 @@ public class ThreeWayParityTests
                     nextExcursionOrdinal = response.Tracker.NextExcursionOrdinal;
                 }
 
-                rules.Add(JsonNode.Parse(response.Result!.Value.GetRawText()));
+                var result = (JsonObject)JsonNode.Parse(response.Result!.Value.GetRawText())!;
+                ApplySnoozeStep(rule, context, at, timers, result);
+                rules.Add(result);
             }
 
             ticks.Add(new JsonObject
@@ -114,6 +116,68 @@ public class ThreeWayParityTests
             ["scenario"] = scenario.Name,
             ["ticks"] = ticks,
         };
+    }
+
+    /// <summary>
+    /// Runs the rule's smart-snooze conditions through <c>nocturne_alerts_evaluate_node</c>
+    /// with <c>root: "snooze"</c> and folds the outcome into the rule's result object —
+    /// the same two-call composition the backend performs (orchestrator per reading, sweep
+    /// per expiring snooze) and the only place the FFI's root-path override is exercised
+    /// against the corpus.
+    /// </summary>
+    private static void ApplySnoozeStep(
+        ScenarioRule rule,
+        JsonElement context,
+        DateTime at,
+        Dictionary<Guid, Dictionary<string, DateTime>> timers,
+        JsonObject result)
+    {
+        // A skipped rule (signal_loss) records nothing else, so there is nowhere to put a
+        // snooze result. Production does not skip it; the generator rejects that combination
+        // at authoring time, so no scenario reaches here with conditions configured.
+        if (result["skipped"] is not null) return;
+        if (rule.SnoozeConditions is not { Count: > 0 } conditions) return;
+
+        var wrapped = new JsonObject
+        {
+            ["type"] = "composite",
+            ["composite"] = new JsonObject
+            {
+                ["operator"] = "and",
+                ["conditions"] = new JsonArray(
+                    conditions.Select(c => (JsonNode?)JsonNode.Parse(c.GetRawText())).ToArray()),
+            },
+        };
+
+        var response = RustAlertEngine.EvaluateNode(new RustEvaluateNodeRequest
+        {
+            RuleId = rule.Id,
+            Node = JsonSerializer.Deserialize<JsonElement>(wrapped.ToJsonString()),
+            Root = CorpusPathRoots.Snooze,
+            Context = context,
+            Now = at,
+            Timers = timers.GetValueOrDefault(rule.Id),
+        });
+
+        timers[rule.Id] = response.Timers ?? new Dictionary<string, DateTime>();
+        result["snooze_extend"] = response.Value;
+
+        if (response.TimerOps is not { Count: > 0 } ops) return;
+
+        // Ops from the rule-body call come first; the snapshot records both in execution
+        // order under the rule's single timer_ops list.
+        if (result["timer_ops"] is not JsonArray merged)
+        {
+            merged = new JsonArray();
+            result["timer_ops"] = merged;
+        }
+        foreach (var op in ops)
+        {
+            var node = new JsonObject { ["op"] = op.Op, ["path"] = op.Path };
+            if (op.At is { } opAt)
+                node["at"] = opAt.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+            merged.Add(node);
+        }
     }
 
     private static RustAlertRule ToRustRule(ScenarioRule rule) => new()

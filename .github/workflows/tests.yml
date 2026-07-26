@@ -109,6 +109,13 @@ jobs:
           cargo test --workspace
           cargo clippy --workspace --all-targets -- -D warnings
           cargo fmt --check
+      # `uniffi` is off by default, so `--workspace` above never compiles the
+      # UniFFI surface or its tests — including the corpus round-trip that is the
+      # in-repo proxy for prelude's Kotlin CorpusHarness. Without this step a
+      # change to that surface can break with every other job green.
+      - name: Rust tests (uniffi surface)
+        working-directory: crates
+        run: cargo test -p nocturne-alerts-ffi --features uniffi
       - name: Build nocturne_alerts cdylib
         working-directory: crates
         run: cargo build --release -p nocturne-alerts-ffi

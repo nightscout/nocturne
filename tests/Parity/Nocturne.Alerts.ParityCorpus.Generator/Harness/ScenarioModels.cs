@@ -1,7 +1,19 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Nocturne.API.Services.Alerts.Evaluators;
 
 namespace Nocturne.Alerts.ParityCorpus.Generator.Harness;
+
+/// <summary>
+/// Reserved <c>ConditionPath</c> roots for the auxiliary evaluation scopes, re-exported from
+/// the engine's internal <c>AlertConditionTypeNames</c> so corpus consumers that cannot see
+/// Nocturne.API internals — the native FFI suite drives the library directly — still bind to
+/// the one definition rather than restating the literal.
+/// </summary>
+public static class CorpusPathRoots
+{
+    public static readonly string Snooze = AlertConditionTypeNames.SnoozePathRoot;
+}
 
 /// <summary>
 /// Serialization contract for corpus scenario files (<c>*.json</c>) and expected
@@ -100,6 +112,20 @@ public sealed record ScenarioRule
     /// <summary>A full ConditionNode object (<c>{"type": …, …}</c>), or null.</summary>
     [JsonPropertyName("auto_resolve_params")]
     public JsonElement? AutoResolveParams { get; init; }
+
+    /// <summary>
+    /// The rule's smart-snooze conditions exactly as stored in
+    /// <c>client_configuration.snooze.conditions</c>: a flat array of full ConditionNode
+    /// objects, or null when the rule configures none.
+    /// </summary>
+    /// <remarks>
+    /// Drives the harness's snooze step (see <see cref="ExpectedRuleResult.SnoozeExtend"/>).
+    /// Null or empty means no step at all — mirroring the sweep, which only evaluates
+    /// conditions when at least one is configured and otherwise falls back to its host-side
+    /// trend heuristic.
+    /// </remarks>
+    [JsonPropertyName("snooze_conditions")]
+    public List<JsonElement>? SnoozeConditions { get; init; }
 }
 
 public sealed record ScenarioTick
@@ -241,8 +267,17 @@ public sealed record ExpectedRuleResult
     public bool? AutoResolved { get; init; }
 
     /// <summary>
-    /// Sustained-timer store mutations performed during this rule's evaluation (root eval
-    /// then auto-resolve eval), in execution order.
+    /// Truth of the rule's smart-snooze condition tree under the <c>snooze</c> path root,
+    /// or null when the rule configures no snooze conditions. This is the predicate the
+    /// sweep reads as "extend the snooze"; the extend/clear policy around it is host-side
+    /// and deliberately not snapshotted.
+    /// </summary>
+    [JsonPropertyName("snooze_extend")]
+    public bool? SnoozeExtend { get; init; }
+
+    /// <summary>
+    /// Sustained-timer store mutations performed during this rule's evaluation (root eval,
+    /// then auto-resolve eval, then snooze eval), in execution order.
     /// </summary>
     [JsonPropertyName("timer_ops")]
     public List<ExpectedTimerOp>? TimerOps { get; init; }

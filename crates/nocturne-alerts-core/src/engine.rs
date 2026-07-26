@@ -5,7 +5,7 @@
 //! every leaf for the leaf log.
 
 use chrono::{DateTime, Utc};
-use serde_json::Value;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::context::SensorContext;
@@ -15,7 +15,7 @@ use crate::excursion::{
 };
 use crate::leaf_identity::collect_leaves;
 use crate::model::{ConditionKind, Node, parse_payload};
-use crate::paths::AUTO_RESOLVE_ROOT;
+use crate::paths::{AUTO_RESOLVE_ROOT, SNOOZE_ROOT};
 use crate::sustained::{TimerOp, TimerStore};
 
 /// An alert rule as stored: `(condition_type, condition_params)` plus tracker
@@ -75,20 +75,12 @@ pub struct RuleOutcome {
     pub timer_ops: Vec<TimerOp>,
 }
 
-/// Evaluates every rule (in order) against one tick.
-pub fn evaluate_tick(
-    rules: &[Rule],
-    ctx: &SensorContext,
-    now: DateTime<Utc>,
-    state: &mut EngineState,
-) -> Vec<RuleOutcome> {
-    rules
-        .iter()
-        .map(|rule| evaluate_rule(rule, ctx, now, state))
-        .collect()
-}
-
 /// Evaluates a single rule for one tick, mirroring the orchestrator contract.
+///
+/// Callers drive their own per-tick loop over rules: a host that also runs
+/// smart snooze has to interleave [`evaluate_snooze_conditions`] between this
+/// call and its timer drain, so a batching wrapper here would only ever fit the
+/// rule-body-only case.
 pub fn evaluate_rule(
     rule: &Rule,
     ctx: &SensorContext,
@@ -179,6 +171,44 @@ pub fn evaluate_rule(
         auto_resolved,
         timer_ops: state.timers.drain_ops(),
     }
+}
+
+/// Mirrors `AlertSweepService.EvaluateSnoozeConditionsAsync`: a rule's
+/// configured smart-snooze conditions are wrapped as
+/// `composite{and, conditions}` and evaluated under the reserved `snooze` path
+/// root, so a `sustained` inside them keys its timer separately from the rule
+/// body's and auto-resolve's.
+///
+/// Deliberately not part of [`evaluate_rule`]: snooze evaluation belongs to the
+/// sweep, driven by a snooze expiring rather than by a reading. Hosts compose
+/// the two calls (the FFI exposes this scope as `evaluate_node` with
+/// `root: "snooze"`); the corpus harness composes them per tick.
+///
+/// The host-side extend/clear policy around this predicate (max counts, extend
+/// minutes, the trend-favourable fallback when no conditions are configured)
+/// stays with the caller — see `docs/alerts/engine-semantics.md` §9.
+pub fn evaluate_snooze_conditions(
+    rule_id: Uuid,
+    conditions: &[Value],
+    ctx: &SensorContext,
+    now: DateTime<Utc>,
+    timers: &mut TimerStore,
+) -> bool {
+    let wrapped = json!({
+        "type": "composite",
+        "composite": { "operator": "and", "conditions": conditions },
+    });
+    let Ok(node) = Node::parse(&wrapped) else {
+        return false;
+    };
+
+    let mut env = Env {
+        now,
+        rule_id,
+        ctx,
+        timers,
+    };
+    eval_node(Some(&node), SNOOZE_ROOT, &mut env)
 }
 
 /// Mirrors `AlertOrchestrator.TryAutoResolveAsync`: only while an excursion is
