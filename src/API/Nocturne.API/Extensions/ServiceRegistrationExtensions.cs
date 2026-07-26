@@ -192,6 +192,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IOidcProviderService, OidcProviderService>();
         services.AddScoped<IOidcAuthService, OidcAuthService>();
+        services.AddScoped<PlatformAdminBootstrapService>();
 
         // OAuth services
         services.AddScoped<IOAuthClientService, OAuthClientService>();

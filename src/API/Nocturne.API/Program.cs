@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.Extensions.Options;
 using Nocturne.API.Authorization;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Audit;
@@ -617,9 +616,7 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 {
     using (var scope = app.Services.CreateScope())
     {
-        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        var platformOptions = scope.ServiceProvider.GetRequiredService<IOptions<PlatformOptions>>();
-        var bootstrap = new PlatformAdminBootstrapService(db, platformOptions);
+        var bootstrap = scope.ServiceProvider.GetRequiredService<PlatformAdminBootstrapService>();
         await bootstrap.BootstrapAsync(CancellationToken.None);
     }
 }
