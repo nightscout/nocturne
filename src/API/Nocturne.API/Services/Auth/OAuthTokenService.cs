@@ -99,32 +99,36 @@ public class OAuthTokenService : IOAuthTokenService
     )
     {
         var codeHash = _jwtService.HashRefreshToken(code);
+        var now = DateTime.UtcNow;
+
+        // Claim the code before anything else. Redemption state is not a concurrency token and the
+        // unique index is on the hash, so a read-then-write check let two simultaneous exchanges
+        // both see redeemed_at IS NULL and both mint a token pair. This single statement is the
+        // atomic claim: exactly one caller can move redeemed_at away from NULL.
+        var claimed = await _db.OAuthAuthorizationCodes
+            .Where(c => c.CodeHash == codeHash && c.RedeemedAt == null && c.ExpiresAt > now)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.RedeemedAt, now), ct);
+
+        if (claimed == 0)
+        {
+            // Unknown, expired and already-redeemed are one error: RFC 6749 Section 5.2 maps all
+            // three to invalid_grant, and a single message tells a caller nothing about which code
+            // hashes exist. On a genuine replay the tokens already issued from the code are revoked
+            // (RFC 6749 Section 4.1.2, OAuth 2.0 Security BCP Section 4.1.2).
+            await RevokeGrantOnCodeReplayAsync(codeHash, ct);
+            return OAuthTokenResult.Fail("invalid_grant", "Authorization code is invalid.");
+        }
 
         var authCode = await _db.OAuthAuthorizationCodes
+            .AsNoTracking()
             .Include(c => c.Client)
             .FirstOrDefaultAsync(c => c.CodeHash == codeHash, ct);
 
         if (authCode == null)
         {
-            _logger.LogWarning("Authorization code exchange failed: code not found");
+            // The row was claimed a moment ago, so this only happens if it was deleted meanwhile.
+            _logger.LogWarning("Authorization code exchange failed: claimed code no longer readable");
             return OAuthTokenResult.Fail("invalid_grant", "Authorization code is invalid.");
-        }
-
-        // Check not expired
-        if (authCode.IsExpired)
-        {
-            _logger.LogWarning("Authorization code exchange failed: code expired");
-            return OAuthTokenResult.Fail("invalid_grant", "Authorization code has expired.");
-        }
-
-        // Check not already redeemed (prevents replay)
-        if (authCode.IsRedeemed)
-        {
-            _logger.LogWarning(
-                "Authorization code replay detected for subject {SubjectId}",
-                authCode.SubjectId
-            );
-            return OAuthTokenResult.Fail("invalid_grant", "Authorization code has already been used.");
         }
 
         // Verify client_id matches
@@ -148,9 +152,6 @@ public class OAuthTokenService : IOAuthTokenService
             return OAuthTokenResult.Fail("invalid_grant", "PKCE code_verifier validation failed.");
         }
 
-        // Mark as redeemed
-        authCode.RedeemedAt = DateTime.UtcNow;
-
         // Create or update grant
         var grant = await _grantService.CreateOrUpdateGrantAsync(
             authCode.ClientEntityId,
@@ -161,6 +162,39 @@ public class OAuthTokenService : IOAuthTokenService
 
         // Mint tokens
         return await MintTokenPairAsync(grant, ct);
+    }
+
+    /// <summary>
+    /// Handles a failed claim on an authorization code. When the code exists and was already
+    /// redeemed, the exchange is a replay: whoever holds the code is racing the legitimate client or
+    /// replaying a stolen one, and the tokens issued from the first redemption can no longer be
+    /// trusted, so the grant behind them is revoked. An unknown or merely expired code is nothing to
+    /// act on.
+    /// </summary>
+    private async Task RevokeGrantOnCodeReplayAsync(string codeHash, CancellationToken ct)
+    {
+        var replayed = await _db.OAuthAuthorizationCodes
+            .AsNoTracking()
+            .Where(c => c.CodeHash == codeHash && c.RedeemedAt != null)
+            .Select(c => new { c.ClientEntityId, c.SubjectId })
+            .FirstOrDefaultAsync(ct);
+
+        if (replayed == null)
+        {
+            _logger.LogWarning("Authorization code exchange failed: code unknown or expired");
+            return;
+        }
+
+        _logger.LogWarning(
+            "Authorization code replay detected for subject {SubjectId}", replayed.SubjectId);
+
+        var grant = await _grantService.GetActiveGrantAsync(
+            replayed.ClientEntityId, replayed.SubjectId, ct);
+
+        if (grant != null)
+        {
+            await _grantService.RevokeGrantAsync(grant.Id, ct);
+        }
     }
 
     /// <inheritdoc />

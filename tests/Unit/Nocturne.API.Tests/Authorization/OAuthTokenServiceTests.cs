@@ -297,8 +297,12 @@ public class OAuthTokenServiceTests : IDisposable
         Assert.Null(result.Error);
         Assert.Null(result.ErrorDescription);
 
-        // Verify the auth code was marked as redeemed
-        var redeemed = await db.OAuthAuthorizationCodes.FirstAsync(c => c.CodeHash == testCodeHash);
+        // Verify the auth code was marked as redeemed. Read fresh: the claim is an ExecuteUpdate,
+        // which bypasses the change tracker, so the instance seeded on this context is stale.
+        using var verifyDb = CreateDbContext();
+        var redeemed = await verifyDb.OAuthAuthorizationCodes
+            .AsNoTracking()
+            .FirstAsync(c => c.CodeHash == testCodeHash);
         Assert.NotNull(redeemed.RedeemedAt);
 
         // Verify grant creation was called
@@ -336,14 +340,19 @@ public class OAuthTokenServiceTests : IDisposable
             TestRedirectUri,
             TestClientId);
 
-        // Assert
+        // Assert — unknown, expired and already-used share one invalid_grant message per
+        // RFC 6749 Section 5.2, so the response reveals nothing about which codes exist.
         Assert.False(result.Success);
         Assert.Equal("invalid_grant", result.Error);
-        Assert.Contains("expired", result.ErrorDescription, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Authorization code is invalid.", result.ErrorDescription);
+
+        // An expired code was never redeemed, so there is nothing to revoke.
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(
+            It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task ExchangeAuthorizationCodeAsync_AlreadyRedeemed_ReturnsError()
+    public async Task ExchangeAuthorizationCodeAsync_AlreadyRedeemed_RevokesTheGrantItIssued()
     {
         // Arrange
         const string testCode = "redeemed-auth-code";
@@ -358,6 +367,10 @@ public class OAuthTokenServiceTests : IDisposable
         await SeedAuthorizationCodeAsync(db, testCodeHash,
             redeemedAt: DateTime.UtcNow.AddMinutes(-1));
 
+        _mockGrantService.Setup(g => g.GetActiveGrantAsync(
+                _testClientEntityId, _testSubjectId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OAuthGrantInfo { Id = _testGrantId, SubjectId = _testSubjectId });
+
         var service = CreateService(db);
 
         // Act
@@ -370,7 +383,71 @@ public class OAuthTokenServiceTests : IDisposable
         // Assert
         Assert.False(result.Success);
         Assert.Equal("invalid_grant", result.Error);
-        Assert.Contains("already been used", result.ErrorDescription, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Authorization code is invalid.", result.ErrorDescription);
+
+        // A replayed code means the tokens from the first redemption are suspect
+        // (RFC 6749 Section 4.1.2).
+        _mockGrantService.Verify(g => g.RevokeGrantAsync(
+            _testGrantId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExchangeAuthorizationCodeAsync_ConcurrentRedemptions_OnlyOneSucceeds()
+    {
+        // Two exchanges of the same code at the same time. The claim is a single conditional UPDATE,
+        // so only one can move redeemed_at away from NULL; a read-then-write check let both through.
+        // Separate connections to a shared-cache database so the two calls really contend.
+        const string testCode = "raced-auth-code";
+        const string testCodeHash = "raced-auth-code-hash";
+        var dataSource = $"file:{Guid.NewGuid():N}?mode=memory&cache=shared";
+
+        _mockJwtService.Setup(j => j.HashRefreshToken(testCode))
+            .Returns(testCodeHash);
+
+        // Keeps the shared-cache database alive for the duration of the test.
+        using var keepAlive = new SqliteConnection($"DataSource={dataSource}");
+        keepAlive.Open();
+
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseSqlite($"DataSource={dataSource};Default Timeout=30")
+            .Options;
+
+        using (var seed = new NocturneDbContext(options) { TenantId = _testTenantId })
+        {
+            await seed.Database.EnsureCreatedAsync();
+            seed.Tenants.Add(new TenantEntity { Id = _testTenantId, Slug = "test" });
+            await seed.SaveChangesAsync();
+            await SeedClientAsync(seed);
+            await SeedSubjectAsync(seed);
+            await SeedGrantAsync(seed);
+            await SeedAuthorizationCodeAsync(seed, testCodeHash);
+        }
+
+        using var dbA = new NocturneDbContext(options) { TenantId = _testTenantId };
+        using var dbB = new NocturneDbContext(options) { TenantId = _testTenantId };
+
+        // Act
+        var attempts = await Task.WhenAll(
+            Redeem(CreateService(dbA)),
+            Redeem(CreateService(dbB)));
+
+        // Assert
+        Assert.Equal(1, attempts.Count(r => r));
+
+        async Task<bool> Redeem(OAuthTokenService service)
+        {
+            try
+            {
+                var result = await service.ExchangeAuthorizationCodeAsync(
+                    testCode, TestCodeVerifier, TestRedirectUri, TestClientId);
+                return result.Success;
+            }
+            catch (SqliteException)
+            {
+                // Losing the write lock is a failed redemption, not a second success.
+                return false;
+            }
+        }
     }
 
     [Fact]
