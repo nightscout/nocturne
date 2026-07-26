@@ -508,10 +508,13 @@ app.MapScalarApiReference((options, httpContext) =>
         .AddAuthorizationCodeFlow("oauth2", flow =>
         {
             // The client is registered per tenant against this exact redirect URI;
-            // authorize-time matching is byte-exact.
-            flow.ClientId = scalarAuth?.ClientId ?? ScalarAuthProvider.ScalarClientId;
+            // authorize-time matching is byte-exact. Left unset when no tenant resolved,
+            // so the flow is visibly unconfigured rather than pointing somewhere wrong.
             if (scalarAuth is not null)
+            {
+                flow.ClientId = scalarAuth.ClientId;
                 flow.RedirectUri = scalarAuth.RedirectUri;
+            }
             flow.Pkce = Pkce.Sha256;
             flow.SelectedScopes = [OAuthScopes.FullAccess];
         })

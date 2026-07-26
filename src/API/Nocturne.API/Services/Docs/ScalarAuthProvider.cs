@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Demo;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -54,14 +56,14 @@ public sealed class ScalarAuthProvider
     /// </summary>
     public const string ScalarSoftwareId = "dev.nocturne.scalar";
 
-    /// <summary>
-    /// Fixed client id for the Scalar docs client. Unlike an app registering through DCR,
-    /// this one is a first-party browser page, so a stable, unguessable-by-nobody id is
-    /// fine — it is a public client and holds no secret.
-    /// </summary>
-    public const string ScalarClientId = "nocturne-scalar-docs";
-
     private const string ClientName = "Scalar API Reference";
+
+    /// <summary>
+    /// Ceiling on redirect URIs held by one tenant's Scalar client. One per origin the
+    /// instance is served on; more than a handful means something is registering them
+    /// that is not an operator opening the docs.
+    /// </summary>
+    private const int MaxRedirectUris = 5;
 
     // Matches the tenant-resolution and public-access caches: long enough to keep the
     // docs page off the database, short enough that a demo reset heals within a couple
@@ -72,6 +74,7 @@ public sealed class ScalarAuthProvider
     private readonly IDbContextFactory<NocturneDbContext> _factory;
     private readonly DemoTenantService _demoTenantService;
     private readonly ISessionService _sessionService;
+    private readonly RedirectUriValidator _redirectUriValidator;
     private readonly IMemoryCache _cache;
     private readonly BaseDomainOptions _baseDomain;
     private readonly ILogger<ScalarAuthProvider> _logger;
@@ -80,6 +83,7 @@ public sealed class ScalarAuthProvider
         IDbContextFactory<NocturneDbContext> factory,
         DemoTenantService demoTenantService,
         ISessionService sessionService,
+        RedirectUriValidator redirectUriValidator,
         IMemoryCache cache,
         IOptions<BaseDomainOptions> baseDomain,
         ILogger<ScalarAuthProvider> logger)
@@ -87,6 +91,7 @@ public sealed class ScalarAuthProvider
         _factory = factory;
         _demoTenantService = demoTenantService;
         _sessionService = sessionService;
+        _redirectUriValidator = redirectUriValidator;
         _cache = cache;
         _baseDomain = baseDomain.Value;
         _logger = logger;
@@ -101,16 +106,39 @@ public sealed class ScalarAuthProvider
     {
         try
         {
-            var tenant = await ResolveTenantAsync(context);
+            var origin = ParseOrigin(context);
+            if (origin is null)
+                return;
+
+            var tenant = await ResolveTenantAsync(origin, context.RequestAborted);
             if (tenant is null)
                 return;
 
-            var redirectUri = BuildRedirectUri(context);
+            // Built from the same validated origin the tenant was resolved from, then
+            // held to the same rules as a redirect URI submitted through registration.
+            var redirectUri = origin.ScalarUri;
+            if (!_redirectUriValidator.IsValidForRegistration(redirectUri))
+            {
+                _logger.LogWarning("Rejected Scalar redirect URI for tenant {TenantId}", tenant.Id);
+                return;
+            }
+
             var clientId = await EnsureScalarClientAsync(tenant.Id, redirectUri, context.RequestAborted);
+            if (clientId is null)
+                return;
 
             var bearerToken = tenant.IsDemo
                 ? await GetDemoBearerTokenAsync(tenant.Id, context)
                 : null;
+
+            if (bearerToken is not null)
+            {
+                // The token is embedded in the page, so this response is per-credential
+                // even though the URL is not. Keep it out of shared caches: a CDN with a
+                // blanket "cache everything" rule would otherwise serve it on past the
+                // reset that revokes it.
+                context.Response.Headers.CacheControl = "no-store, private";
+            }
 
             context.Items[ScalarAuthContext.HttpContextItemKey] =
                 new ScalarAuthContext(clientId, redirectUri, bearerToken);
@@ -124,21 +152,114 @@ public sealed class ScalarAuthProvider
     }
 
     /// <summary>
-    /// Resolves the tenant from the request host. Returns <see langword="null"/> for the
+    /// The request's public origin, parsed into validated parts.
+    /// </summary>
+    /// <remarks>
+    /// Tenant resolution and redirect-URI construction must be driven by the same
+    /// validated value. Reading the forwarded headers separately in each — one
+    /// normalizing the host, the other interpolating it raw — let a single header
+    /// satisfy the tenant check while carrying a different effective authority
+    /// (<c>alice.example.com:443@attacker.example</c> parses as userinfo plus the
+    /// attacker's host), which persisted an attacker-controlled OAuth redirect URI.
+    /// </remarks>
+    private sealed record RequestOrigin(string Scheme, string Host, int? Port)
+    {
+        public string Authority => Port is null ? Host : $"{Host}:{Port}";
+
+        public string ScalarUri => $"{Scheme}://{Authority}/scalar";
+    }
+
+    /// <summary>
+    /// Parses the request's public origin from the forwarded headers, or
+    /// <see langword="null"/> when it is not a single well-formed http(s) origin.
+    /// </summary>
+    /// <remarks>
+    /// The forwarded headers are client-controllable — the gateway passes them through
+    /// untouched — so the host is rebuilt from a validated name and port rather than
+    /// used as a string. Credentials, paths, and multi-value lists are rejected outright
+    /// rather than normalized, because anything that needs normalizing here is not a
+    /// host this deployment serves.
+    /// </remarks>
+    private static RequestOrigin? ParseOrigin(HttpContext context)
+    {
+        var rawScheme = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault()
+                        ?? context.Request.Scheme;
+        var scheme = rawScheme.Trim().ToLowerInvariant();
+        if (scheme is not (("http") or "https"))
+            return null;
+
+        var rawHost = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(rawHost))
+            rawHost = context.Request.Host.Value;
+
+        rawHost = rawHost.Trim();
+        if (rawHost.AsSpan().IndexOfAny(ForbiddenHostChars) >= 0)
+            return null;
+
+        var (host, port) = SplitHostPort(rawHost);
+        if (host is null)
+            return null;
+
+        // Rejects anything that is not a DNS name or IP literal, so the value can only
+        // ever be interpolated back as the host it was validated as.
+        if (Uri.CheckHostName(host) == UriHostNameType.Unknown)
+            return null;
+
+        return new RequestOrigin(scheme, host, port);
+    }
+
+    /// <summary>
+    /// Characters that never appear in a bare host and would change which authority a
+    /// URI built from it addresses: credentials, list separators, and path/query starts.
+    /// </summary>
+    private static readonly char[] ForbiddenHostChars = ['@', ',', ' ', '\t', '/', '\\', '?', '#'];
+
+    /// <summary>
+    /// Splits <c>host[:port]</c>. Returns a null host when the value carries more than
+    /// one colon (and is not a bracketed IPv6 literal) or an unparseable port.
+    /// </summary>
+    private static (string? Host, int? Port) SplitHostPort(string value)
+    {
+        if (value.StartsWith('['))
+        {
+            var close = value.IndexOf(']');
+            if (close < 0)
+                return (null, null);
+
+            var literal = value[..(close + 1)];
+            var rest = value[(close + 1)..];
+            if (rest.Length == 0)
+                return (literal, null);
+            if (rest[0] != ':' || !int.TryParse(rest[1..], out var literalPort) || literalPort is < 1 or > 65535)
+                return (null, null);
+            return (literal, literalPort);
+        }
+
+        var parts = value.Split(':');
+        if (parts.Length == 1)
+            return (parts[0], null);
+        if (parts.Length != 2)
+            return (null, null);
+        if (!int.TryParse(parts[1], out var port) || port is < 1 or > 65535)
+            return (null, null);
+
+        return (parts[0], port);
+    }
+
+    /// <summary>
+    /// Resolves the tenant for the given origin. Returns <see langword="null"/> for the
     /// apex with more than one tenant, an unknown slug, an inactive tenant, or a public
     /// share host — a share grants read-only anonymous access and must not be handed a
     /// client or a token.
     /// </summary>
-    private async Task<TenantEntity?> ResolveTenantAsync(HttpContext context)
+    private async Task<TenantEntity?> ResolveTenantAsync(RequestOrigin origin, CancellationToken ct)
     {
-        var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(':')[0]
-                   ?? context.Request.Host.Host;
-        var slug = SubdomainParser.Extract(host, _baseDomain.BaseDomain);
+        var slug = SubdomainParser.Extract(origin.Host, _baseDomain.BaseDomain);
 
         if (slug is not null && slug.EndsWith(".share", StringComparison.OrdinalIgnoreCase))
             return null;
 
-        await using var db = await _factory.CreateDbContextAsync(context.RequestAborted);
+        await using var db = await _factory.CreateDbContextAsync(ct);
 
         if (slug is null)
         {
@@ -148,35 +269,32 @@ public sealed class ScalarAuthProvider
                 .Where(t => t.IsActive)
                 .OrderBy(t => t.Id)
                 .Take(2)
-                .ToListAsync(context.RequestAborted);
+                .ToListAsync(ct);
 
             return soleTenants.Count == 1 ? soleTenants[0] : null;
         }
 
         return await db.Set<TenantEntity>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Slug == slug && t.IsActive, context.RequestAborted);
-    }
-
-    /// <summary>
-    /// The URI Scalar's OAuth flow will be sent back to: the docs page itself, on the host
-    /// the browser is already using.
-    /// </summary>
-    private static string BuildRedirectUri(HttpContext context)
-    {
-        var proto = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault()
-                    ?? context.Request.Scheme;
-        var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()
-                   ?? context.Request.Host.Value;
-
-        return $"{proto}://{host}/scalar";
+            .FirstOrDefaultAsync(t => t.Slug == slug && t.IsActive, ct);
     }
 
     /// <summary>
     /// Registers the tenant's Scalar OAuth client if absent, and adds
-    /// <paramref name="redirectUri"/> to it if not already registered.
+    /// <paramref name="redirectUri"/> to it if not already registered. Returns the row's
+    /// client id, or <see langword="null"/> when the redirect URI cap is reached.
     /// </summary>
-    private async Task<string> EnsureScalarClientAsync(
+    /// <remarks>
+    /// <paramref name="redirectUri"/> must already be validated: it is persisted as an
+    /// allowed OAuth redirect target, and authorize-time matching is byte-exact.
+    /// <para>
+    /// <c>IsKnown</c> is taken from the bundled directory rather than asserted. The
+    /// consent screen keys its "app not recognized" warning off that flag, and this row
+    /// is created by an unauthenticated request — it must not be able to badge itself as
+    /// vetted.
+    /// </para>
+    /// </remarks>
+    private async Task<string?> EnsureScalarClientAsync(
         Guid tenantId, string redirectUri, CancellationToken ct)
     {
         var cacheKey = $"scalar-client:{tenantId}:{redirectUri}";
@@ -192,19 +310,20 @@ public sealed class ScalarAuthProvider
 
         if (client is null)
         {
-            db.OAuthClients.Add(new OAuthClientEntity
+            client = new OAuthClientEntity
             {
                 Id = Guid.CreateVersion7(),
                 TenantId = tenantId,
-                ClientId = ScalarClientId,
+                ClientId = Guid.CreateVersion7().ToString(),
                 SoftwareId = ScalarSoftwareId,
                 ClientName = ClientName,
                 DisplayName = ClientName,
-                IsKnown = true,
+                IsKnown = KnownOAuthClients.MatchBySoftwareId(ScalarSoftwareId) is not null,
                 RedirectUris = JsonSerializer.Serialize(new[] { redirectUri }),
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
-            });
+            };
+            db.OAuthClients.Add(client);
             await db.SaveChangesAsync(ct);
         }
         else
@@ -212,6 +331,17 @@ public sealed class ScalarAuthProvider
             var registered = DeserializeRedirectUris(client.RedirectUris);
             if (!registered.Contains(redirectUri, StringComparer.Ordinal))
             {
+                // Each distinct origin this instance is served on adds one entry. A real
+                // deployment has one or two; a cap keeps an unauthenticated caller from
+                // growing the row without bound.
+                if (registered.Count >= MaxRedirectUris)
+                {
+                    _logger.LogWarning(
+                        "Scalar client for tenant {TenantId} already holds {Count} redirect URIs — not adding another",
+                        tenantId, registered.Count);
+                    return null;
+                }
+
                 registered.Add(redirectUri);
                 client.RedirectUris = JsonSerializer.Serialize(registered);
                 client.UpdatedAt = DateTime.UtcNow;
@@ -219,8 +349,8 @@ public sealed class ScalarAuthProvider
             }
         }
 
-        _cache.Set(cacheKey, ScalarClientId, ClientCacheTtl);
-        return ScalarClientId;
+        _cache.Set(cacheKey, client.ClientId, ClientCacheTtl);
+        return client.ClientId;
     }
 
     private static List<string> DeserializeRedirectUris(string json)

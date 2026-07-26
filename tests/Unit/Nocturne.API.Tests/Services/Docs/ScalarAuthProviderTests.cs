@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.Demo;
 using Nocturne.API.Services.Docs;
 using Nocturne.API.Tests.Infrastructure;
@@ -62,7 +63,7 @@ public class ScalarAuthProviderTests : IDisposable
 
         var auth = Auth(context);
         auth.Should().NotBeNull();
-        auth!.ClientId.Should().Be(ScalarAuthProvider.ScalarClientId);
+        auth!.ClientId.Should().NotBeNullOrWhiteSpace();
         auth.RedirectUri.Should().Be("https://demo.nocturne.run/scalar");
         auth.BearerToken.Should().Be("demo-access-token");
 
@@ -126,25 +127,137 @@ public class ScalarAuthProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task PrepareAsync_AddsASecondRedirectUri_WithoutDuplicating()
+    public async Task PrepareAsync_MarksTheDemoResponseUncacheable()
+    {
+        SeedTenant("demo", isDemo: true, withDemoMember: true);
+        var context = BuildContext("demo.nocturne.run");
+
+        await BuildProvider().PrepareAsync(context);
+
+        context.Response.Headers.CacheControl.ToString()
+            .Should().Contain("no-store", "the page carries a bearer token");
+    }
+
+    [Fact]
+    public async Task PrepareAsync_LeavesARealTenantResponseCacheable()
+    {
+        SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = BuildContext("rhys.nocturne.run");
+
+        await BuildProvider().PrepareAsync(context);
+
+        context.Response.Headers.CacheControl.ToString().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task PrepareAsync_DoesNotDuplicateARedirectUri()
     {
         var tenantId = SeedTenant("demo", isDemo: true, withDemoMember: true);
-        var provider = BuildProvider();
 
-        // A fresh provider per call so the in-memory client cache does not mask the
-        // second registration.
-        await provider.PrepareAsync(BuildContext("demo.nocturne.run"));
-        await BuildProvider().PrepareAsync(BuildContext("demo.nocturne.run", proto: "http"));
+        // A fresh provider per call so the in-memory client cache does not mask a
+        // repeated registration.
+        await BuildProvider().PrepareAsync(BuildContext("demo.nocturne.run"));
         await BuildProvider().PrepareAsync(BuildContext("demo.nocturne.run"));
 
         await using var db = new NocturneDbContext(_dbOptions);
         var client = await db.OAuthClients.IgnoreQueryFilters()
             .SingleAsync(c => c.TenantId == tenantId);
         JsonSerializer.Deserialize<List<string>>(client.RedirectUris)
-            .Should().BeEquivalentTo([
-                "https://demo.nocturne.run/scalar",
-                "http://demo.nocturne.run/scalar",
-            ]);
+            .Should().Equal("https://demo.nocturne.run/scalar");
+    }
+
+    /// <summary>
+    /// The forwarded headers are client-controllable. A value that resolves a real tenant
+    /// while carrying a different effective authority must never be persisted as a
+    /// redirect URI: authorize-time matching is byte-exact, so it would let an attacker
+    /// have that tenant's authorization codes delivered to a host they control.
+    /// </summary>
+    [Theory]
+    [InlineData("rhys.nocturne.run:8443@attacker.example")] // userinfo — the real host is attacker.example
+    [InlineData("rhys.nocturne.run@attacker.example")]
+    [InlineData("rhys.nocturne.run:443, attacker.example")] // header list — only the first was slug-matched
+    [InlineData("rhys.nocturne.run/../..@attacker.example")]
+    [InlineData("rhys.nocturne.run\\@attacker.example")]
+    [InlineData("rhys.nocturne.run#@attacker.example")]
+    [InlineData("rhys.nocturne.run?x=1")]
+    [InlineData("rhys.nocturne.run:99999")]                 // out-of-range port
+    [InlineData("rhys.nocturne.run:80:80")]
+    public async Task PrepareAsync_RejectsAForwardedHostWhoseAuthorityIsNotTheResolvedTenant(string forwardedHost)
+    {
+        SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = BuildContext(forwardedHost);
+
+        await BuildProvider().PrepareAsync(context);
+
+        Auth(context).Should().BeNull();
+
+        await using var db = new NocturneDbContext(_dbOptions);
+        (await db.OAuthClients.IgnoreQueryFilters().AnyAsync())
+            .Should().BeFalse("no OAuth client may be registered from an unparseable host");
+    }
+
+    [Theory]
+    [InlineData("javascript")]
+    [InlineData("file")]
+    [InlineData("HTTPS evil")]
+    public async Task PrepareAsync_RejectsANonHttpForwardedProto(string proto)
+    {
+        SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = BuildContext("rhys.nocturne.run", proto);
+
+        await BuildProvider().PrepareAsync(context);
+
+        Auth(context).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task PrepareAsync_RejectsCleartextHttpOnAPublicHost()
+    {
+        // RedirectUriValidator treats http on a non-loopback host as invalid for
+        // registration; authorization codes must not be issued over plaintext.
+        SeedTenant("rhys", isDemo: false, withDemoMember: false);
+        var context = BuildContext("rhys.nocturne.run", proto: "http");
+
+        await BuildProvider().PrepareAsync(context);
+
+        Auth(context).Should().BeNull();
+        await using var db = new NocturneDbContext(_dbOptions);
+        (await db.OAuthClients.IgnoreQueryFilters().AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task PrepareAsync_DoesNotBadgeTheClientAsKnown()
+    {
+        // The consent screen suppresses its "app not recognized" warning for known
+        // clients. This row is created by an unauthenticated request.
+        var tenantId = SeedTenant("rhys", isDemo: false, withDemoMember: false);
+
+        await BuildProvider().PrepareAsync(BuildContext("rhys.nocturne.run"));
+
+        await using var db = new NocturneDbContext(_dbOptions);
+        var client = await db.OAuthClients.IgnoreQueryFilters()
+            .SingleAsync(c => c.TenantId == tenantId);
+        client.IsKnown.Should().BeFalse();
+        client.ClientId.Should().NotBe(ScalarAuthProvider.ScalarSoftwareId);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_CapsTheRedirectUriList()
+    {
+        var tenantId = SeedTenant("rhys", isDemo: false, withDemoMember: false);
+
+        // Distinct ports are all legitimate origins, so each is a new entry — the cap is
+        // what stops an unauthenticated caller growing the row without bound.
+        for (var port = 8001; port <= 8010; port++)
+        {
+            await BuildProvider().PrepareAsync(BuildContext($"rhys.nocturne.run:{port}"));
+        }
+
+        await using var db = new NocturneDbContext(_dbOptions);
+        var client = await db.OAuthClients.IgnoreQueryFilters()
+            .SingleAsync(c => c.TenantId == tenantId);
+        JsonSerializer.Deserialize<List<string>>(client.RedirectUris)
+            .Should().HaveCount(5);
     }
 
     [Fact]
@@ -227,6 +340,7 @@ public class ScalarAuthProviderTests : IDisposable
             dbFactory.Object,
             demoTenantService,
             _sessionService.Object,
+            new RedirectUriValidator(),
             cache ?? new MemoryCache(new MemoryCacheOptions()),
             Options.Create(new BaseDomainOptions { BaseDomain = BaseDomain }),
             new Mock<ILogger<ScalarAuthProvider>>().Object);
