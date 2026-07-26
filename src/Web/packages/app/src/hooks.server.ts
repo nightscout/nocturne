@@ -14,6 +14,10 @@ import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 import { getOriginalProto, getEffectiveHost, getOriginalHost, isShareHost } from "$lib/server/request-host";
 import { STATIC_ASSET_PREFIXES, isPublicRoute } from "$lib/server/public-routes";
+import {
+  installRequestScopedBitsIdCounter,
+  withFreshBitsIdCounter,
+} from "$lib/server/bits-id";
 // WUCHALE-DISABLED: wuchale temporarily disabled
 // import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
 // import * as main from '../../../locales/main.loader.server.svelte.js'
@@ -506,12 +510,12 @@ export const locale: Handle = async ({ event, resolve }) => {
   return resolve(event);
 }
 
-// Reset bits-ui's global ID counter at the start of each SSR request so that
-// server-generated IDs match the client (which always starts at 0).
-const resetBitsId: Handle = async ({ event, resolve }) => {
-  (globalThis as any).bitsIdCounter = { current: 0 };
-  return resolve(event);
-};
+installRequestScopedBitsIdCounter();
+
+// Each SSR request counts bits-ui element IDs from 0, as the client does, without
+// its reset disturbing a render already in flight on another request.
+const resetBitsId: Handle = ({ event, resolve }) =>
+  withFreshBitsIdCounter(() => resolve(event));
 
 // Public share host: keep the token-bearing URL out of Referer headers and search indexes on
 // every response (SSR page, /api proxy, realtime ticket), not just the page document.

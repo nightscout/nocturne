@@ -176,6 +176,7 @@ export class TitleFaviconService {
    * Stop flashing animation
    */
   stopFlashing(): void {
+    if (!browser) return;
     if (this.flashInterval) {
       clearInterval(this.flashInterval);
       this.flashInterval = null;
@@ -326,6 +327,7 @@ export class TitleFaviconService {
    * Cleanup resources
    */
   destroy(): void {
+    if (!browser) return;
     this.stopFlashing();
     this.canvas = null;
     this.ctx = null;
@@ -340,7 +342,15 @@ export class TitleFaviconService {
   }
 }
 
-// Singleton instance for global access
+/**
+ * Singleton instance for global access.
+ *
+ * On the server this is one object shared by every concurrent request. That is
+ * only safe because it holds nothing but DOM handles and the last values it
+ * painted, and every method that writes them returns early when `browser` is
+ * false. Keep that guard on anything new here: a server-side write would leak
+ * one tenant's glucose value into another's title.
+ */
 let instance: TitleFaviconService | null = null;
 
 /**
