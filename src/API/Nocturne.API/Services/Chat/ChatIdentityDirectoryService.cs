@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -82,11 +83,21 @@ public sealed class ChatIdentityDirectoryService(
             .ToListAsync(ct);
     }
 
-    /// <summary>Returns a directory entry by its ID, or null if not found.</summary>
-    public async Task<ChatIdentityDirectoryEntry?> GetByIdAsync(Guid id, CancellationToken ct)
+    /// <summary>
+    /// Returns a directory entry by its ID, or null if not found.
+    /// </summary>
+    /// <param name="id">The directory entry ID.</param>
+    /// <param name="tenantScope">
+    /// Tenant the entry must belong to, or <c>null</c> for a deliberately cross-tenant lookup
+    /// (the instance-key directory endpoints the chat bots call from the apex host).
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<ChatIdentityDirectoryEntry?> GetByIdAsync(Guid id, Guid? tenantScope, CancellationToken ct)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        return await db.ChatIdentityDirectory.FirstOrDefaultAsync(d => d.Id == id, ct);
+        return await db.ChatIdentityDirectory
+            .Where(ScopedToId(id, tenantScope))
+            .FirstOrDefaultAsync(ct);
     }
 
     /// <summary>Creates a directory link between a chat platform user and a tenant, auto-suffixing the label if it collides.</summary>
@@ -137,11 +148,14 @@ public sealed class ChatIdentityDirectoryService(
     }
 
     /// <summary>Designates a link as the default for the platform user, clearing the previous default in a transaction.</summary>
-    public async Task SetDefaultAsync(Guid linkId, CancellationToken ct)
+    /// <param name="linkId">The directory entry to make default.</param>
+    /// <param name="tenantScope">Tenant the entry must belong to, or <c>null</c> for a cross-tenant caller.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task SetDefaultAsync(Guid linkId, Guid? tenantScope, CancellationToken ct)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        var target = await db.ChatIdentityDirectory.FirstOrDefaultAsync(d => d.Id == linkId, ct)
-            ?? throw new InvalidOperationException($"Chat identity directory link {linkId} not found");
+        var target = await db.ChatIdentityDirectory.Where(ScopedToId(linkId, tenantScope)).FirstOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException($"Chat identity directory link {linkId} not found");
 
         // NpgsqlRetryingExecutionStrategy requires user-initiated transactions
         // to be wrapped in strategy.ExecuteAsync so the entire block can be
@@ -151,6 +165,9 @@ public sealed class ChatIdentityDirectoryService(
         {
             await using var tx = await db.Database.BeginTransactionAsync(ct);
 
+            // Cleared across tenants on purpose: ux_directory_user_one_default permits at most
+            // one default row per (platform, platform_user_id) for the whole table, because the
+            // default is which tenant a bare bot command resolves to for that chat account.
             await db.ChatIdentityDirectory
                 .Where(d => d.Platform == target.Platform
                             && d.PlatformUserId == target.PlatformUserId
@@ -169,11 +186,15 @@ public sealed class ChatIdentityDirectoryService(
     }
 
     /// <summary>Renames a link's label, throwing if the new label collides with an existing one.</summary>
-    public async Task RenameLabelAsync(Guid linkId, string newLabel, CancellationToken ct)
+    /// <param name="linkId">The directory entry to rename.</param>
+    /// <param name="tenantScope">Tenant the entry must belong to, or <c>null</c> for a cross-tenant caller.</param>
+    /// <param name="newLabel">The new routing label.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task RenameLabelAsync(Guid linkId, Guid? tenantScope, string newLabel, CancellationToken ct)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        var target = await db.ChatIdentityDirectory.FirstOrDefaultAsync(d => d.Id == linkId, ct)
-            ?? throw new InvalidOperationException($"Chat identity directory link {linkId} not found");
+        var target = await db.ChatIdentityDirectory.Where(ScopedToId(linkId, tenantScope)).FirstOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException($"Chat identity directory link {linkId} not found");
 
         target.Label = newLabel;
         try
@@ -191,24 +212,43 @@ public sealed class ChatIdentityDirectoryService(
     }
 
     /// <summary>Updates the display name shown to the chat platform user for a link.</summary>
-    public async Task UpdateDisplayNameAsync(Guid linkId, string newDisplayName, CancellationToken ct)
+    /// <param name="linkId">The directory entry to update.</param>
+    /// <param name="tenantScope">Tenant the entry must belong to, or <c>null</c> for a cross-tenant caller.</param>
+    /// <param name="newDisplayName">The new display name.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task UpdateDisplayNameAsync(Guid linkId, Guid? tenantScope, string newDisplayName, CancellationToken ct)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        var target = await db.ChatIdentityDirectory.FirstOrDefaultAsync(d => d.Id == linkId, ct)
-            ?? throw new InvalidOperationException($"Chat identity directory link {linkId} not found");
+        var target = await db.ChatIdentityDirectory.Where(ScopedToId(linkId, tenantScope)).FirstOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException($"Chat identity directory link {linkId} not found");
 
         target.DisplayName = newDisplayName;
         await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Permanently deletes a directory link.</summary>
-    public async Task RevokeAsync(Guid linkId, CancellationToken ct)
+    /// <param name="linkId">The directory entry to delete.</param>
+    /// <param name="tenantScope">Tenant the entry must belong to, or <c>null</c> for a cross-tenant caller.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The number of rows deleted: 0 when the entry does not exist in that scope.</returns>
+    public async Task<int> RevokeAsync(Guid linkId, Guid? tenantScope, CancellationToken ct)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        await db.ChatIdentityDirectory
-            .Where(d => d.Id == linkId)
+        return await db.ChatIdentityDirectory
+            .Where(ScopedToId(linkId, tenantScope))
             .ExecuteDeleteAsync(ct);
     }
+
+    /// <summary>
+    /// Predicate matching one directory entry by ID, additionally constrained to a tenant when
+    /// <paramref name="tenantScope"/> is supplied. <c>chat_identity_directory</c> is a global
+    /// table with no query filter and no RLS policy — the bots resolve it cross-tenant from the
+    /// apex host — so an ID on its own is never enough for a tenant-authenticated caller.
+    /// </summary>
+    private static Expression<Func<ChatIdentityDirectoryEntry, bool>> ScopedToId(Guid id, Guid? tenantScope)
+        => tenantScope is { } tenantId
+            ? d => d.Id == id && d.TenantId == tenantId
+            : d => d.Id == id;
 
     private static string ResolveUniqueLabel(
         IReadOnlyCollection<string> existingLabels, string suggested)

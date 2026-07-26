@@ -255,4 +255,38 @@ public static class TenantPermissions
     {
         return permissions.Any(p => Satisfies(p, required));
     }
+
+    /// <summary>
+    /// Validates a set of permissions a caller is trying to grant (to a member, a role, or an
+    /// invite) against the permissions the caller itself holds. Every requested atom must be a
+    /// known permission and must be satisfied by <paramref name="granterPermissions"/>, so a
+    /// grant can never exceed the granter's own access. <see cref="Superuser"/> is satisfied
+    /// only by <see cref="Superuser"/>, so it cannot be minted by a non-superuser.
+    /// </summary>
+    /// <param name="requested">The permissions being granted. <c>null</c> or empty is always allowed.</param>
+    /// <param name="granterPermissions">The permissions the granting caller holds.</param>
+    /// <returns>
+    /// An error message describing the first rejected permission, or <c>null</c> when the
+    /// whole set is grantable.
+    /// </returns>
+    public static string? ValidateGrant(
+        IEnumerable<string>? requested,
+        IEnumerable<string> granterPermissions)
+    {
+        if (requested is null)
+            return null;
+
+        var granter = granterPermissions as IReadOnlyCollection<string> ?? granterPermissions.ToList();
+
+        foreach (var permission in requested)
+        {
+            if (permission != Superuser && !All.Contains(permission))
+                return $"'{permission}' is not a known permission.";
+
+            if (!HasPermission(granter, permission))
+                return $"Cannot grant '{permission}' because the caller does not hold it.";
+        }
+
+        return null;
+    }
 }

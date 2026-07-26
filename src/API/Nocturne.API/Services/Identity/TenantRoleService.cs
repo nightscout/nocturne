@@ -11,6 +11,12 @@ namespace Nocturne.API.Services.Identity;
 /// Manages tenant-scoped roles and their permission assignments. Supports creation, updating,
 /// deletion, and slug validation of <see cref="TenantRoleDto"/> records.
 /// </summary>
+/// <remarks>
+/// <c>tenant_roles</c> carries no global query filter and no Row Level Security policy (it sits
+/// in the identity cluster alongside <c>tenant_members</c>, which auth resolution reads before a
+/// tenant context exists), so every lookup here keys on the tenant AND the role ID. A role ID
+/// alone is not an authorization decision.
+/// </remarks>
 /// <seealso cref="ITenantRoleService"/>
 public partial class TenantRoleService(NocturneDbContext context) : ITenantRoleService
 {
@@ -31,10 +37,10 @@ public partial class TenantRoleService(NocturneDbContext context) : ITenantRoleS
             .ToListAsync(ct);
     }
 
-    public async Task<TenantRoleDto?> GetRoleByIdAsync(Guid roleId, CancellationToken ct = default)
+    public async Task<TenantRoleDto?> GetRoleByIdAsync(Guid tenantId, Guid roleId, CancellationToken ct = default)
     {
         return await context.TenantRoles
-            .Where(r => r.Id == roleId)
+            .Where(r => r.Id == roleId && r.TenantId == tenantId)
             .Select(r => new TenantRoleDto(
                 r.Id,
                 r.Name,
@@ -84,7 +90,8 @@ public partial class TenantRoleService(NocturneDbContext context) : ITenantRoleS
         );
     }
 
-    public async Task<TenantRoleDto> UpdateRoleAsync(
+    public async Task<TenantRoleDto?> UpdateRoleAsync(
+        Guid tenantId,
         Guid roleId,
         string name,
         string? description,
@@ -93,7 +100,10 @@ public partial class TenantRoleService(NocturneDbContext context) : ITenantRoleS
     {
         var entity = await context.TenantRoles
             .Include(r => r.MemberRoles)
-            .FirstAsync(r => r.Id == roleId, ct);
+            .FirstOrDefaultAsync(r => r.Id == roleId && r.TenantId == tenantId, ct);
+
+        if (entity is null)
+            return null;
 
         if (entity.Slug == TenantPermissions.SeedRoles.Owner)
             throw new InvalidOperationException("Cannot modify the owner role.");
@@ -118,11 +128,11 @@ public partial class TenantRoleService(NocturneDbContext context) : ITenantRoleS
         );
     }
 
-    public async Task<DeleteRoleResult> DeleteRoleAsync(Guid roleId, CancellationToken ct = default)
+    public async Task<DeleteRoleResult> DeleteRoleAsync(Guid tenantId, Guid roleId, CancellationToken ct = default)
     {
         var role = await context.TenantRoles
             .Include(r => r.MemberRoles)
-            .FirstOrDefaultAsync(r => r.Id == roleId, ct);
+            .FirstOrDefaultAsync(r => r.Id == roleId && r.TenantId == tenantId, ct);
 
         if (role is null)
             return new DeleteRoleResult(false, "role_not_found", "The specified role does not exist.");

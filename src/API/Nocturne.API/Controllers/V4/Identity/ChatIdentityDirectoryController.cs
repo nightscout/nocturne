@@ -103,11 +103,13 @@ public class ChatIdentityDirectoryController : ControllerBase
         [FromBody] RevokeByPlatformUserRequest body,
         CancellationToken ct)
     {
-        var row = await _directory.GetByIdAsync(id, ct);
+        // Cross-tenant by design: the bot authenticates with the instance key from the apex host
+        // and identifies the row by the chat account on it, not by a tenant.
+        var row = await _directory.GetByIdAsync(id, tenantScope: null, ct);
         if (row is null) return NotFound();
         if (row.Platform != body.Platform || row.PlatformUserId != body.PlatformUserId)
             return Forbid();
-        await _directory.RevokeAsync(id, ct);
+        await _directory.RevokeAsync(id, tenantScope: null, ct);
         return NoContent();
     }
 }

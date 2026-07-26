@@ -89,19 +89,34 @@ public sealed class ChatIdentityService(
 
     /// <summary>Designates a chat identity link as the default for the platform user.</summary>
     public Task SetDefaultAsync(Guid tenantId, Guid linkId, CancellationToken ct)
-        => directory.SetDefaultAsync(linkId, ct);
+        => directory.SetDefaultAsync(linkId, RequireTenant(tenantId), ct);
 
     /// <summary>Renames the label on a chat identity link.</summary>
     public Task RenameLabelAsync(Guid tenantId, Guid linkId, string newLabel, CancellationToken ct)
-        => directory.RenameLabelAsync(linkId, newLabel, ct);
+        => directory.RenameLabelAsync(linkId, RequireTenant(tenantId), newLabel, ct);
 
     /// <summary>Updates the display name on a chat identity link.</summary>
     public Task UpdateDisplayNameAsync(Guid tenantId, Guid linkId, string newDisplayName, CancellationToken ct)
-        => directory.UpdateDisplayNameAsync(linkId, newDisplayName, ct);
+        => directory.UpdateDisplayNameAsync(linkId, RequireTenant(tenantId), newDisplayName, ct);
 
     /// <summary>Permanently removes a chat identity link.</summary>
-    public Task RevokeAsync(Guid tenantId, Guid linkId, CancellationToken ct)
-        => directory.RevokeAsync(linkId, ct);
+    /// <exception cref="KeyNotFoundException">The link does not belong to <paramref name="tenantId"/>.</exception>
+    public async Task RevokeAsync(Guid tenantId, Guid linkId, CancellationToken ct)
+    {
+        var deleted = await directory.RevokeAsync(linkId, RequireTenant(tenantId), ct);
+        if (deleted == 0)
+            throw new KeyNotFoundException($"Chat identity directory link {linkId} not found");
+    }
+
+    /// <summary>
+    /// Returns the tenant every mutation on this facade is scoped to. An unresolved tenant is
+    /// rejected rather than passed through as an unscoped (cross-tenant) operation.
+    /// </summary>
+    private static Guid RequireTenant(Guid tenantId)
+        => tenantId != Guid.Empty
+            ? tenantId
+            : throw new InvalidOperationException(
+                "Chat identity link management requires a resolved tenant.");
 
     /// <summary>
     /// Read-only lookup for the authorize page. Does NOT consume the token.

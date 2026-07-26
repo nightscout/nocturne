@@ -11,17 +11,26 @@ public interface ITenantRoleService
     /// <summary>Returns all roles defined for the specified tenant.</summary>
     Task<List<TenantRoleDto>> GetRolesAsync(Guid tenantId, CancellationToken ct = default);
 
-    /// <summary>Returns a role by its ID, or null if not found.</summary>
-    Task<TenantRoleDto?> GetRoleByIdAsync(Guid roleId, CancellationToken ct = default);
+    /// <summary>
+    /// Returns a role by its ID within <paramref name="tenantId"/>, or null if the tenant has
+    /// no such role. A role ID belonging to another tenant resolves to null.
+    /// </summary>
+    Task<TenantRoleDto?> GetRoleByIdAsync(Guid tenantId, Guid roleId, CancellationToken ct = default);
 
     /// <summary>Creates a new custom role with the specified permissions.</summary>
     Task<TenantRoleDto> CreateRoleAsync(Guid tenantId, string name, string? description, List<string> permissions, CancellationToken ct = default);
 
-    /// <summary>Updates a role's name, description, and permissions.</summary>
-    Task<TenantRoleDto> UpdateRoleAsync(Guid roleId, string name, string? description, List<string> permissions, CancellationToken ct = default);
+    /// <summary>
+    /// Updates a role's name, description, and permissions. Returns null when
+    /// <paramref name="tenantId"/> has no role with that ID.
+    /// </summary>
+    Task<TenantRoleDto?> UpdateRoleAsync(Guid tenantId, Guid roleId, string name, string? description, List<string> permissions, CancellationToken ct = default);
 
-    /// <summary>Deletes a role if it is not a system role and has no members assigned.</summary>
-    Task<DeleteRoleResult> DeleteRoleAsync(Guid roleId, CancellationToken ct = default);
+    /// <summary>
+    /// Deletes a role if it is not a system role and has no members assigned. A role ID
+    /// belonging to another tenant is reported as not found.
+    /// </summary>
+    Task<DeleteRoleResult> DeleteRoleAsync(Guid tenantId, Guid roleId, CancellationToken ct = default);
 
     /// <summary>Creates the default system roles (owner, member, follower) for a newly provisioned tenant.</summary>
     Task SeedRolesForTenantAsync(Guid tenantId, CancellationToken ct = default);

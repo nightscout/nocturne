@@ -28,6 +28,9 @@ public class MemberInviteServiceTests : IDisposable
     private readonly Guid _acceptorSubjectId = Guid.CreateVersion7();
     private Guid _followerRoleId;
 
+    /// <summary>Granter permissions of a tenant owner: satisfies any grant the invite can carry.</summary>
+    private static readonly string[] OwnerPermissions = [TenantPermissions.Superuser];
+
     private const string FakeToken = "fake-random-token-abc123";
     private const string FakeTokenHash = "hashed-fake-token";
     private const string BaseUrl = "https://app.nocturnecgm.com";
@@ -118,6 +121,7 @@ public class MemberInviteServiceTests : IDisposable
         var result = await _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
+            OwnerPermissions,
             [_followerRoleId]);
 
         result.Token.Should().Be(FakeToken);
@@ -139,6 +143,7 @@ public class MemberInviteServiceTests : IDisposable
         var act = () => _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
+            OwnerPermissions,
             []);
 
         await act.Should().ThrowAsync<ArgumentException>()
@@ -151,6 +156,7 @@ public class MemberInviteServiceTests : IDisposable
         var result = await _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
+            OwnerPermissions,
             [],
             directPermissions: [TenantPermissions.GlucoseRead]);
 
@@ -162,11 +168,71 @@ public class MemberInviteServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateInviteAsync_RejectsSuperuserFromNonSuperuserCreator()
+    {
+        var act = () => _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            [TenantPermissions.MembersInvite, TenantPermissions.MembersManage],
+            [],
+            directPermissions: [TenantPermissions.Superuser]);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Cannot grant '*'*");
+
+        (await _dbContext.MemberInvites.AnyAsync()).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CreateInviteAsync_RejectsPermissionTheCreatorDoesNotHold()
+    {
+        var act = () => _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            [TenantPermissions.MembersInvite, TenantPermissions.GlucoseRead],
+            [],
+            directPermissions: [TenantPermissions.TreatmentsReadWrite]);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*treatments.readwrite*");
+    }
+
+    [Fact]
+    public async Task CreateInviteAsync_RejectsUnknownPermission()
+    {
+        var act = () => _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [],
+            directPermissions: ["glucose.destroy"]);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*not a known permission*");
+    }
+
+    [Fact]
+    public async Task CreateInviteAsync_RejectsRoleCarryingPermissionsTheCreatorLacks()
+    {
+        // The follower role carries glucose.read; a creator holding only members.invite may not
+        // hand it out even though the role ID is valid for the tenant.
+        var act = () => _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            [TenantPermissions.MembersInvite],
+            [_followerRoleId]);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Cannot grant*");
+    }
+
+    [Fact]
     public async Task AcceptInviteAsync_ExpiredToken_ReturnsError()
     {
         await _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
+            OwnerPermissions,
             [_followerRoleId]);
 
         var invite = await _dbContext.MemberInvites.FirstAsync();
@@ -185,6 +251,7 @@ public class MemberInviteServiceTests : IDisposable
         await _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
+            OwnerPermissions,
             [_followerRoleId]);
 
         var invite = await _dbContext.MemberInvites.FirstAsync();
@@ -203,6 +270,7 @@ public class MemberInviteServiceTests : IDisposable
         await _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
+            OwnerPermissions,
             [_followerRoleId],
             maxUses: 1);
 
@@ -222,6 +290,7 @@ public class MemberInviteServiceTests : IDisposable
         await _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
+            OwnerPermissions,
             [_followerRoleId]);
 
         // Add an existing active membership
@@ -246,6 +315,7 @@ public class MemberInviteServiceTests : IDisposable
         var createResult = await _service.CreateInviteAsync(
             _tenantId,
             _creatorSubjectId,
+            OwnerPermissions,
             [_followerRoleId]);
 
         var result = await _service.RevokeInviteAsync(createResult.Id, _tenantId);

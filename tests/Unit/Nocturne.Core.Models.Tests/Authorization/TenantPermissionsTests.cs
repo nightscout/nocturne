@@ -110,4 +110,71 @@ public class TenantPermissionsTests
         TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Denied]
             .Should().BeEmpty();
     }
+
+    [Fact]
+    public void ValidateGrant_AllowsNothingBeingGranted()
+    {
+        TenantPermissions.ValidateGrant(null, []).Should().BeNull();
+        TenantPermissions.ValidateGrant([], []).Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateGrant_RefusesSuperuser_ToAGranterHoldingEveryOtherPermission()
+    {
+        // Holding every named atom is not the same as holding "*": * additionally satisfies
+        // atoms added in later versions, so it is only ever grantable by another superuser.
+        TenantPermissions.ValidateGrant([TenantPermissions.Superuser], TenantPermissions.All)
+            .Should().Contain("Cannot grant '*'");
+    }
+
+    [Fact]
+    public void ValidateGrant_AllowsSuperuser_FromASuperuser()
+    {
+        TenantPermissions.ValidateGrant([TenantPermissions.Superuser], [TenantPermissions.Superuser])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateGrant_RefusesAnUnknownPermission_EvenFromASuperuser()
+    {
+        TenantPermissions.ValidateGrant(["glucose.destroy"], [TenantPermissions.Superuser])
+            .Should().Contain("not a known permission");
+    }
+
+    [Theory]
+    [InlineData("GLUCOSE.READ")]
+    [InlineData("glucose.read ")]
+    [InlineData("")]
+    public void ValidateGrant_RefusesAPermissionThatIsNotAnExactAtom(string requested)
+    {
+        // Comparison is exact and ordinal, so a case or whitespace variant is unknown rather
+        // than silently equivalent to the atom it resembles.
+        TenantPermissions.ValidateGrant([requested], [TenantPermissions.Superuser])
+            .Should().Contain("not a known permission");
+    }
+
+    [Fact]
+    public void ValidateGrant_AllowsTheReadTierOfAPermissionHeldAsReadWrite()
+    {
+        TenantPermissions.ValidateGrant(
+            [TenantPermissions.GlucoseRead], [TenantPermissions.GlucoseReadWrite])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateGrant_RefusesTheWriteTierOfAPermissionHeldAsReadOnly()
+    {
+        TenantPermissions.ValidateGrant(
+            [TenantPermissions.GlucoseReadWrite], [TenantPermissions.GlucoseRead])
+            .Should().Contain("Cannot grant 'glucose.readwrite'");
+    }
+
+    [Fact]
+    public void ValidateGrant_RefusesTheWholeSetWhenAnyMemberExceedsTheGranter()
+    {
+        TenantPermissions.ValidateGrant(
+            [TenantPermissions.GlucoseRead, TenantPermissions.AuditManage],
+            [TenantPermissions.GlucoseRead, TenantPermissions.AuditRead])
+            .Should().Contain("Cannot grant 'audit.manage'");
+    }
 }

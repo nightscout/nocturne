@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -37,6 +38,7 @@ public class MemberInviteService : IMemberInviteService
     public async Task<MemberInviteResult> CreateInviteAsync(
         Guid tenantId,
         Guid createdBySubjectId,
+        IEnumerable<string> granterPermissions,
         List<Guid> roleIds,
         List<string>? directPermissions = null,
         string? label = null,
@@ -47,14 +49,28 @@ public class MemberInviteService : IMemberInviteService
         if (roleIds.Count == 0 && (directPermissions == null || directPermissions.Count == 0))
             throw new ArgumentException("At least one role or direct permission is required.");
 
-        // Validate roleIds belong to this tenant
+        var granter = granterPermissions as IReadOnlyCollection<string> ?? granterPermissions.ToList();
+
+        var directGrantError = TenantPermissions.ValidateGrant(directPermissions, granter);
+        if (directGrantError != null)
+            throw new ArgumentException(directGrantError);
+
+        // Validate roleIds belong to this tenant, and that the invite's roles do not carry
+        // permissions the creating caller lacks.
         if (roleIds.Count > 0)
         {
-            var validCount = await _dbContext.TenantRoles
-                .CountAsync(r => r.TenantId == tenantId && roleIds.Contains(r.Id));
+            var rolePermissions = await _dbContext.TenantRoles
+                .Where(r => r.TenantId == tenantId && roleIds.Contains(r.Id))
+                .Select(r => r.Permissions)
+                .ToListAsync();
 
-            if (validCount != roleIds.Count)
+            if (rolePermissions.Count != roleIds.Count)
                 throw new ArgumentException("One or more role IDs do not belong to this tenant.");
+
+            var roleGrantError = TenantPermissions.ValidateGrant(
+                rolePermissions.SelectMany(permissions => permissions), granter);
+            if (roleGrantError != null)
+                throw new ArgumentException(roleGrantError);
         }
 
         // Generate token

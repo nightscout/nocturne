@@ -8,10 +8,29 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 /// <seealso cref="ITenantRoleService"/>
 public interface IMemberInviteService
 {
-    /// <summary>Creates a new invite link that grants the specified roles and permissions when accepted.</summary>
+    /// <summary>
+    /// Creates a new invite link that grants the specified roles and permissions when accepted.
+    /// </summary>
+    /// <param name="tenantId">The tenant the invite joins.</param>
+    /// <param name="createdBySubjectId">Subject creating the invite.</param>
+    /// <param name="granterPermissions">
+    /// Permissions the creating caller holds. The invite's roles and direct permissions are
+    /// validated against this set, so an invite cannot carry more access than its creator has.
+    /// </param>
+    /// <param name="roleIds">Roles the invite assigns; must belong to <paramref name="tenantId"/>.</param>
+    /// <param name="directPermissions">Direct permission atoms the invite assigns.</param>
+    /// <param name="label">Optional label recorded on the invite and the resulting membership.</param>
+    /// <param name="expiresInDays">Days until the invite expires.</param>
+    /// <param name="maxUses">Optional cap on the number of acceptances.</param>
+    /// <param name="limitTo24Hours">Whether the resulting membership is clamped to 24 hours of data.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when no roles or permissions are supplied, a role does not belong to the tenant, or
+    /// the grant exceeds <paramref name="granterPermissions"/>.
+    /// </exception>
     Task<MemberInviteResult> CreateInviteAsync(
         Guid tenantId,
         Guid createdBySubjectId,
+        IEnumerable<string> granterPermissions,
         List<Guid> roleIds,
         List<string>? directPermissions = null,
         string? label = null,

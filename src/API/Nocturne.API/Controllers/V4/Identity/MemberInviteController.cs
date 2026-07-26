@@ -134,6 +134,7 @@ public class MemberInviteController : ControllerBase
     [HttpPut("members/{id:guid}/roles")]
     [RemoteCommand(Invalidates = ["GetMembers"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SetMemberRoles(
@@ -155,16 +156,29 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
+        if (IsCallersOwnMembership(member))
+            return Problem(detail: SelfEditDetail, statusCode: 400, title: "Bad Request");
+
         if (request.RoleIds.Count == 0 && (member.DirectPermissions == null || member.DirectPermissions.Count == 0))
             return Problem(detail: "Cannot remove all roles when member has no direct permissions", statusCode: 400, title: "Bad Request");
 
         // Validate roleIds belong to this tenant
         if (request.RoleIds.Count > 0)
         {
-            var validCount = await _dbContext.TenantRoles
-                .CountAsync(r => r.TenantId == tenantId && request.RoleIds.Contains(r.Id), ct);
-            if (validCount != request.RoleIds.Count)
+            var roles = await _dbContext.TenantRoles
+                .Where(r => r.TenantId == tenantId && request.RoleIds.Contains(r.Id))
+                .Select(r => r.Permissions)
+                .ToListAsync(ct);
+            if (roles.Count != request.RoleIds.Count)
                 return Problem(detail: "One or more role IDs do not belong to this tenant", statusCode: 400, title: "Bad Request");
+
+            // Assigning a role grants its permissions, so the same ceiling applies as for a
+            // direct grant: a caller cannot hand out access it does not hold itself.
+            var grantError = TenantPermissions.ValidateGrant(
+                roles.SelectMany(permissions => permissions),
+                HttpContext.GetGrantedScopes());
+            if (grantError != null)
+                return Problem(detail: grantError, statusCode: 403, title: "Forbidden");
         }
 
         // Remove existing role assignments
@@ -198,6 +212,7 @@ public class MemberInviteController : ControllerBase
     [HttpPut("members/{id:guid}/permissions")]
     [RemoteCommand(Invalidates = ["GetMembers"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SetMemberPermissions(
@@ -219,8 +234,16 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
+        if (IsCallersOwnMembership(member))
+            return Problem(detail: SelfEditDetail, statusCode: 400, title: "Bad Request");
+
         if ((request.DirectPermissions == null || request.DirectPermissions.Count == 0) && member.MemberRoles.Count == 0)
             return Problem(detail: "Cannot remove all permissions when member has no roles", statusCode: 400, title: "Bad Request");
+
+        var grantError = TenantPermissions.ValidateGrant(
+            request.DirectPermissions, HttpContext.GetGrantedScopes());
+        if (grantError != null)
+            return Problem(detail: grantError, statusCode: 403, title: "Forbidden");
 
         member.DirectPermissions = request.DirectPermissions;
         member.SysUpdatedAt = DateTime.UtcNow;
@@ -294,11 +317,19 @@ public class MemberInviteController : ControllerBase
     }
 
     private bool HasPermission(string permission)
-    {
-        var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
-        if (grantedScopes == null) return false;
-        return TenantPermissions.HasPermission(grantedScopes, permission);
-    }
+        => TenantPermissions.HasPermission(HttpContext.GetGrantedScopes(), permission);
+
+    private const string SelfEditDetail =
+        "Cannot change your own roles or permissions; ask another member with members.manage.";
+
+    /// <summary>
+    /// True when the target membership belongs to the calling subject. Role and permission
+    /// edits are routed away from the caller's own membership: a self-edit is the only way a
+    /// grant decision can widen the granter's own ceiling within a request, and it is also the
+    /// path by which a sole owner can strip their own administrative access.
+    /// </summary>
+    private bool IsCallersOwnMembership(TenantMemberEntity member)
+        => HttpContext.GetSubjectId() is { } subjectId && member.SubjectId == subjectId;
 }
 
 public record SetMemberRolesRequest(List<Guid> RoleIds);

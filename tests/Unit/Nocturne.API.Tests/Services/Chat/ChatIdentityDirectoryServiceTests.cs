@@ -136,10 +136,10 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         a.IsDefault.Should().BeTrue();
         b.IsDefault.Should().BeFalse();
 
-        await _service.SetDefaultAsync(b.Id, default);
+        await _service.SetDefaultAsync(b.Id, tenantScope: null, ct: default);
 
-        var aAfter = await _service.GetByIdAsync(a.Id, default);
-        var bAfter = await _service.GetByIdAsync(b.Id, default);
+        var aAfter = await _service.GetByIdAsync(a.Id, tenantScope: null, ct: default);
+        var bAfter = await _service.GetByIdAsync(b.Id, tenantScope: null, ct: default);
         aAfter!.IsDefault.Should().BeFalse();
         bAfter!.IsDefault.Should().BeTrue();
     }
@@ -147,8 +147,8 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     [Fact]
     public async Task SetDefaultAsync_throws_when_link_not_found()
     {
-        var act = async () => await _service.SetDefaultAsync(Guid.CreateVersion7(), default);
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        var act = async () => await _service.SetDefaultAsync(Guid.CreateVersion7(), tenantScope: null, ct: default);
+        await act.Should().ThrowAsync<KeyNotFoundException>();
     }
 
     // ---- RenameLabelAsync ----
@@ -157,8 +157,8 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     public async Task RenameLabelAsync_updates_label()
     {
         var a = await _service.CreateLinkAsync(Platform, UserA, Guid.CreateVersion7(), Guid.CreateVersion7(), "lily", "Lily", default);
-        await _service.RenameLabelAsync(a.Id, "rose", default);
-        var after = await _service.GetByIdAsync(a.Id, default);
+        await _service.RenameLabelAsync(a.Id, tenantScope: null, "rose", ct: default);
+        var after = await _service.GetByIdAsync(a.Id, tenantScope: null, ct: default);
         after!.Label.Should().Be("rose");
     }
 
@@ -168,7 +168,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
         await _service.CreateLinkAsync(Platform, UserA, Guid.CreateVersion7(), Guid.CreateVersion7(), "lily", "Lily", default);
         var b = await _service.CreateLinkAsync(Platform, UserA, Guid.CreateVersion7(), Guid.CreateVersion7(), "oliver", "Oliver", default);
 
-        var act = async () => await _service.RenameLabelAsync(b.Id, "lily", default);
+        var act = async () => await _service.RenameLabelAsync(b.Id, tenantScope: null, "lily", ct: default);
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
@@ -178,8 +178,8 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     public async Task UpdateDisplayNameAsync_updates_display_name()
     {
         var a = await _service.CreateLinkAsync(Platform, UserA, Guid.CreateVersion7(), Guid.CreateVersion7(), "lily", "Lily", default);
-        await _service.UpdateDisplayNameAsync(a.Id, "Lily Renamed", default);
-        var after = await _service.GetByIdAsync(a.Id, default);
+        await _service.UpdateDisplayNameAsync(a.Id, tenantScope: null, "Lily Renamed", ct: default);
+        var after = await _service.GetByIdAsync(a.Id, tenantScope: null, ct: default);
         after!.DisplayName.Should().Be("Lily Renamed");
     }
 
@@ -189,8 +189,8 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     public async Task RevokeAsync_hard_deletes_row()
     {
         var a = await _service.CreateLinkAsync(Platform, UserA, Guid.CreateVersion7(), Guid.CreateVersion7(), "lily", "Lily", default);
-        await _service.RevokeAsync(a.Id, default);
-        var after = await _service.GetByIdAsync(a.Id, default);
+        await _service.RevokeAsync(a.Id, tenantScope: null, ct: default);
+        var after = await _service.GetByIdAsync(a.Id, tenantScope: null, ct: default);
         after.Should().BeNull();
     }
 
@@ -273,7 +273,7 @@ public class ChatIdentityDirectoryServiceTests : IDisposable
     public async Task GetByIdAsync_returns_link_or_null()
     {
         var a = await _service.CreateLinkAsync(Platform, UserA, Guid.CreateVersion7(), Guid.CreateVersion7(), "lily", "Lily", default);
-        (await _service.GetByIdAsync(a.Id, default)).Should().NotBeNull();
-        (await _service.GetByIdAsync(Guid.CreateVersion7(), default)).Should().BeNull();
+        (await _service.GetByIdAsync(a.Id, tenantScope: null, ct: default)).Should().NotBeNull();
+        (await _service.GetByIdAsync(Guid.CreateVersion7(), tenantScope: null, ct: default)).Should().BeNull();
     }
 }

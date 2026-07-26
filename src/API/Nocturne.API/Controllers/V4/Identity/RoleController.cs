@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 
@@ -60,6 +61,10 @@ public class RoleController : ControllerBase
         if (!HasPermission(TenantPermissions.RolesManage))
             return Forbid();
 
+        var grantError = TenantPermissions.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
+        if (grantError != null)
+            return Problem(detail: grantError, statusCode: 403, title: "Forbidden");
+
         var role = await _roleService.CreateRoleAsync(
             _tenantAccessor.TenantId, request.Name, request.Description, request.Permissions, ct);
         return StatusCode(StatusCodes.Status201Created, role);
@@ -73,14 +78,23 @@ public class RoleController : ControllerBase
     [RemoteCommand(Invalidates = ["GetRoles"])]
     [ProducesResponseType(typeof(TenantRoleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateRole(Guid id, [FromBody] UpdateRoleRequest request, CancellationToken ct)
     {
         if (!HasPermission(TenantPermissions.RolesManage))
             return Forbid();
 
+        var grantError = TenantPermissions.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
+        if (grantError != null)
+            return Problem(detail: grantError, statusCode: 403, title: "Forbidden");
+
         try
         {
-            var role = await _roleService.UpdateRoleAsync(id, request.Name, request.Description, request.Permissions, ct);
+            var role = await _roleService.UpdateRoleAsync(
+                _tenantAccessor.TenantId, id, request.Name, request.Description, request.Permissions, ct);
+            if (role == null)
+                return NotFound();
+
             return Ok(role);
         }
         catch (InvalidOperationException ex)
@@ -103,7 +117,7 @@ public class RoleController : ControllerBase
         if (!HasPermission(TenantPermissions.RolesManage))
             return Forbid();
 
-        var result = await _roleService.DeleteRoleAsync(id, ct);
+        var result = await _roleService.DeleteRoleAsync(_tenantAccessor.TenantId, id, ct);
         if (!result.Success)
             return Problem(detail: result.ErrorDescription, statusCode: 400, title: result.ErrorCode);
 
@@ -111,11 +125,7 @@ public class RoleController : ControllerBase
     }
 
     private bool HasPermission(string permission)
-    {
-        var grantedScopes = HttpContext.Items["GrantedScopes"] as IReadOnlySet<string>;
-        if (grantedScopes == null) return false;
-        return TenantPermissions.HasPermission(grantedScopes, permission);
-    }
+        => TenantPermissions.HasPermission(HttpContext.GetGrantedScopes(), permission);
 }
 
 public record CreateRoleRequest(string Name, string? Description, List<string> Permissions);

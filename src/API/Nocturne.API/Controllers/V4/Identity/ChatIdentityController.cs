@@ -91,24 +91,40 @@ public class ChatIdentityController : ControllerBase
     [HttpPost("links/{id:guid}/set-default")]
     [RemoteCommand(Invalidates = ["GetLinks"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> SetDefault(Guid id, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
-        await _service.SetDefaultAsync(tenantId, id, ct);
+        try
+        {
+            await _service.SetDefaultAsync(tenantId, id, ct);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
         return NoContent();
     }
 
     [HttpPatch("links/{id:guid}")]
     [RemoteCommand(Invalidates = ["GetLinks"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> UpdateLink(
         Guid id, [FromBody] UpdateChatIdentityLinkRequest body, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
-        if (body.Label is not null)
-            await _service.RenameLabelAsync(tenantId, id, body.Label, ct);
-        if (body.DisplayName is not null)
-            await _service.UpdateDisplayNameAsync(tenantId, id, body.DisplayName, ct);
+        try
+        {
+            if (body.Label is not null)
+                await _service.RenameLabelAsync(tenantId, id, body.Label, ct);
+            if (body.DisplayName is not null)
+                await _service.UpdateDisplayNameAsync(tenantId, id, body.DisplayName, ct);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
         return NoContent();
     }
 
@@ -116,10 +132,18 @@ public class ChatIdentityController : ControllerBase
     [HttpDelete("links/{id:guid}")]
     [RemoteCommand(Invalidates = ["GetLinks"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> RevokeLink(Guid id, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
-        await _service.RevokeAsync(tenantId, id, ct);
+        try
+        {
+            await _service.RevokeAsync(tenantId, id, ct);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
         return NoContent();
     }
 

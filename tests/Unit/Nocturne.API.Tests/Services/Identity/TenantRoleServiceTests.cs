@@ -59,7 +59,7 @@ public class TenantRoleServiceTests : IDisposable
     {
         await _service.SeedRolesForTenantAsync(_tenantId);
         var ownerRole = await _context.TenantRoles.FirstAsync(r => r.Slug == "owner" && r.TenantId == _tenantId);
-        var result = await _service.DeleteRoleAsync(ownerRole.Id);
+        var result = await _service.DeleteRoleAsync(_tenantId, ownerRole.Id);
         result.Success.Should().BeFalse();
         result.ErrorCode.Should().Be("owner_role_protected");
     }
@@ -79,7 +79,7 @@ public class TenantRoleServiceTests : IDisposable
         );
         await _context.SaveChangesAsync();
 
-        var result = await _service.DeleteRoleAsync(followerRole.Id);
+        var result = await _service.DeleteRoleAsync(_tenantId, followerRole.Id);
         result.Success.Should().BeTrue();
 
         var remainingRoles = await _context.TenantMemberRoles.Where(mr => mr.TenantMemberId == member.Id).ToListAsync();
@@ -98,7 +98,7 @@ public class TenantRoleServiceTests : IDisposable
         _context.TenantMemberRoles.Add(new TenantMemberRoleEntity { Id = Guid.CreateVersion7(), TenantMemberId = member.Id, TenantRoleId = followerRole.Id });
         await _context.SaveChangesAsync();
 
-        var result = await _service.DeleteRoleAsync(followerRole.Id);
+        var result = await _service.DeleteRoleAsync(_tenantId, followerRole.Id);
         result.Success.Should().BeFalse();
         result.ErrorCode.Should().Be("members_would_lose_all_permissions");
     }
@@ -123,6 +123,67 @@ public class TenantRoleServiceTests : IDisposable
         var effective = await _service.GetEffectivePermissionsAsync(member.Id);
         effective.Should().BeEquivalentTo(
             ["glucose.read", "reports.read", "device.notify", "device.actuate", "treatments.read"]);
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_ReturnsNull_ForAnotherTenantsRole()
+    {
+        var otherRoleId = await SeedOtherTenantViewerRoleAsync();
+
+        var result = await _service.UpdateRoleAsync(
+            _tenantId, otherRoleId, "Pwned", null, [TenantPermissions.Superuser]);
+
+        result.Should().BeNull("a role ID from another tenant must not resolve");
+
+        var untouched = await _context.TenantRoles.AsNoTracking().FirstAsync(r => r.Id == otherRoleId);
+        untouched.Name.Should().Be("Viewer");
+        untouched.Permissions.Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task DeleteRoleAsync_ReportsNotFound_ForAnotherTenantsRole()
+    {
+        var otherRoleId = await SeedOtherTenantViewerRoleAsync();
+
+        var result = await _service.DeleteRoleAsync(_tenantId, otherRoleId);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("role_not_found");
+        (await _context.TenantRoles.AsNoTracking().AnyAsync(r => r.Id == otherRoleId)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetRoleByIdAsync_ReturnsNull_ForAnotherTenantsRole()
+    {
+        var otherRoleId = await SeedOtherTenantViewerRoleAsync();
+
+        (await _service.GetRoleByIdAsync(_tenantId, otherRoleId)).Should().BeNull();
+    }
+
+    private async Task<Guid> SeedOtherTenantViewerRoleAsync()
+    {
+        var otherTenantId = Guid.CreateVersion7();
+        _context.Tenants.Add(new TenantEntity
+        {
+            Id = otherTenantId,
+            Slug = "other",
+            DisplayName = "Other Tenant",
+        });
+
+        var role = new TenantRoleEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = otherTenantId,
+            Name = "Viewer",
+            Slug = "viewer",
+            Permissions = [TenantPermissions.GlucoseRead],
+            IsSystem = true,
+        };
+        _context.TenantRoles.Add(role);
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        return role.Id;
     }
 
     public void Dispose() => _context.Dispose();

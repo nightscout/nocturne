@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
@@ -150,6 +151,7 @@ public class TenantController : ControllerBase
     [HttpPost("{id:guid}/invites")]
     [RemoteCommand(Invalidates = ["GetById", "ListInvites"])]
     [ProducesResponseType(typeof(MemberInviteResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateInvite(
         Guid id, [FromBody] CreateMemberInviteRequest request, CancellationToken ct)
@@ -158,17 +160,25 @@ public class TenantController : ControllerBase
             return Forbid();
 
         var authContext = HttpContext.Items["AuthContext"] as AuthContext;
-        var result = await _memberInviteService.CreateInviteAsync(
-            id,
-            authContext!.SubjectId!.Value,
-            request.RoleIds,
-            request.DirectPermissions,
-            request.Label,
-            request.ExpiresInDays,
-            request.MaxUses,
-            request.LimitTo24Hours);
+        try
+        {
+            var result = await _memberInviteService.CreateInviteAsync(
+                id,
+                authContext!.SubjectId!.Value,
+                HttpContext.GetGrantedScopes(),
+                request.RoleIds,
+                request.DirectPermissions,
+                request.Label,
+                request.ExpiresInDays,
+                request.MaxUses,
+                request.LimitTo24Hours);
 
-        return StatusCode(StatusCodes.Status201Created, result);
+            return StatusCode(StatusCodes.Status201Created, result);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
+        }
     }
 
     /// <inheritdoc cref="IMemberInviteService.GetInvitesForTenantAsync"/>
