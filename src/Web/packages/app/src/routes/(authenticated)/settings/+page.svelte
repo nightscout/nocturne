@@ -16,6 +16,7 @@
     HeartHandshake,
     Building2,
     Shield,
+    UserPlus,
     ChevronRight,
   } from "lucide-svelte";
   import type { PageData } from "./$types";
@@ -107,6 +108,12 @@
       description: "Tenant details and platform administrators.",
       href: "/settings/admin/tenants",
       icon: Building2,
+    },
+    {
+      title: "Access Requests",
+      description: "Review people asking to join this instance.",
+      href: "/settings/access-requests",
+      icon: UserPlus,
     },
   ];
 

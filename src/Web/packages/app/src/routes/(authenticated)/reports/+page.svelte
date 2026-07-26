@@ -68,7 +68,10 @@
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
-  import type { ScoreCardStatus } from "$lib/components/reports/GlucoseScoreCard.svelte";
+  import {
+    type ScoreCardStatus,
+    scoreCardLabel,
+  } from "$lib/components/reports/score-card-status";
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
@@ -157,17 +160,6 @@
       critical: "from-status-critical to-status-critical",
     };
     return colors[status ?? "good"];
-  }
-
-  function getStatusLabel(status: ScoreCardStatus): string {
-    const labels = {
-      excellent: "Excellent",
-      good: "Good",
-      fair: "Fair",
-      "needs-attention": "Needs Attention",
-      critical: "Critical",
-    };
-    return labels[status ?? "good"];
   }
 
   // Animation delay helper
@@ -296,7 +288,7 @@
                   </div>
                   <Badge variant="secondary" class="mt-2 gap-1.5 px-3 py-1">
                     <Sparkles class="h-3 w-3" />
-                    {getStatusLabel(tirStatus)}
+                    {scoreCardLabel(tirStatus)}
                   </Badge>
                 </div>
 

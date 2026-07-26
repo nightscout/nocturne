@@ -42,6 +42,7 @@ import {
 	TrendingUp,
 	TriangleAlert,
 	User,
+	UserPlus,
 	Users,
 	UtensilsCrossed,
 	Wrench,
@@ -365,6 +366,15 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["tenants", "organizations", "accounts", "platform admin"],
 		icon: Building,
 		href: "/settings/admin/tenants",
+		role: "platform_admin",
+	},
+	{
+		id: "page-access-requests",
+		label: "Access Requests",
+		group: "settings",
+		keywords: ["access requests", "join", "approve", "pending users"],
+		icon: UserPlus,
+		href: "/settings/access-requests",
 		role: "platform_admin",
 	},
 

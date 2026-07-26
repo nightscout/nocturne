@@ -298,7 +298,9 @@
 
     <!-- === Read Access Log Tab === -->
     <Tabs.Content value="reads" class="space-y-4">
-      {#if !config?.readAuditEnabled && !readAuditEnabled}
+      <!-- Gated on the saved config, not the switch: flipping the switch without
+           saving would otherwise reveal an empty table the server isn't filling. -->
+      {#if !config?.readAuditEnabled}
         <!-- Empty state: read audit not enabled -->
         <Card.Root>
           <Card.Content class="flex flex-col items-center justify-center py-12 text-center">

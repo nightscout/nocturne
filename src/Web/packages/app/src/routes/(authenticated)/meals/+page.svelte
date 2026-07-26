@@ -353,8 +353,9 @@
         timeOffsetMinutes: 0,
       });
       toast.success("Meal match accepted");
-      mealsQuery.refresh();
-      suggestionsQuery.refresh();
+      // Awaited so the row's pending state covers the refresh too, not just the
+      // command; otherwise the row is clickable again before it disappears.
+      await Promise.all([mealsQuery.refresh(), suggestionsQuery.refresh()]);
     } catch (err) {
       console.error("Failed to accept match:", err);
       toast.error("Failed to accept match");
@@ -365,7 +366,7 @@
     try {
       await dismissMatch({ foodEntryId: match.foodEntryId! });
       toast.success("Match dismissed");
-      suggestionsQuery.refresh();
+      await suggestionsQuery.refresh();
     } catch (err) {
       console.error("Failed to dismiss match:", err);
       toast.error("Failed to dismiss match");

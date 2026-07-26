@@ -12,7 +12,7 @@
 	import * as Collapsible from '$lib/components/ui/collapsible';
 
 	interface Props {
-		onadd: (food: Food) => void;
+		onadd: (food: Food) => Promise<void> | void;
 		onclose: () => void;
 	}
 
@@ -41,7 +41,10 @@
 	let showDetails = $state(false);
 	let nameInput: HTMLInputElement | undefined = $state();
 
-	const canSave = $derived(!!draft.name && draft.carbs !== undefined && !!draft.portion);
+	let saving = $state(false);
+	const canSave = $derived(
+		!saving && !!draft.name && draft.carbs !== undefined && !!draft.portion
+	);
 
 	const subcategories = $derived.by(() => {
 		if (!draft.category) return [];
@@ -58,9 +61,16 @@
 		nameInput?.focus();
 	});
 
-	function submit(addAnother: boolean) {
+	async function submit(addAnother: boolean) {
+		// The add is awaited and the buttons disabled meanwhile: a second click
+		// through an in-flight create would otherwise add the food twice.
 		if (!canSave) return;
-		onadd(draft);
+		saving = true;
+		try {
+			await onadd(draft);
+		} finally {
+			saving = false;
+		}
 		if (addAnother) {
 			const keepPortion = draft.portion;
 			const keepUnit = draft.unit;
