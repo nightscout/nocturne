@@ -6,9 +6,14 @@ import { env as publicEnv } from "$env/dynamic/public";
 import { dev } from "$app/environment";
 import {
   getApiBaseUrl,
-  getHashedInstanceKey,
   createServerApiClient,
 } from "$lib/server/api-client-factory";
+import {
+  getHashedInstanceKey,
+  INSTANCE_KEY_HEADER,
+  INSTANCE_SERVICE_HEADER,
+  INSTANCE_SERVICE_NAME,
+} from "$lib/server/instance-key";
 import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
@@ -67,10 +72,10 @@ const authHandle: Handle = async ({ event, resolve }) => {
 
         const hashedKey = getHashedInstanceKey();
         if (hashedKey) {
-          headers["X-Instance-Key"] = hashedKey;
+          headers[INSTANCE_KEY_HEADER] = hashedKey;
           // Genuine SSR service call — declare the service so the API honors
           // the instance key (a bare key is ignored).
-          headers["X-Instance-Service"] = "nocturne-web";
+          headers[INSTANCE_SERVICE_HEADER] = INSTANCE_SERVICE_NAME;
         }
 
         const sessionRes = await fetch(`${apiBaseUrl}/api/auth/oidc/session`, { headers });

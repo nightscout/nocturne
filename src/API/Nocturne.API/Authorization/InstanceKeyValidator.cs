@@ -1,4 +1,3 @@
-using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 
 namespace Nocturne.API.Authorization;
@@ -48,11 +47,7 @@ public class InstanceKeyValidator : IInstanceKeyValidator
 
     public InstanceKeyValidator(IConfiguration configuration)
     {
-        var instanceKey =
-            configuration[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
-            ?? configuration[ServiceNames.ConfigKeys.InstanceKey]
-            ?? "";
-        _instanceKeyHash = !string.IsNullOrEmpty(instanceKey) ? HashUtils.Sha256Hex(instanceKey) : "";
+        _instanceKeyHash = InstanceKeyDigest.Resolve(configuration);
     }
 
     /// <inheritdoc />

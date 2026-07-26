@@ -1,7 +1,8 @@
 import { createBot, registerAllCommands, AlertDeliveryHandler, type BotOptions, type PlatformCredentials } from "@nocturne/bot";
 import type { BotApiClient, AlertDispatchEvent } from "@nocturne/bot";
 import { env } from "$env/dynamic/private";
-import { createServerApiClient, getApiBaseUrl, getHashedInstanceKey } from "$lib/server/api-client-factory";
+import { createServerApiClient, getApiBaseUrl } from "$lib/server/api-client-factory";
+import { getHashedInstanceKey } from "$lib/server/instance-key";
 import { fetchDecryptedPlatformCredentials } from "./platform-credentials";
 import type { PlatformCredentials as ApiPlatformCredentials } from "$api";
 

@@ -6,6 +6,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Alerts.Providers;
+using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Xunit;
@@ -31,10 +34,15 @@ public class ChatBotProviderTests
         Severity = AlertRuleSeverity.Critical,
     };
 
+    private const string TestInstanceKey = "test-instance-key";
+    private const string TestTenantSlug = "acme";
+
     private static ChatBotProvider CreateProvider(
         MockHttpMessageHandler handler,
         string? webUrl = "https://web.example.com",
-        string? baseUrl = null)
+        string? baseUrl = null,
+        string? instanceKey = TestInstanceKey,
+        string? tenantSlug = TestTenantSlug)
     {
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost") };
 
@@ -46,10 +54,23 @@ public class ChatBotProviderTests
         var configMock = new Mock<IConfiguration>();
         configMock.Setup(c => c["WEB_URL"]).Returns(webUrl);
         configMock.Setup(c => c["BaseUrl"]).Returns(baseUrl);
+        configMock.Setup(c => c["INSTANCE_KEY"]).Returns(instanceKey);
+
+        var tenantAccessorMock = new Mock<ITenantAccessor>();
+        if (tenantSlug is not null)
+        {
+            tenantAccessorMock
+                .Setup(a => a.Context)
+                .Returns(new TenantContext(Guid.NewGuid(), tenantSlug, "Acme", true));
+        }
 
         var logger = NullLoggerFactory.Instance.CreateLogger<ChatBotProvider>();
 
-        return new ChatBotProvider(httpClientFactoryMock.Object, configMock.Object, logger);
+        return new ChatBotProvider(
+            httpClientFactoryMock.Object,
+            configMock.Object,
+            tenantAccessorMock.Object,
+            logger);
     }
 
     [Fact]
@@ -90,6 +111,72 @@ public class ChatBotProviderTests
         root.GetProperty("channelType").GetString().Should().Be("slack_dm");
         root.GetProperty("destination").GetString().Should().Be("dest-1");
         root.TryGetProperty("payload", out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SendAsync_SendsInstanceKeyServiceCredential()
+    {
+        // Arrange -- the dispatch route is internet-reachable through the gateway and
+        // authenticates the caller on the instance-key digest plus the service marker.
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler);
+
+        // Act
+        await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        // Assert
+        handler.CapturedRequest.Should().NotBeNull();
+        handler.CapturedRequest!.Headers
+            .GetValues(ServiceNames.Headers.InstanceKey).Single()
+            .Should().Be(HashUtils.Sha256Hex(TestInstanceKey));
+        handler.CapturedRequest.Headers
+            .GetValues(ServiceNames.Headers.InstanceService).Single()
+            .Should().Be(ServiceNames.NocturneApi);
+    }
+
+    [Fact]
+    public async Task SendAsync_NamesTargetTenantInBody()
+    {
+        // Arrange
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler);
+
+        // Act
+        await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        // Assert -- the route scopes its API calls to this slug rather than a forwarded host
+        handler.CapturedContent.Should().NotBeNullOrEmpty();
+        JsonDocument.Parse(handler.CapturedContent!).RootElement
+            .GetProperty("tenantSlug").GetString()
+            .Should().Be(TestTenantSlug);
+    }
+
+    [Fact]
+    public async Task SendAsync_SkipsDispatch_WhenInstanceKeyNotConfigured()
+    {
+        // Arrange
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler, instanceKey: null);
+
+        // Act
+        await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        // Assert -- an unauthenticated dispatch would be rejected, so none is sent
+        handler.CapturedRequest.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SendAsync_SkipsDispatch_WhenNoTenantResolved()
+    {
+        // Arrange
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler, tenantSlug: null);
+
+        // Act
+        await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+
+        // Assert
+        handler.CapturedRequest.Should().BeNull();
     }
 
     [Fact]

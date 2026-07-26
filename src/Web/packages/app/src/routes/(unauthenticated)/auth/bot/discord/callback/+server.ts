@@ -3,8 +3,8 @@ import { error, redirect } from "@sveltejs/kit";
 import {
 	createServerApiClient,
 	getApiBaseUrl,
-	getHashedInstanceKey,
 } from "$lib/server/api-client-factory";
+import { getHashedInstanceKey } from "$lib/server/instance-key";
 import { verifyOAuthLinkState } from "$lib/server/bot/oauth-state";
 import { getDiscordOAuthConfig } from "$lib/server/bot/platform-credentials";
 

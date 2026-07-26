@@ -3,8 +3,8 @@ import type { PlatformCredentials } from "$api";
 import {
 	createServerApiClient,
 	getApiBaseUrl,
-	getHashedInstanceKey,
 } from "$lib/server/api-client-factory";
+import { getHashedInstanceKey } from "$lib/server/instance-key";
 
 /**
  * Fetches all decrypted platform credentials over the instance-key

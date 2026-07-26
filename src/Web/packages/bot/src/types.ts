@@ -124,4 +124,10 @@ export interface AlertDispatchEvent {
   channelType: string;
   destination: string;
   payload: AlertPayload;
+  /**
+   * Slug of the tenant the alert belongs to. Sent by the API so the dispatch
+   * route resolves the tenant from the request body rather than a forwarded
+   * host header.
+   */
+  tenantSlug: string;
 }

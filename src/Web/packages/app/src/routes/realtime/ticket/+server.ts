@@ -4,9 +4,9 @@ import { env } from "$env/dynamic/private";
 import { signHandshakeTicket } from "@nocturne/bridge/ticket";
 import {
   getApiBaseUrl,
-  getHashedInstanceKey,
   createServerHttpClient,
 } from "$lib/server/api-client-factory";
+import { getHashedInstanceKey } from "$lib/server/instance-key";
 import { getEffectiveHost, getOriginalProto } from "$lib/server/request-host";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
 

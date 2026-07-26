@@ -1,8 +1,12 @@
-import { createHash } from "crypto";
 import { env } from "$env/dynamic/private";
 import { env as publicEnv } from "$env/dynamic/public";
 import { ApiClient } from "$lib/api/api-client.generated";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
+import {
+  INSTANCE_KEY_HEADER,
+  INSTANCE_SERVICE_HEADER,
+  INSTANCE_SERVICE_NAME,
+} from "./instance-key";
 import {
   propagateAuthCookies,
   type CookieSetter,
@@ -14,26 +18,6 @@ import {
 export function getApiBaseUrl(): string | null {
   return env.NOCTURNE_API_URL || publicEnv.PUBLIC_API_URL || null;
 }
-
-/**
- * Helper to get the hashed instance key for service authentication.
- */
-export function getHashedInstanceKey(): string | null {
-  const instanceKey = env.INSTANCE_KEY;
-  return instanceKey
-    ? createHash("sha256").update(instanceKey).digest("hex").toLowerCase()
-    : null;
-}
-
-/**
- * Header naming the trusted service presenting the instance key. The API's
- * InstanceKeyHandler only authenticates the instance key as admin when this
- * marker is present, so a bare key accidentally forwarded onto an end-user
- * request cannot elevate that request and bypass per-tenant public access.
- * Must stay in sync with `ServiceNames.Headers.InstanceService` on the API.
- */
-const INSTANCE_SERVICE_HEADER = "X-Instance-Service";
-const INSTANCE_SERVICE_NAME = "nocturne-web";
 
 export interface ServerHttpClientOptions {
   accessToken?: string;
@@ -70,7 +54,7 @@ export function createServerHttpClient(
       const headers = new Headers(init?.headers);
 
       if (options?.hashedInstanceKey) {
-        headers.set("X-Instance-Key", options.hashedInstanceKey);
+        headers.set(INSTANCE_KEY_HEADER, options.hashedInstanceKey);
         // Declare this as a genuine service call so the API honors the key.
         headers.set(INSTANCE_SERVICE_HEADER, INSTANCE_SERVICE_NAME);
       }

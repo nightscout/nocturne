@@ -1,5 +1,8 @@
 using System.Net.Http.Json;
+using System.Text.Json;
+using Nocturne.API.Authorization;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 
@@ -10,17 +13,34 @@ namespace Nocturne.API.Services.Alerts.Providers;
 /// to the Nocturne bot service over HTTP.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The bot endpoint is derived from <c>WEB_URL</c> when set (the internal web
 /// endpoint wired by the AppHost), otherwise from the deployment's public base
 /// URL (<see cref="ServiceNames.ConfigKeys.BaseUrl"/>) — which reaches the same
 /// SvelteKit dispatch route through the gateway. Delivery is skipped with a
 /// warning when neither is configured.
+/// </para>
+/// <para>
+/// The dispatch route is reachable from the internet through the gateway, so the
+/// request carries the instance-key service credential
+/// (<see cref="ServiceNames.Headers.InstanceKey"/> +
+/// <see cref="ServiceNames.Headers.InstanceService"/>) and names the target tenant
+/// in the body. Delivery is skipped when either is unavailable.
+/// </para>
 /// </remarks>
 internal sealed class ChatBotProvider(
     IHttpClientFactory httpClientFactory,
     IConfiguration configuration,
+    ITenantAccessor tenantAccessor,
     ILogger<ChatBotProvider> logger)
 {
+    /// <summary>
+    /// Matches the camelCase body the SvelteKit dispatch route parses. <c>PostAsJsonAsync</c>
+    /// applies these defaults implicitly; they are explicit here because the request is
+    /// built by hand to carry the service-auth headers.
+    /// </summary>
+    private static readonly JsonSerializerOptions DispatchJsonOptions = new(JsonSerializerDefaults.Web);
+
     /// <summary>
     /// The set of <see cref="ChannelType"/> values that this provider can deliver to.
     /// </summary>
@@ -58,18 +78,47 @@ internal sealed class ChatBotProvider(
             return;
         }
 
+        var instanceKeyDigest = InstanceKeyDigest.Resolve(configuration);
+        if (string.IsNullOrEmpty(instanceKeyDigest))
+        {
+            logger.LogError(
+                "No instance key configured, cannot authenticate the chat bot dispatch for delivery {DeliveryId}",
+                deliveryId);
+            return;
+        }
+
+        // The dispatch route resolves the tenant from this slug instead of a forwarded
+        // host header, so a missing slug means the request cannot be scoped and is dropped.
+        var tenantSlug = tenantAccessor.Context?.Slug;
+        if (string.IsNullOrEmpty(tenantSlug))
+        {
+            logger.LogError(
+                "No tenant resolved, cannot dispatch chat bot alert for delivery {DeliveryId}",
+                deliveryId);
+            return;
+        }
+
         try
         {
             var client = httpClientFactory.CreateClient("ChatBot");
             var dispatchUrl = $"{webUrl.TrimEnd('/')}/api/v4/bot/dispatch";
 
-            var response = await client.PostAsJsonAsync(dispatchUrl, new
+            using var request = new HttpRequestMessage(HttpMethod.Post, dispatchUrl)
             {
-                DeliveryId = deliveryId,
-                ChannelType = channelType,
-                Destination = destination,
-                Payload = payload,
-            }, ct);
+                Content = JsonContent.Create(new
+                {
+                    DeliveryId = deliveryId,
+                    ChannelType = channelType,
+                    Destination = destination,
+                    Payload = payload,
+                    TenantSlug = tenantSlug,
+                }, options: DispatchJsonOptions),
+            };
+
+            request.Headers.Add(ServiceNames.Headers.InstanceKey, instanceKeyDigest);
+            request.Headers.Add(ServiceNames.Headers.InstanceService, ServiceNames.NocturneApi);
+
+            var response = await client.SendAsync(request, ct);
 
             response.EnsureSuccessStatusCode();
 
