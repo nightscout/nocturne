@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -23,8 +25,17 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 [Route("api/v4/profile")]
 [Authorize]
 [Produces("application/json")]
-public class ProfileController : ControllerBase
+public class ProfileController : ControllerBase, IWriteScopedController
 {
+    /// <summary>
+    /// The OAuth scope every write action on this controller requires. Therapy settings, basal,
+    /// carb ratio, sensitivity and target range schedules are the therapy category — governed by
+    /// <c>therapy.read</c> for reads, and gated with <c>therapy.readwrite</c> on the V1 and V3
+    /// profile write endpoints. The class-level <c>[Authorize]</c> alone is satisfied by read-only
+    /// credentials such as a guest-link session.
+    /// </summary>
+    public string WriteScope => OAuthScopes.TherapyReadWrite;
+
     private readonly ITherapySettingsRepository _therapyRepo;
     private readonly IBasalScheduleRepository _basalRepo;
     private readonly ICarbRatioScheduleRepository _carbRatioRepo;
@@ -152,6 +163,7 @@ public class ProfileController : ControllerBase
     /// Set a profile as the active (default) profile. Clears IsDefault on all other profiles.
     /// </summary>
     [HttpPost("set-default/{profileName}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetTherapySettings"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -294,6 +306,7 @@ public class ProfileController : ControllerBase
     /// Create a new therapy settings record
     /// </summary>
     [HttpPost("settings")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(Invalidates = ["GetProfileSummary", "GetTherapySettings"])]
     [ProducesResponseType(typeof(TherapySettings), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -312,6 +325,7 @@ public class ProfileController : ControllerBase
     /// Update an existing therapy settings record
     /// </summary>
     [HttpPut("settings/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(
         Invalidates = ["GetProfileSummary", "GetTherapySettings", "GetTherapySettingsById"]
     )]
@@ -341,6 +355,7 @@ public class ProfileController : ControllerBase
     /// Delete a therapy settings record
     /// </summary>
     [HttpDelete("settings/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetTherapySettings"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -396,6 +411,7 @@ public class ProfileController : ControllerBase
     /// Create a new basal schedule
     /// </summary>
     [HttpPost("basal")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(Invalidates = ["GetProfileSummary", "GetBasalSchedulesByName"])]
     [ProducesResponseType(typeof(BasalSchedule), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -414,6 +430,7 @@ public class ProfileController : ControllerBase
     /// Update an existing basal schedule
     /// </summary>
     [HttpPut("basal/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(
         Invalidates = ["GetProfileSummary", "GetBasalSchedulesByName", "GetBasalScheduleById"]
     )]
@@ -443,6 +460,7 @@ public class ProfileController : ControllerBase
     /// Delete a basal schedule
     /// </summary>
     [HttpDelete("basal/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetBasalSchedulesByName"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -498,6 +516,7 @@ public class ProfileController : ControllerBase
     /// Create a new carb ratio schedule
     /// </summary>
     [HttpPost("carb-ratio")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetCarbRatioSchedulesByName"])]
     [ProducesResponseType(typeof(CarbRatioSchedule), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -516,6 +535,7 @@ public class ProfileController : ControllerBase
     /// Update an existing carb ratio schedule
     /// </summary>
     [HttpPut("carb-ratio/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(
         Invalidates = [
             "GetProfileSummary",
@@ -549,6 +569,7 @@ public class ProfileController : ControllerBase
     /// Delete a carb ratio schedule
     /// </summary>
     [HttpDelete("carb-ratio/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetCarbRatioSchedulesByName"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -604,6 +625,7 @@ public class ProfileController : ControllerBase
     /// Create a new sensitivity schedule
     /// </summary>
     [HttpPost("sensitivity")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetSensitivitySchedulesByName"])]
     [ProducesResponseType(typeof(SensitivitySchedule), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -626,6 +648,7 @@ public class ProfileController : ControllerBase
     /// Update an existing sensitivity schedule
     /// </summary>
     [HttpPut("sensitivity/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(
         Invalidates = [
             "GetProfileSummary",
@@ -659,6 +682,7 @@ public class ProfileController : ControllerBase
     /// Delete a sensitivity schedule
     /// </summary>
     [HttpDelete("sensitivity/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetSensitivitySchedulesByName"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -717,6 +741,7 @@ public class ProfileController : ControllerBase
     /// Create a new target range schedule
     /// </summary>
     [HttpPost("target-range")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetTargetRangeSchedulesByName"])]
     [ProducesResponseType(typeof(TargetRangeSchedule), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -739,6 +764,7 @@ public class ProfileController : ControllerBase
     /// Update an existing target range schedule
     /// </summary>
     [HttpPut("target-range/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(
         Invalidates = [
             "GetProfileSummary",
@@ -772,6 +798,7 @@ public class ProfileController : ControllerBase
     /// Delete a target range schedule
     /// </summary>
     [HttpDelete("target-range/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetProfileSummary", "GetTargetRangeSchedulesByName"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

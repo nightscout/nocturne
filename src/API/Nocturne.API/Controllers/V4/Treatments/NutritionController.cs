@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Treatments;
@@ -9,6 +10,7 @@ using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -44,8 +46,17 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [Route("api/v4/nutrition")]
 [Authorize]
 [Produces("application/json")]
-public class NutritionController : ControllerBase
+public class NutritionController : ControllerBase, IWriteScopedController
 {
+    /// <summary>
+    /// The OAuth scope every write action on this controller requires. Carb intakes, and the boluses
+    /// <c>POST /meals</c> creates alongside them, are the treatments category
+    /// (<see cref="ShareDataCategories"/>), gated with <c>treatments.readwrite</c> on the V1 and V3
+    /// treatment write endpoints. The per-carb-intake food breakdown is keyed by carb intake and
+    /// reads the food catalog without mutating it, so it is gated with the treatment it describes.
+    /// </summary>
+    public string WriteScope => OAuthScopes.TreatmentsReadWrite;
+
     private readonly ICarbIntakeRepository _carbIntakeRepo;
     private readonly IBolusRepository _bolusRepo;
     private readonly ITreatmentFoodService _treatmentFoodService;
@@ -107,6 +118,7 @@ public class NutritionController : ControllerBase
     /// Create a new carb intake
     /// </summary>
     [HttpPost("carbs")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(Invalidates = ["GetCarbIntakes"])]
     [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -131,6 +143,7 @@ public class NutritionController : ControllerBase
     /// is persisted.
     /// </remarks>
     [HttpPost("carbs/bulk")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(CarbIntake[]), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CarbIntake[]>> CreateCarbIntakesBulk(
@@ -176,6 +189,7 @@ public class NutritionController : ControllerBase
     /// Update an existing carb intake
     /// </summary>
     [HttpPut("carbs/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(Invalidates = ["GetCarbIntakes", "GetCarbIntakeById"])]
     [ProducesResponseType(typeof(CarbIntake), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -224,6 +238,7 @@ public class NutritionController : ControllerBase
     /// Delete a carb intake
     /// </summary>
     [HttpDelete("carbs/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetCarbIntakes"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -244,6 +259,7 @@ public class NutritionController : ControllerBase
     /// Delete a carb intake by its external sync identifier (dataSource + syncIdentifier pair).
     /// </summary>
     [HttpDelete("carbs/by-sync-id")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -280,6 +296,7 @@ public class NutritionController : ControllerBase
     /// Add a food breakdown entry to a carb intake record.
     /// </summary>
     [HttpPost("carbs/{id:guid}/foods")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetCarbIntakeFoods"])]
     [ProducesResponseType(typeof(TreatmentFoodBreakdown), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -310,6 +327,7 @@ public class NutritionController : ControllerBase
     /// Update a food breakdown entry.
     /// </summary>
     [HttpPut("carbs/{id:guid}/foods/{foodEntryId:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetCarbIntakeFoods"])]
     [ProducesResponseType(typeof(TreatmentFoodBreakdown), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -342,6 +360,7 @@ public class NutritionController : ControllerBase
     /// Remove a food breakdown entry.
     /// </summary>
     [HttpDelete("carbs/{id:guid}/foods/{foodEntryId:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetCarbIntakeFoods"])]
     [ProducesResponseType(typeof(TreatmentFoodBreakdown), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -374,6 +393,7 @@ public class NutritionController : ControllerBase
     /// response returns 200 instead of 201.
     /// </summary>
     [HttpPost("meals")]
+    [RequireDeclaredWriteScope]
     [RemoteForm(Invalidates = ["GetCarbIntakes", "GetMeals"])]
     [ProducesResponseType(typeof(CreateMealResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(CreateMealResponse), StatusCodes.Status200OK)]

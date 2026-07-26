@@ -29,6 +29,12 @@ public class RequireScopeAttribute : Attribute, IAuthorizationFilter
     private readonly bool _requireAll;
 
     /// <summary>
+    /// The scopes this attribute requires, in declaration order. Read by the guard test that asserts
+    /// each write action requires the scope for its data category.
+    /// </summary>
+    public IReadOnlyList<string> Scopes => _requiredScopes;
+
+    /// <summary>
     /// Require one or more OAuth scopes.
     /// By default, any one of the listed scopes is sufficient (OR logic).
     /// </summary>

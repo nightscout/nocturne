@@ -2,9 +2,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -39,8 +41,16 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 [Tags("Treatments")]
 [Route("api/v4/foods")]
 [ClientPropertyName("foodsV4")]
-public class FoodsController : ControllerBase
+public class FoodsController : ControllerBase, IWriteScopedController
 {
+    /// <summary>
+    /// The OAuth scope every write action on this controller requires. The food catalog
+    /// (<c>foods</c>) is the food category, and the V1 and V3 food write endpoints are gated with
+    /// <c>food.readwrite</c>; the per-subject favourite list is the same category. The per-action
+    /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session.
+    /// </summary>
+    public string WriteScope => OAuthScopes.FoodReadWrite;
+
     private const string DefaultUserId = "00000000-0000-0000-0000-000000000001";
 
     private readonly NocturneDbContext _context;
@@ -98,6 +108,7 @@ public class FoodsController : ControllerBase
     /// Create a new food record.
     /// </summary>
     [HttpPost]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetFoods", "GetFavorites", "GetRecentFoods"])]
     [Authorize]
     [ProducesResponseType(typeof(Food), StatusCodes.Status201Created)]
@@ -119,6 +130,7 @@ public class FoodsController : ControllerBase
     /// Update an existing food record by ID.
     /// </summary>
     [HttpPut("{foodId}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetFoods", "GetFood", "GetFavorites", "GetRecentFoods"])]
     [Authorize]
     [ProducesResponseType(typeof(Food), StatusCodes.Status200OK)]
@@ -157,6 +169,7 @@ public class FoodsController : ControllerBase
     /// Add a food to favorites.
     /// </summary>
     [HttpPost("{foodId}/favorite")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetFavorites"])]
     [Authorize]
     public async Task<ActionResult> AddFavorite(string foodId)
@@ -182,6 +195,7 @@ public class FoodsController : ControllerBase
     /// Remove a food from favorites.
     /// </summary>
     [HttpDelete("{foodId}/favorite")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetFavorites"])]
     [Authorize]
     public async Task<ActionResult> RemoveFavorite(string foodId)
@@ -256,6 +270,7 @@ public class FoodsController : ControllerBase
     /// <param name="foodId">The food ID to delete.</param>
     /// <param name="attributionMode">How to handle existing attributions: "clear" (default) sets them to Other, "remove" deletes them.</param>
     [HttpDelete("{foodId}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetFavorites", "GetRecentFoods"])]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

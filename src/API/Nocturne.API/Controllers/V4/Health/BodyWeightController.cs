@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Health;
 
@@ -18,8 +20,18 @@ namespace Nocturne.API.Controllers.V4.Health;
 [Tags("Health")]
 [Route("api/v4/body-weight")]
 [Authorize]
-public class BodyWeightController : ControllerBase
+public class BodyWeightController : ControllerBase, IWriteScopedController
 {
+    /// <summary>
+    /// The OAuth scope every write action on this controller requires. Body weight has no category
+    /// scope of its own: the record is patient clinical configuration, written from the Patient
+    /// Record settings form together with the therapy settings, so it is gated on
+    /// <c>therapy.readwrite</c>. The <c>health.readwrite</c> alias cannot be required —
+    /// <see cref="OAuthScopes.Normalize"/> expands it into per-category scopes, so no granted set
+    /// ever contains it.
+    /// </summary>
+    public string WriteScope => OAuthScopes.TherapyReadWrite;
+
     private readonly IBodyWeightService _bodyWeightService;
     private readonly ILogger<BodyWeightController> _logger;
 
@@ -92,6 +104,7 @@ public class BodyWeightController : ControllerBase
     /// Create a single body weight record
     /// </summary>
     [HttpPost]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetBodyWeights"])]
     [ProducesResponseType(typeof(BodyWeight), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -120,6 +133,7 @@ public class BodyWeightController : ControllerBase
     /// Create one or more body weight records (single object or array)
     /// </summary>
     [HttpPost("batch")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(IEnumerable<BodyWeight>), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -174,6 +188,7 @@ public class BodyWeightController : ControllerBase
     /// Update an existing body weight record
     /// </summary>
     [HttpPut("{id}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetBodyWeights", "GetBodyWeight"])]
     [ProducesResponseType(typeof(BodyWeight), 200)]
     [ProducesResponseType(404)]
@@ -203,6 +218,7 @@ public class BodyWeightController : ControllerBase
     /// Delete a body weight record by ID
     /// </summary>
     [HttpDelete("{id}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetBodyWeights", "GetBodyWeight"])]
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]

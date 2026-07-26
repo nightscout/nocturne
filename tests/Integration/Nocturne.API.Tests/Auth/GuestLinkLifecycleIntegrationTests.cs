@@ -347,6 +347,37 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
     }
 
     [Fact]
+    public async Task GuestSession_CannotWriteV4TherapySettings()
+    {
+        // ProfileController does not derive from V4CrudControllerBase, so it carries the write-scope
+        // gate on its own actions. A guest session holds therapy.read at most; therapy settings are
+        // the values the bolus calculator reads.
+        var code = await CreateGuestLinkCodeAsync();
+
+        var handler = new HttpClientHandler { UseCookies = true };
+        using var cookieClient = new HttpClient(handler)
+        {
+            BaseAddress = ApiClient.BaseAddress
+        };
+
+        var activateResponse = await cookieClient.PostAsJsonAsync("/api/v4/guest-links/activate", new
+        {
+            code
+        });
+        activateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await cookieClient.PostAsJsonAsync("/api/v4/profile/settings", new
+        {
+            timestamp = DateTimeOffset.UtcNow,
+            profileName = "fabricated",
+            isDefault = true,
+        });
+
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden);
+        Log($"Guest session V4 therapy settings write rejected, status: {response.StatusCode}");
+    }
+
+    [Fact]
     public async Task GuestSession_CannotAccessAdminEndpoints()
     {
         // Arrange - create and activate a guest link with cookie-enabled client
