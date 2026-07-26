@@ -2,6 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Check, Copy, Download, ShieldCheck, TriangleAlert } from "lucide-svelte";
+  import { copyToClipboard } from "$lib/utils";
 
   interface Props {
     codes: string[];
@@ -28,11 +29,10 @@
   }
 
   async function copyRecoveryCodes() {
-    try {
-      await navigator.clipboard.writeText(codesAsText());
+    if (await copyToClipboard(codesAsText())) {
       copied = true;
       copyFailed = false;
-    } catch {
+    } else {
       copied = false;
       copyFailed = true;
     }

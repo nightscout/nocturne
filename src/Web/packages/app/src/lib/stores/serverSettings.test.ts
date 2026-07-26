@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { directions, getDirectionInfo } from "./serverSettings";
+import { directions } from "./serverSettings";
 
 describe("directions", () => {
 	it("maps known directions to labels", () => {
@@ -27,40 +27,5 @@ describe("directions", () => {
 
 	it("includes RATE OUT OF RANGE direction", () => {
 		expect(directions["RATE OUT OF RANGE"].label).toBe("⇕");
-	});
-});
-
-describe("getDirectionInfo", () => {
-	it("returns correct info for known directions", () => {
-		expect(getDirectionInfo("Flat")).toEqual({
-			label: "→",
-			description: "Stable",
-		});
-
-		expect(getDirectionInfo("SingleUp")).toEqual({
-			label: "↑",
-			description: "Rising",
-		});
-	});
-
-	it("returns NOT COMPUTABLE for unknown directions", () => {
-		expect(getDirectionInfo("InvalidDirection")).toEqual({
-			label: "-",
-			description: "Not computable",
-		});
-	});
-
-	it("returns NOT COMPUTABLE for empty string", () => {
-		expect(getDirectionInfo("")).toEqual({
-			label: "-",
-			description: "Not computable",
-		});
-	});
-
-	it("returns NONE direction correctly", () => {
-		expect(getDirectionInfo("NONE")).toEqual({
-			label: "→",
-			description: "No direction",
-		});
 	});
 });

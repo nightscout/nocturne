@@ -61,6 +61,7 @@
   import { getUploaderName } from "$lib/utils/uploader-labels";
   import { coachmark } from "@nocturne/coach";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { copyToClipboard } from "$lib/utils";
 
   const isPlatformAdmin = $derived((page.data as { isPlatformAdmin?: boolean }).isPlatformAdmin ?? false);
 
@@ -340,8 +341,11 @@
     }
   }
 
-  async function copyToClipboard(text: string, field: string) {
-    await navigator.clipboard.writeText(text);
+  async function copyField(text: string, field: string) {
+    if (!(await copyToClipboard(text))) {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+      return;
+    }
     copiedField = field;
     setTimeout(() => {
       copiedField = null;
@@ -509,7 +513,7 @@
               <Button
                 variant="outline"
                 size="icon"
-                onclick={() => copyToClipboard(window.location.origin, "baseUrl")}
+                onclick={() => copyField(window.location.origin, "baseUrl")}
               >
                 {#if copiedField === "baseUrl"}
                   <Check class="h-4 w-4 text-green-500" />

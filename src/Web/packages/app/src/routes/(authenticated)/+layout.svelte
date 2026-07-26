@@ -11,7 +11,7 @@
   import { getDefaultSettings } from "$lib/components/settings/constants";
   import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
-  import { browser } from "$app/environment";
+  import { browser, dev } from "$app/environment";
   import { beforeNavigate } from "$app/navigation";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
@@ -231,7 +231,7 @@
 
           {#snippet failed(e, reset)}
             {@const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'An unexpected error occurred'}
-            {@const stack = e instanceof Error ? e.stack : undefined}
+            {@const stack = dev && e instanceof Error ? e.stack : undefined}
             <Card.Root class="mx-auto mt-10 max-w-2xl">
               <Card.Header>
                 <Card.Title>Something went wrong</Card.Title>

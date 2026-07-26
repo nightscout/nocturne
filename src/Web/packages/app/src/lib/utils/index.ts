@@ -16,59 +16,6 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SvelteComponent = any;
 
-/** Time utility functions */
-export const times = {
-  mins: (mins: number) => ({ msecs: mins * 60 * 1000 }),
-  hours: (hours: number) => ({ msecs: hours * 60 * 60 * 1000 }),
-  days: (days: number) => ({ msecs: days * 24 * 60 * 60 * 1000 }),
-};
-
-/** Unit conversion utilities */
-export const units = {
-  mgdlToMMOL: (mgdl: number): number => {
-    return Math.round((mgdl / 18.01559) * 10) / 10;
-  },
-  mmolToMGDL: (mmol: number): number => {
-    return Math.round(mmol * 18.01559);
-  },
-};
-
-/** Format time based on user settings */
-export function formatTime(
-  date: Date | number,
-  timeFormat: number = 12,
-  compact: boolean = false
-): string {
-  const options: Intl.DateTimeFormatOptions = {
-    hour: "numeric",
-    minute: "2-digit",
-  };
-  date = typeof date === "number" ? new Date(date) : date;
-
-  if (timeFormat === 24) {
-    options.hour12 = false;
-    return date.toLocaleTimeString(undefined, options);
-  }
-
-  if (compact) {
-    options.minute = "numeric";
-  }
-
-  return date.toLocaleTimeString(undefined, options).toLowerCase();
-}
-
-/** Calculate BG trend direction based on raw delta value */
-export function calculateDirection(delta: number): string {
-  if (delta > 8) return "DoubleUp";
-  if (delta > 5) return "SingleUp";
-  if (delta > 2) return "FortyFiveUp";
-  if (delta < -8) return "DoubleDown";
-  if (delta < -5) return "SingleDown";
-  if (delta < -2) return "FortyFiveDown";
-  return "Flat";
-}
-
-
 /** Get BG trend direction information */
 export function getDirectionInfo(direction?: Direction | string) {
   const directions: Partial<Record<
@@ -120,16 +67,6 @@ export function getDirectionInfo(direction?: Direction | string) {
 
   const dirValue = typeof direction === 'string' ? direction as Direction : direction;
   return directions[dirValue || Direction.Flat] || directions[Direction.Flat]!;
-}
-
-/** Check if data is stale based on timestamp */
-export function isDataStale(
-  timestamp: number,
-  thresholdMinutes: number = 15
-): boolean {
-  const now = Date.now();
-  const diffMinutes = (now - timestamp) / (60 * 1000);
-  return diffMinutes > thresholdMinutes;
 }
 
 /** Enhanced relative time formatting with internationalization support */
@@ -204,6 +141,7 @@ export function timeAgo(timestamp: number | string, locale?: string): string {
 // Re-export UI utilities from shared package
 export {
   cn,
+  copyToClipboard,
   type WithoutChild,
   type WithoutChildren,
   type WithoutChildrenOrChild,

@@ -41,6 +41,7 @@
   import SecurityCredentialCard from "$lib/components/account/SecurityCredentialCard.svelte";
   import TotpSetupDialog from "$lib/components/account/TotpSetupDialog.svelte";
   import { page } from "$app/state";
+  import { copyToClipboard } from "$lib/utils";
 
   const { data }: { data: PageData } = $props();
 
@@ -233,7 +234,10 @@
 
   async function copyRecoveryCodes() {
     const text = newRecoveryCodes.join("\n");
-    await navigator.clipboard.writeText(text);
+    if (!(await copyToClipboard(text))) {
+      errorMessage = "Couldn't copy the codes to the clipboard. Copy them manually instead.";
+      return;
+    }
     copiedCodes = true;
     setTimeout(() => (copiedCodes = false), 2000);
   }

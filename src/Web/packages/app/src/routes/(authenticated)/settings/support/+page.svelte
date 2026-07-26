@@ -35,10 +35,11 @@
   import { getServicesOverview } from "$api/generated/services.generated.remote";
   import { getStatus } from "$api/generated/status.generated.remote";
   import { getSupportConfig } from "$lib/api/support.remote";
-  import { formatDateTime } from "$lib/utils/date-formatting";
+  import { formatDateTime } from "$lib/utils/formatting";
   import IssueCreatorDialog from "$lib/components/support/IssueCreatorDialog.svelte";
   import { getCoachMarkContext } from "@nocturne/coach";
   import { toast } from "svelte-sonner";
+  import { copyToClipboard } from "$lib/utils";
   import {
     buildDiagnosticReport,
     readDiagnosticDevice,
@@ -144,7 +145,10 @@
 
   async function copyLogs() {
     const logs = generateDiagnosticReport();
-    await navigator.clipboard.writeText(logs);
+    if (!(await copyToClipboard(logs))) {
+      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
+      return;
+    }
     logsCopied = true;
     setTimeout(() => (logsCopied = false), 2000);
   }
