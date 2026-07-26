@@ -1,5 +1,6 @@
 using System.Threading;
 using FluentAssertions;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -44,6 +45,7 @@ public class OidcAuthServiceLoginGateTests
             _refreshTokenService.Object,
             _httpFactory.Object,
             _tenantMemberService.Object,
+            new EphemeralDataProtectionProvider(),
             options,
             _configuration.Object,
             NullLogger<OidcAuthService>.Instance);
@@ -140,6 +142,50 @@ public class OidcAuthServiceLoginGateTests
         _sessionService.Verify(
             s => s.IssueSessionAsync(subject.Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_WhenStateHasNoSlugButATenantResolved_StillChecksMembership()
+    {
+        // The crossed pair, and the reachable one: a login started on the apex mints a state
+        // with no slug, but the redirect URI is fixed, so the callback can be delivered to
+        // {tenant}.{basedomain} where that tenant resolves. Gating the check on the slug rather
+        // than on the resolved tenant would let a non-member take a session on that subdomain.
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(tenantSlug: null!), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeFalse();
+        result.IsAccessDenied.Should().BeTrue();
+
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "an apex-minted state replayed at a tenant subdomain must not mint a session for a non-member");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_WhenStateNamesATenantButNoneResolved_IsDenied()
+    {
+        // Nothing to check membership against, so the login is unverifiable rather than tenantless.
+        var subject = SetupResolvedSubject();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(tenantSlug: "erik"), Provider(), Claims(), currentTenantId: null, ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("invalid_state");
+
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
