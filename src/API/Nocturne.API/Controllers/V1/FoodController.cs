@@ -43,6 +43,7 @@ public class FoodController : ControllerBase
     [NightscoutEndpoint("/api/v1/food")]
     [ProducesResponseType(typeof(Food[]), 200)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.FoodRead)]
     public async Task<ActionResult<Food[]>> GetFood(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -86,6 +87,7 @@ public class FoodController : ControllerBase
     [NightscoutEndpoint("/api/v1/food.json")]
     [ProducesResponseType(typeof(Food[]), 200)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.FoodRead)]
     public async Task<ActionResult<Food[]>> GetFoodJson(
         CancellationToken cancellationToken = default
     )
@@ -102,6 +104,7 @@ public class FoodController : ControllerBase
     [NightscoutEndpoint("/api/v1/food/regular")]
     [ProducesResponseType(typeof(Food[]), 200)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.FoodRead)]
     public async Task<ActionResult<Food[]>> GetRegularFood(
         CancellationToken cancellationToken = default
     )
@@ -144,6 +147,7 @@ public class FoodController : ControllerBase
     [NightscoutEndpoint("/api/v1/food/quickpicks")]
     [ProducesResponseType(typeof(Food[]), 200)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.FoodRead)]
     public async Task<ActionResult<Food[]>> GetQuickPickFood(
         CancellationToken cancellationToken = default
     )
@@ -195,6 +199,7 @@ public class FoodController : ControllerBase
     [ProducesResponseType(404)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.FoodRead)]
     public async Task<ActionResult<Food>> GetFoodById(
         string id,
         CancellationToken cancellationToken = default

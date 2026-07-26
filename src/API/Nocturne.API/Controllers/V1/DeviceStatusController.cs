@@ -70,6 +70,7 @@ public class DeviceStatusController : ControllerBase
     [ProducesResponseType(typeof(DeviceStatus[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.DevicesRead)]
     public async Task<ActionResult> GetDeviceStatus(
         [FromQuery] int count = 10,
         [FromQuery] int skip = 0,
@@ -446,6 +447,7 @@ public class DeviceStatusController : ControllerBase
     [ProducesResponseType(typeof(DeviceStatus[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.DevicesRead)]
     public async Task<ActionResult<DeviceStatus[]>> GetDeviceStatusJson(
         [FromQuery] int count = 10,
         [FromQuery] int skip = 0,

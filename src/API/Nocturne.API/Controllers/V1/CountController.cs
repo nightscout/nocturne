@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -71,6 +72,7 @@ public class CountController : ControllerBase
     [HttpGet("entries/where")]
     [NightscoutEndpoint("/api/v1/count/entries/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult<CountResponse>> CountEntries(
         [FromQuery] string? find = null,
         [FromQuery] string? type = null,
@@ -120,6 +122,7 @@ public class CountController : ControllerBase
     [HttpGet("treatments/where")]
     [NightscoutEndpoint("/api/v1/count/treatments/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult<CountResponse>> CountTreatments(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default
@@ -162,6 +165,7 @@ public class CountController : ControllerBase
     [HttpGet("devicestatus/where")]
     [NightscoutEndpoint("/api/v1/count/devicestatus/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
+    [RequireScope(OAuthScopes.DevicesRead)]
     public async Task<ActionResult<CountResponse>> CountDeviceStatus(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default
@@ -204,6 +208,7 @@ public class CountController : ControllerBase
     [HttpGet("activity/where")]
     [NightscoutEndpoint("/api/v1/count/activity/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult<CountResponse>> CountActivity(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default
@@ -249,6 +254,7 @@ public class CountController : ControllerBase
     [ProducesResponseType(typeof(CountResponse), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead, OAuthScopes.DevicesRead, OAuthScopes.FoodRead, OAuthScopes.TherapyRead)]
     public async Task<ActionResult<CountResponse>> CountGeneric(
         string storage,
         [FromQuery] string? find = null,

@@ -16,8 +16,17 @@ namespace Nocturne.API.Controllers.V4;
 /// <remarks>
 /// Anonymous and tenantless by design: it lives under the <c>/api/v4/platform/</c>
 /// prefix, which <see cref="TenantResolutionMiddleware"/> allows through without a
-/// resolved tenant. Only reachable over the internal compose network from Caddy;
-/// it reveals nothing a visitor couldn't learn by loading the public subdomain.
+/// resolved tenant, and <see cref="Middleware.SiteSecurityMiddleware"/> allowlists it
+/// under lockdown (matched exactly, so sibling paths are not allowlisted).
+/// <para>
+/// It stays anonymous because Caddy's <c>on_demand_tls.ask</c> takes only a URL and sends no
+/// custom headers, so there is no credential to require. It is not authenticated-by-network
+/// either: the API is only <c>expose</c>d on the compose network, but the edge route
+/// <c>/api/{**catch-all}</c> reaches nocturne-web, whose <c>proxyHandle</c> forwards all of
+/// <c>/api</c> to this API. That path is what makes the 200-vs-404 answer an anonymous
+/// tenant-slug oracle, so <c>proxyHandle</c> refuses this specific path
+/// (<c>INTERNAL_ONLY_API_PATHS</c>); Caddy calls the API container directly and is unaffected.
+/// </para>
 /// </remarks>
 [ApiController]
 [AllowAnonymous]

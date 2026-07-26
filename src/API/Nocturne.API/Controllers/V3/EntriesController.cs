@@ -65,6 +65,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult> GetEntries(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -145,6 +146,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [ProducesResponseType(typeof(Entry), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult<Entry>> GetEntry(
         string id,
         CancellationToken cancellationToken = default
@@ -490,6 +492,7 @@ public class EntriesController : BaseV3Controller<Entry>
     [NightscoutEndpoint("/api/v3/entries/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult> GetEntryHistory(
         long lastModified,
         [FromQuery] int limit = 1000,

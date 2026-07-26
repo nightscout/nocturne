@@ -45,6 +45,7 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.FoodRead)]
     public async Task<ActionResult> GetFood(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -140,6 +141,7 @@ public class FoodController : BaseV3Controller<Food>
     [NightscoutEndpoint("/api/v3/food/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.FoodRead)]
     public async Task<ActionResult> GetFoodHistory(
         long lastModified,
         [FromQuery] int limit = 1000,
@@ -296,6 +298,7 @@ public class FoodController : BaseV3Controller<Food>
     [ProducesResponseType(typeof(Food), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.FoodRead)]
     public async Task<ActionResult> GetFoodById(
         string id,
         CancellationToken cancellationToken = default

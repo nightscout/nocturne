@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Services.Devices;
-using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Controllers.V1;
@@ -57,6 +58,7 @@ public class PebbleController : ControllerBase
     [NightscoutEndpoint("/pebble")]
     [Produces("application/json")]
     [ProducesResponseType(typeof(PebbleResponse), 200)]
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult<PebbleResponse>> GetPebbleData(
         [FromQuery] string? units = null,
         [FromQuery] int count = 1,

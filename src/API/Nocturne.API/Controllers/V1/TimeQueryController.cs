@@ -4,6 +4,7 @@ using Nocturne.API.Services.Legacy;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -12,9 +13,15 @@ namespace Nocturne.API.Controllers.V1;
 /// Supports bash-style brace expansion for complex time pattern matching.
 /// </summary>
 /// <seealso cref="ITimeQueryService"/>
+/// <remarks>
+/// The scope requirement is class-level and an OR of the three storages these endpoints can
+/// serve: the storage is a route/query parameter (<c>slice/{storage}/...</c>,
+/// <c>?storage=</c>), so the data category is not knowable per action.
+/// </remarks>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1")]
+[RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead, OAuthScopes.DevicesRead)]
 public class TimeQueryController : ControllerBase
 {
     private readonly ITimeQueryService _timeQueryService;

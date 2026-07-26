@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
-using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
+using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -56,6 +57,7 @@ public class IobController : ControllerBase
     [NightscoutEndpoint("/api/v1/iob")]
     [ProducesResponseType(typeof(IobResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult<IobResult>> GetCurrentIob(
         [FromQuery] long? time = null,
         CancellationToken cancellationToken = default
@@ -105,6 +107,7 @@ public class IobController : ControllerBase
     [NightscoutEndpoint("/api/v1/iob/treatments")]
     [ProducesResponseType(typeof(IobResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult<IobResult>> GetIobFromTreatments(
         [FromQuery] long? time = null,
         CancellationToken cancellationToken = default
@@ -149,6 +152,7 @@ public class IobController : ControllerBase
     [ProducesResponseType(typeof(HourlyIobResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult<HourlyIobResponse>> GetHourlyIob(
         [FromQuery] int intervalMinutes = 5,
         [FromQuery] int hours = 24,

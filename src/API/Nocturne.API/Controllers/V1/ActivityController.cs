@@ -53,6 +53,7 @@ public class ActivityController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<Activity>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult<IEnumerable<Activity>>> GetActivities(
         [FromQuery] int count = 10,
         [FromQuery] int skip = 0,
@@ -99,6 +100,7 @@ public class ActivityController : ControllerBase
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult<Activity>> GetActivity(
         string id,
         CancellationToken cancellationToken = default

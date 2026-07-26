@@ -379,6 +379,7 @@ class Program
             builder.AddDemoService<Projects.Nocturne_Services_Demo>(
                 api,
                 managedDatabase,
+                instanceKey,
                 options => { }
             );
         }

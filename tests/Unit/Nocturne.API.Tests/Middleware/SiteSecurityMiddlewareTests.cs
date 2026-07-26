@@ -41,6 +41,27 @@ public sealed class SiteSecurityMiddlewareTests
         ctx.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
     }
 
+    [Theory]
+    [InlineData("/api/v4/platform/tls-authorizeanything")]
+    [InlineData("/api/v4/platform/tls-authorize-evil")]
+    [InlineData("/api/v4/platform/tls-authorize/../entries")]
+    public async Task Paths_that_only_share_the_tls_authorize_prefix_are_not_allowlisted(string path)
+    {
+        // The allowlist entry matches the exact route; a StartsWith would let any path with
+        // this prefix through lockdown.
+        var nextCalled = false;
+        var mw = Build(_ => { nextCalled = true; return Task.CompletedTask; });
+
+        var ctx = new DefaultHttpContext();
+        ctx.Response.Body = new MemoryStream();
+        ctx.Request.Path = path;
+
+        await mw.InvokeAsync(ctx);
+
+        nextCalled.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
+    }
+
     [Fact]
     public async Task Protected_route_is_denied_under_lockdown_when_unauthenticated()
     {

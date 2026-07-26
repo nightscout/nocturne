@@ -57,6 +57,7 @@ public class TreatmentsController : ControllerBase
     [ProducesResponseType(typeof(Treatment[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult> GetTreatments(
         [FromQuery] string? find = null,
         [FromQuery] int count = 10,
@@ -147,6 +148,7 @@ public class TreatmentsController : ControllerBase
     [ProducesResponseType(404)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult<Treatment>> GetTreatmentById(
         string id,
         CancellationToken cancellationToken = default

@@ -64,6 +64,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.DevicesRead)]
     public async Task<IActionResult> GetDeviceStatus(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -155,6 +156,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [ProducesResponseType(typeof(DeviceStatus), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.DevicesRead)]
     public async Task<ActionResult> GetDeviceStatusById(
         string id,
         CancellationToken cancellationToken = default
@@ -497,6 +499,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     [NightscoutEndpoint("/api/v3/devicestatus/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.DevicesRead)]
     public async Task<ActionResult> GetDeviceStatusHistory(
         long lastModified,
         [FromQuery] int limit = 1000,

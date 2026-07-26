@@ -67,12 +67,18 @@ public static class DemoServiceExtensions
     /// <param name="builder">The distributed application builder.</param>
     /// <param name="api">The API resource that the demo service will reference.</param>
     /// <param name="database">The database resource for the demo service to use.</param>
+    /// <param name="instanceKey">
+    /// The instance key the demo service presents to the API. The demo admin endpoints
+    /// (<c>/api/v4/admin/demo/*</c>) require the <c>platform_admin</c> role, which the instance
+    /// key is what yields for a service caller, so without this the service is rejected.
+    /// </param>
     /// <param name="configure">Optional configuration action for demo service options.</param>
     /// <returns>The demo service resource builder, or null if demo mode is disabled.</returns>
     public static IResourceBuilder<ProjectResource>? AddDemoService<TDemoService>(
         this IDistributedApplicationBuilder builder,
         IResourceBuilder<ProjectResource> api,
         IResourceBuilder<IResourceWithConnectionString>? database,
+        IResourceBuilder<ParameterResource> instanceKey,
         Action<DemoServiceOptions>? configure = null)
         where TDemoService : IProjectMetadata, new()
     {
@@ -111,10 +117,11 @@ public static class DemoServiceExtensions
         // Demo service communicates with the API via HTTP, so wait for API availability
         demoService.WaitFor(api);
 
-        // Pass API URL and demo host for HTTP client configuration
+        // Pass API URL, demo host, and the instance key the demo admin endpoints authenticate on
         demoService
             .WithEnvironment("DemoService__ApiUrl", api.GetEndpoint("http"))
-            .WithEnvironment("DemoService__DemoHost", "demo.localhost");
+            .WithEnvironment("DemoService__DemoHost", "demo.localhost")
+            .WithEnvironment("DemoService__InstanceKey", instanceKey);
 
         // Pass demo configuration via environment variables
         demoService

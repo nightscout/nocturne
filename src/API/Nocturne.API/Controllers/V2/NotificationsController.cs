@@ -222,6 +222,7 @@ public class NotificationsController : ControllerBase
     [NightscoutEndpoint("/api/v2/notifications/status")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(OAuthScopes.AlertsRead)]
     public async Task<ActionResult<object>> GetNotificationStatus(
         CancellationToken cancellationToken = default
     )

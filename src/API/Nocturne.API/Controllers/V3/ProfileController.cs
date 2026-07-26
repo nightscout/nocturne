@@ -49,6 +49,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.TherapyRead)]
     public async Task<ActionResult> GetProfiles(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -118,6 +119,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [NightscoutEndpoint("/api/v3/profile/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.TherapyRead)]
     public async Task<ActionResult> GetProfileHistory(
         long lastModified,
         [FromQuery] int limit = 10,
@@ -175,6 +177,7 @@ public class ProfileController : BaseV3Controller<Profile>
     [ProducesResponseType(typeof(Profile), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.TherapyRead)]
     public async Task<ActionResult> GetProfileById(
         string id,
         CancellationToken cancellationToken = default

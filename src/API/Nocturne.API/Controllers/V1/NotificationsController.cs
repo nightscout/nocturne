@@ -239,6 +239,7 @@ public class NotificationsController : ControllerBase
     [NightscoutEndpoint("/api/v1/adminnotifies")]
     [ProducesResponseType(typeof(AdminNotifiesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(OAuthScopes.AlertsRead)]
     public async Task<ActionResult<AdminNotifiesResponse>> GetAdminNotifies(
         CancellationToken cancellationToken = default
     )

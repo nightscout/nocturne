@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
-using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
+using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V2;
 
@@ -45,6 +47,7 @@ public class DDataController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(DDataResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult<DDataResponse>> GetDData(
         CancellationToken cancellationToken = default
     )
@@ -79,6 +82,7 @@ public class DDataController : ControllerBase
     [ProducesResponseType(typeof(DDataResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult<DDataResponse>> GetDDataAt(
         string timestamp,
         CancellationToken cancellationToken = default
@@ -153,6 +157,7 @@ public class DDataController : ControllerBase
     [ProducesResponseType(typeof(DData), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult<DData>> GetRawDData(
         [FromQuery] string? timestamp = null,
         CancellationToken cancellationToken = default

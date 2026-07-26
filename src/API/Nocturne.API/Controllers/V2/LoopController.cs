@@ -134,6 +134,7 @@ public class LoopController : ControllerBase
     /// <response code="200">Configuration status retrieved successfully</response>
     [HttpGet("loop/status")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [RequireScope(OAuthScopes.AlertsRead)]
     public ActionResult<object> GetLoopStatus()
     {
         var status = _loopService.GetConfigurationStatus();

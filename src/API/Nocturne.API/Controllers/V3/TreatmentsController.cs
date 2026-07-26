@@ -61,6 +61,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [ProducesResponseType(typeof(V3ErrorResponse), 400)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult> GetTreatments(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -136,6 +137,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [ProducesResponseType(typeof(Treatment), 200)]
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult<Treatment>> GetTreatment(
         string id,
         CancellationToken cancellationToken = default
@@ -477,6 +479,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     [NightscoutEndpoint("/api/v3/treatments/history/{lastModified}")]
     [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.TreatmentsRead)]
     public async Task<ActionResult> GetTreatmentHistory(
         long lastModified,
         [FromQuery] int limit = 1000,

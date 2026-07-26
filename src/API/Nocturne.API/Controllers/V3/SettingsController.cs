@@ -48,6 +48,7 @@ public class SettingsController : BaseV3Controller<Settings>
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(304)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.TherapyRead)]
     public async Task<ActionResult> GetSettings(CancellationToken cancellationToken = default)
     {
         _logger.LogDebug(
@@ -126,6 +127,7 @@ public class SettingsController : BaseV3Controller<Settings>
     [ProducesResponseType(typeof(V3ErrorResponse), 404)]
     [ProducesResponseType(typeof(V3ErrorResponse), 403)]
     [ProducesResponseType(500)]
+    [RequireScope(OAuthScopes.TherapyRead)]
     public async Task<ActionResult> GetSettingsById(
         string id,
         CancellationToken cancellationToken = default

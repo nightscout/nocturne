@@ -68,6 +68,7 @@ public class EntriesController : ControllerBase
     [ResponseCache(Duration = 60, VaryByHeader = "If-Modified-Since")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult<Entry[]>> GetCurrentEntry(
         CancellationToken cancellationToken = default
     )
@@ -161,6 +162,7 @@ public class EntriesController : ControllerBase
     [NightscoutEndpoint("/api/v1/entries/{spec}")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult<Entry[]>> GetEntry(
         string spec,
         CancellationToken cancellationToken = default
@@ -300,6 +302,7 @@ public class EntriesController : ControllerBase
     [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" }, VaryByHeader = "If-Modified-Since")]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(typeof(Entry[]), 304)] // Not Modified response
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult> GetEntries(
         [FromQuery] string? find = null,
         [FromQuery] int? count = null,

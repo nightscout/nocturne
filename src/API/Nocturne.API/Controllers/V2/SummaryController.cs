@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
-using OpenApi.Remote.Attributes;
 using Nocturne.Core.Contracts.Analytics;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models;
+using OpenApi.Remote.Attributes;
 
 namespace Nocturne.API.Controllers.V2;
 
@@ -51,6 +53,7 @@ public class SummaryController : ControllerBase
     [ProducesResponseType(typeof(SummaryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public async Task<ActionResult<SummaryResponse>> GetSummary(
         [FromQuery] int? hours = null,
         CancellationToken cancellationToken = default
