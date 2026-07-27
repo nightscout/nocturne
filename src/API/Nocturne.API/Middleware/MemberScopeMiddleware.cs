@@ -11,9 +11,9 @@ namespace Nocturne.API.Middleware;
 /// <summary>
 /// Middleware that resolves the authenticated user's tenant membership and applies
 /// RBAC-based permission restrictions. Effective permissions are the union of all
-/// role permissions + direct permissions, intersected with the credential's granted scopes
-/// via <see cref="OAuthScopes"/>. Widening to superuser happens only for a <c>"*"</c> membership
-/// presented on an unscoped credential (see <see cref="UnscopedCredentialTypes"/>).
+/// role permissions + direct permissions; <see cref="MemberScopeResolver"/> turns them into the
+/// granted scope set, intersecting with the credential's own scopes unless the credential carries
+/// none (<see cref="MemberScopeResolver.UnscopedCredentialTypes"/>).
 /// Must run after <see cref="AuthenticationMiddleware"/>.
 /// </summary>
 /// <remarks>
@@ -38,25 +38,6 @@ public class MemberScopeMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<MemberScopeMiddleware> _logger;
-
-    /// <summary>
-    /// Credential types that carry no scope grant of their own — the authenticated human's own
-    /// interactive login. Tenant membership is the only authority for these, so a <c>"*"</c>
-    /// membership widens to superuser. Every other credential presents scopes that bound what it
-    /// may do (an OAuth access token's consented scopes, a direct grant's scopes, an API key's
-    /// grant scopes, a guest link's scopes) and is intersected with membership instead. Membership
-    /// resolution must never widen a scoped credential, or the consent decision is erased. Keyed on
-    /// the credential type rather than on "the scope list is empty" because an interactive OIDC
-    /// login carries the identity provider's own scopes (<c>openid</c>, <c>profile</c>), which are
-    /// not Nocturne data scopes. Types absent from this set are treated as scoped (fail closed).
-    /// </summary>
-    private static readonly IReadOnlySet<AuthType> UnscopedCredentialTypes = new HashSet<AuthType>
-    {
-        AuthType.SessionCookie,
-        AuthType.OidcToken,
-        AuthType.LegacyJwt,
-        AuthType.LegacyAccessToken,
-    };
 
     /// <summary>
     /// Creates a new instance of <see cref="MemberScopeMiddleware"/>.
@@ -160,67 +141,19 @@ public class MemberScopeMiddleware
         var directPermissions = membership.DirectPermissions ?? [];
         var effectivePermissions = rolePermissions.Union(directPermissions).ToHashSet();
 
-        if (effectivePermissions.Contains("*")
-            && UnscopedCredentialTypes.Contains(authContext.AuthType))
-        {
-            // Superuser — grant all scopes AND a wildcard permission trie. Both must be set:
-            // GrantedScopes drives RequireScope checks, while the PermissionTrie drives the
-            // HasPermissions policy (the legacy v1 endpoints). Session tokens carry only the
-            // subject's global role permissions — empty for a normal tenant owner/admin whose
-            // permissions come from membership — so the trie built by AuthenticationMiddleware
-            // is empty. Without rebuilding it here, HasPermissions-gated endpoints would 403
-            // for a tenant superuser on their own tenant (matching the InstanceKey/PlatformAccess
-            // branch above, which sets both).
-            //
-            // Restricted to <see cref="UnscopedCredentialTypes"/>: a scoped credential carries a
-            // consent boundary, and an owner's "*" membership must not widen past it. An owner who
-            // authorized a third-party app for glucose.read falls through to the intersection below
-            // and gets glucose.read, matching what the same credential resolves to when the token
-            // is presented in the api-secret header (AuthType.ApiKey, handled above).
-            context.Items["GrantedScopes"] = (IReadOnlySet<string>)effectivePermissions;
+        var resolvedScopes = MemberScopeResolver.Resolve(
+            effectivePermissions, authContext.AuthType, context.GetGrantedScopes());
+        context.Items["GrantedScopes"] = resolvedScopes;
 
-            var superuserTrie = new PermissionTrie();
-            superuserTrie.Add(["*"]);
-            context.Items["PermissionTrie"] = superuserTrie;
-        }
-        else
-        {
-            // Intersect with auth token scopes. OAuthScopes.Normalize expands a "*" membership to
-            // the full scope list, so a superuser on a scoped credential lands on exactly the
-            // credential's scopes; the "*" scope itself survives only when the credential carries
-            // full access.
-            var normalizedMemberScopes = OAuthScopes.Normalize(effectivePermissions.ToList());
-            var currentScopes = context.GetGrantedScopes();
-            var restrictedScopes = normalizedMemberScopes
-                .Where(memberScope => OAuthScopes.SatisfiesScope(currentScopes, memberScope))
-                .ToHashSet();
-
-            // Member-personal device scopes bypass the role intersection. device.notify /
-            // device.actuate authorize the alert engine to drive the member's OWN registered
-            // client devices (rows RLS-scoped to the member's subject), not patient data. Role
-            // rows are persisted per tenant at seed time and never reconciled
-            // (TenantRoleService.SeedRolesForTenantAsync skips existing slugs), so roles seeded
-            // before these atoms existed would strip the scopes for every pre-existing tenant —
-            // no relink or re-consent can fix that. Grant them from the auth token alone for any
-            // member who holds at least one permission; zero-permission members (the Denied seed
-            // role) stay fully stripped because alert actuations reveal patient state.
-            if (effectivePermissions.Count > 0)
-            {
-                foreach (var personalScope in TenantPermissions.MemberPersonalScopes)
-                {
-                    if (OAuthScopes.SatisfiesScope(currentScopes, personalScope))
-                        restrictedScopes.Add(personalScope);
-                }
-            }
-
-            context.Items["GrantedScopes"] = (IReadOnlySet<string>)restrictedScopes;
-
-            // Rebuild permission trie from restricted scopes
-            var restrictedPermissions = ScopeTranslator.ToPermissions(restrictedScopes);
-            var permissionTrie = new PermissionTrie();
-            permissionTrie.Add(restrictedPermissions);
-            context.Items["PermissionTrie"] = permissionTrie;
-        }
+        // Rebuild the permission trie from the resolved scopes. Both must be set: GrantedScopes
+        // drives RequireScope checks, while the trie drives the HasPermissions policy (the legacy
+        // v1/v2/v3 endpoints). The trie AuthenticationMiddleware built holds only the subject's
+        // global role permissions — empty for a member whose access comes from tenant membership —
+        // so without rebuilding it here every HasPermissions-gated endpoint 403s. ScopeTranslator
+        // collapses a resolved set containing "*" to a wildcard trie.
+        var memberTrie = new PermissionTrie();
+        memberTrie.Add(ScopeTranslator.ToPermissions(resolvedScopes));
+        context.Items["PermissionTrie"] = memberTrie;
 
         authContext.LimitTo24Hours = membership.LimitTo24Hours;
 

@@ -41,7 +41,8 @@ public class TenantOverviewService : ITenantOverviewService
     }
 
     public async Task<TenantOverviewResponse> GetOverviewAsync(
-        Guid subjectId, IReadOnlySet<string> tokenScopes, CancellationToken ct = default)
+        Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
+        CancellationToken ct = default)
     {
         // tenant_members has a global RevokedAt == null query filter, so revoked
         // memberships are already excluded here.
@@ -65,7 +66,7 @@ public class TenantOverviewService : ITenantOverviewService
             var tenant = membership.Tenant;
             if (tenant is null || !tenant.IsActive) continue;
 
-            var allowed = ResolveAllowedScopes(membership, tokenScopes);
+            var allowed = ResolveAllowedScopes(membership, tokenScopes, authType);
             if (!TenantPermissions.HasPermission(allowed, TenantPermissions.GlucoseRead)) continue;
             var includeAlerts = TenantPermissions.HasPermission(allowed, TenantPermissions.AlertsRead);
 
@@ -87,27 +88,20 @@ public class TenantOverviewService : ITenantOverviewService
     }
 
     /// <summary>
-    /// Resolves what the caller may see on this tenant, mirroring <c>MemberScopeMiddleware</c>:
-    /// effective permissions are the union of role permissions and direct permissions; a
-    /// superuser membership ("*") bypasses the token-scope intersection (MemberScopeMiddleware's
-    /// superuser branch grants all effective scopes without consulting the token); otherwise the
-    /// member's normalized scopes are restricted to those the auth token's granted scopes satisfy.
+    /// Resolves what the caller may see on this tenant. Delegates to
+    /// <see cref="MemberScopeResolver"/>, the same resolution <c>MemberScopeMiddleware</c> applies
+    /// per request, so the tenant picker cannot list a tenant the endpoints behind it refuse (or
+    /// hide one they would serve).
     /// </summary>
     internal static IReadOnlySet<string> ResolveAllowedScopes(
-        TenantMemberEntity membership, IReadOnlySet<string> tokenScopes)
+        TenantMemberEntity membership, IReadOnlySet<string> tokenScopes, AuthType authType)
     {
         var effective = membership.MemberRoles
             .SelectMany(mr => mr.TenantRole.Permissions)
             .Union(membership.DirectPermissions ?? [])
             .ToHashSet();
 
-        if (effective.Contains(TenantPermissions.Superuser))
-            return new HashSet<string> { TenantPermissions.Superuser };
-
-        var normalizedMemberScopes = OAuthScopes.Normalize(effective.ToList());
-        return normalizedMemberScopes
-            .Where(memberScope => OAuthScopes.SatisfiesScope(tokenScopes, memberScope))
-            .ToHashSet();
+        return MemberScopeResolver.Resolve(effective, authType, tokenScopes);
     }
 
     private async Task<TenantOverviewItem> BuildItemAsync(

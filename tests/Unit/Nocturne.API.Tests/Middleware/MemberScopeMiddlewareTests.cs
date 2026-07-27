@@ -385,6 +385,243 @@ public class MemberScopeMiddlewareTests
         grantedScopes.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.LegacyJwt)]
+    [InlineData(AuthType.LegacyAccessToken)]
+    public async Task UnscopedCredential_ForAdminMember_ResolvesTheRoleIncludingAdministration(
+        AuthType authType)
+    {
+        // The real web-app credential shape: no scopes at all, because SessionCookieHandler and
+        // AccessTokenHandler never set them and a JWT reaching LegacyJwtHandler has no scope claim
+        // (OAuthAccessTokenHandler claims those first). Intersecting membership against that empty
+        // set 403ed the whole scope-gated surface for every non-owner. Every administration gate
+        // (MemberInviteController, RoleController, ShareLinkController, GuestLinkController,
+        // AuditController) reads GrantedScopes through TenantPermissions.HasPermission.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]);
+
+        var (context, provider) = BuildMemberContext(options, subjectId, [], authType);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().NotBeEmpty();
+
+        foreach (var atom in new[]
+                 {
+                     TenantPermissions.MembersManage, TenantPermissions.MembersInvite,
+                     TenantPermissions.RolesManage, TenantPermissions.TenantSettings,
+                     TenantPermissions.SharingManage, TenantPermissions.SharingGuest,
+                     TenantPermissions.AuditRead, TenantPermissions.GlucoseReadWrite,
+                 })
+        {
+            TenantPermissions.HasPermission(grantedScopes!, atom).Should().BeTrue($"'{atom}' is granted");
+        }
+
+        // An Administrator is not a superuser, and audit.manage is Owner-only by design.
+        grantedScopes.Should().NotContain(OAuthScopes.FullAccess);
+        TenantPermissions.HasPermission(grantedScopes!, TenantPermissions.AuditManage)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task InteractiveOidcLogin_IsNotBoundedByTheProvidersProtocolScopes()
+    {
+        // OidcTokenHandler sets Scopes to the provider's configured scopes — openid/profile/email,
+        // an outbound protocol list identical for every user of that provider, not a Nocturne data
+        // grant. Normalize drops all three, so treating them as a ceiling resolved the member to
+        // nothing.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker]);
+
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, ["openid", "profile", "email"], AuthType.OidcToken);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().Contain(OAuthScopes.GlucoseRead);
+        grantedScopes.Should().Contain(OAuthScopes.TreatmentsReadWrite);
+        // The IdP's protocol scopes are not Nocturne scopes and must not be published.
+        grantedScopes.Should().NotContain("openid");
+        grantedScopes.Should().NotContain("profile");
+    }
+
+    [Fact]
+    public async Task UnscopedCredential_RebuildsThePermissionTrieForLegacyEndpoints()
+    {
+        // The trie drives the HasPermissions policy on v1/v2/v3. An empty resolved scope set left it
+        // empty for every non-owner web-app user.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker]);
+
+        var (context, provider) = BuildMemberContext(options, subjectId, [], AuthType.SessionCookie);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        permissionTrie.Should().NotBeNull();
+        permissionTrie!.Check("api:entries:read").Should().BeTrue();
+        permissionTrie.Check("api:treatments:create").Should().BeTrue();
+        // Caretaker holds glucose.read, not glucose.readwrite.
+        permissionTrie.Check("api:entries:create").Should().BeFalse();
+        permissionTrie.Check("*").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UnscopedCredential_WithDeniedRole_ResolvesToNothing()
+    {
+        // An unscoped credential removes the ceiling, not the membership check.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Denied]);
+
+        var (context, provider) = BuildMemberContext(options, subjectId, [], AuthType.SessionCookie);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        (context.Items["GrantedScopes"] as IReadOnlySet<string>).Should().BeEmpty();
+        (context.Items["PermissionTrie"] as PermissionTrie)!.IsEmpty.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.DirectGrant)]
+    public async Task ScopedCredential_ForAdminMember_StaysBoundedByTheGrant(AuthType authType)
+    {
+        // An OAuth access token and a direct grant both carry a consent boundary, so an Admin
+        // membership must not widen past the scopes the credential presents — administration
+        // included, since no client can request an administration atom.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]);
+
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, [OAuthScopes.GlucoseReadWrite], authType);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().BeEquivalentTo([OAuthScopes.GlucoseReadWrite]);
+        TenantPermissions.HasPermission(grantedScopes!, TenantPermissions.MembersManage)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ScopedCredential_ForReadWriteMember_DowngradesToTheGrantedReadScope()
+    {
+        // A read-only app authorized by a Caretaker: the member holds treatments.readwrite and the
+        // token grants treatments.read. SatisfiesScope answers false for the readwrite requirement
+        // and normalization adds no read counterpart, so this resolved to NEITHER scope.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker]);
+
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, [OAuthScopes.TreatmentsRead], AuthType.OAuthAccessToken);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().BeEquivalentTo([OAuthScopes.TreatmentsRead]);
+        grantedScopes.Should().NotContain(OAuthScopes.TreatmentsReadWrite);
+
+        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        permissionTrie!.Check("api:treatments:read").Should().BeTrue();
+        permissionTrie.Check("api:treatments:create").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GuestCredential_ForAdminMember_KeepsOnlyTheGuestLinkScopes()
+    {
+        // A guest link carries its own read-only scopes and never reaches the membership lookup.
+        // Membership must not widen it even when the guest code was activated by a subject who is
+        // also an Admin member of the tenant.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]);
+
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, [OAuthScopes.GlucoseRead], AuthType.Guest);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        (context.Items["GrantedScopes"] as IReadOnlySet<string>)
+            .Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task UnauthenticatedShareRequest_IsLeftUntouched()
+    {
+        // The public share path resolves its scopes in AuthenticationMiddleware with
+        // IsAuthenticated false, so the Public membership never reaches this middleware. A share can
+        // therefore never be widened by membership resolution, whatever atoms the Public subject
+        // carries.
+        var publicScopes = (IReadOnlySet<string>)new HashSet<string> { OAuthScopes.GlucoseRead };
+
+        var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+        var context = new DefaultHttpContext();
+        context.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = false,
+            AuthType = AuthType.None,
+            TenantId = TestDatabaseSeeder.TenantId,
+        };
+        context.Items["GrantedScopes"] = publicScopes;
+
+        await middleware.InvokeAsync(context);
+
+        context.Items["GrantedScopes"].Should().BeSameAs(publicScopes);
+    }
+
     /// <summary>The desktop Companion's device-flow token scopes.</summary>
     private static readonly List<string> CompanionTokenScopes =
     [

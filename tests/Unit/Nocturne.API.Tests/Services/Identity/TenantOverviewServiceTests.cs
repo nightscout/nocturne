@@ -193,7 +193,7 @@ public class TenantOverviewServiceTests
         SeedMembership(options, Guid.NewGuid(), "other-subject", [TenantPermissions.GlucoseRead]);
 
         var service = NewService(options);
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken);
 
         response.Tenants.Select(t => t.Slug).Should().BeEquivalentTo(
             ["included", "superuser", "readwrite", "direct-only"]);
@@ -204,7 +204,7 @@ public class TenantOverviewServiceTests
     // ---- token scope gating ----
 
     [Fact]
-    public async Task GetOverview_tokenWithoutGlucoseScope_excludesNonSuperuserTenants()
+    public async Task GetOverview_delegatedTokenWithoutGlucoseScope_excludesEveryTenant()
     {
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
@@ -214,19 +214,52 @@ public class TenantOverviewServiceTests
 
         var service = NewService(options);
 
-        // A narrowly-scoped token (no glucose scope) drops member tenants; the superuser
-        // membership bypasses the intersection, matching MemberScopeMiddleware.
+        // A delegated token bounds every membership, the owner's included: an app authorized for
+        // treatments.read must not be handed glucose through a "*" membership. The superuser
+        // membership used to bypass the intersection here, so an owner's narrowly-scoped
+        // third-party token still saw every tenant in the picker.
         var narrow = await service.GetOverviewAsync(
-            subjectId, new HashSet<string> { OAuthScopes.TreatmentsRead });
-        narrow.Tenants.Select(t => t.Slug).Should().BeEquivalentTo(["owner-tenant"]);
+            subjectId, new HashSet<string> { OAuthScopes.TreatmentsRead }, AuthType.OAuthAccessToken);
+        narrow.Tenants.Should().BeEmpty();
 
-        // An empty token scope set (no grants at all) still keeps the superuser tenant.
-        var empty = await service.GetOverviewAsync(subjectId, new HashSet<string>());
-        empty.Tenants.Select(t => t.Slug).Should().BeEquivalentTo(["owner-tenant"]);
+        // An empty scope set on a delegated credential grants nothing.
+        var empty = await service.GetOverviewAsync(
+            subjectId, new HashSet<string>(), AuthType.OAuthAccessToken);
+        empty.Tenants.Should().BeEmpty();
 
-        // A full-access token (what a session with the admin global role resolves to) sees both.
-        var full = await service.GetOverviewAsync(subjectId, FullTokenScopes);
+        // A full-access token consents to everything, so both memberships resolve in full.
+        var full = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken);
         full.Tenants.Select(t => t.Slug).Should().BeEquivalentTo(["member-tenant", "owner-tenant"]);
+    }
+
+    [Fact]
+    public async Task GetOverview_unscopedSessionCredential_seesTenantsFromTheMembershipAlone()
+    {
+        // A browser session carries no scope grant: its JWT permission claims come from the
+        // subject's GLOBAL roles, which are empty for a member who joined by invite. Intersecting
+        // against them emptied the tenant picker for every non-owner membership.
+        var subjectId = Guid.NewGuid();
+        var options = NewOptions();
+
+        SeedMembership(options, subjectId, "member-tenant", [TenantPermissions.GlucoseRead]);
+        SeedMembership(options, subjectId, "admin-tenant",
+            TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]);
+        SeedMembership(options, subjectId, "owner-tenant", [TenantPermissions.Superuser]);
+        SeedMembership(options, subjectId, "no-glucose", [TenantPermissions.TreatmentsRead]);
+        SeedMembership(options, subjectId, "denied",
+            TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Denied]);
+
+        var service = NewService(options);
+
+        var session = await service.GetOverviewAsync(
+            subjectId, new HashSet<string>(), AuthType.SessionCookie);
+        session.Tenants.Select(t => t.Slug).Should().BeEquivalentTo(
+            ["member-tenant", "admin-tenant", "owner-tenant"]);
+
+        // The same subject over a delegated credential with no scopes still sees nothing.
+        var delegated = await service.GetOverviewAsync(
+            subjectId, new HashSet<string>(), AuthType.OAuthAccessToken);
+        delegated.Tenants.Should().BeEmpty();
     }
 
     [Fact]
@@ -239,7 +272,7 @@ public class TenantOverviewServiceTests
 
         var service = NewService(options);
         var response = await service.GetOverviewAsync(
-            subjectId, new HashSet<string> { OAuthScopes.GlucoseRead });
+            subjectId, new HashSet<string> { OAuthScopes.GlucoseRead }, AuthType.OAuthAccessToken);
 
         var item = response.Tenants.Should().ContainSingle().Subject;
         item.ActiveAlertCount.Should().BeNull();
@@ -257,7 +290,7 @@ public class TenantOverviewServiceTests
         SeedActiveExcursion(options, tenantId, AlertRuleSeverity.Warning);
 
         var service = NewService(options);
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken);
 
         var item = response.Tenants.Should().ContainSingle().Subject;
         item.ActiveAlertCount.Should().BeNull();
@@ -323,7 +356,7 @@ public class TenantOverviewServiceTests
         };
         var service = NewService(options, latest);
 
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken);
 
         var item = response.Tenants.Should().ContainSingle().Subject;
         item.Latest.Should().NotBeNull();
@@ -353,7 +386,7 @@ public class TenantOverviewServiceTests
 
         var latest = new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-2) };
         var service = NewService(options, latest);
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken);
 
         var item = response.Tenants.Should().ContainSingle().Subject;
         item.TenantId.Should().Be(tenantA);
@@ -374,7 +407,7 @@ public class TenantOverviewServiceTests
         var latest = new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-2) };
         var service = NewService(options, latest, failingTenantId: badTenant);
 
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken);
 
         response.Tenants.Should().HaveCount(2);
 
@@ -421,7 +454,7 @@ public class TenantOverviewServiceTests
 
         var latest = new SensorGlucose { Mgdl = 120, Timestamp = DateTime.UtcNow.AddMinutes(-2) };
         var service = NewService(options, latest);
-        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.OAuthAccessToken);
 
         var item = response.Tenants.Should().ContainSingle().Subject;
         // The bad rule is skipped, the good rule still applies, and the reading survives.

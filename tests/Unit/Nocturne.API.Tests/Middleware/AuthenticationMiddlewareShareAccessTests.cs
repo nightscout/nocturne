@@ -134,6 +134,35 @@ public sealed class AuthenticationMiddlewareShareAccessTests
     }
 
     [Fact]
+    public async Task Share_access_never_admits_a_tenant_administration_atom()
+    {
+        // The member-permissions API can write any atom onto the Public membership, and the
+        // administration atoms are now part of the grantable scope vocabulary. The share host
+        // must still resolve to at most the shareable read scopes.
+        SetPublicDirectPermissions([
+            OAuthScopes.GlucoseRead,
+            TenantPermissions.MembersManage,
+            TenantPermissions.RolesManage,
+            TenantPermissions.TenantSettings,
+            TenantPermissions.AuditRead,
+            TenantPermissions.SharingManage,
+        ]);
+
+        var ctx = ContextFor(shareAccess: true);
+
+        await Build().InvokeAsync(ctx);
+
+        var scopes = ctx.Items["GrantedScopes"] as IReadOnlySet<string>;
+        scopes.Should().NotBeNull();
+        scopes.Should().BeSubsetOf(TenantPermissions.PublicShareScopes);
+        scopes.Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+
+        var trie = ctx.Items["PermissionTrie"] as PermissionTrie;
+        trie!.Check(TenantPermissions.MembersManage).Should().BeFalse();
+        trie.Check(TenantPermissions.AuditRead).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Share_with_only_heartrate_and_stepcount_still_carries_a_nonempty_trie()
     {
         // heartrate.read/stepcount.read have no legacy api:* equivalent, so a trie derived

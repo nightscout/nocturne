@@ -136,6 +136,19 @@ public static class OAuthScopes
     };
 
     /// <summary>
+    /// Every scope a tenant membership can grant: <see cref="ValidRequestScopes"/> plus every
+    /// <see cref="TenantPermissions.All">tenant permission atom</see>. The two sets differ over the
+    /// tenant-administration atoms (<c>members.manage</c>, <c>roles.manage</c>, <c>tenant.settings</c>,
+    /// <c>audit.read</c>, …): a tenant role may grant them, but a client may not request them at
+    /// <c>/authorize</c> and a user cannot consent to them, because there is no per-client scope
+    /// ceiling to bound such a request. Derived from <see cref="TenantPermissions.All"/> so a new
+    /// permission atom is grantable without a second edit here.
+    /// </summary>
+    /// <seealso cref="NormalizeMemberPermissions"/>
+    public static readonly IReadOnlySet<string> MemberGrantableScopes =
+        new HashSet<string>(ValidRequestScopes.Concat(TenantPermissions.All));
+
+    /// <summary>
     /// Expansion of the health.read convenience alias.
     /// </summary>
     public static readonly IReadOnlyList<string> HealthReadExpansion = new[]
@@ -191,12 +204,46 @@ public static class OAuthScopes
     }
 
     /// <summary>
+    /// Look up the read scope a readwrite scope implies. Lets a caller narrow a readwrite grant to
+    /// its read counterpart, which <see cref="SatisfiesScope"/> cannot express: it answers whether
+    /// a granted set covers a required scope, not what the closest covered scope is.
+    /// </summary>
+    /// <param name="readWriteScope">The readwrite scope to narrow.</param>
+    /// <param name="readScope">The implied read scope, when one exists.</param>
+    /// <returns><c>true</c> when <paramref name="readWriteScope"/> has a read counterpart.</returns>
+    public static bool TryGetImpliedReadScope(string readWriteScope, out string readScope)
+    {
+        return ReadWriteImpliesRead.TryGetValue(readWriteScope, out readScope!);
+    }
+
+    /// <summary>
     /// Expand aliases and normalize a set of requested scopes into concrete scopes.
     /// - Expands health.read into its component scopes
     /// - readwrite scopes implicitly include their read counterpart (no need to list both)
     /// - * (full access) expands to all scopes
+    /// Anything outside <see cref="ValidRequestScopes"/> is dropped, so this is safe to call on
+    /// caller-supplied input.
     /// </summary>
     public static IReadOnlySet<string> Normalize(IEnumerable<string> requestedScopes)
+    {
+        return Normalize(requestedScopes, ValidRequestScopes);
+    }
+
+    /// <summary>
+    /// Expand and normalize a tenant member's effective permissions into granted scopes.
+    /// Behaves like <see cref="Normalize"/> but recognizes <see cref="MemberGrantableScopes"/>, so
+    /// the tenant-administration atoms survive instead of being dropped. Call this only for
+    /// permissions that came from a tenant membership (role rows and direct permissions), never
+    /// for scopes supplied by a client.
+    /// </summary>
+    /// <seealso cref="MemberScopeResolver"/>
+    public static IReadOnlySet<string> NormalizeMemberPermissions(IEnumerable<string> permissions)
+    {
+        return Normalize(permissions, MemberGrantableScopes);
+    }
+
+    private static IReadOnlySet<string> Normalize(
+        IEnumerable<string> requestedScopes, IReadOnlySet<string> recognizedScopes)
     {
         var result = new HashSet<string>();
 
@@ -222,7 +269,7 @@ public static class OAuthScopes
                 continue;
             }
 
-            if (ValidRequestScopes.Contains(scope))
+            if (recognizedScopes.Contains(scope))
             {
                 result.Add(scope);
             }

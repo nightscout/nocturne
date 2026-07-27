@@ -64,18 +64,18 @@ public class MyTenantsController : ControllerBase
         if (authContext?.SubjectId == null)
             return Unauthorized();
 
-        // Per-tenant data is gated on membership permissions intersected with the auth token's
-        // granted scopes (as resolved by AuthenticationMiddleware). This endpoint is tenantless,
-        // so MemberScopeMiddleware has not applied the membership restriction here — the service
-        // mirrors it per tenant. InstanceKey/PlatformAccess are superuser auth types, matching
-        // MemberScopeMiddleware's handling.
+        // This endpoint is tenantless, so MemberScopeMiddleware has not applied the membership
+        // restriction — the service resolves it per tenant through MemberScopeResolver, which needs
+        // the credential type to know whether the token's scopes are a ceiling at all.
+        // InstanceKey/PlatformAccess are superuser auth types, matching MemberScopeMiddleware's
+        // handling: they never reach membership resolution there, so stand in a full-access grant.
         IReadOnlySet<string> tokenScopes =
             authContext.AuthType is AuthType.InstanceKey or AuthType.PlatformAccess
                 ? new HashSet<string> { OAuthScopes.FullAccess }
                 : HttpContext.GetGrantedScopes();
 
         var overview = await _overviewService.GetOverviewAsync(
-            authContext.SubjectId.Value, tokenScopes, ct);
+            authContext.SubjectId.Value, tokenScopes, authContext.AuthType, ct);
         return Ok(overview);
     }
 

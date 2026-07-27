@@ -82,6 +82,24 @@ public class GuestLinkServiceTests : IDisposable
             .WithMessage("*not allowed*");
     }
 
+    [Theory]
+    [InlineData(TenantPermissions.MembersManage)]
+    [InlineData(TenantPermissions.MembersInvite)]
+    [InlineData(TenantPermissions.RolesManage)]
+    [InlineData(TenantPermissions.TenantSettings)]
+    [InlineData(TenantPermissions.SharingManage)]
+    [InlineData(TenantPermissions.SharingGuest)]
+    [InlineData(TenantPermissions.AuditRead)]
+    [InlineData(TenantPermissions.AuditManage)]
+    public async Task CreateGuestLink_RejectsTenantAdministrationScopes(string scope)
+    {
+        var act = () => _service.CreateGuestLinkAsync(
+            _dataOwnerId, _creatorId, "Admin Scopes", "https://example.com", [scope]);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*not allowed*");
+    }
+
     [Fact]
     public async Task CreateGuestLink_EnforcesMaxActiveLimit()
     {
