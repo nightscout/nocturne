@@ -378,6 +378,37 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
     }
 
     [Fact]
+    public async Task GuestSession_CannotWriteV4TrackerDefinitions()
+    {
+        // TrackersController carries [Authorize] per action and no scope gate before this change, so
+        // a guest session could create and delete the tracker definitions that drive sensor and
+        // site-change care reminders. A guest holds alerts.read at most.
+        var code = await CreateGuestLinkCodeAsync();
+
+        var handler = new HttpClientHandler { UseCookies = true };
+        using var cookieClient = new HttpClient(handler)
+        {
+            BaseAddress = ApiClient.BaseAddress
+        };
+
+        var activateResponse = await cookieClient.PostAsJsonAsync("/api/v4/guest-links/activate", new
+        {
+            code
+        });
+        activateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await cookieClient.PostAsJsonAsync("/api/v4/trackers/definitions", new
+        {
+            name = "fabricated",
+            category = "consumable",
+            lifespanHours = 72,
+        });
+
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden);
+        Log($"Guest session V4 tracker definition write rejected, status: {response.StatusCode}");
+    }
+
+    [Fact]
     public async Task GuestSession_CannotAccessAdminEndpoints()
     {
         // Arrange - create and activate a guest link with cookie-enabled client

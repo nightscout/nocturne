@@ -2,8 +2,10 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 
 namespace Nocturne.API.Controllers.V4.Profiles;
@@ -19,8 +21,21 @@ namespace Nocturne.API.Controllers.V4.Profiles;
 [Route("api/v4/ui-settings")]
 [ClientPropertyName("uiSettings")]
 [Authorize]
-public class UISettingsController : ControllerBase
+public class UISettingsController : ControllerBase, IWriteScopedController
 {
+    /// <summary>
+    /// The OAuth scope every write action on this controller requires. These writes are
+    /// tenant-wide configuration, not per-user presentation state:
+    /// <see cref="IUISettingsService.SaveSettingsAsync"/> takes no subject, and
+    /// <see cref="UISettingsConfiguration"/> carries <see cref="NotificationSettings"/> — the alarm
+    /// thresholds and profiles that decide whether a low-glucose alert fires — so the whole-blob PUT
+    /// reaches alarm behaviour as directly as the <c>/notifications/alarms</c> routes do. V1 and V2
+    /// gate their notification writes on <c>alerts.readwrite</c>. The class-level <c>[Authorize]</c>
+    /// alone is satisfied by read-only credentials such as a guest-link session, which holds
+    /// <c>alerts.read</c>.
+    /// </summary>
+    public string WriteScope => OAuthScopes.AlertsReadWrite;
+
     private readonly ILogger<UISettingsController> _logger;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -165,6 +180,7 @@ public class UISettingsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The saved settings</returns>
     [HttpPut]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(UISettingsConfiguration), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -210,6 +226,7 @@ public class UISettingsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The saved notification settings</returns>
     [HttpPut("notifications")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(NotificationSettings), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -283,6 +300,7 @@ public class UISettingsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The saved alarm configuration</returns>
     [HttpPut("notifications/alarms")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(UserAlarmConfiguration), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -325,6 +343,7 @@ public class UISettingsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The saved alarm configuration</returns>
     [HttpPost("notifications/alarms/profiles")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(UserAlarmConfiguration), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -365,6 +384,7 @@ public class UISettingsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>The updated alarm configuration</returns>
     [HttpDelete("notifications/alarms/profiles/{profileId}")]
+    [RequireDeclaredWriteScope]
     [ProducesResponseType(typeof(UserAlarmConfiguration), 200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]

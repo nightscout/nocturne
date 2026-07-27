@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Controllers.V4.Analytics;
@@ -31,8 +33,19 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Tags("State Spans")]
 [Route("api/v4/state-spans")]
 [Authorize]
-public class StateSpansController : ControllerBase
+public class StateSpansController : ControllerBase, IWriteScopedController
 {
+    /// <summary>
+    /// The OAuth scope every write action on this controller requires. <c>state_spans</c> is not in
+    /// <see cref="ShareDataCategories.GovernedTables"/>, but its rows are the decomposed form of
+    /// legacy treatment events — temporary targets, profile switches, exercise, illness and travel
+    /// are <c>treatments</c> in V1/V3, and the temp-basal spans are written by
+    /// <c>V3 TreatmentsController</c>. Both V1 <c>ActivityController</c> and V3
+    /// <c>TreatmentsController</c> gate their writes on <c>treatments.readwrite</c>. The class-level
+    /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session.
+    /// </summary>
+    public string WriteScope => OAuthScopes.TreatmentsReadWrite;
+
     private readonly IStateSpanService _stateSpanService;
 
     public StateSpansController(IStateSpanService stateSpanService)
@@ -310,6 +323,7 @@ public class StateSpansController : ControllerBase
     /// Create a new state span (manual entry)
     /// </summary>
     [HttpPost]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetStateSpans"])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status201Created)]
     public async Task<ActionResult<StateSpan>> CreateStateSpan(
@@ -335,6 +349,7 @@ public class StateSpansController : ControllerBase
     /// Update an existing state span
     /// </summary>
     [HttpPut("{id}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetStateSpans", "GetStateSpan"])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
     public async Task<ActionResult<StateSpan>> UpdateStateSpan(
@@ -370,6 +385,7 @@ public class StateSpansController : ControllerBase
     /// Delete a state span
     /// </summary>
     [HttpDelete("{id}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetStateSpans"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteStateSpan(string id, CancellationToken cancellationToken = default)

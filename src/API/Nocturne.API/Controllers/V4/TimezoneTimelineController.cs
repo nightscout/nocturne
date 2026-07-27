@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Attributes;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Timezones;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Timezones;
 using OpenApi.Remote.Attributes;
 
@@ -18,8 +20,19 @@ namespace Nocturne.API.Controllers.V4;
 [Route("api/v4/timezone-timeline")]
 [Tags("Timezone Timeline")]
 [Authorize]
-public class TimezoneTimelineController : ControllerBase
+public class TimezoneTimelineController : ControllerBase, IWriteScopedController
 {
+    /// <summary>
+    /// The OAuth scope every write action on this controller requires. The timeline is patient
+    /// clinical configuration in the same sense as the timezone on <c>patient_records</c>, which
+    /// <c>PatientRecordController</c> gates on <c>therapy.readwrite</c>, and V1/V3 profile writes
+    /// require the same scope. <see cref="Recorrect"/> additionally triggers a Glooko re-import; the
+    /// records it rewrites are written by the connector's own publish path, so the scope here bounds
+    /// who may request the re-correction, not what the connector may write. The class-level
+    /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session.
+    /// </summary>
+    public string WriteScope => OAuthScopes.TherapyReadWrite;
+
     private const string GlookoConnectorId = "glooko";
 
     private readonly ITimezoneTimelineService _timeline;
@@ -51,6 +64,7 @@ public class TimezoneTimelineController : ControllerBase
     /// move is a single entry; the origin entry covers all earlier history.
     /// </summary>
     [HttpPut]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetTimeline"])]
     public async Task<ActionResult<TimezoneTimelineEntry>> Upsert(
         [FromBody] UpsertTimezoneEntryRequest request,
@@ -70,6 +84,7 @@ public class TimezoneTimelineController : ControllerBase
 
     /// <summary>Delete a timeline entry.</summary>
     [HttpDelete("{id:guid}")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetTimeline"])]
     public async Task<ActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
@@ -85,6 +100,7 @@ public class TimezoneTimelineController : ControllerBase
     /// </summary>
     /// <param name="request">Optional lower bound (UTC). When null, the connector's default window is used.</param>
     [HttpPost("recorrect")]
+    [RequireDeclaredWriteScope]
     [RemoteCommand]
     public async Task<ActionResult<RecorrectResult>> Recorrect(
         [FromBody] RecorrectRequest request,

@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Services;
@@ -23,8 +25,21 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 [ApiController]
 [Tags("Monitoring")]
 [Route("api/v4/trackers")]
-public class TrackersController : ControllerBase
+public class TrackersController : ControllerBase, IWriteScopedController
 {
+    /// <summary>
+    /// The OAuth scope every write action on this controller requires. The <c>tracker_*</c> tables
+    /// are not in <see cref="ShareDataCategories.GovernedTables"/> and have no V1/V3 data
+    /// equivalent: a tracker is monitoring state, not a patient observation. A definition's
+    /// notification thresholds are synthesised into managed alert rules
+    /// (<see cref="ITrackerAlertRuleSyncService"/>), an instance is keyed to the treatment that
+    /// triggered it rather than storing one, and acknowledging an instance acknowledges an alert
+    /// excursion (<see cref="IAlertAcknowledgementService"/>). V1 and V2 gate their notification
+    /// writes on <c>alerts.readwrite</c>. The per-action <c>[Authorize]</c> alone is satisfied by
+    /// read-only credentials such as a guest-link session, which holds <c>alerts.read</c>.
+    /// </summary>
+    public string WriteScope => OAuthScopes.AlertsReadWrite;
+
     private readonly ITrackerRepository _repository;
     private readonly ISignalRBroadcastService _broadcast;
     private readonly ITrackerAlertRuleSyncService _ruleSync;
@@ -221,6 +236,7 @@ public class TrackersController : ControllerBase
     /// Create a new tracker definition
     /// </summary>
     [HttpPost("definitions")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteForm(Invalidates = ["GetDefinitions"])]
     [ProducesResponseType(typeof(TrackerDefinitionDto), StatusCodes.Status201Created)]
@@ -315,6 +331,7 @@ public class TrackersController : ControllerBase
     /// Update a tracker definition
     /// </summary>
     [HttpPut("definitions/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteForm(Invalidates = ["GetDefinitions", "GetDefinition"])]
     [ProducesResponseType(typeof(TrackerDefinitionDto), StatusCodes.Status200OK)]
@@ -420,6 +437,7 @@ public class TrackersController : ControllerBase
     /// Delete a tracker definition
     /// </summary>
     [HttpDelete("definitions/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetDefinitions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -518,6 +536,7 @@ public class TrackersController : ControllerBase
     /// Start a new tracker instance
     /// </summary>
     [HttpPost("instances")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(typeof(TrackerInstanceDto), StatusCodes.Status201Created)]
@@ -573,6 +592,7 @@ public class TrackersController : ControllerBase
     /// Complete a tracker instance
     /// </summary>
     [HttpPut("instances/{id:guid}/complete")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances", "GetInstanceHistory"])]
     [ProducesResponseType(typeof(TrackerInstanceDto), StatusCodes.Status200OK)]
@@ -623,6 +643,7 @@ public class TrackersController : ControllerBase
     /// alert_state escalation rules' job, not a snooze re-fire.
     /// </summary>
     [HttpPost("instances/{id:guid}/ack")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -663,6 +684,7 @@ public class TrackersController : ControllerBase
     /// Delete a tracker instance
     /// </summary>
     [HttpDelete("instances/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -709,6 +731,7 @@ public class TrackersController : ControllerBase
     /// Create a new preset
     /// </summary>
     [HttpPost("presets")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetPresets"])]
     [ProducesResponseType(typeof(TrackerPresetDto), StatusCodes.Status201Created)]
@@ -751,6 +774,7 @@ public class TrackersController : ControllerBase
     /// Apply a preset (starts a new instance)
     /// </summary>
     [HttpPost("presets/{id:guid}/apply")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(typeof(TrackerInstanceDto), StatusCodes.Status200OK)]
@@ -784,6 +808,7 @@ public class TrackersController : ControllerBase
     /// Delete a preset
     /// </summary>
     [HttpDelete("presets/{id:guid}")]
+    [RequireDeclaredWriteScope]
     [Authorize]
     [RemoteCommand(Invalidates = ["GetPresets"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

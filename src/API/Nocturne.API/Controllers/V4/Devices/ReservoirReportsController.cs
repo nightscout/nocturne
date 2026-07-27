@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Models.Requests.V4;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Controllers.V4.Devices;
@@ -43,7 +45,14 @@ public class ReservoirReportsController(
     /// <param name="request">The reservoir report.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The stored pump snapshot carrying the reported value.</returns>
+    /// <remarks>
+    /// Writes <c>pump_snapshots</c> and, for a fill, <c>device_events</c> — both the devices category
+    /// in <see cref="ShareDataCategories.GovernedTables"/>, matching the scope
+    /// <c>PumpSnapshotController</c> and <c>DeviceEventController</c> require. The class-level
+    /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session.
+    /// </remarks>
     [HttpPost]
+    [RequireScope(OAuthScopes.DevicesReadWrite)]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
