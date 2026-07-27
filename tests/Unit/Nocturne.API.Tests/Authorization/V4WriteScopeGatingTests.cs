@@ -58,7 +58,9 @@ public class V4WriteScopeGatingTests
         /// <summary>Platform operator surface; the class carries [Authorize(Roles = "platform_admin")].</summary>
         public const string PlatformAdminRole = "platform-admin role, not a data scope";
 
-        /// <summary>Tenant operator surface; the class carries [RequireAdmin].</summary>
+        /// <summary>
+        /// Tenant operator surface; [RequireAdmin] on the class or on every write action.
+        /// </summary>
         public const string TenantAdminAttribute = "tenant-admin attribute, not a data scope";
 
         /// <summary>Service-to-service surface; the class carries [RequireInstanceKeyAuth].</summary>
@@ -142,6 +144,12 @@ public class V4WriteScopeGatingTests
             ["DeduplicationController"] = NotDataCategory.TenantAdminAttribute,
             ["MigrationController"] = NotDataCategory.TenantAdminAttribute,
 
+            // Both repeat [RequireAdmin] per action rather than carrying it on the class.
+            // ServicesController's data deletions and sync triggers are behind it, so they are not
+            // reachable by a read-only session despite having no scope gate.
+            ["CompatibilityController"] = NotDataCategory.TenantAdminAttribute,
+            ["ServicesController"] = NotDataCategory.TenantAdminAttribute,
+
             ["ChatIdentityDirectoryController"] = NotDataCategory.InstanceKey,
 
             ["DevAdminController"] = NotDataCategory.DevelopmentOnly,
@@ -165,10 +173,8 @@ public class V4WriteScopeGatingTests
             ["ConfigurationController"] = NotDataCategory.ConnectorAdministration,
             ["ConnectorFoodEntriesController"] = NotDataCategory.ConnectorAdministration,
             ["MyFitnessPalSettingsController"] = NotDataCategory.ConnectorAdministration,
-            ["ServicesController"] = NotDataCategory.ConnectorAdministration,
             ["WebhookSettingsController"] = NotDataCategory.ConnectorAdministration,
 
-            ["CompatibilityController"] = NotDataCategory.ComputeOverPostBody,
             ["DebugController"] = NotDataCategory.ComputeOverPostBody,
             ["StatisticsController"] = NotDataCategory.ComputeOverPostBody,
 
@@ -520,8 +526,7 @@ public class V4WriteScopeGatingTests
                 NotDataCategory.PlatformAdminRole => attributes
                     .OfType<AuthorizeAttribute>()
                     .Any(a => a.Roles?.Contains("platform_admin", StringComparison.Ordinal) == true),
-                NotDataCategory.TenantAdminAttribute => attributes
-                    .Any(a => a.GetType().Name == "RequireAdminAttribute"),
+                NotDataCategory.TenantAdminAttribute => CarriesAttribute(controller, "RequireAdminAttribute"),
                 NotDataCategory.InstanceKey => attributes
                     .Any(a => a.GetType().Name == "RequireInstanceKeyAuthAttribute"),
                 NotDataCategory.DevelopmentOnly => controller.Namespace == V4Namespace + ".DevOnly",
@@ -533,6 +538,19 @@ public class V4WriteScopeGatingTests
         }
 
         broken.Should().BeEmpty(string.Join("; ", broken));
+    }
+
+    /// <summary>
+    /// Whether the named attribute governs every write action on the controller — present on the
+    /// class, or repeated on each write action.
+    /// </summary>
+    private static bool CarriesAttribute(Type controller, string attributeTypeName)
+    {
+        bool Named(IEnumerable<object> attributes) =>
+            attributes.Any(a => a.GetType().Name == attributeTypeName);
+
+        return Named(controller.GetCustomAttributes(inherit: true))
+               || WriteActions(controller).All(a => Named(a.GetCustomAttributes(inherit: true)));
     }
 
     private static bool IsGateExempt(Type controller, MethodInfo action) =>
