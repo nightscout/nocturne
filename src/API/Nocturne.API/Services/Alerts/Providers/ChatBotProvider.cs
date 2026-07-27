@@ -17,18 +17,28 @@ namespace Nocturne.API.Services.Alerts.Providers;
 /// The bot endpoint is derived from <c>WEB_URL</c>, which names the web app's
 /// deployment-internal address (the AppHost wires it from the web resource's
 /// endpoint; the Compose bundles set <c>http://nocturne-web:&lt;port&gt;</c>).
-/// Delivery is skipped with a warning when it is unset. The deployment's public
-/// base URL (<see cref="ServiceNames.ConfigKeys.BaseUrl"/>) is deliberately not
-/// used as a fallback: an edge proxy fronting that URL strips the instance-key
-/// service headers below, because the same <c>/api/**</c> prefix is reachable from
-/// the internet, and the dispatch would arrive unauthenticated and be rejected.
+/// The deployment's public base URL (<see cref="ServiceNames.ConfigKeys.BaseUrl"/>)
+/// is deliberately not used as a fallback. It is a hairpin: an intra-cluster call
+/// between two containers on the same network would leave the deployment, traverse
+/// the CDN and the edge proxy, and come back in — carrying the instance-key service
+/// credential across the public internet on every alert. It also makes delivery
+/// depend on the edge forwarding those headers unchanged, which is not a property
+/// the edge guarantees; header sanitisation there would silently 401 every dispatch.
 /// </para>
 /// <para>
 /// The dispatch route is reachable from the internet through the gateway, so the
 /// request carries the instance-key service credential
 /// (<see cref="ServiceNames.Headers.InstanceKey"/> +
 /// <see cref="ServiceNames.Headers.InstanceService"/>) and names the target tenant
-/// in the body. Delivery is skipped when either is unavailable.
+/// in the body.
+/// </para>
+/// <para>
+/// A missing address, instance key, or tenant slug throws rather than returning.
+/// <see cref="AlertDeliveryService"/> creates the <c>alert_deliveries</c> row before
+/// calling this provider and marks neither delivered nor failed for chat-bot
+/// channels, so a silent return leaves that row <c>pending</c> forever with no error
+/// text and no retry accounting. Throwing lands the reason in the row's error field
+/// via the caller's <c>MarkFailedAsync</c>, matching how an HTTP failure is recorded.
 /// </para>
 /// </remarks>
 internal sealed class ChatBotProvider(
@@ -67,6 +77,10 @@ internal sealed class ChatBotProvider(
     /// <param name="destination">Platform-specific destination identifier (user/channel ID).</param>
     /// <param name="payload">The <see cref="AlertPayload"/> to deliver.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <c>WEB_URL</c>, the instance key, or the tenant slug is unavailable. See the
+    /// remarks on this type for why these are thrown rather than logged and skipped.
+    /// </exception>
     public async Task SendAsync(Guid deliveryId, ChannelType channelType, string destination, AlertPayload payload, CancellationToken ct)
     {
         // Internal address only — see the remarks on this type for why the public
@@ -74,29 +88,24 @@ internal sealed class ChatBotProvider(
         var webUrl = configuration["WEB_URL"];
         if (string.IsNullOrEmpty(webUrl))
         {
-            logger.LogWarning(
+            throw new InvalidOperationException(
                 "WEB_URL is not configured with the web app's internal address, cannot dispatch to chat bot");
-            return;
         }
 
         var instanceKeyDigest = InstanceKeyDigest.Resolve(configuration);
         if (string.IsNullOrEmpty(instanceKeyDigest))
         {
-            logger.LogError(
-                "No instance key configured, cannot authenticate the chat bot dispatch for delivery {DeliveryId}",
-                deliveryId);
-            return;
+            throw new InvalidOperationException(
+                "No instance key configured, cannot authenticate the chat bot dispatch");
         }
 
         // The dispatch route resolves the tenant from this slug instead of a forwarded
-        // host header, so a missing slug means the request cannot be scoped and is dropped.
+        // host header, so a missing slug means the request cannot be scoped.
         var tenantSlug = tenantAccessor.Context?.Slug;
         if (string.IsNullOrEmpty(tenantSlug))
         {
-            logger.LogError(
-                "No tenant resolved, cannot dispatch chat bot alert for delivery {DeliveryId}",
-                deliveryId);
-            return;
+            throw new InvalidOperationException(
+                "No tenant resolved, cannot dispatch chat bot alert");
         }
 
         try

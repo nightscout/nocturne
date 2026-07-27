@@ -152,30 +152,38 @@ public class ChatBotProviderTests
     }
 
     [Fact]
-    public async Task SendAsync_SkipsDispatch_WhenInstanceKeyNotConfigured()
+    public async Task SendAsync_ThrowsWithoutDispatching_WhenInstanceKeyNotConfigured()
     {
         // Arrange
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
         var provider = CreateProvider(handler, instanceKey: null);
 
         // Act
-        await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+        var act = () => provider.SendAsync(
+            Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
 
-        // Assert -- an unauthenticated dispatch would be rejected, so none is sent
+        // Assert -- an unauthenticated dispatch would be rejected, so none is sent. The throw
+        // reaches AlertDeliveryService's MarkFailedAsync; a silent return would leave the
+        // alert_deliveries row pending forever.
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*instance key*");
         handler.CapturedRequest.Should().BeNull();
     }
 
     [Fact]
-    public async Task SendAsync_SkipsDispatch_WhenNoTenantResolved()
+    public async Task SendAsync_ThrowsWithoutDispatching_WhenNoTenantResolved()
     {
         // Arrange
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
         var provider = CreateProvider(handler, tenantSlug: null);
 
         // Act
-        await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+        var act = () => provider.SendAsync(
+            Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
 
         // Assert
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*tenant*");
         handler.CapturedRequest.Should().BeNull();
     }
 
@@ -198,30 +206,35 @@ public class ChatBotProviderTests
     [Fact]
     public async Task SendAsync_DoesNotFallBackToThePublicBaseUrl()
     {
-        // Arrange -- only the public base URL is configured. An edge proxy in front of
-        // it strips X-Instance-Key/X-Instance-Service (the /api/** prefix is
-        // internet-reachable), so dispatching there would 401 and drop the alert.
+        // Arrange -- only the public base URL is configured. Dispatching there would hairpin an
+        // intra-cluster call out through the CDN and edge and back in, carrying the instance-key
+        // service credential across the public internet.
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
         var provider = CreateProvider(handler, webUrl: "", baseUrl: "https://nocturne.run");
 
         // Act
-        await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+        var act = () => provider.SendAsync(
+            Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
 
         // Assert -- no request at all, rather than one to the public URL
+        await act.Should().ThrowAsync<InvalidOperationException>();
         handler.CapturedRequest.Should().BeNull();
     }
 
     [Fact]
-    public async Task SendAsync_LogsWarning_WhenWebUrlNotConfigured()
+    public async Task SendAsync_ThrowsWithoutDispatching_WhenWebUrlNotConfigured()
     {
         // Arrange
         var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
         var provider = CreateProvider(handler, webUrl: "", baseUrl: "");
 
-        // Act -- should return early without throwing
-        await provider.SendAsync(Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
+        // Act
+        var act = () => provider.SendAsync(
+            Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(), CancellationToken.None);
 
-        // Assert -- no HTTP request was made
+        // Assert -- no HTTP request, and the reason reaches the delivery row
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*WEB_URL*");
         handler.CapturedRequest.Should().BeNull();
     }
 
