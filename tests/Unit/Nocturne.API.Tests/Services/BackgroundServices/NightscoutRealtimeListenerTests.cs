@@ -129,7 +129,113 @@ public class NightscoutRealtimeListenerTests
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
     }
 
+    /// <summary>
+    /// SocketIOClient bounds the whole connect-with-retries operation with
+    /// <c>new CancellationTokenSource(ReconnectionAttempts * ReconnectionDelayMax)</c>, evaluated in
+    /// int arithmetic. A product above <see cref="int.MaxValue"/> wraps negative and ConnectAsync
+    /// throws ArgumentOutOfRangeException before attempting a single connection, so every tenant
+    /// silently loses its real-time listener.
+    /// </summary>
+    [Fact]
+    public void ReconnectionBudget_FitsWithinInt()
+    {
+        var product = (long)NightscoutConnectorBackgroundService.ReconnectionAttempts
+            * NightscoutConnectorBackgroundService.ReconnectionDelayMaxMs;
+
+        Assert.InRange(product, 1, int.MaxValue);
+    }
+
+    /// <summary>
+    /// A tenant with an enabled connector pointing at an unreachable instance must fall back to
+    /// polling. Regression test for the reconnection-budget overflow: the resulting
+    /// ArgumentOutOfRangeException was swallowed by the per-tenant catch, so the only visible
+    /// symptom was a recurring warning and no listener ever starting.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_UnreachableInstance_DoesNotFailOnReconnectionBudget()
+    {
+        // Arrange — one tenant pointing at a closed port (discard service)
+        var (cleanup, connectionString) = CreateSqliteDb(addTenant: true);
+        using var _ = cleanup;
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Enabled = true,
+            Url = "http://127.0.0.1:9",
+        };
+
+        var logger = new CapturingLogger();
+        var serviceProvider = BuildServiceProvider(connectionString, config);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, logger);
+
+        // Act
+        await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+
+        // Assert — the connect failed (nothing is listening on port 9), but it must have failed by
+        // actually attempting to connect, not by rejecting our own options.
+        Assert.DoesNotContain(logger.Exceptions, ex => ex is ArgumentOutOfRangeException);
+    }
+
+    /// <summary>
+    /// Tenants may store a bare host with no scheme; the polling path normalises this via
+    /// ResolveBaseUrl. The listener path must not blow up on Uri parsing where polling succeeds.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_SchemelessUrl_DoesNotThrowUriFormatException()
+    {
+        // Arrange — a bare host, as three production tenants have stored
+        var (cleanup, connectionString) = CreateSqliteDb(addTenant: true);
+        using var _ = cleanup;
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Enabled = true,
+            Url = "127.0.0.1:9",
+        };
+
+        var logger = new CapturingLogger();
+        var serviceProvider = BuildServiceProvider(connectionString, config);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, logger);
+
+        // Act
+        await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+
+        // Assert
+        Assert.DoesNotContain(logger.Exceptions, ex => ex is UriFormatException);
+    }
+
     #region Helpers
+
+    /// <summary>
+    /// Captures exceptions passed to the logger so tests can assert on how a failure surfaced.
+    /// </summary>
+    private sealed class CapturingLogger : ILogger<NightscoutConnectorBackgroundService>
+    {
+        private readonly List<Exception> _exceptions = [];
+
+        public IReadOnlyList<Exception> Exceptions
+        {
+            get { lock (_exceptions) return _exceptions.ToList(); }
+        }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (exception is null)
+                return;
+
+            lock (_exceptions)
+                _exceptions.Add(exception);
+        }
+    }
 
     /// <summary>
     /// Invokes the protected StartRealtimeListenersAsync via reflection.

@@ -760,7 +760,13 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return url;
     }
 
-    private static string ResolveBaseUrl(string configUrl)
+    /// <summary>
+    /// Normalises a tenant-configured Nightscout URL: supplies <c>https://</c> when the tenant
+    /// stored a bare host, and trims any trailing slash so callers can append paths directly.
+    /// </summary>
+    /// <param name="configUrl">The URL as stored in the tenant's connector configuration.</param>
+    /// <exception cref="InvalidOperationException">The configured URL is null or empty.</exception>
+    public static string ResolveBaseUrl(string configUrl)
     {
         if (string.IsNullOrEmpty(configUrl))
             throw new InvalidOperationException("Nightscout URL is not configured");
