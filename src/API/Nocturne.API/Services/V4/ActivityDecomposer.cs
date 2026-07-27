@@ -92,6 +92,24 @@ public class ActivityDecomposer : IActivityDecomposer, IDecomposer<Activity>
         return null;
     }
 
+    /// <summary>
+    /// Returns the OAuth read scope required to see this activity. Derived from
+    /// <see cref="RequiredWriteScope"/> so the read gate and the storage destination cannot drift
+    /// apart. A regular activity reads under <c>treatments.read</c>, which is the scope the legacy
+    /// activity read plane has always required for StateSpan-backed activities. A dedicated
+    /// destination with no read counterpart falls back to <see cref="OAuthScopes.FullAccess"/>,
+    /// which only an admin grant holds.
+    /// </summary>
+    /// <param name="activity">The activity to classify.</param>
+    public string RequiredReadScope(Activity activity)
+    {
+        var writeScope = RequiredWriteScope(activity);
+        if (writeScope is null)
+            return OAuthScopes.TreatmentsRead;
+
+        return OAuthScopes.ImpliedReadScope(writeScope) ?? OAuthScopes.FullAccess;
+    }
+
     /// <inheritdoc/>
     public async Task<DecompositionResult> DecomposeAsync(
         Activity activity,

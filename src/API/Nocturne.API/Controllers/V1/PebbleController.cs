@@ -13,6 +13,11 @@ namespace Nocturne.API.Controllers.V1;
 /// Used by smartwatch apps, Loop, and other CGM monitoring applications.
 /// Based on the legacy pebble.js implementation.
 /// </summary>
+/// <remarks>
+/// The action requires only <c>glucose.read</c> while the response also carries IOB and COB from
+/// treatments and pump/uploader battery from device status. This is the accepted narrowing described
+/// on <see cref="V2.PropertiesController"/>, which names the per-category follow-up.
+/// </remarks>
 /// <seealso cref="IEntryService"/>
 /// <seealso cref="DeviceStatusProjectionService"/>
 /// <seealso cref="ITreatmentService"/>

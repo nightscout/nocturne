@@ -67,6 +67,9 @@ public class ScopeTranslatorTests
         Assert.Contains(OAuthScopes.AlertsRead, scopes);
         Assert.Contains(OAuthScopes.ReportsRead, scopes);
         Assert.Contains(OAuthScopes.IdentityRead, scopes);
+        Assert.Contains(OAuthScopes.HeartRateRead, scopes);
+        Assert.Contains(OAuthScopes.StepCountRead, scopes);
+        Assert.Contains(OAuthScopes.SleepRead, scopes);
     }
 
     [Fact]
@@ -79,6 +82,45 @@ public class ScopeTranslatorTests
         Assert.Contains(OAuthScopes.TreatmentsRead, scopes);
         Assert.Contains(OAuthScopes.DevicesRead, scopes);
         Assert.Contains(OAuthScopes.TherapyRead, scopes);
+        Assert.Contains(OAuthScopes.HeartRateRead, scopes);
+        Assert.Contains(OAuthScopes.StepCountRead, scopes);
+        Assert.Contains(OAuthScopes.SleepRead, scopes);
+    }
+
+    /// <summary>
+    /// The legacy activity collection is Nocturne's merged read over heart rates, step counts, sleep
+    /// sessions and StateSpans. Its read permission carries the three dedicated categories; the
+    /// StateSpan half reads under treatments, which <c>api:treatments:read</c> grants separately.
+    /// </summary>
+    [Fact]
+    public void FromPermissions_ActivityRead_MapsToTheDedicatedActivityCategories()
+    {
+        var scopes = ScopeTranslator.FromPermissions(["api:activity:read"]);
+
+        Assert.Contains(OAuthScopes.HeartRateRead, scopes);
+        Assert.Contains(OAuthScopes.StepCountRead, scopes);
+        Assert.Contains(OAuthScopes.SleepRead, scopes);
+        Assert.DoesNotContain(OAuthScopes.TreatmentsRead, scopes);
+        Assert.DoesNotContain(OAuthScopes.GlucoseRead, scopes);
+    }
+
+    /// <summary>
+    /// The V1/V2/V3 controllers are gated by the HasPermissions policy, which rejects an empty
+    /// PermissionTrie before any scope check runs. A grant holding only a dedicated activity category
+    /// must therefore still produce a legacy permission string.
+    /// </summary>
+    [Theory]
+    [InlineData(OAuthScopes.HeartRateRead)]
+    [InlineData(OAuthScopes.StepCountRead)]
+    [InlineData(OAuthScopes.SleepRead)]
+    [InlineData(OAuthScopes.HeartRateReadWrite)]
+    [InlineData(OAuthScopes.StepCountReadWrite)]
+    [InlineData(OAuthScopes.SleepReadWrite)]
+    public void ToPermissions_ActivityCategories_MapBackToTheActivityCollection(string scope)
+    {
+        var permissions = ScopeTranslator.ToPermissions([scope]);
+
+        Assert.Contains("api:activity:read", permissions);
     }
 
     [Fact]

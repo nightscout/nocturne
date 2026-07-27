@@ -205,10 +205,23 @@ public class CountController : ControllerBase
     /// <param name="find">MongoDB-style find query filters (JSON format)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Count of activity entries matching the criteria</returns>
+    /// <remarks>
+    /// <c>CountActivitiesAsync</c> sums four storages — StateSpans, heart rates, step counts and
+    /// sleep sessions — into a single number, so unlike the record-returning activity endpoints
+    /// the result cannot be filtered down to the categories the caller holds. The requirement is
+    /// therefore every category's read scope (AND), which is what the legacy admin, <c>api:*:read</c>
+    /// and <c>readable</c> grants carry. Serving a per-category count needs a source-aware count on
+    /// <c>IActivityService</c>.
+    /// </remarks>
     [HttpGet("activity/where")]
     [NightscoutEndpoint("/api/v1/count/activity/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
-    [RequireScope(OAuthScopes.TreatmentsRead)]
+    [RequireScope(
+        requireAll: true,
+        OAuthScopes.TreatmentsRead,
+        OAuthScopes.HeartRateRead,
+        OAuthScopes.StepCountRead,
+        OAuthScopes.SleepRead)]
     public async Task<ActionResult<CountResponse>> CountActivity(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default

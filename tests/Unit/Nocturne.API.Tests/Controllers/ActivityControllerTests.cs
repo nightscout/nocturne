@@ -39,11 +39,27 @@ public class ActivityControllerTests
         // Set up HttpContext for the controller
         var httpContext = new DefaultHttpContext();
         _controller.ControllerContext = new ControllerContext() { HttpContext = httpContext };
+
+        // Default read classification: a regular StateSpan-backed activity, read under treatments.
+        // Tests that exercise a dedicated category override this per record.
+        _mockActivityDecomposer
+            .Setup(d => d.RequiredReadScope(It.IsAny<Activity>()))
+            .Returns(OAuthScopes.TreatmentsRead);
+        GrantScopes(OAuthScopes.TreatmentsRead);
     }
 
     /// <summary>Populates the request's granted scopes, as the auth middleware does at runtime.</summary>
     private void GrantScopes(params string[] scopes) =>
         _controller.HttpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(scopes);
+
+    /// <summary>
+    /// Classifies each activity's read scope by its <see cref="Activity.Type"/>, standing in for the
+    /// real decomposer's routing.
+    /// </summary>
+    private void ClassifyReadScopesByType(Dictionary<string, string> typeToReadScope) =>
+        _mockActivityDecomposer
+            .Setup(d => d.RequiredReadScope(It.IsAny<Activity>()))
+            .Returns((Activity a) => typeToReadScope.GetValueOrDefault(a.Type ?? "", OAuthScopes.TreatmentsRead));
 
     [Fact]
     public async Task GetActivities_WhenActivitiesExist_ShouldReturnActivities()
@@ -188,6 +204,102 @@ public class ActivityControllerTests
         // Assert
         result.Should().NotBeNull();
         result.Result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    /// <summary>
+    /// The merged activity read serves four storages. A caller holding one category must see that
+    /// category and nothing else, which is the cross-category read the per-action scope gate on its
+    /// own could not close.
+    /// </summary>
+    [Fact]
+    public async Task GetActivities_HeartRateOnlyGrant_ReturnsOnlyHeartRateRecords()
+    {
+        var merged = new List<Activity>
+        {
+            new() { Id = "hr", Type = "HeartRate", Mills = 4 },
+            new() { Id = "sc", Type = "StepCount", Mills = 3 },
+            new() { Id = "sleep", Type = "Sleep", Mills = 2 },
+            new() { Id = "ex", Type = "Exercise", Mills = 1 },
+        };
+        ClassifyReadScopesByType(new()
+        {
+            ["HeartRate"] = OAuthScopes.HeartRateRead,
+            ["StepCount"] = OAuthScopes.StepCountRead,
+            ["Sleep"] = OAuthScopes.SleepRead,
+            ["Exercise"] = OAuthScopes.TreatmentsRead,
+        });
+        GrantScopes(OAuthScopes.HeartRateRead);
+        _mockActivityService
+            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(merged);
+
+        var result = await _controller.GetActivities(cancellationToken: CancellationToken.None);
+
+        var returned = (result.Result as OkObjectResult)!.Value as List<Activity>;
+        returned!.Select(a => a.Id).Should().Equal("hr");
+    }
+
+    [Fact]
+    public async Task GetActivities_TreatmentsOnlyGrant_DropsHeartRateStepsAndSleep()
+    {
+        var merged = new List<Activity>
+        {
+            new() { Id = "hr", Type = "HeartRate", Mills = 4 },
+            new() { Id = "sc", Type = "StepCount", Mills = 3 },
+            new() { Id = "sleep", Type = "Sleep", Mills = 2 },
+            new() { Id = "ex", Type = "Exercise", Mills = 1 },
+        };
+        ClassifyReadScopesByType(new()
+        {
+            ["HeartRate"] = OAuthScopes.HeartRateRead,
+            ["StepCount"] = OAuthScopes.StepCountRead,
+            ["Sleep"] = OAuthScopes.SleepRead,
+            ["Exercise"] = OAuthScopes.TreatmentsRead,
+        });
+        GrantScopes(OAuthScopes.TreatmentsRead);
+        _mockActivityService
+            .Setup(x => x.GetActivitiesAsync(It.IsAny<string?>(), 10, 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(merged);
+
+        var result = await _controller.GetActivities(cancellationToken: CancellationToken.None);
+
+        var returned = (result.Result as OkObjectResult)!.Value as List<Activity>;
+        returned!.Select(a => a.Id).Should().Equal("ex");
+    }
+
+    /// <summary>
+    /// A record whose category the caller does not hold answers 404, the same as a record that does
+    /// not exist, so the response does not disclose the record.
+    /// </summary>
+    [Fact]
+    public async Task GetActivity_RecordInUnheldCategory_ReturnsNotFound()
+    {
+        var activityId = "hr-1";
+        ClassifyReadScopesByType(new() { ["HeartRate"] = OAuthScopes.HeartRateRead });
+        GrantScopes(OAuthScopes.TreatmentsRead);
+        _mockActivityService
+            .Setup(x => x.GetActivityByIdAsync(activityId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Activity { Id = activityId, Type = "HeartRate", Mills = 1 });
+
+        var result = await _controller.GetActivity(activityId, CancellationToken.None);
+
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetActivity_RecordInHeldCategory_IsReturned()
+    {
+        var activityId = "hr-1";
+        var record = new Activity { Id = activityId, Type = "HeartRate", Mills = 1 };
+        ClassifyReadScopesByType(new() { ["HeartRate"] = OAuthScopes.HeartRateRead });
+        GrantScopes(OAuthScopes.HeartRateRead);
+        _mockActivityService
+            .Setup(x => x.GetActivityByIdAsync(activityId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(record);
+
+        var result = await _controller.GetActivity(activityId, CancellationToken.None);
+
+        (result.Result as OkObjectResult)!.Value.Should().BeEquivalentTo(record);
     }
 
     [Fact]

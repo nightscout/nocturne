@@ -131,6 +131,9 @@ public class RequireScopeAttributeShareTests
     [InlineData(OAuthScopes.TherapyRead)]
     [InlineData(OAuthScopes.FoodRead)]
     [InlineData(OAuthScopes.AlertsRead)]
+    [InlineData(OAuthScopes.HeartRateRead)]
+    [InlineData(OAuthScopes.StepCountRead)]
+    [InlineData(OAuthScopes.SleepRead)]
     public void LegacyApiSecretAndReadTokens_SatisfyEveryRequiredReadScope(string requiredScope)
     {
         // api-secret / admin subjects carry "*"; read-only legacy subjects carry the Shiro
@@ -150,6 +153,39 @@ public class RequireScopeAttributeShareTests
 
             context.Result.Should().BeNull(
                 $"permissions [{string.Join(",", permissions)}] must still satisfy {requiredScope}");
+        }
+    }
+
+    /// <summary>
+    /// <c>/api/v1/activity</c> merges four storages, so it admits on an OR over their read scopes and
+    /// then filters the response per record. A legacy read subject carries the permissions the
+    /// <c>readable</c> seed role grants, and those must resolve to all four categories or the legacy
+    /// activity read silently starts returning a subset.
+    /// </summary>
+    [Fact]
+    public void LegacyReadableRolePermissions_ReadEveryMergedActivityCategory()
+    {
+        // The permission strings RoleService seeds for the "readable" and "public" roles.
+        var scopes = ScopeTranslator.FromPermissions([
+            "api:entries:read",
+            "api:treatments:read",
+            "api:devicestatus:read",
+            "api:profile:read",
+            "api:food:read",
+            "api:activity:read",
+            "api:trackers:read",
+        ]);
+
+        foreach (var category in new[]
+                 {
+                     OAuthScopes.TreatmentsRead,
+                     OAuthScopes.HeartRateRead,
+                     OAuthScopes.StepCountRead,
+                     OAuthScopes.SleepRead,
+                 })
+        {
+            OAuthScopes.SatisfiesScope(scopes, category).Should().BeTrue(
+                $"a legacy read subject must keep reading {category} data from /api/v1/activity");
         }
     }
 

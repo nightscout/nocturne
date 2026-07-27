@@ -209,6 +209,16 @@ public static class OAuthScopes
     };
 
     /// <summary>
+    /// Returns the read scope a readwrite scope implies, or <see langword="null"/> when the scope
+    /// has no read counterpart (a capability grant, an already-read scope, or full access).
+    /// </summary>
+    /// <param name="readWriteScope">The readwrite scope to downgrade.</param>
+    public static string? ImpliedReadScope(string readWriteScope)
+    {
+        return ReadWriteImpliesRead.TryGetValue(readWriteScope, out var readScope) ? readScope : null;
+    }
+
+    /// <summary>
     /// Check whether a scope string is a valid Nocturne OAuth scope.
     /// </summary>
     public static bool IsValid(string scope)

@@ -1,0 +1,62 @@
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
+
+namespace Nocturne.API.Authorization;
+
+/// <summary>
+/// Enforces per-record OAuth read scopes on the merged activity read endpoints, the mirror of
+/// <see cref="ActivityWriteScopeGuard"/>. <c>IActivityService.GetActivitiesAsync</c> merges four
+/// storages into one response — StateSpans, heart rates, step counts and sleep sessions — and each
+/// dedicated storage has its own read scope, so a single <c>RequireScope</c> attribute on the
+/// action can only decide admission, not what the response may contain. The attribute therefore
+/// lists <see cref="AdmissionScopes"/> as an OR and this guard drops every record whose category
+/// the caller does not hold.
+/// </summary>
+/// <seealso cref="IActivityDecomposer.RequiredReadScope"/>
+internal static class ActivityReadScopeGuard
+{
+    /// <summary>
+    /// The read scopes that admit a caller to the merged activity read endpoints: holding any one
+    /// of them means at least one category in the response is visible. Kept here as documentation
+    /// of the set — attribute arguments must be compile-time constants, so the actions repeat the
+    /// constants inline.
+    /// </summary>
+    public static readonly IReadOnlyList<string> AdmissionScopes =
+    [
+        OAuthScopes.TreatmentsRead,
+        OAuthScopes.HeartRateRead,
+        OAuthScopes.StepCountRead,
+        OAuthScopes.SleepRead,
+    ];
+
+    /// <summary>
+    /// Returns whether the caller's granted scopes cover the storage the activity came from.
+    /// </summary>
+    /// <param name="activity">The activity about to be returned.</param>
+    /// <param name="decomposer">Classifier that maps each activity to its required read scope.</param>
+    /// <param name="grantedScopes">The caller's normalized granted scopes.</param>
+    public static bool CanRead(
+        Activity activity,
+        IActivityDecomposer decomposer,
+        IReadOnlySet<string> grantedScopes)
+    {
+        return OAuthScopes.SatisfiesScope(grantedScopes, decomposer.RequiredReadScope(activity));
+    }
+
+    /// <summary>
+    /// Drops every activity whose storage category the caller lacks the read scope for.
+    /// </summary>
+    /// <param name="activities">The activities about to be returned.</param>
+    /// <param name="decomposer">Classifier that maps each activity to its required read scope.</param>
+    /// <param name="grantedScopes">The caller's normalized granted scopes.</param>
+    public static List<Activity> Filter(
+        IEnumerable<Activity> activities,
+        IActivityDecomposer decomposer,
+        IReadOnlySet<string> grantedScopes)
+    {
+        return activities
+            .Where(activity => CanRead(activity, decomposer, grantedScopes))
+            .ToList();
+    }
+}

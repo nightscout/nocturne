@@ -1,0 +1,152 @@
+using System.Reflection;
+using FluentAssertions;
+using Moq;
+using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Controllers.V1;
+using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
+using Xunit;
+
+namespace Nocturne.API.Tests.Authorization;
+
+[Trait("Category", "Unit")]
+public class ActivityReadScopeGuardTests
+{
+    private static Activity Activity(string id) => new() { Id = id, Mills = 1700000000000 };
+
+    /// <summary>
+    /// Stub decomposer mapping activity ids to a canned required read scope, so the guard's
+    /// scope-checking logic is exercised without a real classifier or DbContext.
+    /// </summary>
+    private static IActivityDecomposer Decomposer(Dictionary<string, string> idToScope)
+    {
+        var mock = new Mock<IActivityDecomposer>();
+        mock.Setup(d => d.RequiredReadScope(It.IsAny<Activity>()))
+            .Returns((Activity a) => idToScope[a.Id!]);
+        return mock.Object;
+    }
+
+    private static IReadOnlySet<string> Granted(params string[] scopes) =>
+        new HashSet<string>(scopes);
+
+    private static Dictionary<string, string> OneOfEachCategory() => new()
+    {
+        ["hr"] = OAuthScopes.HeartRateRead,
+        ["sc"] = OAuthScopes.StepCountRead,
+        ["sleep"] = OAuthScopes.SleepRead,
+        ["regular"] = OAuthScopes.TreatmentsRead,
+    };
+
+    private static Activity[] OneRecordPerCategory() =>
+        [Activity("hr"), Activity("sc"), Activity("sleep"), Activity("regular")];
+
+    [Fact]
+    public void Filter_TreatmentsOnlyGrant_KeepsOnlyRegularActivities()
+    {
+        var kept = ActivityReadScopeGuard.Filter(
+            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(OAuthScopes.TreatmentsRead));
+
+        kept.Select(a => a.Id).Should().Equal("regular");
+    }
+
+    [Fact]
+    public void Filter_HeartRateOnlyGrant_KeepsOnlyHeartRate()
+    {
+        var kept = ActivityReadScopeGuard.Filter(
+            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(OAuthScopes.HeartRateRead));
+
+        kept.Select(a => a.Id).Should().Equal("hr");
+    }
+
+    [Fact]
+    public void Filter_NoScopes_KeepsNothing()
+    {
+        var kept = ActivityReadScopeGuard.Filter(
+            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted());
+
+        kept.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Filter_FullAccess_KeepsEveryCategory()
+    {
+        var kept = ActivityReadScopeGuard.Filter(
+            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(OAuthScopes.FullAccess));
+
+        kept.Should().HaveCount(4);
+    }
+
+    /// <summary>
+    /// A readwrite grant implies its read counterpart, so a sleep-writing client keeps reading back
+    /// what it wrote.
+    /// </summary>
+    [Fact]
+    public void Filter_ReadWriteGrant_SatisfiesTheReadCategory()
+    {
+        var kept = ActivityReadScopeGuard.Filter(
+            OneRecordPerCategory(), Decomposer(OneOfEachCategory()), Granted(OAuthScopes.SleepReadWrite));
+
+        kept.Select(a => a.Id).Should().Equal("sleep");
+    }
+
+    [Fact]
+    public void CanRead_UnheldCategory_IsFalse()
+    {
+        ActivityReadScopeGuard.CanRead(
+            Activity("hr"), Decomposer(OneOfEachCategory()), Granted(OAuthScopes.StepCountRead))
+            .Should().BeFalse();
+    }
+
+    /// <summary>
+    /// The admission list on the read actions must cover exactly the categories the merged read can
+    /// return, or a caller holding one of them is refused the endpoint that serves its own data.
+    /// </summary>
+    [Fact]
+    public void AdmissionScopes_CoverEveryMergedCategory()
+    {
+        ActivityReadScopeGuard.AdmissionScopes.Should().BeEquivalentTo(new[]
+        {
+            OAuthScopes.TreatmentsRead,
+            OAuthScopes.HeartRateRead,
+            OAuthScopes.StepCountRead,
+            OAuthScopes.SleepRead,
+        });
+    }
+
+    /// <summary>
+    /// The action attributes are what the pipeline actually enforces, and the guard only runs on a
+    /// request the attribute admitted. Narrowing the attribute back to a single category would refuse
+    /// a caller the endpoint that serves exactly its own data.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(ActivityController.GetActivities))]
+    [InlineData(nameof(ActivityController.GetActivity))]
+    public void V1ActivityReadActions_AdmitAnyMergedCategory(string actionName)
+    {
+        var attribute = typeof(ActivityController)
+            .GetMethod(actionName)!
+            .GetCustomAttribute<RequireScopeAttribute>();
+
+        attribute.Should().NotBeNull();
+        attribute!.RequiresAll.Should().BeFalse("holding one category must admit the caller");
+        attribute.RequiredScopes.Should().BeEquivalentTo(ActivityReadScopeGuard.AdmissionScopes);
+    }
+
+    /// <summary>
+    /// The activity count sums all four storages into one number that cannot be filtered per
+    /// category, so it requires all four rather than any one.
+    /// </summary>
+    [Fact]
+    public void CountActivityRoute_RequiresEveryMergedCategory()
+    {
+        var attribute = typeof(CountController)
+            .GetMethod(nameof(CountController.CountActivity))!
+            .GetCustomAttribute<RequireScopeAttribute>();
+
+        attribute.Should().NotBeNull();
+        attribute!.RequiresAll.Should().BeTrue();
+        attribute.RequiredScopes.Should().BeEquivalentTo(ActivityReadScopeGuard.AdmissionScopes);
+    }
+}

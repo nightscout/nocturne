@@ -43,6 +43,17 @@ public static class ScopeTranslator
         ["api:food:update"] = [OAuthScopes.FoodReadWrite],
         ["api:food:delete"] = [OAuthScopes.FullAccess],
 
+        // Activity. The legacy activity collection is the merged read plane over four Nocturne
+        // storages, so its read permission carries all three dedicated categories. StateSpan-backed
+        // activities read under treatments, which "api:treatments:read" grants separately — mapping
+        // it here as well would let an activity-only permission read /api/v1/treatments.
+        // The "readable" and "public" seed roles both grant "api:activity:read".
+        ["api:activity:read"] = [
+            OAuthScopes.HeartRateRead,
+            OAuthScopes.StepCountRead,
+            OAuthScopes.SleepRead,
+        ],
+
         // Profile
         ["api:profile:read"] = [OAuthScopes.TherapyRead],
         ["api:profile:create"] = [OAuthScopes.TherapyReadWrite],
@@ -59,6 +70,9 @@ public static class ScopeTranslator
             OAuthScopes.AlertsRead,
             OAuthScopes.ReportsRead,
             OAuthScopes.IdentityRead,
+            OAuthScopes.HeartRateRead,
+            OAuthScopes.StepCountRead,
+            OAuthScopes.SleepRead,
         ],
 
         // Wildcard writes
@@ -97,6 +111,9 @@ public static class ScopeTranslator
             OAuthScopes.AlertsRead,
             OAuthScopes.ReportsRead,
             OAuthScopes.IdentityRead,
+            OAuthScopes.HeartRateRead,
+            OAuthScopes.StepCountRead,
+            OAuthScopes.SleepRead,
         ],
     };
 
@@ -184,6 +201,23 @@ public static class ScopeTranslator
                     permissions.Add("api:profile:read");
                     permissions.Add("api:profile:create");
                     permissions.Add("api:profile:update");
+                    break;
+
+                // The three dedicated activity categories share one legacy collection. Without
+                // these the PermissionTrie built from a heart-rate/step/sleep-only grant would be
+                // empty, and the HasPermissions policy on the V1/V2/V3 controllers rejects an
+                // empty trie before any scope check runs.
+                case OAuthScopes.HeartRateRead:
+                case OAuthScopes.StepCountRead:
+                case OAuthScopes.SleepRead:
+                    permissions.Add("api:activity:read");
+                    break;
+                case OAuthScopes.HeartRateReadWrite:
+                case OAuthScopes.StepCountReadWrite:
+                case OAuthScopes.SleepReadWrite:
+                    permissions.Add("api:activity:read");
+                    permissions.Add("api:activity:create");
+                    permissions.Add("api:activity:update");
                     break;
 
                 case OAuthScopes.AlertsRead:

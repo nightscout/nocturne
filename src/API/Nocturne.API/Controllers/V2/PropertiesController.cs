@@ -13,6 +13,18 @@ namespace Nocturne.API.Controllers.V2;
 /// V2 Properties controller providing client properties and settings endpoints.
 /// Implements the legacy /api/v2/properties endpoints with 1:1 backwards compatibility.
 /// </summary>
+/// <remarks>
+/// Both actions require only <c>glucose.read</c>, while the assembled response carries values
+/// derived from other categories: IOB and COB from boluses and carbs (treatments), basal rates and
+/// ratios from the active profile (therapy), and cannula/sensor/insulin ages from device data.
+/// A <c>glucose.read</c> grant therefore reads across those categories here. This is narrower than
+/// what shipped before per-action scope gating, when any non-empty permission trie sufficed, and is
+/// the accepted position for now. Closing it means filtering by category inside
+/// <c>PropertiesService.BuildSandboxPropertiesAsync(ct, requested)</c>, which already skips building
+/// properties that were not requested and is the natural place to also skip the ones the caller has
+/// no scope for. The same narrowing applies to <see cref="DDataController"/>,
+/// <see cref="SummaryController"/> and <see cref="V1.PebbleController"/>.
+/// </remarks>
 /// <seealso cref="IPropertiesService"/>
 [ApiController]
 [Tags("V2")]

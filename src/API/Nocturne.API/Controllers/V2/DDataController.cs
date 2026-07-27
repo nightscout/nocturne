@@ -13,6 +13,11 @@ namespace Nocturne.API.Controllers.V2;
 /// V2 DData controller providing direct data access endpoints.
 /// Implements the legacy /api/v2/ddata endpoints with 1:1 backwards compatibility.
 /// </summary>
+/// <remarks>
+/// The actions require only <c>glucose.read</c> while the response also carries treatments,
+/// profiles and device status. This is the accepted narrowing described on
+/// <see cref="PropertiesController"/>, which names the per-category follow-up.
+/// </remarks>
 /// <seealso cref="IDDataService"/>
 [ApiController]
 [Tags("V2")]

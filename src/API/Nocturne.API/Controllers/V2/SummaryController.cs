@@ -13,6 +13,11 @@ namespace Nocturne.API.Controllers.V2;
 /// V2 Summary controller providing aggregated data endpoints.
 /// Implements the legacy /api/v2/summary endpoints with 1:1 backwards compatibility.
 /// </summary>
+/// <remarks>
+/// The action requires only <c>glucose.read</c> while the response also carries treatments and the
+/// active profile. This is the accepted narrowing described on <see cref="PropertiesController"/>,
+/// which names the per-category follow-up.
+/// </remarks>
 /// <seealso cref="ISummaryService"/>
 /// <seealso cref="SummaryResponse"/>
 [ApiController]

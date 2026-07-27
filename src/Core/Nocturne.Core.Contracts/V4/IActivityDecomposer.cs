@@ -63,4 +63,13 @@ public interface IActivityDecomposer
     /// regular activity that routes to StateSpans and carries no category scope.
     /// </summary>
     string? RequiredWriteScope(Activity activity);
+
+    /// <summary>
+    /// Returns the OAuth read scope required to see the activity, based on the storage it came
+    /// from (heart rate, step count, sleep, or StateSpans). Unlike
+    /// <see cref="RequiredWriteScope"/> this is never <see langword="null"/>: the merged activity
+    /// read endpoints return records from all four storages in one response, so every record
+    /// needs a category to be filtered on.
+    /// </summary>
+    string RequiredReadScope(Activity activity);
 }

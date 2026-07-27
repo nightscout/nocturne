@@ -61,6 +61,12 @@ public class RequireScopeAttribute : Attribute, IAuthorizationFilter
         _requireAll = requireAll;
     }
 
+    /// <summary>The scopes this attribute requires.</summary>
+    public IReadOnlyList<string> RequiredScopes => _requiredScopes;
+
+    /// <summary>Whether every scope in <see cref="RequiredScopes"/> is required (AND) or any one (OR).</summary>
+    public bool RequiresAll => _requireAll;
+
     /// <summary>
     /// Evaluates the scope requirement against the current request's granted scopes.
     /// </summary>

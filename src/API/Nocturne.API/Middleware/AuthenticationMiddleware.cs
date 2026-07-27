@@ -263,9 +263,10 @@ public class AuthenticationMiddleware
                 // Legacy (HasPermissions-gated) endpoints check the trie, so derive it from the
                 // narrowed scopes; a share that resolves to zero scopes gets an empty trie and
                 // is rejected by the policy instead of passing authorization and reading nothing.
-                // The scope atoms are added alongside because heartrate.read/stepcount.read have
-                // no legacy api:* equivalent — without them a share granting only those
-                // categories would carry an empty trie and be rejected outright.
+                // The scope atoms are added alongside so a share whose categories ToPermissions has
+                // no legacy api:* string for still carries a non-empty trie. Every scope in
+                // PublicShareScopes currently maps, so this is redundant today and guards the case
+                // where a new shareable category is added without a legacy equivalent.
                 var publicPermissionTrie = new PermissionTrie();
                 publicPermissionTrie.Add(ScopeTranslator.ToPermissions(publicScopes));
                 publicPermissionTrie.Add(publicScopes);

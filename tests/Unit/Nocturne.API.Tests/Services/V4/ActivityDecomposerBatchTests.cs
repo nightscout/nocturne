@@ -196,6 +196,71 @@ public class ActivityDecomposerBatchTests : IDisposable
 
     #endregion
 
+    #region RequiredReadScope
+
+    [Fact]
+    public void RequiredReadScope_HeartRate_ReturnsHeartRateRead()
+    {
+        _decomposer.RequiredReadScope(CreateHeartRateActivity("hr", 72))
+            .Should().Be(OAuthScopes.HeartRateRead);
+    }
+
+    [Fact]
+    public void RequiredReadScope_StepCount_ReturnsStepCountRead()
+    {
+        _decomposer.RequiredReadScope(CreateStepCountActivity("sc", 1500))
+            .Should().Be(OAuthScopes.StepCountRead);
+    }
+
+    [Theory]
+    [InlineData("sleep")]
+    [InlineData("nap")]
+    [InlineData("Sleep")]
+    public void RequiredReadScope_SleepType_ReturnsSleepRead(string type)
+    {
+        _decomposer.RequiredReadScope(CreateRegularActivity("s", type))
+            .Should().Be(OAuthScopes.SleepRead);
+    }
+
+    /// <summary>
+    /// Regular activities route to StateSpans, which the merged read serves under treatments. Unlike
+    /// the write scope this is never null: every record in the merged response needs a category to
+    /// be filtered on, so "no category" would mean "visible to anyone admitted".
+    /// </summary>
+    [Theory]
+    [InlineData("exercise")]
+    [InlineData("running")]
+    [InlineData("illness")]
+    [InlineData("travel")]
+    [InlineData("restaurant")]
+    public void RequiredReadScope_RegularActivity_ReturnsTreatmentsRead(string type)
+    {
+        _decomposer.RequiredReadScope(CreateRegularActivity("r", type))
+            .Should().Be(OAuthScopes.TreatmentsRead);
+    }
+
+    /// <summary>
+    /// The read scope must be the read counterpart of the write scope for the same record, so the
+    /// read gate and the write gate cannot classify a record into different categories.
+    /// </summary>
+    [Fact]
+    public void RequiredReadScope_IsTheReadCounterpartOfRequiredWriteScope()
+    {
+        foreach (var activity in new[]
+                 {
+                     CreateHeartRateActivity("hr", 72),
+                     CreateStepCountActivity("sc", 1500),
+                     CreateRegularActivity("s", "sleep"),
+                 })
+        {
+            var writeScope = _decomposer.RequiredWriteScope(activity);
+            _decomposer.RequiredReadScope(activity)
+                .Should().Be(OAuthScopes.ImpliedReadScope(writeScope!));
+        }
+    }
+
+    #endregion
+
     #region Helpers
 
     private static Activity CreateHeartRateActivity(string id, int bpm)
