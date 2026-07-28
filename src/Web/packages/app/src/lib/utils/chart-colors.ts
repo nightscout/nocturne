@@ -51,9 +51,7 @@ export type GlucoseColorMode = 'single' | 'threshold' | 'continuous';
  *
  * This is the only frontend-computed colour in the codebase. It's a
  * documented exception to the "backend computes colours" rule because the
- * spectrum is presentation, not categorisation. Originally lived in
- * halo-dial/colors.ts; moved here to be the single source of truth for
- * both the halo dial and glucose chart.
+ * spectrum is presentation, not categorisation.
  */
 const SPECTRUM_STOPS: ReadonlyArray<readonly [number, number, number, number]> = [
 	[40, 25, 0.22, 0.58],
@@ -109,8 +107,8 @@ export function getGlucoseColorContinuous(mgdl: number): string {
  * to high, and kept in step with `--glucose-heatmap-*`, which owns the colours.
  *
  * Distinct from SPECTRUM_STOPS above: this ramp runs blue-low to red-high, where
- * the halo dial and glucose chart run red-low to blue-high in step with the
- * `--glucose-*` buckets.
+ * the glucose chart runs red-low to blue-high in step with the `--glucose-*`
+ * buckets.
  */
 const GLUCOSE_HEATMAP_STOPS: ReadonlyArray<readonly [number, string]> = [
 	[40, '--glucose-heatmap-1'],

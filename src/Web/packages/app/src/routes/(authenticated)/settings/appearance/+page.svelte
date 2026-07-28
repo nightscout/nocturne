@@ -12,8 +12,6 @@
     setColorScheme,
     userPrefersMode,
     dashboardTopWidgets,
-    sidebarWidget,
-    haloDialConfig,
     chartLineColorMode,
     chartLineColor,
     chartPointColorMode,
@@ -28,7 +26,6 @@
     type ColorScheme,
     type RegionFormat,
   } from "$lib/stores/appearance-store.svelte";
-  import HaloDialConfigurator from "$lib/components/settings/HaloDialConfigurator.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import TitleFaviconSettings from "$lib/components/settings/TitleFaviconSettings.svelte";
   import DashboardWidgetConfigurator from "$lib/components/settings/DashboardWidgetConfigurator.svelte";
@@ -75,7 +72,6 @@
     AlertCircle,
     Timer,
     Eye,
-    PanelLeft,
   } from "lucide-svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import { browser } from "$app/environment";
@@ -851,64 +847,6 @@
       />
     </div>
 
-    <!-- Sidebar Widget -->
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2">
-          <PanelLeft class="h-5 w-5" />
-          Sidebar Widget
-        </CardTitle>
-        <CardDescription>
-          Choose what to display in the sidebar above the navigation
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        <div class="grid gap-4 @xl:grid-cols-2">
-          <button
-            type="button"
-            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {sidebarWidget.current === 'graph'
-              ? 'border-primary bg-accent/30'
-              : 'border-border'}"
-            onclick={() => (sidebarWidget.current = "graph")}
-          >
-            {#if sidebarWidget.current === "graph"}
-              <Badge class="absolute right-2 top-2" variant="default">Active</Badge>
-            {/if}
-            <div class="font-semibold">Glucose Chart</div>
-            <p class="text-sm text-muted-foreground">
-              Compact glucose chart showing recent readings
-            </p>
-          </button>
-
-          <button
-            type="button"
-            class="relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-colors hover:bg-accent/50 {sidebarWidget.current === 'halo-dial'
-              ? 'border-primary bg-accent/30'
-              : 'border-border'}"
-            onclick={() => (sidebarWidget.current = "halo-dial")}
-          >
-            {#if sidebarWidget.current === "halo-dial"}
-              <Badge class="absolute right-2 top-2" variant="default">Active</Badge>
-            {/if}
-            <div class="font-semibold">Halo Dial</div>
-            <p class="text-sm text-muted-foreground">
-              Circular dial with glucose history, predictions, and data-at-a-glance
-            </p>
-          </button>
-        </div>
-
-        <p class="text-xs text-muted-foreground">
-          Changes take effect immediately
-        </p>
-      </CardContent>
-    </Card>
-
-    {#if sidebarWidget.current === "halo-dial"}
-      <HaloDialConfigurator
-        value={haloDialConfig.current}
-        onchange={(config) => (haloDialConfig.current = config)}
-      />
-    {/if}
 
     <!-- Glucose Processing -->
     <Card>

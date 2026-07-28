@@ -38,7 +38,6 @@ public class UserDisplayPreferencesTests
             TimeFormat = "24",
             ColorTheme = "trio",
             NightModeSchedule = true,
-            SidebarWidget = "graph",
             Prediction = new PredictionPreferences { Enabled = true, Minutes = 45, DisplayMode = "cone" },
             Chart = new ChartPreferences { LineColor = "#123456", AreaOpacity = 0.25, Lookback = 6 },
         };
@@ -154,26 +153,23 @@ public class UserDisplayPreferencesTests
             GlucoseUnits = "mmol",
             TimeFormat = "12",
             ColorTheme = "aaps",
-            SidebarWidget = "halo-dial",
         };
 
         prefs.Validate().Should().BeNull();
     }
 
     [Theory]
-    [InlineData("mgdl", null, null, null, "glucoseUnits")]
-    [InlineData(null, "48", null, null, "timeFormat")]
-    [InlineData(null, null, "midnight", null, "colorTheme")]
-    [InlineData(null, null, null, "spinner", "sidebarWidget")]
+    [InlineData("mgdl", null, null, "glucoseUnits")]
+    [InlineData(null, "48", null, "timeFormat")]
+    [InlineData(null, null, "midnight", "colorTheme")]
     public void Validate_rejects_invalid_value(
-        string? units, string? timeFormat, string? theme, string? sidebar, string expectedField)
+        string? units, string? timeFormat, string? theme, string expectedField)
     {
         var prefs = new UserDisplayPreferences
         {
             GlucoseUnits = units,
             TimeFormat = timeFormat,
             ColorTheme = theme,
-            SidebarWidget = sidebar,
         };
 
         prefs.Validate().Should().NotBeNull().And.Contain(expectedField);

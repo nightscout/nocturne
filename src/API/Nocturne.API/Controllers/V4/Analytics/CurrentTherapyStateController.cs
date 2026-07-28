@@ -9,10 +9,9 @@ using Nocturne.Core.Models;
 namespace Nocturne.API.Controllers.V4.Analytics;
 
 /// <summary>
-/// Returns small "right now" therapy values consumed by the dashboard Halo Dial:
-/// the active pump operational mode, the current insulin sensitivity expressed
-/// as a percentage of the profile baseline, and the pump's latest reservoir and
-/// battery reading.
+/// Returns small "right now" therapy values for the dashboard: the active pump
+/// operational mode, the current insulin sensitivity expressed as a percentage
+/// of the profile baseline, and the pump's latest reservoir and battery reading.
 /// </summary>
 [ApiController]
 [Tags("Current Therapy State")]
@@ -59,7 +58,7 @@ public class CurrentTherapyStateController : ControllerBase
 }
 
 /// <summary>
-/// Snapshot of "right now" therapy state for the Halo Dial.
+/// Snapshot of "right now" therapy state.
 /// </summary>
 public class CurrentTherapyStateResponse
 {

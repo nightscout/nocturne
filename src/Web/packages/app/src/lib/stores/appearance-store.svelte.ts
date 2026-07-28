@@ -18,7 +18,7 @@
  * known limitation of the synchronous `bg()`-style accessors.
  *
  * Language keeps its own dedicated cookie + backend path (used by SSR locale
- * resolution). The halo-dial config stays device-local.
+ * resolution).
  */
 
 import { browser } from "$app/environment";
@@ -27,7 +27,6 @@ import { setMode, mode, userPrefersMode } from "mode-watcher";
 import supportedLocales from "../../../../../supportedLocales.json";
 import { WidgetId } from "../api/generated/nocturne-api-client";
 import type { UserDisplayPreferences } from "$lib/api";
-import { type HaloDialConfig, defaultHaloDialConfig } from "../components/dashboard/halo-dial/config";
 import { weekStartName } from "../components/calendar/calendar-date";
 
 // ==========================================
@@ -63,9 +62,6 @@ export const REGION_FORMATS = [
   "de-DE", "fr-FR", "es-ES", "it-IT", "nl-NL", "pl-PL", "pt-PT", "pt-BR",
   "sv-SE", "nb-NO", "da-DK", "fi-FI", "cs-CZ", "ru-RU", "ja-JP",
 ] as const;
-
-/** Sidebar widget preference */
-export type SidebarWidget = "graph" | "halo-dial";
 
 /** Supported locale type - derived from supportedLocales.json */
 export type SupportedLocale = (typeof supportedLocales)[number];
@@ -209,25 +205,6 @@ export const dashboardTopWidgets = new SyncedPref<WidgetId[]>("nocturne-dashboar
   WidgetId.TirChart,
   WidgetId.Tdd,
 ]);
-
-/**
- * Sidebar widget preference — graph or halo dial
- * Default: graph (compact glucose chart)
- */
-export const sidebarWidget = new SyncedPref<SidebarWidget>("nocturne-sidebar-widget", "graph");
-
-/**
- * Halo dial configuration — device-local (not part of the per-user synced set).
- *
- * The storage key carries a version suffix: bumping it discards a stale persisted
- * blob so a changed default (e.g. new default corner elements) reaches existing
- * devices. Safe while the dial has no user-facing editor — no real customization
- * exists to lose. Bump the suffix whenever `defaultHaloDialConfig()` changes.
- */
-export const haloDialConfig = new PersistedState<HaloDialConfig>(
-  "nocturne-halo-dial-config-v2",
-  defaultHaloDialConfig()
-);
 
 // ==========================================
 // Color Theme Management (Nocturne/Trio)
@@ -471,7 +448,6 @@ export function collectPreferences(): UserDisplayPreferences {
     colorTheme: colorTheme.current,
     nightModeSchedule: nightModeSchedule.current,
     dashboardTopWidgets: dashboardTopWidgets.current,
-    sidebarWidget: sidebarWidget.current,
     prediction: {
       enabled: predictionEnabled.current,
       minutes: predictionMinutes.current,
@@ -508,7 +484,6 @@ export function applyPreferences(
   hydrateIfPresent(colorTheme, prefs.colorTheme as ColorTheme | undefined);
   hydrateIfPresent(nightModeSchedule, prefs.nightModeSchedule ?? undefined);
   hydrateIfPresent(dashboardTopWidgets, prefs.dashboardTopWidgets ?? undefined);
-  hydrateIfPresent(sidebarWidget, prefs.sidebarWidget as SidebarWidget | undefined);
 
   if (prefs.prediction) {
     hydrateIfPresent(predictionEnabled, prefs.prediction.enabled ?? undefined);

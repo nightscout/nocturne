@@ -60,7 +60,6 @@ public class UserDisplayPreferences
     };
 
     private static readonly HashSet<string> AllowedColorThemes = new(StringComparer.Ordinal) { "nocturne", "trio", "aaps", "classic" };
-    private static readonly HashSet<string> AllowedSidebarWidgets = new(StringComparer.Ordinal) { "graph", "halo-dial" };
     private static readonly HashSet<string> AllowedPredictionModes = new(StringComparer.Ordinal) { "cone", "lines", "main", "iob", "zt", "uam", "cob" };
     private static readonly HashSet<string> AllowedColorModes = new(StringComparer.Ordinal) { "single", "threshold", "continuous" };
     private static readonly HashSet<string> AllowedAreaModes = new(StringComparer.Ordinal) { "off", "baseline", "deviation" };
@@ -77,7 +76,6 @@ public class UserDisplayPreferences
             ?? Check("timeFormat", TimeFormat, AllowedTimeFormats)
             ?? Check("regionFormat", RegionFormat, AllowedRegionFormats)
             ?? Check("colorTheme", ColorTheme, AllowedColorThemes)
-            ?? Check("sidebarWidget", SidebarWidget, AllowedSidebarWidgets)
             ?? Check("prediction.displayMode", Prediction?.DisplayMode, AllowedPredictionModes)
             ?? Check("chart.lineColorMode", Chart?.LineColorMode, AllowedColorModes)
             ?? Check("chart.pointColorMode", Chart?.PointColorMode, AllowedColorModes)
@@ -121,7 +119,6 @@ public class UserDisplayPreferences
         ColorTheme = incoming.ColorTheme ?? ColorTheme;
         NightModeSchedule = incoming.NightModeSchedule ?? NightModeSchedule;
         DashboardTopWidgets = incoming.DashboardTopWidgets ?? DashboardTopWidgets;
-        SidebarWidget = incoming.SidebarWidget ?? SidebarWidget;
 
         if (incoming.Prediction is { } prediction)
         {
@@ -181,10 +178,6 @@ public class UserDisplayPreferences
     /// <summary>Ordered widget IDs shown in the dashboard top-widget grid.</summary>
     [JsonPropertyName("dashboardTopWidgets")]
     public List<WidgetId>? DashboardTopWidgets { get; set; }
-
-    /// <summary>Sidebar widget preference: "graph" or "halo-dial".</summary>
-    [JsonPropertyName("sidebarWidget")]
-    public string? SidebarWidget { get; set; }
 }
 
 /// <summary>

@@ -84,7 +84,6 @@ describe("appearance-store preference sync", () => {
       timeFormat: "24",
       colorTheme: "aaps",
       nightModeSchedule: true,
-      sidebarWidget: "graph",
       prediction: { enabled: false, minutes: 60, displayMode: "lines" },
       chart: { lineColor: "#000000", pointColor: "#ffffff", showPoints: false, lookback: 4 },
     };

@@ -2,7 +2,7 @@
  * Shared glucose presentation helpers — unit conversion/formatting, the trend-chevron
  * angle, and the delta colour scale. Pure and store-independent so both the web app and the
  * desktop companion render glucose identically. The web app re-exports these from its own
- * `utils/formatting` and `halo-dial/geometry` to keep a single source of truth.
+ * `utils/formatting` to keep a single source of truth.
  */
 
 /** Display unit preference. */
