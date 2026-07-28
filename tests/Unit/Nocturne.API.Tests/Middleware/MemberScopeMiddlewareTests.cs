@@ -20,18 +20,20 @@ public class MemberScopeMiddlewareTests
     [Fact]
     public async Task ApiKey_WithScopedGrant_DoesNotGetSuperuserAccess()
     {
-        // Arrange: API key with only entries.read scope
-        var (middleware, context) = Build(new AuthContext
-        {
-            IsAuthenticated = true,
-            AuthType = AuthType.ApiKey,
-            SubjectId = _subjectId,
-            TenantId = _tenantId,
-            Scopes = ["glucose.read"],
-        });
+        // An owner's api-secret grant scoped to glucose.read only. The owner's "*" membership must
+        // not widen it back to superuser.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+        var subjectId = SeedMemberWithRole(options, OwnerPermissions);
 
-        // Act
-        await middleware.InvokeAsync(context);
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, [OAuthScopes.GlucoseRead], AuthType.ApiKey);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
 
         // Assert: should NOT have superuser wildcard
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
@@ -50,18 +52,20 @@ public class MemberScopeMiddlewareTests
     [Fact]
     public async Task ApiKey_WithFullAccessScope_GetsSuperuserAccess()
     {
-        // Arrange: API key with full access
-        var (middleware, context) = Build(new AuthContext
-        {
-            IsAuthenticated = true,
-            AuthType = AuthType.ApiKey,
-            SubjectId = _subjectId,
-            TenantId = _tenantId,
-            Scopes = ["*"],
-        });
+        // An owner's full-access api-secret — what every uploader configured by the tenant owner
+        // carries. Nothing is stripped, so DELETE (RequireScope("*")) keeps working.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+        var subjectId = SeedMemberWithRole(options, OwnerPermissions);
 
-        // Act
-        await middleware.InvokeAsync(context);
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, [OAuthScopes.FullAccess], AuthType.ApiKey);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
 
         // Assert: full access normalizes to all scopes
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
@@ -127,17 +131,18 @@ public class MemberScopeMiddlewareTests
     [Fact]
     public async Task ApiKey_WithMultipleScopes_GrantsOnlyThoseScopes()
     {
-        var (middleware, context) = Build(new AuthContext
-        {
-            IsAuthenticated = true,
-            AuthType = AuthType.ApiKey,
-            SubjectId = _subjectId,
-            TenantId = _tenantId,
-            Scopes = ["glucose.read", "treatments.readwrite"],
-        });
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+        var subjectId = SeedMemberWithRole(options, OwnerPermissions);
 
-        // Act
-        await middleware.InvokeAsync(context);
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, [OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsReadWrite], AuthType.ApiKey);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
 
         // Assert
         var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
@@ -517,11 +522,12 @@ public class MemberScopeMiddlewareTests
     [Theory]
     [InlineData(AuthType.OAuthAccessToken)]
     [InlineData(AuthType.DirectGrant)]
+    [InlineData(AuthType.ApiKey)]
     public async Task ScopedCredential_ForAdminMember_StaysBoundedByTheGrant(AuthType authType)
     {
-        // An OAuth access token and a direct grant both carry a consent boundary, so an Admin
-        // membership must not widen past the scopes the credential presents — administration
-        // included, since no client can request an administration atom.
+        // An OAuth access token, a direct grant and an api-secret header all carry a consent
+        // boundary, so an Admin membership must not widen past the scopes the credential presents
+        // — administration included, since no client can request an administration atom.
         using var connection = new SqliteConnection("DataSource=:memory:");
         connection.Open();
         var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
@@ -621,6 +627,242 @@ public class MemberScopeMiddlewareTests
 
         context.Items["GrantedScopes"].Should().BeSameAs(publicScopes);
     }
+
+    [Theory]
+    [InlineData(AuthType.ApiKey)]
+    [InlineData(AuthType.DirectGrant)]
+    public async Task ViewerMember_WithTreatmentsWriteGrant_LosesTheWriteScope(AuthType authType)
+    {
+        // A Viewer holding a treatments.readwrite direct grant. The Viewer seed role carries no
+        // treatments atom at all, so the grant must not authorize treatment writes — whether the
+        // token arrives in the api-secret header (ApiKey) or as Authorization: Bearer / ?token=
+        // (DirectGrant). Before this, the header path returned the grant verbatim and the write
+        // went through.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Viewer]);
+
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, [OAuthScopes.TreatmentsReadWrite], authType);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        // The Viewer's own scopes (glucose.read, reports.read) are not in the grant either, so the
+        // intersection is empty.
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().BeEmpty();
+
+        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        permissionTrie.Should().NotBeNull();
+        permissionTrie!.Check("api:treatments:create").Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(AuthType.ApiKey)]
+    [InlineData(AuthType.DirectGrant)]
+    public async Task AdminMember_WithFullAccessGrant_DoesNotKeepTheDeleteScope(AuthType authType)
+    {
+        // The admin seed role has no "*" atom, so an admin cannot delete through the web UI. A
+        // full-access grant they minted resolves the same way: the delete endpoints
+        // (RequireScope("*") on DELETE /api/v1|v3/treatments/{id} and friends) stay closed to them.
+        // Writes — every uploader's actual traffic — are untouched.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(
+            options, TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin]);
+
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, [OAuthScopes.FullAccess], authType);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().NotContain(OAuthScopes.FullAccess);
+        grantedScopes.Should().Contain(OAuthScopes.GlucoseReadWrite);
+        grantedScopes.Should().Contain(OAuthScopes.TreatmentsReadWrite);
+        grantedScopes.Should().Contain(OAuthScopes.DevicesReadWrite);
+    }
+
+    [Fact]
+    public async Task SameGrant_ViaApiSecretHeaderAndBearerToken_ResolvesToTheSameScopes()
+    {
+        // One direct grant row carries both a TokenHash (Bearer / ?token=) and a LegacySecretHash
+        // (the SHA-1 api-secret header the field uploaders send), so the same credential reaches
+        // MemberScopeMiddleware as either AuthType. Both must resolve identically, or the
+        // presentation format picks the privilege level.
+        var grantScopes = new List<string> { OAuthScopes.TreatmentsReadWrite, OAuthScopes.GlucoseReadWrite };
+
+        foreach (var rolePermissions in new[]
+                 {
+                     OwnerPermissions,
+                     TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Admin],
+                     TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Caretaker],
+                     TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Viewer],
+                 })
+        {
+            var headerScopes = await ResolveAsync(rolePermissions, grantScopes, AuthType.ApiKey);
+            var bearerScopes = await ResolveAsync(rolePermissions, grantScopes, AuthType.DirectGrant);
+
+            headerScopes.Should().BeEquivalentTo(
+                bearerScopes,
+                "the api-secret header and the bearer token are the same grant");
+        }
+    }
+
+    [Theory]
+    [InlineData(TenantPermissions.SeedRoles.Caretaker)]
+    [InlineData(TenantPermissions.SeedRoles.Clinician)]
+    public async Task NonWritingRole_WithFullAccessApiSecret_LosesTheUploadScopes(string roleSlug)
+    {
+        // The highest-impact narrowing in this change, pinned so it is a decision rather than a
+        // surprise. Caretaker holds glucose.read and devices.read — not the readwrite counterparts
+        // — and Clinician holds no write atom at all. A full-access api-secret minted by either
+        // therefore stops satisfying [RequireScope(GlucoseReadWrite)] on POST /api/v1/entries and
+        // [RequireScope(DevicesReadWrite)] on POST /api/v1/devicestatus, which is CGM and loop
+        // uploader traffic. Their treatments writes are unaffected for Caretaker, which holds
+        // treatments.readwrite.
+        //
+        // No such grant exists in production today (every direct grant is owner-held), so this is
+        // latent rather than a live regression, but minting a key as a Caretaker would hit it.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        var subjectId = SeedMemberWithRole(options, TenantPermissions.SeedRolePermissions[roleSlug]);
+
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, [OAuthScopes.FullAccess], AuthType.ApiKey);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().NotContain(OAuthScopes.GlucoseReadWrite);
+        grantedScopes.Should().NotContain(OAuthScopes.DevicesReadWrite);
+        grantedScopes.Should().Contain(OAuthScopes.GlucoseRead, "reads are retained");
+
+        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        permissionTrie.Should().NotBeNull();
+        permissionTrie!.Check("api:entries:create").Should().BeFalse();
+        permissionTrie.Check("api:entries:read").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task MigratedNightscoutGrant_OnOwnerMembership_KeepsEveryUploadScope()
+    {
+        // ConnectorConfigurationService seeds the migrated Nightscout secret with
+        // Normalize([health.readwrite]) against the subject who saved the connector secrets.
+        // That subject is a tenant member, so the grant is now intersected — the eight
+        // health.readwrite scopes every field uploader writes with must survive.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+        var subjectId = SeedMemberWithRole(options, OwnerPermissions);
+
+        var migratedGrantScopes = OAuthScopes.Normalize([OAuthScopes.HealthReadWrite]).ToList();
+        var (context, provider) = BuildMemberContext(
+            options, subjectId, migratedGrantScopes, AuthType.ApiKey);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().Contain(OAuthScopes.HealthReadWriteExpansion);
+
+        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        permissionTrie.Should().NotBeNull();
+        permissionTrie!.Check("api:entries:create").Should().BeTrue();
+        permissionTrie.Check("api:treatments:create").Should().BeTrue();
+        permissionTrie.Check("api:devicestatus:create").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ApiKey_WithNoMembershipRow_KeepsTheGrantScopesAndTrie()
+    {
+        // AuthenticationMiddleware exempts AuthType.ApiKey from the tenant-membership check, so an
+        // api-secret grant minted against a subject with no membership on this tenant (a platform
+        // admin who configured the connector, a member since removed) reaches the middleware with
+        // membership == null. It keeps the grant's own scopes rather than resolving to nothing.
+        //
+        // The trie is asserted alongside the scopes because they are separate carriers.
+        // ApiKeyHandler leaves AuthContext.Permissions empty, so the trie AuthenticationMiddleware
+        // builds is empty, and PolicyNames.HasPermissions — class-level on every V1/V2/V3
+        // controller — succeeds only on a non-empty trie. Scopes alone passing is not enough to
+        // keep the legacy uploader surface reachable.
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+
+        using (var seed = new NocturneDbContext(options))
+        {
+            seed.Database.EnsureCreated();
+            TestDatabaseSeeder.Seed(seed);
+        }
+
+        var (context, provider) = BuildMemberContext(
+            options, Guid.CreateVersion7(), [OAuthScopes.TreatmentsReadWrite], AuthType.ApiKey);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        var grantedScopes = context.Items["GrantedScopes"] as IReadOnlySet<string>;
+        grantedScopes.Should().NotBeNull();
+        grantedScopes.Should().Contain(OAuthScopes.TreatmentsReadWrite);
+
+        var permissionTrie = context.Items["PermissionTrie"] as PermissionTrie;
+        permissionTrie.Should().NotBeNull();
+        permissionTrie!.Check("api:treatments:create").Should().BeTrue(
+            "HasPermissionsHandler succeeds only on a non-empty trie");
+        permissionTrie.Check("api:entries:create").Should().BeFalse(
+            "the grant carries treatments.readwrite only");
+    }
+
+    /// <summary>
+    /// Seeds a member holding <paramref name="rolePermissions"/>, runs the middleware for a
+    /// credential carrying <paramref name="grantScopes"/>, and returns the resolved scopes.
+    /// </summary>
+    private static async Task<IReadOnlySet<string>> ResolveAsync(
+        List<string> rolePermissions, List<string> grantScopes, AuthType authType)
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options;
+        var subjectId = SeedMemberWithRole(options, rolePermissions);
+
+        var (context, provider) = BuildMemberContext(options, subjectId, grantScopes, authType);
+        using (provider)
+        {
+            var middleware = new MemberScopeMiddleware(_ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+            await middleware.InvokeAsync(context);
+        }
+
+        return (context.Items["GrantedScopes"] as IReadOnlySet<string>)!;
+    }
+
+    /// <summary>The owner seed role's permissions (the "*" wildcard).</summary>
+    private static List<string> OwnerPermissions =>
+        TenantPermissions.SeedRolePermissions[TenantPermissions.SeedRoles.Owner];
 
     /// <summary>The desktop Companion's device-flow token scopes.</summary>
     private static readonly List<string> CompanionTokenScopes =

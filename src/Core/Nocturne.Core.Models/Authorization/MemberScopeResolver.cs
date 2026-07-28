@@ -43,10 +43,15 @@ public static class MemberScopeResolver
     /// assigns tenant roles deliberately, and none of them writes global <c>SubjectRoles</c>. The
     /// membership is the grant.</item>
     /// </list>
-    /// <see cref="AuthType.ApiKey"/>, <see cref="AuthType.Guest"/>, <see cref="AuthType.InstanceKey"/>
-    /// and <see cref="AuthType.PlatformAccess"/> are absent because <c>MemberScopeMiddleware</c>
-    /// resolves them before reaching membership at all; <see cref="AuthType.OAuthAccessToken"/> and
-    /// <see cref="AuthType.DirectGrant"/> are absent because their scopes are a consent boundary.
+    /// <see cref="AuthType.Guest"/>, <see cref="AuthType.InstanceKey"/> and
+    /// <see cref="AuthType.PlatformAccess"/> are absent because <c>MemberScopeMiddleware</c>
+    /// resolves them before reaching membership at all; <see cref="AuthType.OAuthAccessToken"/>,
+    /// <see cref="AuthType.DirectGrant"/> and <see cref="AuthType.ApiKey"/> are absent because
+    /// their scopes are a consent boundary. A direct grant row carries both a <c>TokenHash</c>
+    /// (<c>Authorization: Bearer</c> / <c>?token=</c>) and a <c>LegacySecretHash</c> (the SHA-1
+    /// api-secret header), so one credential arrives as either <see cref="AuthType.DirectGrant"/>
+    /// or <see cref="AuthType.ApiKey"/>; both must resolve here, or the presentation format picks
+    /// the privilege level.
     /// </remarks>
     public static readonly IReadOnlySet<AuthType> UnscopedCredentialTypes = new HashSet<AuthType>
     {
