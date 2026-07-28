@@ -28,6 +28,7 @@ import supportedLocales from "../../../../../supportedLocales.json";
 import { WidgetId } from "../api/generated/nocturne-api-client";
 import type { UserDisplayPreferences } from "$lib/api";
 import { type HaloDialConfig, defaultHaloDialConfig } from "../components/dashboard/halo-dial/config";
+import { weekStartName } from "../components/calendar/calendar-date";
 
 // ==========================================
 // Type Definitions
@@ -685,12 +686,14 @@ export function getLanguageLabel(
 const REGION_SAMPLE_DATE = new Date(2026, 11, 31);
 
 /**
- * Label for a regional format: the region's name in the user's own language, plus the
- * date it produces. The sample is what makes the choice legible — nobody picks a
- * calendar style by its BCP-47 tag.
+ * Label for a regional format: the region's name in the user's own language, then the
+ * date it produces and the day its weeks start on. Both samples are spelled out because
+ * neither is guessable from a country name — Portugal writes 31/12/2026 but still starts
+ * its weeks on Sunday — and nobody picks a calendar style by its BCP-47 tag.
  */
 export function regionFormatLabel(tag: RegionFormat): string {
   if (!tag) return "Match my language";
+
   const region = tag.split("-")[1];
   let name: string = tag;
   try {
@@ -701,7 +704,10 @@ export function regionFormatLabel(tag: RegionFormat): string {
   } catch {
     // Unknown region subtag: the tag itself is still a usable label.
   }
-  return `${name} — ${REGION_SAMPLE_DATE.toLocaleDateString(tag)}`;
+
+  const sample = REGION_SAMPLE_DATE.toLocaleDateString(tag);
+  const weekStart = weekStartName(tag, preferredLanguage.current);
+  return `${name} — ${sample}, weeks start ${weekStart}`;
 }
 
 /**

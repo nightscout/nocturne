@@ -5,6 +5,7 @@ import {
   getCalendarDayNumber,
   leadingBlankDays,
   weekdayLabels,
+  weekStartName,
 } from "./calendar-date";
 
 describe("calendar date helpers", () => {
@@ -44,6 +45,31 @@ describe("calendar date helpers", () => {
     expect(weekdayLabels("en-US")[0]).toBe("Sun");
     expect(weekdayLabels("en-GB")[0]).toBe("Mon");
     expect(weekdayLabels("en-GB")[6]).toBe("Sun");
+  });
+
+  it("clips weekday labels for locales whose short form is the full word", () => {
+    // pt-PT's abbreviated weekday names are "domingo", "segunda", ... — unclipped
+    // they would blow out a fixed seven-column header.
+    expect(weekdayLabels("pt-PT", "short")[0]).toBe("domingo");
+    expect(weekdayLabels("pt-PT", "short", 3)).toEqual([
+      "dom",
+      "seg",
+      "ter",
+      "qua",
+      "qui",
+      "sex",
+      "sáb",
+    ]);
+    // English already abbreviates to three, so clipping leaves it untouched.
+    expect(weekdayLabels("en-US", "short", 3)[0]).toBe("Sun");
+  });
+
+  it("names the week start in the reader's language, not the region's", () => {
+    expect(weekStartName("de-DE", "en")).toBe("Monday");
+    expect(weekStartName("de-DE", "de")).toBe("Montag");
+    // Portugal writes day-before-month yet still starts weeks on Sunday.
+    expect(weekStartName("pt-PT", "en")).toBe("Sunday");
+    expect(weekStartName("en-US", "en")).toBe("Sunday");
   });
 
   it("offsets the first of the month by the locale's week start", () => {

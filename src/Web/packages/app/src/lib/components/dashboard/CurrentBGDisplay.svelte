@@ -103,9 +103,14 @@
     () => `Last reading: ${formatTimeSinceLastReading()}`
   );
 
-  // Format current time in local timezone
+  // Format current time in local timezone. Renders beside the profile-timezone
+  // clock below, so both must resolve the format the same way.
   const formattedLocalTime = $derived(
-    currentTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    currentTime.toLocaleTimeString(formatLocale(), {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: prefersHour12(),
+    })
   );
 
   // Format time in profile timezone if provided and different

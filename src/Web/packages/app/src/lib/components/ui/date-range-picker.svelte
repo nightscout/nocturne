@@ -170,7 +170,7 @@
           class="w-56 justify-between font-normal"
         >
           {value?.start && value?.end
-            ? `${value.start.toDate(getLocalTimeZone()).toLocaleDateString()} - ${value.end.toDate(getLocalTimeZone()).toLocaleDateString()}`
+            ? `${value.start.toDate(getLocalTimeZone()).toLocaleDateString(formatLocale())} - ${value.end.toDate(getLocalTimeZone()).toLocaleDateString(formatLocale())}`
             : "Select date"}
           <ChevronDownIcon />
         </Button>

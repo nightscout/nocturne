@@ -8,7 +8,7 @@
   import { NotificationUrgency as NotificationUrgencyEnum } from "$api";
   import { Button } from "$lib/components/ui/button";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { getUnitLabel, formatLocale } from "$lib/utils/formatting";
+  import { getUnitLabel, formatLocale, formatDate, time } from "$lib/utils/formatting";
   import {
     leadingBlankDays,
     weekdayLabels,
@@ -129,7 +129,8 @@
 
   // Column headings and month names follow the regional format, so a European
   // format renders Monday-first weeks with its own weekday and month names.
-  const DAY_NAMES = $derived(weekdayLabels(formatLocale()));
+  // 3 chars keeps the seven columns even; English already abbreviates to that.
+  const DAY_NAMES = $derived(weekdayLabels(formatLocale(), "short", 3));
   const MONTH_NAMES = $derived.by(() => {
     const format = new Intl.DateTimeFormat(formatLocale(), { month: "long" });
     return Array.from({ length: 12 }, (_, m) => format.format(new Date(2026, m, 1)));
@@ -326,10 +327,7 @@
     if (!startedAt) return null;
     const date = new Date(startedAt);
     if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return time(date);
   }
 
   let isCompletionDialogOpen = $state(false);
@@ -398,7 +396,7 @@
         {currentYear}
       </h1>
       <p class="text-sm text-muted-foreground">
-        Generated {new Date().toLocaleString()}
+        Generated {formatDate(new Date())}
       </p>
     </div>
 

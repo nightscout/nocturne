@@ -597,8 +597,9 @@
           </Select>
           <p class="text-xs text-muted-foreground">
             Sets date order, month and weekday names, and the day your calendars
-            start on. Pick a European region for day-before-month dates and weeks
-            that start on Monday. Your interface stays in the language above.
+            start on. Each option shows the date it writes and the day its weeks
+            begin, so pick whichever matches how you read a calendar. Your
+            interface stays in the language above.
           </p>
         </div>
       </CardContent>

@@ -127,7 +127,7 @@
     if (draftCalendarValue?.start && draftCalendarValue?.end) {
       const start = draftCalendarValue.start.toDate(getLocalTimeZone());
       const end = draftCalendarValue.end.toDate(getLocalTimeZone());
-      return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+      return `${start.toLocaleDateString(formatLocale())} - ${end.toLocaleDateString(formatLocale())}`;
     }
     return "Select dates";
   });

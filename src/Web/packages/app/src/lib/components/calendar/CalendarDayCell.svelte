@@ -8,7 +8,7 @@
   import TrackerPopoverContent from "$lib/components/calendar/TrackerPopoverContent.svelte";
   import { TrackerCategory } from "$api";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
-  import { formatGlucoseValue } from "$lib/utils/formatting";
+  import { formatGlucoseValue, formatLocale } from "$lib/utils/formatting";
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import { formatCalendarDate, getCalendarDayNumber } from "$lib/components/calendar/calendar-date";
 
@@ -163,7 +163,7 @@
       >
         <div class="space-y-1.5">
           <div class="font-medium text-sm">
-            {formatCalendarDate(day.date, undefined, {
+            {formatCalendarDate(day.date, formatLocale(), {
               weekday: "long",
               month: "short",
               day: "numeric",
