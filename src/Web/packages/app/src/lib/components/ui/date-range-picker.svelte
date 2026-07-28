@@ -5,6 +5,7 @@
   import { queryParam } from "sveltekit-search-params";
 
   import { RangeCalendar } from "$lib/components/ui/range-calendar";
+  import { formatLocale } from "$lib/utils/formatting";
   import * as Popover from "$lib/components/ui/popover/index.js";
   import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
 
@@ -179,6 +180,7 @@
       <RangeCalendar
         bind:value
         captionLayout="dropdown"
+        locale={formatLocale()}
         onValueChange={handleCalendarChange}
       />
     </Popover.Content>

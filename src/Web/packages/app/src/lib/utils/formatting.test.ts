@@ -7,6 +7,7 @@
  * in browser tests instead.
  */
 import { describe, it, expect, vi } from "vitest";
+import type { RegionFormat } from "$lib/stores/appearance-store.svelte";
 
 // `formatting.ts` imports from appearance-store which imports mode-watcher.
 // mode-watcher has no node export. We stub the entire chain so Vite never
@@ -19,6 +20,7 @@ vi.mock("runed", () => ({
 vi.mock("$lib/stores/appearance-store.svelte", () => ({
 	glucoseUnits: { current: "mg/dl" },
 	timeFormat: { current: "12" },
+	regionFormat: { current: "" },
 	preferredLanguage: { current: "en" },
 }));
 
@@ -30,6 +32,10 @@ const {
 	formatGlucoseDelta,
 	getUnitLabel,
 	formatGlucoseRange,
+	formatLocale,
+	prefersHour12,
+	formatShortDate,
+	formatWeekdayDate,
 	formatDateTime,
 	formatDate,
 	formatDateDetailed,
@@ -43,6 +49,10 @@ const {
 	formatEventType,
 	formatNotes,
 } = await import("./formatting");
+
+// The mocked store holds plain objects, so a test can move a preference and read
+// the effect the same way the app does.
+const store = await import("$lib/stores/appearance-store.svelte");
 
 describe("Glucose conversion", () => {
 	describe("convertToDisplayUnits", () => {
@@ -309,5 +319,52 @@ describe("Treatment formatting", () => {
 				formatNotes({ notes: "Test note", enteredBy: "admin" } as any),
 			).toBe("Test note by admin");
 		});
+	});
+});
+
+describe("Regional format", () => {
+	function withRegion(tag: RegionFormat, run: () => void) {
+		const previous = store.regionFormat.current;
+		store.regionFormat.current = tag;
+		try {
+			run();
+		} finally {
+			store.regionFormat.current = previous;
+		}
+	}
+
+	it("falls back to the display language when no region is chosen", () => {
+		expect(formatLocale()).toBe("en");
+	});
+
+	it("prefers the regional format over the display language", () => {
+		withRegion("en-GB", () => expect(formatLocale()).toBe("en-GB"));
+	});
+
+	it("writes the day before the month for a European region", () => {
+		const date = new Date(2026, 11, 31, 9, 5);
+		withRegion("en-GB", () =>
+			expect(formatShortDate(date, true)).toBe("31 Dec 2026"),
+		);
+		withRegion("en-US", () =>
+			expect(formatShortDate(date, true)).toBe("Dec 31, 2026"),
+		);
+	});
+
+	it("names the weekday in the regional format", () => {
+		const date = new Date(2026, 11, 31);
+		withRegion("de-DE", () => expect(formatWeekdayDate(date)).toContain("Do"));
+		withRegion("en-US", () => expect(formatWeekdayDate(date)).toContain("Thu"));
+	});
+});
+
+describe("prefersHour12", () => {
+	it("follows the time-format preference when not overridden", () => {
+		expect(prefersHour12()).toBe(true);
+	});
+
+	it("lets a caller pin the format", () => {
+		expect(prefersHour12(false)).toBe(false);
+		expect(prefersHour12(true)).toBe(true);
 	});
 });

@@ -8,6 +8,8 @@
 import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
 import { ELEMENT_INFO, type ClockElementType, type InternalElement } from "./types";
 import { browser } from "$app/environment";
+import { formatClockTime } from "$lib/components/clock/clock-time";
+import { bg, bgDelta as formatBgDelta, bgLabel } from "$lib/utils/formatting";
 
 /**
  * Resolve CSS variable to its computed value
@@ -158,18 +160,6 @@ export function buildStyleString(element: ClockElement, currentBG: number): stri
 }
 
 /**
- * Format time based on 12h/24h preference
- */
-export function formatTime(format: string | undefined, currentTime: Date): string {
-  const is24h = format === "24h";
-  return currentTime.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: !is24h,
-  });
-}
-
-/**
  * Check if element is a text-based element (uses unified text rendering)
  */
 export function isTextElement(type: string): boolean {
@@ -232,6 +222,10 @@ export function isCategoryChecked(
 
 /**
  * Render element value (for text-based elements, not arrow/tracker)
+ *
+ * @param currentBG Sample glucose in mg/dL; converted here to the user's units so the
+ *   builder preview matches what the saved face will actually show.
+ * @param bgDelta Sample delta in mg/dL.
  */
 export function renderElementValue(
   element: ClockElement,
@@ -241,15 +235,17 @@ export function renderElementValue(
 ): string {
   switch (element.type) {
     case "sg":
-      return currentBG.toString();
+      return String(bg(currentBG));
     case "delta":
-      return `${bgDelta > 0 ? "+" : ""}${bgDelta}${element.showUnits !== false ? " mg/dL" : ""}`;
+      return element.showUnits !== false
+        ? `${formatBgDelta(bgDelta)} ${bgLabel()}`
+        : formatBgDelta(bgDelta);
     case "arrow":
       return ""; // Handled separately with Lucide icon
     case "age":
       return "3m ago";
     case "time":
-      return formatTime(element.format, currentTime);
+      return formatClockTime(currentTime, element.format);
     case "iob":
       return "--U";
     case "cob":
@@ -257,7 +253,7 @@ export function renderElementValue(
     case "basal":
       return "0.8U/h";
     case "forecast":
-      return `${currentBG + 10}`;
+      return String(bg(currentBG + 10));
     case "summary":
       return "92% in range";
     case "tracker":

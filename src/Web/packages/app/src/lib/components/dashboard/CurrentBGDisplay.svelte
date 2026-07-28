@@ -20,7 +20,9 @@
   import {
     formatGlucoseValue,
     formatGlucoseDelta,
+    formatLocale,
     minutesAgo,
+    prefersHour12,
   } from "$lib/utils/formatting";
   import { Clock } from "lucide-svelte";
 
@@ -114,9 +116,10 @@
       const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       if (localTz === profileTimezone) return null;
 
-      const profileTime = currentTime.toLocaleTimeString([], {
+      const profileTime = currentTime.toLocaleTimeString(formatLocale(), {
         hour: "2-digit",
         minute: "2-digit",
+        hour12: prefersHour12(),
         timeZone: profileTimezone,
       });
 

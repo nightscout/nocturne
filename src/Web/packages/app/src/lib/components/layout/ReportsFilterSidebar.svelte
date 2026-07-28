@@ -9,6 +9,7 @@
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { RangeCalendar } from "$lib/components/ui/range-calendar";
   import { dayCount } from "$lib/utils/date-range";
+  import { formatLocale } from "$lib/utils/formatting";
   import { Calendar, Filter, RotateCcw } from "lucide-svelte";
 
   interface Props {
@@ -180,6 +181,7 @@
             <RangeCalendar
               bind:value={draftCalendarValue}
               captionLayout="dropdown"
+              locale={formatLocale()}
               onValueChange={handleCalendarChange}
               class="p-0"
             />

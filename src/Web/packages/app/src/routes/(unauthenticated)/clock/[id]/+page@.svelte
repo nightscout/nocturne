@@ -14,6 +14,7 @@
     Loader2,
   } from "lucide-svelte";
   import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";
+  import { formatClockTime } from "$lib/components/clock/clock-time";
   import {
     isClockReadingStale,
     readingAgeLabel,
@@ -92,14 +93,9 @@
     readingAgeLabel(lastUpdated, currentTime.getTime())
   );
 
-  // Format time based on 12h/24h preference
-  function formatTime(): string {
-    return currentTime.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  }
+  // The fallback readout is not a configured element, so it follows the viewer's
+  // own time-format preference rather than any format stored on the face.
+  const clockTime = $derived(formatClockTime(currentTime, "auto"));
 
   // Show time based on configuration
   const showTime = $derived(clockConfig?.settings?.alwaysShowTime || isStale);
@@ -177,7 +173,7 @@
       <div class="fixed bottom-20 left-1/2 z-20 -translate-x-1/2">
         <div class="flex items-center gap-2 text-2xl text-white/80">
           <ClockIcon class="size-6" />
-          {formatTime()}
+          {clockTime}
         </div>
       </div>
     {/if}

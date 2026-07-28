@@ -71,6 +71,7 @@
   import {
     formatGlucoseValue,
     formatGlucoseRange,
+    formatShortDate,
     getUnitLabel,
   } from "$lib/utils/formatting";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
@@ -193,14 +194,7 @@
             class="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary"
           >
             <Calendar class="h-4 w-4" />
-            {startDate.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })} – {endDate.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })}
+            {formatShortDate(startDate)} – {formatShortDate(endDate, true)}
           </div>
           <h1
             class="bg-linear-to-r from-slate-900 via-slate-700 to-slate-800 bg-clip-text text-4xl font-bold tracking-tight text-transparent dark:from-white dark:via-slate-200 dark:to-slate-300 @lg:text-5xl"

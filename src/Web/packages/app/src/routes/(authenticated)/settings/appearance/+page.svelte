@@ -22,7 +22,11 @@
     chartAreaMode,
     chartAreaOpacity,
     chartAlwaysShowPatterns,
+    regionFormat,
+    regionFormatLabel,
+    REGION_FORMATS,
     type ColorScheme,
+    type RegionFormat,
   } from "$lib/stores/appearance-store.svelte";
   import HaloDialConfigurator from "$lib/components/settings/HaloDialConfigurator.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
@@ -570,6 +574,32 @@
               </SelectContent>
             </Select>
           </div>
+        </div>
+
+        <div class="space-y-2">
+          <Label>Regional format</Label>
+          <Select
+            type="single"
+            value={regionFormat.current}
+            onValueChange={(value) => {
+              // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- value is constrained to REGION_FORMATS by the sibling SelectItems
+              regionFormat.current = value as RegionFormat;
+            }}
+          >
+            <SelectTrigger>
+              <span>{regionFormatLabel(regionFormat.current)}</span>
+            </SelectTrigger>
+            <SelectContent>
+              {#each REGION_FORMATS as region (region)}
+                <SelectItem value={region}>{regionFormatLabel(region)}</SelectItem>
+              {/each}
+            </SelectContent>
+          </Select>
+          <p class="text-xs text-muted-foreground">
+            Sets date order, month and weekday names, and the day your calendars
+            start on. Pick a European region for day-before-month dates and weeks
+            that start on Monday. Your interface stays in the language above.
+          </p>
         </div>
       </CardContent>
     </Card>

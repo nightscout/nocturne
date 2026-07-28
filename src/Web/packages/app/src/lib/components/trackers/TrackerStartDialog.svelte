@@ -6,6 +6,7 @@
   import { TextareaAutosize } from "$lib/components/ui/textarea";
   import { Play } from "lucide-svelte";
   import { cn } from "$lib/utils";
+  import { formatShortDate, time } from "$lib/utils/formatting";
 
   import { tick } from "svelte";
   import {
@@ -107,22 +108,14 @@
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    const timeStr = d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
+    const timeStr = time(d);
 
     if (isSameDay(d, now)) {
       return `today at ${timeStr}`;
     } else if (isSameDay(d, yesterday)) {
       return `yesterday at ${timeStr}`;
     } else {
-      const dateStr = d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
-      return `on ${dateStr} at ${timeStr}`;
+      return `on ${formatShortDate(d)} at ${timeStr}`;
     }
   }
 

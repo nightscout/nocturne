@@ -8,7 +8,11 @@
   import { NotificationUrgency as NotificationUrgencyEnum } from "$api";
   import { Button } from "$lib/components/ui/button";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { getUnitLabel } from "$lib/utils/formatting";
+  import { getUnitLabel, formatLocale } from "$lib/utils/formatting";
+  import {
+    leadingBlankDays,
+    weekdayLabels,
+  } from "$lib/components/calendar/calendar-date";
   import CalendarSkeleton from "$lib/components/calendar/CalendarSkeleton.svelte";
   import { TrackerCompletionDialog } from "$lib/components/trackers";
   import CalendarHeader from "$lib/components/calendar/CalendarHeader.svelte";
@@ -123,21 +127,13 @@
   const units = $derived(glucoseUnits.current);
   const unitLabel = $derived(getUnitLabel(units));
 
-  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const MONTH_NAMES = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
+  // Column headings and month names follow the regional format, so a European
+  // format renders Monday-first weeks with its own weekday and month names.
+  const DAY_NAMES = $derived(weekdayLabels(formatLocale()));
+  const MONTH_NAMES = $derived.by(() => {
+    const format = new Intl.DateTimeFormat(formatLocale(), { month: "long" });
+    return Array.from({ length: 12 }, (_, m) => format.format(new Date(2026, m, 1)));
+  });
 
   // Reactive loading/error states for query results
   const punchCardLoading = $derived(punchCardQuery.loading);
@@ -173,10 +169,9 @@
   });
 
   const calendarGrid = $derived.by(() => {
-    const firstDay = new Date(currentYear, currentMonth, 1);
     const lastDay = new Date(currentYear, currentMonth + 1, 0);
     const daysInMonth = lastDay.getDate();
-    const startDayOfWeek = firstDay.getDay();
+    const startDayOfWeek = leadingBlankDays(currentYear, currentMonth, formatLocale());
 
     const grid: (DayStats | null | { empty: true; dayNumber?: number })[][] =
       [];

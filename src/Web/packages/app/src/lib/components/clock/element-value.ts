@@ -18,7 +18,7 @@ export interface ClockElementValueContext {
   unitLabel: string;
   /** Compact age of the last reading, e.g. "now" or "7m". */
   age: string;
-  /** Current time formatted per the element's 12h/24h setting. */
+  /** Current time, already formatted per the element's format and the viewer's locale. */
   time: string;
 }
 

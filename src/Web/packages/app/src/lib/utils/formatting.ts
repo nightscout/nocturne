@@ -8,7 +8,13 @@
  * - Insulin/carb/percentage display formatting
  */
 
-import { glucoseUnits, timeFormat, preferredLanguage, type GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+import {
+  glucoseUnits,
+  timeFormat,
+  regionFormat,
+  preferredLanguage,
+  type GlucoseUnits,
+} from "$lib/stores/appearance-store.svelte";
 import type { Treatment } from "$lib/api";
 
 // Re-export for backward compatibility
@@ -150,14 +156,24 @@ export function timeStringToSeconds(time: string | undefined): number {
   return h * 3600 + m * 60 + s;
 }
 
-/** The user's preferred locale for Intl formatting */
-function locale(): string {
-  return preferredLanguage.current;
+/**
+ * The locale every Intl call in the app should format with: the regional-format
+ * preference when the user has picked one, otherwise their display language.
+ *
+ * Keeping these separate is what lets someone read an English interface on a
+ * European calendar — "en-GB" gives DD/MM/YYYY and Monday-first weeks without
+ * translating the UI.
+ */
+export function formatLocale(): string {
+  return regionFormat.current || preferredLanguage.current;
 }
 
-/** Whether the user prefers 12-hour time */
-function hour12(): boolean {
-  return timeFormat.current !== "24";
+/**
+ * Whether times render in 12-hour form. `override` pins the answer for a surface
+ * that carries its own format (a clock face element), ignoring the preference.
+ */
+export function prefersHour12(override?: boolean): boolean {
+  return override ?? timeFormat.current !== "24";
 }
 
 /**
@@ -170,10 +186,10 @@ export function time(date: Date | number, compact?: boolean): string {
   const d = typeof date === "number" ? new Date(date) : date;
   const options: Intl.DateTimeFormatOptions = {
     hour: "numeric",
-    minute: compact && hour12() ? "numeric" : "2-digit",
-    hour12: hour12(),
+    minute: compact && prefersHour12() ? "numeric" : "2-digit",
+    hour12: prefersHour12(),
   };
-  return d.toLocaleTimeString(locale(), options);
+  return d.toLocaleTimeString(formatLocale(), options);
 }
 
 /**
@@ -202,13 +218,13 @@ export function lastSeen(
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString(locale());
+  return d.toLocaleDateString(formatLocale());
 }
 
-/** Format elapsed time as minutes ago using the user's language preference. */
+/** Format elapsed time as minutes ago in the user's regional format. */
 export function minutesAgo(from: number, to: number = Date.now()): string {
   const minutes = Math.max(0, Math.floor((to - from) / 60000));
-  return new Intl.RelativeTimeFormat(locale(), {
+  return new Intl.RelativeTimeFormat(formatLocale(), {
     numeric: "always",
     style: "short",
   }).format(-minutes, "minute");
@@ -226,10 +242,10 @@ export function minutesAgo(from: number, to: number = Date.now()): string {
 export function formatDateTime(dateStr: string | undefined): string {
   if (!dateStr) return "—";
   const date = new Date(dateStr);
-  return date.toLocaleDateString(locale()) + " " + date.toLocaleTimeString(locale(), {
+  return date.toLocaleDateString(formatLocale()) + " " + date.toLocaleTimeString(formatLocale(), {
     hour: "numeric",
     minute: "2-digit",
-    hour12: hour12(),
+    hour12: prefersHour12(),
   });
 }
 
@@ -240,7 +256,7 @@ export function formatDateTime(dateStr: string | undefined): string {
  */
 export function formatDate(date: Date | string | undefined): string {
   if (!date) return "N/A";
-  return new Date(date).toLocaleString(locale());
+  return new Date(date).toLocaleString(formatLocale());
 }
 
 /**
@@ -251,17 +267,45 @@ export function formatDate(date: Date | string | undefined): string {
 export function formatDateDetailed(dateString: string | undefined): string {
   if (!dateString) return "Unknown";
   try {
-    return new Date(dateString).toLocaleDateString(locale(), {
+    return new Date(dateString).toLocaleDateString(formatLocale(), {
       year: "numeric",
       month: "long",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-      hour12: hour12(),
+      hour12: prefersHour12(),
     });
   } catch {
     return dateString;
   }
+}
+
+/**
+ * Date with its weekday and no time, e.g. "Tue, 28 Jul" — ordering and names
+ * follow the regional format.
+ */
+export function formatWeekdayDate(date: Date | string | number): string {
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleDateString(formatLocale(), {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/**
+ * Short date with no time, e.g. "28 Jul" or "28 Jul 2026" with `withYear`.
+ */
+export function formatShortDate(
+  date: Date | string | number,
+  withYear = false
+): string {
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleDateString(formatLocale(), {
+    month: "short",
+    day: "numeric",
+    ...(withYear ? { year: "numeric" as const } : {}),
+  });
 }
 
 /**
@@ -288,12 +332,12 @@ export function formatDateForInput(dateStr: string | undefined): string {
 export function formatDateTimeCompact(date: Date | string | number | undefined): string {
   if (date == null) return "—";
   const d = date instanceof Date ? date : new Date(date);
-  return d.toLocaleDateString(locale(), {
+  return d.toLocaleDateString(formatLocale(), {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: hour12(),
+    hour12: prefersHour12(),
   });
 }
 

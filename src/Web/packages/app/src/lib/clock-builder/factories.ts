@@ -7,6 +7,7 @@
 
 import { randomUUID } from "$lib/utils";
 import type { ClockElement, ClockFaceConfig } from "$lib/api";
+import { DEFAULT_CLOCK_TIME_FORMAT } from "$lib/components/clock/clock-time";
 import {
   ELEMENT_INFO,
   DEFAULT_SETTINGS,
@@ -32,7 +33,7 @@ export function createDefaultElement(type: ClockElementType): ClockElement {
     },
   };
   if (info.hasHoursOption) element.hours = 3;
-  if (info.hasFormatOption) element.format = "12h";
+  if (info.hasFormatOption) element.format = DEFAULT_CLOCK_TIME_FORMAT;
   if (info.hasMinutesAheadOption) element.minutesAhead = 30;
   if (type === "tracker") {
     element.show = ["name", "remaining"];

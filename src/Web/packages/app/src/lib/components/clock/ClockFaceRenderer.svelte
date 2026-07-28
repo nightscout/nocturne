@@ -9,6 +9,7 @@
   } from "$lib/utils/formatting";
   import { isUnwiredElementType } from "$lib/clock-builder/types";
   import { renderClockElementValue } from "$lib/components/clock/element-value";
+  import { formatClockTime } from "$lib/components/clock/clock-time";
   import { ArrowUp } from "lucide-svelte";
   import { createChartDataEngine } from "$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte";
   import GlucoseChartShell from "$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte";
@@ -103,16 +104,6 @@
   const timeSince = $derived(
     readingAgeLabel(lastUpdated, currentTime.getTime())
   );
-
-  // Format time based on 12h/24h preference
-  function formatTime(format: string | undefined): string {
-    const is24h = format === "24h";
-    return currentTime.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: !is24h,
-    });
-  }
 
   // Resolve CSS variable to its computed value
   function resolveCssVar(name: string): string {
@@ -227,7 +218,7 @@
       displayDelta,
       unitLabel: bgLabel(),
       age: timeSince,
-      time: formatTime(element.format),
+      time: formatClockTime(currentTime, element.format),
     });
   }
 

@@ -116,7 +116,7 @@ public class ClockElement
     public int? MinutesAhead { get; set; }
 
     /// <summary>
-    /// Time format for time element (12h or 24h)
+    /// Time format for time element: "auto" (follow the viewer's preference), "12h", or "24h"
     /// </summary>
     [JsonPropertyName("format")]
     public string? Format { get; set; }

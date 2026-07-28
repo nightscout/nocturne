@@ -22,6 +22,7 @@
   import { Button } from "$lib/components/ui/button";
   import { getPunchCardData } from "$api/generated/statistics.generated.remote";
   import GlucosePickerCell from "$lib/components/alerts/GlucosePickerCell.svelte";
+  import { formatLocale } from "$lib/utils/formatting";
 
   interface Props {
     /** Currently-selected date, or undefined for the "Last 24 hours" sentinel. */
@@ -31,13 +32,15 @@
     /** Disables days strictly later than this (typically `today()`). */
     maxValue?: DateValue;
     /**
-     * Locale tag used for week-start and weekday labels. Defaults to en-US
-     * (Sunday-first).
+     * Locale tag used for week-start and weekday labels. Defaults to the user's
+     * regional format, so a European format gives Monday-first weeks.
      */
     locale?: string;
   }
 
-  let { value, onValueChange, maxValue, locale = "en-US" }: Props = $props();
+  let { value, onValueChange, maxValue, locale: localeProp }: Props = $props();
+
+  const locale = $derived(localeProp ?? formatLocale());
 
   const tz = getLocalTimeZone();
   const todayValue = today(tz);

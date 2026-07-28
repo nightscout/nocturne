@@ -26,6 +26,7 @@
   import { Button } from "$lib/components/ui/button";
   import GlucosePickerCell from "$lib/components/alerts/GlucosePickerCell.svelte";
   import { getPunchCardData } from "$api/generated/statistics.generated.remote";
+  import { formatLocale } from "$lib/utils/formatting";
 
   interface Props {
     /** ISO start of the confirmed range, or undefined. */
@@ -36,6 +37,10 @@
     onRangeChange?: (start: string, end: string) => void;
     /** Days strictly after this value are disabled. Defaults to today. */
     maxDate?: string;
+    /**
+     * Locale tag used for week-start and weekday labels. Defaults to the user's
+     * regional format, so a European format gives Monday-first weeks.
+     */
     locale?: string;
   }
 
@@ -44,8 +49,10 @@
     endDate,
     onRangeChange,
     maxDate,
-    locale = "en-US",
+    locale: localeProp,
   }: Props = $props();
+
+  const locale = $derived(localeProp ?? formatLocale());
 
   const tz = getLocalTimeZone();
   const todayValue = today(tz);

@@ -88,6 +88,52 @@ public class UserPreferencesControllerTests
     }
 
     [Fact]
+    public async Task UpdatePreferences_persistsRegionFormat()
+    {
+        var (controller, _) = NewController();
+
+        await controller.UpdatePreferences(new UpdateUserPreferencesRequest
+        {
+            Preferences = new UserDisplayPreferences { RegionFormat = "en-GB" },
+        });
+
+        OkValue(await controller.GetPreferences()).Preferences.RegionFormat.Should().Be("en-GB");
+    }
+
+    [Fact]
+    public async Task UpdatePreferences_clearsRegionFormat_backToFollowingTheLanguage()
+    {
+        var (controller, _) = NewController();
+
+        await controller.UpdatePreferences(new UpdateUserPreferencesRequest
+        {
+            Preferences = new UserDisplayPreferences { RegionFormat = "de-DE" },
+        });
+
+        // Empty string is the "match my language" choice, and unlike null it must
+        // survive the merge — otherwise the setting could never be undone.
+        await controller.UpdatePreferences(new UpdateUserPreferencesRequest
+        {
+            Preferences = new UserDisplayPreferences { RegionFormat = "" },
+        });
+
+        OkValue(await controller.GetPreferences()).Preferences.RegionFormat.Should().Be("");
+    }
+
+    [Fact]
+    public async Task UpdatePreferences_rejectsUnknownRegionFormat()
+    {
+        var (controller, _) = NewController();
+
+        var result = await controller.UpdatePreferences(new UpdateUserPreferencesRequest
+        {
+            Preferences = new UserDisplayPreferences { RegionFormat = "en-XX" },
+        });
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
     public async Task GetPreferences_unauthenticated_returns401()
     {
         var (controller, _) = NewController(authenticated: false);

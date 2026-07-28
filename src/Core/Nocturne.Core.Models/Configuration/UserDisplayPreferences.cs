@@ -45,6 +45,20 @@ public class UserDisplayPreferences
     // Allowed values for the constrained string preferences (mirror the frontend literal unions).
     private static readonly HashSet<string> AllowedGlucoseUnits = new(StringComparer.Ordinal) { "mg/dl", "mmol" };
     private static readonly HashSet<string> AllowedTimeFormats = new(StringComparer.Ordinal) { "12", "24" };
+
+    /// <summary>
+    /// Regional formats offered to the user. Empty string means "follow the display language".
+    /// Each tag drives date ordering, month/weekday names and the first day of the week through
+    /// Intl on the frontend, so adding one here is all that a new region needs.
+    /// </summary>
+    private static readonly HashSet<string> AllowedRegionFormats = new(StringComparer.Ordinal)
+    {
+        "",
+        "en-US", "en-GB", "en-AU", "en-CA", "en-IE", "en-NZ", "en-ZA",
+        "de-DE", "fr-FR", "es-ES", "it-IT", "nl-NL", "pl-PL", "pt-PT", "pt-BR",
+        "sv-SE", "nb-NO", "da-DK", "fi-FI", "cs-CZ", "ru-RU", "ja-JP",
+    };
+
     private static readonly HashSet<string> AllowedColorThemes = new(StringComparer.Ordinal) { "nocturne", "trio", "aaps", "classic" };
     private static readonly HashSet<string> AllowedSidebarWidgets = new(StringComparer.Ordinal) { "graph", "halo-dial" };
     private static readonly HashSet<string> AllowedPredictionModes = new(StringComparer.Ordinal) { "cone", "lines", "main", "iob", "zt", "uam", "cob" };
@@ -61,6 +75,7 @@ public class UserDisplayPreferences
         var stringError =
             Check("glucoseUnits", GlucoseUnits, AllowedGlucoseUnits)
             ?? Check("timeFormat", TimeFormat, AllowedTimeFormats)
+            ?? Check("regionFormat", RegionFormat, AllowedRegionFormats)
             ?? Check("colorTheme", ColorTheme, AllowedColorThemes)
             ?? Check("sidebarWidget", SidebarWidget, AllowedSidebarWidgets)
             ?? Check("prediction.displayMode", Prediction?.DisplayMode, AllowedPredictionModes)
@@ -102,6 +117,7 @@ public class UserDisplayPreferences
     {
         GlucoseUnits = incoming.GlucoseUnits ?? GlucoseUnits;
         TimeFormat = incoming.TimeFormat ?? TimeFormat;
+        RegionFormat = incoming.RegionFormat ?? RegionFormat;
         ColorTheme = incoming.ColorTheme ?? ColorTheme;
         NightModeSchedule = incoming.NightModeSchedule ?? NightModeSchedule;
         DashboardTopWidgets = incoming.DashboardTopWidgets ?? DashboardTopWidgets;
@@ -137,6 +153,14 @@ public class UserDisplayPreferences
     /// <summary>Time format: "12" or "24".</summary>
     [JsonPropertyName("timeFormat")]
     public string? TimeFormat { get; set; }
+
+    /// <summary>
+    /// Regional format as a BCP-47 tag (e.g. "en-GB"), driving date ordering, month and weekday
+    /// names, and the first day of the week. Empty string follows the display language.
+    /// Separate from language so a user can read the UI in English on a European calendar.
+    /// </summary>
+    [JsonPropertyName("regionFormat")]
+    public string? RegionFormat { get; set; }
 
     /// <summary>Color theme: "nocturne", "trio", "aaps", or "classic".</summary>
     [JsonPropertyName("colorTheme")]
