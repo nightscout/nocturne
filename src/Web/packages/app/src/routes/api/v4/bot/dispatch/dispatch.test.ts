@@ -131,4 +131,20 @@ describe("POST /api/v4/bot/dispatch", () => {
     expect(response.status).toBe(400);
     expect(handleBotDispatch).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["a dotted slug that would reach a different host", "sometoken.share"],
+    ["an uppercase slug", "Acme"],
+    ["a slug with a leading hyphen", "-acme"],
+    ["a slug with CR/LF", "acme\r\nX-Evil: 1"],
+    ["an empty slug", ""],
+    ["a non-string slug", 1 as unknown as string],
+  ])("rejects %s", async (_label, tenantSlug) => {
+    // The slug becomes a Host label, so shape matters: "<token>.share" would put
+    // the API into share-resolution mode rather than resolving the tenant.
+    const response = await post({ ...EVENT, tenantSlug }, serviceHeaders);
+
+    expect(response.status).toBe(400);
+    expect(handleBotDispatch).not.toHaveBeenCalled();
+  });
 });

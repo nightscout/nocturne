@@ -22,7 +22,12 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 		// forwarded host lets the caller choose which tenant the admin-privileged
 		// API calls land on. buildScopedBotApiClient derives the host from the
 		// server's BASE_DOMAIN and this slug.
-		if (!event?.tenantSlug) {
+		// Shape-checked, not just present. The slug becomes a label in the Host header
+		// buildScopedBotApiClient constructs, so a value containing a dot resolves as a
+		// different host than intended — `<token>.share` would put the API into
+		// share-resolution mode. Anything else non-conforming would reach undici and
+		// throw, surfacing as a 500 rather than a bad request.
+		if (typeof event?.tenantSlug !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(event.tenantSlug)) {
 			return new Response(JSON.stringify({ error: "tenantSlug is required" }), {
 				status: 400,
 				headers: { "Content-Type": "application/json" },

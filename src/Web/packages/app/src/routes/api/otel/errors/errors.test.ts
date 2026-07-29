@@ -91,18 +91,41 @@ describe("POST /api/otel/errors", () => {
     expect(startSpan).not.toHaveBeenCalled();
   });
 
-  it("rejects a chunked body, which declares no length at all", async () => {
+  it("caps an oversized chunked body, which declares no length at all", async () => {
+    // The cap is enforced on bytes read, so this is rejected for its size rather
+    // than for the absent Content-Length.
     const response = await post(chunkedRequest(OVERSIZED));
 
-    expect(response.status).toBe(411);
+    expect(response.status).toBe(413);
     expect(startSpan).not.toHaveBeenCalled();
   });
 
-  it("rejects an unparseable Content-Length", async () => {
+  it("accepts a chunked report within the cap", async () => {
+    // Content-Length is never consulted: a hop that re-frames the body as chunked
+    // must not turn a legitimate browser error report into a rejection. The client
+    // reporter swallows failures, so this would go dark silently.
+    const response = await post(chunkedRequest(JSON.stringify(REPORT)));
+
+    expect(response.status).toBe(204);
+    expect(startSpan).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a report whose Content-Length is unparseable", async () => {
     const response = await post(request(JSON.stringify(REPORT), "not-a-number"));
 
-    expect(response.status).toBe(411);
-    expect(startSpan).not.toHaveBeenCalled();
+    expect(response.status).toBe(204);
+    expect(startSpan).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not 500 on a non-string field", async () => {
+    // Anonymous and internet-reachable: a caller-supplied number where a string is
+    // declared must not throw inside the handler.
+    const response = await post(
+      request(JSON.stringify({ ...REPORT, message: 1, stack: { a: 1 }, url: [] })),
+    );
+
+    expect(response.status).toBe(204);
+    expect(startSpan).toHaveBeenCalledTimes(1);
   });
 
   it("clamps url the same way message and stack are clamped", async () => {

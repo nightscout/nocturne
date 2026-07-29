@@ -9,9 +9,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_FIELD_LENGTH = 4096;
 const MAX_BODY_BYTES = 16_384;
 
-/** Clamps a reported field to a fixed length before it reaches a span attribute. */
-const clampField = (value: string | undefined): string =>
-  (value ?? "").slice(0, MAX_FIELD_LENGTH);
+/**
+ * Clamps a reported field to a fixed length before it reaches a span attribute.
+ * Non-string input reads as absent: the body is caller-supplied JSON, so a number
+ * or object here would otherwise throw inside the handler and turn an anonymous
+ * report into a 500 plus a logged stack.
+ */
+const clampField = (value: unknown): string =>
+  typeof value === "string" ? value.slice(0, MAX_FIELD_LENGTH) : "";
 
 /**
  * Reads the request body with a hard byte ceiling, returning null once the
@@ -54,18 +59,10 @@ async function readBounded(
 // session, so this endpoint cannot require the instance key. Volume is bounded
 // per request by MAX_BODY_BYTES and by the fixed span-attribute clamps.
 export const POST: RequestHandler = async ({ request }) => {
-  // A missing or unparseable Content-Length is rejected rather than treated as
-  // zero. The byte ceiling below is what actually bounds the read; this only
-  // rejects callers that decline to declare a size.
-  const contentLength = request.headers.get("content-length")?.trim();
-  const declaredLength = contentLength ? Number(contentLength) : NaN;
-  if (!Number.isSafeInteger(declaredLength) || declaredLength < 0) {
-    return new Response(null, { status: 411 });
-  }
-  if (declaredLength > MAX_BODY_BYTES) {
-    return new Response(null, { status: 413 });
-  }
-
+  // Content-Length is deliberately not consulted. readBounded enforces the cap on
+  // bytes actually read, so a declared length adds no protection, and requiring one
+  // would reject any report whose body a hop re-framed as chunked — silently, since
+  // the reporter in hooks.client.ts swallows failures.
   const raw = await readBounded(request, MAX_BODY_BYTES);
   if (raw === null) {
     return new Response(null, { status: 413 });
