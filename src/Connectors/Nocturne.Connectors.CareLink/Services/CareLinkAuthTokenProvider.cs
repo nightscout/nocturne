@@ -70,6 +70,22 @@ public class CareLinkAuthTokenProvider(
 
         var audience = cached?.Metadata?.GetValueOrDefault("Audience") ?? seeded?.Audience;
 
+        // A refresh token obtained outside the connect flow — pasted into the connector settings after
+        // being minted by an external tool — arrives on its own. The client id and token endpoint it
+        // must be redeemed against are public values in CareLink's discovery config, so resolve them
+        // instead of requiring the user to supply them.
+        if (!string.IsNullOrEmpty(refreshToken) && (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(tokenUrl)))
+        {
+            using var discovery = CreateAuthFlow();
+            var sso = await discovery.ResolveSsoParametersAsync(config.Server, cancellationToken);
+            if (sso != null)
+            {
+                clientId = string.IsNullOrEmpty(clientId) ? sso.ClientId : clientId;
+                tokenUrl = string.IsNullOrEmpty(tokenUrl) ? sso.TokenUrl : tokenUrl;
+                audience = string.IsNullOrEmpty(audience) ? sso.Audience : audience;
+            }
+        }
+
         if (!string.IsNullOrEmpty(refreshToken) && !string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(tokenUrl))
         {
             var refreshResult = await TryRefreshTokenAsync(refreshToken, clientId, tokenUrl, cancellationToken);
@@ -99,7 +115,7 @@ public class CareLinkAuthTokenProvider(
                 _logger.LogInformation("Performing CareLink credential login for {Username} (attempt {Attempt}/{Max})",
                     config.Username, attempt + 1, maxRetries);
 
-                using var authFlow = new CareLinkAuthFlowService(_logger);
+                using var authFlow = CreateAuthFlow();
                 var authResult = await authFlow.LoginAsync(config.Username, config.Password!, config.Server, cancellationToken);
                 return (authResult, authResult == null);
             },
@@ -115,6 +131,12 @@ public class CareLinkAuthTokenProvider(
         return (result.AccessToken, GetTokenExpiry(result.AccessToken),
             BuildMetadata(refreshToken, clientId, tokenUrl, audience));
     }
+
+    /// <summary>
+    /// Creates the flow service used for discovery and credential login. Overridden in tests to
+    /// supply a fake HTTP handler.
+    /// </summary>
+    protected virtual CareLinkAuthFlowService CreateAuthFlow() => new(_logger);
 
     private static IReadOnlyDictionary<string, string>? BuildMetadata(
         string? refreshToken, string? clientId, string? tokenUrl, string? audience)

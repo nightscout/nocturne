@@ -15,16 +15,32 @@ namespace Nocturne.Connectors.CareLink.Services;
 /// Uses a dedicated <see cref="HttpClient"/> with auto-redirect disabled so that
 /// the redirect chain can be inspected manually to extract the authorization code.
 /// </summary>
-public partial class CareLinkAuthFlowService(ILogger logger) : IDisposable
+public partial class CareLinkAuthFlowService : IDisposable
 {
-    // Auth0 PKCE flows require manual redirect inspection to capture the ?code= parameter
-    // before the final redirect lands on a custom scheme URI the HttpClient cannot follow.
-    // AllowAutoRedirect = false ensures we see every 302 response.
-    private readonly HttpClient _httpClient = new(new HttpClientHandler { AllowAutoRedirect = false })
+    private readonly HttpClient _httpClient;
+    private readonly ILogger _logger;
+
+    /// <param name="logger">Logger for the flow.</param>
+    /// <param name="handler">
+    /// Overrides the default handler. Tests pass a fake; production leaves it null.
+    /// </param>
+    public CareLinkAuthFlowService(ILogger logger, HttpMessageHandler? handler = null)
     {
-        Timeout = TimeSpan.FromMinutes(2)
-    };
-    private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        // Auth0 PKCE flows require manual redirect inspection to capture the ?code= parameter
+        // before the final redirect lands on a custom scheme URI the HttpClient cannot follow.
+        // AllowAutoRedirect = false ensures we see every 302 response.
+        _httpClient = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            Timeout = TimeSpan.FromMinutes(2)
+        };
+
+        // CareLink's Auth0 tenant sits behind CloudFront, whose WAF rejects any request that carries
+        // no User-Agent with a 403 "Request blocked" HTML page. HttpClient sends none by default, so
+        // set it on the client rather than per-request — a call site that forgets it cannot work.
+        _httpClient.DefaultRequestHeaders.Add("User-Agent", CareLinkConstants.UserAgents.MobileApp);
+    }
 
     public void Dispose() => _httpClient.Dispose();
 
@@ -35,33 +51,10 @@ public partial class CareLinkAuthFlowService(ILogger logger) : IDisposable
     /// </summary>
     public async Task<AuthResult?> LoginAsync(string username, string password, string server, CancellationToken ct)
     {
-        // 1. Discovery
-        var discoveryUrl = GetDiscoveryUrl(server);
-        _logger.LogInformation("Fetching CareLink discovery config from {Url}", discoveryUrl);
-
-        var discoveryResponse = await _httpClient.GetAsync(discoveryUrl, ct);
-        discoveryResponse.EnsureSuccessStatusCode();
-        var discoveryJson = await discoveryResponse.Content.ReadAsStringAsync(ct);
-        var discovery = JsonSerializer.Deserialize<DiscoverResponse>(discoveryJson);
-
-        var ssoConfigUrl = ResolveSSOConfigUrl(discovery, server);
-        if (ssoConfigUrl == null)
-        {
-            _logger.LogError("Could not resolve SSO config URL from discovery response for region {Server}", server);
-            return null;
-        }
-
-        // 2. Fetch Auth0 SSO config
-        _logger.LogInformation("Fetching Auth0 SSO config from {Url}", ssoConfigUrl);
-        var ssoResponse = await _httpClient.GetAsync(ssoConfigUrl, ct);
-        ssoResponse.EnsureSuccessStatusCode();
-        var ssoJson = await ssoResponse.Content.ReadAsStringAsync(ct);
-        var ssoConfig = JsonSerializer.Deserialize<Auth0SSOConfig>(ssoJson);
+        // 1-2. Discovery and Auth0 SSO config
+        var ssoConfig = await FetchSsoConfigAsync(server, ct);
         if (ssoConfig == null)
-        {
-            _logger.LogError("Failed to deserialize Auth0 SSO config");
             return null;
-        }
 
         var baseUrl = ssoConfig.GetBaseUrl();
         var tokenUrl = $"{baseUrl}{ssoConfig.SystemEndpoints.TokenEndpointPath}";
@@ -103,7 +96,6 @@ public partial class CareLinkAuthFlowService(ILogger logger) : IDisposable
 
         using var formContent = new FormUrlEncodedContent(hiddenFields);
         using var postRequest = new HttpRequestMessage(HttpMethod.Post, formAction) { Content = formContent };
-        postRequest.Headers.Add("User-Agent", CareLinkConstants.UserAgents.MobileApp);
 
         var postResponse = await _httpClient.SendAsync(postRequest, HttpCompletionOption.ResponseHeadersRead, ct);
         var postBody = await postResponse.Content.ReadAsStringAsync(ct);
@@ -186,28 +178,9 @@ public partial class CareLinkAuthFlowService(ILogger logger) : IDisposable
     /// </summary>
     public async Task<AuthorizeFlow?> BuildAuthorizeUrlAsync(string server, CancellationToken ct)
     {
-        var discoveryUrl = GetDiscoveryUrl(server);
-        var discoveryResponse = await _httpClient.GetAsync(discoveryUrl, ct);
-        discoveryResponse.EnsureSuccessStatusCode();
-        var discovery = JsonSerializer.Deserialize<DiscoverResponse>(
-            await discoveryResponse.Content.ReadAsStringAsync(ct));
-
-        var ssoConfigUrl = ResolveSSOConfigUrl(discovery, server);
-        if (ssoConfigUrl == null)
-        {
-            _logger.LogError("Could not resolve SSO config URL for region {Server}", server);
-            return null;
-        }
-
-        var ssoResponse = await _httpClient.GetAsync(ssoConfigUrl, ct);
-        ssoResponse.EnsureSuccessStatusCode();
-        var ssoConfig = JsonSerializer.Deserialize<Auth0SSOConfig>(
-            await ssoResponse.Content.ReadAsStringAsync(ct));
+        var ssoConfig = await FetchSsoConfigAsync(server, ct);
         if (ssoConfig == null)
-        {
-            _logger.LogError("Failed to deserialize Auth0 SSO config");
             return null;
-        }
 
         var baseUrl = ssoConfig.GetBaseUrl();
         var tokenUrl = $"{baseUrl}{ssoConfig.SystemEndpoints.TokenEndpointPath}";
@@ -261,6 +234,73 @@ public partial class CareLinkAuthFlowService(ILogger logger) : IDisposable
     }
 
     /// <summary>
+    /// The Auth0 client parameters a refresh-token grant needs. These are public values published in
+    /// Medtronic's own discovery config, not user secrets.
+    /// </summary>
+    public record SsoParameters(string ClientId, string TokenUrl, string? Audience);
+
+    /// <summary>
+    /// Resolves the region's Auth0 client id, token endpoint and audience from CareLink's discovery
+    /// config. Lets a refresh token acquired outside the connect flow (pasted into the connector
+    /// settings) be redeemed without the user having to supply those values. Returns null if
+    /// discovery is unreachable or malformed — the caller then has no way to refresh.
+    /// </summary>
+    public async Task<SsoParameters?> ResolveSsoParametersAsync(string server, CancellationToken ct)
+    {
+        try
+        {
+            var ssoConfig = await FetchSsoConfigAsync(server, ct);
+            if (ssoConfig == null)
+                return null;
+
+            var tokenUrl = $"{ssoConfig.GetBaseUrl()}{ssoConfig.SystemEndpoints.TokenEndpointPath}";
+            return new SsoParameters(ssoConfig.Client.ClientId, tokenUrl, ssoConfig.Client.Audience);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Could not resolve CareLink SSO parameters for region {Server}", server);
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Could not resolve CareLink SSO parameters for region {Server}", server);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Fetches the region's Auth0 SSO config: discovery, then the SSO config document it points to.
+    /// </summary>
+    private async Task<Auth0SSOConfig?> FetchSsoConfigAsync(string server, CancellationToken ct)
+    {
+        var discoveryUrl = GetDiscoveryUrl(server);
+        _logger.LogDebug("Fetching CareLink discovery config from {Url}", discoveryUrl);
+
+        var discoveryResponse = await _httpClient.GetAsync(discoveryUrl, ct);
+        discoveryResponse.EnsureSuccessStatusCode();
+        var discovery = JsonSerializer.Deserialize<DiscoverResponse>(
+            await discoveryResponse.Content.ReadAsStringAsync(ct));
+
+        var ssoConfigUrl = ResolveSSOConfigUrl(discovery, server);
+        if (ssoConfigUrl == null)
+        {
+            _logger.LogError("Could not resolve SSO config URL from discovery response for region {Server}", server);
+            return null;
+        }
+
+        _logger.LogDebug("Fetching Auth0 SSO config from {Url}", ssoConfigUrl);
+        var ssoResponse = await _httpClient.GetAsync(ssoConfigUrl, ct);
+        ssoResponse.EnsureSuccessStatusCode();
+        var ssoConfig = JsonSerializer.Deserialize<Auth0SSOConfig>(
+            await ssoResponse.Content.ReadAsStringAsync(ct));
+        if (ssoConfig == null)
+            _logger.LogError("Failed to deserialize Auth0 SSO config");
+
+        return ssoConfig;
+    }
+
+    /// <summary>
     /// Fetches the authenticated user's CareLink profile (username, country) with a freshly-issued
     /// access token, so the connect flow can auto-fill the connector configuration.
     /// </summary>
@@ -272,7 +312,6 @@ public partial class CareLinkAuthFlowService(ILogger logger) : IDisposable
 
         using var request = new HttpRequestMessage(HttpMethod.Get, $"https://{host}{CareLinkConstants.Endpoints.UsersMe}");
         request.Headers.Add("Authorization", $"Bearer {accessToken}");
-        request.Headers.Add("User-Agent", CareLinkConstants.UserAgents.MobileApp);
 
         var response = await _httpClient.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
@@ -354,7 +393,6 @@ public partial class CareLinkAuthFlowService(ILogger logger) : IDisposable
         for (var i = 0; i < maxRedirects; i++)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, currentUrl);
-            request.Headers.Add("User-Agent", CareLinkConstants.UserAgents.MobileApp);
 
             var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
             if (response.Headers.Location != null && (int)response.StatusCode is >= 300 and < 400)
@@ -409,7 +447,6 @@ public partial class CareLinkAuthFlowService(ILogger logger) : IDisposable
             if (!location.StartsWith("http", StringComparison.OrdinalIgnoreCase)) break;
 
             using var redirectRequest = new HttpRequestMessage(HttpMethod.Get, location);
-            redirectRequest.Headers.Add("User-Agent", CareLinkConstants.UserAgents.MobileApp);
             response = await _httpClient.SendAsync(redirectRequest, HttpCompletionOption.ResponseHeadersRead, ct);
 
             code = TryExtractCodeFromLocation(response);

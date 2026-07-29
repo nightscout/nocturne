@@ -20,7 +20,7 @@ public class CareLinkSensorGlucoseMapper(ILogger logger)
             data.MedicalDeviceTime ?? "",
             data.CurrentServerTime);
 
-        var isMmol = data.EffectiveBgUnits?.Contains("mmol", StringComparison.OrdinalIgnoreCase) == true;
+        var isMmol = data.BgUnits?.Contains("mmol", StringComparison.OrdinalIgnoreCase) == true;
         var deviceName = $"CareLink {data.MedicalDeviceFamily ?? "Unknown"}";
         var now = DateTime.UtcNow;
 

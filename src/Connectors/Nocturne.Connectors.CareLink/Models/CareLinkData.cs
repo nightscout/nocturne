@@ -85,11 +85,14 @@ public class CareLinkData
     [JsonPropertyName("lastAlarm")]
     public CareLinkAlarm? LastAlarm { get; set; }
 
+    /// <summary>
+    /// CareLink is inconsistent about the casing of this key ("bgUnits" on some endpoints,
+    /// "bgunits" on others). The connector deserializes case-insensitively, so this one property
+    /// binds either spelling — a second aliased property would collide on the same name and throw
+    /// when the type's metadata is built, before any response is read.
+    /// </summary>
     [JsonPropertyName("bgUnits")]
     public string? BgUnits { get; set; }
-
-    [JsonPropertyName("bgunits")]
-    public string? BgUnitsAlt { get; set; }
 
     [JsonPropertyName("timeFormat")]
     public string? TimeFormat { get; set; }
@@ -105,9 +108,6 @@ public class CareLinkData
 
     [JsonPropertyName("clientTimeZoneName")]
     public string? ClientTimeZoneName { get; set; }
-
-    [JsonIgnore]
-    public string? EffectiveBgUnits => BgUnits ?? BgUnitsAlt;
 }
 
 /// <summary>
