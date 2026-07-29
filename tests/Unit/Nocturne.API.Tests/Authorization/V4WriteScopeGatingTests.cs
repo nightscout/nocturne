@@ -96,6 +96,26 @@ public class V4WriteScopeGatingTests
         public const string PresentationState = "presentation state, no patient data";
 
         /// <summary>
+        /// The required scope depends on the record being written, so no attribute scan can see it.
+        /// The controller calls a per-record guard in the handler instead. Every action filed under
+        /// this reason must be covered by a route-level test that drives the real gate, so the
+        /// exemption is asserted rather than trusted — see
+        /// <see cref="PerRecordGuardedActions_AreCoveredByARouteLevelTest"/>.
+        /// </summary>
+        public const string PerRecordGuard = "per-record scope enforced in the handler";
+
+        /// <summary>
+        /// Mints a capability rather than storing an observation, and the vocabulary that should
+        /// govern it is split: the permission atoms are <c>sharing.manage</c>/<c>sharing.guest</c>
+        /// while the OAuth scope is <c>sharing.readwrite</c>, which no seed role maps to and
+        /// <see cref="OAuthScopes.Normalize"/> keeps only for a client that was granted it
+        /// directly. Requiring either would strip the capability from every non-owner role, so it
+        /// stays ungated until the vocabulary is unified. NOT presentation state — the capability
+        /// this mints serves patient glucose to an anonymous caller.
+        /// </summary>
+        public const string SplitSharingVocabulary = "sharing capability, vocabulary split between atom and scope";
+
+        /// <summary>
         /// Writes alert, notification or DND state. <c>alerts.readwrite</c> is the category, but
         /// gating this surface is the alert-authorization work, not the data-plane taxonomy: the
         /// alert engine, the chat-bot dispatch and the invite redemption all post here with
@@ -178,7 +198,7 @@ public class V4WriteScopeGatingTests
             ["DebugController"] = NotDataCategory.ComputeOverPostBody,
             ["StatisticsController"] = NotDataCategory.ComputeOverPostBody,
 
-            ["ClockFacesController"] = NotDataCategory.PresentationState,
+            ["ClockFacesController"] = NotDataCategory.SplitSharingVocabulary,
             ["CoachMarkController"] = NotDataCategory.PresentationState,
             ["UserPreferencesController"] = NotDataCategory.PresentationState,
 
@@ -213,10 +233,18 @@ public class V4WriteScopeGatingTests
             // A single activity payload decomposes into a different data category per record, so the
             // required scope is not known until the handler has read the body. ActivityController
             // calls ActivityWriteScopeGuard.FindMissingScope per record instead, which no attribute
-            // scan can see. Covered behaviourally by ActivityWriteScopeGuardTests.
-            ["ActivityController.CreateActivities"] = "per-record scope via ActivityWriteScopeGuard",
-            ["ActivityController.UpdateActivity"] = "per-record scope via ActivityWriteScopeGuard",
-            ["ActivityController.DeleteActivity"] = "per-record scope via ActivityWriteScopeGuard",
+            // scan can see.
+            ["ActivityController.CreateActivities"] = NotDataCategory.PerRecordGuard,
+            ["ActivityController.UpdateActivity"] = NotDataCategory.PerRecordGuard,
+            ["ActivityController.DeleteActivity"] = NotDataCategory.PerRecordGuard,
+
+            // state_spans holds four data categories behind one table and the caller picks which by
+            // setting Category in the body, so StateSpanWriteScopeGuard resolves the scope per
+            // record. A flat controller scope under-gated three of the four — notably DataExclusion,
+            // which decides whether glucose readings count towards analytics and reports.
+            ["StateSpansController.CreateStateSpan"] = NotDataCategory.PerRecordGuard,
+            ["StateSpansController.UpdateStateSpan"] = NotDataCategory.PerRecordGuard,
+            ["StateSpansController.DeleteStateSpan"] = NotDataCategory.PerRecordGuard,
 
             // The rest of DiscrepancyController is [RequireAdmin]; the ingest route is deliberately
             // [AllowAnonymous], so there is no credential whose scopes could be checked.
@@ -274,7 +302,6 @@ public class V4WriteScopeGatingTests
             // treatments: state_spans is the decomposed form of the legacy treatment events
             // (temporary target, profile switch, exercise, illness, travel) and of the temp-basal
             // spans V3 TreatmentsController writes. v1 activity writes require treatments.readwrite.
-            ["StateSpansController"] = OAuthScopes.TreatmentsReadWrite,
 
             // therapy: the timezone timeline is the same patient clinical configuration as the
             // timezone on patient_records, which PatientRecordController gates on therapy.readwrite.
@@ -415,6 +442,21 @@ public class V4WriteScopeGatingTests
                 $"{controller.Name} must gate its writes on its own data category");
             OAuthScopes.SatisfiesScope(AllReadScopes, declared)
                 .Should().BeFalse($"{controller.Name}'s write scope must not be satisfiable by read-only scopes");
+
+            // A declared scope that is not in the taxonomy, or that no seed role can hold, silently
+            // makes the controller owner-only: SatisfiesScope short-circuits on "*", so an owner
+            // never notices. sharing.readwrite is the live example — a real constant that survives
+            // Normalize but that no role maps to.
+            OAuthScopes.AllScopes.Should().Contain(declared,
+                $"{controller.Name} declares '{declared}', which is not a scope in the taxonomy");
+
+            TenantPermissions.SeedRolePermissions
+                .Where(role => role.Key != TenantPermissions.SeedRoles.Owner)
+                .Should().Contain(
+                    role => OAuthScopes.SatisfiesScope(
+                        OAuthScopes.NormalizeMemberPermissions(role.Value), declared),
+                    $"{controller.Name}'s write scope '{declared}' must be reachable by at least one "
+                    + "non-owner seed role, or the controller is owner-only by accident");
         }
     }
 
@@ -506,6 +548,74 @@ public class V4WriteScopeGatingTests
             .Select(c => c.Name)
             .ToHashSet(StringComparer.Ordinal);
         GateExemptControllers.Keys.Should().BeSubsetOf(controllersWithWrites);
+    }
+
+    /// <summary>
+    /// The per-record exemptions are the one reason whose mechanism is a method call in the handler,
+    /// which no attribute scan can see — delete the call and the sweep stays green. So each one must
+    /// be covered by a test that drives the real handler. That coverage is listed here rather than
+    /// discovered, so adding a per-record exemption without adding a behavioural test fails.
+    /// </summary>
+    [Fact]
+    public void PerRecordGuardedActions_HaveABehaviouralTest()
+    {
+        var covered = new[]
+        {
+            // StateSpanWriteScopeTests drives all three through the real handler.
+            "StateSpansController.CreateStateSpan",
+            "StateSpansController.UpdateStateSpan",
+            "StateSpansController.DeleteStateSpan",
+            // ActivityWriteScopeGuardTests covers the guard; the handler wiring is asserted by
+            // ActivityControllerScopeTests.
+            "ActivityController.CreateActivities",
+            "ActivityController.UpdateActivity",
+            "ActivityController.DeleteActivity",
+        };
+
+        GateExemptWriteActions
+            .Where(entry => entry.Value == NotDataCategory.PerRecordGuard)
+            .Select(entry => entry.Key)
+            .Should().BeEquivalentTo(covered,
+                "every per-record-guarded action needs a test that drives its handler");
+    }
+
+    /// <summary>
+    /// An attribute-routed action with no verb constraint answers EVERY verb, so it accepts POST
+    /// while carrying no <c>HttpPost</c> for the write sweep to find. There are none today; this
+    /// keeps it that way rather than leaving a silent hole in the sweep's selector.
+    /// </summary>
+    [Fact]
+    public void EveryV4Action_ConstrainsItsVerb()
+    {
+        var unconstrained = V4Controllers()
+            .SelectMany(c => ActionCandidates(c).Select(a => (Controller: c, Action: a)))
+            .Where(x => x.Action.GetCustomAttributes(inherit: true).OfType<IRouteTemplateProvider>().Any()
+                        || x.Action.GetCustomAttributes(inherit: true).OfType<IActionHttpMethodProvider>().Any())
+            .Where(x => HttpVerbs(x.Action).Count == 0)
+            .Select(x => $"{x.Controller.Name}.{x.Action.Name}")
+            .ToList();
+
+        unconstrained.Should().BeEmpty(
+            "an action with no verb constraint answers POST too, so the write sweep would miss it");
+    }
+
+    /// <summary>
+    /// The sweep selects by namespace, so a controller routed under <c>api/v4</c> from a different
+    /// namespace would be invisible to it. Assert the two agree rather than relying on convention.
+    /// </summary>
+    [Fact]
+    public void EveryControllerRoutedUnderApiV4_IsInTheV4Namespace()
+    {
+        var strays = ApiAssembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(ControllerBase).IsAssignableFrom(t))
+            .Where(t => !IsUnderV4Namespace(t))
+            .Where(t => t.GetCustomAttributes<RouteAttribute>(inherit: true)
+                .Any(r => r.Template.StartsWith("api/v4", StringComparison.OrdinalIgnoreCase)))
+            .Select(t => $"{t.Namespace}.{t.Name}")
+            .ToList();
+
+        strays.Should().BeEmpty(
+            "a controller routed under api/v4 outside the V4 namespace escapes the write-scope sweep");
     }
 
     [Fact]
@@ -752,10 +862,29 @@ public class V4WriteScopeGatingTests
         controller.GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .Where(action => HttpVerbs(action).Overlaps(WriteVerbs));
 
+    /// <summary>
+    /// The verbs an action answers. Keyed off <see cref="IActionHttpMethodProvider"/> rather than
+    /// <see cref="HttpMethodAttribute"/>, because <c>[AcceptVerbs]</c> implements the interface
+    /// without deriving from the attribute and would otherwise be invisible to the sweep.
+    /// </summary>
     private static HashSet<string> HttpVerbs(MethodInfo action) =>
-        action.GetCustomAttributes<HttpMethodAttribute>(inherit: true)
+        action.GetCustomAttributes(inherit: true)
+            .OfType<IActionHttpMethodProvider>()
             .SelectMany(a => a.HttpMethods)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The methods MVC would treat as actions: declared on the controller itself rather than
+    /// inherited from <see cref="ControllerBase"/>, not a property accessor, not <c>[NonAction]</c>.
+    /// Used by <see cref="EveryV4Action_ConstrainsItsVerb"/>, since an action with no verb constraint
+    /// answers every verb — including POST — and would otherwise be invisible to the write sweep.
+    /// </summary>
+    private static IEnumerable<MethodInfo> ActionCandidates(Type controller) =>
+        controller.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => !m.IsSpecialName
+                        && m.DeclaringType != typeof(ControllerBase)
+                        && m.DeclaringType != typeof(object)
+                        && !m.GetCustomAttributes(inherit: true).Any(a => a is NonActionAttribute));
 
     private static bool DerivesFromV4Base(Type type)
     {

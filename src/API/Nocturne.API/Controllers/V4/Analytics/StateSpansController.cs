@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -33,18 +35,17 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [Tags("State Spans")]
 [Route("api/v4/state-spans")]
 [Authorize]
-public class StateSpansController : ControllerBase, IWriteScopedController
+public class StateSpansController : ControllerBase
 {
-    /// <summary>
-    /// The OAuth scope every write action on this controller requires. <c>state_spans</c> is not in
-    /// <see cref="ShareDataCategories.GovernedTables"/>, but its rows are the decomposed form of
-    /// legacy treatment events — temporary targets, profile switches, exercise, illness and travel
-    /// are <c>treatments</c> in V1/V3, and the temp-basal spans are written by
-    /// <c>V3 TreatmentsController</c>. Both V1 <c>ActivityController</c> and V3
-    /// <c>TreatmentsController</c> gate their writes on <c>treatments.readwrite</c>. The class-level
-    /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session.
-    /// </summary>
-    public string WriteScope => OAuthScopes.TreatmentsReadWrite;
+    // Writes are gated per record by StateSpanWriteScopeGuard rather than by a single declared
+    // controller scope. state_spans is not in ShareDataCategories.GovernedTables and holds four
+    // different data categories behind one table: the caller picks which by setting
+    // StateSpan.Category in the body, so the required scope is not known until the body is read.
+    // A flat treatments.readwrite would let a treatments-only credential write PumpMode and
+    // PumpConnectivity spans (devices), Profile switches (therapy), and DataExclusion windows —
+    // which decide whether glucose readings count towards analytics and reports, so excluding one
+    // can hide a hypo. The class-level [Authorize] alone is satisfied by read-only credentials
+    // such as a guest-link session, which is what this closes.
 
     private readonly IStateSpanService _stateSpanService;
 
@@ -323,13 +324,18 @@ public class StateSpansController : ControllerBase, IWriteScopedController
     /// Create a new state span (manual entry)
     /// </summary>
     [HttpPost]
-    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetStateSpans"])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<StateSpan>> CreateStateSpan(
         [FromBody] CreateStateSpanRequest request,
         CancellationToken cancellationToken = default)
     {
+        var missingScope = StateSpanWriteScopeGuard.FindMissingScope(
+            HttpContext.GetGrantedScopes(), request.Category);
+        if (missingScope is not null)
+            return this.ForbiddenForScope(missingScope);
+
         var stateSpan = new StateSpan
         {
             Category = request.Category,
@@ -349,9 +355,9 @@ public class StateSpansController : ControllerBase, IWriteScopedController
     /// Update an existing state span
     /// </summary>
     [HttpPut("{id}")]
-    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetStateSpans", "GetStateSpan"])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<StateSpan>> UpdateStateSpan(
         string id,
         [FromBody] UpdateStateSpanRequest request,
@@ -360,6 +366,13 @@ public class StateSpansController : ControllerBase, IWriteScopedController
         var existing = await _stateSpanService.GetStateSpanByIdAsync(id, cancellationToken);
         if (existing == null)
             return NotFound();
+
+        // Both categories: moving a span out of one category and into another needs write access to
+        // each, or a caller could relocate a record into a category it may not write.
+        var missingScope = StateSpanWriteScopeGuard.FindMissingScope(
+            HttpContext.GetGrantedScopes(), existing.Category, request.Category ?? existing.Category);
+        if (missingScope is not null)
+            return this.ForbiddenForScope(missingScope);
 
         var updated = new StateSpan
         {
@@ -385,11 +398,21 @@ public class StateSpansController : ControllerBase, IWriteScopedController
     /// Delete a state span
     /// </summary>
     [HttpDelete("{id}")]
-    [RequireDeclaredWriteScope]
     [RemoteCommand(Invalidates = ["GetStateSpans"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DeleteStateSpan(string id, CancellationToken cancellationToken = default)
     {
+        // The stored record's own category decides the scope, so the span has to be read first.
+        var existing = await _stateSpanService.GetStateSpanByIdAsync(id, cancellationToken);
+        if (existing == null)
+            return NotFound();
+
+        var missingScope = StateSpanWriteScopeGuard.FindMissingScope(
+            HttpContext.GetGrantedScopes(), existing.Category);
+        if (missingScope is not null)
+            return this.ForbiddenForScope(missingScope);
+
         var deleted = await _stateSpanService.DeleteStateSpanAsync(id, cancellationToken);
         if (!deleted)
             return NotFound();

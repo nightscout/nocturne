@@ -94,7 +94,7 @@ public class ActivityController : ControllerBase
         var missingScope = ActivityWriteScopeGuard.FindMissingScope(
             activityList, _activityDecomposer, HttpContext.GetGrantedScopes());
         if (missingScope is not null)
-            return ForbiddenForScope(missingScope);
+            return this.ForbiddenForScope(missingScope);
 
         var result = await _activityService.CreateActivitiesAsync(activityList, cancellationToken);
         return StatusCode(StatusCodes.Status201Created, result);
@@ -123,7 +123,7 @@ public class ActivityController : ControllerBase
         var missingScope = ActivityWriteScopeGuard.FindMissingScope(
             toCheck, _activityDecomposer, HttpContext.GetGrantedScopes());
         if (missingScope is not null)
-            return ForbiddenForScope(missingScope);
+            return this.ForbiddenForScope(missingScope);
 
         var updated = await _activityService.UpdateActivityAsync(id, activity, cancellationToken);
         if (updated == null)
@@ -150,7 +150,7 @@ public class ActivityController : ControllerBase
             var missingScope = ActivityWriteScopeGuard.FindMissingScope(
                 [existing], _activityDecomposer, HttpContext.GetGrantedScopes());
             if (missingScope is not null)
-                return ForbiddenForScope(missingScope);
+                return this.ForbiddenForScope(missingScope);
         }
 
         var deleted = await _activityService.DeleteActivityAsync(id, cancellationToken);
@@ -159,11 +159,6 @@ public class ActivityController : ControllerBase
 
         return NoContent();
     }
-
-    private ObjectResult ForbiddenForScope(string scope) => Problem(
-        detail: $"This operation requires the '{scope}' scope.",
-        statusCode: StatusCodes.Status403Forbidden,
-        title: "Forbidden");
 
     private static Activity MapToActivity(UpsertActivityRequest request) => new()
     {
