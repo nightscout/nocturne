@@ -72,7 +72,10 @@ src/Web/packages/app/src/lib/api/api-client.generated.ts
 
 docs/plans/
 
-# SDK generated output (openapi-v4.json is tracked — synced by CI, see sync-sdk-spec.yml)
+# SDK generated output. openapi-v4.json is the filtered SDK surface, produced by
+# sdk/filter-v4-spec.js from the API build's openapi.json; sdk-publish.yml
+# regenerates it and hands it to the per-language jobs as an artifact.
+sdk/openapi-v4.json
 sdk/csharp/out/
 sdk/typescript/out/
 sdk/kotlin/out/
