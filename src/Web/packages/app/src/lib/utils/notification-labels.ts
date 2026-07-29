@@ -11,6 +11,12 @@ const LABEL_MAP: Record<string, string> = {
   share_link_rotated: "Your sharing link has been replaced",
   share_link_rotated_subtitle:
     "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",
+  // The release that first ran the share-token rotation filed these keys before they were renamed
+  // to share_link_rotated. Keep them mapped for as long as those rows can exist, or the owners who
+  // were notified see the raw key.
+  share_link_reset: "Your sharing link has been replaced",
+  share_link_reset_subtitle:
+    "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",
 };
 
 /** Resolve a notification title/subtitle/action label, mapping known i18n keys
