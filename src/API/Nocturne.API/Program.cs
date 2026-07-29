@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -128,6 +129,14 @@ builder.Services.AddDiscrepancyAnalysisRepository();
 builder.Services.AddAlertRepositories();
 
 builder.Services.AddDataProtection()
+    // Pinned, not defaulted. Without this the application discriminator is
+    // IHostEnvironment.ContentRootPath, which becomes part of the root purpose — so payloads are
+    // keyed on (key ring) x (working directory). That was survivable while Data Protection only
+    // held in-flight OIDC state and passkey challenges, but TOTP secrets are now persisted with
+    // it: a changed container WORKDIR, or running the API from a host path against the same
+    // database, would make every stored secret permanently unreadable while DataProtectionKeys
+    // still looked healthy. Never change this string.
+    .SetApplicationName("Nocturne")
     .PersistKeysToNocturneDb();
 
 // Add compatibility proxy services

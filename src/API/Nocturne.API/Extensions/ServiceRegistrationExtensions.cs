@@ -202,6 +202,9 @@ public static class ServiceRegistrationExtensions
         services.AddSingleton<ShareTokenCacheService>();
         services.AddSingleton<IShareTokenGenerator, ShareTokenGenerator>();
         services.AddScoped<IShareLinkService, ShareLinkService>();
+        // Singleton because both consumers run at startup outside any request scope, and it creates
+        // its own scope per notification.
+        services.AddSingleton<IShareLinkResetNotifier, ShareLinkResetNotifier>();
         services.AddHostedService<ShareTokenBackfillService>();
 
         // Passkey (WebAuthn/FIDO2) services

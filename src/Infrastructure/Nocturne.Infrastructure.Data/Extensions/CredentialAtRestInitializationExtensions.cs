@@ -18,8 +18,9 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// <see cref="Entities.ITenantScoped"/>, neither table carries a <c>tenant_id</c>, and no migration
 /// enables row level security on them. So neither pass sets <c>app.current_tenant_id</c>: there is
 /// no policy to satisfy, and a pass over a tenant-scoped table without that GUC would silently
-/// affect zero rows. <c>CredentialAtRestSchemaFacts</c> in the integration suite asserts this
-/// remains true.
+/// affect zero rows. <c>CredentialAtRestPassTests</c> in the Infrastructure.Data integration suite
+/// asserts this remains true by reading <c>pg_class.relrowsecurity</c> for both tables, and that
+/// suite is one of the few this repository's CI actually runs.
 ///
 /// Both passes are idempotent, discriminating on the stored format rather than on a marker, so a
 /// restart or a re-deploy is a no-op.

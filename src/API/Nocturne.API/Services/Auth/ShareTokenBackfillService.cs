@@ -7,13 +7,15 @@ namespace Nocturne.API.Services.Auth;
 /// <summary>
 /// One-time startup backfill that mints a share token for every tenant that was publicly readable
 /// under the legacy model — its Public subject holds at least one role or direct permission — but
-/// has no share token yet. After the bare {slug} host becomes login-only, this keeps those tenants'
-/// public access working at the new {token}.share.{baseDomain} URL (the URL changes; operators are
-/// expected to notify affected tenants). Idempotent: only tenants with a null share token are touched,
-/// so it is safe to run on every startup.
+/// has no share token yet, so the bare {slug} host becoming login-only does not leave the tenant
+/// with public access silently switched off. Idempotent: only tenants with a null share token are
+/// touched, so it is safe to run on every startup.
 ///
-/// Only the token's digest is stored, so a backfilled link's URL is knowable to nobody: the owner
-/// generates their own link from settings to obtain one.
+/// It cannot restore a working link. Only the digest is stored, so the minted token's URL is
+/// knowable to nobody — not even an operator with database access — and the owner has to regenerate
+/// from settings to obtain one. That is why every backfilled tenant's owner is notified through
+/// <see cref="IShareLinkResetNotifier"/>: without it the settings card would report public access as
+/// on, for a link nothing can resolve and nobody can produce.
 /// </summary>
 public sealed class ShareTokenBackfillService : IHostedService
 {
@@ -70,7 +72,7 @@ public sealed class ShareTokenBackfillService : IHostedService
             foreach (var tenant in tenants)
             {
                 // Only the digest is stored, so the minted token is not recoverable afterwards and
-                // is never logged. The owner generates a link of their own to obtain a URL.
+                // is never logged. The owner is notified below and generates their own link.
                 string digest;
                 do
                 {
@@ -85,6 +87,13 @@ public sealed class ShareTokenBackfillService : IHostedService
             await db.SaveChangesAsync(cancellationToken);
             _logger.LogInformation(
                 "Backfilled share tokens for {Count} previously-public tenant(s)", tenants.Count);
+
+            // After the save, so a tenant is never told its link was reset unless the row committed.
+            var notifier = scope.ServiceProvider.GetRequiredService<IShareLinkResetNotifier>();
+            foreach (var tenant in tenants)
+            {
+                await notifier.NotifyAsync(tenant.Id, cancellationToken);
+            }
         }
         catch (Exception ex)
         {

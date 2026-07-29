@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -97,9 +98,40 @@ public class TotpService : ITotpService
             return null;
         }
 
-        var credentials = await _dbContext.TotpCredentials
-            .Where(c => c.SubjectId == subject.Id)
-            .ToListAsync();
+        // secret_key is a Data Protection payload, and the value converter decrypts during
+        // MATERIALIZATION — so a payload this process cannot resolve (a lost key, a changed
+        // application discriminator) throws out of ToListAsync, not out of a property read. Caught
+        // here so the caller gets the ordinary invalid-code response with an audit record, rather
+        // than an unhandled CryptographicException surfacing as a 500 with nothing logged.
+        // Recovery is removing the credential and re-enrolling, which RemoveCredentialAsync
+        // deliberately does without materializing the entity.
+        //
+        // Necessarily all-or-nothing: the converter runs for the whole result set, so one
+        // unreadable row denies verification for that subject's other credentials too. Better than
+        // a 500, and the condition needs an operator either way.
+        //
+        // Not covered by a unit test, deliberately rather than by omission:
+        // TotpSecretProtection.EphemeralFallback is one static instance so that every context in a
+        // process stays mutually readable, so no in-process test can produce a payload this process
+        // fails to decrypt. Converter-level failure is covered by TotpSecretProtectionTests; this
+        // catch is reasoned, not asserted.
+        List<TotpCredentialEntity> credentials;
+        try
+        {
+            credentials = await _dbContext.TotpCredentials
+                .Where(c => c.SubjectId == subject.Id)
+                .ToListAsync();
+        }
+        catch (CryptographicException ex)
+        {
+            _logger.LogError(
+                ex,
+                "TOTP credentials for subject {SubjectId} could not be decrypted; treating the "
+                + "attempt as failed. They must be removed and re-enrolled.",
+                subject.Id);
+            TotpHelper.Verify(DummySecret, code);
+            return null;
+        }
 
         if (credentials.Count == 0)
         {
@@ -144,11 +176,26 @@ public class TotpService : ITotpService
 
     public async Task RemoveCredentialAsync(Guid credentialId, Guid subjectId)
     {
-        var credential = await _dbContext.TotpCredentials
-            .FirstOrDefaultAsync(c => c.Id == credentialId && c.SubjectId == subjectId)
-            ?? throw new InvalidOperationException("Credential not found.");
+        // Key-only projection, then delete a stub. Loading the entity would run the value converter
+        // over secret_key and throw for a payload this process cannot decrypt, so an undecryptable
+        // credential could not be removed — the one case where removal matters most, since
+        // re-enrolling is the documented recovery. ExecuteDeleteAsync would also avoid the
+        // materialization but is unsupported by the in-memory provider the unit tests use.
+        var existingId = await _dbContext.TotpCredentials
+            .Where(c => c.Id == credentialId && c.SubjectId == subjectId)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync();
 
-        _dbContext.TotpCredentials.Remove(credential);
+        if (existingId is null)
+            throw new InvalidOperationException("Credential not found.");
+
+        // Reuse the tracked instance when there is one, since attaching a second instance with the
+        // same key throws. An instance can only be tracked if it materialized, which means its
+        // payload decrypted — so the undecryptable case always takes the stub path.
+        var tracked = _dbContext.ChangeTracker.Entries<TotpCredentialEntity>()
+            .FirstOrDefault(e => e.Entity.Id == existingId.Value)?.Entity;
+
+        _dbContext.TotpCredentials.Remove(tracked ?? new TotpCredentialEntity { Id = existingId.Value });
         await _dbContext.SaveChangesAsync();
 
         _logger.LogInformation(
