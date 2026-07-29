@@ -7,24 +7,18 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 
 /// <summary>
 /// One-pass conversions that bring pre-existing credential columns onto their at-rest storage
-/// format: TOTP secrets to Data Protection payloads, tenant share tokens to SHA-256 digests.
-/// Both run at startup, before the server accepts requests, because both need application code
-/// (a Data Protection protector, a token generator) that a SQL migration cannot call.
-///
-/// Both passes talk to PostgreSQL over raw ADO so they read and write the stored representation
-/// directly, bypassing the EF value converter that would otherwise reject the old format.
-///
-/// Neither <c>totp_credentials</c> nor <c>tenants</c> is tenant-scoped — neither entity implements
-/// <see cref="Entities.ITenantScoped"/>, neither table carries a <c>tenant_id</c>, and no migration
-/// enables row level security on them. So neither pass sets <c>app.current_tenant_id</c>: there is
-/// no policy to satisfy, and a pass over a tenant-scoped table without that GUC would silently
-/// affect zero rows. <c>CredentialAtRestPassTests</c> in the Infrastructure.Data integration suite
-/// asserts this remains true by reading <c>pg_class.relrowsecurity</c> for both tables, and that
-/// suite is one of the few this repository's CI actually runs.
-///
-/// Both passes are idempotent, discriminating on the stored format rather than on a marker, so a
-/// restart or a re-deploy is a no-op.
+/// format: TOTP secrets to Data Protection payloads, tenant share tokens to SHA-256 digests. Both
+/// run at startup, before the server accepts requests, because both need application code (a
+/// protector, a token generator) that a SQL migration cannot call. Both use raw ADO to read and
+/// write the stored representation directly, bypassing the EF value converter that would reject the
+/// old format. Both are idempotent, discriminating on the stored format rather than on a marker.
 /// </summary>
+/// <remarks>
+/// Neither <c>totp_credentials</c> nor <c>tenants</c> is tenant-scoped, so neither pass sets
+/// <c>app.current_tenant_id</c>. A pass over a tenant-scoped table without that GUC would silently
+/// affect zero rows, so <c>CredentialAtRestPassTests</c> asserts both tables stay outside row level
+/// security.
+/// </remarks>
 public static class CredentialAtRestInitializationExtensions
 {
     /// <summary>

@@ -114,7 +114,7 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "sharing.link_reset",
+            Type = "sharing.link_rotated",
             Category = NotificationCategory.ActionRequired,
             DefaultUrgency = NotificationUrgency.Info,
             Icon = "link",

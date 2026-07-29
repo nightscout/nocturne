@@ -71,7 +71,7 @@ public class GuestLinkService : IGuestLinkService
         }
 
         var code = GenerateCode();
-        var hash = HashCode(code);
+        var hash = CredentialHash.GuestCode(code);
         var now = DateTime.UtcNow;
 
         var entity = new OAuthGrantEntity
@@ -109,7 +109,7 @@ public class GuestLinkService : IGuestLinkService
         CancellationToken ct = default)
     {
         var normalized = code.Replace("-", "").ToUpperInvariant();
-        var hash = HashCode(normalized);
+        var hash = CredentialHash.GuestCode(normalized);
         var now = DateTime.UtcNow;
 
         var grant = await _dbContext.OAuthGrants
@@ -279,9 +279,6 @@ public class GuestLinkService : IGuestLinkService
     {
         return $"{code[..3]}-{code[3..]}";
     }
-
-    /// <summary>Digest of a guest code. Codes are displayed uppercase but typed either way.</summary>
-    private static string HashCode(string code) => CredentialHash.Sha256Hex(code.ToUpperInvariant());
 
     private static GuestLinkInfo MapToInfo(OAuthGrantEntity entity)
     {

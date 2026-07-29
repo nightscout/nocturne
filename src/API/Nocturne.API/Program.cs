@@ -1,8 +1,8 @@
-using Microsoft.AspNetCore.DataProtection;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -129,13 +129,10 @@ builder.Services.AddDiscrepancyAnalysisRepository();
 builder.Services.AddAlertRepositories();
 
 builder.Services.AddDataProtection()
-    // Pinned, not defaulted. Without this the application discriminator is
-    // IHostEnvironment.ContentRootPath, which becomes part of the root purpose — so payloads are
-    // keyed on (key ring) x (working directory). That was survivable while Data Protection only
-    // held in-flight OIDC state and passkey challenges, but TOTP secrets are now persisted with
-    // it: a changed container WORKDIR, or running the API from a host path against the same
-    // database, would make every stored secret permanently unreadable while DataProtectionKeys
-    // still looked healthy. Never change this string.
+    // Never change this string. It is part of the root purpose for every payload, and TOTP secrets
+    // are persisted under it — changing it makes every stored secret permanently unreadable while
+    // DataProtectionKeys still looks healthy. Left unset, it defaults to ContentRootPath, so a
+    // changed container WORKDIR would do the same.
     .SetApplicationName("Nocturne")
     .PersistKeysToNocturneDb();
 
@@ -587,9 +584,7 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
     // Bring pre-existing credential columns onto their at-rest storage format. Runs after
     // migrations (it depends on the widened share_token column) and before the server accepts
     // requests, so no request can read a column in the old format.
-    await CredentialAtRestStartupTask.RunAsync(
-        app.Services,
-        app.Services.GetRequiredService<ILogger<Program>>());
+    await CredentialAtRestStartupTask.RunAsync(app.Services);
 }
 else if (isNSwagGeneration)
 {

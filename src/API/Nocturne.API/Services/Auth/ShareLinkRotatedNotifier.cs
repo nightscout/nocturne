@@ -8,32 +8,30 @@ namespace Nocturne.API.Services.Auth;
 
 /// <summary>
 /// Tells a tenant's owner that their public share link no longer resolves and has to be
-/// regenerated. Used by both startup paths that leave a tenant in that state: the rotation pass in
-/// <see cref="CredentialAtRestStartupTask"/>, which retires a plaintext token, and
-/// <see cref="ShareTokenBackfillService"/>, which mints one for a legacy publicly-readable tenant.
-/// Only the digest is stored in either case, so neither can hand back a URL — the owner is the only
-/// one who can produce a working link, which is why they have to be told.
+/// regenerated. Used by the rotation pass in <see cref="CredentialAtRestStartupTask"/>, which
+/// retires a plaintext token. Only the digest of the replacement is stored, so the pass cannot hand
+/// back a URL — the owner is the only one who can produce a working link.
 /// </summary>
-public interface IShareLinkResetNotifier
+public interface IShareLinkRotatedNotifier
 {
     /// <summary>
     /// Files the notification for the tenant's owner. Best-effort: a tenant with no owner, or a
     /// notification that cannot be filed, must not stop startup — the token has already been
-    /// written and neither pass revisits it.
+    /// written and the pass does not revisit it.
     /// </summary>
     Task NotifyAsync(Guid tenantId, CancellationToken cancellationToken = default);
 }
 
 /// <inheritdoc />
-public sealed class ShareLinkResetNotifier : IShareLinkResetNotifier
+public sealed class ShareLinkRotatedNotifier : IShareLinkRotatedNotifier
 {
     /// <summary>Notification type for a share link that no longer resolves.</summary>
-    public const string NotificationType = "sharing.link_reset";
+    public const string NotificationType = "sharing.link_rotated";
 
     private readonly IServiceProvider _services;
-    private readonly ILogger<ShareLinkResetNotifier> _logger;
+    private readonly ILogger<ShareLinkRotatedNotifier> _logger;
 
-    public ShareLinkResetNotifier(IServiceProvider services, ILogger<ShareLinkResetNotifier> logger)
+    public ShareLinkRotatedNotifier(IServiceProvider services, ILogger<ShareLinkRotatedNotifier> logger)
     {
         _services = services;
         _logger = logger;
@@ -53,7 +51,7 @@ public sealed class ShareLinkResetNotifier : IShareLinkResetNotifier
             if (ownerSubjectId is null)
             {
                 _logger.LogWarning(
-                    "Tenant {TenantId} has no owner; its share link was reset without a notification.",
+                    "Tenant {TenantId} has no owner; its share link was rotated without a notification.",
                     tenantId);
                 return;
             }
@@ -76,8 +74,8 @@ public sealed class ShareLinkResetNotifier : IShareLinkResetNotifier
                 .CreateNotificationAsync(
                     userId: ownerSubjectId,
                     type: NotificationType,
-                    title: "share_link_reset",
-                    subtitle: "share_link_reset_subtitle",
+                    title: "share_link_rotated",
+                    subtitle: "share_link_rotated_subtitle",
                     sourceId: tenantId.ToString(),
                     cancellationToken: cancellationToken);
         }
@@ -85,7 +83,7 @@ public sealed class ShareLinkResetNotifier : IShareLinkResetNotifier
         {
             _logger.LogError(
                 ex,
-                "Failed to notify the owner of tenant {TenantId} that its share link was reset.",
+                "Failed to notify the owner of tenant {TenantId} that its share link was rotated.",
                 tenantId);
         }
     }

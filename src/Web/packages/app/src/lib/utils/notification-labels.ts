@@ -8,8 +8,8 @@ const LABEL_MAP: Record<string, string> = {
   compression_low_detected_subtitle:
     "Possible overnight compression lows are ready to review",
   review: "Review",
-  share_link_reset: "Your sharing link has been reset",
-  share_link_reset_subtitle:
+  share_link_rotated: "Your sharing link has been replaced",
+  share_link_rotated_subtitle:
     "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",
 };
 

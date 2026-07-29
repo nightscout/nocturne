@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -58,10 +59,8 @@ public class CredentialAtRestPassTests
         var plaintext = NewSecret();
         var credentialId = await SeedPlaintextTotpCredentialAsync(dataSource, plaintext);
 
-        var encrypted = await CredentialAtRestInitializationExtensions.ProtectTotpSecretsAsync(
+        await CredentialAtRestInitializationExtensions.ProtectTotpSecretsAsync(
             dataSource, protector, NullLogger.Instance);
-
-        encrypted.Should().BeGreaterThanOrEqualTo(1, "the seeded plaintext row must be rewritten");
 
         var stored = await ReadSecretAsync(dataSource, credentialId);
         stored.Should().NotEqual(plaintext, "the column must no longer hold the seed");
@@ -70,10 +69,56 @@ public class CredentialAtRestPassTests
             "verification reads the secret back through the same protector");
 
         // Second run: the row is already protected, so it is skipped rather than double-encrypted.
-        var second = await CredentialAtRestInitializationExtensions.ProtectTotpSecretsAsync(
+        // Asserted on the seeded row rather than on the pass's count, because the pass is
+        // table-global and other tests in this collection seed rows of their own.
+        await CredentialAtRestInitializationExtensions.ProtectTotpSecretsAsync(
             dataSource, protector, NullLogger.Instance);
-        second.Should().Be(0);
         (await ReadSecretAsync(dataSource, credentialId)).Should().Equal(stored);
+    }
+
+    /// <summary>
+    /// The converter decrypts on materialization, so an unconverted row fails the read. Pins the
+    /// exception type, because <c>TotpService.VerifyLoginAsync</c> catches
+    /// <see cref="CryptographicException"/> specifically to turn a lost key into an ordinary failed
+    /// attempt instead of a 500 — EF passes it through unwrapped.
+    /// </summary>
+    [Fact]
+    public async Task An_unconverted_secret_fails_the_EF_read_with_a_CryptographicException()
+    {
+        await using var dataSource = NpgsqlDataSource.Create(_fx.AppConnectionString);
+        var credentialId = await SeedPlaintextTotpCredentialAsync(dataSource, NewSecret());
+
+        await using var db = CreateContext(dataSource);
+        var read = () => db.TotpCredentials.AsNoTracking()
+            .Where(c => c.Id == credentialId)
+            .ToListAsync();
+
+        await read.Should().ThrowAsync<CryptographicException>();
+    }
+
+    /// <summary>
+    /// An unreadable credential must still be deletable, since re-enrolling is the recovery. Pins
+    /// the key-only-projection-then-delete-a-stub shape <c>TotpService.RemoveCredentialAsync</c>
+    /// uses to avoid materializing the secret it is about to discard.
+    /// </summary>
+    [Fact]
+    public async Task An_unconverted_credential_can_still_be_deleted()
+    {
+        await using var dataSource = NpgsqlDataSource.Create(_fx.AppConnectionString);
+        var credentialId = await SeedPlaintextTotpCredentialAsync(dataSource, NewSecret());
+
+        await using var db = CreateContext(dataSource);
+        var existingId = await db.TotpCredentials
+            .Where(c => c.Id == credentialId)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync();
+
+        existingId.Should().Be(credentialId, "a key-only projection does not run the converter");
+
+        db.TotpCredentials.Remove(new TotpCredentialEntity { Id = existingId!.Value });
+        await db.SaveChangesAsync();
+
+        (await CountCredentialsAsync(dataSource, credentialId)).Should().Be(0);
     }
 
     [Fact]
@@ -154,10 +199,12 @@ public class CredentialAtRestPassTests
         minted.Select(CredentialHash.ShareToken).Should().Contain(stored,
             "the stored digest must be of a freshly minted token");
 
-        // Second run: the digest is already in the target format, so nothing is rotated again.
+        // Second run: the digest is already in the target format, so this tenant is not rotated
+        // again. Asserted on the seeded tenant rather than on an empty result, because the sweep is
+        // table-global and other tests in this collection seed tenants of their own.
         var second = await CredentialAtRestInitializationExtensions.RotatePlaintextShareTokensAsync(
-            dataSource, () => "0000000000aa", NullLogger.Instance);
-        second.Should().BeEmpty();
+            dataSource, () => $"re{Guid.NewGuid():N}"[..12], NullLogger.Instance);
+        second.Should().NotContain(tenantId);
         (await ReadShareTokenAsync(dataSource, tenantId)).Should().Be(stored);
     }
 
@@ -223,6 +270,15 @@ public class CredentialAtRestPassTests
         (await cmd.ExecuteNonQueryAsync()).Should().Be(1);
 
         return credentialId;
+    }
+
+    private static async Task<long> CountCredentialsAsync(NpgsqlDataSource dataSource, Guid credentialId)
+    {
+        await using var conn = await dataSource.OpenConnectionAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT count(*) FROM totp_credentials WHERE id = @id";
+        cmd.Parameters.AddWithValue("@id", credentialId);
+        return (long)(await cmd.ExecuteScalarAsync())!;
     }
 
     private static async Task<byte[]> ReadSecretAsync(NpgsqlDataSource dataSource, Guid credentialId)

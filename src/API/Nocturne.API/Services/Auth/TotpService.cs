@@ -98,23 +98,12 @@ public class TotpService : ITotpService
             return null;
         }
 
-        // secret_key is a Data Protection payload, and the value converter decrypts during
-        // MATERIALIZATION — so a payload this process cannot resolve (a lost key, a changed
-        // application discriminator) throws out of ToListAsync, not out of a property read. Caught
-        // here so the caller gets the ordinary invalid-code response with an audit record, rather
-        // than an unhandled CryptographicException surfacing as a 500 with nothing logged.
-        // Recovery is removing the credential and re-enrolling, which RemoveCredentialAsync
-        // deliberately does without materializing the entity.
-        //
-        // Necessarily all-or-nothing: the converter runs for the whole result set, so one
-        // unreadable row denies verification for that subject's other credentials too. Better than
-        // a 500, and the condition needs an operator either way.
-        //
-        // Not covered by a unit test, deliberately rather than by omission:
-        // TotpSecretProtection.EphemeralFallback is one static instance so that every context in a
-        // process stays mutually readable, so no in-process test can produce a payload this process
-        // fails to decrypt. Converter-level failure is covered by TotpSecretProtectionTests; this
-        // catch is reasoned, not asserted.
+        // The value converter decrypts secret_key on materialization, so an unresolvable payload
+        // throws out of the query rather than out of a property read. Falls through to the same
+        // dummy-verify path as the no-credential case, preserving the timing shape and the audit
+        // record; recovery is RemoveCredentialAsync, which does not materialize the secret. One
+        // unreadable row denies this subject's other credentials too — the converter runs over the
+        // whole result set — and that condition needs an operator either way.
         List<TotpCredentialEntity> credentials;
         try
         {
@@ -176,10 +165,9 @@ public class TotpService : ITotpService
 
     public async Task RemoveCredentialAsync(Guid credentialId, Guid subjectId)
     {
-        // Key-only projection, then delete a stub. Loading the entity would run the value converter
-        // over secret_key and throw for a payload this process cannot decrypt, so an undecryptable
-        // credential could not be removed — the one case where removal matters most, since
-        // re-enrolling is the documented recovery. ExecuteDeleteAsync would also avoid the
+        // Key-only projection, then delete a stub: loading the entity would decrypt secret_key and
+        // throw, leaving an undecryptable credential undeletable — the case where removal matters
+        // most, since re-enrolling is the recovery. ExecuteDeleteAsync would also skip the
         // materialization but is unsupported by the in-memory provider the unit tests use.
         var existingId = await _dbContext.TotpCredentials
             .Where(c => c.Id == credentialId && c.SubjectId == subjectId)
@@ -189,9 +177,8 @@ public class TotpService : ITotpService
         if (existingId is null)
             throw new InvalidOperationException("Credential not found.");
 
-        // Reuse the tracked instance when there is one, since attaching a second instance with the
-        // same key throws. An instance can only be tracked if it materialized, which means its
-        // payload decrypted — so the undecryptable case always takes the stub path.
+        // Reuse the tracked instance when there is one; attaching a second instance with the same
+        // key throws.
         var tracked = _dbContext.ChangeTracker.Entries<TotpCredentialEntity>()
             .FirstOrDefault(e => e.Entity.Id == existingId.Value)?.Entity;
 

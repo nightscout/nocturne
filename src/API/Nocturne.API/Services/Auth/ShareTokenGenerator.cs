@@ -17,12 +17,10 @@ public interface IShareTokenGenerator
 /// visual ambiguity. Uniqueness against existing tokens is enforced at the call site.
 /// </summary>
 /// <remarks>
-/// 16 rather than 12 because the token's entropy is now the whole security argument. It is stored
-/// only as an unsalted SHA-256 digest, which is the right choice for an exact-match lookup — but it
-/// means a leaked database gives an attacker an offline search target, and 60 bits is within reach
-/// of a well-funded one. The token is only ever copied and pasted, never typed, so the extra four
-/// characters cost nothing. Well inside the 63-character DNS label limit for
-/// <c>{token}.share.{domain}</c>.
+/// The token is stored only as an unsalted SHA-256 digest, so its entropy is the whole defence
+/// against an offline search of a leaked dump; 60 bits was within reach of a well-funded attacker.
+/// The token forms the first label of <c>{token}.share.{domain}</c>, so it must stay under 63
+/// characters.
 /// </remarks>
 public sealed class ShareTokenGenerator : IShareTokenGenerator
 {

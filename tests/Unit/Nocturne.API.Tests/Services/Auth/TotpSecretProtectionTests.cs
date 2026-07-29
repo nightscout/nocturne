@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
@@ -51,7 +52,9 @@ public class TotpSecretProtectionTests
 
         var read = () => converter.ConvertFromProvider(plaintext);
 
-        read.Should().Throw<Exception>(
+        // CryptographicException specifically: that is what TotpService.VerifyLoginAsync catches to
+        // turn a lost key into an ordinary failed attempt instead of a 500.
+        read.Should().Throw<CryptographicException>(
             "an unencrypted column value must fail closed rather than be read as a secret");
     }
 
@@ -64,7 +67,7 @@ public class TotpSecretProtectionTests
 
         var read = () => converter.ConvertFromProvider(stored);
 
-        read.Should().Throw<Exception>();
+        read.Should().Throw<CryptographicException>();
     }
 
     [Fact]

@@ -21,17 +21,20 @@ public static class CredentialAtRestStartupTask
     /// </summary>
     public static async Task RunAsync(
         IServiceProvider services,
-        ILogger logger,
         CancellationToken cancellationToken = default)
     {
+        var logger = services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger(typeof(CredentialAtRestStartupTask));
         var dataSource = services.GetRequiredService<NpgsqlDataSource>();
 
-        // The same factory the EF model uses, so payloads written here are readable through it.
-        var protector = TotpSecretProtection.CreateProtector(services);
+        // Same purpose as the EF model, so payloads written here are readable through it, and
+        // required rather than lenient so a missing registration fails startup instead of writing
+        // secrets nothing can read afterwards.
+        var protector = TotpSecretProtection.RequireProtector(services);
         await CredentialAtRestInitializationExtensions.ProtectTotpSecretsAsync(
             dataSource, protector, logger, cancellationToken);
 
-        var notifier = services.GetRequiredService<IShareLinkResetNotifier>();
+        var notifier = services.GetRequiredService<IShareLinkRotatedNotifier>();
         var tokenGenerator = services.GetRequiredService<IShareTokenGenerator>();
         var rotatedTenantIds = await CredentialAtRestInitializationExtensions.RotatePlaintextShareTokensAsync(
             dataSource, tokenGenerator.Generate, logger, cancellationToken);
@@ -41,5 +44,4 @@ public static class CredentialAtRestStartupTask
             await notifier.NotifyAsync(tenantId, cancellationToken);
         }
     }
-
 }
