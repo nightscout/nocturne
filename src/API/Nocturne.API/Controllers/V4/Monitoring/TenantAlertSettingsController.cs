@@ -77,7 +77,9 @@ public class TenantAlertSettingsController : ControllerBase
         // guard): a past until would persist a never-active window (EndsAt <= StartedAt)
         // — or retroactively expire the kept one without an audit clear — and the
         // response would report DndManualActive=false despite the request saying true.
-        if (request.DndManualActive && AsUtc(request.DndManualUntil) is { } until && until <= now)
+        // Only when the request is actually turning the mute on: with the toggle absent the
+        // expiry is never read, so rejecting a stale echo of it would 400 a schedule-only save.
+        if (request.DndManualActive == true && AsUtc(request.DndManualUntil) is { } until && until <= now)
             return BadRequest("dnd_manual_until must be in the future.");
 
         var entity = await db.TenantAlertSettings.FirstOrDefaultAsync(ct);
@@ -90,46 +92,57 @@ public class TenantAlertSettingsController : ControllerBase
         entity.UpdatedAt = now;
         if (isNew) db.TenantAlertSettings.Add(entity);
 
-        // Manual DND is a scope=all window. Toggling on ensures exactly one active all-window
-        // (anchoring StartedAt on the existing one so a re-PUT doesn't reset the for_minutes
-        // anchor); toggling off clears every uncleared all-window (user-clear, cleared_by
-        // null) — including future-started ones, so an explicit "DND off" also cancels a
-        // pending mute instead of letting it silently activate later (Create's supersede
-        // clears the same set).
-        if (request.DndManualActive)
+        // Manual DND is a scope=all window in a table this controller shares with
+        // DndWindowsController (which devices post to directly). An absent dndManualActive
+        // therefore means "leave the mute alone", not false: treating it as false would make
+        // saving a *schedule* change silently cancel a mute a device had taken out, and would
+        // rewrite that window's expiry on the way through.
+        if (request.DndManualActive is { } manualActive)
         {
+            // Toggling on ensures exactly one active all-window (anchoring StartedAt on the
+            // existing one so a re-PUT doesn't reset the for_minutes anchor). Toggling off is an
+            // explicit "DND off" and clears every uncleared all-window (user-clear, cleared_by
+            // null) — including future-started ones, so it also cancels a pending mute rather
+            // than letting it silently activate later.
             var activeAll = await ActiveAllWindowsAsync(db, now, ct);
-            var endsAt = AsUtc(request.DndManualUntil);
-            if (activeAll.Count == 0)
+            if (manualActive)
             {
-                db.DndWindows.Add(new DndWindowEntity
+                var endsAt = AsUtc(request.DndManualUntil);
+                if (activeAll.Count == 0)
                 {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = db.TenantId,
-                    Scope = DndScope.All,
-                    StartedAt = now,
-                    EndsAt = endsAt,
-                    Source = ManualSource,
-                });
+                    db.DndWindows.Add(new DndWindowEntity
+                    {
+                        Id = Guid.CreateVersion7(),
+                        TenantId = db.TenantId,
+                        Scope = DndScope.All,
+                        StartedAt = now,
+                        EndsAt = endsAt,
+                        Source = ManualSource,
+                    });
+                }
+                else
+                {
+                    var keep = activeAll.OrderBy(w => w.StartedAt).First();
+                    keep.EndsAt = endsAt;
+                    foreach (var extra in activeAll.Where(w => !ReferenceEquals(w, keep)))
+                    {
+                        extra.ClearedAt = now;
+                        extra.ClearedBy = DndWindowsController.SupersededBy;
+                    }
+                }
             }
             else
             {
-                var keep = activeAll.OrderBy(w => w.StartedAt).First();
-                keep.EndsAt = endsAt;
-                foreach (var extra in activeAll.Where(w => !ReferenceEquals(w, keep)))
-                {
-                    extra.ClearedAt = now;
-                    extra.ClearedBy = DndWindowsController.SupersededBy;
-                }
+                // Every uncleared all-window, not just the active ones: an explicit "DND off"
+                // should also cancel a mute that has not started yet rather than let it activate
+                // later. (DndWindowsController's overlap supersede leaves such a window alone,
+                // because adding one mute is not a statement about another span.)
+                var uncleared = await db.DndWindows
+                    .Where(w => w.Scope == DndScope.All && w.ClearedAt == null)
+                    .ToListAsync(ct);
+                foreach (var w in uncleared)
+                    w.ClearedAt = now;
             }
-        }
-        else
-        {
-            var uncleared = await db.DndWindows
-                .Where(w => w.Scope == DndScope.All && w.ClearedAt == null)
-                .ToListAsync(ct);
-            foreach (var w in uncleared)
-                w.ClearedAt = now;
         }
 
         await db.SaveChangesAsync(ct);
@@ -202,7 +215,12 @@ public class TenantAlertSettingsResponse
 
 public class UpdateTenantAlertSettingsRequest
 {
-    public bool DndManualActive { get; set; }
+    /// <summary>
+    /// Manual (scope=all) DND toggle. Omit to leave the tenant's manual mute untouched — the
+    /// mute lives in <c>dnd_windows</c>, which devices write to independently, so a settings
+    /// save that only changes the schedule must not disturb it.
+    /// </summary>
+    public bool? DndManualActive { get; set; }
     public DateTime? DndManualUntil { get; set; }
     public bool DndScheduleEnabled { get; set; }
     public TimeOnly? DndScheduleStart { get; set; }

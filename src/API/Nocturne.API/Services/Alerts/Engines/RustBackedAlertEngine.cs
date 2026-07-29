@@ -56,7 +56,7 @@ internal sealed class RustBackedAlertEngine(
         }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var timers = await timerStore.GetAllForRuleAsync(rule.Id, ct);
+        var timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(rule.Id, ct));
         var trackerState = await trackerRepository.GetTrackerStateAsync(rule.Id, ct);
         var priorExcursionId = trackerState?.ActiveExcursionId;
 
@@ -142,7 +142,7 @@ internal sealed class RustBackedAlertEngine(
             Root = pathRoot,
             Context = RustEnvelopeMapper.BuildContext(context),
             Now = timeProvider.GetUtcNow().UtcDateTime,
-            Timers = new Dictionary<string, DateTime>(await timerStore.GetAllForRuleAsync(ruleId, ct)),
+            Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(ruleId, ct)),
         });
 
         await ApplyTimerOpsAsync(ruleId, response.TimerOps, ct);
@@ -186,7 +186,7 @@ internal sealed class RustBackedAlertEngine(
                 Root = Evaluators.AlertConditionTypeNames.AutoResolvePathRoot,
                 Context = RustEnvelopeMapper.BuildContext(context),
                 Now = timeProvider.GetUtcNow().UtcDateTime,
-                Timers = new Dictionary<string, DateTime>(await timerStore.GetAllForRuleAsync(rule.Id, ct)),
+                Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(rule.Id, ct)),
             });
             await ApplyTimerOpsAsync(rule.Id, response.TimerOps, ct);
             shouldResolve = response.Value;
@@ -224,7 +224,7 @@ internal sealed class RustBackedAlertEngine(
             Root = wire,
             Context = RustEnvelopeMapper.BuildContext(context),
             Now = timeProvider.GetUtcNow().UtcDateTime,
-            Timers = new Dictionary<string, DateTime>(await timerStore.GetAllForRuleAsync(rule.Id, ct)),
+            Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(rule.Id, ct)),
         });
         await ApplyTimerOpsAsync(rule.Id, response.TimerOps, ct);
         return response.Value;

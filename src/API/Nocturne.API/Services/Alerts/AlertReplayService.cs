@@ -176,12 +176,16 @@ internal sealed class AlertReplayService(
             // Pin every fact in the per-tick context to `tick` — APS / pump / uploader /
             // state-span / temp-basal / device-event repos all support an as-of cutoff.
             var tickUtc = DateTime.SpecifyKind(tick, DateTimeKind.Utc);
+            // Receipt-gated, and through the same resolver the live enricher uses so the two
+            // cannot disagree about how a window resolves. No scheduled projection is passed:
+            // a recurring schedule's past state is not reconstructible from the settings row.
+            var tickDnd = DndWindowResolver.Resolve(dndWindows, tickUtc, receiptGated: true);
             var enrichedBase = (await enricher.EnrichAsOfAsync(
                 baseContext, ordered, tenantId, tickUtc, ct))
                 with
             {
-                ActiveDndScopes = ResolveDndScopes(dndWindows, tickUtc),
-                ActiveDoNotDisturb = ResolveDoNotDisturb(dndWindows, tickUtc),
+                ActiveDndScopes = tickDnd.Scopes,
+                ActiveDoNotDisturb = tickDnd.ActiveDoNotDisturb,
             };
 
             CaptureFactSnapshots(enrichedBase, DateTime.SpecifyKind(tick, DateTimeKind.Utc), factPrev, factPoints);
@@ -613,44 +617,6 @@ internal sealed class AlertReplayService(
     /// against the override rather than against a non-existent rule). The original list is
     /// returned unchanged when <paramref name="ruleOverride"/> is null.
     /// </summary>
-    private static readonly IReadOnlySet<DndScope> NoDndScopes = new HashSet<DndScope>();
-
-    /// <summary>
-    /// The DND scopes active at <paramref name="atUtc"/>, resolved from the tenant's windows with
-    /// receipt-gated <see cref="DndWindowSnapshot.WasActiveAt"/>. Returns a shared empty set when
-    /// none are active so the common no-DND tick allocates nothing.
-    /// </summary>
-    private static IReadOnlySet<DndScope> ResolveDndScopes(
-        IReadOnlyList<DndWindowSnapshot> windows, DateTime atUtc)
-    {
-        HashSet<DndScope>? scopes = null;
-        foreach (var w in windows)
-        {
-            if (w.WasActiveAt(atUtc))
-                (scopes ??= new HashSet<DndScope>()).Add(w.Scope);
-        }
-        return scopes ?? NoDndScopes;
-    }
-
-    /// <summary>
-    /// The tenant-wide DND snapshot at <paramref name="atUtc"/> for the <c>do_not_disturb</c>
-    /// leaf: the earliest StartedAt among receipt-gated active <c>scope=all</c> windows with
-    /// source <c>manual</c> (the live enricher's window branch produces the same projection),
-    /// or null when no all-window was active. Scheduled DND is not reconstructible
-    /// historically, so replay's snapshot considers windows only.
-    /// </summary>
-    private static DoNotDisturbSnapshot? ResolveDoNotDisturb(
-        IReadOnlyList<DndWindowSnapshot> windows, DateTime atUtc)
-    {
-        DateTime? earliest = null;
-        foreach (var w in windows)
-        {
-            if (w.Scope == DndScope.All && w.WasActiveAt(atUtc) && (earliest is null || w.StartedAt < earliest))
-                earliest = w.StartedAt;
-        }
-        return earliest is { } startedAt ? new DoNotDisturbSnapshot(startedAt, "manual") : null;
-    }
-
     private static IReadOnlyList<AlertRuleSnapshot> ApplyOverride(
         IReadOnlyList<AlertRuleSnapshot> stored,
         ReplayRuleOverride? ruleOverride,

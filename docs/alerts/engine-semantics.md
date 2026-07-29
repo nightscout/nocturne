@@ -212,6 +212,26 @@ in §3 plus:
 - Timezone resolution order (where applicable): per-rule condition timezone → tenant
   timezone (`TenantTimeZoneId`, IANA id) → UTC. Failure modes differ by leaf (§3:
   `time_of_day` fails closed on a bad per-rule tz, falls back on a bad tenant tz).
+- **Which ids resolve** is itself normative, because it decides whether a rule fires at
+  all. Both engines resolve an exact IANA id, then retry case-insensitively — connector
+  data carries mis-cased ids in bulk (production has ~240 rows spelling `Etc/GMT-2` as
+  `ETC/GMT-2`), and dropping them would make an overnight low rule silently never fire.
+  The two retries agree on that population but are **not** the same set, in both
+  directions. Neither divergence is corpus-catchable (the corpus pins evaluation given a
+  resolved zone, not resolution itself), so both are cutover gates:
+  - **C# resolves more:** `TimeZoneHelper` accepts Windows ids
+    (`AUS Eastern Standard Time`) via `TryConvertWindowsIdToIanaId`. `chrono_tz` has no
+    equivalent, so the crate leaves them unresolved (per-rule ⇒ false, tenant ⇒ UTC).
+    Closing it means carrying a CLDR Windows↔IANA mapping in the crate, which would then
+    need its own drift check against .NET's.
+  - **Rust resolves more:** the crate scans `chrono_tz::TZ_VARIANTS`, which includes tzdb
+    *backward links* (`Etc/Greenwich`, `Etc/Zulu`, `US/Pacific`, `Asia/Calcutta`,
+    `Australia/ACT`). C# scans `TimeZoneInfo.GetSystemTimeZones()` — the ICU canonical
+    set, which excludes those — and its `Etc/*` fallback only uppercases the suffix, so
+    `Etc/GREENWICH` is produced and fails. A rule whose per-rule tz is a backward link
+    therefore evaluates under Rust and fails closed under managed. Closing it means
+    filtering the scan to canonical zones, at the cost of rejecting ids the tzdb still
+    considers valid.
 
 ---
 

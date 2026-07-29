@@ -173,6 +173,13 @@ public static partial class AlertsInterop
         {
             return false;
         }
+        catch (BadImageFormatException)
+        {
+            // A cdylib built for the wrong architecture (an arm64 .so on an amd64 host)
+            // loads far enough to fail here rather than to not be found at all. Treat it
+            // as unavailable so callers take their degraded path instead of faulting.
+            return false;
+        }
     }
 
     #endregion

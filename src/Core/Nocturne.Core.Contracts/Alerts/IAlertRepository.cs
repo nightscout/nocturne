@@ -127,14 +127,22 @@ public interface IAlertRepository
     Task<TenantAlertSettingsSnapshot> GetTenantAlertSettingsAsync(Guid tenantId, CancellationToken ct);
 
     /// <summary>
-    /// Returns the tenant's uncleared DND windows (<c>cleared_at IS NULL</c>) as resolver
-    /// snapshots, for scoped Do Not Disturb (ADR 0004 D5). Every <see cref="DateTime"/> is
-    /// normalised to <see cref="DateTimeKind.Utc"/> so <see cref="DndWindowSnapshot.IsActiveAt"/>
-    /// (naive comparison) is sound. The caller resolves active-at-now; the enricher folds the
-    /// active scopes into <see cref="SensorContext.ActiveDndScopes"/>. Backed by the partial
-    /// index on <c>(tenant_id, scope) WHERE cleared_at IS NULL</c>.
+    /// Returns the tenant's DND windows that can still take effect at or after
+    /// <paramref name="nowUtc"/> — uncleared (<c>cleared_at IS NULL</c>) <b>and</b> not past
+    /// their expiry — as resolver snapshots, for scoped Do Not Disturb (ADR 0004 D5). Every
+    /// <see cref="DateTime"/> is normalised to <see cref="DateTimeKind.Utc"/> so
+    /// <see cref="DndWindowSnapshot.IsActiveAt"/> (naive comparison) is sound.
     /// </summary>
-    Task<IReadOnlyList<DndWindowSnapshot>> GetUnclearedDndWindowsAsync(Guid tenantId, CancellationToken ct);
+    /// <remarks>
+    /// The expiry bound is what keeps this bounded. A window that simply runs out is never
+    /// cleared — <c>cleared_at</c> stays null for audit — so filtering on <c>cleared_at</c>
+    /// alone would return every timed mute the tenant has ever set, growing without limit on a
+    /// path that runs once per glucose reading. The partial index on
+    /// <c>(tenant_id, scope) WHERE cleared_at IS NULL</c> still serves the lookup; only rows
+    /// that can still matter come back.
+    /// </remarks>
+    Task<IReadOnlyList<DndWindowSnapshot>> GetUnexpiredDndWindowsAsync(
+        Guid tenantId, DateTime nowUtc, CancellationToken ct);
 
     /// <summary>
     /// Returns every DND window for the tenant received by <paramref name="asOfReceiptUtc"/>

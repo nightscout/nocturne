@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,10 +16,13 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// state is computed on read, never stored; rows are retained after clear/expiry for audit.
 /// </summary>
 /// <remarks>
-/// One active window per scope is enforced here: creating a window supersedes any active window of
-/// the same scope (<c>cleared_by = "system:superseded"</c>). Creates are idempotent by the
-/// client-supplied id so a device/web retry never double-applies. A <c>scope=all</c> window is
-/// tenant-wide DND and additionally drives the <c>do_not_disturb</c> condition via the enricher.
+/// One active window per scope <em>at any instant</em> is enforced here: creating a window
+/// reconciles the same-scope windows whose span overlaps it — an earlier one is truncated to end
+/// where the new one begins, one it wholly covers is cleared
+/// (<c>cleared_by = "system:superseded"</c>), and a non-overlapping one is left alone. Creates are
+/// idempotent by the client-supplied id so a device/web retry never double-applies. A
+/// <c>scope=all</c> window is tenant-wide DND and additionally drives the <c>do_not_disturb</c>
+/// condition via the enricher.
 /// </remarks>
 /// <seealso cref="AlertRulesController"/>
 [ApiController]
@@ -74,6 +78,12 @@ public class DndWindowsController : ControllerBase
         if (request.Id == Guid.Empty)
             return BadRequest("A client-supplied window id is required.");
 
+        // Scope is nullable on the request so an omitted field is rejected rather than
+        // silently defaulting to the zero enum member (lows) — muting the wrong class of
+        // alert is not a reasonable reading of a malformed request.
+        if (request.Scope is not { } scope)
+            return BadRequest("scope is required (lows | highs | all).");
+
         var startedAt = AsUtc(request.StartedAt);
         var endsAt = request.EndsAt is { } e ? AsUtc(e) : (DateTime?)null;
         if (endsAt is { } ends && ends <= startedAt)
@@ -89,18 +99,34 @@ public class DndWindowsController : ControllerBase
         if (existing is not null)
             return Ok(MapToResponse(existing));
 
-        // Supersede so at most one window per scope is active. Only a window that is
-        // itself active now displaces the existing ones — an offline-authored window
-        // received after its expiry (or before its start) is recorded for audit
-        // without turning off a live mute.
+        // Keep "at most one window of a scope active at any instant" by reconciling against the
+        // *span* of the incoming window rather than against what happens to be active right now.
+        //
+        // Only same-scope windows whose span overlaps the new one are touched. A window that
+        // merely expired, or one scheduled for a later span that this one does not reach, is left
+        // exactly as it is — restamping the first would falsify the audit trail these rows are
+        // retained for, and clearing the second would destroy standing user intent that adding
+        // this mute said nothing about.
+        //
+        // Of the overlapping ones:
+        //  - one that started earlier is *truncated* to end where this one begins, so a running
+        //    mute is handed over at the boundary instead of being switched off;
+        //  - one that starts at or after this window's start is wholly covered, so it is cleared.
+        //
+        // A null EndsAt is an open-ended span, so [started, ∞).
         var now = DateTime.UtcNow;
-        var newWindowIsActive = startedAt <= now && (endsAt == null || now < endsAt);
-        if (newWindowIsActive)
+        var overlapping = await db.DndWindows
+            .Where(w => w.Scope == scope && w.ClearedAt == null
+                        && (w.EndsAt == null || w.EndsAt > startedAt)
+                        && (endsAt == null || w.StartedAt < endsAt))
+            .ToListAsync(ct);
+        foreach (var w in overlapping)
         {
-            var superseded = await db.DndWindows
-                .Where(w => w.Scope == request.Scope && w.ClearedAt == null)
-                .ToListAsync(ct);
-            foreach (var w in superseded)
+            if (w.StartedAt < startedAt)
+            {
+                w.EndsAt = startedAt;
+            }
+            else
             {
                 w.ClearedAt = now;
                 w.ClearedBy = SupersededBy;
@@ -111,7 +137,7 @@ public class DndWindowsController : ControllerBase
         {
             Id = request.Id,
             TenantId = tenantId,
-            Scope = request.Scope,
+            Scope = scope,
             StartedAt = startedAt,
             EndsAt = endsAt,
             Source = request.Source,
@@ -196,8 +222,11 @@ public class CreateDndWindowRequest
     /// <summary>Client-generated UUID. Re-sending the same id is a no-op that returns the stored window.</summary>
     public Guid Id { get; set; }
 
-    /// <summary>Which alerts to silence: <c>lows</c> | <c>highs</c> | <c>all</c>.</summary>
-    public DndScope Scope { get; set; }
+    /// <summary>
+    /// Which alerts to silence: <c>lows</c> | <c>highs</c> | <c>all</c>. Required — nullable so
+    /// an omitted value is a 400 rather than defaulting to the zero enum member.
+    /// </summary>
+    public DndScope? Scope { get; set; }
 
     /// <summary>When the mute takes effect (may predate receipt for offline authoring).</summary>
     public DateTime StartedAt { get; set; }
@@ -206,6 +235,7 @@ public class CreateDndWindowRequest
     public DateTime? EndsAt { get; set; }
 
     /// <summary>Audit label for what created the window (e.g. <c>web</c>, <c>prelude-device</c>).</summary>
+    [MaxLength(128)]
     public string? Source { get; set; }
 }
 

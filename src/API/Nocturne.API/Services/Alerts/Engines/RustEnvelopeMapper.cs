@@ -100,6 +100,29 @@ internal static class RustEnvelopeMapper
     private static readonly ConditionalWeakTable<SensorContext, object> ContextElementCache = new();
 
     /// <summary>
+    /// Copies persisted sustained timers into the envelope with every instant pinned to
+    /// <see cref="DateTimeKind.Utc"/>.
+    /// </summary>
+    /// <remarks>
+    /// Defensive rather than a live fix: <c>alert_condition_timers.first_true_at</c> is
+    /// <c>timestamp with time zone</c>, so Npgsql already hands these back as
+    /// <see cref="DateTimeKind.Utc"/>, and the replay store round-trips whatever it was given.
+    /// The reason to pin it anyway is that the crate deserialises these as
+    /// <c>DateTime&lt;Utc&gt;</c>, which requires an offset in the wire form — a
+    /// <see cref="DateTimeKind.Unspecified"/> instant serialises without one and turns the whole
+    /// call into an error envelope. This is the one instant crossing the boundary that arrives
+    /// straight from a store rather than through a projection that normalises it, so a future
+    /// column or store change would otherwise land as a silent engine failure.
+    /// </remarks>
+    public static Dictionary<string, DateTime> BuildTimers(IReadOnlyDictionary<string, DateTime> timers)
+    {
+        var wire = new Dictionary<string, DateTime>(timers.Count, StringComparer.Ordinal);
+        foreach (var (path, at) in timers)
+            wire[path] = DateTime.SpecifyKind(at, DateTimeKind.Utc);
+        return wire;
+    }
+
+    /// <summary>
     /// Projects a <see cref="SensorContext"/> onto the corpus <c>ScenarioContext</c> wire
     /// shape. Field-by-field total against the generator's <c>ScenarioModels.cs</c>
     /// (its <c>ToSensorContext</c> is the inverse of this mapping).

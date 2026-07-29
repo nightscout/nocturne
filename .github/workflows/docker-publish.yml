@@ -149,7 +149,10 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             crates/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock') }}
+          # Sources, not just the lockfile: actions/cache restores crates/target with mtimes
+          # newer than the checkout, and cargo's path-package fingerprint is mtime-based, so a
+          # lockfile-only key lets a source-only change reuse a stale cdylib and never re-save it.
+          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
 
       - name: Build nocturne_alerts native library
         working-directory: crates

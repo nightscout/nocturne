@@ -42,19 +42,21 @@ public sealed class RuleScopeClassBackfillService : BackgroundService
 
         try
         {
+            using var scope = _serviceProvider.CreateScope();
+            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
+            var classifier = scope.ServiceProvider.GetRequiredService<IRuleScopeClassifier>();
+
             // Without the native engine every Classify falls back to Undirected, and the
             // recompute-and-compare below would overwrite previously-correct low/high
             // classifications with that fallback. Skip the whole scan instead of persisting it.
-            if (!AlertsInterop.IsAvailable())
+            // Asked of the classifier rather than AlertsInterop directly: it is the thing whose
+            // availability actually matters here, and it caches the probe for the process lifetime.
+            if (!classifier.IsAvailable)
             {
                 _logger.LogWarning(
                     "nocturne_alerts native library unavailable; skipping scope-class backfill to preserve stored classifications");
                 return;
             }
-
-            using var scope = _serviceProvider.CreateScope();
-            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-            var classifier = scope.ServiceProvider.GetRequiredService<IRuleScopeClassifier>();
 
             // Tenants are not RLS-scoped, so this list read is safe without a tenant context.
             List<Guid> tenantIds;

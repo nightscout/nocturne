@@ -204,38 +204,19 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
             // resolved below); this projects the active scheduled window if any (ADR 0004 D5).
             var scheduled = settings?.Resolve(now, enriched.TenantTimeZoneId);
 
-            // Scoped DND windows: resolve each uncleared window active-at-now into its scope.
-            var windows = await _deps.Alerts.GetUnclearedDndWindowsAsync(tenantId, ct);
-            var activeScopes = new HashSet<DndScope>();
-            foreach (var w in windows)
-            {
-                if (w.IsActiveAt(now))
-                    activeScopes.Add(w.Scope);
-            }
-            if (scheduled is not null)
-                activeScopes.Add(DndScope.All);
-
-            // ActiveDoNotDisturb drives the do_not_disturb condition leaf and the tenant-wide
-            // notion of DND, so it is non-null exactly when `all` is active — lows/highs windows
-            // feed ActiveDndScopes (the gate) only. When a manual (all-window) mute and the
-            // scheduled window are both active, the manual path takes precedence for the
-            // for_minutes anchor and source — the pre-window TenantAlertSettingsSnapshot.Resolve
-            // contract, preserved so overlap doesn't shift the elapsed-time anchor.
-            DoNotDisturbSnapshot? dnd = null;
-            if (activeScopes.Contains(DndScope.All))
-            {
-                var activeAllWindows = windows
-                    .Where(w => w.Scope == DndScope.All && w.IsActiveAt(now))
-                    .ToList();
-                dnd = activeAllWindows.Count > 0
-                    ? new DoNotDisturbSnapshot(activeAllWindows.Min(w => w.StartedAt), "manual")
-                    : new DoNotDisturbSnapshot(scheduled!.StartedAt, scheduled.Source);
-            }
+            // Scoped DND windows + scheduled DND, folded into the active scope set and the
+            // tenant-wide projection by the shared resolver — the same call replay makes (there
+            // receipt-gated), so the live gate and replay cannot drift on how a window resolves.
+            // The read is bounded by expiry: a window that merely runs out is never cleared, so
+            // filtering on cleared_at alone would return every timed mute the tenant has ever set,
+            // on a path that runs once per reading.
+            var windows = await _deps.Alerts.GetUnexpiredDndWindowsAsync(tenantId, now, ct);
+            var dnd = DndWindowResolver.Resolve(windows, now, receiptGated: false, scheduled);
 
             enriched = enriched with
             {
-                ActiveDoNotDisturb = dnd,
-                ActiveDndScopes = activeScopes,
+                ActiveDoNotDisturb = dnd.ActiveDoNotDisturb,
+                ActiveDndScopes = dnd.Scopes,
             };
         }
 

@@ -54,7 +54,7 @@ public class AlertReplayServiceTests
             .Setup(r => r.GetDndWindowsAsOfAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
         _alertRepository
-            .Setup(r => r.GetUnclearedDndWindowsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
 
         var enricherDeps = new SensorContextEnricherDependencies(

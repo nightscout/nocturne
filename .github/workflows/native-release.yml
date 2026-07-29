@@ -45,7 +45,10 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             crates/target
-          key: cargo-release-${{ matrix.rid }}-${{ hashFiles('crates/Cargo.lock') }}
+          # Sources, not just the lockfile — a restored crates/target has newer mtimes than
+          # the checkout, and cargo's path-package fingerprint is mtime-based, so a
+          # lockfile-only key can publish a release artifact built from stale sources.
+          key: cargo-release-${{ matrix.rid }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
       - name: Build cdylib
         working-directory: crates
         run: cargo build --release -p nocturne-alerts-ffi

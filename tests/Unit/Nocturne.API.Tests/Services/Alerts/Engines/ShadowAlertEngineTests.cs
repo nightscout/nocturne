@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
@@ -166,6 +167,77 @@ public class ShadowAlertEngineTests
         (await timerStore.GetAllForRuleAsync(RuleId, CancellationToken.None)).Should().BeEmpty();
         var state = await trackerRepo.GetTrackerStateAsync(RuleId, CancellationToken.None);
         state!.State.Should().Be("active", "the managed write is the only persisted state");
+    }
+
+    /// <summary>
+    /// A managed throw is the one divergence class a comparison after the fact cannot see: the
+    /// managed evaluators throw and the orchestrator skips the rule, while the Rust engine fails
+    /// closed to <c>false</c> — which moves an active excursion into hysteresis and lets the sweep
+    /// force-close a live alert. Shadow mode has to surface it, and must still let the exception
+    /// through so the orchestrator's per-rule catch keeps deciding what a throwing rule means.
+    /// </summary>
+    [Fact]
+    public async Task Managed_throwing_logs_a_managed_threw_divergence_and_rethrows()
+    {
+        var rule = BuildThresholdRule();
+        rule.ConditionParams = "{ this is not json";
+        // The secondary engine reaches a definite answer where managed threw — the shape of the
+        // real divergence: managed skips the rule, the secondary carries on and returns false.
+        var fake = new FakeShadowEvaluator(() => new ShadowRuleOutcome
+        {
+            Root = false,
+            Transition = "hysteresis_started",
+            AutoResolved = false,
+            PostTimers = new Dictionary<string, DateTime>(),
+            PostTrackerState = "hysteresis",
+            PostConfirmationCount = 0,
+            PostHasActiveExcursion = true,
+        });
+        var (engine, logger, timerStore, trackerRepo, provider) = BuildShadowEngine(rule, fake);
+        await using var _ = provider;
+
+        var act = async () => await engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+
+        await act.Should().ThrowAsync<JsonException>(
+            "the managed engine stays authoritative, throws included");
+
+        // The log has to carry what the secondary engine actually produced. Reporting a Rust
+        // outcome without running it would let an operator "confirm" a divergence class from a
+        // line that never observed the Rust half.
+        fake.Calls.Should().Be(1, "the secondary engine must run so its outcome can be reported");
+        var divergence = logger.Entries.Should().ContainSingle(e =>
+            e.Level == LogLevel.Warning
+            && e.Message.Contains("AlertEngineDivergence")
+            && e.Message.Contains("field=managed_threw")).Subject;
+        divergence.Message.Should().Contain("managed=threw JsonException");
+        divergence.Message.Should().Contain("root=False");
+        divergence.Message.Should().Contain("transition=hysteresis_started");
+
+        // Still side-effect-free: the shadow run persists nothing, and managed threw before it
+        // could write anything either.
+        timerStore.DrainOps().Should().BeEmpty();
+        (await trackerRepo.GetTrackerStateAsync(RuleId, CancellationToken.None)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Managed_throwing_reports_the_secondary_engines_own_failure_rather_than_a_value()
+    {
+        var rule = BuildThresholdRule();
+        rule.ConditionParams = "{ this is not json";
+        var fake = new FakeShadowEvaluator(throws: new InvalidOperationException("rust exploded"));
+        var (engine, logger, _, _, provider) = BuildShadowEngine(rule, fake);
+        await using var _ = provider;
+
+        var act = async () => await engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+
+        await act.Should().ThrowAsync<JsonException>();
+
+        // Both engines failing is not the divergence class; the line must say so.
+        var divergence = logger.Entries.Should().ContainSingle(e =>
+            e.Message.Contains("field=managed_threw")).Subject;
+        divergence.Message.Should().Contain("rust=threw InvalidOperationException");
     }
 
     [NativeFact]

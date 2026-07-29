@@ -14,9 +14,10 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// <remarks>
 /// Rows are retained after they expire or are cleared (audit). Effective state is
 /// resolved on read — not cleared, started, not past <see cref="EndsAt"/> — never a
-/// stored "active" flag. The one-active-window-per-scope invariant is enforced on
-/// create (a same-scope window is superseded, its <see cref="ClearedBy"/> stamped
-/// <c>system:superseded</c>). <see cref="CreatedAt"/> is the server **receipt** time;
+/// stored "active" flag. The one-active-window-per-scope-per-instant invariant is
+/// enforced on create (a same-scope window whose span *overlaps* is superseded, its
+/// <see cref="ClearedBy"/> stamped <c>system:superseded</c>; one scheduled for a
+/// non-overlapping span is left alone). <see cref="CreatedAt"/> is the server **receipt** time;
 /// replay's "active at T" check uses it so it never retroactively suppresses the
 /// offline-authoring gap.
 /// </remarks>

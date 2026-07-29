@@ -53,7 +53,7 @@ public class SensorContextEnricherTests
         // The repo never returns null; default the new DND-windows fetch to empty so the
         // unconditional enrichment block is exercised. Per-test setups override this.
         _alertRepository
-            .Setup(r => r.GetUnclearedDndWindowsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetUnexpiredDndWindowsAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<DndWindowSnapshot>());
     }
 
@@ -671,7 +671,7 @@ public class SensorContextEnricherTests
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         _alertRepository
-            .Setup(r => r.GetUnclearedDndWindowsAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetUnexpiredDndWindowsAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<DndWindowSnapshot>
             {
                 new(DndScope.Lows, StartedAt: now.AddMinutes(-5), EndsAt: null, ClearedAt: null, CreatedAt: now.AddMinutes(-5)),
@@ -693,7 +693,7 @@ public class SensorContextEnricherTests
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var startedAt = now.AddMinutes(-30);
         _alertRepository
-            .Setup(r => r.GetUnclearedDndWindowsAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetUnexpiredDndWindowsAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<DndWindowSnapshot>
             {
                 new(DndScope.All, StartedAt: startedAt, EndsAt: null, ClearedAt: null, CreatedAt: startedAt),
@@ -746,7 +746,7 @@ public class SensorContextEnricherTests
                 DndScheduleStart: new TimeOnly(0, 0),
                 DndScheduleEnd: new TimeOnly(23, 0)));
         _alertRepository
-            .Setup(r => r.GetUnclearedDndWindowsAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetUnexpiredDndWindowsAsync(_tenantId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<DndWindowSnapshot>
             {
                 new(DndScope.All, StartedAt: manualStartedAt, EndsAt: null, ClearedAt: null, CreatedAt: manualStartedAt),

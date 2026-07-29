@@ -146,6 +146,54 @@ public class TenantAlertSettingsControllerTests
         got.DndScheduleEnd.Should().Be(new TimeOnly(7, 0));
     }
 
+    [Fact]
+    public async Task AnOmittedManualToggle_leavesTheMuteAlone()
+    {
+        var (controller, options) = NewController();
+        var muted = OkValue(await controller.Update(
+            new UpdateTenantAlertSettingsRequest { DndManualActive = true }, CancellationToken.None));
+
+        // A save that only touches the schedule — dndManualActive absent. dnd_windows is shared
+        // with DndWindowsController (devices post to it directly), so an absent toggle must not
+        // be read as "off" and cancel a mute this request said nothing about.
+        var resp = OkValue(await controller.Update(
+            new UpdateTenantAlertSettingsRequest
+            {
+                DndManualActive = null,
+                DndScheduleEnabled = true,
+                DndScheduleStart = new TimeOnly(22, 0),
+                DndScheduleEnd = new TimeOnly(7, 0),
+            },
+            CancellationToken.None));
+
+        resp.DndManualActive.Should().BeTrue();
+        resp.DndManualStartedAt.Should().Be(muted.DndManualStartedAt);
+        resp.DndScheduleEnabled.Should().BeTrue();
+
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        (await db.DndWindows.CountAsync(w => w.Scope == DndScope.All && w.ClearedAt == null)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AnOmittedManualToggle_doesNotRewriteTheMutesExpiry()
+    {
+        var (controller, options) = NewController();
+        var until = DateTime.UtcNow.AddMinutes(30);
+        await controller.Update(
+            new UpdateTenantAlertSettingsRequest { DndManualActive = true, DndManualUntil = until },
+            CancellationToken.None);
+
+        // Without the manual toggle, a timed mute must keep its expiry rather than being
+        // silently promoted to indefinite by a schedule-only save.
+        await controller.Update(
+            new UpdateTenantAlertSettingsRequest { DndManualActive = null, DndScheduleEnabled = true },
+            CancellationToken.None);
+
+        await using var db = new NocturneDbContext(options) { TenantId = Tenant };
+        var window = await db.DndWindows.SingleAsync(w => w.Scope == DndScope.All && w.ClearedAt == null);
+        window.EndsAt.Should().BeCloseTo(until, TimeSpan.FromSeconds(1));
+    }
+
     // ---- helpers ----
 
     private static (TenantAlertSettingsController Controller, DbContextOptions<NocturneDbContext> Options) NewController()

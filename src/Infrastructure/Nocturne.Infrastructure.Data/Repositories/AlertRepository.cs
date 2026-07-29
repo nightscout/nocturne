@@ -357,8 +357,8 @@ public class AlertRepository : IAlertRepository
     }
 
     /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<DndWindowSnapshot>> GetUnclearedDndWindowsAsync(
-        Guid tenantId, CancellationToken ct)
+    public virtual async Task<IReadOnlyList<DndWindowSnapshot>> GetUnexpiredDndWindowsAsync(
+        Guid tenantId, DateTime nowUtc, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
         context.TenantId = tenantId;
@@ -366,9 +366,16 @@ public class AlertRepository : IAlertRepository
         // Project the raw columns first, then map in memory: DateTime.SpecifyKind isn't SQL-
         // translatable, and Npgsql can read a `timestamp` column back as Unspecified, which
         // would compare wrongly against the Utc `now` in DndWindowSnapshot's naive comparison.
+        //
+        // The ends_at bound is load-bearing rather than an optimisation: a window that simply
+        // runs out is never cleared (the row is kept for audit), so filtering on cleared_at
+        // alone returns every timed mute the tenant has ever set — on a query that runs once
+        // per glucose reading.
         var rows = await context.DndWindows
             .AsNoTracking()
-            .Where(w => w.TenantId == tenantId && w.ClearedAt == null)
+            .Where(w => w.TenantId == tenantId
+                        && w.ClearedAt == null
+                        && (w.EndsAt == null || w.EndsAt > nowUtc))
             .Select(w => new { w.Scope, w.StartedAt, w.EndsAt, w.CreatedAt })
             .ToListAsync(ct);
 
