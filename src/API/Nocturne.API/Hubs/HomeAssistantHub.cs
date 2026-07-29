@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
@@ -99,12 +101,19 @@ public class HomeAssistantHub : TenantAwareHub
         var tenantId = TenantContext?.TenantId
             ?? throw new HubException("No tenant context resolved.");
 
-        // Gate 1: OAuth scope check — require "alerts.readwrite"
-        var scopes = Context.User?.FindAll("scope")
-            .SelectMany(c => c.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-            .ToHashSet() ?? new HashSet<string>();
+        // Gate 1: OAuth scope check — require "alerts.readwrite".
+        //
+        // Read from GrantedScopes rather than a "scope" claim on the principal. That claim is minted
+        // only by JwtService and so only ever appeared on the principal the framework's JwtBearer
+        // scheme built; AuthenticationMiddleware's claim set has never carried it. Now that the
+        // custom chain owns the final principal on every path, FindAll("scope") is always empty and
+        // this gate would deny every acknowledge. GrantedScopes is the resolved, membership-
+        // intersected scope set, which is the right authority here anyway.
+        var httpContext = Context.GetHttpContext()
+            ?? throw new HubException("No HTTP context available.");
+        var scopes = httpContext.GetGrantedScopes();
 
-        if (!scopes.Contains("alerts.readwrite"))
+        if (!OAuthScopes.SatisfiesScope(scopes, OAuthScopes.AlertsReadWrite))
             throw new HubException("Insufficient permissions: alerts.readwrite scope required.");
 
         // Gate 2: Channel config check — find HA channels for this excursion's rule and verify allow_ack

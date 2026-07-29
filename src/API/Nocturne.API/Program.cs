@@ -439,13 +439,23 @@ app.UseMiddleware<AuditContextMiddleware>();
 // Add site security middleware (enforces authentication when site lockdown is enabled)
 app.UseMiddleware<SiteSecurityMiddleware>();
 
-// AuthenticationMiddleware above is the only authenticator. UseAuthentication() is deliberately
-// absent: it runs the JwtBearer scheme and assigns its principal over whatever the chain decided,
-// and that scheme validates strictly less (no issuer or audience check, no tenant pin, no
-// revocation check) while trusting the same signing key. It would therefore re-admit exactly the
-// tokens the chain rejects — a token pinned to another tenant, or one that has been revoked — and
-// undo the membership rejection in SetUnauthenticated. The scheme stays registered only so
-// UseAuthorization has a challenge scheme to produce a 401 with.
+// There is no app.UseAuthentication() call here, and adding one would be a security regression.
+//
+// The framework's authentication middleware is NOT absent — minimal hosting auto-inserts it at the
+// HEAD of the pipeline because AddAuthentication is registered, and an explicit app.UseAuthentication()
+// is what suppresses that auto-add. So calling it here would move the JwtBearer scheme from before
+// AuthenticationMiddleware to after it, letting the scheme's principal overwrite whatever the handler
+// chain decided. That scheme validates strictly less — no issuer or audience check, no tenant pin, no
+// revocation check — while trusting the same signing key, so it would re-admit exactly the tokens the
+// chain rejects and undo the rejection in SetUnauthenticated.
+//
+// Running ahead of the chain is harmless only because AuthenticationMiddleware assigns
+// context.User on every path, success and rejection alike, so it always owns the final principal.
+// That invariant is what makes this safe; do not weaken it.
+//
+// The scheme also gives UseAuthorization a challenge scheme, so an anonymous request gets 401
+// rather than 500. No policy names an authentication scheme, so PolicyEvaluator reads context.User
+// directly.
 app.UseAuthorization();
 
 // Add rate limiting

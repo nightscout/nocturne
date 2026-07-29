@@ -1,3 +1,4 @@
+using Nocturne.API.Extensions;
 using System.Security.Claims;
 using System.Threading;
 using FluentAssertions;
@@ -55,6 +56,31 @@ public sealed class AuthenticationMiddlewarePrincipalTests
         public Task<AuthResult> AuthenticateAsync(HttpContext httpContext) =>
             Task.FromResult(AuthResult.Success(context));
     }
+
+    /// <summary>
+    /// Stub handler that rejects the credential, standing in for every chain rejection: a token
+    /// pinned to another tenant, a revoked grant, or any credential presented on a share host.
+    /// </summary>
+    private sealed class RejectingHandler : IAuthHandler
+    {
+        public int Priority => 50;
+
+        public string Name => "Rejecting";
+
+        public Task<AuthResult> AuthenticateAsync(HttpContext httpContext) =>
+            Task.FromResult(AuthResult.Failure("not valid for this tenant"));
+    }
+
+    /// <summary>
+    /// A principal shaped like the one the framework's JwtBearer scheme builds. The framework
+    /// authentication middleware runs at the HEAD of the pipeline (minimal hosting auto-inserts it
+    /// because AddAuthentication is registered), so this is what context.User already holds when
+    /// AuthenticationMiddleware runs.
+    /// </summary>
+    private static ClaimsPrincipal FrameworkPrincipal() =>
+        new(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, SubjectId.ToString()), new Claim("scope", "alerts.readwrite")],
+            "Bearer"));
 
     private static (AuthenticationMiddleware Middleware, DefaultHttpContext Context) Build(bool isMember)
     {
@@ -126,5 +152,46 @@ public sealed class AuthenticationMiddlewarePrincipalTests
             .Which.IsAuthenticated.Should().BeTrue();
         context.User.Identity?.IsAuthenticated.Should().BeTrue();
         context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value.Should().Be(SubjectId.ToString());
+    }
+
+    [Fact]
+    public async Task Rejected_credential_does_not_inherit_the_framework_principal()
+    {
+        // The other half of the same vulnerability. When the handler chain REJECTS a credential the
+        // middleware never entered the IsAuthenticated branch, so it never assigned context.User —
+        // and the principal the framework scheme built ahead of it survived untouched. The
+        // membership check cannot catch this either: it only runs for IsAuthenticated: true. So a
+        // token pinned to another tenant, a revoked grant, or a credential presented on a share host
+        // still satisfied bare [Authorize] on ~40 V4 controllers, including the sensor-glucose read.
+        var memberService = new Mock<ITenantMemberService>();
+        var dbName = $"auth_principal_reject_{Guid.NewGuid()}";
+        var services = new ServiceCollection();
+        services.AddScoped<ICategoryReadContext, CategoryReadContext>();
+        services.AddSingleton(memberService.Object);
+        services.AddScoped(_ => TestDbContextFactory.CreateInMemoryContext(dbName));
+        var provider = services.BuildServiceProvider();
+
+        var context = new DefaultHttpContext { RequestServices = provider };
+        context.Items["TenantContext"] = new TenantContext(TenantId, "victim", "Victim", true, false);
+        context.User = FrameworkPrincipal();
+
+        var middleware = new AuthenticationMiddleware(
+            next: _ => Task.CompletedTask,
+            logger: NullLogger<AuthenticationMiddleware>.Instance,
+            handlers: [new RejectingHandler()],
+            environment: Mock.Of<IHostEnvironment>(e => e.EnvironmentName == "Production"),
+            publicAccessCacheService: null!,
+            oidcOptions: Options.Create(new OidcOptions()),
+            scopeFactory: provider.GetRequiredService<IServiceScopeFactory>());
+
+        await middleware.InvokeAsync(context);
+
+        context.Items["AuthContext"].Should().BeOfType<AuthContext>()
+            .Which.IsAuthenticated.Should().BeFalse();
+
+        context.User.Identity?.IsAuthenticated.Should().NotBe(true,
+            "a credential the chain rejected must not keep the framework scheme's principal");
+        context.User.Claims.Should().BeEmpty();
+        context.GetGrantedScopes().Should().BeEmpty();
     }
 }
