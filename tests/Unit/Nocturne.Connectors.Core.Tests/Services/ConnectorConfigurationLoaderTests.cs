@@ -6,6 +6,7 @@ using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Models.Configuration;
 using Xunit;
 
 namespace Nocturne.Connectors.Core.Tests.Services;
@@ -112,6 +113,76 @@ public class ConnectorConfigurationLoaderTests
 
         config.Enabled.Should().BeTrue("a connector with its required credentials present must sync");
         config.ApiSecret.Should().Be("s3cr3t", "the required secret must be applied from the secret store");
+    }
+
+    /// <summary>
+    ///     Skipping an incomplete connector is right, but doing it silently is not: the tenant turned
+    ///     it on, and with only a debug log it reports healthy forever while never syncing once. A
+    ///     CareLink connector sat in exactly that state for seven weeks because its username was blank.
+    /// </summary>
+    [Fact]
+    public async Task LoadForTenantAsync_RecordsWhyItIsNotSyncing_WhenRequiredConfigurationMissing()
+    {
+        var configService = new Mock<IConnectorConfigurationService>();
+        configService
+            .Setup(s => s.GetConfigurationAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = ConnectorName,
+                Configuration = JsonDocument.Parse("{\"enabled\": true}")
+            });
+        configService
+            .Setup(s => s.GetSecretsAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+        configService
+            .Setup(s => s.GetHealthStateAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorHealthStateDto { IsHealthy = true });
+
+        await CreateRequiredSecretLoader(configService).LoadForTenantAsync(CancellationToken.None);
+
+        configService.Verify(s => s.UpdateHealthStateAsync(
+                ConnectorName,
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                It.Is<string>(m => m.Contains("ApiSecret") && m.Contains("required")),
+                It.IsAny<DateTime?>(),
+                false,
+                It.IsAny<CancellationToken>()),
+            Times.Once,
+            "the tenant must be told which setting is missing, not left looking healthy");
+    }
+
+    /// <summary>
+    ///     The loader runs every poll cycle, so an unchanged message must not be rewritten each time.
+    /// </summary>
+    [Fact]
+    public async Task LoadForTenantAsync_DoesNotRewriteHealthState_WhenAlreadyRecorded()
+    {
+        var configService = new Mock<IConnectorConfigurationService>();
+        configService
+            .Setup(s => s.GetConfigurationAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorConfigurationResponse
+            {
+                ConnectorName = ConnectorName,
+                Configuration = JsonDocument.Parse("{\"enabled\": true}")
+            });
+        configService
+            .Setup(s => s.GetSecretsAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string>());
+        configService
+            .Setup(s => s.GetHealthStateAsync(ConnectorName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ConnectorHealthStateDto
+            {
+                IsHealthy = false,
+                LastErrorMessage = "Not syncing: ApiSecret is required but not configured."
+            });
+
+        await CreateRequiredSecretLoader(configService).LoadForTenantAsync(CancellationToken.None);
+
+        configService.Verify(s => s.UpdateHealthStateAsync(
+                It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string>(),
+                It.IsAny<DateTime?>(), It.IsAny<bool?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     private static ConnectorConfigurationLoader<RequiredSecretTestConfig> CreateRequiredSecretLoader(

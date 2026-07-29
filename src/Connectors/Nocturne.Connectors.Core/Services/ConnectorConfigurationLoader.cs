@@ -67,15 +67,58 @@ public class ConnectorConfigurationLoader<TConfig>(
         // required configuration, syncing it would authenticate with empty credentials and fail
         // every cycle. Treat incomplete configuration as not configured and skip it, exactly like a
         // tenant that never configured the connector at all.
-        if (config.Enabled && !config.HasRequiredConfiguration())
+        if (config.Enabled)
         {
-            logger.LogDebug(
-                "{ConnectorName} is enabled but missing required configuration; skipping sync",
-                registration.ConnectorName);
-            config.Enabled = false;
+            var missing = config.MissingRequiredProperties();
+            if (missing.Count > 0)
+            {
+                logger.LogDebug(
+                    "{ConnectorName} is enabled but missing required configuration ({Missing}); skipping sync",
+                    registration.ConnectorName, string.Join(", ", missing));
+                config.Enabled = false;
+
+                // The tenant turned this connector on, so silence is the wrong answer: skipping with
+                // only a debug log leaves it reporting healthy while it never syncs at all.
+                await ReportIncompleteConfigurationAsync(missing, ct);
+            }
         }
 
         return config;
+    }
+
+    /// <summary>
+    ///     Records the missing configuration as the connector's health state, so the tenant sees why
+    ///     it is not syncing. Written only when it differs from what is already stored — this runs on
+    ///     every poll cycle, and rewriting an unchanged message would be a needless write each time.
+    /// </summary>
+    private async Task ReportIncompleteConfigurationAsync(IReadOnlyList<string> missing, CancellationToken ct)
+    {
+        var message = $"Not syncing: {string.Join(", ", missing)} {(missing.Count == 1 ? "is" : "are")} required "
+                      + "but not configured.";
+
+        try
+        {
+            var health = await configService.GetHealthStateAsync(registration.ConnectorName, ct);
+            if (health is { IsHealthy: false } && health.LastErrorMessage == message)
+                return;
+
+            await configService.UpdateHealthStateAsync(
+                registration.ConnectorName,
+                lastErrorMessage: message,
+                lastErrorAt: DateTime.UtcNow,
+                isHealthy: false,
+                ct: ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex,
+                "Failed to record incomplete configuration for {ConnectorName}",
+                registration.ConnectorName);
+        }
     }
 
     private static TConfig CloneDefaults(TConfig source)

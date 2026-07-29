@@ -151,15 +151,22 @@ public abstract class BaseConnectorConfiguration : IConnectorConfiguration
     ///     required secret later removed) reports false here and must not sync — otherwise it polls
     ///     every cycle with empty credentials and fails authentication forever.
     /// </summary>
-    public bool HasRequiredConfiguration()
+    public bool HasRequiredConfiguration() => MissingRequiredProperties().Count == 0;
+
+    /// <summary>
+    ///     The display names of the required properties that have no value, so a caller can say which
+    ///     ones are missing rather than only that something is.
+    /// </summary>
+    public IReadOnlyList<string> MissingRequiredProperties()
     {
-        foreach (var (property, _, _) in GetRequiredProperties())
+        var missing = new List<string>();
+        foreach (var (property, displayName, _) in GetRequiredProperties())
         {
             if (IsRequiredValueMissing(property, property.GetValue(this)))
-                return false;
+                missing.Add(displayName);
         }
 
-        return true;
+        return missing;
     }
 
     /// <summary>

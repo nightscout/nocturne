@@ -190,9 +190,9 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
     }
 
     /// <summary>
-    ///     Fetches CareLink data for the resolved role. On a fetch error, records the failure on
-    ///     <paramref name="result"/> and returns null; also returns null (without failing the sync)
-    ///     when the service has no data to return.
+    ///     Fetches CareLink data for the resolved role, recording a failure on <paramref name="result"/>
+    ///     and returning null when no endpoint yields a payload. A working account always returns one,
+    ///     even with no current readings, so an absent payload means every path failed.
     /// </summary>
     private async Task<CareLinkData?> TryFetchDataAsync(
         CareLinkConnectorConfiguration config,
@@ -232,7 +232,14 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         }
 
         if (data == null)
-            _logger.LogWarning("[{ConnectorSource}] No data returned from CareLink", ConnectorSource);
+        {
+            // Reporting success here would mark the connector healthy while nothing reaches the
+            // tenant — the state the CareLink connector sat in when every endpoint was failing.
+            _logger.LogError(
+                "[{ConnectorSource}] No data returned from any CareLink endpoint", ConnectorSource);
+            result.Success = false;
+            result.Errors.Add("No data returned from any CareLink endpoint");
+        }
 
         return data;
     }
