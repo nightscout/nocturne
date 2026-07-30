@@ -59,6 +59,7 @@ public class MembershipRequestServiceTests : IDisposable
         _service = new MembershipRequestService(
             _dbContext,
             _tenantService.Object,
+            new TenantRoleService(_dbContext),
             _notificationService.Object,
             NullLogger<MembershipRequestService>.Instance);
 
@@ -187,7 +188,7 @@ public class MembershipRequestServiceTests : IDisposable
         var roleIds = new List<Guid> { _adminRoleId };
 
         var result = await _service.ApproveRequestAsync(
-            request.Id, _tenantId, roleIds, _adminSubjectId);
+            request.Id, _tenantId, roleIds, _adminSubjectId, [TenantPermissions.Superuser]);
 
         result.Success.Should().BeTrue();
         result.Error.Should().BeNull();
@@ -209,7 +210,7 @@ public class MembershipRequestServiceTests : IDisposable
     public async Task ApproveRequestAsync_RequestNotFound_ReturnsFailure()
     {
         var result = await _service.ApproveRequestAsync(
-            Guid.CreateVersion7(), _tenantId, [_adminRoleId], _adminSubjectId);
+            Guid.CreateVersion7(), _tenantId, [_adminRoleId], _adminSubjectId, [TenantPermissions.Superuser]);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("not found");
@@ -226,7 +227,7 @@ public class MembershipRequestServiceTests : IDisposable
 
         // Try to approve the already-denied request
         var result = await _service.ApproveRequestAsync(
-            request.Id, _tenantId, [_adminRoleId], _adminSubjectId);
+            request.Id, _tenantId, [_adminRoleId], _adminSubjectId, [TenantPermissions.Superuser]);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("no longer pending");

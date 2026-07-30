@@ -64,6 +64,7 @@ public class MemberInviteServiceTests : IDisposable
             _dbContext,
             _jwtService.Object,
             _tenantService.Object,
+            new TenantRoleService(_dbContext),
             configuration,
             logger.Object);
 

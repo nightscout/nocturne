@@ -162,24 +162,10 @@ public class MemberInviteController : ControllerBase
         if (request.RoleIds.Count == 0 && (member.DirectPermissions == null || member.DirectPermissions.Count == 0))
             return Problem(detail: "Cannot remove all roles when member has no direct permissions", statusCode: 400, title: "Bad Request");
 
-        // Validate roleIds belong to this tenant
-        if (request.RoleIds.Count > 0)
-        {
-            var roles = await _dbContext.TenantRoles
-                .Where(r => r.TenantId == tenantId && request.RoleIds.Contains(r.Id))
-                .Select(r => r.Permissions)
-                .ToListAsync(ct);
-            if (roles.Count != request.RoleIds.Count)
-                return Problem(detail: "One or more role IDs do not belong to this tenant", statusCode: 400, title: "Bad Request");
-
-            // Assigning a role grants its permissions, so the same ceiling applies as for a
-            // direct grant: a caller cannot hand out access it does not hold itself.
-            var grantError = TenantPermissions.ValidateGrant(
-                roles.SelectMany(permissions => permissions),
-                HttpContext.GetGrantedScopes());
-            if (grantError != null)
-                return Problem(detail: grantError, statusCode: 403, title: "Forbidden");
-        }
+        var roleGrant = await _tenantRoleService.ValidateRoleGrantAsync(
+            tenantId, request.RoleIds, HttpContext.GetGrantedScopes(), ct);
+        if (!roleGrant.Ok)
+            return RoleGrantProblem(roleGrant);
 
         // Remove existing role assignments
         _dbContext.TenantMemberRoles.RemoveRange(member.MemberRoles);
@@ -240,10 +226,31 @@ public class MemberInviteController : ControllerBase
         if ((request.DirectPermissions == null || request.DirectPermissions.Count == 0) && member.MemberRoles.Count == 0)
             return Problem(detail: "Cannot remove all permissions when member has no roles", statusCode: 400, title: "Bad Request");
 
-        var grantError = TenantPermissions.ValidateGrant(
-            request.DirectPermissions, HttpContext.GetGrantedScopes());
-        if (grantError != null)
-            return Problem(detail: grantError, statusCode: 403, title: "Forbidden");
+        // The Public system subject serves the anonymous share viewer, so the granter's own
+        // permissions are the wrong bound: an owner holding "*" would otherwise be able to give an
+        // unauthenticated reader everything. ShareLinkService.SetScopesAsync bounds the same rows to
+        // PublicShareScopes; both writers have to agree or the narrower one is decorative.
+        var isPublicSubject = member.Subject?.IsSystemSubject == true && member.Subject.Name == "Public";
+        if (isPublicSubject)
+        {
+            var outsideShareVocabulary = (request.DirectPermissions ?? [])
+                .Where(p => !TenantPermissions.PublicShareScopes.Contains(p))
+                .ToList();
+            if (outsideShareVocabulary.Count > 0)
+            {
+                return Problem(
+                    detail: $"Public access cannot be granted: {string.Join(", ", outsideShareVocabulary)}.",
+                    statusCode: 400,
+                    title: "Bad Request");
+            }
+        }
+        else
+        {
+            var violation = TenantPermissions.ValidateGrant(
+                request.DirectPermissions, HttpContext.GetGrantedScopes());
+            if (violation != null)
+                return GrantProblem(violation);
+        }
 
         member.DirectPermissions = request.DirectPermissions;
         member.SysUpdatedAt = DateTime.UtcNow;
@@ -306,6 +313,11 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
+        // The clamp is enforced in RLS via app.share_full_history, so lifting your own is a
+        // self-widening edit — the same class the role and permission editors refuse.
+        if (IsCallersOwnMembership(member))
+            return Problem(detail: SelfEditDetail, statusCode: 400, title: "Bad Request");
+
         member.LimitTo24Hours = request.LimitTo24Hours;
         member.SysUpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
@@ -330,6 +342,22 @@ public class MemberInviteController : ControllerBase
     /// </summary>
     private bool IsCallersOwnMembership(TenantMemberEntity member)
         => HttpContext.GetSubjectId() is { } subjectId && member.SubjectId == subjectId;
+
+    /// <summary>
+    /// An unknown permission is malformed input; exceeding the ceiling is a refusal.
+    /// </summary>
+    private ObjectResult GrantProblem(GrantCeilingViolation violation) =>
+        violation.Code == GrantCeilingViolation.UnknownPermission
+            ? Problem(detail: violation.Description, statusCode: 400, title: "Bad Request")
+            : Problem(detail: violation.Description, statusCode: 403, title: "Forbidden");
+
+    /// <summary>
+    /// A foreign role id is malformed input; a role conferring more than the caller holds is a refusal.
+    /// </summary>
+    private ObjectResult RoleGrantProblem(RoleGrantValidation validation) =>
+        validation.ErrorCode == RoleGrantValidation.ForeignRole
+            ? Problem(detail: validation.ErrorDescription, statusCode: 400, title: "Bad Request")
+            : Problem(detail: validation.ErrorDescription, statusCode: 403, title: "Forbidden");
 }
 
 public record SetMemberRolesRequest(List<Guid> RoleIds);

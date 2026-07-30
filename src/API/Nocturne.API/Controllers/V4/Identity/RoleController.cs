@@ -61,9 +61,9 @@ public class RoleController : ControllerBase
         if (!HasPermission(TenantPermissions.RolesManage))
             return Forbid();
 
-        var grantError = TenantPermissions.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
-        if (grantError != null)
-            return Problem(detail: grantError, statusCode: 403, title: "Forbidden");
+        var violation = TenantPermissions.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
+        if (violation != null)
+            return GrantProblem(violation);
 
         var role = await _roleService.CreateRoleAsync(
             _tenantAccessor.TenantId, request.Name, request.Description, request.Permissions, ct);
@@ -84,9 +84,9 @@ public class RoleController : ControllerBase
         if (!HasPermission(TenantPermissions.RolesManage))
             return Forbid();
 
-        var grantError = TenantPermissions.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
-        if (grantError != null)
-            return Problem(detail: grantError, statusCode: 403, title: "Forbidden");
+        var violation = TenantPermissions.ValidateGrant(request.Permissions, HttpContext.GetGrantedScopes());
+        if (violation != null)
+            return GrantProblem(violation);
 
         try
         {
@@ -123,6 +123,14 @@ public class RoleController : ControllerBase
 
         return NoContent();
     }
+
+    /// <summary>
+    /// An unknown permission is malformed input; exceeding the ceiling is a refusal.
+    /// </summary>
+    private ObjectResult GrantProblem(GrantCeilingViolation violation) =>
+        violation.Code == GrantCeilingViolation.UnknownPermission
+            ? Problem(detail: violation.Description, statusCode: 400, title: "Bad Request")
+            : Problem(detail: violation.Description, statusCode: 403, title: "Forbidden");
 
     private bool HasPermission(string permission)
         => TenantPermissions.HasPermission(HttpContext.GetGrantedScopes(), permission);

@@ -37,6 +37,47 @@ public interface ITenantRoleService
 
     /// <summary>Returns the combined set of permissions a member has through their roles and direct grants.</summary>
     Task<List<string>> GetEffectivePermissionsAsync(Guid memberId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Checks that every id in <paramref name="roleIds"/> names a role of
+    /// <paramref name="tenantId"/>, and that <paramref name="granterScopes"/> already holds every
+    /// permission those roles confer.
+    /// </summary>
+    /// <remarks>
+    /// The single entry point for conferring a role, so that no conferring path can be added
+    /// without both checks. Assigning a role hands out its permissions, so the grant ceiling that
+    /// applies to a direct permission edit applies here too: the Administrator seed role holds
+    /// <c>members.manage</c> and <c>roles.manage</c>, which without the ceiling is enough to attach
+    /// the Owner role to a chosen subject and reach <c>*</c>.
+    /// </remarks>
+    /// <param name="tenantId">The tenant whose roles may be conferred.</param>
+    /// <param name="roleIds">The roles being conferred. An empty set is valid.</param>
+    /// <param name="granterScopes">
+    /// The caller's resolved scopes. Passed rather than read so a background or service caller has
+    /// to name the authority it is acting on. <see cref="TenantPermissions"/> atoms are a subset of
+    /// the member-grantable scope vocabulary, so a resolved scope set is a valid granter set.
+    /// </param>
+    /// <param name="ct">A cancellation token.</param>
+    Task<RoleGrantValidation> ValidateRoleGrantAsync(
+        Guid tenantId,
+        IReadOnlyCollection<Guid> roleIds,
+        IReadOnlyCollection<string> granterScopes,
+        CancellationToken ct = default);
+}
+
+/// <summary>
+/// Outcome of <see cref="ITenantRoleService.ValidateRoleGrantAsync"/>. <c>ErrorCode</c> is stable
+/// for the frontend to branch and localise on; <c>ErrorDescription</c> is diagnostic only.
+/// </summary>
+public record RoleGrantValidation(bool Ok, string? ErrorCode, string? ErrorDescription)
+{
+    /// <summary>A role id does not belong to the tenant.</summary>
+    public const string ForeignRole = "role_not_in_tenant";
+
+    /// <summary>The roles confer a permission the caller does not hold.</summary>
+    public const string ExceedsGranter = "grant_exceeds_granter";
+
+    public static RoleGrantValidation Valid { get; } = new(true, null, null);
 }
 
 /// <summary>

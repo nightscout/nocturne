@@ -9,6 +9,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.API.Extensions;
 
 namespace Nocturne.API.Controllers.V4.PlatformAdmin;
 
@@ -32,6 +33,7 @@ public class AccessRequestController(
     NocturneDbContext dbContext,
     ISubjectService subjectService,
     ITenantService tenantService,
+    ITenantRoleService tenantRoleService,
     ITenantAccessor tenantAccessor,
     IInAppNotificationService notificationService,
     ILogger<AccessRequestController> logger) : ControllerBase
@@ -85,13 +87,14 @@ public class AccessRequestController(
         {
             var tenantId = tenantContext.TenantId;
 
-            // Validate roleIds belong to this tenant
-            if (request.RoleIds.Count > 0)
+            var roleGrant = await tenantRoleService.ValidateRoleGrantAsync(
+                tenantId, request.RoleIds, HttpContext.GetGrantedScopes(), ct);
+            if (!roleGrant.Ok)
             {
-                var validCount = await dbContext.TenantRoles
-                    .CountAsync(r => r.TenantId == tenantId && request.RoleIds.Contains(r.Id), ct);
-                if (validCount != request.RoleIds.Count)
-                    return Problem(detail: "One or more role IDs do not belong to this tenant", statusCode: 400, title: "Bad Request");
+                return Problem(
+                    detail: roleGrant.ErrorDescription,
+                    statusCode: roleGrant.ErrorCode == RoleGrantValidation.ForeignRole ? 400 : 403,
+                    title: roleGrant.ErrorCode == RoleGrantValidation.ForeignRole ? "Bad Request" : "Forbidden");
             }
 
             await tenantService.AddMemberAsync(tenantId, subjectId, request.RoleIds, request.DirectPermissions, ct: ct);

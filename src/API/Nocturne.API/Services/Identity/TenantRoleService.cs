@@ -209,6 +209,37 @@ public partial class TenantRoleService(NocturneDbContext context) : ITenantRoleS
         await context.SaveChangesAsync(ct);
     }
 
+    /// <inheritdoc />
+    public async Task<RoleGrantValidation> ValidateRoleGrantAsync(
+        Guid tenantId,
+        IReadOnlyCollection<Guid> roleIds,
+        IReadOnlyCollection<string> granterScopes,
+        CancellationToken ct = default)
+    {
+        if (roleIds.Count == 0)
+            return RoleGrantValidation.Valid;
+
+        var permissionSets = await context.TenantRoles
+            .Where(r => r.TenantId == tenantId && roleIds.Contains(r.Id))
+            .Select(r => r.Permissions)
+            .ToListAsync(ct);
+
+        // Counted rather than compared by id: a duplicate id would otherwise pass a set comparison
+        // while resolving fewer rows than requested.
+        if (permissionSets.Count != roleIds.Distinct().Count())
+        {
+            return new RoleGrantValidation(
+                false, RoleGrantValidation.ForeignRole, "One or more role IDs do not belong to this tenant.");
+        }
+
+        var exceeded = TenantPermissions.ValidateGrant(
+            permissionSets.SelectMany(permissions => permissions), granterScopes);
+
+        return exceeded is null
+            ? RoleGrantValidation.Valid
+            : new RoleGrantValidation(false, exceeded.Code, exceeded.Description);
+    }
+
     public async Task<List<string>> GetEffectivePermissionsAsync(Guid memberId, CancellationToken ct = default)
     {
         var member = await context.TenantMembers

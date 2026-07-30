@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -130,7 +131,9 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
         return new MemberInviteController(
             Mock.Of<IMemberInviteService>(),
             Mock.Of<ITenantService>(),
-            Mock.Of<ITenantRoleService>(),
+            // The real service, not a mock: the tenant check and the ceiling are the properties
+            // under test, and a mock would assert the mock.
+            new TenantRoleService(_dbContext),
             tenantAccessor.Object,
             _dbContext)
         {
@@ -184,7 +187,9 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
     [Fact]
     public async Task SetMemberPermissions_rejectsAnUnknownPermission()
     {
-        // Superuser caller: an unrecognized atom is refused on validity, not on the ceiling.
+        // Superuser caller, so the ceiling cannot be what refuses this. 400 rather than 403
+        // distinguishes the two: an atom outside the vocabulary is malformed input, and asserting
+        // the status is what makes the stated reason testable.
         var controller = BuildController(TenantPermissions.Superuser);
 
         var result = await controller.SetMemberPermissions(
@@ -194,7 +199,7 @@ public sealed class MemberInviteControllerGrantCeilingTests : IDisposable
             CancellationToken.None);
 
         result.Should().BeOfType<ObjectResult>()
-            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
 
         (await TargetPermissionsAsync()).Should().BeEquivalentTo([TenantPermissions.GlucoseRead]);
     }
