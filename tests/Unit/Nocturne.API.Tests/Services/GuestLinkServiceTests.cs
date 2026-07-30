@@ -101,8 +101,14 @@ public class GuestLinkServiceTests : IDisposable
         var act = () => _service.CreateGuestLinkAsync(
             _dataOwnerId, _creatorId, "Admin Scopes", "https://example.com", [scope]);
 
-        await act.Should().ThrowAsync<ArgumentException>()
-            .WithMessage("*not allowed*");
+        // Rejected, but by the recognised-scope guard rather than the guest cap, so the message is
+        // not asserted. A tenant-administration atom is deliberately absent from ValidRequestScopes
+        // — no client may request one and no user may consent to one — so OAuthScopes.IsValid fails
+        // it before ValidateGrantScopes reaches AllowedGuestScopes. Both guards reject it; which one
+        // speaks first is incidental, and pinning the wording made this test fail the moment guest
+        // validation moved into the shared helper. CreateGuestLink_RejectsWriteScopes covers the
+        // guest-cap message, using a scope that IS requestable.
+        await act.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]

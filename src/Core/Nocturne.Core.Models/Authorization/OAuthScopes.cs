@@ -227,6 +227,7 @@ public static class OAuthScopes
     public static bool TryGetImpliedReadScope(string readWriteScope, out string readScope)
     {
         return ReadWriteImpliesRead.TryGetValue(readWriteScope, out readScope!);
+    }
 
     /// <summary>
     /// The scope list to store on a grant of <paramref name="grantType"/>: deduplicated, ordered, every
