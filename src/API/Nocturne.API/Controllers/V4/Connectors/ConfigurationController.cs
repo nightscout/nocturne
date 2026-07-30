@@ -278,7 +278,7 @@ public class ConfigurationController : ControllerBase
     /// <param name="secrets">Dictionary of secret property names to plaintext values</param>
     /// <param name="ct">Cancellation token</param>
     [HttpPut("{connectorName}/secrets")]
-    [RemoteCommand(Invalidates = ["GetConfiguration"])]
+    [RemoteCommand(Invalidates = ["GetConfiguration", "GetAllConnectorStatus"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SaveSecrets(
