@@ -53,11 +53,17 @@
       fresh.push(a);
     }
     if (fresh.length > 0) queue = [...fresh, ...queue];
-    // Remove toasts that were acknowledged elsewhere (other tab, banner, etc.)
+    // Remove toasts that were acknowledged elsewhere (other tab, banner, etc.).
+    // Assign only when a card actually drops: this effect reads `queue`, and
+    // `filter` returns a new array even when nothing matched, so an
+    // unconditional write re-dirties the effect's own dependency and loops.
     const ackedIds = new Set(
       list.filter((a) => a.acknowledgedAt).map((a) => a.id)
     );
-    if (ackedIds.size > 0) queue = queue.filter((a) => !ackedIds.has(a.id));
+    if (ackedIds.size > 0) {
+      const remaining = queue.filter((a) => !ackedIds.has(a.id));
+      if (remaining.length !== queue.length) queue = remaining;
+    }
   });
 
   function dismiss(id: string): void {

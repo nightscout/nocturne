@@ -1,4 +1,11 @@
 <script lang="ts">
+  import {
+    FALLBACK_LOGO,
+    monochromeLogos,
+    resolveLogoName,
+    resolveLogoSrc,
+  } from "./logo-src";
+
   interface Props {
     /**
      * Icon identifier string (e.g., "dexcom", "xdrip", "loop") or filename with
@@ -17,50 +24,17 @@
 
   const { icon, class: className = "h-full w-full", invertMode = false }: Props = $props();
 
-  const logoExtensions: Record<string, string> = {
-    aaps: "png",
-    dexcom: "png",
-    discord: "png",
-    eversense: "png",
-    github: "png",
-    glooko: "png",
-    glucotracker: "png",
-    "google-chat": "png",
-    "home-assistant": "png",
-    juggluco: "png",
-    libre: "png",
-    loop: "png",
-    mylife: "png",
-    nightscout: "png",
-    nocturne: "png",
-    omnipod: "png",
-    slack: "png",
-    spike: "png",
-    sugarmate: "png",
-    tandem: "png",
-    teams: "png",
-    telegram: "png",
-    wechat: "png",
-    whatsapp: "png",
-    imessage: "jpg",
-    medtronic: "jpg",
-    messenger: "jpg",
-    myfitnesspal: "jpg",
-    tidepool: "jpg",
-    trio: "jpg",
-    twiist: "png",
-    xdrip: "jpg",
-    xdrip4ios: "jpg",
-  };
-
   const hasDarkVariant = $derived((icon ?? "device") === "nocturne");
 
-  const src = $derived.by(() => {
-    const name = icon ?? "device";
-    if (name.includes(".")) return `/logos/${name}`;
-    const ext = logoExtensions[name] ?? "svg";
-    return `/logos/${name}.${ext}`;
-  });
+  const src = $derived(resolveLogoSrc(icon));
+
+  const isMonochrome = $derived(monochromeLogos.has(resolveLogoName(icon)));
+
+  // An id with no asset would otherwise render a broken image. Track which src
+  // failed rather than a bare flag, so a later icon isn't stuck on the fallback
+  // and a missing fallback can't loop.
+  let failedSrc = $state<string | null>(null);
+  const displaySrc = $derived(failedSrc === src ? FALLBACK_LOGO : src);
 
   const lightSrc = $derived(hasDarkVariant ? "/logos/nocturne-light.png" : null);
 </script>
@@ -82,9 +56,12 @@
   />
 {:else}
   <img
-    {src}
+    src={displaySrc}
     alt=""
-    class="object-cover rounded-[inherit] {className}"
+    class="object-cover rounded-[inherit] {isMonochrome
+      ? 'dark:invert'
+      : ''} {className}"
     draggable="false"
+    onerror={() => (failedSrc = src)}
   />
 {/if}
