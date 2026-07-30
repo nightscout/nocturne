@@ -273,19 +273,23 @@ public class OAuthGrantService : IOAuthGrantService
         if (grant == null || grant.SubjectId != ownerSubjectId)
             return null;
 
+        // Validated before anything is assigned, so a rejected update leaves the tracked entity
+        // untouched. This method filters on the grant id and the owning subject with no GrantType
+        // filter, and a guest grant records the DATA OWNER's subject id, so the owner reaches their
+        // own guest link here; the cap is what stops a PATCH turning a read-only share into full
+        // access.
+        var validatedScopes = scopes is null
+            ? null
+            : OAuthScopes.ValidateGrantScopes(scopes, grant.GrantType);
+
         if (label != null)
         {
             grant.Label = label;
         }
 
-        if (scopes != null)
+        if (validatedScopes != null)
         {
-            // This method filters on the grant id and the owning subject only, with no GrantType
-            // filter, and a guest grant records the DATA OWNER's subject id — so the owner reaches
-            // their own guest link here. ValidateGrantScopes rejects a scope outside the vocabulary
-            // and caps a guest grant at the read scopes a guest link may hold, so a read-only share
-            // cannot be turned into full access by a PATCH.
-            grant.Scopes = OAuthScopes.ValidateGrantScopes(scopes, grant.GrantType);
+            grant.Scopes = validatedScopes;
         }
 
         await _dbContext.SaveChangesAsync(ct);

@@ -101,14 +101,12 @@ public class GuestLinkServiceTests : IDisposable
         var act = () => _service.CreateGuestLinkAsync(
             _dataOwnerId, _creatorId, "Admin Scopes", "https://example.com", [scope]);
 
-        // Rejected, but by the recognised-scope guard rather than the guest cap, so the message is
-        // not asserted. A tenant-administration atom is deliberately absent from ValidRequestScopes
-        // — no client may request one and no user may consent to one — so OAuthScopes.IsValid fails
-        // it before ValidateGrantScopes reaches AllowedGuestScopes. Both guards reject it; which one
-        // speaks first is incidental, and pinning the wording made this test fail the moment guest
-        // validation moved into the shared helper. CreateGuestLink_RejectsWriteScopes covers the
-        // guest-cap message, using a scope that IS requestable.
-        await act.Should().ThrowAsync<ArgumentException>();
+        // An administration atom is absent from ValidRequestScopes, so the recognised-scope guard
+        // rejects it before the guest cap is consulted. Either guard is a correct rejection, so the
+        // assertion accepts both rather than pinning one wording.
+        await act.Should().ThrowAsync<ArgumentException>()
+            .Where(e => e.Message.Contains("not a recognised scope")
+                        || e.Message.Contains("not allowed for guest links"));
     }
 
     [Fact]

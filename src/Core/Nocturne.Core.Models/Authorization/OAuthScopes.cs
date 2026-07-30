@@ -155,7 +155,7 @@ public static class OAuthScopes
     /// </summary>
     /// <seealso cref="ValidateGrantScopes"/>
     public static readonly IReadOnlySet<string> AllowedGuestScopes =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        new HashSet<string>(StringComparer.Ordinal)
         {
             GlucoseRead, TreatmentsRead, DevicesRead, TherapyRead, HeartRateRead, StepCountRead,
             SleepRead, AlertsRead, ReportsRead, IdentityRead, HealthRead,
@@ -241,10 +241,10 @@ public static class OAuthScopes
     /// this as <c>invalid_scope</c>.
     /// </exception>
     /// <remarks>
-    /// Both paths that take a grant's scopes from a caller go through here — creating a guest link and
-    /// updating a grant — so the cap on a guest link holds whichever one the scopes arrive on. The
-    /// authorization-code and device-code flows validate the requested scopes before a grant is
-    /// created and do not reach a guest grant.
+    /// The two paths that can set a guest grant's scopes go through here: creating a guest link and
+    /// updating a grant. <c>OAuthGrantService.CreateOrUpdateGrantAsync</c> also assigns scopes but
+    /// matches on a client id, which a guest grant does not have, so it cannot reach one. The
+    /// authorization-code and device-code flows validate before a grant is created.
     /// </remarks>
     public static List<string> ValidateGrantScopes(IEnumerable<string> scopes, string grantType)
     {

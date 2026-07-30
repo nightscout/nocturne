@@ -57,7 +57,7 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
         var response = await client.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Test Link",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
 
         // Assert
@@ -70,7 +70,7 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
         code.Should().NotBeNullOrWhiteSpace();
         code.Should().MatchRegex(@"^[A-Z0-9]{3}-[A-Z0-9]{4}$", "code should be formatted as ABC-DEFG");
 
-        var url = body.GetProperty("url").GetString();
+        var url = body.GetProperty("fullUrl").GetString();
         url.Should().NotBeNullOrWhiteSpace();
         url.Should().Contain("/guest/");
 
@@ -84,7 +84,7 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
         var response = await ApiClient.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Unauthenticated Link",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
 
         // Assert
@@ -103,7 +103,7 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
             var createResponse = await client.PostAsJsonAsync("/api/v4/guest-links", new
             {
                 label = $"Link {i + 1}",
-                scopes = new[] { "entries.read" }
+                scopes = new[] { "glucose.read" }
             });
             createResponse.StatusCode.Should().Be(HttpStatusCode.OK, $"link {i + 1} creation should succeed");
         }
@@ -112,7 +112,7 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
         var response = await client.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Link 6 - Over Limit",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
 
         // Assert
@@ -129,11 +129,17 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
         var response = await client.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Write Scope Link",
-            scopes = new[] { "entries.readwrite" }
+            scopes = new[] { "glucose.readwrite" }
         });
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        // glucose.readwrite is a recognised request scope, so this reaches the guest cap rather than
+        // the recognised-scope guard. Asserted so the case cannot silently start passing for the
+        // wrong reason if the scope name changes again.
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("error").GetString().Should().Contain("not allowed for guest links");
     }
 
     #endregion
@@ -148,7 +154,7 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
         var createResponse = await client.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Activate Test",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -493,7 +499,7 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
         var createResponse = await client.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Revoke Test",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -521,7 +527,7 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
         var createResponse = await ownerClient.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Non-Owner Revoke Test",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -563,7 +569,7 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
             var createResponse = await client.PostAsJsonAsync("/api/v4/guest-links", new
             {
                 label = $"List Test Link {i + 1}",
-                scopes = new[] { "entries.read" }
+                scopes = new[] { "glucose.read" }
             });
             createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         }
@@ -595,7 +601,7 @@ public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
         var response = await client.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Session Test",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 

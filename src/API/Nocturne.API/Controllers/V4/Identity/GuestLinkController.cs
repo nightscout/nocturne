@@ -89,8 +89,10 @@ public class GuestLinkController : ControllerBase
         [FromQuery] bool includeDismissed = false,
         CancellationToken ct = default)
     {
+        // SubjectId excludes a guest session, whose EffectiveSubjectId resolves to the data owner
+        // and would otherwise list the owner's links — labels, scopes and each guest's ActivatedIp.
         var auth = HttpContext.GetAuthContext();
-        if (auth is not { IsAuthenticated: true })
+        if (auth is not { IsAuthenticated: true, SubjectId: not null })
             return Unauthorized();
 
         var effectiveSubjectId = auth.EffectiveSubjectId;
