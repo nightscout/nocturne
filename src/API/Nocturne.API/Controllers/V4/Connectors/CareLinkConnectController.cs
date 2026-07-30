@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -150,6 +152,8 @@ public partial class CareLinkConnectController : ControllerBase
             _logger.LogDebug(ex, "CareLink connect: profile auto-fill fetch failed (non-fatal)");
         }
 
+        await PersistSignedInAccountAsync(flowState.Server, username, country, ct);
+
         _logger.LogInformation("CareLink connect completed for tenant {Tenant}", _tenantAccessor.Context?.TenantId);
 
         return Ok(new CareLinkConnectCompleteResponse
@@ -207,6 +211,58 @@ public partial class CareLinkConnectController : ControllerBase
             LinkCode = $"nocturne-connect://link?server={Uri.EscapeDataString(serverUrl)}&token={Uri.EscapeDataString(token)}",
             ExpiresInSeconds = (int)DesktopTokenLifetime.TotalSeconds,
         });
+    }
+
+    /// <summary>
+    /// Writes what the sign-in established into the connector configuration: the region whose tokens
+    /// were just stored, and the account that authenticated. Without this the connector has
+    /// credentials but no username, which is a required setting — so it never syncs — and its region
+    /// can point at the other CareLink cloud, sending every data request to a host that rejects the
+    /// token. The desktop companion has no settings form at all, so only the server can do this.
+    /// Never fails the connect: the credentials are already stored and the user can fill the form in.
+    /// </summary>
+    private async Task PersistSignedInAccountAsync(
+        string server, string? username, string? country, CancellationToken ct)
+    {
+        try
+        {
+            var existing = await _configService.GetConfigurationAsync(ConnectorName, ct);
+            using var merged = MergeSignedInAccount(existing?.Configuration, server, username, country);
+            await _configService.SaveConfigurationAsync(
+                ConnectorName, merged, User.Identity?.Name ?? "carelink-connect", ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "CareLink connect: could not persist the signed-in account to the configuration");
+        }
+    }
+
+    /// <summary>
+    /// Applies the signed-in account to the stored configuration. The region is authoritative — it is
+    /// the cloud the stored tokens belong to — while a username or country the profile did not report
+    /// leaves whatever is configured alone. Merges into <paramref name="existing"/> because
+    /// <see cref="IConnectorConfigurationService.SaveConfigurationAsync"/> replaces the whole
+    /// document, and dropping the tenant's sync toggles and intervals here would be silent.
+    /// </summary>
+    public static JsonDocument MergeSignedInAccount(
+        JsonDocument? existing, string server, string? username, string? country)
+    {
+        var config = existing is not null
+            ? JsonNode.Parse(existing.RootElement.GetRawText())?.AsObject() ?? new JsonObject()
+            : new JsonObject();
+
+        config["server"] = server;
+        if (!string.IsNullOrWhiteSpace(username))
+            config["username"] = username;
+        if (!string.IsNullOrWhiteSpace(country))
+            config["countryCode"] = country.ToLowerInvariant();
+
+        return JsonDocument.Parse(config.ToJsonString());
     }
 
     private static string ExtractCode(string input)

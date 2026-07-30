@@ -143,7 +143,15 @@
   // CareLink uses a browser-based sign-in (manual-paste OAuth) instead of a stored password.
   const isCareLink = $derived(connectorInfo?.id?.toLowerCase() === "carelink");
 
-  function onCareLinkConnected(info: { username?: string | null; country?: string | null }) {
+  function onCareLinkConnected(info: {
+    server: "EU" | "US";
+    username?: string | null;
+    country?: string | null;
+  }) {
+    // The region is not a preference here — it is the CareLink cloud the stored tokens belong to,
+    // and the server has already recorded it. Leaving a stale value in the form would let a save
+    // put it back, pointing every data request at a host that rejects those tokens.
+    configuration = { ...configuration, server: info.server };
     // Auto-fill identity the sign-in discovered, without clobbering anything already set.
     if (info.username && !configuration.username) {
       configuration = { ...configuration, username: info.username };

@@ -44,8 +44,13 @@
   let {
     onConnected,
   }: {
-    // Called after a refresh token is stored, with the auto-detected profile (if any).
-    onConnected?: (info: { username?: string | null; country?: string | null }) => void;
+    // Called after a refresh token is stored, with the region signed in to and the
+    // auto-detected profile (if any).
+    onConnected?: (info: {
+      server: "EU" | "US";
+      username?: string | null;
+      country?: string | null;
+    }) => void;
   } = $props();
 
   type Phase = "idle" | "awaiting-code" | "done";
@@ -96,7 +101,7 @@
       }
       connectedUsername = res.username ?? null;
       phase = "done";
-      onConnected?.({ username: res.username, country: res.country });
+      onConnected?.({ server: region, username: res.username, country: res.country });
     } catch (e) {
       error = e instanceof Error ? e.message : "Could not complete CareLink sign-in.";
     } finally {
