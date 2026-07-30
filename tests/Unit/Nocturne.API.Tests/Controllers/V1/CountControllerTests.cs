@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Xunit;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Tests.Controllers.V1;
 
@@ -49,10 +50,33 @@ public class CountControllerTests
             _mockLogger.Object
         );
 
-        _controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext(),
-        };
+        // CountGeneric resolves the required scope from the storage selector, so these delegation
+        // tests need a scope set. Full access keeps them about delegation;
+        // CountGeneric_RefusesAStorageOutsideTheGrant covers the refusal.
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["GrantedScopes"] = OAuthScopes.Normalize([OAuthScopes.FullAccess]);
+
+        _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+    }
+
+    [Fact]
+    public async Task CountGeneric_RefusesAStorageOutsideTheGrant()
+    {
+        // The route serves five collections, so an attribute could only OR across them and would
+        // let a glucose-only grant learn a treatment row count.
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["GrantedScopes"] = OAuthScopes.Normalize([OAuthScopes.GlucoseRead]);
+        _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+        var refused = await _controller.CountGeneric("treatments");
+
+        refused.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        _mockTreatmentStore.Verify(
+            s => s.CountAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        var allowed = await _controller.CountGeneric("entries");
+        allowed.Result.Should().NotBeOfType<ObjectResult>();
     }
 
     [Fact]

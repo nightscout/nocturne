@@ -7,6 +7,8 @@ using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
+using Nocturne.API.Authorization;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -216,17 +218,18 @@ public class CountController : ControllerBase
     [HttpGet("activity/where")]
     [NightscoutEndpoint("/api/v1/count/activity/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
-    [RequireScope(
-        requireAll: true,
-        OAuthScopes.TreatmentsRead,
-        OAuthScopes.HeartRateRead,
-        OAuthScopes.StepCountRead,
-        OAuthScopes.SleepRead)]
     public async Task<ActionResult<CountResponse>> CountActivity(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default
     )
     {
+        // Every category, because the number merges four of them and cannot be filtered down to the
+        // ones the caller holds. A grant without sleep.read therefore loses this count; the scopes
+        // come from ActivityReadScopeGuard so the set cannot drift from the record endpoints'.
+        var granted = HttpContext.GetGrantedScopes();
+        if (!ActivityReadScopeGuard.AdmissionScopes.All(s => OAuthScopes.SatisfiesScope(granted, s)))
+            return StatusCode(403, new { status = 403, message = "Counting merged activity requires every activity category's read scope.", type = "forbidden" });
+
         _logger.LogDebug(
             "Count activity endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
@@ -263,18 +266,16 @@ public class CountController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Count of records matching the criteria</returns>
     /// <remarks>
-    /// The scope requirement is an OR across every storage this route can serve, because the
-    /// storage is a route parameter. It therefore lets a grant scoped to one category learn a
-    /// row COUNT for another; the per-storage sibling routes above (<c>entries/where</c>,
-    /// <c>treatments/where</c>, …) are each gated on their own category. Narrowing this route
-    /// needs a per-storage check inside the action.
+    /// The storage is a route parameter, so the governing scope is resolved per request through
+    /// <see cref="LegacyStorageReadScopes"/>. An attribute here would be an OR across every
+    /// collection the route serves and would let a grant scoped to one category learn a row count
+    /// for another. <c>activity</c> merges four categories and keeps the AND below.
     /// </remarks>
     [HttpGet("{storage}/where")]
     [NightscoutEndpoint("/api/v1/count/:storage/where")]
     [ProducesResponseType(typeof(CountResponse), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
-    [RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead, OAuthScopes.DevicesRead, OAuthScopes.FoodRead, OAuthScopes.TherapyRead)]
     public async Task<ActionResult<CountResponse>> CountGeneric(
         string storage,
         [FromQuery] string? find = null,
@@ -282,6 +283,20 @@ public class CountController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        // "activity" reaches CountActivitiesAsync, which merges four categories into one number, so
+        // it needs every category's read scope rather than one storage's.
+        if (string.Equals(storage, "activity", StringComparison.OrdinalIgnoreCase))
+        {
+            var granted = HttpContext.GetGrantedScopes();
+            if (!ActivityReadScopeGuard.AdmissionScopes.All(s => OAuthScopes.SatisfiesScope(granted, s)))
+                return StatusCode(403, new { status = 403, message = "Counting merged activity requires every activity category's read scope.", type = "forbidden" });
+        }
+        else if (LegacyStorageReadScopes.RequiredReadScope(storage) is { } required)
+        {
+            if (!OAuthScopes.SatisfiesScope(HttpContext.GetGrantedScopes(), required))
+                return StatusCode(403, new { status = 403, message = $"Counting '{storage}' requires the {required} scope.", type = "forbidden" });
+        }
+
         _logger.LogDebug(
             "Generic count endpoint requested for storage: {Storage}, find: {Find}, type: {Type} from {RemoteIpAddress}",
             storage,

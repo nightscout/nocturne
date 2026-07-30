@@ -48,13 +48,14 @@ public class RequireScopeAttributeTests
     public void UnauthenticatedPublicShare_WithReadScopes_StillCannotWrite()
     {
         // The public-share path leaves AuthContext.IsAuthenticated = false while populating read
-        // scopes, and the filter now evaluates that scope set rather than requiring authentication
-        // (otherwise every share link would 401 on the read endpoints). The write must still be
-        // rejected — here on the scope check, so the rejection is 403 rather than 401.
+        // scopes, so the filter admits an unauthenticated caller for a read requirement — otherwise
+        // every share link would 401. A write requirement is refused before the scope set is
+        // consulted, which is what keeps write-immunity a property of the filter rather than of the
+        // scopes a share happens to hold.
         var result = Evaluate(new RequireScopeAttribute(OAuthScopes.GlucoseReadWrite),
             authenticated: false, OAuthScopes.GlucoseRead);
 
-        result.Should().BeOfType<ForbidResult>();
+        result.Should().BeOfType<UnauthorizedResult>();
     }
 
     [Fact]

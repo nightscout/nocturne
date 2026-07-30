@@ -8,6 +8,15 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Repositories;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 
 namespace Nocturne.API.Tests.Authorization;
 
@@ -136,17 +145,48 @@ public class ActivityReadScopeGuardTests
 
     /// <summary>
     /// The activity count sums all four storages into one number that cannot be filtered per
-    /// category, so it requires all four rather than any one.
+    /// category, so it requires all four rather than any one. Driven through the action rather than
+    /// read off an attribute, because the check moved into the handler when the route's other
+    /// storages became per-request.
     /// </summary>
-    [Fact]
-    public void CountActivityRoute_RequiresEveryMergedCategory()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CountActivityRoute_RequiresEveryMergedCategory(bool holdsEveryCategory)
     {
-        var attribute = typeof(CountController)
-            .GetMethod(nameof(CountController.CountActivity))!
-            .GetCustomAttribute<RequireScopeAttribute>();
+        var granted = holdsEveryCategory
+            ? ActivityReadScopeGuard.AdmissionScopes.ToArray()
+            : ActivityReadScopeGuard.AdmissionScopes.Take(ActivityReadScopeGuard.AdmissionScopes.Count - 1).ToArray();
 
-        attribute.Should().NotBeNull();
-        attribute!.RequiresAll.Should().BeTrue();
-        attribute.RequiredScopes.Should().BeEquivalentTo(ActivityReadScopeGuard.AdmissionScopes);
+        var activityService = new Mock<IActivityService>();
+        activityService
+            .Setup(s => s.CountActivitiesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(3L);
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["GrantedScopes"] = OAuthScopes.Normalize(granted);
+
+        var controller = new CountController(
+            Mock.Of<IEntryStore>(), Mock.Of<ITreatmentStore>(), Mock.Of<IApsSnapshotRepository>(),
+            Mock.Of<IProfileProjectionService>(), Mock.Of<IFoodRepository>(),
+            activityService.Object, NullLogger<CountController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
+
+        var result = await controller.CountActivity();
+
+        if (holdsEveryCategory)
+        {
+            result.Result.Should().NotBeOfType<ObjectResult>();
+        }
+        else
+        {
+            result.Result.Should().BeOfType<ObjectResult>()
+                .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+            activityService.Verify(
+                s => s.CountActivitiesAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
     }
 }

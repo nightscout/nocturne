@@ -239,7 +239,11 @@ public class NotificationsController : ControllerBase
     [NightscoutEndpoint("/api/v1/adminnotifies")]
     [ProducesResponseType(typeof(AdminNotifiesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    [RequireScope(OAuthScopes.AlertsRead)]
+    // No scope gate. NotificationV1Service.GetAdminNotifiesAsync checks *:*:admin itself and
+    // returns the notification bodies only to an admin, otherwise just notifyCount — the legacy
+    // Nightscout contract. A scope requirement would replace that degradation with a 403, and
+    // alerts.read is the wrong category for site notices in any case. Recorded in
+    // ReadEndpointScopeEnforcementTests.ExemptReadActions.
     public async Task<ActionResult<AdminNotifiesResponse>> GetAdminNotifies(
         CancellationToken cancellationToken = default
     )

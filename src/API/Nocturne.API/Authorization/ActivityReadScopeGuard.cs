@@ -18,9 +18,9 @@ internal static class ActivityReadScopeGuard
 {
     /// <summary>
     /// The read scopes that admit a caller to the merged activity read endpoints: holding any one
-    /// of them means at least one category in the response is visible. Kept here as documentation
-    /// of the set — attribute arguments must be compile-time constants, so the actions repeat the
-    /// constants inline.
+    /// of them means at least one category in the response is visible. Attribute arguments must be
+    /// compile-time constants, so the admission attributes repeat these constants inline; the
+    /// count endpoints, which cannot filter and so require all four, read them from here.
     /// </summary>
     public static readonly IReadOnlyList<string> AdmissionScopes =
     [

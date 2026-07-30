@@ -43,6 +43,43 @@ public class ReadEndpointScopeEnforcementTests
         "AuthorizationController",
     };
 
+    /// <summary>
+    /// Read actions exempt from the rule, keyed <c>Controller.Action</c> with the mechanism that
+    /// governs them instead. Action-granular so exempting one action cannot exempt a controller's
+    /// whole read surface. <see cref="ExemptReadActions_NameALiveReadAction"/> keeps it honest.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> ExemptReadActions =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            // NotificationV1Service.GetAdminNotifiesAsync checks *:*:admin itself and returns the
+            // notification bodies only to an admin, otherwise just notifyCount. A scope gate would
+            // turn that documented degradation into a 403, and site notices are not a data category.
+            ["NotificationsController.GetAdminNotifies"] = "service authorizes internally and degrades",
+
+            // The collection is a route or query value, so an attribute here would be an OR across
+            // every collection the route serves and would admit a caller holding one category to
+            // all of them. LegacyStorageReadScopes resolves the governing scope per request inside
+            // the action instead. LegacyStorageReadScopeTests covers the mapping and
+            // TimeQueryStorageGateTests drives the actions.
+            ["TimeQueryController.GetTimeBasedEntries"] = PerRequestStorageScope,
+            ["TimeQueryController.GetTimeBasedEntriesWithPrefix"] = PerRequestStorageScope,
+            ["TimeQueryController.GetTimeBasedEntriesWithPrefixAndRegex"] = PerRequestStorageScope,
+            ["TimeQueryController.GetTimeQueryEcho"] = PerRequestStorageScope,
+            ["TimeQueryController.GetTimeQueryEchoWithPrefix"] = PerRequestStorageScope,
+            ["TimeQueryController.GetTimeQueryEchoWithPrefixAndRegex"] = PerRequestStorageScope,
+            ["TimeQueryController.GetSlicedData"] = PerRequestStorageScope,
+            ["TimeQueryController.GetSlicedDataWithType"] = PerRequestStorageScope,
+            ["TimeQueryController.GetSlicedDataWithTypeAndPrefix"] = PerRequestStorageScope,
+            ["TimeQueryController.GetSlicedDataWithAll"] = PerRequestStorageScope,
+            ["CountController.CountGeneric"] = PerRequestStorageScope,
+
+            // Merges four categories into one number, so it cannot be filtered and requires every
+            // category's read scope. Read from ActivityReadScopeGuard.AdmissionScopes in the action.
+            ["CountController.CountActivity"] = "every activity category, checked in the action",
+        };
+
+    private const string PerRequestStorageScope = "storage-derived scope, checked in the action";
+
     [Fact]
     public void EveryV1V2AndV3ReadAction_RequiresAnOAuthScope()
     {
@@ -84,7 +121,7 @@ public class ReadEndpointScopeEnforcementTests
                     || type.GetCustomAttribute<RequireScopeAttribute>() != null
                     || type.GetCustomAttribute<RequirePermissionAttribute>() != null;
 
-                if (!hasPerActionAuthz)
+                if (!hasPerActionAuthz && !ExemptReadActions.ContainsKey($"{type.Name}.{method.Name}"))
                     violations.Add($"{type.Name}.{method.Name} [{string.Join(",", verbs)}]");
             }
         }
@@ -159,5 +196,41 @@ public class ReadEndpointScopeEnforcementTests
         shareable.Should().OnlyContain(s => s.EndsWith(".read", StringComparison.Ordinal),
             "RequireScope admits the anonymous share principal on its scope set alone, so the set " +
             "must never contain a write scope");
+    }
+
+    [Fact]
+    public void ExemptReadActions_NameALiveReadAction()
+    {
+        var assembly = typeof(RequireScopeAttribute).Assembly;
+
+        foreach (var (key, _) in ExemptReadActions)
+        {
+            var parts = key.Split('.', 2);
+
+            // Resolved by the type that declares the action: the same controller name exists in more
+            // than one version namespace (NotificationsController in V1 and V2).
+            var matches = assembly.GetTypes()
+                .Where(t => t.Name == parts[0]
+                    && t.Namespace is "Nocturne.API.Controllers.V1"
+                        or "Nocturne.API.Controllers.V2" or "Nocturne.API.Controllers.V3")
+                .Select(t => (Type: t, Method: t
+                    .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                    .FirstOrDefault(m => m.Name == parts[1])))
+                .Where(x => x.Method is not null)
+                .ToList();
+
+            matches.Should().HaveCount(1,
+                $"{key} must name exactly one live V1/V2/V3 read action");
+            var method = matches[0].Method!;
+
+            method!.GetCustomAttributes<HttpMethodAttribute>()
+                .SelectMany(a => a.HttpMethods)
+                .Should().Contain(v => ReadVerbs.Contains(v),
+                    $"{key} is exempted from the READ rule but is not a read action");
+
+            (method.GetCustomAttribute<RequireScopeAttribute>() is null
+                && method.GetCustomAttribute<RequirePermissionAttribute>() is null)
+                .Should().BeTrue($"{key} now carries a gate, so its exemption is stale — remove it");
+        }
     }
 }

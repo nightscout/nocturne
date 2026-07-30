@@ -1,3 +1,5 @@
+using Nocturne.API.Extensions;
+using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Services.Legacy;
@@ -15,13 +17,13 @@ namespace Nocturne.API.Controllers.V1;
 /// <seealso cref="ITimeQueryService"/>
 /// <remarks>
 /// The scope requirement is class-level and an OR of the three storages these endpoints can
-/// serve: the storage is a route/query parameter (<c>slice/{storage}/...</c>,
-/// <c>?storage=</c>), so the data category is not knowable per action.
+/// serve. The storage is a route or query value, so the governing scope is resolved per request
+/// through <see cref="Authorization.LegacyStorageReadScopes"/> instead: a class-level OR would let a
+/// caller holding one category read another's records through <c>slice/{storage}/…</c>.
 /// </remarks>
 [ApiController]
 [Tags("V1")]
 [Route("api/v1")]
-[RequireScope(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead, OAuthScopes.DevicesRead)]
 public class TimeQueryController : ControllerBase
 {
     private readonly ITimeQueryService _timeQueryService;
@@ -213,6 +215,8 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
+        if (RefuseStorage(storage) is { } refusal) return refusal;
+
         return GetTimeQueryEchoInternal(null, null, storage, field);
     }
 
@@ -235,6 +239,8 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
+        if (RefuseStorage(storage) is { } refusal) return refusal;
+
         return GetTimeQueryEchoInternal(prefix, null, storage, field);
     }
 
@@ -259,6 +265,8 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
+        if (RefuseStorage(storage) is { } refusal) return refusal;
+
         return GetTimeQueryEchoInternal(prefix, regex, storage, field);
     }
 
@@ -355,6 +363,8 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseStorage(storage) is { } refusal) return refusal;
+
         return await GetSlicedDataInternal(
             storage,
             field,
@@ -391,6 +401,8 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseStorage(storage) is { } refusal) return refusal;
+
         return await GetSlicedDataInternal(
             storage,
             field,
@@ -429,6 +441,8 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseStorage(storage) is { } refusal) return refusal;
+
         return await GetSlicedDataInternal(
             storage,
             field,
@@ -469,6 +483,8 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseStorage(storage) is { } refusal) return refusal;
+
         return await GetSlicedDataInternal(
             storage,
             field,
@@ -601,4 +617,19 @@ public class TimeQueryController : ControllerBase
             );
         }
     }
+    /// <summary>
+    /// Refuses a storage the caller's scopes do not cover. Returns null when the request may proceed.
+    /// </summary>
+    private ActionResult? RefuseStorage(string storage)
+    {
+        if (LegacyStorageReadScopes.RequiredReadScope(storage) is null)
+        {
+            return BadRequest(new { status = 400, message = $"Unsupported storage type: {storage}", type = "bad_request" });
+        }
+
+        return LegacyStorageReadScopes.CanRead(HttpContext.GetGrantedScopes(), storage)
+            ? null
+            : StatusCode(403, new { status = 403, message = $"Reading '{storage}' requires the {LegacyStorageReadScopes.RequiredReadScope(storage)} scope.", type = "forbidden" });
+    }
+
 }

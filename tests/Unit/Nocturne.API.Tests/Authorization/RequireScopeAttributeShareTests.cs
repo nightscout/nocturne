@@ -77,8 +77,9 @@ public class RequireScopeAttributeShareTests
 
         new RequireScopeAttribute(writeScope).OnAuthorization(context);
 
-        context.Result.Should().BeOfType<ForbidResult>(
-            "PublicShareScopes holds only .read scopes, so no share may write");
+        context.Result.Should().BeOfType<UnauthorizedResult>(
+            "an unauthenticated caller is refused before its scopes are consulted, so a write "
+            + "requirement can never be reached by a share");
     }
 
     [Theory]

@@ -68,12 +68,13 @@ public class ControllerAuthorizationCoverageTests
             // v1 endpoints authenticate via the api-secret / token trie and are gated by the
             // fallback policy plus in-handler scope checks, matching upstream Nightscout behaviour.
             // They deliberately do not use the v4 [Authorize] convention.
-            //
-            // Count/Iob/Pebble/TimeQuery/Debug used to be listed here. They now carry per-action
-            // (or class-level) gates, because the fallback admits any non-empty trie and so let a
-            // grant scoped to one category read every other one — see
-            // ReadEndpointScopeEnforcementTests.
             ["Nocturne.API.Controllers.V1.AlexaController"] = "legacy v1 (fallback trie + in-handler)",
+
+            // Its routes take the collection as a route or query value, so an attribute would be an
+            // OR across every collection they serve. LegacyStorageReadScopes resolves the governing
+            // scope per request in the action; ReadEndpointScopeEnforcementTests records each action.
+            ["Nocturne.API.Controllers.V1.TimeQueryController"] = "storage-derived scope, checked in the action",
+            ["Nocturne.API.Controllers.V1.CountController"] = "storage-derived scope, checked in the action",
 
             // ── Authentication credential-management surfaces ──────────────────────────────────
             // These live in the Authentication namespace and mix explicit [AllowAnonymous] public

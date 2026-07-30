@@ -222,7 +222,9 @@ public class NotificationsController : ControllerBase
     [NightscoutEndpoint("/api/v2/notifications/status")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    [RequireScope(OAuthScopes.AlertsRead)]
+    // Operator diagnostics, not alert data: alerts.read would be the wrong category, and no
+    // production grant carries it. Gated like DebugController.
+    [RequireAdmin]
     public async Task<ActionResult<object>> GetNotificationStatus(
         CancellationToken cancellationToken = default
     )

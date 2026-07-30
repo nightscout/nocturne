@@ -1,3 +1,4 @@
+import { isInternalOnlyApiPath } from "$lib/server/internal-only-api-paths";
 import { type Handle } from "@sveltejs/kit";
 import { randomUUID } from "$lib/utils";
 import type { HandleServerError } from "@sveltejs/kit";
@@ -274,22 +275,14 @@ const siteSecurityHandle: Handle = async ({ event, resolve }) => {
   return resolve(event);
 };
 
-// API paths that must never be reachable from the internet. This proxy is the only route from
-// the edge to the API (the gateway sends /api/{**catch-all} here), so refusing them here makes
-// them internal-network-only, which is what their callers already assume.
-//
-// /api/v4/platform/tls-authorize is Caddy's on_demand_tls "ask" hook. Caddy calls the API
-// container directly, never through this proxy, so denying it costs nothing; proxying it would
-// expose an anonymous "is this tenant slug active?" oracle (200 vs 404) to the internet. The ask
-// hook cannot be header-authenticated — Caddy's `ask` takes only a URL and sends no custom
-// headers — so blocking the external path is the gate.
-const INTERNAL_ONLY_API_PATHS = ["/api/v4/platform/tls-authorize"];
+// This proxy is the only route from the edge to the API (the gateway sends /api/{**catch-all}
+// here), so refusing a path here makes it internal-network-only. See internal-only-api-paths.
 
 // Proxy handler for /api requests
 const proxyHandle: Handle = async ({ event, resolve }) => {
   // Check if the request is for /api (but not SvelteKit-handled routes like webhooks and bot dispatch)
   const path = event.url.pathname;
-  if (INTERNAL_ONLY_API_PATHS.includes(path)) {
+  if (isInternalOnlyApiPath(path)) {
     return new Response("Not Found", { status: 404 });
   }
   if (path.startsWith("/api") && !path.startsWith("/api/v4/webhooks") && !path.startsWith("/api/v4/bot") && !path.startsWith("/api/otel")) {

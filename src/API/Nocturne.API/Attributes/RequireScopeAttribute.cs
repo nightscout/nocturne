@@ -77,16 +77,24 @@ public class RequireScopeAttribute : Attribute, IAuthorizationFilter
 
         var grantedScopes = httpContext.GetGrantedScopes();
 
-        // Eligibility is the presence of resolved scopes, not an authenticated identity. A public
-        // share link ({token}.share.{baseDomain}) is deliberately IsAuthenticated: false, yet
+        // An unauthenticated caller is eligible only for a read requirement. A public share link
+        // ({token}.share.{baseDomain}) is deliberately IsAuthenticated: false, yet
         // AuthenticationMiddleware resolves its Public subject down to
-        // TenantPermissions.PublicShareScopes and publishes them here. Requiring authentication
-        // would 401 every share, so the scope set is the gate for both principals.
+        // TenantPermissions.PublicShareScopes and publishes them here, so requiring authentication
+        // outright would 401 every share.
         //
-        // This cannot widen writes: PublicShareScopes contains only ".read" scopes, and
-        // OAuthScopes.SatisfiesScope grants a required scope solely on an exact match, on "*", or
-        // on the matching ".readwrite" — so no share scope set can ever satisfy a write scope.
-        //
+        // Restricting it to read requirements keeps "an unauthenticated principal can never pass a
+        // write gate" a property of this attribute. Deriving it from the scopes a share happens to
+        // hold would instead make it depend on every present and future anonymous path publishing
+        // only read scopes, and SatisfiesScope matches device.notify and device.actuate on an exact
+        // string — neither is ".read" nor ".readwrite".
+        if (!httpContext.IsAuthenticated()
+            && !_requiredScopes.All(scope => scope.EndsWith(".read", StringComparison.Ordinal)))
+        {
+            context.Result = new UnauthorizedResult();
+            return;
+        }
+
         // No scopes at all means no resolved grant, which fails closed. An authenticated caller
         // gets 403 (identity known, grant insufficient); anyone else gets 401.
         if (grantedScopes.Count == 0)
