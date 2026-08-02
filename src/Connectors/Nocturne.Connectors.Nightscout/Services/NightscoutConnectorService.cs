@@ -196,23 +196,46 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         // Handle Glucose
         // Glucose keeps request.From — for background syncs the framework already derived
         // it from the latest glucose entry, so it is glucose's own independent cursor.
+        //
+        // Each data type below streams fetch-page → publish-page rather than accumulating
+        // the whole range first: a multi-year backfill of a high-volume collection held in
+        // one list has taken the process out with OutOfMemory, failing unrelated tenants'
+        // publishes with it. A page publish failure stops the crawl — pages arrive newest
+        // first, so later pages are older history that a re-run re-pulls (idempotent).
         if (activeTypes.Contains(SyncDataType.Glucose))
         {
             try
             {
-                var entries = await FetchGlucoseDataRangeAsync(request.From, request.To);
-                var entryList = entries.ToList();
-                result.ItemsSynced[SyncDataType.Glucose] = entryList.Count;
-                if (entryList.Count > 0)
+                var count = 0;
+                DateTime? lastTime = null;
+                var publishSuccess = true;
+
+                await foreach (var page in FetchGlucosePagesAsync(request.From, request.To))
                 {
-                    result.LastEntryTimes[SyncDataType.Glucose] = entryList.Max(e => e.Date);
-                    var publishSuccess = await PublishGlucoseDataInBatchesAsync(
-                        entryList, config, cancellationToken);
-                    if (!publishSuccess)
+                    count += page.Length;
+                    var pageMax = page.Max(e => e.Date);
+                    if (lastTime is null || pageMax > lastTime)
+                        lastTime = pageMax;
+
+                    if (!await PublishGlucoseDataInBatchesAsync(page, config, cancellationToken))
                     {
-                        result.Success = false;
-                        result.Errors.Add("Glucose publish failed");
+                        publishSuccess = false;
+                        break;
                     }
+                }
+
+                _logger.LogInformation(
+                    "[{ConnectorSource}] Retrieved {Count} glucose entries from Nightscout",
+                    ConnectorSource,
+                    count);
+
+                result.ItemsSynced[SyncDataType.Glucose] = count;
+                if (lastTime.HasValue)
+                    result.LastEntryTimes[SyncDataType.Glucose] = lastTime.Value;
+                if (!publishSuccess)
+                {
+                    result.Success = false;
+                    result.Errors.Add("Glucose publish failed");
                 }
             }
             catch (Exception ex)
@@ -238,29 +261,47 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var treatmentFrom = openEnded
                     ? await CalculateTreatmentSinceTimestampAsync(config)
                     : request.From;
-                var treatments = await FetchTreatmentsAsync(treatmentFrom, request.To);
-                var treatmentList = treatments.ToList();
-                if (treatmentList.Count > 0)
+
+                var count = 0;
+                DateTime? lastTime = null;
+                var publishSuccess = true;
+
+                await foreach (var page in FetchTreatmentPagesAsync(treatmentFrom, request.To))
                 {
-                    var lastTime = treatmentList
+                    count += page.Length;
+                    var pageMax = page
                         .Select(t => DateTime.TryParse(t.CreatedAt, out var dt) ? dt : (DateTime?)null)
                         .Where(dt => dt.HasValue)
                         .Max();
-                    var publishSuccess = await PublishTreatmentDataInBatchesAsync(
-                        treatmentList, config, cancellationToken);
+                    if (pageMax.HasValue && (lastTime is null || pageMax > lastTime))
+                        lastTime = pageMax;
 
+                    if (!await PublishTreatmentDataInBatchesAsync(page, config, cancellationToken))
+                    {
+                        publishSuccess = false;
+                        break;
+                    }
+                }
+
+                _logger.LogInformation(
+                    "[{ConnectorSource}] Retrieved {Count} treatments from Nightscout",
+                    ConnectorSource,
+                    count);
+
+                if (count > 0)
+                {
                     // Report count under each enabled treatment sub-type
                     foreach (var tt in treatmentTypes.Where(t => activeTypes.Contains(t)))
                     {
-                        result.ItemsSynced[tt] = treatmentList.Count;
+                        result.ItemsSynced[tt] = count;
                         result.LastEntryTimes[tt] = lastTime;
                     }
+                }
 
-                    if (!publishSuccess)
-                    {
-                        result.Success = false;
-                        result.Errors.Add("Treatments publish failed");
-                    }
+                if (!publishSuccess)
+                {
+                    result.Success = false;
+                    result.Errors.Add("Treatments publish failed");
                 }
             }
             catch (Exception ex)
@@ -314,23 +355,40 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var deviceStatusFrom = openEnded
                     ? await CalculateDeviceStatusCatchUpSinceAsync(config) ?? request.From
                     : request.From;
-                var deviceStatuses = await FetchDeviceStatusAsync(deviceStatusFrom, request.To);
-                var deviceStatusList = deviceStatuses.ToList();
-                result.ItemsSynced[SyncDataType.DeviceStatus] = deviceStatusList.Count;
-                if (deviceStatusList.Count > 0)
+
+                var count = 0;
+                DateTime? lastTime = null;
+                var publishSuccess = true;
+
+                await foreach (var page in FetchDeviceStatusPagesAsync(deviceStatusFrom, request.To))
                 {
-                    var lastTime = deviceStatusList
+                    count += page.Length;
+                    var pageMax = page
                         .Select(d => DateTimeOffset.TryParse(d.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
                         .Where(dt => dt.HasValue)
                         .Max();
-                    result.LastEntryTimes[SyncDataType.DeviceStatus] = lastTime;
-                    var publishSuccess = await PublishDeviceStatusAsync(
-                        deviceStatusList, config, cancellationToken);
-                    if (!publishSuccess)
+                    if (pageMax.HasValue && (lastTime is null || pageMax > lastTime))
+                        lastTime = pageMax;
+
+                    if (!await PublishDeviceStatusAsync(page, config, cancellationToken))
                     {
-                        result.Success = false;
-                        result.Errors.Add("DeviceStatus publish failed");
+                        publishSuccess = false;
+                        break;
                     }
+                }
+
+                _logger.LogInformation(
+                    "[{ConnectorSource}] Retrieved {Count} device statuses from Nightscout",
+                    ConnectorSource,
+                    count);
+
+                result.ItemsSynced[SyncDataType.DeviceStatus] = count;
+                if (lastTime.HasValue)
+                    result.LastEntryTimes[SyncDataType.DeviceStatus] = lastTime;
+                if (!publishSuccess)
+                {
+                    result.Success = false;
+                    result.Errors.Add("DeviceStatus publish failed");
                 }
             }
             catch (Exception ex)
@@ -378,23 +436,40 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 var activityFrom = openEnded
                     ? await CalculateActivityCatchUpSinceAsync(config) ?? request.From
                     : request.From;
-                var activities = await FetchActivityAsync(activityFrom, request.To);
-                var activityList = activities.ToList();
-                result.ItemsSynced[SyncDataType.Activity] = activityList.Count;
-                if (activityList.Count > 0)
+
+                var count = 0;
+                DateTime? lastTime = null;
+                var publishSuccess = true;
+
+                await foreach (var page in FetchActivityPagesAsync(activityFrom, request.To))
                 {
-                    var lastTime = activityList
+                    count += page.Length;
+                    var pageMax = page
                         .Select(a => DateTimeOffset.TryParse(a.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
                         .Where(dt => dt.HasValue)
                         .Max();
-                    result.LastEntryTimes[SyncDataType.Activity] = lastTime;
-                    var publishSuccess = await PublishActivityDataAsync(
-                        activityList, config, cancellationToken);
-                    if (!publishSuccess)
+                    if (pageMax.HasValue && (lastTime is null || pageMax > lastTime))
+                        lastTime = pageMax;
+
+                    if (!await PublishActivityDataAsync(page, config, cancellationToken))
                     {
-                        result.Success = false;
-                        result.Errors.Add("Activity publish failed");
+                        publishSuccess = false;
+                        break;
                     }
+                }
+
+                _logger.LogInformation(
+                    "[{ConnectorSource}] Retrieved {Count} activities from Nightscout",
+                    ConnectorSource,
+                    count);
+
+                result.ItemsSynced[SyncDataType.Activity] = count;
+                if (lastTime.HasValue)
+                    result.LastEntryTimes[SyncDataType.Activity] = lastTime;
+                if (!publishSuccess)
+                {
+                    result.Success = false;
+                    result.Errors.Add("Activity publish failed");
                 }
             }
             catch (Exception ex)
@@ -425,54 +500,109 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private static DateTime? AnchorUnboundedFetch(DateTime? from, DateTime? to) =>
         from is null && to is null ? DateTime.UtcNow : to;
 
-    protected override async Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
-        DateTime? from, DateTime? to)
+    /// <summary>
+    ///     Streams a paginated Nightscout collection newest-first, one page per iteration,
+    ///     so callers never hold more than a page of a multi-year history in memory. Each
+    ///     full page steps the upper bound just below its oldest record; a short page is
+    ///     the end of the range.
+    /// </summary>
+    /// <param name="from">Optional inclusive lower bound.</param>
+    /// <param name="to">Optional inclusive upper bound; anchored to now when both bounds are open.</param>
+    /// <param name="buildUrl">Builds the request URL for the given bounds.</param>
+    /// <param name="oldestOf">Extracts the oldest record time from a page, or null when the page has no usable times.</param>
+    /// <param name="operationName">Operation label for fetch logging.</param>
+    private async IAsyncEnumerable<T[]> FetchPagesAsync<T>(
+        DateTime? from,
+        DateTime? to,
+        Func<DateTime?, DateTime?, string> buildUrl,
+        Func<T[], DateTime?> oldestOf,
+        string operationName)
     {
-        var allEntries = new List<Entry>();
         var currentTo = AnchorUnboundedFetch(from, to);
 
         while (true)
         {
-            var entries = await FetchDataAsync<Entry[]>(
-                BuildEntriesUrl(from, currentTo),
-                "FetchGlucoseData");
+            var page = await FetchDataAsync<T[]>(buildUrl(from, currentTo), operationName);
 
-            if (entries == null || entries.Length == 0)
-                break;
+            if (page == null || page.Length == 0)
+                yield break;
 
-            foreach (var entry in entries)
-                entry.DataSource = ConnectorSource;
+            yield return page;
 
-            allEntries.AddRange(entries);
+            // Fewer than MaxCount means we've fetched everything in this range
+            if (page.Length < _currentConfig.MaxCount)
+                yield break;
 
-            // If we got fewer than MaxCount, we've fetched everything in this range
-            if (entries.Length < _currentConfig.MaxCount)
-                break;
+            var oldestDate = oldestOf(page);
+            if (!oldestDate.HasValue)
+                yield break;
 
-            // Find the oldest entry's date and paginate backwards
-            var oldestMs = entries.Min(e => e.Mills);
-            if (oldestMs <= 0)
-                break;
+            // Avoid an infinite loop if the oldest date hasn't moved
+            if (currentTo.HasValue && oldestDate.Value >= currentTo.Value)
+                yield break;
 
-            var oldestDate = DateTimeOffset.FromUnixTimeMilliseconds(oldestMs).UtcDateTime;
+            // Next page: records older than the oldest we've seen
+            currentTo = oldestDate.Value.AddMilliseconds(-1);
 
-            // Avoid infinite loop if the oldest date hasn't changed
-            if (currentTo.HasValue && oldestDate >= currentTo.Value)
-                break;
-
-            // Next page: fetch entries older than the oldest we've seen
-            currentTo = oldestDate.AddMilliseconds(-1);
-
-            // If we've gone past the requested 'from', stop
             if (from.HasValue && currentTo < from)
-                break;
+                yield break;
 
             _logger.LogDebug(
-                "[{ConnectorSource}] Paginating glucose entries, fetched {Count} so far, next page before {Before:yyyy-MM-dd HH:mm:ss}",
+                "[{ConnectorSource}] Paginating {Operation}, next page before {Before:yyyy-MM-dd HH:mm:ss}",
                 ConnectorSource,
-                allEntries.Count,
+                operationName,
                 currentTo);
         }
+    }
+
+    private static DateTime? OldestEntryTime(Entry[] page)
+    {
+        var oldestMs = page.Min(e => e.Mills);
+        return oldestMs > 0
+            ? DateTimeOffset.FromUnixTimeMilliseconds(oldestMs).UtcDateTime
+            : null;
+    }
+
+    /// <summary>
+    ///     Oldest created_at on a page. Uses DateTimeOffset for consistent UTC comparison
+    ///     regardless of system timezone.
+    /// </summary>
+    private static DateTime? OldestCreatedAt<T>(T[] page, Func<T, string?> createdAtOf)
+    {
+        return page
+            .Select(item => DateTimeOffset.TryParse(createdAtOf(item), out var dto) ? dto.UtcDateTime : (DateTime?)null)
+            .Where(dt => dt.HasValue)
+            .Min();
+    }
+
+    private async IAsyncEnumerable<Entry[]> FetchGlucosePagesAsync(DateTime? from, DateTime? to)
+    {
+        await foreach (var page in FetchPagesAsync<Entry>(
+            from, to, BuildEntriesUrl, OldestEntryTime, "FetchGlucoseData"))
+        {
+            foreach (var entry in page)
+                entry.DataSource = ConnectorSource;
+            yield return page;
+        }
+    }
+
+    private async IAsyncEnumerable<Treatment[]> FetchTreatmentPagesAsync(DateTime? from, DateTime? to)
+    {
+        await foreach (var page in FetchPagesAsync<Treatment>(
+            from, to, BuildTreatmentsUrl, p => OldestCreatedAt(p, t => t.CreatedAt), "FetchTreatments"))
+        {
+            foreach (var treatment in page)
+                treatment.DataSource = ConnectorSource;
+            yield return page;
+        }
+    }
+
+    protected override async Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
+        DateTime? from, DateTime? to)
+    {
+        var allEntries = new List<Entry>();
+        await foreach (var page in FetchGlucosePagesAsync(from, to))
+            allEntries.AddRange(page);
 
         _logger.LogInformation(
             "[{ConnectorSource}] Retrieved {Count} glucose entries from Nightscout",
@@ -486,49 +616,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         DateTime? from, DateTime? to)
     {
         var allTreatments = new List<Treatment>();
-        var currentTo = AnchorUnboundedFetch(from, to);
-
-        while (true)
-        {
-            var treatments = await FetchDataAsync<Treatment[]>(
-                BuildTreatmentsUrl(from, currentTo),
-                "FetchTreatments");
-
-            if (treatments == null || treatments.Length == 0)
-                break;
-
-            foreach (var treatment in treatments)
-                treatment.DataSource = ConnectorSource;
-
-            allTreatments.AddRange(treatments);
-
-            if (treatments.Length < _currentConfig.MaxCount)
-                break;
-
-            // Find the oldest treatment's created_at and paginate backwards.
-            // Use DateTimeOffset to ensure consistent UTC comparison regardless of system timezone.
-            var oldestDate = treatments
-                .Select(t => DateTimeOffset.TryParse(t.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
-                .Where(dt => dt.HasValue)
-                .Min();
-
-            if (!oldestDate.HasValue)
-                break;
-
-            if (currentTo.HasValue && oldestDate.Value >= currentTo.Value)
-                break;
-
-            currentTo = oldestDate.Value.AddMilliseconds(-1);
-
-            if (from.HasValue && currentTo < from)
-                break;
-
-            _logger.LogDebug(
-                "[{ConnectorSource}] Paginating treatments, fetched {Count} so far, next page before {Before:yyyy-MM-dd HH:mm:ss}",
-                ConnectorSource,
-                allTreatments.Count,
-                currentTo);
-        }
+        await foreach (var page in FetchTreatmentPagesAsync(from, to))
+            allTreatments.AddRange(page);
 
         _logger.LogInformation(
             "[{ConnectorSource}] Retrieved {Count} treatments from Nightscout",
@@ -560,56 +649,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return profiles;
     }
 
-    private async Task<IEnumerable<DeviceStatus>> FetchDeviceStatusAsync(
-        DateTime? from, DateTime? to)
-    {
-        var allStatuses = new List<DeviceStatus>();
-        var currentTo = AnchorUnboundedFetch(from, to);
-
-        while (true)
-        {
-            var statuses = await FetchDataAsync<DeviceStatus[]>(
-                BuildDeviceStatusUrl(from, currentTo),
-                "FetchDeviceStatus");
-
-            if (statuses == null || statuses.Length == 0)
-                break;
-
-            allStatuses.AddRange(statuses);
-
-            if (statuses.Length < _currentConfig.MaxCount)
-                break;
-
-            var oldestDate = statuses
-                .Select(d => DateTimeOffset.TryParse(d.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
-                .Where(dt => dt.HasValue)
-                .Min();
-
-            if (!oldestDate.HasValue)
-                break;
-
-            if (currentTo.HasValue && oldestDate.Value >= currentTo.Value)
-                break;
-
-            currentTo = oldestDate.Value.AddMilliseconds(-1);
-
-            if (from.HasValue && currentTo < from)
-                break;
-
-            _logger.LogDebug(
-                "[{ConnectorSource}] Paginating device statuses, fetched {Count} so far, next page before {Before:yyyy-MM-dd HH:mm:ss}",
-                ConnectorSource,
-                allStatuses.Count,
-                currentTo);
-        }
-
-        _logger.LogInformation(
-            "[{ConnectorSource}] Retrieved {Count} device statuses from Nightscout",
-            ConnectorSource,
-            allStatuses.Count);
-
-        return allStatuses;
-    }
+    private IAsyncEnumerable<DeviceStatus[]> FetchDeviceStatusPagesAsync(DateTime? from, DateTime? to) =>
+        FetchPagesAsync<DeviceStatus>(
+            from, to, BuildDeviceStatusUrl, p => OldestCreatedAt(p, d => d.CreatedAt), "FetchDeviceStatus");
 
     private async Task<IEnumerable<Food>> FetchFoodAsync()
     {
@@ -633,56 +675,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return foods;
     }
 
-    private async Task<IEnumerable<Activity>> FetchActivityAsync(
-        DateTime? from, DateTime? to)
-    {
-        var allActivities = new List<Activity>();
-        var currentTo = AnchorUnboundedFetch(from, to);
-
-        while (true)
-        {
-            var activities = await FetchDataAsync<Activity[]>(
-                BuildActivityUrl(from, currentTo),
-                "FetchActivity");
-
-            if (activities == null || activities.Length == 0)
-                break;
-
-            allActivities.AddRange(activities);
-
-            if (activities.Length < _currentConfig.MaxCount)
-                break;
-
-            var oldestDate = activities
-                .Select(a => DateTimeOffset.TryParse(a.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
-                .Where(dt => dt.HasValue)
-                .Min();
-
-            if (!oldestDate.HasValue)
-                break;
-
-            if (currentTo.HasValue && oldestDate.Value >= currentTo.Value)
-                break;
-
-            currentTo = oldestDate.Value.AddMilliseconds(-1);
-
-            if (from.HasValue && currentTo < from)
-                break;
-
-            _logger.LogDebug(
-                "[{ConnectorSource}] Paginating activities, fetched {Count} so far, next page before {Before:yyyy-MM-dd HH:mm:ss}",
-                ConnectorSource,
-                allActivities.Count,
-                currentTo);
-        }
-
-        _logger.LogInformation(
-            "[{ConnectorSource}] Retrieved {Count} activities from Nightscout",
-            ConnectorSource,
-            allActivities.Count);
-
-        return allActivities;
-    }
+    private IAsyncEnumerable<Activity[]> FetchActivityPagesAsync(DateTime? from, DateTime? to) =>
+        FetchPagesAsync<Activity>(
+            from, to, BuildActivityUrl, p => OldestCreatedAt(p, a => a.CreatedAt), "FetchActivity");
 
     private async Task<T?> FetchDataAsync<T>(string url, string operationName) where T : class
     {
