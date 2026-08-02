@@ -56,15 +56,21 @@ public class CareLinkSensorGlucoseMapperTests
         result[0].Mgdl.Should().Be(120);
     }
 
-    [Fact]
-    public void Map_ConvertsMmolToMgdl()
+    [Theory]
+    [InlineData("mmol/L")]
+    [InlineData("mg/dL")]
+    [InlineData(null)]
+    public void Map_TakesSgAsMgdl_WhateverTheDisplayUnitsAre(string? bgUnits)
     {
-        var data = CreateTestData(0, "mmol/L");
-        data.Sgs = [new CareLinkSensorGlucose { Sg = 7, Datetime = "2024-01-15T14:30:00", Kind = "SG" }];
+        // bgUnits is the account's display preference, not a unit for sg. sg is an int, so a value
+        // in mmol/L could only ever arrive quantised to whole numbers.
+        var data = CreateTestData(0, bgUnits);
+        data.Sgs = [new CareLinkSensorGlucose { Sg = 126, Datetime = "2024-01-15T14:30:00", Kind = "SG" }];
 
         var result = _mapper.Map(data);
+
         result.Should().NotBeEmpty();
-        result[0].Mgdl.Should().BeApproximately(7 * 18.0182, 0.01);
+        result[0].Mgdl.Should().Be(126);
     }
 
     [Fact]
