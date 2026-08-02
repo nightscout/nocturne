@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Authorization;
@@ -7,7 +10,7 @@ namespace Nocturne.API.Authorization;
 /// </summary>
 /// <remarks>
 /// The V1 routes that take the collection as a parameter — <c>slice/{storage}/…</c>,
-/// <c>times?storage=</c>, <c>count/{storage}/where</c> — cannot be gated by an attribute, because a
+/// <c>times/echo?storage=</c>, <c>count/{storage}/where</c> — cannot be gated by an attribute, because a
 /// class- or action-level scope list is an OR across every collection the route can serve and so
 /// admits a caller holding any one of them to all of them. The storage is a route or query value, so
 /// the governing scope is resolvable per request and is checked in the action instead.
@@ -45,4 +48,28 @@ internal static class LegacyStorageReadScopes
     /// </summary>
     public static bool CanRead(IReadOnlySet<string> grantedScopes, string? storage) =>
         RequiredReadScope(storage) is { } scope && OAuthScopes.SatisfiesScope(grantedScopes, scope);
+
+    /// <summary>
+    /// The result to return instead of reading <paramref name="storage"/>, or <see langword="null"/>
+    /// when the caller may read it. An unclassified selector is refused rather than passed through,
+    /// so adding a collection to a route's accepted list without classifying it here closes the
+    /// route rather than opening it.
+    /// </summary>
+    public static ActionResult? RefuseRead(HttpContext httpContext, string? storage)
+    {
+        if (RequiredReadScope(storage) is not { } required)
+        {
+            return new BadRequestObjectResult(
+                new { status = 400, message = $"Unsupported storage type: {storage}", type = "bad_request" });
+        }
+
+        if (CanRead(httpContext.GetGrantedScopes(), storage))
+            return null;
+
+        return new ObjectResult(
+            new { status = 403, message = $"Reading '{storage}' requires the {required} scope.", type = "forbidden" })
+        {
+            StatusCode = StatusCodes.Status403Forbidden,
+        };
+    }
 }

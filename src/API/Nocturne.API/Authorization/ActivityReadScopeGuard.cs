@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -29,6 +32,28 @@ internal static class ActivityReadScopeGuard
         OAuthScopes.StepCountRead,
         OAuthScopes.SleepRead,
     ];
+
+    /// <summary>
+    /// The result to return instead of a merged activity count, or <see langword="null"/> when the
+    /// caller may have it. A count cannot be filtered the way <see cref="Filter"/> filters records,
+    /// so it takes every category rather than any one of them.
+    /// </summary>
+    public static ActionResult? RefuseUnlessEveryCategory(HttpContext httpContext)
+    {
+        var granted = httpContext.GetGrantedScopes();
+        if (AdmissionScopes.All(scope => OAuthScopes.SatisfiesScope(granted, scope)))
+            return null;
+
+        return new ObjectResult(new
+        {
+            status = 403,
+            message = "Counting merged activity requires every activity category's read scope.",
+            type = "forbidden",
+        })
+        {
+            StatusCode = StatusCodes.Status403Forbidden,
+        };
+    }
 
     /// <summary>
     /// Returns whether the caller's granted scopes cover the storage the activity came from.

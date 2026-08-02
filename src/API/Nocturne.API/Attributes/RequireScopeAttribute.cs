@@ -18,9 +18,11 @@ namespace Nocturne.API.Attributes;
 /// The granted scopes are further refined by <see cref="Middleware.MemberScopeMiddleware"/>
 /// based on the user's tenant membership roles.
 /// <para>
-/// The check keys off the resolved scope set rather than an authenticated identity, so it also
-/// applies to the anonymous public-share principal, whose scopes are narrowed to
-/// <see cref="TenantPermissions.PublicShareScopes"/>. An empty scope set is rejected.
+/// A read requirement is decided on the resolved scope set alone, so it admits the anonymous
+/// public-share principal, whose scopes are narrowed to
+/// <see cref="TenantPermissions.PublicShareScopes"/>. A requirement naming anything other than
+/// read also requires an authenticated caller, so no anonymous principal can pass a write gate
+/// however its scopes are resolved. An empty scope set is rejected either way.
 /// </para>
 /// </remarks>
 /// <seealso cref="RequirePermissionAttribute"/>

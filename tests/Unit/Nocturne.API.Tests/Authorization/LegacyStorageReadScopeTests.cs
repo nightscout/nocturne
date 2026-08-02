@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Nocturne.API.Authorization;
+using Nocturne.API.Controllers.V1;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
 
@@ -92,6 +93,20 @@ public class LegacyStorageReadScopeTests
         foreach (var storage in new[] { "entries", "treatments", "devicestatus", "profile", "food" })
         {
             LegacyStorageReadScopes.CanRead(productionGrant, storage).Should().BeTrue(storage);
+        }
+    }
+
+    [Fact]
+    public void CountableStorage_IsFullyClassified()
+    {
+        // CountController validates against its own allow-list before the scope gate, so a selector
+        // it accepts but this does not classify would reach a count ungated.
+        foreach (var storage in CountController.CountableStorage)
+        {
+            var classified = LegacyStorageReadScopes.RequiredReadScope(storage) is not null
+                || string.Equals(storage, "activity", StringComparison.OrdinalIgnoreCase);
+
+            classified.Should().BeTrue(storage);
         }
     }
 

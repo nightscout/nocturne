@@ -61,9 +61,6 @@ public class ReadEndpointScopeEnforcementTests
             // all of them. LegacyStorageReadScopes resolves the governing scope per request inside
             // the action instead. LegacyStorageReadScopeTests covers the mapping and
             // TimeQueryStorageGateTests drives the actions.
-            ["TimeQueryController.GetTimeBasedEntries"] = PerRequestStorageScope,
-            ["TimeQueryController.GetTimeBasedEntriesWithPrefix"] = PerRequestStorageScope,
-            ["TimeQueryController.GetTimeBasedEntriesWithPrefixAndRegex"] = PerRequestStorageScope,
             ["TimeQueryController.GetTimeQueryEcho"] = PerRequestStorageScope,
             ["TimeQueryController.GetTimeQueryEchoWithPrefix"] = PerRequestStorageScope,
             ["TimeQueryController.GetTimeQueryEchoWithPrefixAndRegex"] = PerRequestStorageScope,

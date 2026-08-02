@@ -146,8 +146,8 @@ public class ActivityReadScopeGuardTests
     /// <summary>
     /// The activity count sums all four storages into one number that cannot be filtered per
     /// category, so it requires all four rather than any one. Driven through the action rather than
-    /// read off an attribute, because the check moved into the handler when the route's other
-    /// storages became per-request.
+    /// read off an attribute, because the handler makes the check and an attribute scan cannot
+    /// see it.
     /// </summary>
     [Theory]
     [InlineData(true)]

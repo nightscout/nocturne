@@ -27,6 +27,14 @@ namespace Nocturne.API.Controllers.V1;
 [Route("api/v1/[controller]")]
 public class CountController : ControllerBase
 {
+    /// <summary>
+    /// The selectors <c>{storage}/where</c> dispatches on. Every one must be classified in
+    /// <see cref="LegacyStorageReadScopes"/> or handled by <see cref="ActivityReadScopeGuard"/>,
+    /// which <c>CountableStorage_IsFullyClassified</c> asserts.
+    /// </summary>
+    internal static readonly string[] CountableStorage =
+        ["entries", "treatments", "devicestatus", "profile", "food", "activity"];
+
     private readonly IEntryStore _entryStore;
     private readonly ITreatmentStore _treatmentStore;
     private readonly IApsSnapshotRepository _apsSnapshotRepository;
@@ -223,12 +231,8 @@ public class CountController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        // Every category, because the number merges four of them and cannot be filtered down to the
-        // ones the caller holds. A grant without sleep.read therefore loses this count; the scopes
-        // come from ActivityReadScopeGuard so the set cannot drift from the record endpoints'.
-        var granted = HttpContext.GetGrantedScopes();
-        if (!ActivityReadScopeGuard.AdmissionScopes.All(s => OAuthScopes.SatisfiesScope(granted, s)))
-            return StatusCode(403, new { status = 403, message = "Counting merged activity requires every activity category's read scope.", type = "forbidden" });
+        if (ActivityReadScopeGuard.RefuseUnlessEveryCategory(HttpContext) is { } refusal)
+            return refusal;
 
         _logger.LogDebug(
             "Count activity endpoint requested with find: {Find} from {RemoteIpAddress}",
@@ -283,19 +287,26 @@ public class CountController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (!CountableStorage.Contains(storage, StringComparer.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Invalid storage type requested: {Storage}", storage);
+            return BadRequest(
+                new
+                {
+                    status = 400,
+                    message = $"Invalid storage type: {storage}. Supported types: {string.Join(", ", CountableStorage)}",
+                    type = "client",
+                }
+            );
+        }
+
         // "activity" reaches CountActivitiesAsync, which merges four categories into one number, so
         // it needs every category's read scope rather than one storage's.
-        if (string.Equals(storage, "activity", StringComparison.OrdinalIgnoreCase))
-        {
-            var granted = HttpContext.GetGrantedScopes();
-            if (!ActivityReadScopeGuard.AdmissionScopes.All(s => OAuthScopes.SatisfiesScope(granted, s)))
-                return StatusCode(403, new { status = 403, message = "Counting merged activity requires every activity category's read scope.", type = "forbidden" });
-        }
-        else if (LegacyStorageReadScopes.RequiredReadScope(storage) is { } required)
-        {
-            if (!OAuthScopes.SatisfiesScope(HttpContext.GetGrantedScopes(), required))
-                return StatusCode(403, new { status = 403, message = $"Counting '{storage}' requires the {required} scope.", type = "forbidden" });
-        }
+        var refusal = string.Equals(storage, "activity", StringComparison.OrdinalIgnoreCase)
+            ? ActivityReadScopeGuard.RefuseUnlessEveryCategory(HttpContext)
+            : LegacyStorageReadScopes.RefuseRead(HttpContext, storage);
+        if (refusal is not null)
+            return refusal;
 
         _logger.LogDebug(
             "Generic count endpoint requested for storage: {Storage}, find: {Find}, type: {Type} from {RemoteIpAddress}",
@@ -307,29 +318,6 @@ public class CountController : ControllerBase
 
         try
         {
-            // Validate storage type
-            var validStorageTypes = new[]
-            {
-                "entries",
-                "treatments",
-                "devicestatus",
-                "profile",
-                "food",
-                "activity",
-            };
-            if (!validStorageTypes.Contains(storage.ToLowerInvariant()))
-            {
-                _logger.LogWarning("Invalid storage type requested: {Storage}", storage);
-                return BadRequest(
-                    new
-                    {
-                        status = 400,
-                        message = $"Invalid storage type: {storage}. Supported types: {string.Join(", ", validStorageTypes)}",
-                        type = "client",
-                    }
-                );
-            }
-
             long count;
             switch (storage.ToLowerInvariant())
             {

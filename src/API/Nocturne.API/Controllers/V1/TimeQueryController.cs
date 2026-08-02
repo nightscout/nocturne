@@ -16,10 +16,10 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <seealso cref="ITimeQueryService"/>
 /// <remarks>
-/// The scope requirement is class-level and an OR of the three storages these endpoints can
-/// serve. The storage is a route or query value, so the governing scope is resolved per request
-/// through <see cref="Authorization.LegacyStorageReadScopes"/> instead: a class-level OR would let a
-/// caller holding one category read another's records through <c>slice/{storage}/…</c>.
+/// The <c>slice</c> and <c>echo</c> actions take the collection as a route or query value, so
+/// their governing scope is resolved per request through <see cref="LegacyStorageReadScopes"/>; a
+/// class-level OR would let a caller holding one category read another's records. The <c>times</c>
+/// actions always read entries, so they carry <c>glucose.read</c> directly.
 /// </remarks>
 [ApiController]
 [Tags("V1")]
@@ -45,11 +45,13 @@ public class TimeQueryController : ControllerBase
 
     /// <summary>
     /// /api/v1/times without prefix is not a valid Nightscout endpoint.
-    /// Nightscout returns 404 for this path. We match that behavior for parity.
+    /// Nightscout returns 404 for this path. We match that behavior for parity, behind the same
+    /// scope the prefixed routes carry so the 404 is not itself readable without a grant.
     /// </summary>
     /// <returns>404 Not Found to match Nightscout behavior</returns>
     [HttpGet("times")]
     [ApiExplorerSettings(IgnoreApi = true)] // Hide from OpenAPI as it's not a real endpoint
+    [RequireScope(OAuthScopes.GlucoseRead)]
     public ActionResult GetTimeBasedEntries()
     {
         return NotFound();
@@ -65,6 +67,7 @@ public class TimeQueryController : ControllerBase
     /// <returns>Entries matching the time patterns</returns>
     [HttpGet("times/{prefix}")]
     [NightscoutEndpoint("/api/v1/times/{prefix}")]
+    [RequireScope(OAuthScopes.GlucoseRead)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -89,6 +92,7 @@ public class TimeQueryController : ControllerBase
     /// <returns>Entries matching the time patterns</returns>
     [HttpGet("times/{prefix}/{regex}")]
     [NightscoutEndpoint("/api/v1/times/{prefix}/{regex}")]
+    [RequireScope(OAuthScopes.GlucoseRead)]
     [ProducesResponseType(typeof(Entry[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
@@ -215,7 +219,7 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
-        if (RefuseStorage(storage) is { } refusal) return refusal;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return GetTimeQueryEchoInternal(null, null, storage, field);
     }
@@ -239,7 +243,7 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
-        if (RefuseStorage(storage) is { } refusal) return refusal;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return GetTimeQueryEchoInternal(prefix, null, storage, field);
     }
@@ -265,7 +269,7 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
-        if (RefuseStorage(storage) is { } refusal) return refusal;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return GetTimeQueryEchoInternal(prefix, regex, storage, field);
     }
@@ -363,7 +367,7 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        if (RefuseStorage(storage) is { } refusal) return refusal;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return await GetSlicedDataInternal(
             storage,
@@ -401,7 +405,7 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        if (RefuseStorage(storage) is { } refusal) return refusal;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return await GetSlicedDataInternal(
             storage,
@@ -441,7 +445,7 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        if (RefuseStorage(storage) is { } refusal) return refusal;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return await GetSlicedDataInternal(
             storage,
@@ -483,7 +487,7 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        if (RefuseStorage(storage) is { } refusal) return refusal;
+        if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return await GetSlicedDataInternal(
             storage,
@@ -617,19 +621,4 @@ public class TimeQueryController : ControllerBase
             );
         }
     }
-    /// <summary>
-    /// Refuses a storage the caller's scopes do not cover. Returns null when the request may proceed.
-    /// </summary>
-    private ActionResult? RefuseStorage(string storage)
-    {
-        if (LegacyStorageReadScopes.RequiredReadScope(storage) is null)
-        {
-            return BadRequest(new { status = 400, message = $"Unsupported storage type: {storage}", type = "bad_request" });
-        }
-
-        return LegacyStorageReadScopes.CanRead(HttpContext.GetGrantedScopes(), storage)
-            ? null
-            : StatusCode(403, new { status = 403, message = $"Reading '{storage}' requires the {LegacyStorageReadScopes.RequiredReadScope(storage)} scope.", type = "forbidden" });
-    }
-
 }

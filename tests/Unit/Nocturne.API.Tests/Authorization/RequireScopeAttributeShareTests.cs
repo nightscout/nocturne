@@ -12,11 +12,11 @@ using Xunit;
 namespace Nocturne.API.Tests.Authorization;
 
 /// <summary>
-/// <see cref="RequireScopeAttribute"/> gates on the resolved scope set rather than on an
-/// authenticated identity, because a public share link is deliberately
-/// <c>IsAuthenticated: false</c> while still carrying scopes narrowed to
-/// <see cref="TenantPermissions.PublicShareScopes"/>. These tests pin both halves of that
-/// judgement: the share can satisfy a read requirement, and it can never satisfy a write one.
+/// <see cref="RequireScopeAttribute"/> decides a read requirement on the resolved scope set alone,
+/// because a public share link is deliberately <c>IsAuthenticated: false</c> while still carrying
+/// scopes narrowed to <see cref="TenantPermissions.PublicShareScopes"/>. A requirement naming
+/// anything other than read additionally demands an authenticated caller. These tests pin both
+/// halves: the share can satisfy a read requirement, and it can never satisfy a write one.
 /// </summary>
 public class RequireScopeAttributeShareTests
 {

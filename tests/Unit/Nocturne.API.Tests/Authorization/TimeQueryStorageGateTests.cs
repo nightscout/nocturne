@@ -1,8 +1,13 @@
+using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Attributes;
 using Nocturne.API.Controllers.V1;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Models;
@@ -12,12 +17,15 @@ using Xunit;
 namespace Nocturne.API.Tests.Authorization;
 
 /// <summary>
-/// Drives the actions, not the attribute set. The gate is a call inside the handler because the
-/// collection is a route or query value, so a scan for attributes cannot see it and a mapping test
-/// would still pass with the call deleted.
+/// Drives the actions rather than the attribute set. The <c>slice</c> and <c>echo</c> gates are
+/// calls inside the handler because the collection is a route or query value, so a scan for
+/// attributes cannot see them and a mapping test would still pass with the call deleted.
 /// </summary>
 public class TimeQueryStorageGateTests
 {
+    /// <summary>The collections <c>slice</c> dispatches to; the rest are rejected as bad input.</summary>
+    private static readonly string[] SliceableStorage = ["entries", "treatments", "devicestatus"];
+
     [Theory]
     [InlineData("treatments")]
     [InlineData("devicestatus")]
@@ -25,8 +33,8 @@ public class TimeQueryStorageGateTests
     [InlineData("food")]
     public async Task Slice_RefusesACollectionOutsideTheGrant(string storage)
     {
-        // A glucose-only grant reaching /api/v1/slice/treatments/... returned every treatment
-        // record while the route carried a class-level OR of glucose|treatments|devices.
+        // A class-level OR of glucose|treatments|devices would admit this caller to
+        // /api/v1/slice/treatments/... and every treatment record with it.
         var (controller, service) = Build(OAuthScopes.GlucoseRead);
 
         var result = await controller.GetSlicedData(storage, "dateString");
@@ -35,20 +43,18 @@ public class TimeQueryStorageGateTests
         service.VerifyNoOtherCalls();
     }
 
-    [Fact]
-    public async Task Slice_AllowsTheCollectionTheGrantCovers()
+    [Theory]
+    [InlineData("entries", OAuthScopes.GlucoseRead)]
+    [InlineData("treatments", OAuthScopes.TreatmentsRead)]
+    [InlineData("devicestatus", OAuthScopes.DevicesRead)]
+    public async Task Slice_AllowsTheCollectionTheGrantCovers(string storage, string scope)
     {
-        var (controller, service) = Build(OAuthScopes.GlucoseRead);
-        service
-            .Setup(s => s.ExecuteSliceQueryAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<string?>(), It.IsAny<Dictionary<string, object>?>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        var (controller, service) = Build(scope);
+        StubSlice(service);
 
-        var result = await controller.GetSlicedData("entries", "dateString");
+        var result = await controller.GetSlicedData(storage, "dateString");
 
-        result.Should().NotBeOfType<ObjectResult>();
+        result.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]
@@ -78,22 +84,75 @@ public class TimeQueryStorageGateTests
     }
 
     [Fact]
-    public async Task FullAccess_ReadsEveryCollection()
+    public async Task FullAccess_ReadsEverySliceableCollection()
     {
         var (controller, service) = Build(OAuthScopes.FullAccess);
+        StubSlice(service);
+
+        foreach (var storage in SliceableStorage)
+        {
+            var result = await controller.GetSlicedData(storage, "dateString");
+            result.Should().BeOfType<OkObjectResult>(storage);
+        }
+    }
+
+    /// <summary>
+    /// The <c>times</c> actions take no collection selector — the internal call hardcodes
+    /// <c>entries</c> — so their gate is an attribute rather than a call in the handler, and the
+    /// category it names has to be the one they actually read.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(TimeQueryController.GetTimeBasedEntries))]
+    [InlineData(nameof(TimeQueryController.GetTimeBasedEntriesWithPrefix))]
+    [InlineData(nameof(TimeQueryController.GetTimeBasedEntriesWithPrefixAndRegex))]
+    public void Times_RequiresGlucoseRead(string actionName)
+    {
+        var action = typeof(TimeQueryController).GetMethod(actionName, BindingFlags.Public | BindingFlags.Instance);
+        action.Should().NotBeNull();
+
+        var required = action!.GetCustomAttributes<RequireScopeAttribute>()
+            .SelectMany(a => a.RequiredScopes)
+            .ToArray();
+
+        required.Should().Equal(OAuthScopes.GlucoseRead);
+    }
+
+    /// <summary>
+    /// Runs the attributes the action actually carries against a grant holding no glucose scope.
+    /// The scopes are ones that do not expand to glucose; <c>health.read</c> does, so a grant
+    /// carrying it reads entries legitimately.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(TimeQueryController.GetTimeBasedEntriesWithPrefix))]
+    [InlineData(nameof(TimeQueryController.GetTimeBasedEntriesWithPrefixAndRegex))]
+    public void Times_RefusesAGrantWithoutGlucose(string actionName)
+    {
+        var action = typeof(TimeQueryController).GetMethod(actionName, BindingFlags.Public | BindingFlags.Instance)!;
+        var attributes = action.GetCustomAttributes<RequireScopeAttribute>().ToArray();
+        attributes.Should().NotBeEmpty();
+
+        var httpContext = new DefaultHttpContext();
+        httpContext.Items["AuthContext"] = new AuthContext { IsAuthenticated = true };
+        httpContext.Items["GrantedScopes"] = OAuthScopes.Normalize(
+            [OAuthScopes.SleepRead, OAuthScopes.ReportsRead]);
+
+        var filterContext = new AuthorizationFilterContext(
+            new ActionContext(httpContext, new RouteData(), new ActionDescriptor()),
+            new List<IFilterMetadata>());
+
+        foreach (var attribute in attributes)
+            attribute.OnAuthorization(filterContext);
+
+        filterContext.Result.Should().BeOfType<ForbidResult>();
+    }
+
+    private static void StubSlice(Mock<ITimeQueryService> service) =>
         service
             .Setup(s => s.ExecuteSliceQueryAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(),
                 It.IsAny<string?>(), It.IsAny<Dictionary<string, object>?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-
-        foreach (var storage in new[] { "entries", "treatments", "devicestatus", "profile", "food" })
-        {
-            var result = await controller.GetSlicedData(storage, "dateString");
-            result.Should().NotBeOfType<ObjectResult>(storage);
-        }
-    }
 
     private static void Refused(ActionResult result) =>
         result.Should().BeOfType<ObjectResult>()
