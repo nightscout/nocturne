@@ -181,7 +181,7 @@ public class CacheIntegrationTests
         );
 
         // Act
-        var result = await entryService.CreateEntriesAsync(newEntries, CancellationToken.None);
+        var result = await entryService.CreateEntriesAsync(newEntries, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.NotNull(result);

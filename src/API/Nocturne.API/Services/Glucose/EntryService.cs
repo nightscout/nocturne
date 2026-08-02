@@ -171,6 +171,7 @@ public class EntryService : IEntryService
     /// </remarks>
     public async Task<IEnumerable<Entry>> CreateEntriesAsync(
         IEnumerable<Entry> entries,
+        WriteOrigin origin = WriteOrigin.Live,
         CancellationToken cancellationToken = default)
     {
         var validEntries = entries
@@ -180,7 +181,7 @@ public class EntryService : IEntryService
         if (validEntries.Count == 0)
             return [];
 
-        await _decomposer.DecomposeBatchAsync(validEntries, WriteOrigin.Live, cancellationToken);
+        await _decomposer.DecomposeBatchAsync(validEntries, origin, cancellationToken);
 
         return validEntries;
     }

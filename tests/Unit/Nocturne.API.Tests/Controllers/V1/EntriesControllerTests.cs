@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Controllers.V1;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Xunit;
@@ -89,7 +90,7 @@ public class EntriesControllerTests
 
         _mockEntryService
             .Setup(x =>
-                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>())
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new[] { expectedProcessedEntry });
 
@@ -152,7 +153,7 @@ public class EntriesControllerTests
 
         _mockEntryService
             .Setup(x =>
-                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>())
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
                 new[]
@@ -219,7 +220,7 @@ public class EntriesControllerTests
 
         _mockEntryService
             .Setup(x =>
-                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>())
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
                 new[]
@@ -278,7 +279,7 @@ public class EntriesControllerTests
 
         _mockEntryService
             .Setup(x =>
-                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>())
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
                 new[]
@@ -333,7 +334,7 @@ public class EntriesControllerTests
 
         _mockEntryService
             .Setup(x =>
-                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>())
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
                 new[]
@@ -393,7 +394,7 @@ public class EntriesControllerTests
 
         _mockEntryService
             .Setup(x =>
-                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>())
+                x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(new[] { new Entry { Id = "created-id", Sgv = 120 } });
 

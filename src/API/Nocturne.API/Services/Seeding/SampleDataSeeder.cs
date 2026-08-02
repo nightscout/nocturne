@@ -151,7 +151,7 @@ public class SampleDataSeeder
 
             foreach (var batch in entries.Chunk(BatchSize))
             {
-                var created = await _entryService.CreateEntriesAsync(batch, ct);
+                var created = await _entryService.CreateEntriesAsync(batch, cancellationToken: ct);
                 entryCount += created.Count();
             }
 

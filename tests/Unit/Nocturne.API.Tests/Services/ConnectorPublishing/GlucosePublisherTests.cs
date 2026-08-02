@@ -52,14 +52,32 @@ public class GlucosePublisherTests
     {
         var entries = new List<Entry> { new() { Id = "1" } };
         _mockEntryService
-            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(entries);
 
         var result = await _publisher.PublishEntriesAsync(entries, "test-source", WriteOrigin.Live);
 
         result.Should().BeTrue();
         _mockEntryService.Verify(
-            s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()),
+            s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Once
+        );
+    }
+
+    [Fact]
+    public async Task PublishEntriesAsync_ForwardsWriteOrigin_SoBackfillsDoNotBroadcastAsLive()
+    {
+        // Regression: the publisher dropped its origin, so a first-ever full-history import
+        // decomposed everything as Live — broadcasting years of entries to connected clients.
+        var entries = new List<Entry> { new() { Id = "1" } };
+        _mockEntryService
+            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(entries);
+
+        await _publisher.PublishEntriesAsync(entries, "test-source", WriteOrigin.Backfill);
+
+        _mockEntryService.Verify(
+            s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), WriteOrigin.Backfill, It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
@@ -68,7 +86,7 @@ public class GlucosePublisherTests
     public async Task PublishEntriesAsync_ReturnsFalse_OnException()
     {
         _mockEntryService
-            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<CancellationToken>()))
+            .Setup(s => s.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("test error"));
 
         var result = await _publisher.PublishEntriesAsync(new List<Entry>(), "test-source", WriteOrigin.Live);

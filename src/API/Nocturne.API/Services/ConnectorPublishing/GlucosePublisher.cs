@@ -62,7 +62,7 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         try
         {
             var entryList = entries.ToList();
-            await _entryService.CreateEntriesAsync(entryList, cancellationToken);
+            await _entryService.CreateEntriesAsync(entryList, origin, cancellationToken);
             await UpdateLastReadingAtAsync(cancellationToken);
             await _alertEvaluator.EvaluateAsync(cancellationToken);
             return true;

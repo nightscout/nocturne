@@ -251,7 +251,7 @@ public class EntriesController : BaseV3Controller<Entry>
             var processedEntry = _documentProcessingService.ProcessEntry(entry); // Save to database
             var createdEntries = await _entryService.CreateEntriesAsync(
                 new[] { processedEntry },
-                cancellationToken
+                cancellationToken: cancellationToken
             );
             var createdEntry = createdEntries.FirstOrDefault();
 
@@ -339,7 +339,7 @@ public class EntriesController : BaseV3Controller<Entry>
             // Save to database
             var createdEntries = await _entryService.CreateEntriesAsync(
                 processedEntries,
-                cancellationToken
+                cancellationToken: cancellationToken
             );
 
             _logger.LogDebug(

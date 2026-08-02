@@ -119,12 +119,16 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
+            // Do not swallow: a null watermark means "no prior data", which triggers an
+            // initial backfill — unbounded for connectors with a null InitialSyncFloor.
+            // A transient read failure must fail this cycle (retried next interval), not
+            // be amplified into a full-history recrawl and republish.
+            _logger.LogError(
                 ex,
                 "Failed to fetch latest entry timestamp for {ConnectorSource}",
                 ConnectorSource
             );
-            return null;
+            throw;
         }
     }
 
@@ -160,12 +164,14 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
+            // See FetchLatestEntryTimestampAsync: a swallowed failure reads as "no prior
+            // data" and triggers an unbounded initial backfill for null-floor connectors.
+            _logger.LogError(
                 ex,
                 "Failed to fetch latest treatment timestamp for {ConnectorSource}",
                 ConnectorSource
             );
-            return null;
+            throw;
         }
     }
 

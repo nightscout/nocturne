@@ -633,7 +633,7 @@ public class EntriesController : ControllerBase
             // Create entries in database
             var createdEntries = await _entryService.CreateEntriesAsync(
                 uniqueEntries,
-                cancellationToken
+                cancellationToken: cancellationToken
             );
             var createdArray = createdEntries.ToArray();
 
@@ -1186,7 +1186,7 @@ public class EntriesController : ControllerBase
             // Create entries in database synchronously
             var createdEntries = await _entryService.CreateEntriesAsync(
                 uniqueEntries,
-                cancellationToken
+                cancellationToken: cancellationToken
             );
 
             // Mark processing as completed

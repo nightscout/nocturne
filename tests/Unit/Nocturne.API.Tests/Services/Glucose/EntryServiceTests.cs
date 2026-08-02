@@ -353,7 +353,7 @@ public class EntryServiceTests
         };
 
         // Act
-        var result = await _sut.CreateEntriesAsync(entries, CancellationToken.None);
+        var result = await _sut.CreateEntriesAsync(entries, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(2, result.Count());
@@ -388,7 +388,7 @@ public class EntryServiceTests
 
         // Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => _sut.CreateEntriesAsync(entries, CancellationToken.None));
+            () => _sut.CreateEntriesAsync(entries, cancellationToken: CancellationToken.None));
 
         _cache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -407,7 +407,7 @@ public class EntryServiceTests
         };
 
         // Act
-        var result = await _sut.CreateEntriesAsync(entries, CancellationToken.None);
+        var result = await _sut.CreateEntriesAsync(entries, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Single(result);
@@ -433,7 +433,7 @@ public class EntryServiceTests
         };
 
         // Act
-        var result = await _sut.CreateEntriesAsync(entries, CancellationToken.None);
+        var result = await _sut.CreateEntriesAsync(entries, cancellationToken: CancellationToken.None);
 
         // Assert — unknown types are silently filtered out (empty batch never decomposed)
         Assert.Empty(result);
@@ -455,7 +455,7 @@ public class EntryServiceTests
         };
 
         // Act
-        var result = await _sut.CreateEntriesAsync(entries, CancellationToken.None);
+        var result = await _sut.CreateEntriesAsync(entries, cancellationToken: CancellationToken.None);
 
         // Assert — only the two valid entries reach the batch decompose
         Assert.Equal(2, result.Count());
