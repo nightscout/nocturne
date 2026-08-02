@@ -102,6 +102,55 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
+    /// Seeds the full-access direct grant that the <c>api-secret</c> header used across these tests
+    /// authenticates against, and returns its id.
+    /// </summary>
+    /// <remarks>
+    /// <c>ApiKeyHandler</c> matches a non-<c>noc_</c> header value against <c>legacy_secret_hash</c>
+    /// verbatim, and <c>CleanupDatabaseAsync</c> truncates <c>oauth_grants</c> before every test, so
+    /// without this row the header matches nothing. A request that also carries a bearer token is
+    /// unaffected either way — <c>ApiKeyHandler</c> runs last — but a SignalR hub connection carries
+    /// the header alone, so it is this row that decides whether the connection has a credential.
+    /// </remarks>
+    /// <param name="conn">Open connection to the test database.</param>
+    /// <param name="tenantId">The tenant the grant belongs to.</param>
+    /// <param name="subjectId">An existing subject to own the grant.</param>
+    /// <param name="apiSecret">The value sent in the <c>api-secret</c> header.</param>
+    public static async Task<Guid> SeedApiSecretGrantAsync(
+        NpgsqlConnection conn,
+        Guid tenantId,
+        Guid subjectId,
+        string apiSecret = "test-secret-for-integration-tests")
+    {
+        var grantId = Guid.CreateVersion7();
+
+        // Set RLS context
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
+            cmd.Parameters.AddWithValue("tenantId", tenantId.ToString());
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, legacy_secret_hash, created_at)
+                VALUES (@id, @tenantId, @subjectId, @grantType, @scopes, @legacySecretHash, now());
+                """;
+            cmd.Parameters.AddWithValue("id", grantId);
+            cmd.Parameters.AddWithValue("tenantId", tenantId);
+            cmd.Parameters.AddWithValue("subjectId", subjectId);
+            cmd.Parameters.AddWithValue("grantType", OAuthScopes.GrantTypeDirect);
+            cmd.Parameters.AddWithValue("scopes", new[] { OAuthScopes.FullAccess });
+            cmd.Parameters.AddWithValue("legacySecretHash", apiSecret.ToLowerInvariant());
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        return grantId;
+    }
+
+    /// <summary>
     /// Creates a subject with tenant membership and admin role but WITHOUT a passkey credential.
     /// Used for testing tenant setup guard scenarios where passkey enrollment is required.
     /// </summary>

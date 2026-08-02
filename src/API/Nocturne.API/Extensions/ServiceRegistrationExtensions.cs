@@ -656,11 +656,20 @@ public static class ServiceRegistrationExtensions
     )
     {
         // SignalR
-        services.AddSignalR();
-        services.AddSingleton<
-            Microsoft.AspNetCore.SignalR.IHubFilter,
-            Nocturne.API.Hubs.TenantHubFilter
-        >();
+        // Global hub filters have to be added to HubOptions — SignalR reads HubOptions.HubFilters
+        // and never resolves IHubFilter from the container, so a filter registered only in DI never
+        // runs. TenantHubFilter is outermost so the invocation scope's ITenantAccessor is populated
+        // before anything inside resolves a tenant-scoped service; HubAuthorizationFilter needs none
+        // of that itself, since it reads the credential out of HttpContext.Items.
+        services.AddSignalR(options =>
+        {
+            Microsoft.AspNetCore.SignalR.HubOptionsExtensions
+                .AddFilter<Nocturne.API.Hubs.TenantHubFilter>(options);
+            Microsoft.AspNetCore.SignalR.HubOptionsExtensions
+                .AddFilter<Nocturne.API.Hubs.HubAuthorizationFilter>(options);
+        });
+        services.AddSingleton<Nocturne.API.Hubs.TenantHubFilter>();
+        services.AddSingleton<Nocturne.API.Hubs.HubAuthorizationFilter>();
         services.AddScoped<ISignalRBroadcastService, SignalRBroadcastService>();
         services.AddScoped<ISyncProgressReporter, SignalRSyncProgressReporter>();
 

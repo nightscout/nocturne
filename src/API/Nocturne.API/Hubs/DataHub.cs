@@ -1,11 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Nocturne.API.Extensions;
-using Nocturne.API.Middleware;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Identity;
-using Nocturne.Connectors.Core.Utilities;
-using Nocturne.Core.Constants;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models.Authorization;
@@ -15,8 +13,10 @@ namespace Nocturne.API.Hubs;
 /// <summary>
 /// SignalR hub for real-time data updates, replacing socket.io main data connection
 /// </summary>
-// Connections authenticate in-band after negotiate and are reachable only via the internal
-// realtime bridge, so the HTTP fallback authorization policy must not gate the handshake.
+// The handshake is anonymous because clients authenticate in-band, after negotiate: a client that
+// can only present its credential once the connection is up would otherwise be refused before it
+// could. The hub endpoint is internet-reachable (the cloud gateway publishes /hubs/**), so
+// authorization happens per method in HubAuthorizationFilter, not at the handshake.
 [AllowAnonymous]
 public class DataHub : TenantAwareHub
 {
@@ -30,10 +30,14 @@ public class DataHub : TenantAwareHub
     }
 
     /// <summary>
-    /// Client authorization method (replaces socket.io 'authorize' event)
+    /// Client authorization method (replaces socket.io 'authorize' event). Joins the tenant-scoped
+    /// authorized group, which receives the tenant's live data broadcasts, and records the
+    /// connection's credential for every subsequent hub method.
     /// </summary>
     /// <param name="authData">Authorization data containing client info, secret, token, and history</param>
     /// <returns>Authorization result</returns>
+    [HubAuthenticationMethod]
+    [HubTenantGroup]
     public async Task<object> Authorize(AuthorizeRequest authData)
     {
         try
@@ -43,80 +47,30 @@ public class DataHub : TenantAwareHub
                 Context.ConnectionId
             );
 
-            // Check authentication through existing middleware context
-            var authContext =
-                Context.GetHttpContext()?.Items["AuthContext"] as Middleware.AuthenticationContext;
-            bool isAuthorized = authContext?.IsAuthenticated ?? false;
+            // A connection that presented a credential on the HTTP upgrade is already authenticated
+            // and scoped; otherwise authenticate from the in-band payload.
+            var authorization = HubAuthorizationState.Resolve(Context);
 
-            // If not already authenticated through middleware, try to authenticate with provided credentials
-            if (!isAuthorized)
+            if (authorization is null && !string.IsNullOrEmpty(authData.Token))
             {
-                if (!string.IsNullOrEmpty(authData.Token))
-                {
-                    // OAuth JWT (validated + tenant-pinned + scope-checked) or legacy opaque
-                    // access token. Glucose read is the gate: the authorized group receives the
-                    // tenant's live data broadcasts.
-                    isAuthorized = await _tokenAuthorizer.IsTokenAuthorizedAsync(
-                        authData.Token,
-                        TenantContext?.TenantId,
-                        OAuthScopes.GlucoseRead
-                    );
-                }
-                else if (!string.IsNullOrEmpty(authData.Secret))
-                {
-                    // For API secret, we need to validate it against the configured secret
-                    // This would normally be done by the authentication middleware
-                    // For SignalR hubs, we need to implement the same logic
-                    var configuration = Context
-                        .GetHttpContext()
-                        ?.RequestServices.GetRequiredService<IConfiguration>();
-                    // Match InstanceKeyHandler's lookup: Aspire dev sets the
-                    // value under Parameters:instance-key (user-secrets);
-                    // production sets it as the INSTANCE_KEY env var, which
-                    // ASP.NET Core surfaces as a top-level config key.
-                    var configuredSecret =
-                        configuration?[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
-                        ?? configuration?[ServiceNames.ConfigKeys.InstanceKey];
-                    if (!string.IsNullOrEmpty(configuredSecret))
-                    {
-                        // Calculate SHA-256 hash of the configured secret
-                        var expectedHash = HashUtils.Sha256Hex(configuredSecret);
-
-                        // Compare with provided secret (should be the hashed value)
-                        isAuthorized = authData.Secret.ToLowerInvariant() == expectedHash;
-                    }
-                }
-            }
-
-            if (isAuthorized)
-            {
-                // Add connection to tenant-scoped authorized group
-                await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup("authorized"));
-
-                // If user is admin, also add to admin group for admin-specific notifications
-                var httpContext = Context.GetHttpContext();
-                if (httpContext?.IsAdmin() == true)
-                {
-                    await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup("admin"));
-                    _logger.LogDebug(
-                        "Client {ConnectionId} added to admin group",
-                        Context.ConnectionId
-                    );
-                }
-
-                _logger.LogInformation(
-                    "Client {ConnectionId} authorized successfully",
-                    Context.ConnectionId
+                // OAuth JWT (validated + tenant-pinned + scope-checked) or legacy opaque access
+                // token. Glucose read is the gate: the authorized group receives the tenant's live
+                // data broadcasts.
+                authorization = await _tokenAuthorizer.AuthorizeTokenAsync(
+                    authData.Token,
+                    TenantContext?.TenantId,
+                    OAuthScopes.GlucoseRead
                 );
-
-                return new
-                {
-                    read = true,
-                    write = true,
-                    success = true,
-                };
             }
-            else
+            else if (authorization is null && !string.IsNullOrEmpty(authData.Secret))
+            {
+                authorization = _tokenAuthorizer.AuthorizeInstanceKey(
+                    authData.Secret,
+                    TenantContext?.TenantId
+                );
+            }
+
+            if (authorization is null || !authorization.Satisfies(OAuthScopes.GlucoseRead))
             {
                 _logger.LogWarning(
                     "Client {ConnectionId} authorization failed",
@@ -129,6 +83,62 @@ public class DataHub : TenantAwareHub
                     success = false,
                 };
             }
+
+            HubAuthorizationState.Grant(Context, authorization);
+
+            // The tenant-wide groups carry more than the glucose read this method gates on —
+            // tracker state, device action intents, arbitrary dataUpdate payloads — so only a
+            // credential that belongs to the tenant joins them. [HubTenantGroup] declares that
+            // requirement; HubAuthorizationFilter cannot enforce it on an authentication entry
+            // point, because the credential arrives in this invocation, so the check is here. A
+            // guest is not refused outright: it still authorizes, and joins nothing tenant-wide,
+            // reaching the categories it was shared through Subscribe.
+            if (authorization.CanJoinTenantRelay)
+            {
+                await Groups.AddToGroupAsync(
+                    Context.ConnectionId, TenantGroup(RealtimeGroups.Authorized));
+
+                // Per-subject payloads (in-app notifications, device notification mirrors) go to the
+                // owning subject's group, so one member's notifications never reach another's client.
+                if (authorization.OwnSubjectId is { } subjectId)
+                {
+                    await Groups.AddToGroupAsync(
+                        Context.ConnectionId, TenantGroup(RealtimeGroups.ForSubject(subjectId)));
+                }
+
+                // The bridge consumes no payload itself; it relays every subject's to its own
+                // clients, so it takes the tenant-wide copy of the per-subject broadcasts.
+                if (authorization.IsInfrastructure)
+                {
+                    await Groups.AddToGroupAsync(
+                        Context.ConnectionId, TenantGroup(RealtimeGroups.Relay));
+                }
+
+                // If user is admin, also add to admin group for admin-specific notifications
+                var httpContext = Context.GetHttpContext();
+                if (httpContext?.IsAdmin() == true)
+                {
+                    await Groups.AddToGroupAsync(
+                        Context.ConnectionId, TenantGroup(RealtimeGroups.Admin));
+                    _logger.LogDebug(
+                        "Client {ConnectionId} added to admin group",
+                        Context.ConnectionId
+                    );
+                }
+            }
+
+            _logger.LogInformation(
+                "Client {ConnectionId} authorized successfully ({Kind})",
+                Context.ConnectionId,
+                authorization.Kind
+            );
+
+            return new
+            {
+                read = true,
+                write = authorization.Satisfies(OAuthScopes.GlucoseReadWrite),
+                success = true,
+            };
         }
         catch (Exception ex)
         {
@@ -148,9 +158,12 @@ public class DataHub : TenantAwareHub
     }
 
     /// <summary>
-    /// Request retro data load (replaces socket.io 'loadRetro' event)
+    /// Request retro data load (replaces socket.io 'loadRetro' event). Each collection in the
+    /// response is gated on its own read scope, so a narrowly-scoped credential receives only the
+    /// categories it holds.
     /// </summary>
     /// <param name="request">Retro load request containing loadedMills timestamp</param>
+    [HubScope(OAuthScopes.GlucoseRead)]
     public async Task LoadRetro(RetroLoadRequest request)
     {
         try
@@ -185,23 +198,34 @@ public class DataHub : TenantAwareHub
             var endTime = request.LoadedMills;
             var startTime = endTime - (48 * 60 * 60 * 1000); // 48 hours before
 
-            // Load retro data from multiple collections
+            var authorization = HubAuthorizationState.Resolve(Context)!;
+
+            // Load retro data from multiple collections. The glucose gate is the method's declared
+            // scope; treatments and device status answer to their own.
             var entries = await entryService.GetEntriesAsync(
                 find: $"{{\"mills\": {{\"$gte\": {startTime}, \"$lt\": {endTime}}}}}",
                 count: 1000
             );
 
-            var treatments = await treatmentService.GetTreatmentsAsync(
-                find: $"{{\"mills\": {{\"$gte\": {startTime}, \"$lt\": {endTime}}}}}",
-                count: 1000
-            );
+            IEnumerable<Core.Models.Treatment> treatments = [];
+            if (authorization.Satisfies(OAuthScopes.TreatmentsRead))
+            {
+                treatments = await treatmentService.GetTreatmentsAsync(
+                    find: $"{{\"mills\": {{\"$gte\": {startTime}, \"$lt\": {endTime}}}}}",
+                    count: 1000
+                );
+            }
 
-            var deviceStatuses = await projectionService.GetAsync(
-                count: 1000,
-                skip: 0,
-                find: null,
-                ct: default
-            );
+            IEnumerable<Core.Models.DeviceStatus> deviceStatuses = [];
+            if (authorization.Satisfies(OAuthScopes.DevicesRead))
+            {
+                deviceStatuses = await projectionService.GetAsync(
+                    count: 1000,
+                    skip: 0,
+                    find: null,
+                    ct: default
+                );
+            }
 
             var retroData = new
             {
@@ -243,7 +267,9 @@ public class DataHub : TenantAwareHub
     }
 
     /// <summary>
-    /// Subscribe to storage collections (replaces socket.io '/storage' namespace 'subscribe' event)
+    /// Subscribe to storage collections (replaces socket.io '/storage' namespace 'subscribe' event).
+    /// Each collection is joined only when the connection's credential satisfies the read scope
+    /// governing it, so the returned list may be narrower than the one requested.
     /// </summary>
     /// <param name="request">Storage subscription request</param>
     /// <returns>Subscription result</returns>
@@ -251,22 +277,37 @@ public class DataHub : TenantAwareHub
     {
         try
         {
-            var enabledCollections = Services.Realtime.RealtimeCategories.All;
-            var collections = request.Collections ?? enabledCollections;
+            var governingScopes = RealtimeCategories.GoverningScopes;
+            var collections = request.Collections ?? RealtimeCategories.All;
+            var authorization = HubAuthorizationState.Resolve(Context)!;
             var subscribed = new List<string>();
 
             foreach (var collection in collections)
             {
-                if (enabledCollections.Contains(collection))
+                // An unclassified collection has no governing scope and cannot be subscribed to.
+                if (!governingScopes.TryGetValue(collection, out var requiredScope))
                 {
-                    await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup(collection));
-                    subscribed.Add(collection);
+                    continue;
+                }
+
+                if (!authorization.Satisfies(requiredScope))
+                {
                     _logger.LogDebug(
-                        "Client {ConnectionId} subscribed to collection {Collection}",
+                        "Client {ConnectionId} lacks {RequiredScope} for collection {Collection}",
                         Context.ConnectionId,
+                        requiredScope,
                         collection
                     );
+                    continue;
                 }
+
+                await Groups.AddToGroupAsync(Context.ConnectionId, TenantGroup(collection));
+                subscribed.Add(collection);
+                _logger.LogDebug(
+                    "Client {ConnectionId} subscribed to collection {Collection}",
+                    Context.ConnectionId,
+                    collection
+                );
             }
 
             return new { success = true, collections = subscribed };

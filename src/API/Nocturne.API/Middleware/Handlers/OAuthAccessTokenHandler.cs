@@ -39,21 +39,16 @@ public class OAuthAccessTokenHandler : IAuthHandler
         _logger = logger;
     }
 
+    /// <summary>
+    /// Path prefix of the SignalR hub endpoints, the only place the token is accepted on the query
+    /// string.
+    /// </summary>
+    private static readonly PathString HubPathPrefix = new("/hubs");
+
     /// <inheritdoc />
     public async Task<AuthResult> AuthenticateAsync(HttpContext context)
     {
-        // Check for Bearer token in Authorization header
-        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
-
-        if (
-            string.IsNullOrEmpty(authHeader)
-            || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return AuthResult.Skip();
-        }
-
-        var token = authHeader["Bearer ".Length..].Trim();
+        var token = ExtractToken(context);
 
         // Must be a JWT (3 dot-separated parts)
         if (string.IsNullOrEmpty(token) || token.Count(c => c == '.') != 2)
@@ -169,5 +164,35 @@ public class OAuthAccessTokenHandler : IAuthHandler
         );
 
         return AuthResult.Success(authContext);
+    }
+
+    /// <summary>
+    /// Extracts the bearer token from the Authorization header, or — on a SignalR hub path only —
+    /// from the <c>access_token</c> query parameter.
+    /// </summary>
+    /// <remarks>
+    /// The SignalR clients cannot set headers on a WebSocket or SSE request, so they append the token
+    /// to the query string under <c>access_token</c> (the JS <c>accessTokenFactory</c>, the .NET
+    /// <c>AccessTokenProvider</c>, and the desktop companion's hand-built URL all use that key); the
+    /// hub connection's <see cref="HttpContext"/> is that upgrade request, so without this a hub
+    /// connection carries no authentication context. Restricted to <see cref="HubPathPrefix"/>
+    /// because a query-string credential ends up in access logs and referrers.
+    /// </remarks>
+    private static string? ExtractToken(HttpContext context)
+    {
+        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+
+        if (!string.IsNullOrEmpty(authHeader)
+            && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            return authHeader["Bearer ".Length..].Trim();
+        }
+
+        if (context.Request.Path.StartsWithSegments(HubPathPrefix))
+        {
+            return context.Request.Query["access_token"].FirstOrDefault();
+        }
+
+        return null;
     }
 }

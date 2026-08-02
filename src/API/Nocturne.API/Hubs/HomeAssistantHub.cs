@@ -1,5 +1,4 @@
 using Nocturne.Core.Models.Authorization;
-using Nocturne.API.Extensions;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
@@ -18,8 +17,10 @@ namespace Nocturne.API.Hubs;
 /// when the channel is configured to allow it.
 /// Mounted at /hubs/home-assistant.
 /// </summary>
-// Connections authenticate in-band after negotiate and are reachable only via the internal
-// realtime bridge, so the HTTP fallback authorization policy must not gate the handshake.
+// The handshake is anonymous so it does not gate on the HTTP fallback authorization policy; this hub
+// has no in-band handshake method, so callers must present a credential on the HTTP upgrade request.
+// The hub endpoint is internet-reachable (the cloud gateway publishes /hubs/**), so authorization
+// happens per method in HubAuthorizationFilter.
 [AllowAnonymous]
 public class HomeAssistantHub : TenantAwareHub
 {
@@ -35,6 +36,11 @@ public class HomeAssistantHub : TenantAwareHub
     /// Also performs catch-up delivery for any failed HA deliveries targeting this instance.
     /// </summary>
     /// <param name="instanceId">The Home Assistant instance identifier (matches channel Destination).</param>
+    // ha-glucose and ha-alerts carry the tenant's glucose relay and every alert dispatch, and the
+    // catch-up replays undelivered alert payloads to the caller, so a share-style credential is
+    // refused. The instanceId is caller-chosen, so ha:{instanceId} is tenant-wide too.
+    [HubScope(OAuthScopes.AlertsRead)]
+    [HubTenantGroup]
     public async Task Subscribe(string instanceId)
     {
         var ct = Context.ConnectionAborted;
@@ -94,27 +100,18 @@ public class HomeAssistantHub : TenantAwareHub
     /// </summary>
     /// <param name="excursionId">The excursion to acknowledge.</param>
     /// <param name="acknowledgedBy">Display name or identifier of the person acknowledging.</param>
+    // Gate 1 is the declared scope, enforced by HubAuthorizationFilter against the connection's
+    // resolved credential. The authority is the resolved, membership-intersected GrantedScopes set,
+    // not a "scope" claim on the principal: that claim is minted only by JwtService and so only ever
+    // appeared on the principal the framework's JwtBearer scheme built, and the custom chain owns the
+    // final principal on every path.
+    [HubScope(OAuthScopes.AlertsReadWrite)]
     public async Task Acknowledge(Guid excursionId, string acknowledgedBy)
     {
         var ct = Context.ConnectionAborted;
 
         var tenantId = TenantContext?.TenantId
             ?? throw new HubException("No tenant context resolved.");
-
-        // Gate 1: OAuth scope check — require "alerts.readwrite".
-        //
-        // Read from GrantedScopes rather than a "scope" claim on the principal. That claim is minted
-        // only by JwtService and so only ever appeared on the principal the framework's JwtBearer
-        // scheme built; AuthenticationMiddleware's claim set has never carried it. Now that the
-        // custom chain owns the final principal on every path, FindAll("scope") is always empty and
-        // this gate would deny every acknowledge. GrantedScopes is the resolved, membership-
-        // intersected scope set, which is the right authority here anyway.
-        var httpContext = Context.GetHttpContext()
-            ?? throw new HubException("No HTTP context available.");
-        var scopes = httpContext.GetGrantedScopes();
-
-        if (!OAuthScopes.SatisfiesScope(scopes, OAuthScopes.AlertsReadWrite))
-            throw new HubException("Insufficient permissions: alerts.readwrite scope required.");
 
         // Gate 2: Channel config check — find HA channels for this excursion's rule and verify allow_ack
         var services = Context.GetHttpContext()!.RequestServices;

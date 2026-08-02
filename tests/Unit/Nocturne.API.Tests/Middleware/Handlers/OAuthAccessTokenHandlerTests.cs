@@ -109,6 +109,16 @@ public class OAuthAccessTokenHandlerTests
         return context;
     }
 
+    /// <summary>A request carrying the token on the query string as a SignalR client does.</summary>
+    private static DefaultHttpContext QueryRequest(string path, string token, TenantContext tenant)
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Path = path;
+        context.Request.QueryString = QueryString.Create("access_token", token);
+        context.Items["TenantContext"] = tenant;
+        return context;
+    }
+
     private TenantContext Tenant(Guid? id = null) =>
         new(id ?? _tenantId, "acme", "Acme", IsActive: true);
 
@@ -200,5 +210,37 @@ public class OAuthAccessTokenHandlerTests
         var result = await _handler.AuthenticateAsync(context);
 
         result.ShouldSkip.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("/hubs/data")]
+    [InlineData("/hubs")]
+    public async Task Accepts_an_access_token_query_parameter_on_a_hub_path(string path)
+    {
+        // A WebSocket or SSE upgrade cannot carry an Authorization header, so every SignalR client
+        // puts the token in access_token. Without this the hub connection is anonymous and every
+        // method HubAuthorizationFilter gates is denied.
+        var context = QueryRequest(path, MintDesktopStyleToken(), Tenant());
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.Succeeded.Should().BeTrue(result.Error);
+        result.AuthContext!.AuthType.Should().Be(AuthType.OAuthAccessToken);
+        result.AuthContext.SubjectId.Should().Be(_subjectId);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/entries")]
+    [InlineData("/hubsomething")]
+    public async Task Ignores_an_access_token_query_parameter_off_a_hub_path(string path)
+    {
+        // A query-string credential lands in access logs and referrers, so it is honoured only where
+        // the transport leaves no alternative.
+        var context = QueryRequest(path, MintDesktopStyleToken(), Tenant());
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.ShouldSkip.Should().BeTrue();
+        result.Succeeded.Should().BeFalse();
     }
 }

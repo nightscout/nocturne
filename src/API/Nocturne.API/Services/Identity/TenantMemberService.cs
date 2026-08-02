@@ -52,4 +52,25 @@ public class TenantMemberService : ITenantMemberService
             .Distinct()
             .ToListAsync(ct);
     }
+
+    public async Task<IReadOnlySet<string>?> GetEffectivePermissionsAsync(
+        Guid subjectId, Guid tenantId, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreateDbContextAsync(ct);
+        var membership = await context.TenantMembers.AsNoTracking()
+            .Include(tm => tm.MemberRoles)
+                .ThenInclude(mr => mr.TenantRole)
+            .Where(tm => tm.SubjectId == subjectId && tm.TenantId == tenantId)
+            .FirstOrDefaultAsync(ct);
+
+        if (membership is null)
+        {
+            return null;
+        }
+
+        return membership.MemberRoles
+            .SelectMany(mr => mr.TenantRole.Permissions)
+            .Union(membership.DirectPermissions ?? [])
+            .ToHashSet();
+    }
 }

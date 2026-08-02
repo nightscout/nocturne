@@ -20,7 +20,7 @@ public class DirectGrantTokenHandler : IAuthHandler
     /// <summary>
     /// Prefix identifying opaque direct grant tokens (see <see cref="Controllers.Authentication.DirectGrantController"/>).
     /// </summary>
-    private const string TokenPrefix = "noc_";
+    internal const string TokenPrefix = "noc_";
 
     /// <summary>
     /// Handler priority (150 - after session cookies, before OIDC/legacy JWT)
@@ -68,19 +68,7 @@ public class DirectGrantTokenHandler : IAuthHandler
             return AuthResult.Skip();
         }
 
-        var tokenHash = ComputeSha256Hex(token);
-
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
-        dbContext.TenantId = tenantCtx.TenantId;
-
-        var grant = await dbContext.OAuthGrants
-            .AsNoTracking()
-            .IgnoreQueryFilters()
-            .Where(g => g.TokenHash == tokenHash
-                     && g.TenantId == tenantCtx.TenantId
-                     && g.GrantType == OAuthGrantTypes.Direct
-                     && g.RevokedAt == null)
-            .FirstOrDefaultAsync();
+        var grant = await FindActiveGrantAsync(_dbContextFactory, token, tenantCtx.TenantId);
 
         if (grant == null)
         {
@@ -105,6 +93,42 @@ public class DirectGrantTokenHandler : IAuthHandler
             TokenId = grant.Id,
             LimitTo24Hours = false, // Direct grants defer to MemberScopeMiddleware for 24-hour limits
         });
+    }
+
+    /// <summary>
+    /// Finds the active direct grant <paramref name="token"/> identifies on
+    /// <paramref name="tenantId"/>, or null when there is none.
+    /// </summary>
+    /// <remarks>
+    /// Runs on its own context pinned to <paramref name="tenantId"/>: callers hold a scope whose
+    /// context may carry no tenant, and <c>oauth_grants</c> is tenant-scoped by both a global query
+    /// filter and the <c>tenant_isolation</c> RLS policy, so an unpinned read matches no row. The
+    /// grant's own <c>TenantId</c> is matched explicitly as well, so the tenant a grant authorizes is
+    /// decided here rather than by whatever tenant state the connection carries.
+    /// </remarks>
+    /// <param name="dbContextFactory">Factory for the tenant-pinned context.</param>
+    /// <param name="token">The presented token, <c>noc_</c>-prefixed.</param>
+    /// <param name="tenantId">The tenant the grant must belong to.</param>
+    /// <param name="ct">Cancellation token.</param>
+    internal static async Task<OAuthGrantEntity?> FindActiveGrantAsync(
+        IDbContextFactory<NocturneDbContext> dbContextFactory,
+        string token,
+        Guid tenantId,
+        CancellationToken ct = default)
+    {
+        var tokenHash = ComputeSha256Hex(token);
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync(ct);
+        dbContext.TenantId = tenantId;
+
+        return await dbContext.OAuthGrants
+            .AsNoTracking()
+            .IgnoreQueryFilters()
+            .Where(g => g.TokenHash == tokenHash
+                     && g.TenantId == tenantId
+                     && g.GrantType == OAuthGrantTypes.Direct
+                     && g.RevokedAt == null)
+            .FirstOrDefaultAsync(ct);
     }
 
     /// <summary>

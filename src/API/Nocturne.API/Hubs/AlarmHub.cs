@@ -1,34 +1,38 @@
 using Microsoft.AspNetCore.SignalR;
-using Nocturne.API.Middleware;
-using Nocturne.Core.Constants;
-using Nocturne.Core.Contracts.Identity;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Hubs;
 
 /// <summary>
 /// SignalR hub for alarm notifications, replacing socket.io alarm namespace
 /// </summary>
-// Connections authenticate in-band after negotiate and are reachable only via the internal
-// realtime bridge, so the HTTP fallback authorization policy must not gate the handshake.
+// The handshake is anonymous because clients authenticate in-band, after negotiate: a client that
+// can only present its credential once the connection is up would otherwise be refused before it
+// could. The hub endpoint is internet-reachable (the cloud gateway publishes /hubs/**), so
+// authorization happens per method in HubAuthorizationFilter, not at the handshake.
 [Microsoft.AspNetCore.Authorization.AllowAnonymous]
 public class AlarmHub : TenantAwareHub
 {
     private readonly ILogger<AlarmHub> _logger;
-    private readonly IAuthorizationService _authorizationService;
+    private readonly IHubTokenAuthorizer _tokenAuthorizer;
 
-    public AlarmHub(ILogger<AlarmHub> logger, IAuthorizationService authorizationService)
+    public AlarmHub(ILogger<AlarmHub> logger, IHubTokenAuthorizer tokenAuthorizer)
     {
         _logger = logger;
-        _authorizationService = authorizationService;
+        _tokenAuthorizer = tokenAuthorizer;
     }
 
     /// <summary>
-    /// Subscribe to alarm notifications (replaces socket.io 'subscribe' event)
+    /// Subscribe to alarm notifications (replaces socket.io 'subscribe' event). Legacy alarms carry
+    /// the glucose reading that triggered them, so glucose read is the gate.
     /// </summary>
     /// <param name="authData">Authorization data containing secret and JWT token</param>
     /// <returns>Subscription result</returns>
+    [HubAuthenticationMethod]
+    [HubTenantGroup]
     public async Task<object> Subscribe(AlarmSubscribeRequest authData)
     {
         try
@@ -36,66 +40,36 @@ public class AlarmHub : TenantAwareHub
             _logger.LogInformation(
                 "Client {ConnectionId} subscribing to alarms",
                 Context.ConnectionId
-            ); // Check authentication through existing middleware context
-            var authContext =
-                Context.GetHttpContext()?.Items["AuthContext"] as Middleware.AuthenticationContext;
-            bool isAuthorized = authContext?.IsAuthenticated ?? false;
+            );
 
-            // If not already authenticated through middleware, try to authenticate with provided credentials
-            if (!isAuthorized)
+            // A connection that presented a credential on the HTTP upgrade is already authenticated
+            // and scoped; otherwise authenticate from the in-band payload. Both credential shapes go
+            // through IHubTokenAuthorizer so the tenant pin and scope check match DataHub's.
+            var authorization = HubAuthorizationState.Resolve(Context);
+
+            if (authorization is null && !string.IsNullOrEmpty(authData.JwtToken))
             {
-                if (!string.IsNullOrEmpty(authData.JwtToken))
-                {
-                    // Try to generate JWT from access token
-                    var authResponse = await _authorizationService.GenerateJwtFromAccessTokenAsync(
-                        authData.JwtToken
-                    );
-                    isAuthorized = authResponse != null;
-                }
-                else if (!string.IsNullOrEmpty(authData.Secret))
-                {
-                    // For API secret, we need to validate it against the configured secret
-                    // This would normally be done by the authentication middleware
-                    // For SignalR hubs, we need to implement the same logic
-                    var configuration = Context
-                        .GetHttpContext()
-                        ?.RequestServices.GetRequiredService<IConfiguration>();
-                    var configuredSecret =
-                        configuration?[$"Parameters:{ServiceNames.Parameters.InstanceKey}"]
-                        ?? configuration?[ServiceNames.ConfigKeys.InstanceKey];
-                    if (!string.IsNullOrEmpty(configuredSecret))
-                    {
-                        // Calculate SHA1 hash of the configured secret
-                        using var sha1 = System.Security.Cryptography.SHA1.Create();
-                        var secretBytes = System.Text.Encoding.UTF8.GetBytes(configuredSecret);
-                        var hashBytes = sha1.ComputeHash(secretBytes);
-                        var expectedHash = BitConverter
-                            .ToString(hashBytes)
-                            .Replace("-", "")
-                            .ToLowerInvariant();
-
-                        // Compare with provided secret (should be the hashed value)
-                        isAuthorized = authData.Secret.ToLowerInvariant() == expectedHash;
-                    }
-                }
+                authorization = await _tokenAuthorizer.AuthorizeTokenAsync(
+                    authData.JwtToken,
+                    TenantContext?.TenantId,
+                    OAuthScopes.GlucoseRead
+                );
+            }
+            else if (authorization is null && !string.IsNullOrEmpty(authData.Secret))
+            {
+                authorization = _tokenAuthorizer.AuthorizeInstanceKey(
+                    authData.Secret,
+                    TenantContext?.TenantId
+                );
             }
 
-            if (isAuthorized)
-            {
-                // Add connection to tenant-scoped alarm subscribers group
-                await Groups.AddToGroupAsync(
-                    Context.ConnectionId,
-                    TenantGroup("alarm-subscribers")
-                );
-
-                _logger.LogInformation(
-                    "Client {ConnectionId} subscribed to alarms successfully",
-                    Context.ConnectionId
-                );
-
-                return new { read = true, success = true };
-            }
-            else
+            // The group carries the tenant's alarms, announcements and notifications, not one data
+            // category, so a share-style grant is refused here as it is on DataHub's tenant groups.
+            // [HubTenantGroup] declares that requirement; HubAuthorizationFilter cannot enforce it on
+            // an authentication entry point, because the credential arrives in this invocation.
+            if (authorization is null
+                || !authorization.CanJoinTenantRelay
+                || !authorization.Satisfies(OAuthScopes.GlucoseRead))
             {
                 _logger.LogWarning(
                     "Client {ConnectionId} alarm subscription failed - unauthorized",
@@ -103,6 +77,21 @@ public class AlarmHub : TenantAwareHub
                 );
                 return new { read = false, success = false };
             }
+
+            HubAuthorizationState.Grant(Context, authorization);
+
+            // Add connection to tenant-scoped alarm subscribers group
+            await Groups.AddToGroupAsync(
+                Context.ConnectionId,
+                TenantGroup("alarm-subscribers")
+            );
+
+            _logger.LogInformation(
+                "Client {ConnectionId} subscribed to alarms successfully",
+                Context.ConnectionId
+            );
+
+            return new { read = true, success = true };
         }
         catch (Exception ex)
         {
@@ -126,6 +115,7 @@ public class AlarmHub : TenantAwareHub
     /// <param name="level">Alarm level to acknowledge</param>
     /// <param name="group">Alarm group to acknowledge</param>
     /// <param name="silenceTime">Time to silence alarm in milliseconds</param>
+    [HubScope(OAuthScopes.AlertsReadWrite)]
     public async Task Ack(int level, string group, int silenceTime)
     {
         try
