@@ -260,6 +260,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<MigrationRunEntity> MigrationRuns { get; set; }
 
     /// <summary>
+    /// Gets or sets the ConnectorResetJobs table recording platform-admin cursor reset jobs
+    /// </summary>
+    public DbSet<ConnectorResetJobEntity> ConnectorResetJobs { get; set; }
+
+    /// <summary>
     /// Gets or sets the LinkedRecords table for deduplication linking
     /// </summary>
     public DbSet<LinkedRecordEntity> LinkedRecords { get; set; }
@@ -1297,6 +1302,22 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .Entity<MigrationRunEntity>()
             .HasIndex(r => new { r.SourceId, r.State })
             .HasDatabaseName("ix_migration_runs_source_state");
+
+        modelBuilder
+            .Entity<MigrationRunEntity>()
+            .HasIndex(r => r.TenantId)
+            .HasDatabaseName("ix_migration_runs_tenant");
+
+        // Connector reset job indexes
+        modelBuilder
+            .Entity<ConnectorResetJobEntity>()
+            .HasIndex(j => j.TenantId)
+            .HasDatabaseName("ix_connector_reset_jobs_tenant");
+
+        modelBuilder
+            .Entity<ConnectorResetJobEntity>()
+            .HasIndex(j => j.State)
+            .HasDatabaseName("ix_connector_reset_jobs_state");
 
         // LinkedRecords indexes - optimized for deduplication queries
         modelBuilder

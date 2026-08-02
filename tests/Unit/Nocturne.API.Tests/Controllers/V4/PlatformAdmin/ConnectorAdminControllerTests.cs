@@ -127,23 +127,23 @@ public class ConnectorAdminControllerTests
     }
 
     [Fact]
-    public void GetResetJobStatus_UnknownJob_Returns404()
+    public async Task GetResetJobStatus_UnknownJob_Returns404()
     {
         var db = CreateDb();
         var jobService = new Mock<IConnectorCursorResetJobService>();
-        jobService.Setup(s => s.GetStatus(It.IsAny<Guid>()))
-            .Throws(new KeyNotFoundException());
+        jobService.Setup(s => s.GetStatusAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new KeyNotFoundException());
 
         var controller = CreateController(Engine(db), jobService.Object);
 
-        var result = controller.GetResetJobStatus(Guid.CreateVersion7());
+        var result = await controller.GetResetJobStatus(Guid.CreateVersion7(), CancellationToken.None);
 
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(404);
     }
 
     [Fact]
-    public void GetResetJobStatus_KnownJob_ReturnsStatus()
+    public async Task GetResetJobStatus_KnownJob_ReturnsStatus()
     {
         var db = CreateDb();
         var jobId = Guid.CreateVersion7();
@@ -155,33 +155,34 @@ public class ConnectorAdminControllerTests
             State = ConnectorResetJobState.Running,
         };
         var jobService = new Mock<IConnectorCursorResetJobService>();
-        jobService.Setup(s => s.GetStatus(jobId)).Returns(status);
+        jobService.Setup(s => s.GetStatusAsync(jobId, It.IsAny<CancellationToken>())).ReturnsAsync(status);
 
         var controller = CreateController(Engine(db), jobService.Object);
 
-        var result = controller.GetResetJobStatus(jobId);
+        var result = await controller.GetResetJobStatus(jobId, CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeSameAs(status);
     }
 
     [Fact]
-    public void CancelResetJob_UnknownJob_Returns404()
+    public async Task CancelResetJob_UnknownJob_Returns404()
     {
         var db = CreateDb();
         var jobService = new Mock<IConnectorCursorResetJobService>();
-        jobService.Setup(s => s.Cancel(It.IsAny<Guid>())).Throws(new KeyNotFoundException());
+        jobService.Setup(s => s.CancelAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new KeyNotFoundException());
 
         var controller = CreateController(Engine(db), jobService.Object);
 
-        var result = controller.CancelResetJob(Guid.CreateVersion7());
+        var result = await controller.CancelResetJob(Guid.CreateVersion7(), CancellationToken.None);
 
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(404);
     }
 
     [Fact]
-    public void CancelResetJob_KnownJob_Returns204()
+    public async Task CancelResetJob_KnownJob_Returns204()
     {
         var db = CreateDb();
         var jobId = Guid.CreateVersion7();
@@ -189,10 +190,10 @@ public class ConnectorAdminControllerTests
 
         var controller = CreateController(Engine(db), jobService.Object);
 
-        var result = controller.CancelResetJob(jobId);
+        var result = await controller.CancelResetJob(jobId, CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
-        jobService.Verify(s => s.Cancel(jobId), Times.Once);
+        jobService.Verify(s => s.CancelAsync(jobId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

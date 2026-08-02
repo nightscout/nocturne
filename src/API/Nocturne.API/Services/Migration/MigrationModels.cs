@@ -33,7 +33,9 @@ public enum MigrationJobState
     /// <summary>Migration terminated due to an unrecoverable error. See <see cref="MigrationJobInfo.ErrorMessage"/>.</summary>
     Failed,
     /// <summary>Migration was explicitly stopped by the user before completion.</summary>
-    Cancelled
+    Cancelled,
+    /// <summary>The API restarted while the migration was running; the work did not complete and must be re-run.</summary>
+    Interrupted
 }
 
 /// <summary>

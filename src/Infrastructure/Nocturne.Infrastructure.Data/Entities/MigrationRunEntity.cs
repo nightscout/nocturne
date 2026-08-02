@@ -23,6 +23,33 @@ public class MigrationRunEntity
     public Guid SourceId { get; set; }
 
     /// <summary>
+    /// The tenant that started (and owns) this migration. Used to scope history and
+    /// status lookups; the table itself is operator metadata and not RLS-scoped.
+    /// </summary>
+    [Column("tenant_id")]
+    public Guid TenantId { get; set; }
+
+    /// <summary>
+    /// Migration mode: "Api" or "MongoDb"
+    /// </summary>
+    [Column("mode")]
+    [MaxLength(20)]
+    public string Mode { get; set; } = "Api";
+
+    /// <summary>
+    /// Human-readable source description shown in job history (URL or database name)
+    /// </summary>
+    [Column("source_description")]
+    [MaxLength(512)]
+    public string? SourceDescription { get; set; }
+
+    /// <summary>
+    /// When the migration job was created
+    /// </summary>
+    [Column("created_at")]
+    public DateTime CreatedAt { get; set; }
+
+    /// <summary>
     /// When the migration job started
     /// </summary>
     [Column("started_at")]
@@ -35,7 +62,7 @@ public class MigrationRunEntity
     public DateTime? CompletedAt { get; set; }
 
     /// <summary>
-    /// Current state: Pending, Running, Completed, Failed, Cancelled
+    /// Current state: Pending, Running, Completed, Failed, Cancelled, Interrupted
     /// </summary>
     [Column("state")]
     [MaxLength(20)]

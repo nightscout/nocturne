@@ -588,6 +588,10 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         // Apply the per-category public-share RLS policies, derived from the C# category map,
         // so they cannot drift from the code. Runs under the migrator role like migrations.
         await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(migratorConnectionString, logger);
+
+        // Background job records left Pending/Running by a previous process are orphans —
+        // the detached tasks died with it. Mark them Interrupted so polls report the truth.
+        await DatabaseInitializationExtensions.MarkInterruptedJobsAsync(migratorConnectionString, logger);
     }
 
     // Validate RLS, ownership, default privileges, and NoResetOnClose under the app role.

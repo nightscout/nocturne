@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Services.Connectors;
 
@@ -35,13 +38,16 @@ public interface IConnectorCursorResetJobService
         List<SyncDataType>? dataTypes,
         CancellationToken ct);
 
-    /// <summary>Returns a snapshot of a job's progress.</summary>
+    /// <summary>
+    /// Returns a snapshot of a job's progress — live from memory while the job runs, from the
+    /// persisted record when the job is no longer in memory (e.g. after an API restart).
+    /// </summary>
     /// <exception cref="KeyNotFoundException">Thrown when no job with that id exists.</exception>
-    ConnectorResetJobStatus GetStatus(Guid jobId);
+    Task<ConnectorResetJobStatus> GetStatusAsync(Guid jobId, CancellationToken ct = default);
 
     /// <summary>Requests cancellation of a running job.</summary>
     /// <exception cref="KeyNotFoundException">Thrown when no job with that id exists.</exception>
-    void Cancel(Guid jobId);
+    Task CancelAsync(Guid jobId, CancellationToken ct = default);
 }
 
 /// <inheritdoc cref="IConnectorCursorResetJobService"/>
@@ -96,6 +102,11 @@ public class ConnectorCursorResetJobService : IConnectorCursorResetJobService
             _serviceProvider);
         _jobs[jobId] = job;
 
+        // Record the job before the work starts. The in-process task cannot survive an API
+        // restart, but its record must — otherwise a restart mid-run leaves the operator
+        // polling a 404 with no way to tell "never existed" from "killed partway".
+        await job.PersistSnapshotAsync(ct);
+
         // Detached background task: deliberately uses CancellationToken.None, not the request token,
         // so the reset outlives the HTTP request that started it. User-initiated cancellation flows
         // through the job's own CancellationTokenSource via Cancel().
@@ -121,25 +132,43 @@ public class ConnectorCursorResetJobService : IConnectorCursorResetJobService
     }
 
     /// <inheritdoc />
-    public ConnectorResetJobStatus GetStatus(Guid jobId)
+    public async Task<ConnectorResetJobStatus> GetStatusAsync(Guid jobId, CancellationToken ct = default)
     {
         if (_jobs.TryGetValue(jobId, out var job))
             return job.GetStatus();
 
-        throw new KeyNotFoundException($"Connector cursor reset job {jobId} not found");
+        var record = await FindRecordAsync(jobId, ct)
+            ?? throw new KeyNotFoundException($"Connector cursor reset job {jobId} not found");
+
+        return ConnectorResetJob.StatusFromRecord(record);
     }
 
     /// <inheritdoc />
-    public void Cancel(Guid jobId)
+    public async Task CancelAsync(Guid jobId, CancellationToken ct = default)
     {
         if (_jobs.TryGetValue(jobId, out var job))
         {
             job.Cancel();
+            await job.PersistSnapshotAsync(ct);
             _logger.LogInformation("Cancelled connector cursor reset job {JobId}", jobId);
             return;
         }
 
-        throw new KeyNotFoundException($"Connector cursor reset job {jobId} not found");
+        var record = await FindRecordAsync(jobId, ct)
+            ?? throw new KeyNotFoundException($"Connector cursor reset job {jobId} not found");
+
+        // The record exists but the job is not in memory — terminal, or orphaned by a restart
+        // that the startup sweep hasn't reached. Either way there is nothing left to stop.
+        _logger.LogInformation(
+            "Cancel requested for connector cursor reset job {JobId} which is no longer running (state {State})",
+            jobId, record.State);
+    }
+
+    private async Task<ConnectorResetJobEntity?> FindRecordAsync(Guid jobId, CancellationToken ct)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        return await db.ConnectorResetJobs.FindAsync([jobId], ct);
     }
 }
 
@@ -214,6 +243,7 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
         _startedAt = DateTime.UtcNow;
         _state = ConnectorResetJobState.Running;
         var ct = _cts.Token;
+        await PersistSnapshotAsync(CancellationToken.None);
 
         try
         {
@@ -248,7 +278,72 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
         finally
         {
             _completedAt = DateTime.UtcNow;
+            await PersistSnapshotAsync(CancellationToken.None);
         }
+    }
+
+    /// <summary>
+    /// Upserts the job's persisted record from the current in-memory snapshot. Persistence
+    /// failures after start are logged, not thrown — the running work matters more than its
+    /// record, and the terminal snapshot in <see cref="ExecuteAsync"/>'s finally retries.
+    /// </summary>
+    public async Task PersistSnapshotAsync(CancellationToken ct)
+    {
+        try
+        {
+            var status = GetStatus();
+            using var scope = _serviceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+
+            var record = await db.ConnectorResetJobs.FindAsync([_id], ct);
+            if (record is null)
+            {
+                record = new ConnectorResetJobEntity { Id = _id };
+                db.ConnectorResetJobs.Add(record);
+            }
+
+            record.TenantId = status.TenantId;
+            record.TenantSlug = status.TenantSlug;
+            record.State = status.State.ToString();
+            record.CreatedAt = status.CreatedAt;
+            record.StartedAt = status.StartedAt;
+            record.CompletedAt = status.CompletedAt;
+            record.ErrorMessage = status.ErrorMessage is { Length: > 1000 } e ? e[..1000] : status.ErrorMessage;
+            record.TotalConnectors = status.TotalConnectors;
+            record.CompletedConnectors = status.CompletedConnectors;
+            record.ConnectorsJson = JsonSerializer.Serialize(status.Connectors);
+
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (_state is not ConnectorResetJobState.Pending)
+        {
+            _logger.LogError(ex, "Failed to persist connector cursor reset job {JobId}", _id);
+        }
+    }
+
+    /// <summary>Reconstructs a pollable status from a persisted record (post-restart lookups).</summary>
+    public static ConnectorResetJobStatus StatusFromRecord(ConnectorResetJobEntity record)
+    {
+        var connectors = record.ConnectorsJson is null
+            ? []
+            : JsonSerializer.Deserialize<List<ConnectorResetConnectorProgress>>(record.ConnectorsJson) ?? [];
+
+        return new ConnectorResetJobStatus
+        {
+            JobId = record.Id,
+            TenantId = record.TenantId,
+            TenantSlug = record.TenantSlug,
+            State = Enum.TryParse<ConnectorResetJobState>(record.State, out var state)
+                ? state
+                : ConnectorResetJobState.Interrupted,
+            CreatedAt = record.CreatedAt,
+            StartedAt = record.StartedAt,
+            CompletedAt = record.CompletedAt,
+            ErrorMessage = record.ErrorMessage,
+            TotalConnectors = record.TotalConnectors,
+            CompletedConnectors = record.CompletedConnectors,
+            Connectors = connectors,
+        };
     }
 
     void IConnectorResetProgress.ConnectorStarted(string connectorName) =>
@@ -342,6 +437,8 @@ public enum ConnectorResetJobState
     Failed,
     /// <summary>The job was cancelled before completing.</summary>
     Cancelled,
+    /// <summary>The API restarted while the job was running; the work did not complete and must be re-run.</summary>
+    Interrupted,
 }
 
 /// <summary>State of a single connector within a reset job.</summary>

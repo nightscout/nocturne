@@ -170,6 +170,39 @@ public static class DatabaseInitializationExtensions
     }
 
     /// <summary>
+    /// Marks any background job record still Pending/Running as Interrupted. Migration and
+    /// connector cursor reset jobs run on detached in-process tasks that die with the process,
+    /// so a row left in a live state at startup can only be an orphan from a previous run.
+    /// Without this sweep, an operator polling such a job sees "Running" forever.
+    /// </summary>
+    public static async Task MarkInterruptedJobsAsync(
+        string migratorConnectionString,
+        ILogger logger,
+        CancellationToken cancellationToken = default)
+    {
+        await using var dataSource = new NpgsqlDataSourceBuilder(migratorConnectionString).Build();
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        var total = 0;
+        foreach (var table in new[] { "migration_runs", "connector_reset_jobs" })
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText =
+                $"""
+                 UPDATE {table}
+                 SET state = 'Interrupted',
+                     completed_at = now(),
+                     error_message = 'The API restarted while this job was running; re-run it to finish the work.'
+                 WHERE state IN ('Pending', 'Running')
+                 """;
+            total += await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (total > 0)
+            logger.LogWarning("Marked {Count} orphaned background job records as Interrupted", total);
+    }
+
+    /// <summary>
     /// Repeatedly invokes <paramref name="probe"/> until it succeeds or the
     /// attempt budget is exhausted. Exceptions matching <paramref name="isTransient"/>
     /// are retried after <paramref name="retryDelay"/>; all others propagate
