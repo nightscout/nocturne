@@ -145,7 +145,8 @@
         if (
           status.state === MigrationJobState.Completed ||
           status.state === MigrationJobState.Failed ||
-          status.state === MigrationJobState.Cancelled
+          status.state === MigrationJobState.Cancelled ||
+          status.state === MigrationJobState.Interrupted
         ) {
           pollingActive = false;
           await loadData(); // Refresh history
@@ -204,6 +205,8 @@
         return { variant: "destructive", label: "Failed" };
       case MigrationJobState.Cancelled:
         return { variant: "outline", label: "Cancelled" };
+      case MigrationJobState.Interrupted:
+        return { variant: "destructive", label: "Interrupted" };
       default:
         return { variant: "secondary", label: "Unknown" };
     }

@@ -66,6 +66,7 @@
     ConnectorResetJobState.Completed,
     ConnectorResetJobState.Failed,
     ConnectorResetJobState.Cancelled,
+    ConnectorResetJobState.Interrupted,
   ];
   function isTerminal(state: ConnectorResetJobState | undefined): boolean {
     return state !== undefined && TERMINAL_STATES.includes(state);

@@ -2424,6 +2424,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("source_identifier");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt")
@@ -2436,9 +2440,9 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Mode")
                         .HasDatabaseName("ix_migration_sources_mode");
 
-                    b.HasIndex("SourceIdentifier")
+                    b.HasIndex("TenantId", "SourceIdentifier")
                         .IsUnique()
-                        .HasDatabaseName("ix_migration_sources_identifier");
+                        .HasDatabaseName("ix_migration_sources_tenant_identifier");
 
                     b.ToTable("migration_sources");
                 });

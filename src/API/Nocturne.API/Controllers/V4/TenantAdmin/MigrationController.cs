@@ -188,7 +188,7 @@ public class MigrationController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<MigrationSourceDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<MigrationSourceDto>>> GetSources(CancellationToken ct)
     {
-        var sources = await _migrationService.GetSourcesAsync(ct);
+        var sources = await _migrationService.GetSourcesAsync(_tenantAccessor.TenantId, ct);
         return Ok(sources);
     }
 }

@@ -36,7 +36,9 @@ public interface IMigrationJobService
         CancellationToken ct = default
     );
     PendingMigrationConfig GetPendingConfig();
-    Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(CancellationToken ct = default);
+
+    /// <summary>Lists the calling tenant's migration sources. Source URLs frequently identify a person, so sources are never listed cross-tenant.</summary>
+    Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(Guid tenantId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -95,13 +97,14 @@ public class MigrationJobService : IMigrationJobService
         };
 
         var job = new MigrationJob(jobId, tenantId, request, jobInfo, tenantContext, _logger, _serviceProvider);
-        _jobs[jobId] = job;
 
         // Record the job (and its source) before the work starts. The in-process task cannot
         // survive an API restart, but its record must — job history and "was this source ever
         // migrated?" checks read these rows, and without them a restart erases all evidence
-        // that the run happened.
+        // that the run happened. Registered in the job map only after the record exists, so a
+        // failed persist doesn't leave a phantom Pending job answering status probes.
         await job.PersistSnapshotAsync(ct);
+        _jobs[jobId] = job;
 
         // Start migration on a detached background task. This deliberately does NOT use the
         // request's CancellationToken (HttpContext.RequestAborted): the migration is designed to
@@ -356,6 +359,7 @@ public class MigrationJobService : IMigrationJobService
     }
 
     public async Task<IReadOnlyList<MigrationSourceDto>> GetSourcesAsync(
+        Guid tenantId,
         CancellationToken ct = default
     )
     {
@@ -363,7 +367,9 @@ public class MigrationJobService : IMigrationJobService
         var dbContext = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
 
         var sources = await dbContext
-            .MigrationSources.OrderByDescending(s => s.LastMigrationAt ?? s.CreatedAt)
+            .MigrationSources
+            .Where(s => s.TenantId == tenantId)
+            .OrderByDescending(s => s.LastMigrationAt ?? s.CreatedAt)
             .Select(s => new MigrationSourceDto
             {
                 Id = s.Id,
@@ -462,7 +468,11 @@ internal class MigrationJob
     public void Cancel()
     {
         _cts.Cancel();
-        _state = MigrationJobState.Cancelled;
+        // Leave terminal states untouched — cancelling a job that already Completed/Failed must
+        // not rewrite its (now persisted) outcome, which would also un-satisfy the startup
+        // "was this source ever migrated?" check.
+        if (_state is MigrationJobState.Pending or MigrationJobState.Validating or MigrationJobState.Running)
+            _state = MigrationJobState.Cancelled;
     }
 
     public async Task ExecuteAsync(CancellationToken externalCt)
@@ -542,8 +552,8 @@ internal class MigrationJob
             run.State = _state.ToString();
             run.StartedAt = _startedAt == default ? _info.CreatedAt : _startedAt;
             run.CompletedAt = _completedAt;
-            run.DateRangeStart = _request.StartDate;
-            run.DateRangeEnd = _request.EndDate;
+            run.DateRangeStart = AsUtc(_request.StartDate);
+            run.DateRangeEnd = AsUtc(_request.EndDate);
             run.ErrorMessage = _errorMessage;
             run.EntriesMigrated = (int)Math.Min(int.MaxValue, MigratedCount("entries"));
             run.TreatmentsMigrated = (int)Math.Min(int.MaxValue, MigratedCount("treatments"));
@@ -566,26 +576,27 @@ internal class MigrationJob
         _collectionProgress.TryGetValue(collection, out var p) ? p.DocumentsMigrated : 0;
 
     /// <summary>
-    /// Finds or creates the migration source row for this job's target. Sources dedupe on
-    /// <see cref="MigrationSourceEntity.SourceIdentifier"/>: the Nightscout URL for API mode,
-    /// a SHA-256 digest of the connection string for MongoDB mode. Only non-usable digests are
-    /// stored — never the API secret or connection string themselves.
+    /// Finds or creates the migration source row for this job's target. Sources dedupe per
+    /// tenant on <see cref="MigrationSourceEntity.SourceIdentifier"/>: the Nightscout URL for
+    /// API mode, a SHA-256 digest of the connection string for MongoDB mode. Only non-usable
+    /// digests are stored — never the API secret or connection string themselves.
     /// </summary>
     private async Task<Guid> UpsertSourceAsync(NocturneDbContext db, CancellationToken ct)
     {
         var isApi = _request.Mode == MigrationMode.Api;
         var identifier = isApi
-            ? _request.NightscoutUrl!.TrimEnd('/')
-            : Sha256Hex(_request.MongoConnectionString ?? string.Empty);
+            ? ApiSourceIdentifier(_request.NightscoutUrl!)
+            : MongoSourceIdentifier(_request.MongoConnectionString ?? string.Empty);
 
         var source = await db.MigrationSources.FirstOrDefaultAsync(
-            s => s.SourceIdentifier == identifier, ct);
+            s => s.TenantId == _tenantId && s.SourceIdentifier == identifier, ct);
         if (source is not null)
             return source.Id;
 
         source = new MigrationSourceEntity
         {
             Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
             Mode = _request.Mode.ToString(),
             SourceIdentifier = identifier,
             NightscoutUrl = isApi ? _request.NightscoutUrl : null,
@@ -599,8 +610,22 @@ internal class MigrationJob
         return source.Id;
     }
 
+    /// <summary>Canonical source identifier for an API-mode migration. Shared with the startup pending-migration check so the two always agree.</summary>
+    internal static string ApiSourceIdentifier(string nightscoutUrl) => nightscoutUrl.TrimEnd('/');
+
+    /// <summary>Canonical source identifier for a MongoDB-mode migration: a non-usable digest, never the connection string itself.</summary>
+    internal static string MongoSourceIdentifier(string connectionString) => Sha256Hex(connectionString);
+
     private static string Sha256Hex(string value) =>
         Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+
+    /// <summary>Npgsql rejects Local/Unspecified kinds for timestamptz; normalize optional caller-supplied dates.</summary>
+    private static DateTime? AsUtc(DateTime? value) => value switch
+    {
+        null => null,
+        { Kind: DateTimeKind.Unspecified } v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
+        { } v => v.ToUniversalTime(),
+    };
 
     /// <summary>Reconstructs a status snapshot from a persisted run (post-restart lookups).</summary>
     public static MigrationJobStatus StatusFromRecord(MigrationRunEntity run)

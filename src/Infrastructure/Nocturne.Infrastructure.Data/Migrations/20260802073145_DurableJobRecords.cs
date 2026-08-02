@@ -11,6 +11,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropIndex(
+                name: "ix_migration_sources_identifier",
+                table: "migration_sources");
+
+            migrationBuilder.AddColumn<Guid>(
+                name: "tenant_id",
+                table: "migration_sources",
+                type: "uuid",
+                nullable: false,
+                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
+
             migrationBuilder.AddColumn<DateTime>(
                 name: "created_at",
                 table: "migration_runs",
@@ -62,6 +73,12 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "ix_migration_sources_tenant_identifier",
+                table: "migration_sources",
+                columns: new[] { "tenant_id", "source_identifier" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "ix_migration_runs_tenant",
                 table: "migration_runs",
                 column: "tenant_id");
@@ -84,8 +101,16 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 name: "connector_reset_jobs");
 
             migrationBuilder.DropIndex(
+                name: "ix_migration_sources_tenant_identifier",
+                table: "migration_sources");
+
+            migrationBuilder.DropIndex(
                 name: "ix_migration_runs_tenant",
                 table: "migration_runs");
+
+            migrationBuilder.DropColumn(
+                name: "tenant_id",
+                table: "migration_sources");
 
             migrationBuilder.DropColumn(
                 name: "created_at",
@@ -102,6 +127,12 @@ namespace Nocturne.Infrastructure.Data.Migrations
             migrationBuilder.DropColumn(
                 name: "tenant_id",
                 table: "migration_runs");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_migration_sources_identifier",
+                table: "migration_sources",
+                column: "source_identifier",
+                unique: true);
         }
     }
 }

@@ -1258,11 +1258,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(b => b.SleepSessionId)
             .HasDatabaseName("ix_sleep_biometric_samples_sleep_session_id");
 
-        // Migration source indexes
+        // Migration source indexes. Sources dedupe per tenant: the identifier alone must
+        // not be unique, or tenant B migrating from the same URL as tenant A would collide
+        // with (and read) A's source row.
         modelBuilder
             .Entity<MigrationSourceEntity>()
-            .HasIndex(s => s.SourceIdentifier)
-            .HasDatabaseName("ix_migration_sources_identifier")
+            .HasIndex(s => new { s.TenantId, s.SourceIdentifier })
+            .HasDatabaseName("ix_migration_sources_tenant_identifier")
             .IsUnique();
 
         modelBuilder

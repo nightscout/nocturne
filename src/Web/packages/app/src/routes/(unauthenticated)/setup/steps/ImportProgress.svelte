@@ -172,7 +172,8 @@
           }
           if (
             status.state === MigrationJobState.Failed ||
-            status.state === MigrationJobState.Cancelled
+            status.state === MigrationJobState.Cancelled ||
+            status.state === MigrationJobState.Interrupted
           ) {
             failed = true;
             error =

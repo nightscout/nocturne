@@ -147,15 +147,22 @@ public class MigrationJobServiceTests
     }
 
     [Fact]
-    public async Task GetSourcesAsync_returns_the_persisted_source()
+    public async Task GetSourcesAsync_only_returns_the_calling_tenants_sources()
     {
+        // A source URL frequently identifies a person; one tenant must never see another
+        // tenant's sources, even when both migrated from the same URL.
         var (service, _) = CreateService();
-        var tenant = Tenant(Guid.NewGuid());
+        var tenantA = Tenant(Guid.NewGuid());
+        var tenantB = Tenant(Guid.NewGuid());
 
-        await service.StartMigrationAsync(ApiRequest(), tenant);
+        await service.StartMigrationAsync(ApiRequest(), tenantA);
+        await service.StartMigrationAsync(ApiRequest(), tenantB);
 
-        var sources = await service.GetSourcesAsync();
+        var sourcesA = await service.GetSourcesAsync(tenantA.TenantId);
 
-        sources.Should().ContainSingle(s => s.NightscoutUrl == "https://example-nightscout.invalid");
+        sourcesA.Should().ContainSingle(s => s.NightscoutUrl == "https://example-nightscout.invalid");
+
+        var sourcesC = await service.GetSourcesAsync(Guid.NewGuid());
+        sourcesC.Should().BeEmpty();
     }
 }

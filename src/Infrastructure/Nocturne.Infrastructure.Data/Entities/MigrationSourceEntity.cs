@@ -17,6 +17,14 @@ public class MigrationSourceEntity
     public Guid Id { get; set; }
 
     /// <summary>
+    /// The tenant that migrated from this source. Sources dedupe per tenant, and the
+    /// tenant-facing sources listing filters on this — a source URL frequently identifies
+    /// a person, so one tenant must never see another tenant's sources.
+    /// </summary>
+    [Column("tenant_id")]
+    public Guid TenantId { get; set; }
+
+    /// <summary>
     /// Migration mode: "Api" or "MongoDb"
     /// </summary>
     [Column("mode")]

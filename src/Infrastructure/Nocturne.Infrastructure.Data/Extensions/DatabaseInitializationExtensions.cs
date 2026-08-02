@@ -174,6 +174,8 @@ public static class DatabaseInitializationExtensions
     /// connector cursor reset jobs run on detached in-process tasks that die with the process,
     /// so a row left in a live state at startup can only be an orphan from a previous run.
     /// Without this sweep, an operator polling such a job sees "Running" forever.
+    /// Assumes a single API instance: a second replica (or an overlapping deploy) booting
+    /// while another instance has a job genuinely running would mark that job Interrupted.
     /// </summary>
     public static async Task MarkInterruptedJobsAsync(
         string migratorConnectionString,

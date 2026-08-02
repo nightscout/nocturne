@@ -100,12 +100,13 @@ public class ConnectorCursorResetJobService : IConnectorCursorResetJobService
             connectors.Connectors.Select(c => c.ConnectorName),
             _logger,
             _serviceProvider);
-        _jobs[jobId] = job;
-
         // Record the job before the work starts. The in-process task cannot survive an API
         // restart, but its record must — otherwise a restart mid-run leaves the operator
-        // polling a 404 with no way to tell "never existed" from "killed partway".
-        await job.PersistSnapshotAsync(ct);
+        // polling a 404 with no way to tell "never existed" from "killed partway". Registered
+        // in the job map only after the record exists, so a failed persist doesn't leave a
+        // phantom Pending job answering status probes.
+        await job.PersistSnapshotAsync(CancellationToken.None);
+        _jobs[jobId] = job;
 
         // Detached background task: deliberately uses CancellationToken.None, not the request token,
         // so the reset outlives the HTTP request that started it. User-initiated cancellation flows
