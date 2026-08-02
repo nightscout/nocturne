@@ -614,6 +614,15 @@ internal class MigrationJob
         };
     }
 
+    /// <summary>
+    ///     Anchor for the first page of a collection fetch. Nightscout applies an implicit
+    ///     recency window (roughly the last four days) to any query carrying no date filter,
+    ///     which truncates an unbounded first page — the short page then ends pagination,
+    ///     silently importing days of history instead of years. Anchoring the upper bound
+    ///     keeps every request explicitly dated.
+    /// </summary>
+    private static DateTime FirstPageAnchor => DateTime.UtcNow;
+
     private async Task MigrateEntriesViaApiAsync(
         HttpClient httpClient,
         NocturneDbContext dbContext,
@@ -627,7 +636,7 @@ internal class MigrationJob
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
-        DateTime? currentTo = null;
+        DateTime? currentTo = FirstPageAnchor;
         const int pageSize = 10000;
 
         using var scope = CreateTenantScope();
@@ -701,7 +710,7 @@ internal class MigrationJob
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
-        DateTime? currentTo = null;
+        DateTime? currentTo = FirstPageAnchor;
         const int pageSize = 10000;
 
         using var scope = CreateTenantScope();
@@ -774,7 +783,7 @@ internal class MigrationJob
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
-        DateTime? currentTo = null;
+        DateTime? currentTo = FirstPageAnchor;
         const int pageSize = 10000;
 
         using var scope = CreateTenantScope();
@@ -1010,7 +1019,7 @@ internal class MigrationJob
 
         var totalMigrated = 0L;
         var totalFailed = 0L;
-        DateTime? currentTo = null;
+        DateTime? currentTo = FirstPageAnchor;
         const int pageSize = 10000;
 
         using var scope = CreateTenantScope();

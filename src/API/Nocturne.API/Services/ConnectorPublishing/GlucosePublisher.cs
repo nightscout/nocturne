@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Audit;
 using Nocturne.Connectors.Core.Interfaces;
-using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
