@@ -5,6 +5,5 @@
 export const signInMethodLabels = {
   passkey: "Sign in with passkey",
   username: "Sign in with username",
-  authenticator: "Use authenticator app",
   recoveryCode: "Use a recovery code",
 } as const;

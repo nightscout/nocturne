@@ -14,8 +14,8 @@
     type PublicKeyCredentialCreationOptionsJSON,
   } from "@simplewebauthn/browser";
   import {
-    registerOptions,
-    registerComplete,
+    recoveryModeOptions,
+    recoveryModeComplete,
   } from "$lib/api/generated/passkeys.generated.remote";
   import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
   import {
@@ -35,9 +35,9 @@
   let errorMessage = $state<string | null>(null);
   let recoveryCodes = $state<string[]>([]);
 
-  // In recovery mode, we need to find the orphaned subject.
-  // The register/options endpoint will look up the subject by username.
-  // For now, we collect username + display name and attempt registration.
+  // The server resolves the account from the username and only proceeds when that account
+  // has no passkey and no linked sign-in provider, so this can only restore access to an
+  // account that is already locked out.
 
   /**
    * The completion response only carries recovery codes when the account had
@@ -65,8 +65,7 @@
     errorMessage = null;
 
     try {
-      // registerOptions finds the account by username
-      const response = await registerOptions({
+      const response = await recoveryModeOptions({
         username: username.trim(),
       });
       const options = parseCeremonyOptions<PublicKeyCredentialCreationOptionsJSON>(
@@ -76,7 +75,8 @@
 
       const attestation = await startRegistration({ optionsJSON: options });
 
-      const result = await registerComplete({
+      const result = await recoveryModeComplete({
+        username: username.trim(),
         attestationResponseJson: JSON.stringify(attestation),
         challengeToken,
         label: `${displayName.trim() || username.trim()}'s passkey`,
@@ -90,7 +90,7 @@
       errorMessage = describePasskeyError(
         err,
         "register",
-        "We couldn't register a passkey. Check that the username is correct and try again."
+        "We couldn't register a passkey for that username. This page only works for an account that has no passkey and no linked sign-in provider — otherwise sign in with a recovery code."
       );
     } finally {
       isRegistering = false;

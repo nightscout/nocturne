@@ -20,9 +20,17 @@ namespace Nocturne.API.Controllers.Authentication;
 /// Handles setup, verification, credential listing/removal, and TOTP-based authentication.
 /// </summary>
 /// <remarks>
-/// TOTP is treated as a second factor. Setup requires at least one primary auth factor
-/// (passkey or OIDC link) to be configured first. This prevents a user from having TOTP
-/// as their only authentication method.
+/// TOTP is never a sole factor: <see cref="Setup"/> requires at least one primary auth factor
+/// (passkey or OIDC link) to already be configured, and <see cref="Login"/> requires a step-up
+/// token minted by a completed primary factor, so a code on its own can never produce a session.
+/// <para>
+/// Known limitation — TOTP is only <em>demanded</em> on the passkey sign-in path.
+/// <c>PasskeyController.LoginComplete</c> checks <see cref="ITotpService.GetCredentialCountAsync"/>
+/// and withholds the session until a code is supplied here. The OIDC login callback
+/// (<c>OidcAuthService.CompleteLoginAsync</c>) does not: a subject with TOTP enrolled and a linked
+/// provider signs in through that provider with no code. Closing it needs a pending-second-factor
+/// state carried across the provider redirect, which the web app has no route for today.
+/// </para>
 /// </remarks>
 /// <seealso cref="ITotpService"/>
 /// <seealso cref="ISessionService"/>
@@ -34,6 +42,12 @@ namespace Nocturne.API.Controllers.Authentication;
 [AllowDuringSetup]
 public class TotpController : ControllerBase
 {
+    /// <summary>
+    /// Returned for every rejected step-up so the response does not distinguish an expired token
+    /// from a wrong code, or reveal whether an account exists.
+    /// </summary>
+    private const string CodeNotAccepted = "That code wasn't accepted. Please sign in again.";
+
     private readonly ITotpService _totpService;
     private readonly ISessionService _sessionService;
     private readonly ISubjectService _subjectService;
@@ -207,17 +221,20 @@ public class TotpController : ControllerBase
     }
 
     /// <summary>
-    /// Authenticate using a TOTP code and username.
+    /// Complete sign-in with a TOTP code after a primary factor has been verified.
     /// </summary>
-    /// <param name="request">A <see cref="TotpLoginRequest"/> containing the username and 6-digit code.</param>
+    /// <param name="request">A <see cref="TotpLoginRequest"/> containing the step-up token and 6-digit code.</param>
     /// <returns>A <see cref="TotpLoginResponse"/> with access token on success.</returns>
     /// <remarks>
+    /// TOTP is a second factor, so this endpoint needs a step-up token from a completed passkey
+    /// assertion — it cannot be reached with a code alone. The token names the subject; a
+    /// caller-supplied username is not accepted.
     /// Rate-limited via the "totp-login" policy.
     /// On success: issues session cookies, updates last login time, and logs
     /// <see cref="AuthAuditEventType.Login"/>. On failure: logs <see cref="AuthAuditEventType.FailedAuth"/>.
     /// </remarks>
     /// <response code="200">Login successful with access token.</response>
-    /// <response code="400">Invalid username or code.</response>
+    /// <response code="400">Invalid step-up token or code.</response>
     [HttpPost("login")]
     [AllowAnonymous]
     [EnableRateLimiting("totp-login")]
@@ -229,25 +246,25 @@ public class TotpController : ControllerBase
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var ua = Request.Headers.UserAgent.ToString();
 
-        var result = await _totpService.VerifyLoginAsync(request.Username, request.Code);
+        var result = await _totpService.VerifyStepUpAsync(request.StepUpToken, request.Code);
         if (result == null)
         {
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, subjectId: null, success: false,
                 ipAddress: ip, userAgent: ua,
-                detailsJson: JsonSerializer.Serialize(new { method = "totp", username = request.Username }));
-            return Problem(detail: "Invalid username or code", statusCode: 400, title: "Bad Request");
+                detailsJson: JsonSerializer.Serialize(new { method = "totp" }));
+            return Problem(detail: CodeNotAccepted, statusCode: 400, title: "Bad Request");
         }
 
-        // VerifyLoginAsync resolves the subject by username globally, so a member of another
-        // tenant with a valid TOTP credential could otherwise be issued a session here. Require
-        // membership of the tenant being logged into; respond as for an invalid code so the
-        // failure does not reveal that the account exists on a different tenant.
+        // The step-up token is minted by the passkey assertion, which is not tenant-scoped, so a
+        // member of another tenant could otherwise be issued a session here. Require membership of
+        // the tenant being logged into; respond as for an invalid code so the failure does not
+        // reveal that the account exists on a different tenant.
         if (!await _tenantMemberService.IsMemberAsync(result.SubjectId, _tenantAccessor.TenantId))
         {
             await _auditService.LogAsync(AuthAuditEventType.FailedAuth, result.SubjectId, success: false,
                 ipAddress: ip, userAgent: ua,
                 detailsJson: JsonSerializer.Serialize(new { method = "totp", reason = "not_a_member" }));
-            return Problem(detail: "Invalid username or code", statusCode: 400, title: "Bad Request");
+            return Problem(detail: CodeNotAccepted, statusCode: 400, title: "Bad Request");
         }
 
         var session = await _sessionService.IssueSessionAsync(
@@ -323,12 +340,13 @@ public class TotpCredentialDto
 }
 
 /// <summary>
-/// Request to authenticate using TOTP
+/// Request to complete sign-in with TOTP. The subject comes from the step-up token, which is
+/// issued only after a primary factor has been verified.
 /// </summary>
 public class TotpLoginRequest
 {
-    [Required, StringLength(255)]
-    public string Username { get; set; } = string.Empty;
+    [Required]
+    public string StepUpToken { get; set; } = string.Empty;
 
     [Required, RegularExpression(@"^\d{6}$")]
     public string Code { get; set; } = string.Empty;

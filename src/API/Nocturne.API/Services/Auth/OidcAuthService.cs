@@ -290,6 +290,12 @@ public class OidcAuthService : IOidcAuthService
     /// issued — otherwise any external identity could mint a session on any tenant's subdomain.
     /// Extracted from <see cref="HandleCallbackAsync"/> so the membership gate can be unit-tested
     /// without exercising the OIDC code exchange.
+    /// <para>
+    /// No TOTP second-factor gate here. <c>PasskeyController.LoginComplete</c> withholds the session
+    /// when the subject has an authenticator enrolled; this path issues one regardless, so a subject
+    /// with TOTP and a linked provider signs in through the provider without a code. Adding the gate
+    /// needs a pending-second-factor state that survives the provider redirect.
+    /// </para>
     /// </summary>
     internal async Task<OidcCallbackResult> CompleteLoginAsync(
         OidcStateData stateData,

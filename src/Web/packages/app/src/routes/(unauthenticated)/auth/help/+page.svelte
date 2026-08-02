@@ -75,15 +75,14 @@
       </Card.Header>
       <Card.Content>
         <p class="text-sm leading-relaxed text-muted-foreground">
-          If you've set up an authenticator app (such as Google Authenticator or
-          Authy), you can sign in using a 6-digit code that refreshes every 30
-          seconds.
+          An authenticator app (such as Google Authenticator or Authy) is a
+          second step, not a way to sign in on its own. It shows a 6-digit code
+          that refreshes every 30 seconds, and each code can be used once.
         </p>
         <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-          On the login page, choose
-          <strong>{signInMethodLabels.authenticator}</strong>, enter your
-          username, then type the code shown in your authenticator app. You can
-          set up an authenticator in your account settings after signing in.
+          If you've set one up, the login page asks for the code straight after
+          your passkey. You can set up an authenticator in your account settings
+          after signing in.
         </p>
       </Card.Content>
     </Card.Root>

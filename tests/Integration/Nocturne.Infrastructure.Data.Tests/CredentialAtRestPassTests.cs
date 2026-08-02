@@ -78,7 +78,7 @@ public class CredentialAtRestPassTests
 
     /// <summary>
     /// The converter decrypts on materialization, so an unconverted row fails the read. Pins the
-    /// exception type, because <c>TotpService.VerifyLoginAsync</c> catches
+    /// exception type, because <c>TotpService.VerifyStepUpAsync</c> catches
     /// <see cref="CryptographicException"/> specifically to turn a lost key into an ordinary failed
     /// attempt instead of a 500 — EF passes it through unwrapped.
     /// </summary>

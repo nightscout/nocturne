@@ -52,7 +52,7 @@ public class TotpSecretProtectionTests
 
         var read = () => converter.ConvertFromProvider(plaintext);
 
-        // CryptographicException specifically: that is what TotpService.VerifyLoginAsync catches to
+        // CryptographicException specifically: that is what TotpService.VerifyStepUpAsync catches to
         // turn a lost key into an ordinary failed attempt instead of a 500.
         read.Should().Throw<CryptographicException>(
             "an unencrypted column value must fail closed rather than be read as a secret");

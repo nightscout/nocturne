@@ -12,8 +12,15 @@ public interface IPasskeyService
     Task<PasskeyRegistrationOptions> GenerateRegistrationOptionsAsync(Guid subjectId, string username, Guid tenantId);
 
     /// <summary>Validates the attestation response and stores the new passkey credential.</summary>
+    /// <param name="expectedSubjectId">
+    /// The subject the caller's flow resolved as the one enrolling. The challenge token must
+    /// have been issued for this subject or the registration is rejected, so a challenge minted
+    /// by one flow cannot be redeemed as an enrolment in another. Required: every enrolment flow
+    /// must name its own subject, and that subject must be one the server resolved rather than
+    /// one the request supplied.
+    /// </param>
     /// <param name="label">Optional user-assigned label for the credential.</param>
-    Task<PasskeyCredentialResult> CompleteRegistrationAsync(string attestationResponseJson, string challengeToken, Guid tenantId, string? label = null);
+    Task<PasskeyCredentialResult> CompleteRegistrationAsync(string attestationResponseJson, string challengeToken, Guid tenantId, Guid expectedSubjectId, string? label = null);
 
     /// <summary>Generates assertion options for a discoverable (usernameless) login flow.</summary>
     Task<PasskeyAssertionOptions> GenerateDiscoverableAssertionOptionsAsync(Guid tenantId);

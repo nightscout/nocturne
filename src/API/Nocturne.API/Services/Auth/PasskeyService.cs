@@ -127,15 +127,26 @@ public class PasskeyService : IPasskeyService
         });
 
         var optionsJson = JsonSerializer.Serialize(options, FidoModelSerializerContext.Default.CredentialCreateOptions);
-        var challengeToken = CreateChallengeToken(optionsJson, subjectId);
+        var challengeToken = CreateChallengeToken(optionsJson, subjectId, ChallengePurpose.Registration);
 
         return new PasskeyRegistrationOptions(optionsJson, challengeToken);
     }
 
     public async Task<PasskeyCredentialResult> CompleteRegistrationAsync(
-        string attestationResponseJson, string challengeToken, Guid tenantId, string? label = null)
+        string attestationResponseJson, string challengeToken, Guid tenantId, Guid expectedSubjectId,
+        string? label = null)
     {
-        var cookie = ReadChallengeToken(challengeToken);
+        var cookie = ReadChallengeToken(challengeToken, ChallengePurpose.Registration);
+
+        // Checked before the ceremony so a challenge for the wrong subject is rejected outright.
+        var subjectId = cookie.SubjectId
+            ?? throw new InvalidOperationException("Challenge cookie missing subject ID for registration.");
+
+        if (subjectId != expectedSubjectId)
+        {
+            throw new InvalidOperationException(
+                "Registration challenge was not issued for the enrolling subject.");
+        }
 
         var originalOptions = JsonSerializer.Deserialize(
             cookie.OptionsJson,
@@ -157,9 +168,6 @@ public class PasskeyService : IPasskeyService
                 return !exists;
             },
         });
-
-        var subjectId = cookie.SubjectId
-            ?? throw new InvalidOperationException("Challenge cookie missing subject ID for registration.");
 
         // Enforce 20 credential cap
         var existingCount = await _dbContext.PasskeyCredentials
@@ -203,7 +211,7 @@ public class PasskeyService : IPasskeyService
         });
 
         var optionsJson = JsonSerializer.Serialize(options, FidoModelSerializerContext.Default.AssertionOptions);
-        var challengeToken = CreateChallengeToken(optionsJson, subjectId: null);
+        var challengeToken = CreateChallengeToken(optionsJson, subjectId: null, ChallengePurpose.Assertion);
 
         return Task.FromResult(new PasskeyAssertionOptions(optionsJson, challengeToken));
     }
@@ -230,7 +238,7 @@ public class PasskeyService : IPasskeyService
         });
 
         var optionsJson = JsonSerializer.Serialize(options, FidoModelSerializerContext.Default.AssertionOptions);
-        var challengeToken = CreateChallengeToken(optionsJson, subject.Id);
+        var challengeToken = CreateChallengeToken(optionsJson, subject.Id, ChallengePurpose.Assertion);
 
         return new PasskeyAssertionOptions(optionsJson, challengeToken);
     }
@@ -238,7 +246,7 @@ public class PasskeyService : IPasskeyService
     public async Task<PasskeyAssertionResult> CompleteAssertionAsync(
         string assertionResponseJson, string challengeToken, Guid tenantId)
     {
-        var cookie = ReadChallengeToken(challengeToken);
+        var cookie = ReadChallengeToken(challengeToken, ChallengePurpose.Assertion);
 
         var originalOptions = JsonSerializer.Deserialize(
             cookie.OptionsJson,
@@ -320,12 +328,13 @@ public class PasskeyService : IPasskeyService
             .CountAsync(c => c.SubjectId == subjectId);
     }
 
-    private string CreateChallengeToken(string optionsJson, Guid? subjectId)
+    private string CreateChallengeToken(string optionsJson, Guid? subjectId, string purpose)
     {
         var payload = new ChallengeCookiePayload
         {
             OptionsJson = optionsJson,
             SubjectId = subjectId,
+            Purpose = purpose,
             ExpiresAt = DateTime.UtcNow.Add(ChallengeExpiry),
         };
 
@@ -333,7 +342,7 @@ public class PasskeyService : IPasskeyService
         return _protector.Protect(json);
     }
 
-    private ChallengeCookiePayload ReadChallengeToken(string challengeToken)
+    private ChallengeCookiePayload ReadChallengeToken(string challengeToken, string expectedPurpose)
     {
         string json;
         try
@@ -349,6 +358,14 @@ public class PasskeyService : IPasskeyService
         var payload = JsonSerializer.Deserialize<ChallengeCookiePayload>(json)
             ?? throw new InvalidOperationException("Failed to deserialize challenge token payload.");
 
+        // Registration and assertion tokens share one protector, so the purpose is checked
+        // here: an assertion token is bound to the subject named in the login request, and
+        // without this check it could be redeemed as a registration challenge for that subject.
+        if (payload.Purpose != expectedPurpose)
+        {
+            throw new InvalidOperationException("Challenge token was issued for a different ceremony.");
+        }
+
         if (payload.ExpiresAt < DateTime.UtcNow)
         {
             throw new InvalidOperationException("Challenge token has expired. Please restart the authentication flow.");
@@ -357,10 +374,17 @@ public class PasskeyService : IPasskeyService
         return payload;
     }
 
+    private static class ChallengePurpose
+    {
+        public const string Registration = "registration";
+        public const string Assertion = "assertion";
+    }
+
     private sealed class ChallengeCookiePayload
     {
         public string OptionsJson { get; set; } = string.Empty;
         public Guid? SubjectId { get; set; }
+        public string Purpose { get; set; } = string.Empty;
         public DateTime ExpiresAt { get; set; }
     }
 }

@@ -233,10 +233,18 @@ public partial class SetupController : ControllerBase
         if (string.IsNullOrEmpty(request.ChallengeToken))
             return Problem(detail: "Challenge token is required", statusCode: 400, title: "Bad Request");
 
+        // The enrolling subject is looked up here rather than taken from the challenge token, so a
+        // registration challenge minted by another flow cannot be redeemed as the first owner.
+        var ownerSubjectId = await FindSetupOwnerSubjectIdAsync(tenant!, ct);
+        if (ownerSubjectId == null)
+            return Problem(detail: "Start setup again to create the owner account",
+                statusCode: 400, title: "Bad Request");
+
         try
         {
             var credResult = await _passkeyService.CompleteRegistrationAsync(
-                request.AttestationResponseJson, request.ChallengeToken, tenant!.Id);
+                request.AttestationResponseJson, request.ChallengeToken, tenant!.Id,
+                expectedSubjectId: ownerSubjectId.Value);
 
             // Generate recovery codes
             var recoveryCodes = await _recoveryCodeService.GenerateCodesAsync(credResult.SubjectId);
@@ -424,6 +432,32 @@ public partial class SetupController : ControllerBase
     }
 
     /// <summary>
+    /// The first-run owner subject: the earliest non-system active subject. Setup only runs while
+    /// no member of the tenant holds credentials, so this is the account the owner options step
+    /// created or reused. Ordered so the options and complete steps resolve the same row.
+    /// </summary>
+    private static IQueryable<SubjectEntity> SetupOwnerSubjects(NocturneDbContext context) =>
+        context.Subjects.Where(s => !s.IsSystemSubject && s.IsActive).OrderBy(s => s.Id);
+
+    /// <summary>
+    /// Returns the first-run owner subject's id as resolved from the database, or
+    /// <see langword="null"/> when the options step has not created it yet.
+    /// </summary>
+    private async Task<Guid?> FindSetupOwnerSubjectIdAsync(TenantEntity tenant, CancellationToken ct)
+    {
+        await using var context = await _dbFactory.CreateDbContextAsync(ct);
+
+        await context.Database.ExecuteSqlRawAsync(
+            "SELECT set_config('app.current_tenant_id', {0}, false)",
+            tenant.Id.ToString());
+
+        return await SetupOwnerSubjects(context)
+            .AsNoTracking()
+            .Select(s => (Guid?)s.Id)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
     /// Find or create the first non-system subject, ensure it is a member of the
     /// given tenant with the owner role, and assign the global admin role.
     /// Idempotent: safe to call on retries after a failed WebAuthn/OIDC ceremony,
@@ -438,8 +472,7 @@ public partial class SetupController : ControllerBase
             "SELECT set_config('app.current_tenant_id', {0}, false)",
             tenant.Id.ToString());
 
-        var existingSubject = await context.Subjects
-            .FirstOrDefaultAsync(s => !s.IsSystemSubject && s.IsActive, ct);
+        var existingSubject = await SetupOwnerSubjects(context).FirstOrDefaultAsync(ct);
 
         Guid subjectId;
         if (existingSubject != null)

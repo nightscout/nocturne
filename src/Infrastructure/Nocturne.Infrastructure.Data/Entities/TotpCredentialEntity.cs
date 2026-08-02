@@ -52,6 +52,14 @@ public class TotpCredentialEntity
     [Column("last_used_at")]
     public DateTime? LastUsedAt { get; set; }
 
+    /// <summary>
+    /// The most recent RFC 6238 time step consumed by a successful verification, or null if the
+    /// credential has never been verified. A code at or below this step is rejected, so each
+    /// code is usable once rather than for the whole ±1 step acceptance window.
+    /// </summary>
+    [Column("last_used_step")]
+    public long? LastUsedStep { get; set; }
+
     // Navigation properties
 
     /// <summary>

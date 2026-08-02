@@ -72,6 +72,11 @@
   let totpCode = $state("");
   /** Submitted from the code field's onComplete, so a full code submits itself. */
   let totpFormEl = $state<HTMLFormElement | null>(null);
+  /**
+   * Proof from the API that the passkey step succeeded. The authenticator code is
+   * a second factor, so it is only accepted alongside this token.
+   */
+  let stepUpToken = $state("");
 
   async function handleAuthResult(result: {
     success?: boolean;
@@ -79,11 +84,27 @@
     refreshToken?: string;
     expiresIn?: number;
     refreshExpiresIn?: number;
+    totpRequired?: boolean;
+    stepUpToken?: string | null;
     error?: string;
   }) {
     if (!result.success) {
       passkeyError =
         result.error ?? "We couldn't sign you in. Please try again.";
+      return;
+    }
+
+    // The passkey was accepted but this account also has an authenticator, so there is
+    // no session yet — collect the code and finish there.
+    if (result.totpRequired) {
+      if (!result.stepUpToken) {
+        passkeyError = "We couldn't sign you in. Please try again.";
+        return;
+      }
+      stepUpToken = result.stepUpToken;
+      totpCode = "";
+      authenticator.clear();
+      mode = "totp";
       return;
     }
 
@@ -188,6 +209,11 @@
     passkeyError = null;
     recovery.clear();
     authenticator.clear();
+    // Leaving the authenticator step abandons the passkey step it belonged to.
+    if (newMode !== "totp") {
+      stepUpToken = "";
+      totpCode = "";
+    }
   }
 </script>
 
@@ -204,15 +230,6 @@
 {/snippet}
 
 {#snippet otherMethodLinks()}
-  <Button
-    variant="link"
-    size="sm"
-    class="h-auto p-0 text-xs"
-    onclick={() => switchMode("totp")}
-    disabled={isLoading}
-  >
-    {signInMethodLabels.authenticator}
-  </Button>
   <Button
     variant="link"
     size="sm"
@@ -450,7 +467,7 @@
       </div>
 
     {:else if mode === "totp"}
-      <!-- Authenticator-app sign-in. Also verified on the server. -->
+      <!-- Second step after the passkey: the authenticator code, verified on the server. -->
       <form
         bind:this={totpFormEl}
         class="space-y-3"
@@ -459,33 +476,14 @@
         })}
       >
         <input type="hidden" name="returnUrl" value={returnUrl} />
+        <input type="hidden" name="stepUpToken" value={stepUpToken} />
 
         <FormError issues={authenticator.error} focusOnShow />
 
-        <FormField
-          label="Username"
-          id="totp-username"
-          required
-          issues={signInWithAuthenticator.fields.username.issues()}
-        >
-          {#snippet control(field)}
-            <div class="relative">
-              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                {...field}
-                name="username"
-                type="text"
-                placeholder="your-username"
-                class="pl-10"
-                autocomplete="username"
-                autocapitalize="none"
-                spellcheck={false}
-                autofocus
-                bind:value={username}
-              />
-            </div>
-          {/snippet}
-        </FormField>
+        <p class="text-sm text-muted-foreground">
+          Your passkey was accepted. Enter the current code from your authenticator
+          app to finish signing in.
+        </p>
 
         <div class="space-y-2">
           <Label for="totp-code-input">Authenticator code</Label>
@@ -527,7 +525,7 @@
           type="submit"
           class="w-full"
           disabled={signInWithAuthenticator.pending > 0 ||
-            !username.trim() ||
+            !stepUpToken ||
             totpCode.length !== 6}
         >
           {#if signInWithAuthenticator.pending > 0}

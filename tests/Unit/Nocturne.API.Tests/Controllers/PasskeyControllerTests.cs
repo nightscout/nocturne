@@ -11,6 +11,7 @@ using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Infrastructure.Data;
@@ -25,6 +26,7 @@ public class PasskeyControllerTests : IDisposable
     private readonly DbContextOptions<NocturneDbContext> _dbOptions;
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IPasskeyService> _passkeyService;
+    private readonly Mock<ITotpService> _totpService;
     private readonly Mock<IRecoveryCodeService> _recoveryCodeService;
     private readonly Mock<IJwtService> _jwtService;
     private readonly Mock<ISessionService> _sessionService;
@@ -34,6 +36,7 @@ public class PasskeyControllerTests : IDisposable
     private readonly PasskeyController _controller;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
+    private readonly Guid _subjectId = Guid.CreateVersion7();
 
     public PasskeyControllerTests()
     {
@@ -49,6 +52,7 @@ public class PasskeyControllerTests : IDisposable
         _dbContext.Database.EnsureCreated();
 
         _passkeyService = new Mock<IPasskeyService>();
+        _totpService = new Mock<ITotpService>();
         _recoveryCodeService = new Mock<IRecoveryCodeService>();
         _jwtService = new Mock<IJwtService>();
         _sessionService = new Mock<ISessionService>();
@@ -75,6 +79,7 @@ public class PasskeyControllerTests : IDisposable
 
         _controller = new PasskeyController(
             _passkeyService.Object,
+            _totpService.Object,
             _recoveryCodeService.Object,
             _jwtService.Object,
             _sessionService.Object,
@@ -102,8 +107,11 @@ public class PasskeyControllerTests : IDisposable
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    /// <summary>Seeds an active subject that is a member of the given tenant (this one by default).</summary>
-    private async Task<Guid> SeedMemberAsync(string username, Guid? tenantId = null)
+    /// <summary>
+    /// Seeds an active subject that is a member of the given tenant (this one by default),
+    /// optionally holding a passkey credential.
+    /// </summary>
+    private async Task<Guid> SeedMemberAsync(string username, bool withPasskey = false, Guid? tenantId = null)
     {
         var resolvedTenantId = tenantId ?? _tenantId;
         await EnsureTenantAsync(resolvedTenantId);
@@ -123,6 +131,19 @@ public class PasskeyControllerTests : IDisposable
             TenantId = resolvedTenantId,
             SubjectId = subjectId,
         });
+
+        if (withPasskey)
+        {
+            _dbContext.PasskeyCredentials.Add(new PasskeyCredentialEntity
+            {
+                Id = Guid.CreateVersion7(),
+                SubjectId = subjectId,
+                CredentialId = Guid.CreateVersion7().ToByteArray(),
+                PublicKey = [1, 2, 3],
+                CreatedAt = DateTime.UtcNow,
+            });
+        }
+
         await _dbContext.SaveChangesAsync();
         return subjectId;
     }
@@ -132,53 +153,23 @@ public class PasskeyControllerTests : IDisposable
         if (await _dbContext.Set<TenantEntity>().AnyAsync(t => t.Id == tenantId))
             return;
 
+        // The whole id, not a prefix: two v7 GUIDs minted in the same millisecond share their
+        // leading hex digits, so a prefix collides on the unique slug.
         _dbContext.Set<TenantEntity>().Add(new TenantEntity
         {
             Id = tenantId,
-            Slug = "t" + tenantId.ToString("N")[..8],
+            Slug = "t" + tenantId.ToString("N"),
             DisplayName = "Tenant",
         });
         await _dbContext.SaveChangesAsync();
     }
 
-    private async Task SeedPasskeyCredentialAsync(Guid subjectId)
-    {
-        _dbContext.PasskeyCredentials.Add(new PasskeyCredentialEntity
-        {
-            Id = Guid.CreateVersion7(),
-            SubjectId = subjectId,
-            CredentialId = Guid.CreateVersion7().ToByteArray(),
-            PublicKey = [1, 2, 3],
-        });
-        await _dbContext.SaveChangesAsync();
-    }
-
-    private async Task SeedOidcIdentityAsync(Guid subjectId)
-    {
-        var providerId = Guid.CreateVersion7();
-        _dbContext.Set<OidcProviderEntity>().Add(new OidcProviderEntity
-        {
-            Id = providerId,
-            Name = "Keycloak",
-            IssuerUrl = "https://issuer.example",
-            ClientId = "nocturne",
-        });
-        _dbContext.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
-        {
-            Id = Guid.CreateVersion7(),
-            SubjectId = subjectId,
-            ProviderId = providerId,
-            OidcSubjectId = "ext-" + subjectId,
-            Issuer = "https://issuer.example",
-        });
-        await _dbContext.SaveChangesAsync();
-    }
-
-    private void Authenticate(Guid subjectId) =>
+    /// <summary>Puts an authenticated subject on the request, as the auth middleware would.</summary>
+    private void Authenticate(Guid? subjectId = null) =>
         _controller.ControllerContext.HttpContext.Items["AuthContext"] = new AuthContext
         {
             IsAuthenticated = true,
-            SubjectId = subjectId,
+            SubjectId = subjectId ?? _subjectId,
             TenantId = _tenantId,
         };
 
@@ -202,66 +193,95 @@ public class PasskeyControllerTests : IDisposable
             .Setup(s => s.GenerateRegistrationOptionsAsync(subjectId, username, _tenantId))
             .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
 
-    [Fact]
-    public async Task RegisterOptions_EmptyUsername_ReturnsBadRequest()
-    {
-        var request = new PasskeyRegisterOptionsRequest { Username = "" };
+    #region Passkey enrolment is bound to the caller
 
-        var result = await _controller.RegisterOptions(request);
+    [Fact]
+    public async Task RegisterOptions_WhenAnonymous_ReturnsUnauthorizedWithoutMintingAChallenge()
+    {
+        var result = await _controller.RegisterOptions(new PasskeyRegisterOptionsRequest { Username = "testuser" });
 
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
-        Assert.Equal(400, objectResult.StatusCode);
+        objectResult.StatusCode.Should().Be(401);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            Times.Never,
+            "an anonymous caller must not be able to start an enrolment ceremony");
     }
 
     [Fact]
-    public async Task RegisterOptions_ValidRequest_CallsServiceAndReturnsOptionsWithToken()
+    public async Task RegisterComplete_WhenAnonymous_ReturnsUnauthorizedWithoutStoringACredential()
     {
-        var subjectId = await SeedMemberAsync("testuser");
-        StubRegistrationOptions(subjectId, "testuser");
+        var result = await _controller.RegisterComplete(new PasskeyRegisterCompleteRequest
+        {
+            AttestationResponseJson = "{}",
+            ChallengeToken = "some-token",
+        });
 
-        var result = await _controller.RegisterOptions(
-            new PasskeyRegisterOptionsRequest { Username = "testuser" });
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        objectResult.StatusCode.Should().Be(401);
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()),
+            Times.Never,
+            "an anonymous caller must not be able to store a credential");
+    }
+
+    [Fact]
+    public async Task RegisterOptions_UsesTheAuthenticatedSubject()
+    {
+        Authenticate();
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(_subjectId, "testuser", _tenantId))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
+
+        var result = await _controller.RegisterOptions(new PasskeyRegisterOptionsRequest { Username = "testuser" });
 
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
         var response = Assert.IsType<PasskeyOptionsResponse>(okResult.Value);
-        Assert.Contains("challenge", response.Options);
-        Assert.Equal("token-data", response.ChallengeToken);
-        _passkeyService.Verify(s => s.GenerateRegistrationOptionsAsync(subjectId, "testuser", _tenantId), Times.Once);
+        response.Options.Should().Contain("challenge");
+        response.ChallengeToken.Should().Be("token-data");
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(_subjectId, "testuser", _tenantId),
+            Times.Once);
     }
 
-    // ── Registration subject binding ─────────────────────────────────────
+    [Fact]
+    public async Task RegisterComplete_BindsTheChallengeToTheAuthenticatedSubject()
+    {
+        var victimSubjectId = Guid.CreateVersion7();
+        Authenticate();
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), _subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(new PasskeyCredentialResult(Guid.CreateVersion7(), _subjectId));
+
+        var result = await _controller.RegisterComplete(new PasskeyRegisterCompleteRequest
+        {
+            AttestationResponseJson = "{}",
+            ChallengeToken = "token-for-victim",
+        });
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), _subjectId, It.IsAny<string?>()),
+            Times.Once,
+            "the enrolling subject is the session's, so a challenge minted for another subject is refused");
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), victimSubjectId, It.IsAny<string?>()),
+            Times.Never);
+    }
 
     [Fact]
-    public async Task RegisterOptions_WhenAnonymousAndTheAccountHasACredential_IsRefused()
+    public async Task RegisterOptions_EmptyUsername_ReturnsBadRequest()
     {
-        // The takeover: an anonymous caller naming an established account used to have its
-        // subject id honoured, binding their own authenticator to that account.
-        var victimId = await SeedMemberAsync("victim");
-        await SeedPasskeyCredentialAsync(victimId);
+        Authenticate();
 
-        var result = await _controller.RegisterOptions(
-            new PasskeyRegisterOptionsRequest { Username = "victim" });
+        var result = await _controller.RegisterOptions(new PasskeyRegisterOptionsRequest { Username = "" });
 
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(400, objectResult.StatusCode);
-        _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
-            Times.Never);
-    }
-
-    [Fact]
-    public async Task RegisterOptions_WhenAnonymousAndTheAccountHasAnOidcIdentity_IsRefused()
-    {
-        var victimId = await SeedMemberAsync("victim");
-        await SeedOidcIdentityAsync(victimId);
-
-        var result = await _controller.RegisterOptions(
-            new PasskeyRegisterOptionsRequest { Username = "victim" });
-
-        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
-        _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
-            Times.Never);
     }
 
     [Fact]
@@ -269,10 +289,8 @@ public class PasskeyControllerTests : IDisposable
     {
         // Adding a passkey to your own account. The username on the request is not the
         // authority — the session is — so naming someone else changes nothing.
-        var callerId = await SeedMemberAsync("caller");
-        await SeedPasskeyCredentialAsync(callerId);
-        var victimId = await SeedMemberAsync("victim");
-        await SeedPasskeyCredentialAsync(victimId);
+        var callerId = await SeedMemberAsync("caller", withPasskey: true);
+        var victimId = await SeedMemberAsync("victim", withPasskey: true);
         Authenticate(callerId);
         StubRegistrationOptions(callerId, "victim");
 
@@ -291,8 +309,7 @@ public class PasskeyControllerTests : IDisposable
     {
         // Re-registering after spending a recovery code: the account still holds its old
         // credential, so only the recovery session makes this allowed.
-        var subjectId = await SeedMemberAsync("owner");
-        await SeedPasskeyCredentialAsync(subjectId);
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
         GiveRecoverySession(subjectId, "passkey:manage");
         StubRegistrationOptions(subjectId, "owner");
 
@@ -307,35 +324,46 @@ public class PasskeyControllerTests : IDisposable
     [Fact]
     public async Task RegisterOptions_WithARecoverySessionLackingPasskeyManage_IsRefused()
     {
-        var subjectId = await SeedMemberAsync("owner");
-        await SeedPasskeyCredentialAsync(subjectId);
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
         GiveRecoverySession(subjectId, "glucose.read");
 
         var result = await _controller.RegisterOptions(
             new PasskeyRegisterOptionsRequest { Username = "owner" });
 
-        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        Assert.Equal(401, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            Times.Never);
     }
 
     [Fact]
-    public async Task RegisterOptions_ForAnotherTenantsMember_IsRefused()
+    public async Task RegisterComplete_WithARecoverySession_BindsToTheCookieSubject()
     {
-        // Subjects are global; membership is what scopes them. A credentialless subject in
-        // another tenant must not be claimable from this one.
-        var otherTenantSubjectId = await SeedMemberAsync("elsewhere", tenantId: Guid.CreateVersion7());
+        var subjectId = await SeedMemberAsync("owner", withPasskey: true);
+        GiveRecoverySession(subjectId, "passkey:manage");
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()))
+            .ReturnsAsync(new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId));
 
-        var result = await _controller.RegisterOptions(
-            new PasskeyRegisterOptionsRequest { Username = "elsewhere" });
+        var result = await _controller.RegisterComplete(new PasskeyRegisterCompleteRequest
+        {
+            AttestationResponseJson = "{}",
+            ChallengeToken = "token",
+        });
 
-        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        Assert.IsType<OkObjectResult>(result.Result);
         _passkeyService.Verify(
-            s => s.GenerateRegistrationOptionsAsync(otherTenantSubjectId, It.IsAny<string>(), It.IsAny<Guid>()),
-            Times.Never);
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), subjectId, It.IsAny<string?>()),
+            Times.Once);
     }
 
     [Fact]
     public async Task RegisterComplete_NoChallengeToken_ReturnsBadRequest()
     {
+        Authenticate();
+
         var request = new PasskeyRegisterCompleteRequest
         {
             AttestationResponseJson = "{}",
@@ -347,6 +375,508 @@ public class PasskeyControllerTests : IDisposable
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(400, objectResult.StatusCode);
     }
+
+    #endregion
+
+    #region Recovery-mode enrolment
+
+    [Fact]
+    public async Task RecoveryModeOptions_WhenTenantIsNotInRecoveryMode_IsRefused()
+    {
+        // A tenant whose only member has a passkey is not in recovery mode.
+        await SeedMemberAsync("rhys", withPasskey: true);
+
+        var result = await _controller.RecoveryModeOptions(new PasskeyLoginOptionsRequest { Username = "rhys" });
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        objectResult.StatusCode.Should().Be(400);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RecoveryModeOptions_WhenTheNamedAccountStillHasAPasskey_IsRefused()
+    {
+        // Recovery mode is active because of the orphan, but the named account is not the orphan.
+        var withPasskey = await SeedMemberAsync("rhys", withPasskey: true);
+        await SeedMemberAsync("orphan", withPasskey: false);
+        _subjectService
+            .Setup(s => s.CountPrimaryAuthFactorsAsync(withPasskey))
+            .ReturnsAsync(1);
+
+        var result = await _controller.RecoveryModeOptions(new PasskeyLoginOptionsRequest { Username = "rhys" });
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        objectResult.StatusCode.Should().Be(400);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            Times.Never,
+            "an account that can still sign in must not be enrollable without a session");
+    }
+
+    [Fact]
+    public async Task RecoveryModeOptions_ForALockedOutAccount_MintsAChallengeForTheResolvedSubject()
+    {
+        await SeedMemberAsync("rhys", withPasskey: true);
+        var orphanId = await SeedMemberAsync("orphan", withPasskey: false);
+        _subjectService
+            .Setup(s => s.CountPrimaryAuthFactorsAsync(orphanId))
+            .ReturnsAsync(0);
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan", _tenantId))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
+
+        var result = await _controller.RecoveryModeOptions(new PasskeyLoginOptionsRequest { Username = "orphan" });
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(orphanId, "orphan", _tenantId),
+            Times.Once,
+            "the subject comes from the server's lookup, not from the request");
+    }
+
+    [Fact]
+    public async Task RecoveryModeOptions_ForAnotherTenantsMember_IsRefused()
+    {
+        // Subjects are global; membership is what scopes them. A locked-out subject in another
+        // tenant must not be claimable from this one.
+        await SeedMemberAsync("rhys", withPasskey: true);
+        await SeedMemberAsync("orphan", withPasskey: false);
+        var elsewhereId = await SeedMemberAsync("elsewhere", tenantId: Guid.CreateVersion7());
+        _subjectService.Setup(s => s.CountPrimaryAuthFactorsAsync(elsewhereId)).ReturnsAsync(0);
+
+        var result = await _controller.RecoveryModeOptions(new PasskeyLoginOptionsRequest { Username = "elsewhere" });
+
+        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(elsewhereId, It.IsAny<string>(), It.IsAny<Guid>()),
+            Times.Never);
+    }
+
+    #endregion
+
+    #region Anonymous enrolment binds to a server-resolved subject
+
+    [Fact]
+    public async Task InviteComplete_WithAChallengeForAnotherSubject_IsRefused()
+    {
+        var victimId = await SeedMemberAsync("rhys", withPasskey: true);
+        await SeedEnrollingSubjectAsync("invitee");
+        var inviteService = StubValidInvite();
+        StubRegistrationChallengeMintedFor(victimId);
+
+        var result = await _controller.InviteComplete(
+            new InviteCompleteRequest
+            {
+                Token = "invite-token",
+                Username = "invitee",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-rhys",
+            },
+            inviteService.Object);
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        objectResult.StatusCode.Should().Be(400);
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), victimId, It.IsAny<string?>()),
+            Times.Never,
+            "the enrolling subject comes from the server's lookup, not from the challenge token");
+        inviteService.Verify(
+            s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>()),
+            Times.Never,
+            "a refused enrolment must not join anyone to the tenant");
+    }
+
+    [Fact]
+    public async Task InviteComplete_ForAnAccountThatCanAlreadySignIn_IsRefused()
+    {
+        // Naming an existing member resolves nothing: only a subject with no sign-in method that
+        // is not yet a member of this tenant can be enrolled anonymously.
+        await SeedMemberAsync("rhys", withPasskey: true);
+        var inviteService = StubValidInvite();
+
+        var result = await _controller.InviteComplete(
+            new InviteCompleteRequest
+            {
+                Token = "invite-token",
+                Username = "rhys",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-token",
+            },
+            inviteService.Object);
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        objectResult.StatusCode.Should().Be(400);
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task InviteComplete_WithAChallengeForTheResolvedInvitee_Succeeds()
+    {
+        var inviteeId = await SeedEnrollingSubjectAsync("invitee");
+        var inviteService = StubValidInvite();
+        StubRegistrationChallengeMintedFor(inviteeId);
+        _recoveryCodeService.Setup(s => s.GenerateCodesAsync(inviteeId)).ReturnsAsync(["code-1"]);
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(inviteeId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900));
+
+        var result = await _controller.InviteComplete(
+            new InviteCompleteRequest
+            {
+                Token = "invite-token",
+                Username = "invitee",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-invitee",
+            },
+            inviteService.Object);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.IsType<PasskeyRegistrationResponse>(ok.Value).Success.Should().BeTrue();
+        inviteService.Verify(s => s.AcceptInviteAsync("invite-token", inviteeId), Times.Once);
+    }
+
+    [Fact]
+    public async Task AccessRequestComplete_WithAChallengeForAnotherSubject_IsRefused()
+    {
+        var victimId = await SeedMemberAsync("rhys", withPasskey: true);
+        await AllowAccessRequestsAsync();
+        await SeedPendingAccessRequestAsync("Sam Smith");
+        StubRegistrationChallengeMintedFor(victimId);
+
+        var result = await _controller.AccessRequestComplete(
+            new AccessRequestCompleteRequest
+            {
+                DisplayName = "Sam Smith",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-rhys",
+            },
+            new Mock<IInAppNotificationService>().Object);
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        objectResult.StatusCode.Should().Be(400);
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), victimId, It.IsAny<string?>()),
+            Times.Never,
+            "the enrolling subject comes from the server's lookup, not from the challenge token");
+    }
+
+    [Fact]
+    public async Task AccessRequestComplete_WithAChallengeForTheResolvedRequestor_Succeeds()
+    {
+        await AllowAccessRequestsAsync();
+        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
+        StubRegistrationChallengeMintedFor(requestorId);
+
+        var result = await _controller.AccessRequestComplete(
+            new AccessRequestCompleteRequest
+            {
+                DisplayName = "Sam Smith",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-sam",
+            },
+            new Mock<IInAppNotificationService>().Object);
+
+        Assert.IsType<OkResult>(result);
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), requestorId, It.IsAny<string?>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// Subjects are global; membership is what scopes them. A credential-less member of another
+    /// tenant is that tenant's locked-out account, not an abandoned enrolment here, so an invite
+    /// naming their username enrols a fresh subject and leaves theirs untouched.
+    /// </summary>
+    [Fact]
+    public async Task InviteOptions_ForAnotherTenantsMember_DoesNotBindToThatSubject()
+    {
+        var elsewhereId = await SeedMemberAsync("elsewhere", tenantId: Guid.CreateVersion7());
+        var inviteService = StubValidInvite();
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "elsewhere", _tenantId))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
+
+        var result = await _controller.InviteOptions(
+            new InviteOptionsRequest { Token = "invite-token", Username = "elsewhere", DisplayName = "Attacker" },
+            inviteService.Object);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        var victim = await _dbContext.Subjects.AsNoTracking().FirstAsync(s => s.Id == elsewhereId);
+        victim.Name.Should().Be("elsewhere", "another tenant's member must not be renamed by an invite here");
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(elsewhereId, It.IsAny<string>(), It.IsAny<Guid>()),
+            Times.Never,
+            "the ceremony must not be bound to another tenant's member");
+        var subjects = await _dbContext.Subjects.AsNoTracking()
+            .Where(s => s.Username == "elsewhere").ToListAsync();
+        subjects.Should().HaveCount(2, "the invite enrols a new subject rather than claiming theirs");
+    }
+
+    /// <summary>
+    /// The completion half of the same claim: with no enrolling shell to resolve, the credential
+    /// never reaches another tenant's member.
+    /// </summary>
+    [Fact]
+    public async Task InviteComplete_ForAnotherTenantsMember_StoresNoCredential()
+    {
+        var elsewhereId = await SeedMemberAsync("elsewhere", tenantId: Guid.CreateVersion7());
+        var inviteService = StubValidInvite();
+        StubRegistrationChallengeMintedFor(elsewhereId);
+
+        var result = await _controller.InviteComplete(
+            new InviteCompleteRequest
+            {
+                Token = "invite-token",
+                Username = "elsewhere",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-elsewhere",
+            },
+            inviteService.Object);
+
+        Assert.Equal(400, Assert.IsType<ObjectResult>(result.Result).StatusCode);
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), elsewhereId, It.IsAny<string?>()),
+            Times.Never,
+            "a member of any tenant is an account, not a half-finished enrolment");
+        inviteService.Verify(
+            s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>()),
+            Times.Never);
+    }
+
+    /// <summary>
+    /// Duplicate subjects left behind by an older build of the options step are all credential-less
+    /// shells that nobody can sign in as, so the completion resolves the newest — the one the
+    /// caller's ceremony was minted against — rather than refusing the invite forever.
+    /// </summary>
+    [Fact]
+    public async Task InviteComplete_WithDuplicateEnrollingSubjects_ResolvesTheNewest()
+    {
+        var older = await SeedEnrollingSubjectAsync("invitee");
+        var newest = await SeedEnrollingSubjectAsync("invitee");
+        newest.CompareTo(older).Should().BePositive("UUID v7 ids sort in creation order");
+        var inviteService = StubValidInvite();
+        StubRegistrationChallengeMintedFor(newest);
+        _recoveryCodeService.Setup(s => s.GenerateCodesAsync(newest)).ReturnsAsync(["code-1"]);
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(newest, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900));
+
+        var result = await _controller.InviteComplete(
+            new InviteCompleteRequest
+            {
+                Token = "invite-token",
+                Username = "invitee",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-invitee",
+            },
+            inviteService.Object);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        inviteService.Verify(s => s.AcceptInviteAsync("invite-token", newest), Times.Once);
+    }
+
+    /// <summary>
+    /// Cancelling the OS prompt is the common failure, and it abandons the ceremony but not the
+    /// subject the options step created. A retry has to land on that same subject: the completion
+    /// step resolves the enrolling subject by username, so a second one under the same username
+    /// makes the invite unfinishable.
+    /// </summary>
+    [Fact]
+    public async Task InviteOptions_AfterAnAbandonedCeremony_ReusesTheSubject()
+    {
+        var inviteService = StubValidInvite();
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "invitee", _tenantId))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
+
+        Assert.IsType<OkObjectResult>((await _controller.InviteOptions(
+            new InviteOptionsRequest { Token = "invite-token", Username = "Invitee", DisplayName = "Sam" },
+            inviteService.Object)).Result);
+        Assert.IsType<OkObjectResult>((await _controller.InviteOptions(
+            new InviteOptionsRequest { Token = "invite-token", Username = "invitee", DisplayName = "Sam Smith" },
+            inviteService.Object)).Result);
+
+        var subjects = await _dbContext.Subjects.AsNoTracking()
+            .Where(s => s.Username == "invitee").ToListAsync();
+        subjects.Should().ContainSingle("a retry must reuse the abandoned subject, not add another");
+        subjects[0].Name.Should().Be("Sam Smith");
+
+        StubRegistrationChallengeMintedFor(subjects[0].Id);
+        _recoveryCodeService.Setup(s => s.GenerateCodesAsync(subjects[0].Id)).ReturnsAsync(["code-1"]);
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjects[0].Id, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900));
+
+        var result = await _controller.InviteComplete(
+            new InviteCompleteRequest
+            {
+                Token = "invite-token",
+                Username = "invitee",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-invitee",
+            },
+            inviteService.Object);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.IsType<PasskeyRegistrationResponse>(ok.Value).Success.Should().BeTrue();
+        inviteService.Verify(s => s.AcceptInviteAsync("invite-token", subjects[0].Id), Times.Once);
+    }
+
+    /// <summary>
+    /// The same abandoned-ceremony retry on the access-request flow. The pending subject holds no
+    /// credential, so resuming it takes nothing over; the conflict is still reported for a request
+    /// that actually finished registering.
+    /// </summary>
+    [Fact]
+    public async Task AccessRequestOptions_AfterAnAbandonedCeremony_ReusesTheSubject()
+    {
+        await AllowAccessRequestsAsync();
+        _passkeyService
+            .Setup(s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), "sam-smith", _tenantId))
+            .ReturnsAsync(new PasskeyRegistrationOptions("{\"challenge\":\"abc\"}", "token-data"));
+
+        Assert.IsType<OkObjectResult>((await _controller.AccessRequestOptions(
+            new AccessRequestOptionsRequest { DisplayName = "Sam Smith" })).Result);
+        Assert.IsType<OkObjectResult>((await _controller.AccessRequestOptions(
+            new AccessRequestOptionsRequest { DisplayName = "Sam Smith", Message = "second try" })).Result);
+
+        var subjects = await _dbContext.Subjects.AsNoTracking()
+            .Where(s => s.Name == "Sam Smith").ToListAsync();
+        subjects.Should().ContainSingle("a retry must reuse the abandoned subject, not add another");
+        subjects[0].AccessRequestMessage.Should().Be("second try");
+
+        StubRegistrationChallengeMintedFor(subjects[0].Id);
+
+        var result = await _controller.AccessRequestComplete(
+            new AccessRequestCompleteRequest
+            {
+                DisplayName = "Sam Smith",
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-sam",
+            },
+            new Mock<IInAppNotificationService>().Object);
+
+        Assert.IsType<OkResult>(result);
+    }
+
+    /// <summary>
+    /// A pending request that finished registering is a real request awaiting approval, not an
+    /// abandoned ceremony, so a second one under the same name is still a conflict.
+    /// </summary>
+    [Fact]
+    public async Task AccessRequestOptions_WhenTheNameHasAFinishedPendingRequest_IsAConflict()
+    {
+        await AllowAccessRequestsAsync();
+        var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
+        _dbContext.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = requestorId,
+            CredentialId = Guid.CreateVersion7().ToByteArray(),
+            PublicKey = [1, 2, 3],
+            CreatedAt = DateTime.UtcNow,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.AccessRequestOptions(
+            new AccessRequestOptionsRequest { DisplayName = "Sam Smith" });
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        _passkeyService.Verify(
+            s => s.GenerateRegistrationOptionsAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>()),
+            Times.Never);
+    }
+
+    /// <summary>
+    /// Makes the passkey service behave as the real one does for a challenge token minted for
+    /// <paramref name="subjectId"/>: it accepts that subject as the enrolling one and refuses
+    /// every other.
+    /// </summary>
+    private void StubRegistrationChallengeMintedFor(Guid subjectId)
+    {
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ReturnsAsync((string _, string _, Guid _, Guid expectedSubjectId, string? _) =>
+                expectedSubjectId == subjectId
+                    ? new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId)
+                    : throw new InvalidOperationException(
+                        "Registration challenge was not issued for the enrolling subject."));
+    }
+
+    private Mock<IMemberInviteService> StubValidInvite()
+    {
+        var inviteService = new Mock<IMemberInviteService>();
+        inviteService.Setup(s => s.GetInviteByTokenAsync("invite-token"))
+            .ReturnsAsync(new MemberInviteInfo(
+                Guid.CreateVersion7(), _tenantId, "Test", "Owner", [], null, null, false,
+                DateTime.UtcNow.AddDays(1), null, 0, true, false, false, DateTime.UtcNow, []));
+        inviteService.Setup(s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>()))
+            .ReturnsAsync(new AcceptMemberInviteResult(true, MembershipId: Guid.CreateVersion7()));
+        return inviteService;
+    }
+
+    /// <summary>
+    /// Adds the subject that <c>invite/options</c> creates: active, no credentials, and not yet a
+    /// member of the tenant.
+    /// </summary>
+    private async Task<Guid> SeedEnrollingSubjectAsync(string username)
+    {
+        var subjectId = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = username,
+            Username = username,
+            IsActive = true,
+            IsSystemSubject = false,
+        });
+        await _dbContext.SaveChangesAsync();
+        return subjectId;
+    }
+
+    /// <summary>
+    /// Adds the subject that <c>access-request/options</c> creates: pending and inactive.
+    /// </summary>
+    private async Task<Guid> SeedPendingAccessRequestAsync(string displayName)
+    {
+        var subjectId = Guid.CreateVersion7();
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = displayName,
+            Username = displayName.ToLowerInvariant().Replace(" ", "-"),
+            IsActive = false,
+            IsSystemSubject = false,
+            ApprovalStatus = "Pending",
+        });
+        await _dbContext.SaveChangesAsync();
+        return subjectId;
+    }
+
+    private async Task AllowAccessRequestsAsync()
+    {
+        var tenant = await _dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == _tenantId);
+        if (tenant == null)
+        {
+            tenant = new TenantEntity { Id = _tenantId, Slug = "test", DisplayName = "Test" };
+            _dbContext.Tenants.Add(tenant);
+        }
+
+        tenant.AllowAccessRequests = true;
+        await _dbContext.SaveChangesAsync();
+    }
+
+    #endregion
 
     [Fact]
     public async Task LoginOptions_EmptyUsername_ReturnsBadRequest()
@@ -403,6 +933,66 @@ public class PasskeyControllerTests : IDisposable
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(400, objectResult.StatusCode);
     }
+
+    #region The passkey alone is not a session when a second factor is enrolled
+
+    /// <summary>Stubs a passkey assertion that resolves to <paramref name="subjectId"/>.</summary>
+    private void StubSuccessfulAssertion(Guid subjectId, string username) =>
+        _passkeyService
+            .Setup(s => s.CompleteAssertionAsync("{}", "assertion-token", _tenantId))
+            .ReturnsAsync(new PasskeyAssertionResult(subjectId, username, username));
+
+    private Task<ActionResult<PasskeyLoginCompleteResponse>> LoginCompleteAsync() =>
+        _controller.LoginComplete(new PasskeyLoginCompleteRequest
+        {
+            AssertionResponseJson = "{}",
+            ChallengeToken = "assertion-token",
+        });
+
+    [Fact]
+    public async Task LoginComplete_WhenTheSubjectHasAnAuthenticator_WithholdsTheSession()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        _totpService.Setup(s => s.GetCredentialCountAsync(subjectId)).ReturnsAsync(1);
+        _totpService.Setup(s => s.CreateStepUpTokenAsync(subjectId)).ReturnsAsync("step-up-token");
+
+        var result = await LoginCompleteAsync();
+
+        var response = Assert.IsType<PasskeyLoginCompleteResponse>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        response.TotpRequired.Should().BeTrue();
+        response.StepUpToken.Should().NotBeNullOrEmpty();
+        response.AccessToken.Should().BeEmpty();
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "the second factor is still outstanding, so the passkey alone must not grant access");
+    }
+
+    [Fact]
+    public async Task LoginComplete_WhenTheSubjectHasNoAuthenticator_IssuesTheSession()
+    {
+        var subjectId = await SeedMemberAsync("rhys", withPasskey: true);
+        StubSuccessfulAssertion(subjectId, "rhys");
+        _totpService.Setup(s => s.GetCredentialCountAsync(subjectId)).ReturnsAsync(0);
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900));
+
+        var result = await LoginCompleteAsync();
+
+        var response = Assert.IsType<PasskeyLoginCompleteResponse>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        response.TotpRequired.Should().BeFalse();
+        response.AccessToken.Should().Be("access");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(subjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _totpService.Verify(s => s.CreateStepUpTokenAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    #endregion
 
     [Fact]
     public async Task RecoveryVerify_EmptyFields_ReturnsBadRequest()

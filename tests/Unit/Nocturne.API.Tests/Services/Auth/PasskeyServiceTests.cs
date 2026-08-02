@@ -319,6 +319,61 @@ public class PasskeyServiceTests
 
     #endregion
 
+    #region Challenge token binding
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteRegistrationAsync_WithAChallengeForAnotherSubject_IsRejected()
+    {
+        var service = CreateService();
+        var victimSubjectId = Guid.CreateVersion7();
+
+        // A challenge minted for the victim — as the old caller-supplied subjectId allowed.
+        var options = await service.GenerateRegistrationOptionsAsync(victimSubjectId, "victim", _tenantId);
+
+        var act = () => service.CompleteRegistrationAsync(
+            "{}", options.ChallengeToken, _tenantId, expectedSubjectId: _subjectId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*not issued for the enrolling subject*");
+
+        (await _dbContext.PasskeyCredentials.AnyAsync(c => c.SubjectId == victimSubjectId))
+            .Should().BeFalse("no credential may be stored for a subject the caller does not own");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteRegistrationAsync_WithAnAssertionChallenge_IsRejected()
+    {
+        var service = CreateService();
+
+        // Login and registration challenges share one protector, so the ceremony a token was
+        // minted for has to be checked.
+        var assertion = await service.GenerateDiscoverableAssertionOptionsAsync(_tenantId);
+
+        var act = () => service.CompleteRegistrationAsync(
+            "{}", assertion.ChallengeToken, _tenantId, expectedSubjectId: _subjectId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*different ceremony*");
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteAssertionAsync_WithARegistrationChallenge_IsRejected()
+    {
+        var service = CreateService();
+
+        var registration = await service.GenerateRegistrationOptionsAsync(_subjectId, "testuser", _tenantId);
+
+        var act = () => service.CompleteAssertionAsync("{}", registration.ChallengeToken, _tenantId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*different ceremony*");
+    }
+
+    #endregion
+
     #region Helpers
 
     private PasskeyService CreateService()

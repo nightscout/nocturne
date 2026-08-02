@@ -121,6 +121,7 @@
 
       const result = await inviteComplete({
         token,
+        username,
         attestationResponseJson: JSON.stringify(attestation),
         challengeToken,
       });

@@ -233,13 +233,27 @@ export const logoutSession = command(z.string().optional(), async (_providerId) 
 // ============================================================================
 
 /**
- * The credential fields shared by the code-based sign-in forms. `returnUrl` is
- * a hidden field so a submission without JavaScript lands where the user
- * started; it's reduced to a same-origin path before being used.
+ * Recovery-code sign-in fields. `returnUrl` is a hidden field so a submission
+ * without JavaScript lands where the user started; it's reduced to a same-origin
+ * path before being used.
  */
-const codeSignInSchema = z.object({
+const recoveryCodeSchema = z.object({
   username: z.string().trim().min(1, "Enter your username"),
   code: z.string().trim().min(1, "Enter your code"),
+  returnUrl: z.string().optional(),
+});
+
+/**
+ * Authenticator-code fields. The account is named by the step-up token the
+ * passkey step returned, not by the person signing in, because the code alone
+ * is not a sign-in method.
+ */
+const authenticatorSchema = z.object({
+  stepUpToken: z.string().min(1),
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app"),
   returnUrl: z.string().optional(),
 });
 
@@ -251,7 +265,7 @@ const codeSignInSchema = z.object({
  * comes back as a field-level issue on the re-rendered page.
  */
 export const signInWithRecoveryCode = form(
-  codeSignInSchema,
+  recoveryCodeSchema,
   async (data, issue) => {
     const api = getApiClient();
 
@@ -280,23 +294,19 @@ export const signInWithRecoveryCode = form(
 );
 
 /**
- * Sign in with a code from an authenticator app. Server-side for the same
- * reason as {@link signInWithRecoveryCode}.
+ * Finish signing in with a code from an authenticator app, after the passkey
+ * step returned a step-up token. Server-side for the same reason as
+ * {@link signInWithRecoveryCode}.
  */
 export const signInWithAuthenticator = form(
-  codeSignInSchema.extend({
-    code: z
-      .string()
-      .trim()
-      .regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app"),
-  }),
+  authenticatorSchema,
   async (data, issue) => {
     const api = getApiClient();
 
     let verified = false;
     try {
       const result = await api.totp.login({
-        username: data.username,
+        stepUpToken: data.stepUpToken,
         code: data.code,
       });
       verified = result?.success === true;
@@ -310,7 +320,7 @@ export const signInWithAuthenticator = form(
     if (!verified) {
       invalid(
         issue.code(
-          "That code wasn't accepted. Codes expire after 30 seconds — try the current one."
+          "That code wasn't accepted. Each code works once and expires after 30 seconds — try the current one."
         )
       );
     }

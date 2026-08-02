@@ -82,7 +82,6 @@ public class TenantResolutionMiddleware
         // Platform-admin tenant-access grant: minted at the apex (operator is not on
         // any tenant subdomain yet); the target tenant is resolved from the query string.
         "/api/auth/platform-access",
-        "/api/auth/passkey/setup/",
         "/api/v4/admin/demo/",
         "/api/v4/admin/platform-settings",
         "/api/v4/admin/tenants",

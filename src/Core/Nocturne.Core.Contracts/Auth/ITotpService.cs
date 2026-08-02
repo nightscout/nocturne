@@ -14,8 +14,27 @@ public interface ITotpService
     /// <summary>Verifies a TOTP code against the pending setup challenge and registers the credential.</summary>
     Task<TotpCredentialResult> CompleteSetupAsync(string code, string label, string challengeToken);
 
-    /// <summary>Verifies a TOTP code for login and returns the authenticated subject, or null if invalid.</summary>
-    Task<TotpLoginResult?> VerifyLoginAsync(string username, string code);
+    /// <summary>
+    /// Mints a short-lived single-use token recording that a primary factor (passkey or linked
+    /// provider) has just been verified for this subject. It is the only way to reach
+    /// <see cref="VerifyStepUpAsync"/>, which keeps TOTP a second factor.
+    /// </summary>
+    /// <remarks>
+    /// This method verifies nothing itself. The caller must have completed a primary factor for
+    /// <paramref name="subjectId"/> in the same request before calling it — minting a token from
+    /// anything less turns TOTP into a single factor for that path. Nothing in the type system
+    /// enforces that, so a new call site is a security decision.
+    /// </remarks>
+    /// <param name="subjectId">The subject whose primary factor was just verified.</param>
+    Task<string> CreateStepUpTokenAsync(Guid subjectId);
+
+    /// <summary>
+    /// Verifies a TOTP code for the subject a step-up token was minted for and returns that subject,
+    /// or null if the token or the code is not valid. Both halves are single-use: the token is
+    /// consumed, so it yields at most one session, and the code's time step is consumed, so it
+    /// cannot be reused for the remainder of its acceptance window.
+    /// </summary>
+    Task<TotpLoginResult?> VerifyStepUpAsync(string stepUpToken, string code);
 
     /// <summary>Returns all registered TOTP credentials for the specified subject.</summary>
     Task<List<TotpCredentialInfo>> GetCredentialsAsync(Guid subjectId);

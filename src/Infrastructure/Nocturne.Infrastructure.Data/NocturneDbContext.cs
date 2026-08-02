@@ -186,6 +186,11 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<TotpCredentialEntity> TotpCredentials { get; set; }
 
     /// <summary>
+    /// Gets or sets the TotpStepUpTokens table recording each minted step-up token and its redemption
+    /// </summary>
+    public DbSet<TotpStepUpTokenEntity> TotpStepUpTokens { get; set; }
+
+    /// <summary>
     /// ASP.NET Core Data Protection key ring — persisted so keys survive container restarts.
     /// Not tenant-scoped; no RLS.
     /// </summary>
@@ -3273,6 +3278,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<RecoveryCodeEntity>(entity =>
         {
             entity.HasIndex(e => e.SubjectId);
+            entity.HasOne(e => e.Subject).WithMany().HasForeignKey(e => e.SubjectId);
+        });
+
+        // TotpStepUpTokenEntity
+        modelBuilder.Entity<TotpStepUpTokenEntity>(entity =>
+        {
+            entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
+            entity.HasIndex(e => e.SubjectId);
+            // The cleanup sweep deletes by expiry.
+            entity.HasIndex(e => e.ExpiresAt);
             entity.HasOne(e => e.Subject).WithMany().HasForeignKey(e => e.SubjectId);
         });
 

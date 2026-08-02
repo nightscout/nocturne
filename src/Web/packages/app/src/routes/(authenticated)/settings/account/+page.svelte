@@ -128,11 +128,12 @@
   // ============================================================================
 
   async function handleAddPasskey() {
-    if (!user?.subjectId || !user?.name) return;
+    if (!user?.name) return;
     isRegistering = true;
     errorMessage = null;
 
     try {
+      // The account the passkey is added to comes from the session, not this call.
       const response = await registerOptions({ username: user.name });
       const options = JSON.parse(response.options ?? "");
       const challengeToken = response.challengeToken ?? "";

@@ -460,6 +460,85 @@ public class SetupControllerTests : IDisposable
         validation.IsValid.Should().BeFalse();
     }
 
+    // ── OwnerComplete binds the enrolment to a server-resolved subject ────
+
+    [Fact]
+    public async Task OwnerComplete_WithAChallengeForAnotherSubject_IsRefused()
+    {
+        var ownerSubjectId = await SeedOwnerlessTenantWithOwnerSubjectAsync();
+        var otherSubjectId = Guid.CreateVersion7();
+        StubRegistrationChallengeMintedFor(otherSubjectId);
+
+        var result = await _controller.OwnerComplete(
+            new SetupOwnerCompleteRequest
+            {
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-another-subject",
+            },
+            CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(400);
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), ownerSubjectId, It.IsAny<string?>()),
+            Times.Once,
+            "the enrolling subject comes from the server's lookup, not from the challenge token");
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "a refused enrolment must not produce a session");
+    }
+
+    [Fact]
+    public async Task OwnerComplete_WithAChallengeForTheResolvedOwner_Succeeds()
+    {
+        var ownerSubjectId = await SeedOwnerlessTenantWithOwnerSubjectAsync();
+        StubRegistrationChallengeMintedFor(ownerSubjectId);
+        _recoveryCodeService.Setup(s => s.GenerateCodesAsync(ownerSubjectId))
+            .ReturnsAsync(["code-1"]);
+        _sessionService
+            .Setup(s => s.IssueSessionAsync(ownerSubjectId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900));
+
+        var result = await _controller.OwnerComplete(
+            new SetupOwnerCompleteRequest
+            {
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-for-owner",
+            },
+            CancellationToken.None);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeOfType<SetupOwnerCompleteResponse>().Subject.Success.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OwnerComplete_BeforeTheOptionsStepCreatedTheOwner_IsRefused()
+    {
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = Guid.CreateVersion7(), Slug = "my-instance", DisplayName = "My Instance",
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.OwnerComplete(
+            new SetupOwnerCompleteRequest
+            {
+                AttestationResponseJson = "{}",
+                ChallengeToken = "challenge-from-nowhere",
+            },
+            CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(400);
+        _passkeyService.Verify(
+            s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()),
+            Times.Never,
+            "with no subject to resolve there is nothing to enrol onto");
+    }
+
     // ── OwnerOidc ────────────────────────────────────────────────────────
 
     [Fact]
@@ -503,6 +582,50 @@ public class SetupControllerTests : IDisposable
     // function. These scenarios are covered by integration tests.
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Seeds the sole tenant plus the credential-less owner subject and membership that
+    /// <c>owner/options</c> leaves behind, and returns the subject id.
+    /// </summary>
+    private async Task<Guid> SeedOwnerlessTenantWithOwnerSubjectAsync()
+    {
+        var tenantId = Guid.CreateVersion7();
+        var subjectId = Guid.CreateVersion7();
+
+        _dbContext.Set<TenantEntity>().Add(new TenantEntity
+        {
+            Id = tenantId, Slug = "my-instance", DisplayName = "My Instance",
+        });
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId, Name = "Owner", Username = "owner",
+            IsActive = true, IsSystemSubject = false,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = tenantId, SubjectId = subjectId,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        return subjectId;
+    }
+
+    /// <summary>
+    /// Makes the passkey service behave as the real one does for a challenge token minted for
+    /// <paramref name="subjectId"/>: it accepts that subject as the enrolling one and refuses
+    /// every other.
+    /// </summary>
+    private void StubRegistrationChallengeMintedFor(Guid subjectId)
+    {
+        _passkeyService
+            .Setup(s => s.CompleteRegistrationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>()))
+            .ReturnsAsync((string _, string _, Guid _, Guid expectedSubjectId, string? _) =>
+                expectedSubjectId == subjectId
+                    ? new PasskeyCredentialResult(Guid.CreateVersion7(), subjectId)
+                    : throw new InvalidOperationException(
+                        "Registration challenge was not issued for the enrolling subject."));
+    }
 
     /// <summary>
     /// Seeds a tenant with a member that has a passkey credential, making

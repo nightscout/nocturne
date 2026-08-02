@@ -156,6 +156,51 @@ public class TotpHelperTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void TryVerify_ReportsTheMatchedTimeStep()
+    {
+        var secret = TotpHelper.GenerateSecret();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var code = TotpHelper.ComputeTotp(secret, now);
+
+        var result = TotpHelper.TryVerify(secret, code, lastUsedStep: null, out var matchedStep);
+
+        result.Should().BeTrue();
+        matchedStep.Should().Be(now / 30);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void TryVerify_RejectsACodeWhoseStepWasAlreadyConsumed()
+    {
+        var secret = TotpHelper.GenerateSecret();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var code = TotpHelper.ComputeTotp(secret, now);
+
+        TotpHelper.TryVerify(secret, code, lastUsedStep: null, out var consumedStep).Should().BeTrue();
+
+        // Replayed inside the same +/- 1 step window, which without the floor would still match.
+        var replay = TotpHelper.TryVerify(secret, code, consumedStep, out _);
+
+        replay.Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void TryVerify_AcceptsACodeFromAStepAfterTheConsumedOne()
+    {
+        var secret = TotpHelper.GenerateSecret();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var code = TotpHelper.ComputeTotp(secret, now);
+
+        // A step before the current one was consumed, so the current code is still usable.
+        var result = TotpHelper.TryVerify(secret, code, lastUsedStep: (now / 30) - 1, out var matchedStep);
+
+        result.Should().BeTrue();
+        matchedStep.Should().Be(now / 30);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void ComputeTotp_AlwaysReturnsSixDigits()
     {
         var secret = TotpHelper.GenerateSecret();
