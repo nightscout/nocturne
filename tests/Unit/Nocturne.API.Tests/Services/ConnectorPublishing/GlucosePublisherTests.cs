@@ -23,6 +23,7 @@ public class GlucosePublisherTests
 {
     private readonly Mock<IEntryService> _mockEntryService;
     private readonly Mock<ISensorGlucoseRepository> _mockSensorGlucoseRepository;
+    private readonly Mock<IMeterGlucoseRepository> _mockMeterGlucoseRepository;
     private readonly Mock<IPatientDeviceStamper> _mockPatientDeviceStamper;
     private readonly GlucosePublisher _publisher;
 
@@ -30,11 +31,13 @@ public class GlucosePublisherTests
     {
         _mockEntryService = new Mock<IEntryService>();
         _mockSensorGlucoseRepository = new Mock<ISensorGlucoseRepository>();
+        _mockMeterGlucoseRepository = new Mock<IMeterGlucoseRepository>();
         _mockPatientDeviceStamper = new Mock<IPatientDeviceStamper>();
 
         _publisher = new GlucosePublisher(
             _mockEntryService.Object,
             _mockSensorGlucoseRepository.Object,
+            _mockMeterGlucoseRepository.Object,
             _mockPatientDeviceStamper.Object,
             Mock.Of<IDbContextFactory<NocturneDbContext>>(),
             Mock.Of<ITenantAccessor>(),
@@ -124,12 +127,12 @@ public class GlucosePublisherTests
     }
 
     [Fact]
-    public async Task GetLatestEntryTimestampAsync_ReturnsDate_WhenEntryHasDate()
+    public async Task GetLatestEntryTimestampAsync_ReturnsSensorTimestamp_WhenPresent()
     {
         var expectedDate = new DateTime(2026, 1, 15, 12, 0, 0, DateTimeKind.Utc);
-        _mockEntryService
-            .Setup(s => s.GetCurrentEntryAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Entry { Date = expectedDate });
+        _mockSensorGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedDate);
 
         var result = await _publisher.GetLatestEntryTimestampAsync(DataSources.NightscoutConnector);
 
@@ -137,27 +140,61 @@ public class GlucosePublisherTests
     }
 
     [Fact]
-    public async Task GetLatestEntryTimestampAsync_ReturnsMills_WhenDateIsDefault()
+    public async Task GetLatestEntryTimestampAsync_FallsBackToMeterTimestamp_ForManualBgOnlySource()
     {
-        var mills = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        _mockEntryService
-            .Setup(s => s.GetCurrentEntryAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Entry { Mills = mills });
+        var meterDate = new DateTime(2026, 1, 15, 12, 0, 0, DateTimeKind.Utc);
+        _mockSensorGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+        _mockMeterGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(meterDate);
 
         var result = await _publisher.GetLatestEntryTimestampAsync(DataSources.NightscoutConnector);
 
-        result.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime);
+        result.Should().Be(meterDate);
     }
 
     [Fact]
-    public async Task GetLatestEntryTimestampAsync_ReturnsNull_WhenNoEntry()
+    public async Task GetLatestEntryTimestampAsync_ReturnsLatestOfSensorAndMeter()
     {
+        var sensorDate = new DateTime(2026, 1, 15, 12, 0, 0, DateTimeKind.Utc);
+        var meterDate = new DateTime(2026, 1, 20, 8, 0, 0, DateTimeKind.Utc);
+        _mockSensorGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sensorDate);
+        _mockMeterGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(meterDate);
+
+        var result = await _publisher.GetLatestEntryTimestampAsync(DataSources.NightscoutConnector);
+
+        result.Should().Be(meterDate);
+    }
+
+    [Fact]
+    public async Task GetLatestEntryTimestampAsync_ReturnsNull_WhenSourceHasNoData_EvenIfAnotherSourceIsLive()
+    {
+        // Regression: a tenant migrating from Nightscout while their uploader (e.g. Trio)
+        // already pushes glucose directly. The connector has never written a row, so its
+        // watermark must be null — a cross-source fallback here made the first sync look
+        // incremental and permanently skipped the full-history backfill.
+        _mockSensorGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
+        _mockMeterGlucoseRepository
+            .Setup(r => r.GetLatestTimestampAsync(DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DateTime?)null);
         _mockEntryService
             .Setup(s => s.GetCurrentEntryAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Entry?)null);
+            .ReturnsAsync(new Entry { Date = DateTime.UtcNow });
 
-        var result = await _publisher.GetLatestEntryTimestampAsync("test-source");
+        var result = await _publisher.GetLatestEntryTimestampAsync(DataSources.NightscoutConnector);
 
         result.Should().BeNull();
+        _mockEntryService.Verify(
+            s => s.GetCurrentEntryAsync(It.IsAny<CancellationToken>()),
+            Times.Never,
+            "the watermark must never consult cross-source data");
     }
 }

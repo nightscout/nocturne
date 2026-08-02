@@ -414,11 +414,22 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return await FetchGlucoseDataRangeAsync(since, null);
     }
 
+    /// <summary>
+    ///     Upper bound for the first page of a paginated fetch. Nightscout applies an
+    ///     implicit recency window (roughly the last four days) to any query carrying no
+    ///     date filter at all, so a fully unbounded first page silently truncates a
+    ///     full-history backfill — the short page then reads as end-of-history to the
+    ///     pagination loop. Anchoring the bound to "now" keeps every request explicitly
+    ///     dated; requests that already carry a bound pass through unchanged.
+    /// </summary>
+    private static DateTime? AnchorUnboundedFetch(DateTime? from, DateTime? to) =>
+        from is null && to is null ? DateTime.UtcNow : to;
+
     protected override async Task<IEnumerable<Entry>> FetchGlucoseDataRangeAsync(
         DateTime? from, DateTime? to)
     {
         var allEntries = new List<Entry>();
-        var currentTo = to;
+        var currentTo = AnchorUnboundedFetch(from, to);
 
         while (true)
         {
@@ -475,7 +486,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         DateTime? from, DateTime? to)
     {
         var allTreatments = new List<Treatment>();
-        var currentTo = to;
+        var currentTo = AnchorUnboundedFetch(from, to);
 
         while (true)
         {
@@ -553,7 +564,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         DateTime? from, DateTime? to)
     {
         var allStatuses = new List<DeviceStatus>();
-        var currentTo = to;
+        var currentTo = AnchorUnboundedFetch(from, to);
 
         while (true)
         {
@@ -626,7 +637,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         DateTime? from, DateTime? to)
     {
         var allActivities = new List<Activity>();
-        var currentTo = to;
+        var currentTo = AnchorUnboundedFetch(from, to);
 
         while (true)
         {

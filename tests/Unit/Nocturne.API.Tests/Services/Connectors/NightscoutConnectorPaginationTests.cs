@@ -236,6 +236,46 @@ public class NightscoutConnectorPaginationTests
     }
 
     [Fact]
+    public async Task FetchGlucoseData_UnboundedFetch_AnchorsFirstPageToNow()
+    {
+        // Regression: a query with no find[date] bound at all makes Nightscout apply an
+        // implicit recency window (~4 days), so an unbounded full-history backfill got a
+        // truncated first page that the short-page check read as end-of-history.
+        var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(CreateEntries(5, BaseTime)));
+
+        var service = CreateService(handler);
+
+        var before = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        await service.FetchGlucoseDataAsync();
+        var after = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        var firstUrl = handler.RequestUrls[0];
+        firstUrl.Should().Contain("find[date][$lte]=",
+            "an unbounded fetch must carry an explicit upper bound so the source cannot window it");
+
+        var lte = long.Parse(System.Text.RegularExpressions.Regex
+            .Match(firstUrl, @"find\[date\]\[\$lte\]=(\d+)").Groups[1].Value);
+        lte.Should().BeInRange(before, after, "the anchor should be the moment of the fetch");
+    }
+
+    [Fact]
+    public async Task FetchGlucoseData_CatchUpWithSince_DoesNotAddUpperBound()
+    {
+        // A catch-up fetch (since set, no upper bound) must stay unbounded at the top so
+        // future-dated readings from a fast device clock are still picked up immediately.
+        var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(CreateEntries(3, BaseTime)));
+
+        var service = CreateService(handler);
+
+        await service.FetchGlucoseDataAsync(BaseTime.AddHours(-1).UtcDateTime);
+
+        handler.RequestUrls[0].Should().Contain("find[date][$gte]=")
+            .And.NotContain("find[date][$lte]=");
+    }
+
+    [Fact]
     public async Task FetchGlucoseData_SetsDataSourceOnAllEntries()
     {
         var page1 = CreateEntries(MaxCount, BaseTime);
@@ -327,6 +367,38 @@ public class NightscoutConnectorPaginationTests
         result.ItemsSynced[Nocturne.Connectors.Core.Models.SyncDataType.Boluses]
             .Should().Be(MaxCount + 4,
                 "pagination must retrieve treatments across all pages");
+    }
+
+    [Fact]
+    public async Task FetchTreatments_OpenEndedInitialSync_AnchorsFirstPageToNow()
+    {
+        // Same implicit-window regression as glucose: an open-ended first-ever treatments
+        // sync (no watermark, no floor) must not issue a fully unbounded query.
+        var handler = new SequentialMockHandler();
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
+        handler.Enqueue(JsonResponse(CreateTreatments(3, BaseTime)));
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Url = "https://nightscout.example.com",
+            ApiSecret = "test-secret",
+            MaxCount = MaxCount,
+        };
+        var service = CreateService(handler, config, withPublisher: true);
+
+        var request = new Nocturne.Connectors.Core.Models.SyncRequest
+        {
+            From = null,
+            To = null,
+            DataTypes = [Nocturne.Connectors.Core.Models.SyncDataType.Boluses],
+        };
+
+        var result = await service.SyncDataAsync(request, config, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        var treatmentsUrl = handler.RequestUrls.First(u => u.Contains("treatments.json"));
+        treatmentsUrl.Should().Contain("find[created_at][$lte]=",
+            "an unbounded fetch must carry an explicit upper bound so the source cannot window it");
     }
 
     #endregion
