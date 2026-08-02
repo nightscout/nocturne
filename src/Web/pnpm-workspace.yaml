@@ -21,7 +21,13 @@ onlyBuiltDependencies:
 # Migrated from the package.json "pnpm" field, which pnpm v11+ no longer reads.
 overrides:
   "@sveltejs/vite-plugin-svelte": "^5.0.3"
-  svelte: "^5.37.0"
+  # Pinned exactly, not as a range. A range override still lets pnpm keep several satisfying
+  # copies side by side (this tree had 5.45.2, 5.50.0 and 5.55.5 at once), and svelte's `Snippet`
+  # is branded with a `unique symbol` declared per copy. Two copies in one type-check program
+  # therefore make every snippet-to-snippet assignment fail with "Two different types with this
+  # name exist, but they are unrelated" — 20 such errors in glucose-chart's dialogs alone, and the
+  # same trap for anything consuming these packages by path. One copy, one brand.
+  svelte: "5.55.5"
   vite: "^6.3.5"
 
 packageExtensions:
