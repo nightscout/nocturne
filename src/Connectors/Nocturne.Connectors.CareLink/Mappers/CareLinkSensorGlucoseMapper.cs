@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.CareLink.Configurations;
 using Nocturne.Connectors.CareLink.Models;
 using Nocturne.Connectors.CareLink.Utilities;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.CareLink.Mappers;
