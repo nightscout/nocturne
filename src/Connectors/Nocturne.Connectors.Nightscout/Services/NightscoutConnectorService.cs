@@ -200,8 +200,13 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         // Each data type below streams fetch-page → publish-page rather than accumulating
         // the whole range first: a multi-year backfill of a high-volume collection held in
         // one list has taken the process out with OutOfMemory, failing unrelated tenants'
-        // publishes with it. A page publish failure stops the crawl — pages arrive newest
-        // first, so later pages are older history that a re-run re-pulls (idempotent).
+        // publishes with it. Pages arrive newest first, and the resume cursor is the latest
+        // STORED record, so anything unpublished below an already-published page sits under
+        // the cursor forever — a background catch-up never returns for it. Every page is
+        // therefore still attempted after a publish failure, bounding holes to the failed
+        // pages (the pre-streaming behaviour bounded them to failed batches); only an
+        // explicit ranged re-pull (cursor reset / migration) heals them, so the sync is
+        // reported failed either way.
         if (activeTypes.Contains(SyncDataType.Glucose))
         {
             try
@@ -218,10 +223,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                         lastTime = pageMax;
 
                     if (!await PublishGlucoseDataInBatchesAsync(page, config, cancellationToken))
-                    {
                         publishSuccess = false;
-                        break;
-                    }
                 }
 
                 _logger.LogInformation(
@@ -277,10 +279,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                         lastTime = pageMax;
 
                     if (!await PublishTreatmentDataInBatchesAsync(page, config, cancellationToken))
-                    {
                         publishSuccess = false;
-                        break;
-                    }
                 }
 
                 _logger.LogInformation(
@@ -371,10 +370,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                         lastTime = pageMax;
 
                     if (!await PublishDeviceStatusAsync(page, config, cancellationToken))
-                    {
                         publishSuccess = false;
-                        break;
-                    }
                 }
 
                 _logger.LogInformation(
@@ -452,10 +448,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                         lastTime = pageMax;
 
                     if (!await PublishActivityDataAsync(page, config, cancellationToken))
-                    {
                         publishSuccess = false;
-                        break;
-                    }
                 }
 
                 _logger.LogInformation(
