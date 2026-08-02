@@ -29,8 +29,6 @@ public class TimeQueryStorageGateTests
     [Theory]
     [InlineData("treatments")]
     [InlineData("devicestatus")]
-    [InlineData("profile")]
-    [InlineData("food")]
     public async Task Slice_RefusesACollectionOutsideTheGrant(string storage)
     {
         // A class-level OR of glucose|treatments|devices would admit this caller to
@@ -57,15 +55,23 @@ public class TimeQueryStorageGateTests
         result.Should().BeOfType<OkObjectResult>();
     }
 
-    [Fact]
-    public async Task Slice_RefusesAnUnknownCollection()
+    [Theory]
+    [InlineData("sensor_glucose")]
+    [InlineData("profile")]
+    [InlineData("food")]
+    public async Task Slice_RefusesACollectionItDoesNotServe(string storage)
     {
-        var (controller, service) = Build(OAuthScopes.FullAccess);
+        // Ahead of the scope gate, so the answer does not vary with the grant on a collection the
+        // route never served.
+        foreach (var scopes in new[] { new[] { OAuthScopes.FullAccess }, new[] { OAuthScopes.SleepRead } })
+        {
+            var (controller, service) = Build(scopes);
 
-        var result = await controller.GetSlicedData("sensor_glucose", "dateString");
+            var result = await controller.GetSlicedData(storage, "dateString");
 
-        result.Should().BeOfType<BadRequestObjectResult>();
-        service.VerifyNoOtherCalls();
+            result.Should().BeOfType<BadRequestObjectResult>(storage);
+            service.VerifyNoOtherCalls();
+        }
     }
 
     [Theory]

@@ -99,14 +99,23 @@ public class LegacyStorageReadScopeTests
     [Fact]
     public void CountableStorage_IsFullyClassified()
     {
-        // CountController validates against its own allow-list before the scope gate, so a selector
-        // it accepts but this does not classify would reach a count ungated.
+        // An accepted selector this does not classify is refused outright, so the count route would
+        // answer 400 for a collection it dispatches on rather than counting it.
         foreach (var storage in CountController.CountableStorage)
         {
             var classified = LegacyStorageReadScopes.RequiredReadScope(storage) is not null
                 || string.Equals(storage, "activity", StringComparison.OrdinalIgnoreCase);
 
             classified.Should().BeTrue(storage);
+        }
+    }
+
+    [Fact]
+    public void SliceableStorage_IsFullyClassified()
+    {
+        foreach (var storage in TimeQueryController.SliceableStorage)
+        {
+            LegacyStorageReadScopes.RequiredReadScope(storage).Should().NotBeNull(storage);
         }
     }
 

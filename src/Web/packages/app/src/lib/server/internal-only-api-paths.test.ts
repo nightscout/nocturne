@@ -25,7 +25,6 @@ describe("isInternalOnlyApiPath", () => {
     "/api/v4/platform/tls-authorize/extra",
     "/api/v4/platform",
     "/api/v1/entries",
-    "/api/v4/platform/tls-authorize/extra",
     "/api/v4/platform/%zz",
   ])("does not refuse %s", (path) => {
     expect(isInternalOnlyApiPath(path)).toBe(false);

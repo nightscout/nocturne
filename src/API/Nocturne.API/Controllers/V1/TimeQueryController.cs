@@ -26,6 +26,13 @@ namespace Nocturne.API.Controllers.V1;
 [Route("api/v1")]
 public class TimeQueryController : ControllerBase
 {
+    /// <summary>
+    /// The collections <c>slice</c> and <c>times/echo</c> dispatch on. Every one must be classified
+    /// in <see cref="LegacyStorageReadScopes"/>, which <c>SliceableStorage_IsFullyClassified</c>
+    /// asserts.
+    /// </summary>
+    internal static readonly string[] SliceableStorage = ["entries", "treatments", "devicestatus"];
+
     private readonly ITimeQueryService _timeQueryService;
     private readonly ILogger<TimeQueryController> _logger;
 
@@ -219,6 +226,7 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
         if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return GetTimeQueryEchoInternal(null, null, storage, field);
@@ -243,6 +251,7 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
         if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return GetTimeQueryEchoInternal(prefix, null, storage, field);
@@ -269,6 +278,7 @@ public class TimeQueryController : ControllerBase
         [FromQuery] string field = "dateString"
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
         if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return GetTimeQueryEchoInternal(prefix, regex, storage, field);
@@ -367,6 +377,7 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
         if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return await GetSlicedDataInternal(
@@ -405,6 +416,7 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
         if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return await GetSlicedDataInternal(
@@ -445,6 +457,7 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
         if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return await GetSlicedDataInternal(
@@ -487,6 +500,7 @@ public class TimeQueryController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        if (RefuseUnsupportedStorage(storage) is { } unsupported) return unsupported;
         if (LegacyStorageReadScopes.RefuseRead(HttpContext, storage) is { } refusal) return refusal;
 
         return await GetSlicedDataInternal(
@@ -536,16 +550,6 @@ public class TimeQueryController : ControllerBase
             {
                 _logger.LogWarning("Storage and field parameters are required");
                 return BadRequest("Storage and field parameters are required");
-            }
-
-            // Validate storage type
-            var validStorageTypes = new[] { "entries", "treatments", "devicestatus" };
-            if (!validStorageTypes.Contains(storage.ToLowerInvariant()))
-            {
-                _logger.LogWarning("Invalid storage type: {Storage}", storage);
-                return BadRequest(
-                    $"Storage must be one of: {string.Join(", ", validStorageTypes)}"
-                );
             }
 
             // Extract query parameters for additional filtering
@@ -620,5 +624,19 @@ public class TimeQueryController : ControllerBase
                 }
             );
         }
+    }
+
+    /// <summary>
+    /// Refuses a collection these routes do not dispatch on. Checked ahead of the scope gate so the
+    /// answer is the same whatever the caller holds, rather than 403 for one grant and 400 for
+    /// another on a collection the route never served.
+    /// </summary>
+    private ActionResult? RefuseUnsupportedStorage(string storage)
+    {
+        if (SliceableStorage.Contains(storage, StringComparer.OrdinalIgnoreCase))
+            return null;
+
+        _logger.LogWarning("Invalid storage type requested: {Storage}", storage);
+        return BadRequest($"Storage must be one of: {string.Join(", ", SliceableStorage)}");
     }
 }
