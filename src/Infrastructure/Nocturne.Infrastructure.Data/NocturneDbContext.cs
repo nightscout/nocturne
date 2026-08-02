@@ -2160,6 +2160,18 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasDatabaseName("ux_directory_user_one_default");
 
             b.HasIndex(e => e.TenantId).HasDatabaseName("ix_directory_tenant_id");
+
+            // Not tenant-scoped (no RLS — the bot resolves across tenants), but the tenant
+            // reference is still a real FK so deleting a tenant takes its directory rows with it.
+            // Without it these rows outlive the tenant, and each one holds a chat-platform user id
+            // plus the tenant's slug and display name in Label/DisplayName — so a "delete
+            // everything" would leave a person's Discord/Telegram id still associated with the
+            // instance they had. No navigation property: nothing should traverse tenant -> chat
+            // links, this exists purely for the cascade.
+            b.HasOne<TenantEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ChatIdentityPendingLinkEntity>(b =>

@@ -216,7 +216,21 @@ public class TenantController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        await _tenantService.DeleteAsync(id, ct);
+        try
+        {
+            await _tenantService.DeleteAsync(id, ct);
+        }
+        catch (KeyNotFoundException)
+        {
+            // The 404 this action already advertises. ITenantService.DeleteAsync throws for an
+            // unknown id, and without this the caller gets a 500 — which reads as "the platform
+            // is broken", not "there is nothing here to delete". Callers that delete a tenant as
+            // part of a larger teardown (nocturne-cloud's retention purge) treat 404 as success
+            // so a partially-completed run can be retried; a 500 makes them fail forever on a
+            // tenant that was already removed out of band.
+            return NotFound();
+        }
+
         return NoContent();
     }
 
