@@ -148,6 +148,37 @@ jobs:
   # Database integration tests: bare-Postgres Testcontainers (no Aspire), so they
   # run reliably on GitHub-hosted runners where Docker is available. Other
   # integration projects stay deferred until their fixtures/references are fixed.
+  # Typechecks the Svelte library packages that have no build step and no generated API
+  # client, so this needs nothing but pnpm. @nocturne/app and @nocturne/portal are excluded
+  # because their checks depend on the NSwag/Zod codegen and belong with the .NET build.
+  #
+  # Only glucose-chart and coach are listed. @nocturne/ui and @nocturne/cms still run
+  # svelte-check-native, which silently discovers zero files on Linux (see the note on their
+  # `check` scripts) — and once pointed at a checker that does read their sources they report
+  # ~880 and ~838 errors respectively. That debt has to be triaged before either can be gated.
+  web-typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src/Web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          # src/Web's lockfile is v11 format, so pnpm 9 (what the unit job pins) cannot read it
+          # with --frozen-lockfile. Same pin the image build uses in docker-publish.yml.
+          version: "11.5.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: src/Web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck library packages
+        run: |
+          pnpm --filter @nightscout/glucose-chart                --filter @nocturne/coach                run check
+
   integration-db:
     runs-on: ubuntu-latest
     timeout-minutes: 20

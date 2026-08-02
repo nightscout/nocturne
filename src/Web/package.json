@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "@typescript/native-preview": "7.0.0-dev.20260513.1",
     "prettier": "^3.7.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",

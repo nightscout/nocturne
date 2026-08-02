@@ -20,10 +20,10 @@
     "@sveltejs/vite-plugin-svelte": "^5.1.1"
   },
   "devDependencies": {
-    "svelte-check-native": "^0.2.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "svelte-check": "^4.4.2"
   },
   "scripts": {
-    "check": "svelte-check-native --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json"
   }
 }
