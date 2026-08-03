@@ -4,9 +4,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -15,6 +17,13 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// <summary>
 /// Controller for active alert state, history, and acknowledgement.
 /// </summary>
+/// <remarks>
+/// Acknowledging, snoozing and recording a delivery outcome all silence or close an excursion, so
+/// every write action here requires <see cref="OAuthScopes.AlertsReadWrite"/>; the class-level
+/// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session,
+/// which holds <c>alerts.read</c>. <see cref="AcknowledgeExcursion"/> additionally accepts
+/// <see cref="OAuthScopes.DeviceNotify"/> — see the note on that action.
+/// </remarks>
 /// <seealso cref="IAlertAcknowledgementService"/>
 /// <seealso cref="IAlertDeliveryService"/>
 [ApiController]
@@ -207,6 +216,7 @@ public class AlertsController : ControllerBase
 
     /// <inheritdoc cref="IAlertAcknowledgementService.AcknowledgeAllAsync"/>
     [HttpPost("acknowledge")]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> Acknowledge(
@@ -228,8 +238,22 @@ public class AlertsController : ControllerBase
     /// or already closed is a no-op. Returns 404 when the excursion does not
     /// exist for the current tenant.
     /// </summary>
+    /// <remarks>
+    /// Accepts <see cref="OAuthScopes.DeviceNotify"/> as well as
+    /// <see cref="OAuthScopes.AlertsReadWrite"/>: this is the endpoint behind the Acknowledge
+    /// action on a device toast, and a registered client device's grant carries the device
+    /// capability scopes rather than the alert data scope. A scoped credential is intersected with
+    /// membership (<see cref="MemberScopeResolver"/>), so even a tenant owner's Companion token
+    /// resolves to <c>device.notify</c> without <c>alerts.readwrite</c>. A guest link reaches
+    /// neither scope, its grant being capped at <see cref="OAuthScopes.AllowedGuestScopes"/>, but a
+    /// member does: the Clinician and Viewer seed roles hold <c>device.notify</c> outright (and the
+    /// resolver grants it to any member holding at least one permission), so both acknowledge here
+    /// while holding no <c>alerts.readwrite</c> — Clinician holding <c>alerts.read</c>, Viewer no
+    /// alert scope at all.
+    /// </remarks>
     /// <seealso cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/>
     [HttpPost("excursions/{excursionId:guid}/acknowledge")]
+    [RequireScope(OAuthScopes.AlertsReadWrite, OAuthScopes.DeviceNotify)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -263,6 +287,7 @@ public class AlertsController : ControllerBase
     /// Snooze an alert instance for the specified duration.
     /// </summary>
     [HttpPost("instances/{instanceId:guid}/snooze")]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -306,6 +331,7 @@ public class AlertsController : ControllerBase
 
     /// <inheritdoc cref="IAlertDeliveryService.MarkDeliveredAsync"/>
     [HttpPost("deliveries/{deliveryId:guid}/delivered")]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> MarkDelivered(
         Guid deliveryId, [FromBody] MarkDeliveredRequest request, CancellationToken ct)
@@ -317,6 +343,7 @@ public class AlertsController : ControllerBase
 
     /// <inheritdoc cref="IAlertDeliveryService.MarkFailedAsync"/>
     [HttpPost("deliveries/{deliveryId:guid}/failed")]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult> MarkFailed(
         Guid deliveryId, [FromBody] MarkFailedRequest request, CancellationToken ct)

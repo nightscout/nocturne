@@ -9,6 +9,9 @@ export default defineConfig({
   // pnpm 11's global links store lives outside the workspace root, so vite's strict fs
   // allow-list blocks serving vitest-browser-svelte to the browser runner.
   server: { fs: { strict: false } },
+  // runed/kit imports `$app/*`, which esbuild's dep pre-bundler can't resolve —
+  // the stubs below are vitest aliases, applied only in vite's own pipeline.
+  optimizeDeps: { exclude: ["runed/kit"] },
   test: {
     include: ["src/**/*.svelte.test.ts"],
     setupFiles: ["vitest-browser-svelte", "./vitest.browser.setup.ts"],

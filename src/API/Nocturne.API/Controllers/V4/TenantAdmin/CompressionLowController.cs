@@ -1,14 +1,25 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.TenantAdmin;
 
 /// <summary>
 /// Controller for compression low detection and review.
 /// </summary>
+/// <remarks>
+/// Every write here is the glucose category and requires <see cref="OAuthScopes.GlucoseReadWrite"/>.
+/// Accepting a suggestion writes a <see cref="StateSpanCategory.DataExclusion"/> span
+/// (<c>CompressionLowService.AcceptSuggestionAsync</c>), which decides whether the flagged readings
+/// count towards analytics and reports — the same category-to-scope mapping
+/// <c>StateSpanWriteScopeGuard</c> applies — and dismiss, delete and detection all write the
+/// suggestions that propose one. The class-level <c>[Authorize]</c> alone is satisfied by read-only
+/// credentials such as a guest-link session, which holds <c>glucose.read</c>.
+/// </remarks>
 /// <seealso cref="ICompressionLowService"/>
 /// <seealso cref="ICompressionLowDetectionService"/>
 [ApiController]
@@ -71,6 +82,7 @@ public class CompressionLowController : ControllerBase
     /// Accept a suggestion with adjusted bounds
     /// </summary>
     [HttpPost("suggestions/{id:guid}/accept")]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(typeof(StateSpan), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -96,6 +108,7 @@ public class CompressionLowController : ControllerBase
     /// Dismiss a suggestion
     /// </summary>
     [HttpPost("suggestions/{id:guid}/dismiss")]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -119,6 +132,7 @@ public class CompressionLowController : ControllerBase
     /// Delete a suggestion and its associated state span
     /// </summary>
     [HttpDelete("suggestions/{id:guid}")]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -143,8 +157,11 @@ public class CompressionLowController : ControllerBase
     /// <remarks>
     /// Provide either a single `nightOf` date or a range with `startDate` and `endDate`.
     /// When using a range, detection runs for each night in the range (inclusive).
+    /// Each night analysed persists the <c>compression_low_suggestions</c> rows it finds
+    /// (<c>CompressionLowDetectionService.DetectForNightAsync</c>), so this is a write.
     /// </remarks>
     [HttpPost("detect")]
+    [RequireScope(OAuthScopes.GlucoseReadWrite)]
     [RemoteCommand(Invalidates = ["GetSuggestions"])]
     [ProducesResponseType(typeof(DetectionResult), StatusCodes.Status200OK)]
     public async Task<ActionResult<DetectionResult>> TriggerDetection(

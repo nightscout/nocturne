@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
@@ -40,6 +42,11 @@ public class TenantAlertSettingsController : ControllerBase
     /// <summary>
     /// Get the current tenant's alert settings, creating a default row if one does not exist.
     /// </summary>
+    /// <remarks>
+    /// The get-or-create is a write, but of server-defined defaults and idempotently, so it carries
+    /// no <see cref="OAuthScopes.AlertsReadWrite"/> gate: a read-only caller cannot choose what it
+    /// stores and a repeat call stores nothing further.
+    /// </remarks>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(TenantAlertSettingsResponse), StatusCodes.Status200OK)]
@@ -63,7 +70,14 @@ public class TenantAlertSettingsController : ControllerBase
     /// Replace the current tenant's alert settings. Upserts on first call. The manual-DND toggle
     /// creates/clears the tenant's <c>scope=all</c> window; scheduled fields persist on the row.
     /// </summary>
+    /// <remarks>
+    /// Requires <see cref="OAuthScopes.AlertsReadWrite"/>: this toggles tenant-wide Do Not Disturb,
+    /// which suppresses delivery of every non-critical alert. The class-level <c>[Authorize]</c>
+    /// alone is satisfied by read-only credentials such as a guest-link session, which holds
+    /// <c>alerts.read</c>.
+    /// </remarks>
     [HttpPut]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["Get"])]
     [ProducesResponseType(typeof(TenantAlertSettingsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -16,6 +18,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// state is computed on read, never stored; rows are retained after clear/expiry for audit.
 /// </summary>
 /// <remarks>
+/// <para>
 /// One active window per scope <em>at any instant</em> is enforced here: creating a window
 /// reconciles the same-scope windows whose span overlaps it — an earlier one is truncated to end
 /// where the new one begins, one it wholly covers is cleared
@@ -23,6 +26,12 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// idempotent by the client-supplied id so a device/web retry never double-applies. A
 /// <c>scope=all</c> window is tenant-wide DND and additionally drives the <c>do_not_disturb</c>
 /// condition via the enricher.
+/// </para>
+/// <para>
+/// Opening and clearing a window both decide whether alerts are delivered, so they require
+/// <see cref="OAuthScopes.AlertsReadWrite"/>; the class-level <c>[Authorize]</c> alone is satisfied
+/// by read-only credentials such as a guest-link session, which holds <c>alerts.read</c>.
+/// </para>
 /// </remarks>
 /// <seealso cref="AlertRulesController"/>
 [ApiController]
@@ -67,6 +76,7 @@ public class DndWindowsController : ControllerBase
     /// scope so at most one is ever active per scope.
     /// </summary>
     [HttpPost]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetActive"])]
     [ProducesResponseType(typeof(DndWindowResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(DndWindowResponse), StatusCodes.Status200OK)]
@@ -172,6 +182,7 @@ public class DndWindowsController : ControllerBase
     /// or by supersede) is returned unchanged so a retry never rewrites the audit timestamp.
     /// </summary>
     [HttpPost("{id:guid}/clear")]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetActive"])]
     [ProducesResponseType(typeof(DndWindowResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

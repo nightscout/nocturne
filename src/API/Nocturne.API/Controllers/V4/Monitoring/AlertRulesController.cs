@@ -3,11 +3,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -22,11 +24,18 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// than as side-channel schedule/step structures.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Every write action requires <see cref="OAuthScopes.AlertsReadWrite"/>: a rule decides whether a
+/// low-glucose alert reaches anyone, and the class-level <c>[Authorize]</c> alone is satisfied by
+/// read-only credentials such as a guest-link session, which holds <c>alerts.read</c>.
+/// </para>
+/// <para>
 /// The runtime evaluation pipeline that operates on these rules is documented in
 /// <c>docs/diagrams/alert-evaluation-pipeline.mmd</c> — the rendered SVG appears under
 /// the Monitoring tag in the Scalar OpenAPI docs (wired via
 /// <c>diagrams.yaml</c>'s <c>tags: [Monitoring]</c> entry and
 /// <see cref="Configuration.TagDescriptionDocumentTransformer"/>).
+/// </para>
 /// </remarks>
 /// <seealso cref="NocturneDbContext"/>
 /// <seealso cref="IAlertReferenceService"/>
@@ -105,6 +114,7 @@ public class AlertRulesController : ControllerBase
     /// Create an alert rule with a flat channel list.
     /// </summary>
     [HttpPost]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetRules"])]
     [ProducesResponseType(typeof(AlertRuleResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -178,6 +188,7 @@ public class AlertRulesController : ControllerBase
     /// Update an alert rule.
     /// </summary>
     [HttpPut("{id:guid}")]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetRules", "GetRule"])]
     [ProducesResponseType(typeof(AlertRuleResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -265,6 +276,7 @@ public class AlertRulesController : ControllerBase
     /// Delete an alert rule (cascades to its channels).
     /// </summary>
     [HttpDelete("{id:guid}")]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetRules"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -308,6 +320,7 @@ public class AlertRulesController : ControllerBase
     /// Toggle an alert rule enabled/disabled.
     /// </summary>
     [HttpPatch("{id:guid}/toggle")]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand(Invalidates = ["GetRules", "GetRule"])]
     [ProducesResponseType(typeof(AlertRuleResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -335,6 +348,7 @@ public class AlertRulesController : ControllerBase
     /// without polluting the active-alerts surface.
     /// </summary>
     [HttpPost("{id:guid}/test-fire")]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -365,6 +379,7 @@ public class AlertRulesController : ControllerBase
     /// rule lookup — channels and metadata come straight from the request body.
     /// </summary>
     [HttpPost("test-fire-dry-run")]
+    [RequireScope(OAuthScopes.AlertsReadWrite)]
     [RemoteCommand]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
     public async Task<IActionResult> TestFireDryRun(

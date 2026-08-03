@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import {
     get as getDnd,
     update as updateDnd,
@@ -18,10 +19,20 @@
     CardTitle,
     CardDescription,
   } from "$lib/components/ui/card";
-  import { ArrowLeft, BellOff, Save, Loader2 } from "lucide-svelte";
+  import { ArrowLeft, BellOff, Save, Loader2, ShieldAlert } from "lucide-svelte";
   import { EditorActionBar } from "$lib/components/layout";
 
-  const dndQuery = getDnd();
+  const effectivePermissions: string[] = $derived(
+    (page.data as any).effectivePermissions ?? [],
+  );
+  // Manual DND is tenant-wide — it suppresses delivery of every non-critical
+  // alert for every member — so the server gates it on alerts.readwrite.
+  const canSetDnd = $derived(
+    effectivePermissions.includes("*") ||
+      effectivePermissions.includes("alerts.readwrite"),
+  );
+
+  const dndQuery = $derived(canSetDnd ? getDnd() : undefined);
 
   let saving = $state(false);
   let error = $state<string | null>(null);
@@ -61,7 +72,7 @@
   // Seed form state from query results on first successful response. Subsequent
   // refreshes do NOT clobber user edits.
   $effect(() => {
-    const dnd = dndQuery.current;
+    const dnd = dndQuery?.current;
     if (seeded || dnd === undefined) return;
     untrack(() => {
       applyResponse(dnd ?? null);
@@ -93,115 +104,147 @@
   <title>Do Not Disturb · Alerts · Nocturne</title>
 </svelte:head>
 
-<div class="@container container mx-auto max-w-3xl p-3 @md:p-6 space-y-6 max-md:pb-24">
-  <EditorActionBar>
-    {#snippet leading()}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onclick={() => goto("/alerts")}
-        aria-label="Back to alerts"
-      >
-        <ArrowLeft class="h-4 w-4" />
-      </Button>
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <BellOff class="h-5 w-5" /> Do Not Disturb
-        </h1>
-        <p class="text-sm text-muted-foreground">
-          Suppress non-critical alerts. Critical-severity rules and rules opted in via "Allow through DND" still fire.
-        </p>
-      </div>
-    {/snippet}
-    {#snippet actions()}
-      <Button class="shrink-0" onclick={save} disabled={saving || !seeded}>
-        {#if saving}
-          <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-        {:else}
-          <Save class="h-4 w-4 mr-2" />
-        {/if}
-        Save
-      </Button>
-    {/snippet}
-  </EditorActionBar>
+{#snippet heading()}
+  <Button
+    type="button"
+    variant="ghost"
+    size="icon"
+    onclick={() => goto("/alerts")}
+    aria-label="Back to alerts"
+  >
+    <ArrowLeft class="h-4 w-4" />
+  </Button>
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
+      <BellOff class="h-5 w-5" /> Do Not Disturb
+    </h1>
+    <p class="text-sm text-muted-foreground">
+      Suppress non-critical alerts. Critical-severity rules and rules opted in via "Allow through DND" still fire.
+    </p>
+  </div>
+{/snippet}
 
-  {#if error}
-    <div class="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>
+<!-- EditorActionBar pins its actions container to the bottom of the viewport below md, so
+     without a save action it would leave an empty bar there; the reserved space it asks
+     consumers for goes with it. -->
+<div
+  class="@container container mx-auto max-w-3xl p-3 @md:p-6 space-y-6 {canSetDnd
+    ? 'max-md:pb-24'
+    : ''}"
+>
+  {#if canSetDnd}
+    <EditorActionBar>
+      {#snippet leading()}
+        {@render heading()}
+      {/snippet}
+      {#snippet actions()}
+        <Button class="shrink-0" onclick={save} disabled={saving || !seeded}>
+          {#if saving}
+            <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+          {:else}
+            <Save class="h-4 w-4 mr-2" />
+          {/if}
+          Save
+        </Button>
+      {/snippet}
+    </EditorActionBar>
+  {:else}
+    <div class="mb-6 flex min-w-0 items-center gap-2">
+      {@render heading()}
+    </div>
   {/if}
 
-  <Card>
-    <CardHeader>
-      <CardTitle>Manual</CardTitle>
-      <CardDescription>Toggle DND on right now, optionally with an automatic expiry.</CardDescription>
-    </CardHeader>
-    <CardContent class="space-y-4">
-      <div class="flex items-center justify-between">
-        <Label for="dnd-manual">Do Not Disturb is currently</Label>
-        <Switch
-          id="dnd-manual"
-          checked={dndManualActive}
-          onCheckedChange={(c: boolean) => (dndManualActive = c)}
-        />
-      </div>
-      {#if dndManualActive}
-        <div class="space-y-2">
-          <Label for="dnd-until">Auto-expire (optional)</Label>
-          <Input
-            id="dnd-until"
-            type="datetime-local"
-            value={dndManualUntilLocal}
-            oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-              (dndManualUntilLocal = e.currentTarget.value)}
-          />
-          <p class="text-xs text-muted-foreground">Leave blank to keep DND on indefinitely.</p>
-        </div>
-      {/if}
-    </CardContent>
-  </Card>
+  {#if canSetDnd}
+    {#if error}
+      <div class="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>
+    {/if}
 
-  <Card>
-    <CardHeader>
-      <CardTitle>Schedule</CardTitle>
-      <CardDescription>Recurring quiet hours. Cross-midnight windows are allowed.</CardDescription>
-    </CardHeader>
-    <CardContent class="space-y-4">
-      <div class="flex items-center justify-between">
-        <Label for="dnd-schedule">Use a recurring quiet-hours window</Label>
-        <Switch
-          id="dnd-schedule"
-          checked={dndScheduleEnabled}
-          onCheckedChange={(c: boolean) => (dndScheduleEnabled = c)}
-        />
-      </div>
-      {#if dndScheduleEnabled}
-        <div class="grid gap-4 @sm:grid-cols-2">
-          <div class="space-y-2">
-            <Label for="dnd-start">From</Label>
-            <Input
-              id="dnd-start"
-              type="time"
-              value={dndScheduleStart}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                (dndScheduleStart = e.currentTarget.value)}
-            />
-          </div>
-          <div class="space-y-2">
-            <Label for="dnd-end">To</Label>
-            <Input
-              id="dnd-end"
-              type="time"
-              value={dndScheduleEnd}
-              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                (dndScheduleEnd = e.currentTarget.value)}
-            />
-          </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Manual</CardTitle>
+        <CardDescription>Toggle DND on right now, optionally with an automatic expiry.</CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <div class="flex items-center justify-between">
+          <Label for="dnd-manual">Do Not Disturb is currently</Label>
+          <Switch
+            id="dnd-manual"
+            checked={dndManualActive}
+            onCheckedChange={(c: boolean) => (dndManualActive = c)}
+          />
         </div>
-        <p class="text-xs text-muted-foreground">
-          Scheduled windows are interpreted in your timezone, set on your
-          <a href="/settings/patient" class="underline">patient record</a>.
+        {#if dndManualActive}
+          <div class="space-y-2">
+            <Label for="dnd-until">Auto-expire (optional)</Label>
+            <Input
+              id="dnd-until"
+              type="datetime-local"
+              value={dndManualUntilLocal}
+              oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                (dndManualUntilLocal = e.currentTarget.value)}
+            />
+            <p class="text-xs text-muted-foreground">Leave blank to keep DND on indefinitely.</p>
+          </div>
+        {/if}
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle>Schedule</CardTitle>
+        <CardDescription>Recurring quiet hours. Cross-midnight windows are allowed.</CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <div class="flex items-center justify-between">
+          <Label for="dnd-schedule">Use a recurring quiet-hours window</Label>
+          <Switch
+            id="dnd-schedule"
+            checked={dndScheduleEnabled}
+            onCheckedChange={(c: boolean) => (dndScheduleEnabled = c)}
+          />
+        </div>
+        {#if dndScheduleEnabled}
+          <div class="grid gap-4 @sm:grid-cols-2">
+            <div class="space-y-2">
+              <Label for="dnd-start">From</Label>
+              <Input
+                id="dnd-start"
+                type="time"
+                value={dndScheduleStart}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                  (dndScheduleStart = e.currentTarget.value)}
+              />
+            </div>
+            <div class="space-y-2">
+              <Label for="dnd-end">To</Label>
+              <Input
+                id="dnd-end"
+                type="time"
+                value={dndScheduleEnd}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                  (dndScheduleEnd = e.currentTarget.value)}
+              />
+            </div>
+          </div>
+          <p class="text-xs text-muted-foreground">
+            Scheduled windows are interpreted in your timezone, set on your
+            <a href="/settings/patient" class="underline">patient record</a>.
+          </p>
+        {/if}
+      </CardContent>
+    </Card>
+  {:else}
+    <Card>
+      <CardContent class="flex flex-col items-center justify-center py-12 text-center">
+        <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+          <ShieldAlert class="h-6 w-6 text-destructive" />
+        </div>
+        <h2 class="text-lg font-semibold">Access Denied</h2>
+        <p class="mt-2 max-w-sm text-sm text-muted-foreground">
+          You do not have permission to change Do Not Disturb. Contact your
+          tenant administrator for access.
         </p>
-      {/if}
-    </CardContent>
-  </Card>
+      </CardContent>
+    </Card>
+  {/if}
 </div>

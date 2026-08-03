@@ -87,10 +87,11 @@ public class V4WriteScopeGatingTests
         public const string ConnectorAdministration = "connector configuration, not a data write";
 
         /// <summary>
-        /// POST carrying a request body for a pure computation or a report render. Nothing is
-        /// persisted, so there is no write to scope.
+        /// POST whose handler computes and returns: a statistic over the values in the request
+        /// body, a report render, or a replay over stored history for a window the body supplies.
+        /// Nothing is persisted, so there is no write to scope.
         /// </summary>
-        public const string ComputeOverPostBody = "computes from the body, persists nothing";
+        public const string ComputesAndReturns = "computes and returns, persists nothing";
 
         /// <summary>Per-user or per-tenant presentation state with no patient observation in it.</summary>
         public const string PresentationState = "presentation state, no patient data";
@@ -114,14 +115,6 @@ public class V4WriteScopeGatingTests
         /// this mints serves patient glucose to an anonymous caller.
         /// </summary>
         public const string SplitSharingVocabulary = "sharing capability, vocabulary split between atom and scope";
-
-        /// <summary>
-        /// Writes alert, notification or DND state. <c>alerts.readwrite</c> is the category, but
-        /// gating this surface is the alert-authorization work, not the data-plane taxonomy: the
-        /// alert engine, the chat-bot dispatch and the invite redemption all post here with
-        /// credentials whose scope resolution is being changed on sibling branches.
-        /// </summary>
-        public const string AlertSurface = "alert surface, pending the alert-authorization work";
 
         /// <summary>
         /// Deliberately <c>[AllowAnonymous]</c>. There is no credential to scope, so a scope gate
@@ -195,22 +188,18 @@ public class V4WriteScopeGatingTests
             ["MyFitnessPalSettingsController"] = NotDataCategory.ConnectorAdministration,
             ["WebhookSettingsController"] = NotDataCategory.ConnectorAdministration,
 
-            ["DebugController"] = NotDataCategory.ComputeOverPostBody,
-            ["StatisticsController"] = NotDataCategory.ComputeOverPostBody,
+            ["DebugController"] = NotDataCategory.ComputesAndReturns,
+            ["StatisticsController"] = NotDataCategory.ComputesAndReturns,
+
+            // Both replay actions compute over the STORED alert rules and glucose history — the
+            // body supplies only the window — and return the events that would have fired.
+            // AlertReplayService has no SaveChangesAsync and adds to no DbSet, so a POST here is a
+            // read the body shape forced off GET.
+            ["AlertReplayController"] = NotDataCategory.ComputesAndReturns,
 
             ["ClockFacesController"] = NotDataCategory.SplitSharingVocabulary,
             ["CoachMarkController"] = NotDataCategory.PresentationState,
             ["UserPreferencesController"] = NotDataCategory.PresentationState,
-
-            ["AlertCustomSoundsController"] = NotDataCategory.AlertSurface,
-            ["AlertInvitesController"] = NotDataCategory.AlertSurface,
-            ["AlertReplayController"] = NotDataCategory.AlertSurface,
-            ["AlertRulesController"] = NotDataCategory.AlertSurface,
-            ["AlertsController"] = NotDataCategory.AlertSurface,
-            ["CompressionLowController"] = NotDataCategory.AlertSurface,
-            ["DndWindowsController"] = NotDataCategory.AlertSurface,
-            ["NotificationsController"] = NotDataCategory.AlertSurface,
-            ["TenantAlertSettingsController"] = NotDataCategory.AlertSurface,
 
             ["AnalyticsController"] = NotDataCategory.TenantOperationalConfig,
             ["AuditController"] = NotDataCategory.TenantOperationalConfig,
@@ -249,6 +238,17 @@ public class V4WriteScopeGatingTests
             // The rest of DiscrepancyController is [RequireAdmin]; the ingest route is deliberately
             // [AllowAnonymous], so there is no credential whose scopes could be checked.
             ["DiscrepancyController.IngestDiscrepancy"] = NotDataCategory.AnonymousByDeclaration,
+
+            // The caller's own notification bookkeeping: MarkAsRead / MarkAllAsRead set read_at,
+            // DismissNotification sets the archive flags. Each is confined to a row whose UserId is
+            // the caller's subject (InAppNotificationService checks it, and the mark-all repository
+            // query is keyed by user), and none changes alert state — archiving an alert.firing
+            // notification neither acknowledges nor silences the excursion behind it. Same category
+            // as CoachMarkController and UserPreferencesController above; the rest of
+            // NotificationsController is gated on alerts.readwrite.
+            ["NotificationsController.MarkAsRead"] = NotDataCategory.PresentationState,
+            ["NotificationsController.MarkAllAsRead"] = NotDataCategory.PresentationState,
+            ["NotificationsController.DismissNotification"] = NotDataCategory.PresentationState,
         };
 
     /// <summary>
@@ -269,6 +269,12 @@ public class V4WriteScopeGatingTests
             ["MeterGlucoseController"] = OAuthScopes.GlucoseReadWrite,
             ["CalibrationController"] = OAuthScopes.GlucoseReadWrite,
             ["BGCheckController"] = OAuthScopes.GlucoseReadWrite,
+
+            // glucose: accepting a compression-low suggestion writes a DataExclusion state span,
+            // which decides whether the flagged readings count towards analytics and reports —
+            // the category StateSpanWriteScopeGuard maps to glucose.readwrite. Dismiss, delete and
+            // detection write the compression_low_suggestions rows that propose one.
+            ["CompressionLowController"] = OAuthScopes.GlucoseReadWrite,
 
             // treatments: boluses / basal_injections / bolus_calculations sit under treatments.read;
             // notes are the V4 form of a legacy text treatment. v1 treatments create requires
@@ -315,6 +321,20 @@ public class V4WriteScopeGatingTests
             // alerts: UISettingsConfiguration is tenant-wide and carries NotificationSettings, the
             // alarm thresholds and profiles that decide whether a low-glucose alert fires.
             ["UISettingsController"] = OAuthScopes.AlertsReadWrite,
+
+            // alerts: the rest of the alert surface. A rule and its channels decide whether an
+            // alert reaches anyone; acknowledging, snoozing and recording a delivery outcome close
+            // or silence an excursion; a DND window and the tenant-wide manual toggle suppress
+            // delivery outright; a custom sound is what an alert plays; an invite attaches a
+            // follower to a rule channel; an in-app notification is a delivery channel. v1/v2
+            // notification writes require alerts.readwrite.
+            ["AlertRulesController"] = OAuthScopes.AlertsReadWrite,
+            ["AlertsController"] = OAuthScopes.AlertsReadWrite,
+            ["DndWindowsController"] = OAuthScopes.AlertsReadWrite,
+            ["TenantAlertSettingsController"] = OAuthScopes.AlertsReadWrite,
+            ["AlertCustomSoundsController"] = OAuthScopes.AlertsReadWrite,
+            ["AlertInvitesController"] = OAuthScopes.AlertsReadWrite,
+            ["NotificationsController"] = OAuthScopes.AlertsReadWrite,
 
             // devices: a reservoir report is stored as a manual-source pump_snapshots row, and a fill
             // additionally writes a device_events row. Both are the devices category.
