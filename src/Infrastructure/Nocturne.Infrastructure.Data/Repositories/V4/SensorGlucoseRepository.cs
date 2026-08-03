@@ -278,6 +278,14 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         if (newest == default)
             return;
 
+        // Clamp to wall clock: advance-only means a single future-dated reading (device clock
+        // skew, a double-applied timezone offset) would otherwise pin the column ahead of now
+        // for good — and the staleness/signal-loss evaluators compare "now - LastReadingAt",
+        // so a pinned-future value silently disables the alerts that watch for silence.
+        var now = DateTime.UtcNow;
+        if (newest > now)
+            newest = now;
+
         try
         {
             await using var ctx = await ContextFactory.CreateAsync(ct);

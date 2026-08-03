@@ -117,4 +117,38 @@ public class SensorGlucoseRepositoryLastReadingTests : IDisposable
 
         TenantLastReading().Should().Be(timestamp);
     }
+
+    [Fact]
+    public async Task CreateAsync_SyncIdUpsertOfTheNewestReading_AdvancesLastReadingAt()
+    {
+        // A connector replay of the newest reading is still an arrival.
+        var timestamp = new DateTime(2026, 8, 1, 12, 10, 0, DateTimeKind.Utc);
+        var first = Reading(timestamp);
+        first.SyncIdentifier = "sync-1";
+        await _repo.CreateAsync(first, WriteOrigin.Live);
+        _context.ChangeTracker.Clear();
+
+        var replay = Reading(timestamp);
+        replay.SyncIdentifier = "sync-1";
+        replay.Mgdl = 121;
+        await _repo.CreateAsync(replay, WriteOrigin.Live);
+
+        TenantLastReading().Should().Be(timestamp);
+    }
+
+    [Fact]
+    public async Task FutureDatedReadings_ClampToWallClock()
+    {
+        // Advance-only would let one future-dated reading (device clock skew, a double-applied
+        // timezone offset) pin the column ahead of now for good — silently disabling the
+        // staleness and signal-loss evaluators that compare "now - LastReadingAt".
+        var before = DateTime.UtcNow;
+        await _repo.BulkCreateAsync([Reading(before.AddYears(1))], WriteOrigin.Live);
+        var after = DateTime.UtcNow;
+
+        var lastReading = TenantLastReading();
+        lastReading.Should().NotBeNull();
+        lastReading!.Value.Should().BeOnOrAfter(before).And.BeOnOrBefore(after,
+            "a future reading timestamp must clamp to the wall clock");
+    }
 }
