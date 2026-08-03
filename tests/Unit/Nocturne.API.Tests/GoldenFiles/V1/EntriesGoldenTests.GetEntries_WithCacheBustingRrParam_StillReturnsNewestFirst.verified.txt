@@ -1,0 +1,81 @@
+﻿{
+  StatusCode: 200,
+  ContentType: application/json; charset=utf-8,
+  Body: [
+    {
+      _id: aaaaaaaaaaaaaaaaaaaaa001,
+      date: 1711454400000,
+      mills: 1711454400000,
+      dateString: DateTimeOffset_1,
+      sysTime: DateTimeOffset_1,
+      mgdl: 100,
+      sgv: 100,
+      mmol: 5.54994394556615,
+      direction: Flat,
+      trend: 4,
+      type: sgv,
+      device: xDrip-DexcomG6,
+      isValid: true
+    },
+    {
+      _id: aaaaaaaaaaaaaaaaaaaaa002,
+      date: 1711454100000,
+      mills: 1711454100000,
+      dateString: DateTimeOffset_2,
+      sysTime: DateTimeOffset_2,
+      mgdl: 110,
+      sgv: 110,
+      mmol: 6.104938340122764,
+      direction: Flat,
+      trend: 4,
+      type: sgv,
+      device: xDrip-DexcomG6,
+      isValid: true
+    },
+    {
+      _id: aaaaaaaaaaaaaaaaaaaaa003,
+      date: 1711453800000,
+      mills: 1711453800000,
+      dateString: DateTimeOffset_3,
+      sysTime: DateTimeOffset_3,
+      mgdl: 120,
+      sgv: 120,
+      mmol: 6.65993273467938,
+      direction: Flat,
+      trend: 4,
+      type: sgv,
+      device: xDrip-DexcomG6,
+      isValid: true
+    },
+    {
+      _id: aaaaaaaaaaaaaaaaaaaaa004,
+      date: 1711453500000,
+      mills: 1711453500000,
+      dateString: DateTimeOffset_4,
+      sysTime: DateTimeOffset_4,
+      mgdl: 130,
+      sgv: 130,
+      mmol: 7.214927129235995,
+      direction: Flat,
+      trend: 4,
+      type: sgv,
+      device: xDrip-DexcomG6,
+      isValid: true
+    },
+    {
+      _id: aaaaaaaaaaaaaaaaaaaaa005,
+      date: 1711453200000,
+      mills: 1711453200000,
+      dateString: DateTimeOffset_5,
+      sysTime: DateTimeOffset_5,
+      mgdl: 140,
+      sgv: 140,
+      mmol: 7.769921523792609,
+      direction: Flat,
+      trend: 4,
+      type: sgv,
+      device: xDrip-DexcomG6,
+      isValid: true
+    }
+  ]
+}

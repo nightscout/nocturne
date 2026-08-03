@@ -294,7 +294,6 @@ public class EntriesController : ControllerBase
     /// <param name="find">MongoDB-style find query filters (JSON format) - for unit tests</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <param name="dateString">ISO date string for date filtering</param>
-    /// <param name="rr">Reverse results (latest first)</param>
     /// <param name="format">Output format (json, csv, tsv, txt)</param>
     /// <returns>Array of entries matching the criteria</returns>
     [HttpGet]
@@ -308,7 +307,6 @@ public class EntriesController : ControllerBase
         [FromQuery] int? count = null,
         [FromQuery] string? dateString = null,
         [FromQuery] string? type = null,
-        [FromQuery] int rr = 0,
         [FromQuery] string? format = null,
         CancellationToken cancellationToken = default
     )
@@ -341,12 +339,11 @@ public class EntriesController : ControllerBase
         }
 
         _logger.LogInformation(
-            "Entries endpoint requested with count: {Count}, type: {Type}, findQuery: {FindQuery}, dateString: {DateString}, rr: {RR}, format: {Format} from {RemoteIpAddress}",
+            "Entries endpoint requested with count: {Count}, type: {Type}, findQuery: {FindQuery}, dateString: {DateString}, format: {Format} from {RemoteIpAddress}",
             count,
             type,
             findQuery,
             dateString,
-            rr,
             format,
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
@@ -380,17 +377,16 @@ public class EntriesController : ControllerBase
             // Nightscout defaults to 10 when count is not specified
             var limitedCount = count ?? 10;
 
-            // Convert rr parameter to boolean (non-zero means reverse)
-            var reverseResults = rr != 0;
-
             // Use advanced filtering if any advanced parameters are provided
+            // reverseResults stays false (newest-first): legacy Nightscout ignores the cache-busting
+            // "rr" query parameter, so a nonzero "rr" value must never flip the sort order.
             var entries = await _entryService.GetEntriesWithAdvancedFilterAsync(
                 type: entryType,
                 count: limitedCount,
                 skip: 0,
                 findQuery: findQuery,
                 dateString: dateString,
-                reverseResults: reverseResults,
+                reverseResults: false,
                 cancellationToken: cancellationToken
             );
             var entriesArray = entries.ToArray();
