@@ -237,6 +237,7 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
                 var upserted = SensorGlucoseMapper.ToDomainModel(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
                 await RaiseBroadcastAsync([], [upserted], [], origin, ct);
+                await AdvanceTenantLastReadingAsync([upserted], ct);
                 return upserted;
             }
         }
@@ -246,7 +247,52 @@ public class SensorGlucoseRepository : V4RepositoryBase<SensorGlucose, SensorGlu
         await ctx.SaveChangesAsync(ct);
         var created = SensorGlucoseMapper.ToDomainModel(entity);
         await RaiseBroadcastAsync([created], [], [], origin, ct);
+        await AdvanceTenantLastReadingAsync([created], ct);
         return created;
+    }
+
+    /// <inheritdoc />
+    public override async Task<IEnumerable<SensorGlucose>> BulkCreateAsync(
+        IEnumerable<SensorGlucose> recordsParam, WriteOrigin origin, CancellationToken ct = default)
+    {
+        var written = (await base.BulkCreateAsync(recordsParam, origin, ct)).ToList();
+        await AdvanceTenantLastReadingAsync(written, ct);
+        return written;
+    }
+
+    /// <summary>
+    /// Advances the tenant's LastReadingAt to the newest written reading timestamp (never
+    /// backwards). Maintained here — the one chokepoint every sensor glucose write passes
+    /// through — so uploader POSTs, connector publishes, and imports all keep it current;
+    /// the alert sweep and tenant overview read the column as the cheap "when did CGM data
+    /// last arrive" signal without querying the readings table. Reading time, not ingestion
+    /// time: a backfill of old history must not make a silent sensor look fresh.
+    /// </summary>
+    private async Task AdvanceTenantLastReadingAsync(
+        IReadOnlyCollection<SensorGlucose> written, CancellationToken ct)
+    {
+        if (written.Count == 0)
+            return;
+
+        var newest = written.Max(r => r.Timestamp);
+        if (newest == default)
+            return;
+
+        try
+        {
+            await using var ctx = await ContextFactory.CreateAsync(ct);
+            if (ctx.TenantId == Guid.Empty)
+                return;
+
+            await ctx.Tenants
+                .Where(t => t.Id == ctx.TenantId
+                    && (t.LastReadingAt == null || t.LastReadingAt < newest))
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.LastReadingAt, newest), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to advance tenant LastReadingAt");
+        }
     }
 
     /// <inheritdoc />

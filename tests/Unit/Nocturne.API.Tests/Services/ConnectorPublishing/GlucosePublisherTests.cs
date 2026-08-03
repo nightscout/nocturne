@@ -39,8 +39,6 @@ public class GlucosePublisherTests
             _mockSensorGlucoseRepository.Object,
             _mockMeterGlucoseRepository.Object,
             _mockPatientDeviceStamper.Object,
-            Mock.Of<IDbContextFactory<NocturneDbContext>>(),
-            Mock.Of<ITenantAccessor>(),
             Mock.Of<ICanonicalAlertEvaluator>(),
             Mock.Of<IAuditContext>(),
             NullLogger<GlucosePublisher>.Instance

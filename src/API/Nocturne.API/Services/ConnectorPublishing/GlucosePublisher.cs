@@ -26,8 +26,6 @@ internal sealed class GlucosePublisher : IGlucosePublisher
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
     private readonly IPatientDeviceStamper _patientDeviceStamper;
-    private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
-    private readonly ITenantAccessor _tenantAccessor;
     private readonly ICanonicalAlertEvaluator _alertEvaluator;
     private readonly IAuditContext _auditContext;
     private readonly ILogger<GlucosePublisher> _logger;
@@ -37,8 +35,6 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         ISensorGlucoseRepository sensorGlucoseRepository,
         IMeterGlucoseRepository meterGlucoseRepository,
         IPatientDeviceStamper patientDeviceStamper,
-        IDbContextFactory<NocturneDbContext> contextFactory,
-        ITenantAccessor tenantAccessor,
         ICanonicalAlertEvaluator alertEvaluator,
         IAuditContext auditContext,
         ILogger<GlucosePublisher> logger)
@@ -47,8 +43,6 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         _sensorGlucoseRepository = sensorGlucoseRepository ?? throw new ArgumentNullException(nameof(sensorGlucoseRepository));
         _meterGlucoseRepository = meterGlucoseRepository ?? throw new ArgumentNullException(nameof(meterGlucoseRepository));
         _patientDeviceStamper = patientDeviceStamper ?? throw new ArgumentNullException(nameof(patientDeviceStamper));
-        _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
-        _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
         _alertEvaluator = alertEvaluator ?? throw new ArgumentNullException(nameof(alertEvaluator));
         _auditContext = auditContext;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -63,7 +57,6 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         {
             var entryList = entries.ToList();
             await _entryService.CreateEntriesAsync(entryList, origin, cancellationToken);
-            await UpdateLastReadingAtAsync(cancellationToken);
             await _alertEvaluator.EvaluateAsync(cancellationToken);
             return true;
         }
@@ -88,7 +81,6 @@ internal sealed class GlucosePublisher : IGlucosePublisher
             await _patientDeviceStamper.StampAsync(recordList, [DeviceCategory.CGM], source, cancellationToken);
             using (SystemAuditScope.Push(_auditContext))
                 await _sensorGlucoseRepository.BulkCreateAsync(recordList, origin, cancellationToken);
-            await UpdateLastReadingAtAsync(cancellationToken);
             await _alertEvaluator.EvaluateAsync(cancellationToken);
 
             _logger.LogDebug("Published {Count} SensorGlucose records for {Source}", recordList.Count, source);
@@ -127,29 +119,6 @@ internal sealed class GlucosePublisher : IGlucosePublisher
         CancellationToken cancellationToken = default)
     {
         return await _sensorGlucoseRepository.GetLatestTimestampAsync(source, cancellationToken);
-    }
-
-    /// <summary>
-    /// Updates the tenant's LastReadingAt timestamp after successful glucose publish.
-    /// Uses ExecuteUpdateAsync to avoid materializing the tenant entity.
-    /// </summary>
-    private async Task UpdateLastReadingAtAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            var tenantId = _tenantAccessor.TenantId;
-            if (tenantId == Guid.Empty) return;
-
-            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-            var now = DateTime.UtcNow;
-            await context.Tenants
-                .Where(t => t.Id == tenantId)
-                .ExecuteUpdateAsync(s => s.SetProperty(t => t.LastReadingAt, now), cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to update tenant LastReadingAt timestamp");
-        }
     }
 
 }
