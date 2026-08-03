@@ -22,6 +22,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     protected readonly ILogger _logger;
     private readonly IConnectorPublisher? _publisher;
 
+    /// <summary>The API publisher, or <c>null</c> when running detached (e.g. dry-run tooling).</summary>
+    protected IConnectorPublisher? Publisher => _publisher;
+
     // Broadcast origin for this run's glucose / care (treatment-family) publishes, resolved once from the
     // pre-run resume watermark and memoized so every batch and granular publish in the run agrees — a
     // paginated or multi-call first sync can't flip to Live mid-backfill. The connector service is

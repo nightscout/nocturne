@@ -200,41 +200,31 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         // Each data type below streams fetch-page → publish-page rather than accumulating
         // the whole range first: a multi-year backfill of a high-volume collection held in
         // one list has taken the process out with OutOfMemory, failing unrelated tenants'
-        // publishes with it. Pages arrive newest first, and the resume cursor is the latest
-        // STORED record, so anything unpublished below an already-published page sits under
-        // the cursor forever — a background catch-up never returns for it. Every page is
-        // therefore still attempted after a publish failure, bounding holes to the failed
-        // pages (the pre-streaming behaviour bounded them to failed batches); only an
-        // explicit ranged re-pull (cursor reset / migration) heals them, so the sync is
-        // reported failed either way.
+        // publishes with it. Pages arrive newest first, so anything a broken crawl never
+        // stored sits BELOW the newest stored record where an ordinary catch-up never
+        // returns; CrawlAndPublishAsync persists a low-water mark as pages land and resumes
+        // below it on the next sync, so a crawl killed by a restart or a failing store
+        // self-heals instead of stranding the older history.
         if (activeTypes.Contains(SyncDataType.Glucose))
         {
             try
             {
-                var count = 0;
-                DateTime? lastTime = null;
-                var publishSuccess = true;
-
-                await foreach (var page in FetchGlucosePagesAsync(request.From, request.To))
-                {
-                    count += page.Length;
-                    var pageMax = page.Max(e => e.Date);
-                    if (lastTime is null || pageMax > lastTime)
-                        lastTime = pageMax;
-
-                    if (!await PublishGlucoseDataInBatchesAsync(page, config, cancellationToken))
-                        publishSuccess = false;
-                }
+                var outcome = await CrawlAndPublishAsync(
+                    "Glucose", request.From, request.To,
+                    FetchGlucosePagesAsync,
+                    newestOf: p => p.Max(e => e.Date),
+                    oldestOf: OldestEntryTime,
+                    publishAsync: p => PublishGlucoseDataInBatchesAsync(p, config, cancellationToken));
 
                 _logger.LogInformation(
                     "[{ConnectorSource}] Retrieved {Count} glucose entries from Nightscout",
                     ConnectorSource,
-                    count);
+                    outcome.Count);
 
-                result.ItemsSynced[SyncDataType.Glucose] = count;
-                if (lastTime.HasValue)
-                    result.LastEntryTimes[SyncDataType.Glucose] = lastTime.Value;
-                if (!publishSuccess)
+                result.ItemsSynced[SyncDataType.Glucose] = outcome.Count;
+                if (outcome.NewestTime.HasValue)
+                    result.LastEntryTimes[SyncDataType.Glucose] = outcome.NewestTime.Value;
+                if (!outcome.Success)
                 {
                     result.Success = false;
                     result.Errors.Add("Glucose publish failed");
@@ -264,40 +254,29 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     ? await CalculateTreatmentSinceTimestampAsync(config)
                     : request.From;
 
-                var count = 0;
-                DateTime? lastTime = null;
-                var publishSuccess = true;
-
-                await foreach (var page in FetchTreatmentPagesAsync(treatmentFrom, request.To))
-                {
-                    count += page.Length;
-                    var pageMax = page
-                        .Select(t => DateTime.TryParse(t.CreatedAt, out var dt) ? dt : (DateTime?)null)
-                        .Where(dt => dt.HasValue)
-                        .Max();
-                    if (pageMax.HasValue && (lastTime is null || pageMax > lastTime))
-                        lastTime = pageMax;
-
-                    if (!await PublishTreatmentDataInBatchesAsync(page, config, cancellationToken))
-                        publishSuccess = false;
-                }
+                var outcome = await CrawlAndPublishAsync(
+                    "Treatments", treatmentFrom, request.To,
+                    FetchTreatmentPagesAsync,
+                    newestOf: p => NewestCreatedAt(p, t => t.CreatedAt),
+                    oldestOf: p => OldestCreatedAt(p, t => t.CreatedAt),
+                    publishAsync: p => PublishTreatmentDataInBatchesAsync(p, config, cancellationToken));
 
                 _logger.LogInformation(
                     "[{ConnectorSource}] Retrieved {Count} treatments from Nightscout",
                     ConnectorSource,
-                    count);
+                    outcome.Count);
 
-                if (count > 0)
+                if (outcome.Count > 0)
                 {
                     // Report count under each enabled treatment sub-type
                     foreach (var tt in treatmentTypes.Where(t => activeTypes.Contains(t)))
                     {
-                        result.ItemsSynced[tt] = count;
-                        result.LastEntryTimes[tt] = lastTime;
+                        result.ItemsSynced[tt] = outcome.Count;
+                        result.LastEntryTimes[tt] = outcome.NewestTime;
                     }
                 }
 
-                if (!publishSuccess)
+                if (!outcome.Success)
                 {
                     result.Success = false;
                     result.Errors.Add("Treatments publish failed");
@@ -355,33 +334,22 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     ? await CalculateDeviceStatusCatchUpSinceAsync(config) ?? request.From
                     : request.From;
 
-                var count = 0;
-                DateTime? lastTime = null;
-                var publishSuccess = true;
-
-                await foreach (var page in FetchDeviceStatusPagesAsync(deviceStatusFrom, request.To))
-                {
-                    count += page.Length;
-                    var pageMax = page
-                        .Select(d => DateTimeOffset.TryParse(d.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
-                        .Where(dt => dt.HasValue)
-                        .Max();
-                    if (pageMax.HasValue && (lastTime is null || pageMax > lastTime))
-                        lastTime = pageMax;
-
-                    if (!await PublishDeviceStatusAsync(page, config, cancellationToken))
-                        publishSuccess = false;
-                }
+                var outcome = await CrawlAndPublishAsync(
+                    "DeviceStatus", deviceStatusFrom, request.To,
+                    FetchDeviceStatusPagesAsync,
+                    newestOf: p => NewestCreatedAt(p, d => d.CreatedAt),
+                    oldestOf: p => OldestCreatedAt(p, d => d.CreatedAt),
+                    publishAsync: p => PublishDeviceStatusAsync(p, config, cancellationToken));
 
                 _logger.LogInformation(
                     "[{ConnectorSource}] Retrieved {Count} device statuses from Nightscout",
                     ConnectorSource,
-                    count);
+                    outcome.Count);
 
-                result.ItemsSynced[SyncDataType.DeviceStatus] = count;
-                if (lastTime.HasValue)
-                    result.LastEntryTimes[SyncDataType.DeviceStatus] = lastTime;
-                if (!publishSuccess)
+                result.ItemsSynced[SyncDataType.DeviceStatus] = outcome.Count;
+                if (outcome.NewestTime.HasValue)
+                    result.LastEntryTimes[SyncDataType.DeviceStatus] = outcome.NewestTime;
+                if (!outcome.Success)
                 {
                     result.Success = false;
                     result.Errors.Add("DeviceStatus publish failed");
@@ -433,33 +401,22 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     ? await CalculateActivityCatchUpSinceAsync(config) ?? request.From
                     : request.From;
 
-                var count = 0;
-                DateTime? lastTime = null;
-                var publishSuccess = true;
-
-                await foreach (var page in FetchActivityPagesAsync(activityFrom, request.To))
-                {
-                    count += page.Length;
-                    var pageMax = page
-                        .Select(a => DateTimeOffset.TryParse(a.CreatedAt, out var dto) ? dto.UtcDateTime : (DateTime?)null)
-                        .Where(dt => dt.HasValue)
-                        .Max();
-                    if (pageMax.HasValue && (lastTime is null || pageMax > lastTime))
-                        lastTime = pageMax;
-
-                    if (!await PublishActivityDataAsync(page, config, cancellationToken))
-                        publishSuccess = false;
-                }
+                var outcome = await CrawlAndPublishAsync(
+                    "Activity", activityFrom, request.To,
+                    FetchActivityPagesAsync,
+                    newestOf: p => NewestCreatedAt(p, a => a.CreatedAt),
+                    oldestOf: p => OldestCreatedAt(p, a => a.CreatedAt),
+                    publishAsync: p => PublishActivityDataAsync(p, config, cancellationToken));
 
                 _logger.LogInformation(
                     "[{ConnectorSource}] Retrieved {Count} activities from Nightscout",
                     ConnectorSource,
-                    count);
+                    outcome.Count);
 
-                result.ItemsSynced[SyncDataType.Activity] = count;
-                if (lastTime.HasValue)
-                    result.LastEntryTimes[SyncDataType.Activity] = lastTime;
-                if (!publishSuccess)
+                result.ItemsSynced[SyncDataType.Activity] = outcome.Count;
+                if (outcome.NewestTime.HasValue)
+                    result.LastEntryTimes[SyncDataType.Activity] = outcome.NewestTime;
+                if (!outcome.Success)
                 {
                     result.Success = false;
                     result.Errors.Add("Activity publish failed");
@@ -493,6 +450,136 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     private static DateTime? AnchorUnboundedFetch(DateTime? from, DateTime? to) =>
         from is null && to is null ? DateTime.UtcNow : to;
 
+    private sealed record PagedCrawlOutcome(int Count, DateTime? NewestTime, bool Success);
+
+    private Task<DateTime?> GetBackfillLowWaterMarkAsync(string collection) =>
+        Publisher is { IsAvailable: true } p
+            ? p.Metadata.GetBackfillLowWaterMarkAsync(ConnectorSource, collection)
+            : Task.FromResult<DateTime?>(null);
+
+    private Task SetBackfillLowWaterMarkAsync(string collection, DateTime? mark) =>
+        Publisher is { IsAvailable: true } p
+            ? p.Metadata.SetBackfillLowWaterMarkAsync(ConnectorSource, collection, mark)
+            : Task.CompletedTask;
+
+    /// <summary>
+    ///     Crawls a collection newest-first, publishing each page as it lands, then — when an
+    ///     earlier crawl of the collection left a persisted low-water mark — resumes that
+    ///     incomplete backfill below the mark. Pages descend from "now", so anything a killed
+    ///     crawl never reached sits BELOW the newest stored record and an ordinary catch-up
+    ///     never returns for it; the mark is what carries "history below X is still missing"
+    ///     across process restarts and store failures.
+    /// </summary>
+    private async Task<PagedCrawlOutcome> CrawlAndPublishAsync<T>(
+        string collection,
+        DateTime? from,
+        DateTime? to,
+        Func<DateTime?, DateTime?, IAsyncEnumerable<T[]>> pages,
+        Func<T[], DateTime?> newestOf,
+        Func<T[], DateTime?> oldestOf,
+        Func<T[], Task<bool>> publishAsync)
+    {
+        var mark = await GetBackfillLowWaterMarkAsync(collection);
+
+        var primary = await CrawlRangeAsync(
+            collection, from, to, pages, newestOf, oldestOf, publishAsync, fullCrawl: from is null);
+
+        // Resume the incomplete backfill only when this cycle's primary crawl stored cleanly —
+        // a store that is failing right now shouldn't be hammered with the deep history too.
+        // A full primary crawl (open lower bound) already covers everything below the mark.
+        if (mark is null || !primary.Success || from is null)
+            return primary;
+
+        var resume = await CrawlRangeAsync(
+            collection, null, mark.Value.AddMilliseconds(-1),
+            pages, newestOf, oldestOf, publishAsync, fullCrawl: true);
+
+        var newest = primary.NewestTime is null || (resume.NewestTime is not null && resume.NewestTime > primary.NewestTime)
+            ? resume.NewestTime
+            : primary.NewestTime;
+        return new PagedCrawlOutcome(primary.Count + resume.Count, newest, resume.Success);
+    }
+
+    /// <summary>
+    ///     One newest-first crawl over a range. A page publish failure stops the crawl (pages
+    ///     below a gap would strand it above the resume point) and records the low-water mark
+    ///     so the next sync resumes there. Full crawls (open lower bound) also advance the mark
+    ///     after every published page — crash protection for multi-hour histories — and clear
+    ///     it on reaching the source's beginning; bounded catch-up crawls only ever raise it.
+    /// </summary>
+    private async Task<PagedCrawlOutcome> CrawlRangeAsync<T>(
+        string collection,
+        DateTime? from,
+        DateTime? to,
+        Func<DateTime?, DateTime?, IAsyncEnumerable<T[]>> pages,
+        Func<T[], DateTime?> newestOf,
+        Func<T[], DateTime?> oldestOf,
+        Func<T[], Task<bool>> publishAsync,
+        bool fullCrawl)
+    {
+        var count = 0;
+        DateTime? newestSeen = null;
+        DateTime? lowestPublished = null;
+        var success = true;
+
+        try
+        {
+            await foreach (var page in pages(from, to))
+            {
+                count += page.Length;
+                var pageNewest = newestOf(page);
+                if (pageNewest.HasValue && (newestSeen is null || pageNewest > newestSeen))
+                    newestSeen = pageNewest;
+
+                if (!await publishAsync(page))
+                {
+                    success = false;
+                    break;
+                }
+
+                var pageOldest = oldestOf(page);
+                if (pageOldest.HasValue)
+                    lowestPublished = pageOldest;
+
+                if (fullCrawl && lowestPublished.HasValue)
+                    await SetBackfillLowWaterMarkAsync(collection, lowestPublished);
+            }
+        }
+        catch
+        {
+            // A fetch failure mid-crawl leaves the same gap a publish failure does: record the
+            // resume point for what already published before surfacing the error.
+            await RaiseBackfillLowWaterMarkAsync(collection, lowestPublished);
+            throw;
+        }
+
+        if (success && fullCrawl)
+        {
+            // Reached the source's beginning: the backfill is complete.
+            await SetBackfillLowWaterMarkAsync(collection, null);
+        }
+        else if (!success)
+        {
+            await RaiseBackfillLowWaterMarkAsync(collection, lowestPublished);
+        }
+
+        return new PagedCrawlOutcome(count, newestSeen, success);
+    }
+
+    /// <summary>
+    ///     Raises the collection's low-water mark to <paramref name="candidate"/> — never lowers
+    ///     it: a deeper mark from an earlier failure still describes missing history further down.
+    /// </summary>
+    private async Task RaiseBackfillLowWaterMarkAsync(string collection, DateTime? candidate)
+    {
+        if (!candidate.HasValue)
+            return;
+
+        var existing = await GetBackfillLowWaterMarkAsync(collection);
+        if (existing is null || existing < candidate)
+            await SetBackfillLowWaterMarkAsync(collection, candidate);
+    }
+
     /// <summary>
     ///     Streams a paginated Nightscout collection newest-first, one page per iteration,
     ///     so callers never hold more than a page of a multi-year history in memory. Each
@@ -517,7 +604,14 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         {
             var page = await FetchDataAsync<T[]>(buildUrl(from, currentTo), operationName);
 
-            if (page == null || page.Length == 0)
+            // FetchDataAsync reports failure (retries exhausted, non-retryable HTTP, bad JSON)
+            // as null. That is not the end of the range — treating it as one silently truncated
+            // crawls into "successful" partial syncs, and would wrongly clear a backfill
+            // low-water mark. A genuinely exhausted range answers an empty array.
+            if (page == null)
+                throw new HttpRequestException($"{operationName} fetch failed; see preceding connector logs");
+
+            if (page.Length == 0)
                 yield break;
 
             yield return page;
@@ -566,6 +660,15 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             .Select(item => DateTimeOffset.TryParse(createdAtOf(item), out var dto) ? dto.UtcDateTime : (DateTime?)null)
             .Where(dt => dt.HasValue)
             .Min();
+    }
+
+    /// <summary>Newest created_at on a page; the counterpart of <see cref="OldestCreatedAt{T}"/>.</summary>
+    private static DateTime? NewestCreatedAt<T>(T[] page, Func<T, string?> createdAtOf)
+    {
+        return page
+            .Select(item => DateTimeOffset.TryParse(createdAtOf(item), out var dto) ? dto.UtcDateTime : (DateTime?)null)
+            .Where(dt => dt.HasValue)
+            .Max();
     }
 
     private async IAsyncEnumerable<Entry[]> FetchGlucosePagesAsync(DateTime? from, DateTime? to)

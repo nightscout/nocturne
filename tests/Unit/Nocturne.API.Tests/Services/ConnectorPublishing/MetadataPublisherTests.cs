@@ -1,7 +1,9 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.EntityFrameworkCore;
 using Moq;
+using Nocturne.Infrastructure.Data;
 using Nocturne.API.Services.ConnectorPublishing;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Connectors;
@@ -66,6 +68,8 @@ public class MetadataPublisherTests
             _mockNoteRepository.Object,
             _mockTenantOwnerResolver.Object,
             _mockTenantAccessor.Object,
+            new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+                .UseInMemoryDatabase($"metadata-publisher-{Guid.NewGuid():N}").Options),
             NullLogger<MetadataPublisher>.Instance
         );
     }

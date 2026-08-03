@@ -108,4 +108,14 @@ public class ConnectorConfigurationEntity : ITenantScoped, ISystemTimestamped
     /// </summary>
     [Column("is_healthy")]
     public bool IsHealthy { get; set; } = true;
+
+    /// <summary>
+    /// Per-collection backfill low-water marks, serialized as a JSON map of collection key
+    /// (e.g. "Glucose") to the oldest successfully published record time. A key means an
+    /// earlier backfill crawl of that collection stopped before reaching the source's
+    /// beginning; the connector resumes below the mark on its next sync. Runtime sync state
+    /// like <see cref="LastSuccessfulSync"/> — never part of the user-editable configuration.
+    /// </summary>
+    [Column("backfill_low_water_marks", TypeName = "jsonb")]
+    public string? BackfillLowWaterMarks { get; set; }
 }

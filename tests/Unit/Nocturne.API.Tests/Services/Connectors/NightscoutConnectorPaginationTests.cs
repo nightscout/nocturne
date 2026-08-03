@@ -54,6 +54,7 @@ public class NightscoutConnectorPaginationTests
             mock.Setup(p => p.IsAvailable).Returns(true);
             mock.Setup(p => p.Glucose).Returns(glucoseMock.Object);
             mock.Setup(p => p.Treatments).Returns(treatmentMock.Object);
+            mock.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
             publisher = mock.Object;
         }
 
@@ -375,12 +376,12 @@ public class NightscoutConnectorPaginationTests
         // Regression: the sync used to fetch the ENTIRE range into one list before
         // publishing anything — a multi-year backfill of a high-volume collection OOMed
         // the process mid-publish. Streaming means each page is published before the next
-        // is fetched, and a failing publish marks the sync failed while every page is
-        // still attempted (holes stay bounded to the failed pages).
+        // is fetched, and a failing publish stops the crawl — the persisted low-water mark
+        // is what carries the un-crawled remainder to the next sync.
         var page1 = CreateEntries(MaxCount, BaseTime);
         var oldestPage1Ms = page1.Min(e => e.Mills);
         var page2Start = DateTimeOffset.FromUnixTimeMilliseconds(oldestPage1Ms).AddMilliseconds(-1);
-        var page2 = CreateEntries(3, page2Start); // short page ends the crawl
+        var page2 = CreateEntries(3, page2Start);
 
         var handler = new SequentialMockHandler();
         handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
@@ -408,6 +409,7 @@ public class NightscoutConnectorPaginationTests
         var publisherMock = new Mock<IConnectorPublisher>();
         publisherMock.Setup(p => p.IsAvailable).Returns(true);
         publisherMock.Setup(p => p.Glucose).Returns(glucoseMock.Object);
+        publisherMock.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
 
         var service = new NightscoutConnectorService(
             new HttpClient(handler) { BaseAddress = new Uri(config.Url) },
@@ -429,12 +431,12 @@ public class NightscoutConnectorPaginationTests
 
         result.Success.Should().BeFalse();
         result.Errors.Should().Contain("Glucose publish failed");
-        // Both pages were attempted despite the first publish failing…
-        requestsAtPublish.Should().HaveCount(2);
-        // …and the first page was published before page 2 was fetched (auth + page 1 = 2 requests).
+        // The first page was published before page 2 was fetched (auth + page 1 = 2 requests)…
         requestsAtPublish[0].Should().Be(2,
             "the first page must be published before the next page is fetched");
-        result.ItemsSynced[Nocturne.Connectors.Core.Models.SyncDataType.Glucose].Should().Be(MaxCount + 3);
+        // …and its failure stopped the crawl there.
+        requestsAtPublish.Should().HaveCount(1);
+        handler.RequestUrls.Count(u => u.Contains("entries.json")).Should().Be(2);
     }
 
     [Fact]
@@ -471,31 +473,4 @@ public class NightscoutConnectorPaginationTests
 
     #endregion
 
-    /// <summary>
-    /// Mock handler that returns pre-queued responses in order and records request URLs.
-    /// </summary>
-    private class SequentialMockHandler : HttpMessageHandler
-    {
-        private readonly Queue<HttpResponseMessage> _responses = new();
-
-        public List<string> RequestUrls { get; } = [];
-
-        public void Enqueue(HttpResponseMessage response) =>
-            _responses.Enqueue(response);
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            RequestUrls.Add(request.RequestUri?.PathAndQuery ?? "");
-
-            if (_responses.Count == 0)
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent("[]", System.Text.Encoding.UTF8, "application/json"),
-                });
-
-            return Task.FromResult(_responses.Dequeue());
-        }
-    }
 }

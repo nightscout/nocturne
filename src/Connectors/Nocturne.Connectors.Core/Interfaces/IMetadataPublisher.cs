@@ -62,4 +62,35 @@ public interface IMetadataPublisher
     Task<DateTime?> GetLatestActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads the persisted backfill low-water mark for one of <paramref name="source"/>'s data
+    /// collections. A mark means an earlier backfill crawl of that collection stopped before
+    /// reaching the source's beginning — history older than the mark may be missing, and the
+    /// connector should resume the crawl below it. <c>null</c> means no incomplete backfill.
+    /// </summary>
+    /// <param name="source">The connector data source (e.g. <c>nightscout-connector</c>).</param>
+    /// <param name="collection">The data collection key (e.g. <c>Glucose</c>, <c>Treatments</c>).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<DateTime?> GetBackfillLowWaterMarkAsync(
+        string source,
+        string collection,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Persists (or clears, with <c>null</c>) the backfill low-water mark for one of
+    /// <paramref name="source"/>'s data collections. Connectors update the mark as each page of
+    /// a newest-first backfill lands, so a crawl killed mid-run (process restart, publish
+    /// failure) can resume from where it stopped instead of stranding the older history below
+    /// the resume cursor forever.
+    /// </summary>
+    /// <param name="source">The connector data source (e.g. <c>nightscout-connector</c>).</param>
+    /// <param name="collection">The data collection key (e.g. <c>Glucose</c>, <c>Treatments</c>).</param>
+    /// <param name="lowWaterMark">The oldest successfully published record time, or <c>null</c> once the crawl reaches the source's beginning.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task SetBackfillLowWaterMarkAsync(
+        string source,
+        string collection,
+        DateTime? lowWaterMark,
+        CancellationToken cancellationToken = default);
 }

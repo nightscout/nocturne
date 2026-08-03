@@ -1,4 +1,8 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Identity;
@@ -30,6 +34,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     private readonly INoteRepository _noteRepository;
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly NocturneDbContext _db;
     private readonly ILogger<MetadataPublisher> _logger;
 
     public MetadataPublisher(
@@ -42,6 +47,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         INoteRepository noteRepository,
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
+        NocturneDbContext db,
         ILogger<MetadataPublisher> logger)
     {
         _profileWriteService = profileWriteService ?? throw new ArgumentNullException(nameof(profileWriteService));
@@ -53,6 +59,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         _noteRepository = noteRepository ?? throw new ArgumentNullException(nameof(noteRepository));
         _tenantOwnerResolver = tenantOwnerResolver ?? throw new ArgumentNullException(nameof(tenantOwnerResolver));
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
+        _db = db ?? throw new ArgumentNullException(nameof(db));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -275,5 +282,72 @@ internal sealed class MetadataPublisher : IMetadataPublisher
             return DateTimeOffset.FromUnixTimeMilliseconds(latest.Mills).UtcDateTime;
 
         return null;
+    }
+
+    /// <inheritdoc />
+    public async Task<DateTime?> GetBackfillLowWaterMarkAsync(
+        string source,
+        string collection,
+        CancellationToken cancellationToken = default)
+    {
+        var config = await FindConnectorConfigurationAsync(source, cancellationToken);
+        if (config?.BackfillLowWaterMarks is null)
+            return null;
+
+        var marks = JsonSerializer.Deserialize<Dictionary<string, DateTime>>(config.BackfillLowWaterMarks);
+        return marks is not null && marks.TryGetValue(collection, out var mark)
+            ? DateTime.SpecifyKind(mark, DateTimeKind.Utc)
+            : null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetBackfillLowWaterMarkAsync(
+        string source,
+        string collection,
+        DateTime? lowWaterMark,
+        CancellationToken cancellationToken = default)
+    {
+        var config = await FindConnectorConfigurationAsync(source, cancellationToken);
+        if (config is null)
+        {
+            _logger.LogWarning(
+                "No connector configuration found for {Source}; cannot persist backfill low-water mark",
+                source);
+            return;
+        }
+
+        var marks = config.BackfillLowWaterMarks is null
+            ? []
+            : JsonSerializer.Deserialize<Dictionary<string, DateTime>>(config.BackfillLowWaterMarks) ?? new Dictionary<string, DateTime>();
+
+        if (lowWaterMark is null)
+            marks.Remove(collection);
+        else
+            marks[collection] = lowWaterMark.Value;
+
+        config.BackfillLowWaterMarks = marks.Count == 0 ? null : JsonSerializer.Serialize(marks);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Resolves the connector configuration row for a connector data source. Sources follow the
+    /// <c>{connector-name}-connector</c> convention (<c>nightscout-connector</c>) while
+    /// configuration rows carry the bare connector name, so the suffix is stripped for the
+    /// lookup, with an exact match as fallback.
+    /// </summary>
+    private async Task<ConnectorConfigurationEntity?> FindConnectorConfigurationAsync(
+        string source,
+        CancellationToken cancellationToken)
+    {
+        const string suffix = "-connector";
+        var name = source.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+            ? source[..^suffix.Length]
+            : source;
+
+        return await _db.ConnectorConfigurations
+            .FirstOrDefaultAsync(
+                c => c.ConnectorName.ToLower() == name.ToLower()
+                    || c.ConnectorName.ToLower() == source.ToLower(),
+                cancellationToken);
     }
 }
