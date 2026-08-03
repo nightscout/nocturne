@@ -374,6 +374,10 @@ public class TandemE2eSyncTests
             Task.FromResult(true);
         public Task<DateTime?> GetLatestActivityTimestampAsync(string source, CancellationToken ct = default) =>
             Task.FromResult<DateTime?>(null);
+        public Task<DateTime?> GetBackfillLowWaterMarkAsync(string source, string collection, CancellationToken ct = default) =>
+            Task.FromResult<DateTime?>(null);
+        public Task SetBackfillLowWaterMarkAsync(string source, string collection, DateTime? lowWaterMark, CancellationToken ct = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class Fixture
