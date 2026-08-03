@@ -301,6 +301,14 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The update is a single jsonb-path statement on PostgreSQL so concurrent writers to
+    /// DIFFERENT collections on the same row (a manual sync or cursor-reset job racing the
+    /// background sync) can't clobber each other's keys — a read-modify-write of the whole map
+    /// could drop a mark, and a dropped mark is stranded history, the exact failure marks exist
+    /// to prevent. Same-key races stay last-writer-wins: any surviving mark is a valid resume
+    /// point because the resume crawl is unbounded below it.
+    /// </remarks>
     public async Task SetBackfillLowWaterMarkAsync(
         string source,
         string collection,
@@ -316,6 +324,37 @@ internal sealed class MetadataPublisher : IMetadataPublisher
             return;
         }
 
+        if (_db.Database.IsNpgsql())
+        {
+            if (lowWaterMark is null)
+            {
+                await _db.Database.ExecuteSqlAsync(
+                    $"""
+                     UPDATE connector_configurations
+                     SET backfill_low_water_marks =
+                         NULLIF(coalesce(backfill_low_water_marks, jsonb_build_object()) - {collection}, jsonb_build_object())
+                     WHERE id = {config.Id}
+                     """,
+                    cancellationToken);
+            }
+            else
+            {
+                // Serialized as an ISO-8601 UTC string ("...Z"), matching what
+                // System.Text.Json writes so Get round-trips without a timezone shift.
+                var value = lowWaterMark.Value.ToString("O");
+                await _db.Database.ExecuteSqlAsync(
+                    $"""
+                     UPDATE connector_configurations
+                     SET backfill_low_water_marks =
+                         jsonb_set(coalesce(backfill_low_water_marks, jsonb_build_object()), ARRAY[{collection}], to_jsonb({value}::text))
+                     WHERE id = {config.Id}
+                     """,
+                    cancellationToken);
+            }
+            return;
+        }
+
+        // Non-relational providers (tests): plain read-modify-write on the tracked entity.
         var marks = config.BackfillLowWaterMarks is null
             ? []
             : JsonSerializer.Deserialize<Dictionary<string, DateTime>>(config.BackfillLowWaterMarks) ?? new Dictionary<string, DateTime>();
@@ -333,7 +372,8 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     /// Resolves the connector configuration row for a connector data source. Sources follow the
     /// <c>{connector-name}-connector</c> convention (<c>nightscout-connector</c>) while
     /// configuration rows carry the bare connector name, so the suffix is stripped for the
-    /// lookup, with an exact match as fallback.
+    /// lookup, with an exact match as fallback. Reads without tracking — marks are written via
+    /// jsonb-path updates, and a stale tracked snapshot must never flow back into the row.
     /// </summary>
     private async Task<ConnectorConfigurationEntity?> FindConnectorConfigurationAsync(
         string source,
@@ -344,7 +384,11 @@ internal sealed class MetadataPublisher : IMetadataPublisher
             ? source[..^suffix.Length]
             : source;
 
-        return await _db.ConnectorConfigurations
+        var query = _db.Database.IsNpgsql()
+            ? _db.ConnectorConfigurations.AsNoTracking()
+            : _db.ConnectorConfigurations;
+
+        return await query
             .FirstOrDefaultAsync(
                 c => c.ConnectorName.ToLower() == name.ToLower()
                     || c.ConnectorName.ToLower() == source.ToLower(),

@@ -35,13 +35,15 @@ public class NightscoutBackfillResumeTests
 
         public Mock<IMetadataPublisher> BuildMetadataMock()
         {
+            // Bound to the exact connector source: a wrong source string must read as "no
+            // mark store" in these tests, not silently work.
             var mock = new Mock<IMetadataPublisher>();
             mock.Setup(m => m.GetBackfillLowWaterMarkAsync(
-                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                    "nightscout-connector", It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((string _, string collection, CancellationToken _) =>
                     Marks.TryGetValue(collection, out var mark) ? mark : null);
             mock.Setup(m => m.SetBackfillLowWaterMarkAsync(
-                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+                    "nightscout-connector", It.IsAny<string>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
                 .Returns((string _, string collection, DateTime? mark, CancellationToken _) =>
                 {
                     if (mark is null) Marks.Remove(collection);
@@ -112,7 +114,7 @@ public class NightscoutBackfillResumeTests
         DataTypes = [SyncDataType.Glucose],
     };
 
-    private NightscoutConnectorConfiguration Config(NightscoutConnectorService service) => new()
+    private static NightscoutConnectorConfiguration Config() => new()
     {
         Url = "https://nightscout.example.com",
         ApiSecret = "test-secret",
@@ -140,7 +142,7 @@ public class NightscoutBackfillResumeTests
             .ReturnsAsync(() => ++calls == 1);
 
         var result = await service.SyncDataAsync(
-            GlucoseRequest(from: null, to: BaseTime.UtcDateTime), Config(service), CancellationToken.None);
+            GlucoseRequest(from: null, to: BaseTime.UtcDateTime), Config(), CancellationToken.None);
 
         result.Success.Should().BeFalse();
         marks.Marks.Should().ContainKey("Glucose")
@@ -167,7 +169,7 @@ public class NightscoutBackfillResumeTests
         }
 
         var result = await service.SyncDataAsync(
-            GlucoseRequest(from: null, to: BaseTime.UtcDateTime), Config(service), CancellationToken.None);
+            GlucoseRequest(from: null, to: BaseTime.UtcDateTime), Config(), CancellationToken.None);
 
         // Regression: a fetch failure used to read as a clean end-of-range — a "successful"
         // partial sync that would have wrongly cleared the mark.
@@ -185,7 +187,7 @@ public class NightscoutBackfillResumeTests
         handler.Enqueue(JsonResponse(CreateEntries(3, BaseTime))); // short page = source's beginning
 
         var result = await service.SyncDataAsync(
-            GlucoseRequest(from: null, to: BaseTime.UtcDateTime), Config(service), CancellationToken.None);
+            GlucoseRequest(from: null, to: BaseTime.UtcDateTime), Config(), CancellationToken.None);
 
         result.Success.Should().BeTrue();
         marks.Marks.Should().NotContainKey("Glucose", "the crawl reached the source's beginning");
@@ -204,7 +206,7 @@ public class NightscoutBackfillResumeTests
 
         var result = await service.SyncDataAsync(
             GlucoseRequest(from: BaseTime.UtcDateTime.AddHours(-1), to: BaseTime.UtcDateTime),
-            Config(service), CancellationToken.None);
+            Config(), CancellationToken.None);
 
         result.Success.Should().BeTrue();
 
@@ -221,6 +223,62 @@ public class NightscoutBackfillResumeTests
     }
 
     [Fact]
+    public async Task FailedPrimaryCrawl_SkipsTheResume_AndPreservesTheMark()
+    {
+        // A store that is failing right now must not be hammered with the deep history too;
+        // the mark survives untouched for the next healthy cycle.
+        var (service, handler, marks, glucose) = CreateService();
+        var mark = BaseTime.UtcDateTime.AddDays(-10);
+        marks.Marks["Glucose"] = mark;
+
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
+        handler.Enqueue(JsonResponse(CreateEntries(2, BaseTime))); // catch-up page
+
+        glucose.Setup(p => p.PublishEntriesAsync(
+                It.IsAny<IEnumerable<Entry>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await service.SyncDataAsync(
+            GlucoseRequest(from: BaseTime.UtcDateTime.AddHours(-1), to: BaseTime.UtcDateTime),
+            Config(), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        handler.RequestUrls.Count(u => u.Contains($"count={MaxCount}")).Should().Be(1,
+            "no resume crawl may run while the store is failing");
+        marks.Marks["Glucose"].Should().Be(mark);
+    }
+
+    [Fact]
+    public async Task BoundedCrawlFailure_NeverLowersADeeperMark()
+    {
+        // An admin re-pull of an old window failing must not pull an existing higher mark
+        // down: the higher mark's unbounded resume already covers everything below it.
+        var (service, handler, marks, glucose) = CreateService();
+        var highMark = BaseTime.UtcDateTime;
+        marks.Marks["Glucose"] = highMark;
+
+        var windowTop = new DateTimeOffset(BaseTime.UtcDateTime.AddDays(-50));
+        var page1 = CreateEntries(MaxCount, windowTop);
+        var page2 = CreateEntries(MaxCount, DateTimeOffset.FromUnixTimeMilliseconds(page1.Min(e => e.Mills)).AddMilliseconds(-1));
+
+        handler.Enqueue(JsonResponse(Array.Empty<Entry>())); // auth check
+        handler.Enqueue(JsonResponse(page1));
+        handler.Enqueue(JsonResponse(page2));
+
+        var calls = 0;
+        glucose.Setup(p => p.PublishEntriesAsync(
+                It.IsAny<IEnumerable<Entry>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => ++calls == 1); // page 1 stores, page 2 fails
+
+        var result = await service.SyncDataAsync(
+            GlucoseRequest(from: windowTop.UtcDateTime.AddDays(-10), to: windowTop.UtcDateTime),
+            Config(), CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        marks.Marks["Glucose"].Should().Be(highMark);
+    }
+
+    [Fact]
     public async Task NoMark_MeansNoResumeCrawl()
     {
         var (service, handler, marks, _) = CreateService();
@@ -230,7 +288,7 @@ public class NightscoutBackfillResumeTests
 
         var result = await service.SyncDataAsync(
             GlucoseRequest(from: BaseTime.UtcDateTime.AddHours(-1), to: BaseTime.UtcDateTime),
-            Config(service), CancellationToken.None);
+            Config(), CancellationToken.None);
 
         result.Success.Should().BeTrue();
         handler.RequestUrls.Count(u => u.Contains($"count={MaxCount}")).Should().Be(1);

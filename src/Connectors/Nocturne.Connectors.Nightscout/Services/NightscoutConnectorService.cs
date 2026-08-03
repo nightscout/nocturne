@@ -470,6 +470,16 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     never returns for it; the mark is what carries "history below X is still missing"
     ///     across process restarts and store failures.
     /// </summary>
+    /// <remarks>
+    ///     The resume crawl is deliberately UNBOUNDED below the mark, and that is load-bearing:
+    ///     the mark's value only decides where re-crawling starts, never where it stops, so a
+    ///     raised or stale mark can only cost redundant (idempotent) re-fetching — every
+    ///     missing region below any surviving mark is eventually reached. Bounding the resume
+    ///     (e.g. stopping at a previous mark, or persisting gap floors) would turn those same
+    ///     states into data loss. The known cost: a failed bounded catch-up leaves a near-now
+    ///     mark whose resume re-crawls the full history for a minutes-wide gap — rare, safe,
+    ///     and preferred over a more fragile gap bookkeeping.
+    /// </remarks>
     private async Task<PagedCrawlOutcome> CrawlAndPublishAsync<T>(
         string collection,
         DateTime? from,
