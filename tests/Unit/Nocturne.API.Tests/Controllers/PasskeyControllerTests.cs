@@ -484,7 +484,7 @@ public class PasskeyControllerTests : IDisposable
             Times.Never,
             "the enrolling subject comes from the server's lookup, not from the challenge token");
         inviteService.Verify(
-            s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>()),
             Times.Never,
             "a refused enrolment must not join anyone to the tenant");
     }
@@ -538,7 +538,7 @@ public class PasskeyControllerTests : IDisposable
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.IsType<PasskeyRegistrationResponse>(ok.Value).Success.Should().BeTrue();
-        inviteService.Verify(s => s.AcceptInviteAsync("invite-token", inviteeId), Times.Once);
+        inviteService.Verify(s => s.AcceptInviteAsync("invite-token", inviteeId, _tenantId), Times.Once);
     }
 
     [Fact]
@@ -648,7 +648,7 @@ public class PasskeyControllerTests : IDisposable
             Times.Never,
             "a member of any tenant is an account, not a half-finished enrolment");
         inviteService.Verify(
-            s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>()),
+            s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>()),
             Times.Never);
     }
 
@@ -681,7 +681,7 @@ public class PasskeyControllerTests : IDisposable
             inviteService.Object);
 
         Assert.IsType<OkObjectResult>(result.Result);
-        inviteService.Verify(s => s.AcceptInviteAsync("invite-token", newest), Times.Once);
+        inviteService.Verify(s => s.AcceptInviteAsync("invite-token", newest, _tenantId), Times.Once);
     }
 
     /// <summary>
@@ -728,7 +728,7 @@ public class PasskeyControllerTests : IDisposable
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.IsType<PasskeyRegistrationResponse>(ok.Value).Success.Should().BeTrue();
-        inviteService.Verify(s => s.AcceptInviteAsync("invite-token", subjects[0].Id), Times.Once);
+        inviteService.Verify(s => s.AcceptInviteAsync("invite-token", subjects[0].Id, _tenantId), Times.Once);
     }
 
     /// <summary>
@@ -816,11 +816,11 @@ public class PasskeyControllerTests : IDisposable
     private Mock<IMemberInviteService> StubValidInvite()
     {
         var inviteService = new Mock<IMemberInviteService>();
-        inviteService.Setup(s => s.GetInviteByTokenAsync("invite-token"))
+        inviteService.Setup(s => s.GetInviteByTokenAsync("invite-token", _tenantId))
             .ReturnsAsync(new MemberInviteInfo(
                 Guid.CreateVersion7(), _tenantId, "Test", "Owner", [], null, null, false,
                 DateTime.UtcNow.AddDays(1), null, 0, true, false, false, DateTime.UtcNow, []));
-        inviteService.Setup(s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>()))
+        inviteService.Setup(s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>()))
             .ReturnsAsync(new AcceptMemberInviteResult(true, MembershipId: Guid.CreateVersion7()));
         return inviteService;
     }
