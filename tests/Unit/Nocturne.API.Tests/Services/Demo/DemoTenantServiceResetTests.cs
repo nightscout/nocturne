@@ -133,7 +133,11 @@ public class DemoTenantServiceResetTests : IDisposable
 
         var publicMember = members.Single(m => m.Subject!.IsSystemSubject);
         publicMember.LimitTo24Hours.Should().BeFalse();
-        publicMember.MemberRoles.Should().HaveCount(1, "the demo service writes through the Public subject");
+        publicMember.DirectPermissions.Should().BeEquivalentTo(
+            TenantPermissions.PublicShareScopes,
+            "the share link shows every shareable category, and nothing beyond that vocabulary");
+        publicMember.MemberRoles.Should().BeEmpty(
+            "the Public subject must not hold the demo member's write and administration atoms");
 
         var demoMember = members.Single(m => !m.Subject!.IsSystemSubject);
         demoMember.Username.Should().Be(DemoTenantService.DemoMemberUsername);

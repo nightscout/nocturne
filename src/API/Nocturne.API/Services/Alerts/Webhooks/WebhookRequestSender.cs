@@ -51,7 +51,7 @@ public class WebhookRequestSender(
 
         foreach (var url in urlList)
         {
-            if (!WebhookDestination.IsAllowed(url))
+            if (!await WebhookDestination.IsAllowedAsync(url, cancellationToken))
             {
                 failures.Add(url);
                 logger.LogWarning(

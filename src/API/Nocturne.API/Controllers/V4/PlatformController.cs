@@ -1,7 +1,7 @@
-using Nocturne.API.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Authorization;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Multitenancy;

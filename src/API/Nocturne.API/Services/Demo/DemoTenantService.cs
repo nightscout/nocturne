@@ -14,14 +14,13 @@ namespace Nocturne.API.Services.Demo;
 /// resetting it back to a freshly provisioned state.
 /// </summary>
 /// <remarks>
-/// The demo tenant carries two access paths, both on its own <c>demo-visitor</c> role
-/// (<see cref="TenantPermissions.DemoVisitorPermissions"/>) rather than a seed role. The
-/// Public system subject holds it, which widens the tenant's public share view to the full
-/// history of every shareable category (the share host narrows any grant to
-/// <see cref="TenantPermissions.PublicShareScopes"/>). Separately, one non-system member
-/// holds it so an anonymous visitor can be signed in as a real member (see
-/// <c>DemoSessionController</c>) and reach the write and settings surfaces the read-only
-/// share host cannot serve.
+/// The demo tenant carries two access paths. The Public system subject holds every scope in
+/// <see cref="TenantPermissions.PublicShareScopes"/> with no history limit, so the tenant's
+/// share link shows the full history of every shareable category. Separately, one non-system
+/// member holds the tenant's own <c>demo-visitor</c> role
+/// (<see cref="TenantPermissions.DemoVisitorPermissions"/>, not a seed role) so an anonymous
+/// visitor can be signed in as a real member (see <c>DemoSessionController</c>) and reach the
+/// write and settings surfaces the read-only share host cannot serve.
 /// <para>
 /// The demo member is identified by its <em>membership</em> row
 /// (<c>tenant_members.username</c>, unique per tenant), never by the subject's global
@@ -100,11 +99,12 @@ public sealed class DemoTenantService
     }
 
     /// <summary>
-    /// Applies the demo tenant's access configuration: marks onboarding complete so
-    /// the app serves the dashboard instead of the setup wizard, and puts both the Public
-    /// subject and the demo member on the tenant's <c>demo-visitor</c> role.
-    /// Idempotent — called on every provision and after every reset, so a reset that
-    /// failed part-way is repaired by the demo service's next provision.
+    /// Applies the demo tenant's access configuration: marks onboarding complete so the app
+    /// serves the dashboard instead of the setup wizard, opens the Public subject's share
+    /// grant to every shareable category, and puts the demo member on the tenant's
+    /// <c>demo-visitor</c> role. Idempotent — called on every provision and after every
+    /// reset, so a reset that failed part-way is repaired by the demo service's next
+    /// provision.
     /// </summary>
     public async Task ConfigureAccessAsync(Guid tenantId, CancellationToken ct = default)
     {
@@ -119,7 +119,7 @@ public sealed class DemoTenantService
 
         var demoRole = await EnsureDemoRoleAsync(db, tenantId, ct);
 
-        await GrantPublicAccessAsync(db, tenantId, demoRole.Id, ct);
+        await GrantPublicAccessAsync(db, tenantId, ct);
         await EnsureDemoMemberAsync(db, tenantId, demoRole.Id, ct);
 
         await db.SaveChangesAsync(ct);
@@ -371,12 +371,22 @@ public sealed class DemoTenantService
     }
 
     /// <summary>
-    /// Assigns the demo role to the Public system subject's membership and lifts its
-    /// 24-hour history limit, widening the tenant's public share view to the full
-    /// history of every shareable category.
+    /// Grants the Public system subject every shareable read scope and lifts its 24-hour
+    /// history limit, widening the tenant's public share view to the full history of every
+    /// shareable category.
     /// </summary>
+    /// <remarks>
+    /// Written as direct permissions bounded by
+    /// <see cref="TenantPermissions.PublicShareScopes"/>, not as the demo-visitor role. The
+    /// Public subject serves the anonymous share viewer, and the other two writers of this
+    /// membership — <c>MemberInviteController.SetMemberPermissions</c> and
+    /// <c>ShareLinkService.SetScopesAsync</c> — both refuse anything outside that vocabulary.
+    /// A third writer granting the write and administration atoms the demo member holds would
+    /// leave the narrower two decorative, and would rest the whole property on
+    /// <c>AuthenticationMiddleware</c> re-narrowing the grant on every share request.
+    /// </remarks>
     private async Task GrantPublicAccessAsync(
-        NocturneDbContext db, Guid tenantId, Guid adminRoleId, CancellationToken ct)
+        NocturneDbContext db, Guid tenantId, CancellationToken ct)
     {
         var publicMember = await db.TenantMembers
             .Include(m => m.Subject)
@@ -391,16 +401,16 @@ public sealed class DemoTenantService
         }
 
         publicMember.LimitTo24Hours = false;
-        await AssignRoleAsync(db, publicMember.Id, adminRoleId, ct);
+        publicMember.DirectPermissions = [.. TenantPermissions.PublicShareScopes];
     }
 
     /// <summary>
-    /// Ensures the demo membership exists with the Admin role, creating its subject on
+    /// Ensures the demo membership exists on the demo-visitor role, creating its subject on
     /// first provision. The subject is created fresh and carries no global username, so
     /// it can never collide with — or resolve to — an operator's or invitee's account.
     /// </summary>
     private async Task EnsureDemoMemberAsync(
-        NocturneDbContext db, Guid tenantId, Guid adminRoleId, CancellationToken ct)
+        NocturneDbContext db, Guid tenantId, Guid demoRoleId, CancellationToken ct)
     {
         var member = await db.TenantMembers
             .FirstOrDefaultAsync(
@@ -441,7 +451,7 @@ public sealed class DemoTenantService
             member.LimitTo24Hours = false;
         }
 
-        await AssignRoleAsync(db, member.Id, adminRoleId, ct);
+        await AssignRoleAsync(db, member.Id, demoRoleId, ct);
     }
 
     private static async Task AssignRoleAsync(

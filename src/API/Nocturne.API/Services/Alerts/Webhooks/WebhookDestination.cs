@@ -27,7 +27,12 @@ public static class WebhookDestination
     /// Returns true when <paramref name="url"/> is a well-formed absolute http(s) URL whose
     /// every resolved address is publicly routable.
     /// </summary>
-    public static bool IsAllowed(string url)
+    /// <remarks>
+    /// Asynchronous because a hostname costs a DNS round trip, and an alert fans out to every
+    /// URL on the rule: resolving synchronously would block a thread-pool thread per
+    /// destination for as long as the resolver takes.
+    /// </remarks>
+    public static async Task<bool> IsAllowedAsync(string url, CancellationToken ct = default)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
             return false;
@@ -35,7 +40,7 @@ public static class WebhookDestination
         if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
             return false;
 
-        var addresses = ResolveAddresses(uri);
+        var addresses = await ResolveAddressesAsync(uri, ct);
 
         // Fail closed on an empty result. A name this process cannot resolve is not
         // necessarily unreachable — the HTTP stack may resolve it by other means — so
@@ -46,14 +51,14 @@ public static class WebhookDestination
         return addresses.All(IsPubliclyRoutable);
     }
 
-    private static IReadOnlyList<IPAddress> ResolveAddresses(Uri uri)
+    private static async Task<IReadOnlyList<IPAddress>> ResolveAddressesAsync(Uri uri, CancellationToken ct)
     {
         if (IPAddress.TryParse(uri.DnsSafeHost, out var literal))
             return [literal];
 
         try
         {
-            return Dns.GetHostAddresses(uri.DnsSafeHost);
+            return await Dns.GetHostAddressesAsync(uri.DnsSafeHost, ct);
         }
         catch (SocketException)
         {

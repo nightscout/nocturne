@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.Core.Models.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Authorization;
@@ -25,7 +25,7 @@ public sealed class DenyDemoSubjectAttribute : Attribute, IAsyncAuthorizationFil
 {
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
-        if (context.HttpContext.Items["AuthContext"] is not AuthContext { SubjectId: { } subjectId })
+        if (context.HttpContext.GetAuthContext() is not { SubjectId: { } subjectId })
             return;
 
         var factory = context.HttpContext.RequestServices
