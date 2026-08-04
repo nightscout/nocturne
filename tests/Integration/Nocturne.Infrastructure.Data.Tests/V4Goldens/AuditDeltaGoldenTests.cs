@@ -11,12 +11,14 @@ namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 /// V4RepositoryBase refactor NORMALIZED (delta D5). The base's <c>DeleteByLegacyIdAsync</c> now
 /// routes through the audited soft-delete helper, so EVERY V4 type writes a
 /// <see cref="MutationAuditLogEntity"/> row on a legacy-id delete — not just the dedup participants
-/// that used to override it. The two scenarios below pin both sides post-normalization:
-///   - a formerly-RAW type (BGCheck, which inherited the plain base) → audit row present (the D5 delta);
-///   - an already-AUDITED type (DeviceEvent) → audit row present (unchanged).
-/// The <see cref="V4GoldenFixture"/>'s <c>SystemAuditContext</c> short-circuits the
-/// <c>MutationAuditInterceptor</c> (IsSystem == true), so the only audit rows that can appear here
-/// come from the audited soft-delete helper, which writes them directly.
+/// that used to override it. Both a formerly-RAW type (BGCheck, which inherited the plain base) and
+/// an already-AUDITED type (DeviceEvent) are pinned, under both attributions:
+///   - deleted by a human actor → audit row present (the D5 delta, and the row the audit trail is for);
+///   - deleted by a connector/background sweep → no audit row, because the helper applies the same
+///     system skip as the <c>MutationAuditInterceptor</c>. A sweep has no actor and its provenance
+///     is already on the record (data_source); recording it grew mutation_audit_log to 24GB.
+/// The <c>MutationAuditInterceptor</c> never contributes here: the helper detaches the entities and
+/// issues the soft-delete as a bulk update, so every row below comes from the helper itself.
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("V4 goldens")]
@@ -32,11 +34,19 @@ public class AuditDeltaGoldenTests
         _fx.QueryAsync(tenant, ctx => ctx.Set<MutationAuditLogEntity>().AsNoTracking()
             .CountAsync(a => a.EntityType == entityType && a.EntityId == entityId && a.Action == "delete"));
 
+    /// <summary>
+    /// Attributes the scope's writes to a human actor, as the API's audit middleware does for a
+    /// request. Without this a golden runs under the fixture's default system attribution.
+    /// </summary>
+    private static void AttributeScopeToUser(IServiceScope scope) =>
+        scope.ServiceProvider.GetRequiredService<TestAuditContext>().AttributeToUser(Guid.NewGuid());
+
     [Fact]
     public async Task D5_FormerlyRawType_BGCheck_DeleteByLegacyId_WritesAuditRow()
     {
         var tenant = Guid.NewGuid();
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        AttributeScopeToUser(scope);
         var repo = scope.ServiceProvider.GetRequiredService<IBGCheckRepository>();
 
         var created = await repo.CreateAsync(
@@ -56,6 +66,7 @@ public class AuditDeltaGoldenTests
     {
         var tenant = Guid.NewGuid();
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        AttributeScopeToUser(scope);
         var repo = scope.ServiceProvider.GetRequiredService<IDeviceEventRepository>();
 
         var created = await repo.CreateAsync(
@@ -67,5 +78,41 @@ public class AuditDeltaGoldenTests
 
         // An AUDITED type wrote an audit row before D5 and still does after (unchanged).
         (await AuditRowCountAsync(tenant, "DeviceEvent", created.Id)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task D5_FormerlyRawType_BGCheck_SystemDeleteByLegacyId_WritesNoAuditRow()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        // No AttributeScopeToUser: the fixture's default is system attribution, as a connector
+        // resync sweep carries.
+        var repo = scope.ServiceProvider.GetRequiredService<IBGCheckRepository>();
+
+        var created = await repo.CreateAsync(
+            new BGCheck { Timestamp = T0, Glucose = 95, DataSource = "nightscout", LegacyId = "bg-sys-del" },
+            WriteOrigin.Live, CancellationToken.None);
+
+        var deleted = await repo.DeleteByLegacyIdAsync("bg-sys-del", WriteOrigin.Live, CancellationToken.None);
+        deleted.Should().Be(1, "the sweep still soft-deletes the row");
+
+        (await AuditRowCountAsync(tenant, "BGCheck", created.Id)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task D5_AuditedType_DeviceEvent_SystemDeleteByLegacyId_WritesNoAuditRow()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await _fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<IDeviceEventRepository>();
+
+        var created = await repo.CreateAsync(
+            new DeviceEvent { Timestamp = T0, EventType = DeviceEventType.SiteChange, DataSource = "nightscout", LegacyId = "de-sys-del" },
+            WriteOrigin.Live, CancellationToken.None);
+
+        var deleted = await repo.DeleteByLegacyIdAsync("de-sys-del", WriteOrigin.Live, CancellationToken.None);
+        deleted.Should().Be(1, "the sweep still soft-deletes the row");
+
+        (await AuditRowCountAsync(tenant, "DeviceEvent", created.Id)).Should().Be(0);
     }
 }

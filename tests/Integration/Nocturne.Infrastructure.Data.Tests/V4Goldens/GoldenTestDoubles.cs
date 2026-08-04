@@ -20,19 +20,32 @@ internal sealed class TestTenantAccessor : ITenantAccessor
 }
 
 /// <summary>
-/// System-attributed <see cref="IAuditContext"/> (no human actor), matching how connectors ingest —
-/// so audited soft-deletes in the dedup paths are treated as system-initiated, as in production.
+/// Stand-in for the request-scoped <see cref="IAuditContext"/> the API populates per request (that
+/// implementation lives in the API layer, which this project does not reference). Defaults to system
+/// attribution (no human actor), matching how connectors ingest — so audited soft-deletes in the
+/// dedup paths are treated as system-initiated, as in production. A golden pinning the
+/// user-attributed audit path calls <see cref="AttributeToUser"/> on its own scope's instance.
 /// </summary>
-internal sealed class SystemAuditContext : IAuditContext
+internal sealed class TestAuditContext : IAuditContext
 {
-    public Guid? SubjectId => null;
-    public string? SubjectName => null;
-    public string? AuthType => null;
+    public Guid? SubjectId { get; private set; }
+    public string? SubjectName { get; private set; }
+    public string? AuthType { get; private set; }
     public string? IpAddress => null;
     public Guid? TokenId => null;
     public string? CorrelationId => null;
-    public string? Endpoint => null;
-    public bool IsSystem => true;
+    public string? Endpoint { get; private set; }
+    public bool IsSystem { get; private set; } = true;
+
+    /// <summary>Attributes subsequent writes on this scope to a human actor.</summary>
+    public void AttributeToUser(Guid subjectId)
+    {
+        SubjectId = subjectId;
+        SubjectName = "golden-user";
+        AuthType = "AccessToken";
+        Endpoint = "DELETE /api/v4/goldens";
+        IsSystem = false;
+    }
 }
 
 /// <summary>

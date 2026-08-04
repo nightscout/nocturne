@@ -84,7 +84,10 @@ public class V4GoldenFixture : IAsyncLifetime
         // MutationAuditInterceptor resolves IHttpContextAccessor (registered by the API in prod).
         services.AddHttpContextAccessor();
         services.AddSingleton<ITenantAccessor>(_accessor);
-        services.AddSingleton<IAuditContext, SystemAuditContext>();
+        // Scoped, mirroring the API's request-scoped registration, so a golden can attribute its
+        // own scope to a user without leaking that attribution into the next test.
+        services.AddScoped<TestAuditContext>();
+        services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<TestAuditContext>());
         services.AddPostgreSqlInfrastructure(config);
         // Capturing broadcaster: the V4 repos resolve IV4RecordBroadcaster<T> via the open generic, so
         // the real chokepoint fires into BroadcastCapture (additive — existing goldens ignore it).
