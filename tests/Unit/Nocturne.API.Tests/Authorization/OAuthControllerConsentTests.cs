@@ -13,9 +13,11 @@ namespace Nocturne.API.Tests.Authorization;
 
 /// <summary>
 /// Unit tests for the consent-approval endpoint (<c>POST /api/oauth/authorize</c>), covering the
-/// order in which the client and its redirect URI are validated. Both the approve and the deny path
-/// end in a redirect to <c>redirect_uri</c>, so both need the URI proven to belong to the client
-/// before anything is emitted.
+/// order in which the client and its redirect URI are validated, and the ceiling on what the
+/// approval may delegate. Both the approve and the deny path end in a redirect to
+/// <c>redirect_uri</c>, so both need the URI proven to belong to the client before anything is
+/// emitted; and the approved scopes are bounded by the approver's own scopes on the tenant, so a
+/// consent screen asking for <c>*</c> cannot mint more than the approver holds.
 /// </summary>
 [Trait("Category", "Unit")]
 [Trait("Category", "OAuth")]
@@ -30,6 +32,9 @@ public class OAuthControllerConsentTests
 
     private readonly Mock<IOAuthClientService> _clientService = new();
     private readonly Mock<IOAuthTokenService> _tokenService = new();
+
+    /// <summary>Scopes the controller handed the token service, captured on issue.</summary>
+    private readonly List<string> _issuedScopes = [];
 
     public OAuthControllerConsentTests()
     {
@@ -54,10 +59,16 @@ public class OAuthControllerConsentTests
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()))
+            .Callback<Guid, Guid, IEnumerable<string>, string, string, bool, CancellationToken>(
+                (_, _, scopes, _, _, _, _) => _issuedScopes.AddRange(scopes))
             .ReturnsAsync("the-code");
     }
 
-    private OAuthController CreateController()
+    /// <param name="approverScopes">
+    /// The approver's resolved scopes on the tenant, as <c>MemberScopeMiddleware</c> leaves them.
+    /// Defaults to superuser, which is the tenant owner doing the approving.
+    /// </param>
+    private OAuthController CreateController(params string[] approverScopes)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Items["AuthContext"] = new AuthContext
@@ -66,6 +77,8 @@ public class OAuthControllerConsentTests
             AuthType = AuthType.SessionCookie,
             SubjectId = _subjectId,
         };
+        httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(
+            approverScopes.Length > 0 ? approverScopes : [OAuthScopes.FullAccess]);
 
         return new OAuthController(
             _clientService.Object,
@@ -82,11 +95,12 @@ public class OAuthControllerConsentTests
         };
     }
 
-    private static ConsentApprovalRequest Consent(bool approved, string redirectUri) => new()
+    private static ConsentApprovalRequest Consent(
+        bool approved, string redirectUri, string scope = OAuthScopes.GlucoseRead) => new()
     {
         ClientId = ClientId,
         RedirectUri = redirectUri,
-        Scope = OAuthScopes.GlucoseRead,
+        Scope = scope,
         CodeChallenge = "a-code-challenge",
         State = "opaque-state",
         Approved = approved,
@@ -129,5 +143,53 @@ public class OAuthControllerConsentTests
         var redirect = result.Should().BeOfType<RedirectResult>().Subject;
         redirect.Url.Should().StartWith(RegisteredRedirectUri);
         redirect.Url.Should().Contain("code=the-code");
+    }
+
+    [Fact]
+    public async Task Approving_full_access_issues_only_what_the_approver_holds()
+    {
+        // A user cannot delegate more than they hold. Approving a consent screen that asked
+        // for "*" previously minted a full-access token whatever the approver's own
+        // permissions on the tenant were — turning any member into a superuser via their
+        // own browser. The demo makes that reachable anonymously, since its shared visitor
+        // account is a real member anyone can get a session for.
+        var controller = CreateController(OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead);
+
+        var result = await controller.ApproveConsent(
+            Consent(true, RegisteredRedirectUri, OAuthScopes.FullAccess));
+
+        result.Should().BeOfType<RedirectResult>();
+        _issuedScopes.Should().BeEquivalentTo([OAuthScopes.GlucoseRead, OAuthScopes.TreatmentsRead]);
+    }
+
+    [Fact]
+    public async Task Approving_a_scope_the_approver_lacks_drops_it()
+    {
+        var controller = CreateController(OAuthScopes.GlucoseRead);
+
+        var result = await controller.ApproveConsent(Consent(
+            true, RegisteredRedirectUri, $"{OAuthScopes.GlucoseRead} {OAuthScopes.TreatmentsReadWrite}"));
+
+        result.Should().BeOfType<RedirectResult>();
+        _issuedScopes.Should().BeEquivalentTo([OAuthScopes.GlucoseRead]);
+    }
+
+    [Fact]
+    public async Task Approving_when_none_of_the_scopes_are_held_is_rejected()
+    {
+        var controller = CreateController(OAuthScopes.GlucoseRead);
+
+        var result = await controller.ApproveConsent(
+            Consent(true, RegisteredRedirectUri, OAuthScopes.TreatmentsReadWrite));
+
+        result.Should().BeOfType<BadRequestObjectResult>()
+            .Which.Value.Should().BeOfType<OAuthError>()
+            .Which.Error.Should().Be("invalid_scope");
+        _tokenService.Verify(
+            s => s.GenerateAuthorizationCodeAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }
