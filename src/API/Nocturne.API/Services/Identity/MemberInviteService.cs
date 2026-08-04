@@ -14,6 +14,9 @@ namespace Nocturne.API.Services.Identity;
 /// <seealso cref="IMemberInviteService"/>
 public class MemberInviteService : IMemberInviteService
 {
+    /// <summary>Longest lifetime an invite token may be minted with.</summary>
+    private const int MaxExpiresInDays = 90;
+
     private readonly NocturneDbContext _dbContext;
     private readonly IJwtService _jwtService;
     private readonly ITenantService _tenantService;
@@ -52,6 +55,11 @@ public class MemberInviteService : IMemberInviteService
     {
         if (roleIds.Count == 0 && (directPermissions == null || directPermissions.Count == 0))
             throw new ArgumentException("At least one role or direct permission is required.");
+
+        // The token is a bearer credential for tenant membership, so its lifetime is bounded
+        // rather than taken from the caller.
+        if (expiresInDays is < 1 or > MaxExpiresInDays)
+            throw new ArgumentException($"Expiry must be between 1 and {MaxExpiresInDays} days.");
 
         var granter = granterPermissions as IReadOnlyCollection<string> ?? granterPermissions.ToList();
 
@@ -173,6 +181,21 @@ public class MemberInviteService : IMemberInviteService
         if (validRoleIds.Count == 0 && (entity.DirectPermissions == null || entity.DirectPermissions.Count == 0))
             return new AcceptMemberInviteResult(false, "no_permissions", "All roles from this invite have been deleted and no direct permissions are assigned.");
 
+        // Claim the use before writing the membership. The IsExhausted check above is a fast path
+        // on a value read earlier in the request; two concurrent accepts of a single-use invite —
+        // the default the UI mints — would both pass it and both join. Only a row that is still
+        // under its cap matches here, so the loser claims nothing and is refused.
+        var claimed = await _dbContext.MemberInvites
+            .Where(i => i.Id == entity.Id && (i.MaxUses == null || i.UseCount < i.MaxUses))
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.UseCount, i => i.UseCount + 1));
+
+        if (claimed == 0)
+            return new AcceptMemberInviteResult(false, "exhausted", "This invite has reached its maximum uses.");
+
+        // The guarded update bypasses the change tracker, so the entity loaded above still carries
+        // the pre-claim count. Reload it rather than leave a stale row for anything downstream.
+        await _dbContext.Entry(entity).ReloadAsync();
+
         // Create the tenant membership via the tenant service
         await _tenantService.AddMemberAsync(
             entity.TenantId,
@@ -189,9 +212,6 @@ public class MemberInviteService : IMemberInviteService
 
         // Update the invite link to the member
         member.CreatedFromInviteId = entity.Id;
-
-        // Increment use count
-        entity.UseCount++;
         await _dbContext.SaveChangesAsync();
 
         _logger.LogInformation(

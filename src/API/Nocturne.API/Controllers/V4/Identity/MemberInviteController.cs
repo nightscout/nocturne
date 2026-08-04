@@ -206,10 +206,12 @@ public class MemberInviteController : ControllerBase
             token, subjectId.Value, _tenantAccessor.TenantId);
 
         // The refusal reason is written for the invitee — "You are already a member of this
-        // tenant", "This invite has expired" — so it goes in the problem detail, which is the
-        // only part of a 400 body the generated client surfaces.
+        // tenant", "This invite has expired". It goes in the title as well as the detail because
+        // openapi-remote-codegen 0.2.0 resolves a ProblemDetails to `title` before `detail`, so a
+        // reason carried only in the detail reaches the invitee as the literal "Bad Request".
         if (!result.Success)
-            return Problem(detail: result.ErrorDescription, statusCode: 400, title: "Bad Request");
+            return Problem(
+                detail: result.ErrorDescription, statusCode: 400, title: result.ErrorDescription);
 
         return Ok(result);
     }

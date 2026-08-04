@@ -227,6 +227,66 @@ public class MemberInviteServiceTests : IDisposable
             .WithMessage("*Cannot grant*");
     }
 
+    /// <summary>
+    /// The use is claimed with a guarded update rather than by incrementing a value read earlier,
+    /// so a second acceptance cannot slip past a cap that the first has already reached.
+    /// </summary>
+    [Fact]
+    public async Task AcceptInviteAsync_whenTheCapIsAlreadyReached_isRefused()
+    {
+        await _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [_followerRoleId],
+            maxUses: 1);
+
+        _tenantService
+            .Setup(s => s.AddMemberAsync(
+                _tenantId, It.IsAny<Guid>(), It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(),
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback((Guid _, Guid subjectId, List<Guid> _, List<string>? _, string? _, bool _, CancellationToken _) =>
+            {
+                _dbContext.TenantMembers.Add(new TenantMemberEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = _tenantId,
+                    SubjectId = subjectId,
+                });
+                _dbContext.SaveChanges();
+            })
+            .Returns(Task.CompletedTask);
+
+        var first = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
+        first.Success.Should().BeTrue();
+
+        var second = await _service.AcceptInviteAsync(FakeToken, Guid.CreateVersion7(), _tenantId);
+
+        second.Success.Should().BeFalse();
+        second.ErrorCode.Should().Be("exhausted");
+        (await _dbContext.MemberInvites.AsNoTracking().FirstAsync()).UseCount.Should().Be(1);
+    }
+
+    /// <summary>
+    /// The token is a bearer credential for tenant membership, so its lifetime is bounded rather
+    /// than taken from the caller.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(3651)]
+    public async Task CreateInviteAsync_withAnExpiryOutsideTheAllowedRange_isRefused(int expiresInDays)
+    {
+        var act = () => _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [_followerRoleId],
+            expiresInDays: expiresInDays);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
     [Fact]
     public async Task AcceptInviteAsync_ExpiredToken_ReturnsError()
     {

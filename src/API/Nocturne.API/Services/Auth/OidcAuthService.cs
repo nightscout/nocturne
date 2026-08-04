@@ -338,7 +338,7 @@ public class OidcAuthService : IOidcAuthService
         if (currentTenantId is { } tenantId)
         {
             if (!await _tenantMemberService.IsMemberAsync(subject.Id, tenantId)
-                && !await TryAcceptInviteFromReturnUrlAsync(stateData.ReturnUrl, subject.Id, tenantId))
+                && !await IsInvitedByReturnUrlAsync(stateData.ReturnUrl, tenantId))
             {
                 _logger.LogWarning(
                     "OIDC login denied: subject {SubjectId} is not a member of tenant {TenantId}",
@@ -408,41 +408,30 @@ public class OidcAuthService : IOidcAuthService
     }
 
     /// <summary>
-    /// Joins <paramref name="subjectId"/> to <paramref name="tenantId"/> when the login was
-    /// started from a join link whose invite is still valid for that tenant.
+    /// Whether the login was started from a join link whose invite is still valid for
+    /// <paramref name="tenantId"/>, and so should be allowed to complete for a non-member.
     /// </summary>
     /// <param name="returnUrl">The return URL carried in the (data-protected) state.</param>
-    /// <param name="subjectId">The subject the external identity resolved to.</param>
     /// <param name="tenantId">The tenant the callback resolved to.</param>
-    /// <returns><c>true</c> when the invite was accepted and the subject is now a member.</returns>
     /// <remarks>
     /// A first-time OIDC identity is a member of nothing, so the membership guard alone sends the
-    /// invitee back to a login page that cannot help them. The invite token is what authorizes the
-    /// join, and it is validated the same way the accept endpoint validates it — bounded by the
-    /// resolved tenant, and refused when expired, revoked or exhausted.
+    /// invitee back to a login page that cannot help them. This only issues the session; the join
+    /// itself stays behind the Accept button on the join page, which the invite-token exemption
+    /// makes reachable for a signed-in non-member.
+    /// <para>
+    /// Joining here instead would be a forced join: the login endpoint is anonymous and takes the
+    /// return URL from the query string, so anyone could navigate a victim to a join link of their
+    /// choosing and have the silent IdP round-trip write the membership without a gesture.
+    /// </para>
     /// </remarks>
-    private async Task<bool> TryAcceptInviteFromReturnUrlAsync(
-        string? returnUrl, Guid subjectId, Guid tenantId)
+    private async Task<bool> IsInvitedByReturnUrlAsync(string? returnUrl, Guid tenantId)
     {
         var token = InviteTokenFromReturnUrl(returnUrl);
         if (token == null)
             return false;
 
-        var result = await _memberInviteService.AcceptInviteAsync(token, subjectId, tenantId);
-        if (!result.Success)
-        {
-            _logger.LogWarning(
-                "OIDC login from a join link could not accept the invite for subject "
-                    + "{SubjectId} on tenant {TenantId}: {ErrorCode}",
-                subjectId, tenantId, result.ErrorCode);
-            return false;
-        }
-
-        _logger.LogInformation(
-            "MemberInviteAudit: {Event} tenant_id={TenantId} subject_id={SubjectId} member_id={MemberId}",
-            "invite_accepted_via_oidc", tenantId, subjectId, result.MembershipId);
-
-        return true;
+        var invite = await _memberInviteService.GetInviteByTokenAsync(token, tenantId);
+        return invite is { IsValid: true };
     }
 
     /// <summary>

@@ -131,7 +131,7 @@ public class OidcAuthServiceLoginGateTests
     /// </summary>
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task CompleteLoginAsync_whenTheLoginCameFromAValidJoinLink_joinsAndIssuesSession()
+    public async Task CompleteLoginAsync_whenTheLoginCameFromAValidJoinLink_issuesSessionWithoutJoining()
     {
         var subject = SetupResolvedSubject();
         var tenantId = Guid.NewGuid();
@@ -139,8 +139,8 @@ public class OidcAuthServiceLoginGateTests
             .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
         _memberInviteService
-            .Setup(s => s.AcceptInviteAsync("invite-token", subject.Id, tenantId))
-            .ReturnsAsync(new AcceptMemberInviteResult(true, MembershipId: Guid.NewGuid()));
+            .Setup(s => s.GetInviteByTokenAsync("invite-token", tenantId))
+            .ReturnsAsync(ValidInvite(tenantId));
         SetupSessionIssuance();
 
         var result = await _service.CompleteLoginAsync(
@@ -150,9 +150,38 @@ public class OidcAuthServiceLoginGateTests
         result.Success.Should().BeTrue();
         result.IsAccessDenied.Should().BeFalse();
         _memberInviteService.Verify(
-            s => s.AcceptInviteAsync("invite-token", subject.Id, tenantId),
+            s => s.GetInviteByTokenAsync("invite-token", tenantId),
             Times.Once,
-            "the acceptance is bounded by the tenant the callback resolved to, not by the token");
+            "the invite is looked up against the tenant the callback resolved to, not the token's");
+    }
+
+    /// <summary>
+    /// The login endpoint is anonymous and takes its return URL from the query string, so joining
+    /// here would let anyone navigate a victim to a join link of their choosing and have the silent
+    /// IdP round-trip write the membership. The session is issued; the join stays behind the Accept
+    /// button.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_fromAJoinLink_neverWritesTheMembershipItself()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _memberInviteService
+            .Setup(s => s.GetInviteByTokenAsync("invite-token", tenantId))
+            .ReturnsAsync(ValidInvite(tenantId));
+        SetupSessionIssuance();
+
+        await _service.CompleteLoginAsync(
+            LoginState(returnUrl: "/join?token=invite-token"),
+            Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        _memberInviteService.Verify(
+            s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>()),
+            Times.Never);
     }
 
     /// <summary>
@@ -170,8 +199,8 @@ public class OidcAuthServiceLoginGateTests
             .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
         _memberInviteService
-            .Setup(s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>()))
-            .ReturnsAsync(new AcceptMemberInviteResult(false, "invalid_token", "Invite not found or has been revoked."));
+            .Setup(s => s.GetInviteByTokenAsync(It.IsAny<string>(), It.IsAny<Guid>()))
+            .ReturnsAsync((MemberInviteInfo?)null);
 
         var result = await _service.CompleteLoginAsync(
             LoginState(returnUrl: "/join?token=someone-elses-token"),
@@ -277,6 +306,25 @@ public class OidcAuthServiceLoginGateTests
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    /// <summary>An invite of <paramref name="tenantId"/> that is currently acceptable.</summary>
+    private static MemberInviteInfo ValidInvite(Guid tenantId) => new(
+        Id: Guid.NewGuid(),
+        TenantId: tenantId,
+        TenantName: "Test Tenant",
+        CreatedByName: "Owner",
+        RoleIds: [Guid.NewGuid()],
+        DirectPermissions: null,
+        Label: "Dr. Smith",
+        LimitTo24Hours: false,
+        ExpiresAt: DateTime.UtcNow.AddDays(7),
+        MaxUses: null,
+        UseCount: 0,
+        IsValid: true,
+        IsExpired: false,
+        IsRevoked: false,
+        CreatedAt: DateTime.UtcNow,
+        UsedBy: []);
 
     [Fact]
     [Trait("Category", "Unit")]

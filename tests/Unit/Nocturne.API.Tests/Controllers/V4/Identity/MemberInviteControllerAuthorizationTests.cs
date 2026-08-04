@@ -513,8 +513,10 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     }
 
     /// <summary>
-    /// The reason is written for the invitee and the generated client only surfaces the problem
-    /// detail of a 400, so a refusal that hides it reads as "Request rejected".
+    /// The reason is written for the invitee, and openapi-remote-codegen 0.2.0 resolves a
+    /// ProblemDetails to <c>title</c> before <c>detail</c> — so a reason carried only in the detail
+    /// reaches them as the literal "Bad Request". Asserting the title is what makes the reason the
+    /// invitee actually reads testable.
     /// </summary>
     [Fact]
     public async Task AcceptInvite_surfacesTheRefusalReason()
@@ -530,8 +532,9 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-        problem.Value.Should().BeOfType<ProblemDetails>()
-            .Which.Detail.Should().Be("You are already a member of this tenant.");
+        var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
+        details.Title.Should().Be("You are already a member of this tenant.");
+        details.Detail.Should().Be("You are already a member of this tenant.");
     }
 
     /// <summary>
