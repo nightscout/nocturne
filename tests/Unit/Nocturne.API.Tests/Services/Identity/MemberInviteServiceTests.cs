@@ -228,8 +228,40 @@ public class MemberInviteServiceTests : IDisposable
     }
 
     /// <summary>
-    /// The use is claimed with a guarded update rather than by incrementing a value read earlier,
-    /// so a second acceptance cannot slip past a cap that the first has already reached.
+    /// The guarded claim itself, reached only when the cap is hit after the invite was read: the
+    /// row is taken to its cap out of band while the tracked entity still shows the earlier count,
+    /// so <c>IsExhausted</c> passes and the UPDATE is what refuses. This is the shape of two
+    /// concurrent accepts, which the sequential case below never reaches.
+    /// </summary>
+    [Fact]
+    public async Task AcceptInviteAsync_whenTheCapIsReachedAfterTheInviteWasRead_isRefused()
+    {
+        await _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [_followerRoleId],
+            maxUses: 1);
+
+        // The tracked entity keeps use_count = 0, so the in-memory checks pass and only the
+        // guarded UPDATE can catch this.
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "UPDATE member_invites SET use_count = 1");
+
+        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("exhausted");
+        _tenantService.Verify(
+            s => s.AddMemberAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(),
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "the use is claimed before the membership is written, so a refused claim writes nothing");
+    }
+
+    /// <summary>
+    /// The ordinary sequential case: a single-use invite is refused on its second acceptance.
     /// </summary>
     [Fact]
     public async Task AcceptInviteAsync_whenTheCapIsAlreadyReached_isRefused()

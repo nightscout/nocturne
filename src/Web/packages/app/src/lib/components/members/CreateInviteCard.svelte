@@ -16,7 +16,8 @@
   import { coachmark } from "@nocturne/coach";
   import { createInvite } from "$api/generated/memberInvites.generated.remote";
   import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
-  import { copyToClipboard, messageFrom } from "$lib/utils";
+  import { copyToClipboard } from "$lib/utils";
+  import { describeSubmitError } from "$lib/forms";
 
   interface Props {
     roles: TenantRoleDto[];
@@ -82,7 +83,7 @@
         onCreated(createdInviteUrl);
       }
     } catch (e) {
-      errorMessage = messageFrom(e, "Failed to create invite. Please try again.");
+      errorMessage = describeSubmitError(e, "Failed to create invite. Please try again.");
     } finally {
       isCreatingInvite = false;
     }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { messageFrom } from "$lib/utils";
+  import { describeSubmitError } from "$lib/forms";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import * as Card from "$lib/components/ui/card";
@@ -151,7 +151,7 @@
       expandedMember = null;
       clearMessages();
     } catch (e) {
-      errorMessage = messageFrom(e, "Failed to update member. Please try again.");
+      errorMessage = describeSubmitError(e, "Failed to update member. Please try again.");
       clearMessages();
     } finally {
       isSavingMember = false;
@@ -296,7 +296,7 @@
                     request: { limitTo24Hours },
                   });
                 } catch (e) {
-                  errorMessage = messageFrom(e, "Failed to update member. Please try again.");
+                  errorMessage = describeSubmitError(e, "Failed to update member. Please try again.");
                   clearMessages();
                 }
               }}
@@ -308,7 +308,7 @@
                   successMessage = "Member removed successfully.";
                   clearMessages();
                 } catch (e) {
-                  errorMessage = messageFrom(e, "Failed to remove member. Please try again.");
+                  errorMessage = describeSubmitError(e, "Failed to remove member. Please try again.");
                   clearMessages();
                 }
               }}

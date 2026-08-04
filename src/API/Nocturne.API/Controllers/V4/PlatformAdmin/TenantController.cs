@@ -113,7 +113,8 @@ public class TenantController : ControllerBase
         var result = await _tenantService.RemoveMemberAsync(id, subjectId, ct);
         return result.Ok
             ? NoContent()
-            : Problem(detail: result.ErrorDescription, statusCode: 400, title: "Bad Request");
+            : Problem(
+                detail: result.ErrorDescription, statusCode: 400, title: result.ErrorDescription);
     }
 
     [HttpDelete("{id:guid}")]
