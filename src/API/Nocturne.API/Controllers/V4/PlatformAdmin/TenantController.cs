@@ -30,16 +30,13 @@ public class TenantController : ControllerBase
 {
     private readonly ITenantService _tenantService;
     private readonly ITenantRoleService _tenantRoleService;
-    private readonly IMemberInviteService _memberInviteService;
 
     public TenantController(
         ITenantService tenantService,
-        ITenantRoleService tenantRoleService,
-        IMemberInviteService memberInviteService)
+        ITenantRoleService tenantRoleService)
     {
         _tenantService = tenantService;
         _tenantRoleService = tenantRoleService;
-        _memberInviteService = memberInviteService;
     }
 
     [HttpGet]
@@ -145,69 +142,6 @@ public class TenantController : ControllerBase
 
         await _tenantService.RemoveMemberAsync(id, subjectId, ct);
         return NoContent();
-    }
-
-    /// <inheritdoc cref="IMemberInviteService.CreateInviteAsync"/>
-    [HttpPost("{id:guid}/invites")]
-    [RemoteCommand(Invalidates = ["GetById", "ListInvites"])]
-    [ProducesResponseType(typeof(MemberInviteResult), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> CreateInvite(
-        Guid id, [FromBody] CreateMemberInviteRequest request, CancellationToken ct)
-    {
-        if (!await IsCallerTenantOwnerAsync(id, ct))
-            return Forbid();
-
-        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
-        try
-        {
-            var result = await _memberInviteService.CreateInviteAsync(
-                id,
-                authContext!.SubjectId!.Value,
-                HttpContext.GetGrantedScopes(),
-                request.RoleIds,
-                request.DirectPermissions,
-                request.Label,
-                request.ExpiresInDays,
-                request.MaxUses,
-                request.LimitTo24Hours);
-
-            return StatusCode(StatusCodes.Status201Created, result);
-        }
-        catch (ArgumentException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
-        }
-    }
-
-    /// <inheritdoc cref="IMemberInviteService.GetInvitesForTenantAsync"/>
-    [HttpGet("{id:guid}/invites")]
-    [RemoteQuery]
-    [ProducesResponseType(typeof(List<MemberInviteInfo>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> ListInvites(Guid id, CancellationToken ct)
-    {
-        if (!await IsCallerTenantOwnerAsync(id, ct))
-            return Forbid();
-
-        var invites = await _memberInviteService.GetInvitesForTenantAsync(id);
-        return Ok(invites);
-    }
-
-    /// <inheritdoc cref="IMemberInviteService.RevokeInviteAsync"/>
-    [HttpDelete("{id:guid}/invites/{inviteId:guid}")]
-    [RemoteCommand(Invalidates = ["GetById", "ListInvites"])]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RevokeInvite(Guid id, Guid inviteId, CancellationToken ct)
-    {
-        if (!await IsCallerTenantOwnerAsync(id, ct))
-            return Forbid();
-
-        var revoked = await _memberInviteService.RevokeInviteAsync(inviteId, id);
-        return revoked ? NoContent() : NotFound();
     }
 
     [HttpDelete("{id:guid}")]
@@ -380,16 +314,6 @@ public record ProvisionRequest(
     string OwnerEmail,
     ProvisionCredentialData? Credential = null,
     ProvisionOidcIdentityData? OidcIdentity = null);
-
-public class CreateMemberInviteRequest
-{
-    public List<Guid> RoleIds { get; set; } = [];
-    public List<string>? DirectPermissions { get; set; }
-    public string? Label { get; set; }
-    public int ExpiresInDays { get; set; } = 7;
-    public int? MaxUses { get; set; }
-    public bool LimitTo24Hours { get; set; }
-}
 
 public record SubjectCredentialsDto(List<PasskeyCredentialDto> Passkeys, List<OidcIdentityDto> OidcIdentities);
 public record PasskeyCredentialDto(Guid Id, string? DisplayName, DateTime CreatedAt);

@@ -9,12 +9,11 @@ public class TenantControllerDeleteTests
 {
     private readonly Mock<ITenantService> _tenantService = new();
     private readonly Mock<ITenantRoleService> _roleService = new();
-    private readonly Mock<IMemberInviteService> _inviteService = new();
     private readonly TenantController _controller;
 
     public TenantControllerDeleteTests()
     {
-        _controller = new TenantController(_tenantService.Object, _roleService.Object, _inviteService.Object)
+        _controller = new TenantController(_tenantService.Object, _roleService.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };

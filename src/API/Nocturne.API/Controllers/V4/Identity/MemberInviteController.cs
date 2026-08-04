@@ -53,6 +53,71 @@ public class MemberInviteController : ControllerBase
         _dbContext = dbContext;
     }
 
+    /// <inheritdoc cref="IMemberInviteService.CreateInviteAsync"/>
+    [HttpPost]
+    [RemoteCommand(Invalidates = ["ListInvites"])]
+    [ProducesResponseType(typeof(MemberInviteResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> CreateInvite([FromBody] CreateMemberInviteRequest request)
+    {
+        if (!HasPermission(TenantPermissions.MembersInvite))
+            return Forbid();
+
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+            return Unauthorized();
+
+        try
+        {
+            var result = await _memberInviteService.CreateInviteAsync(
+                _tenantAccessor.TenantId,
+                subjectId.Value,
+                HttpContext.GetGrantedScopes(),
+                request.RoleIds,
+                request.DirectPermissions,
+                request.Label,
+                request.ExpiresInDays,
+                request.MaxUses,
+                request.LimitTo24Hours);
+
+            return StatusCode(StatusCodes.Status201Created, result);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
+        }
+    }
+
+    /// <inheritdoc cref="IMemberInviteService.GetInvitesForTenantAsync"/>
+    [HttpGet]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(List<MemberInviteInfo>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ListInvites()
+    {
+        if (!HasPermission(TenantPermissions.MembersInvite))
+            return Forbid();
+
+        var invites = await _memberInviteService.GetInvitesForTenantAsync(_tenantAccessor.TenantId);
+        return Ok(invites);
+    }
+
+    /// <inheritdoc cref="IMemberInviteService.RevokeInviteAsync"/>
+    [HttpDelete("{inviteId:guid}")]
+    [RemoteCommand(Invalidates = ["ListInvites"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RevokeInvite(Guid inviteId)
+    {
+        if (!HasPermission(TenantPermissions.MembersInvite))
+            return Forbid();
+
+        var revoked = await _memberInviteService.RevokeInviteAsync(inviteId, _tenantAccessor.TenantId);
+        return revoked ? NoContent() : NotFound();
+    }
+
     /// <summary>
     /// Get invite info for the accept page (anonymous).
     /// </summary>
@@ -358,6 +423,16 @@ public class MemberInviteController : ControllerBase
         validation.ErrorCode == RoleGrantValidation.ForeignRole
             ? Problem(detail: validation.ErrorDescription, statusCode: 400, title: "Bad Request")
             : Problem(detail: validation.ErrorDescription, statusCode: 403, title: "Forbidden");
+}
+
+public class CreateMemberInviteRequest
+{
+    public List<Guid> RoleIds { get; set; } = [];
+    public List<string>? DirectPermissions { get; set; }
+    public string? Label { get; set; }
+    public int ExpiresInDays { get; set; } = 7;
+    public int? MaxUses { get; set; }
+    public bool LimitTo24Hours { get; set; }
 }
 
 public record SetMemberRolesRequest(List<Guid> RoleIds);
