@@ -14,20 +14,18 @@
   } from "lucide-svelte";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import { coachmark } from "@nocturne/coach";
-  import { createInvite } from "$api/generated/tenants.generated.remote";
+  import { createInvite } from "$api/generated/memberInvites.generated.remote";
   import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
-  import { copyToClipboard } from "$lib/utils";
+  import { copyToClipboard, messageFrom } from "$lib/utils";
 
   interface Props {
     roles: TenantRoleDto[];
-    tenantId: string;
     onCreated: (url: string) => void;
     onCancel: () => void;
   }
 
   let {
     roles = [],
-    tenantId,
     onCreated,
     onCancel,
   }: Props = $props();
@@ -67,18 +65,15 @@
     errorMessage = null;
     try {
       const result = await createInvite({
-        id: tenantId,
-        request: {
-          roleIds: inviteRoleIds.length > 0 ? inviteRoleIds : undefined,
-          directPermissions:
-            inviteDirectPermissions.length > 0
-              ? inviteDirectPermissions
-              : undefined,
-          label: inviteLabel || undefined,
-          expiresInDays: 7,
-          maxUses: allowMultipleUses ? undefined : 1,
-          limitTo24Hours,
-        },
+        roleIds: inviteRoleIds.length > 0 ? inviteRoleIds : undefined,
+        directPermissions:
+          inviteDirectPermissions.length > 0
+            ? inviteDirectPermissions
+            : undefined,
+        label: inviteLabel || undefined,
+        expiresInDays: 7,
+        maxUses: allowMultipleUses ? undefined : 1,
+        limitTo24Hours,
       });
       if (result.inviteUrl) {
         createdInviteUrl = result.inviteUrl.startsWith("http")
@@ -86,8 +81,8 @@
           : `${window.location.origin}${result.inviteUrl}`;
         onCreated(createdInviteUrl);
       }
-    } catch {
-      errorMessage = "Failed to create invite. Please try again.";
+    } catch (e) {
+      errorMessage = messageFrom(e, "Failed to create invite. Please try again.");
     } finally {
       isCreatingInvite = false;
     }

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { messageFrom } from "$lib/utils";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import * as Card from "$lib/components/ui/card";
@@ -16,12 +17,12 @@
   } from "lucide-svelte";
   import { resolve } from "$app/paths";
   import { getCurrentTenantId } from "../current-tenant.remote";
-  import { getMembers } from "$lib/api/generated/memberInvites.generated.remote";
   import {
+    getMembers,
     listInvites,
     revokeInvite,
-    removeMember,
-  } from "$api/generated/tenants.generated.remote";
+  } from "$lib/api/generated/memberInvites.generated.remote";
+  import { removeMember } from "$api/generated/tenants.generated.remote";
   import { getRoles } from "$lib/api/generated/roles.generated.remote";
   import { getShareLink } from "$api/generated/shareLinks.generated.remote";
   import {
@@ -82,7 +83,7 @@
 
   // Queries
   const membersQuery = getMembers();
-  const invitesQuery = $derived(tenantId ? listInvites(tenantId) : null);
+  const invitesQuery = $derived(canInvite ? listInvites() : null);
   const rolesQuery = getRoles();
   const pendingRequestsQuery = $derived(canManageMembers ? getPendingRequests() : null);
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
@@ -120,11 +121,6 @@
   let expandedMember = $state<string | null>(null);
   let isSavingMember = $state(false);
   let isRevokingInvite = $state<string | null>(null);
-
-  /** Surface a server-provided message when present, else a generic fallback. */
-  function messageFrom(e: unknown, fallback: string): string {
-    return (e as { body?: { message?: string } })?.body?.message ?? fallback;
-  }
 
   // Visible members — system subjects (e.g. Public) are managed via the
   // public access card above, not as removable/editable cards.
@@ -337,7 +333,6 @@
         {#if showCreateInvite && tenantId}
           <CreateInviteCard
             roles={allRoles}
-            tenantId={tenantId}
             onCreated={() => {
               successMessage = "Invite link created. Share it with the new member.";
               clearMessages();
@@ -368,11 +363,10 @@
           roles={allRoles}
           isRevoking={isRevokingInvite !== null}
           onRevoke={async (inviteId) => {
-            if (!tenantId) return;
             isRevokingInvite = inviteId;
             errorMessage = null;
             try {
-              await revokeInvite({ id: tenantId, inviteId });
+              await revokeInvite(inviteId);
               successMessage = "Invite revoked successfully.";
               clearMessages();
             } catch {

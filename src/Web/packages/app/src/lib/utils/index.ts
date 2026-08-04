@@ -150,6 +150,11 @@ export function timeAgo(
   }
 }
 
+/** Surface a server-provided message when present, else a generic fallback. */
+export function messageFrom(e: unknown, fallback: string): string {
+  return (e as { body?: { message?: string } })?.body?.message ?? fallback;
+}
+
 // Re-export UI utilities from shared package
 export {
   cn,
