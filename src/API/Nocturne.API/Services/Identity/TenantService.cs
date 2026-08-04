@@ -298,18 +298,41 @@ public partial class TenantService : ITenantService
         }
     }
 
-    public async Task RemoveMemberAsync(
+    public async Task<MemberRemovalResult> RemoveMemberAsync(
         Guid tenantId, Guid subjectId, CancellationToken ct = default)
     {
         await using var context = await _factory.CreateDbContextAsync(ct);
         var member = await context.TenantMembers
+            .Include(tm => tm.Subject)
             .FirstOrDefaultAsync(tm => tm.TenantId == tenantId && tm.SubjectId == subjectId, ct);
 
-        if (member != null)
+        // Already absent is the caller's desired end state, not a refusal.
+        if (member == null)
+            return new MemberRemovalResult(true);
+
+        // The Public subject serves the anonymous share viewer; its membership is the share's
+        // storage, managed through the public access card rather than the member list.
+        if (member.Subject?.IsSystemSubject == true)
+            return new MemberRemovalResult(false, "Cannot remove system subject memberships");
+
+        var isOwner = await context.TenantMemberRoles
+            .AnyAsync(mr => mr.TenantMemberId == member.Id
+                && mr.TenantRole!.Slug == TenantPermissions.SeedRoles.Owner, ct);
+
+        if (isOwner)
         {
-            context.TenantMembers.Remove(member);
-            await context.SaveChangesAsync(ct);
+            var ownerCount = await context.TenantMemberRoles
+                .CountAsync(mr => mr.TenantRole!.TenantId == tenantId
+                    && mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner
+                    && mr.TenantMember!.RevokedAt == null, ct);
+
+            if (ownerCount <= 1)
+                return new MemberRemovalResult(false, "Cannot remove the last owner of a tenant");
         }
+
+        context.TenantMembers.Remove(member);
+        await context.SaveChangesAsync(ct);
+        return new MemberRemovalResult(true);
     }
 
     public async Task<List<TenantDto>> GetTenantsForSubjectAsync(

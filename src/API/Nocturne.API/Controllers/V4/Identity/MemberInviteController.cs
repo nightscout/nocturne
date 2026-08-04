@@ -138,36 +138,10 @@ public class MemberInviteController : ControllerBase
         if (!HasPermission(TenantPermissions.MembersManage))
             return Forbid();
 
-        var tenantId = _tenantAccessor.TenantId;
-        var member = await _dbContext.TenantMembers
-            .Include(m => m.Subject)
-            .Where(m => m.TenantId == tenantId && m.SubjectId == subjectId)
-            .FirstOrDefaultAsync(ct);
-
-        if (member == null)
-            return NoContent();
-
-        if (member.Subject?.IsSystemSubject == true)
-            return Problem(detail: "Cannot remove system subject memberships", statusCode: 400, title: "Bad Request");
-
-        // Prevent removing the last member with the owner role
-        var isOwner = await _dbContext.TenantMemberRoles
-            .AnyAsync(mr => mr.TenantMemberId == member.Id
-                && mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner, ct);
-
-        if (isOwner)
-        {
-            var ownerCount = await _dbContext.TenantMemberRoles
-                .CountAsync(mr => mr.TenantRole.TenantId == tenantId
-                    && mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner
-                    && mr.TenantMember.RevokedAt == null, ct);
-
-            if (ownerCount <= 1)
-                return Problem(detail: "Cannot remove the last owner of a tenant", statusCode: 400, title: "Bad Request");
-        }
-
-        await _tenantService.RemoveMemberAsync(tenantId, subjectId, ct);
-        return NoContent();
+        var result = await _tenantService.RemoveMemberAsync(_tenantAccessor.TenantId, subjectId, ct);
+        return result.Ok
+            ? NoContent()
+            : Problem(detail: result.ErrorDescription, statusCode: 400, title: "Bad Request");
     }
 
     /// <summary>

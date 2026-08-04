@@ -99,6 +99,23 @@ public class TenantController : ControllerBase
         return NoContent();
     }
 
+    /// <inheritdoc cref="ITenantService.RemoveMemberAsync"/>
+    [HttpDelete("{id:guid}/members/{subjectId:guid}")]
+    [RemoteCommand(Invalidates = ["GetById"])]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RemoveMember(Guid id, Guid subjectId, CancellationToken ct)
+    {
+        if (!await IsCallerTenantOwnerAsync(id, ct))
+            return Forbid();
+
+        var result = await _tenantService.RemoveMemberAsync(id, subjectId, ct);
+        return result.Ok
+            ? NoContent()
+            : Problem(detail: result.ErrorDescription, statusCode: 400, title: "Bad Request");
+    }
+
     [HttpDelete("{id:guid}")]
     [RemoteCommand(Invalidates = ["GetAll"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

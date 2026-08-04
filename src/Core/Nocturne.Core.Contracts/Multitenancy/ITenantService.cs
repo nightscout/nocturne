@@ -35,8 +35,12 @@ public interface ITenantService
     /// <summary>Adds a subject as a member of the specified tenant with the given roles and permissions.</summary>
     Task AddMemberAsync(Guid tenantId, Guid subjectId, List<Guid> roleIds, List<string>? directPermissions = null, string? label = null, bool limitTo24Hours = false, CancellationToken ct = default);
 
-    /// <summary>Removes a subject's membership from the specified tenant.</summary>
-    Task RemoveMemberAsync(Guid tenantId, Guid subjectId, CancellationToken ct = default);
+    /// <summary>
+    /// Removes a subject's membership from the specified tenant. Refuses to remove a system
+    /// subject's membership or the tenant's last owner; a membership that is already absent
+    /// succeeds.
+    /// </summary>
+    Task<MemberRemovalResult> RemoveMemberAsync(Guid tenantId, Guid subjectId, CancellationToken ct = default);
 
     /// <summary>Returns all tenants that the specified subject is a member of.</summary>
     Task<List<TenantDto>> GetTenantsForSubjectAsync(Guid subjectId, CancellationToken ct = default);
@@ -108,3 +112,9 @@ public record ProvisionOidcIdentityData(
 /// Result of a full tenant-plus-owner provisioning operation.
 /// </summary>
 public record ProvisionResult(Guid TenantId, Guid SubjectId, string Slug);
+
+/// <summary>
+/// Outcome of removing a membership. <paramref name="Ok"/> is false only for a refusal, which
+/// carries the reason; a membership that was already absent is a success.
+/// </summary>
+public record MemberRemovalResult(bool Ok, string? ErrorDescription = null);
