@@ -47,7 +47,8 @@ public class MemberInviteService : IMemberInviteService
         string? label = null,
         int expiresInDays = 7,
         int? maxUses = null,
-        bool limitTo24Hours = false)
+        bool limitTo24Hours = false,
+        string? baseUrl = null)
     {
         if (roleIds.Count == 0 && (directPermissions == null || directPermissions.Count == 0))
             throw new ArgumentException("At least one role or direct permission is required.");
@@ -89,9 +90,11 @@ public class MemberInviteService : IMemberInviteService
             "MemberInviteAudit: {Event} invite_id={InviteId} tenant_id={TenantId} role_count={RoleCount} expires_at={ExpiresAt}",
             "invite_created", entity.Id, tenantId, roleIds.Count, entity.ExpiresAt);
 
-        // Build invite URL
-        var baseUrl = _configuration[ServiceNames.ConfigKeys.BaseUrl]?.TrimEnd('/') ?? "";
-        var inviteUrl = $"{baseUrl}/join?token={token}";
+        // The join page is served per tenant, so the invite has to point at the tenant's own host.
+        // The configured base URL is the instance apex, which in a multi-tenant deployment serves a
+        // different site entirely — only the caller knows the host the invite was minted on.
+        var origin = (baseUrl ?? _configuration[ServiceNames.ConfigKeys.BaseUrl])?.TrimEnd('/') ?? "";
+        var inviteUrl = $"{origin}/join?token={token}";
 
         return new MemberInviteResult(
             entity.Id,

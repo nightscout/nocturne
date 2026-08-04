@@ -15,16 +15,13 @@
     ChevronRight,
   } from "lucide-svelte";
   import { resolve } from "$app/paths";
-  import { getCurrentTenantId } from "../current-tenant.remote";
+  import { getRoles } from "$lib/api/generated/roles.generated.remote";
+  import { getShareLink } from "$api/generated/shareLinks.generated.remote";
   import {
     getMembers,
     listInvites,
     revokeInvite,
-  } from "$lib/api/generated/memberInvites.generated.remote";
-  import { removeMember } from "$api/generated/tenants.generated.remote";
-  import { getRoles } from "$lib/api/generated/roles.generated.remote";
-  import { getShareLink } from "$api/generated/shareLinks.generated.remote";
-  import {
+    removeMember,
     setMemberRoles,
     setMemberPermissions,
     setMemberLimitTo24Hours,
@@ -75,10 +72,6 @@
   const canCreateGuestLinks = $derived(
     hasStar || effectivePermissions.includes("sharing.guest"),
   );
-
-  // Tenant
-  const tenantIdQuery = getCurrentTenantId();
-  const tenantId = $derived(tenantIdQuery.current ?? undefined);
 
   // Queries
   const membersQuery = getMembers();
@@ -312,13 +305,10 @@
                 }
               }}
               onRemove={async () => {
-                if (!tenantId || !member.subjectId) return;
+                if (!member.subjectId) return;
                 errorMessage = null;
                 try {
-                  await removeMember({ id: tenantId, subjectId: member.subjectId });
-                  // GetMembers lives on MemberInviteController, so RemoveMember's
-                  // Invalidates cannot name it — refresh from here.
-                  await membersQuery.refresh();
+                  await removeMember(member.subjectId);
                   successMessage = "Member removed successfully.";
                   clearMessages();
                 } catch (e) {

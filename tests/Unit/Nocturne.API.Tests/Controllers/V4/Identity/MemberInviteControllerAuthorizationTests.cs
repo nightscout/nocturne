@@ -90,7 +90,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 _tenantId, _callerSubjectId, It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
-                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
+                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(expected);
 
         var controller = BuildController(TenantPermissions.Superuser);
@@ -113,7 +113,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
-                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
+                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(expected);
 
         var controller = BuildController(TenantPermissions.MembersInvite);
@@ -201,7 +201,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
-                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
+                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
 
         var controller = BuildController(TenantPermissions.MembersInvite, TenantPermissions.GlucoseRead);
@@ -213,7 +213,35 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             It.Is<IEnumerable<string>>(scopes => scopes.OrderBy(x => x).SequenceEqual(
                 new[] { TenantPermissions.GlucoseRead, TenantPermissions.MembersInvite }.OrderBy(x => x))),
             It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(), It.IsAny<string?>(),
-            It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()),
+            It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// The join page is served per tenant, so the invite must be built on the host it was minted
+    /// on. The configured base URL is the instance apex, which in Nocturne Cloud serves the
+    /// marketing site — an invite built on it 404s for the invitee.
+    /// </summary>
+    [Fact]
+    public async Task CreateInvite_buildsTheInviteOnTheRequestHost()
+    {
+        _inviteService
+            .Setup(s => s.CreateInviteAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(),
+                It.IsAny<bool>(), It.IsAny<string?>()))
+            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
+
+        var controller = BuildController(TenantPermissions.MembersInvite);
+        controller.HttpContext.Request.Scheme = "https";
+        controller.HttpContext.Request.Host = new HostString("chris-natoli-aps.nocturne.run");
+
+        await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
+
+        _inviteService.Verify(s => s.CreateInviteAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+            It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(),
+            It.IsAny<bool>(), "https://chris-natoli-aps.nocturne.run"),
             Times.Once);
     }
 
@@ -232,7 +260,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
-                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
+                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
 
         var controller = BuildController(TenantPermissions.MembersInvite);
@@ -251,7 +279,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 
         _inviteService.Verify(s => s.CreateInviteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
-            It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), expected),
+            It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), expected, It.IsAny<string?>()),
             Times.Once);
     }
 
@@ -291,7 +319,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
-                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
+                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
 
         var controller = BuildController(TenantPermissions.MembersInvite);
@@ -300,7 +328,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 
         _inviteService.Verify(s => s.CreateInviteAsync(
             _tenantId, _callerSubjectId, It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
-            It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()),
+            It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()),
             Times.Once);
     }
 
@@ -314,7 +342,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
-                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
+                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
             .ThrowsAsync(new ArgumentException("One or more role IDs do not belong to this tenant."));
 
         var controller = BuildController(TenantPermissions.MembersInvite);

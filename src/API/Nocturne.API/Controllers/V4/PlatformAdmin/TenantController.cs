@@ -99,50 +99,6 @@ public class TenantController : ControllerBase
         return NoContent();
     }
 
-    /// <inheritdoc cref="ITenantService.RemoveMemberAsync"/>
-    [HttpDelete("{id:guid}/members/{subjectId:guid}")]
-    [RemoteCommand(Invalidates = ["GetById"])]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> RemoveMember(
-        Guid id, Guid subjectId,
-        [FromServices] NocturneDbContext dbContext,
-        CancellationToken ct)
-    {
-        if (!await IsCallerTenantOwnerAsync(id, ct))
-            return Forbid();
-
-        var member = await dbContext.TenantMembers
-            .Include(m => m.Subject)
-            .Where(m => m.TenantId == id && m.SubjectId == subjectId)
-            .FirstOrDefaultAsync(ct);
-
-        if (member == null)
-            return NoContent();
-
-        if (member.Subject?.IsSystemSubject == true)
-            return Problem(detail: "Cannot remove system subject memberships", statusCode: 400, title: "Bad Request");
-
-        // Prevent removing the last member with the owner role
-        var isOwner = await dbContext.TenantMemberRoles
-            .AnyAsync(mr => mr.TenantMemberId == member.Id
-                && mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner, ct);
-
-        if (isOwner)
-        {
-            var ownerCount = await dbContext.TenantMemberRoles
-                .CountAsync(mr => mr.TenantRole.TenantId == id
-                    && mr.TenantRole.Slug == TenantPermissions.SeedRoles.Owner
-                    && mr.TenantMember.RevokedAt == null, ct);
-
-            if (ownerCount <= 1)
-                return Problem(detail: "Cannot remove the last owner of a tenant", statusCode: 400, title: "Bad Request");
-        }
-
-        await _tenantService.RemoveMemberAsync(id, subjectId, ct);
-        return NoContent();
-    }
-
     [HttpDelete("{id:guid}")]
     [RemoteCommand(Invalidates = ["GetAll"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

@@ -23,6 +23,11 @@ public interface IMemberInviteService
     /// <param name="expiresInDays">Days until the invite expires.</param>
     /// <param name="maxUses">Optional cap on the number of acceptances.</param>
     /// <param name="limitTo24Hours">Whether the resulting membership is clamped to 24 hours of data.</param>
+    /// <param name="baseUrl">
+    /// Origin the invite URL is built on. The join page is served per tenant, so this must be the
+    /// tenant's own host — the configured instance base URL is the apex, which serves a different
+    /// site in multi-tenant deployments.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when no roles or permissions are supplied, a role does not belong to the tenant, or
     /// the grant exceeds <paramref name="granterPermissions"/>.
@@ -36,7 +41,8 @@ public interface IMemberInviteService
         string? label = null,
         int expiresInDays = 7,
         int? maxUses = null,
-        bool limitTo24Hours = false);
+        bool limitTo24Hours = false,
+        string? baseUrl = null);
 
     /// <summary>Retrieves invite details by token, or null if the token is invalid or expired.</summary>
     Task<MemberInviteInfo?> GetInviteByTokenAsync(string token);
