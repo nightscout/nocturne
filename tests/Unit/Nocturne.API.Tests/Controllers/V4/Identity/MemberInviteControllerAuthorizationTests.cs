@@ -1,6 +1,9 @@
+using System.Reflection;
 using FluentAssertions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Routing;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Tests.Infrastructure;
@@ -119,6 +122,114 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status201Created);
+    }
+
+    /// <summary>
+    /// The regression itself was a class-level <c>[Authorize(Roles = "platform_admin")]</c>, which
+    /// the MVC filter pipeline applies before any action body runs — so invoking the action
+    /// directly, as every other test here does, cannot see it. Assert on the attributes instead.
+    /// </summary>
+    [Fact]
+    public void InviteEndpoints_carryNoRoleRestriction()
+    {
+        var controller = typeof(MemberInviteController);
+        var members = new MemberInfo[]
+        {
+            controller,
+            controller.GetMethod(nameof(MemberInviteController.CreateInvite))!,
+            controller.GetMethod(nameof(MemberInviteController.ListInvites))!,
+            controller.GetMethod(nameof(MemberInviteController.RevokeInvite))!,
+        };
+
+        var roleRestricted = members
+            .SelectMany(m => m.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+                .Where(a => !string.IsNullOrWhiteSpace(a.Roles))
+                .Select(a => $"{m.Name} -> Roles = \"{a.Roles}\""))
+            .ToList();
+
+        roleRestricted.Should().BeEmpty(
+            "invite management is gated on the members.invite permission; a role restriction "
+            + "rejects ordinary tenant members before the permission check runs");
+    }
+
+    /// <summary>
+    /// The platform-admin controller must not regain an invite route: a second copy behind
+    /// <c>[Authorize(Roles = "platform_admin")]</c> is how the endpoints became unreachable.
+    /// </summary>
+    [Fact]
+    public void TenantController_exposesNoInviteRoutes()
+    {
+        var inviteRoutes = typeof(Nocturne.API.Controllers.V4.PlatformAdmin.TenantController)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .SelectMany(m => m.GetCustomAttributes<HttpMethodAttribute>()
+                .Where(a => a.Template?.Contains("invites", StringComparison.OrdinalIgnoreCase) == true)
+                .Select(a => $"{m.Name} -> {a.Template}"))
+            .ToList();
+
+        inviteRoutes.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// An instance-key caller clears the permission gate but carries no subject, and
+    /// <c>MemberInviteEntity.CreatedBySubjectId</c> is a non-nullable FK. Answer 401 rather than
+    /// dereferencing a null subject id.
+    /// </summary>
+    [Fact]
+    public async Task CreateInvite_withoutASubject_isUnauthorized()
+    {
+        var controller = BuildController(TenantPermissions.Superuser);
+        controller.HttpContext.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true,
+            SubjectId = null,
+            TenantId = _tenantId,
+        };
+
+        var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
+
+        result.Should().BeOfType<UnauthorizedResult>();
+        _inviteService.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// The caller's own scopes bound what the invite may confer. Passing the wrong set — or an
+    /// empty one — would let the grant ceiling in the service pass everything.
+    /// </summary>
+    [Fact]
+    public async Task CreateInvite_passesTheCallersScopesAsTheGrantCeiling()
+    {
+        _inviteService
+            .Setup(s => s.CreateInviteAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
+            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
+
+        var controller = BuildController(TenantPermissions.MembersInvite, TenantPermissions.GlucoseRead);
+
+        await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
+
+        _inviteService.Verify(s => s.CreateInviteAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(),
+            It.Is<IEnumerable<string>>(scopes => scopes.OrderBy(x => x).SequenceEqual(
+                new[] { TenantPermissions.GlucoseRead, TenantPermissions.MembersInvite }.OrderBy(x => x))),
+            It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(), It.IsAny<string?>(),
+            It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// members.manage governs editing existing memberships; it does not imply the right to mint a
+    /// new invite. Keeping the two atoms distinct is what makes the members page's own gate honest.
+    /// </summary>
+    [Fact]
+    public async Task CreateInvite_withMembersManageAlone_isForbidden()
+    {
+        var controller = BuildController(TenantPermissions.MembersManage);
+
+        var result = await controller.CreateInvite(ClinicianInvite(Guid.CreateVersion7()));
+
+        result.Should().BeOfType<ForbidResult>();
+        _inviteService.VerifyNoOtherCalls();
     }
 
     [Fact]
