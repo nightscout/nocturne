@@ -42,6 +42,7 @@ public class OidcAuthServiceOAuth2ClaimsTests
             new Mock<IRefreshTokenService>().Object,
             _httpFactory.Object,
             new Mock<ITenantMemberService>().Object,
+            new Mock<IMemberInviteService>().Object,
             new EphemeralDataProtectionProvider(),
             Options.Create(new OidcOptions()),
             new Mock<IConfiguration>().Object,

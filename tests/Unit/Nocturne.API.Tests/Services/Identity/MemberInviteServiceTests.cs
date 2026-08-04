@@ -240,7 +240,7 @@ public class MemberInviteServiceTests : IDisposable
         invite.ExpiresAt = DateTime.UtcNow.AddDays(-1);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId);
+        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
 
         result.Success.Should().BeFalse();
         result.ErrorCode.Should().Be("expired");
@@ -259,7 +259,7 @@ public class MemberInviteServiceTests : IDisposable
         invite.RevokedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync();
 
-        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId);
+        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
 
         result.Success.Should().BeFalse();
         result.ErrorCode.Should().Be("revoked");
@@ -279,7 +279,7 @@ public class MemberInviteServiceTests : IDisposable
         invite.UseCount = 1;
         await _dbContext.SaveChangesAsync();
 
-        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId);
+        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
 
         result.Success.Should().BeFalse();
         result.ErrorCode.Should().Be("exhausted");
@@ -304,10 +304,94 @@ public class MemberInviteServiceTests : IDisposable
         });
         await _dbContext.SaveChangesAsync();
 
-        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId);
+        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
 
         result.Success.Should().BeFalse();
         result.ErrorCode.Should().Be("already_member");
+    }
+
+    /// <summary>
+    /// An invite is only ever presented on the tenant it was minted for — the join page, the
+    /// anonymous passkey signup and the accept endpoint all run on the tenant host and pass the
+    /// tenant they resolved. A token from another tenant must therefore read as unknown, not as an
+    /// invite that happens to point elsewhere: honouring it would join the caller to a tenant they
+    /// never visited, on a host that never resolved it.
+    /// </summary>
+    [Fact]
+    public async Task AcceptInviteAsync_whenTheTokenBelongsToAnotherTenant_isRefusedAsUnknown()
+    {
+        await _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [_followerRoleId]);
+
+        var result = await _service.AcceptInviteAsync(
+            FakeToken, _acceptorSubjectId, tenantId: Guid.CreateVersion7());
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be("invalid_token");
+
+        _tenantService.Verify(
+            s => s.AddMemberAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(),
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never,
+            "a token from another tenant must not write a membership anywhere");
+    }
+
+    /// <summary>
+    /// The same boundary on the read side. The invite info feeds the join page and the anonymous
+    /// passkey signup, which mints a subject before anyone has proved anything.
+    /// </summary>
+    [Fact]
+    public async Task GetInviteByTokenAsync_whenTheTokenBelongsToAnotherTenant_returnsNull()
+    {
+        await _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [_followerRoleId]);
+
+        (await _service.GetInviteByTokenAsync(FakeToken, Guid.CreateVersion7())).Should().BeNull();
+        (await _service.GetInviteByTokenAsync(FakeToken, _tenantId)).Should().NotBeNull();
+    }
+
+    /// <summary>
+    /// The other half of the tenant bound: on the invite's own tenant the acceptance still lands.
+    /// </summary>
+    [Fact]
+    public async Task AcceptInviteAsync_onTheInvitesOwnTenant_addsTheMemberAndCountsTheUse()
+    {
+        await _service.CreateInviteAsync(
+            _tenantId,
+            _creatorSubjectId,
+            OwnerPermissions,
+            [_followerRoleId]);
+
+        _tenantService
+            .Setup(s => s.AddMemberAsync(
+                _tenantId, _acceptorSubjectId, It.IsAny<List<Guid>>(), It.IsAny<List<string>?>(),
+                It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback(() =>
+            {
+                _dbContext.TenantMembers.Add(new TenantMemberEntity
+                {
+                    Id = Guid.CreateVersion7(),
+                    TenantId = _tenantId,
+                    SubjectId = _acceptorSubjectId,
+                });
+                _dbContext.SaveChanges();
+            })
+            .Returns(Task.CompletedTask);
+
+        var result = await _service.AcceptInviteAsync(FakeToken, _acceptorSubjectId, _tenantId);
+
+        result.Success.Should().BeTrue();
+        result.MembershipId.Should().NotBeNull();
+
+        var invite = await _dbContext.MemberInvites.FirstAsync();
+        invite.UseCount.Should().Be(1);
     }
 
     [Fact]

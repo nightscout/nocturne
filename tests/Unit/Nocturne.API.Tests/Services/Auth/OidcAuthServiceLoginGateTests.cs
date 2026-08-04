@@ -31,6 +31,7 @@ public class OidcAuthServiceLoginGateTests
     private readonly Mock<IRefreshTokenService> _refreshTokenService = new();
     private readonly Mock<IHttpClientFactory> _httpFactory = new();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
+    private readonly Mock<IMemberInviteService> _memberInviteService = new();
     private readonly Mock<IConfiguration> _configuration = new();
     private readonly OidcAuthService _service;
 
@@ -45,6 +46,7 @@ public class OidcAuthServiceLoginGateTests
             _refreshTokenService.Object,
             _httpFactory.Object,
             _tenantMemberService.Object,
+            _memberInviteService.Object,
             new EphemeralDataProtectionProvider(),
             options,
             _configuration.Object,
@@ -119,6 +121,94 @@ public class OidcAuthServiceLoginGateTests
             s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
             Times.Never,
             "the cross-tenant login must not mint a session");
+    }
+
+    /// <summary>
+    /// The invitee's OIDC identity is a member of nothing the first time they use it, so the
+    /// membership gate alone bounced them back to a login page that could not help — the callback
+    /// returns to /join still signed out, and the page offers registration again. The invite token
+    /// carried in the login's own return URL is the authorization to join, so it is accepted here.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_whenTheLoginCameFromAValidJoinLink_joinsAndIssuesSession()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _memberInviteService
+            .Setup(s => s.AcceptInviteAsync("invite-token", subject.Id, tenantId))
+            .ReturnsAsync(new AcceptMemberInviteResult(true, MembershipId: Guid.NewGuid()));
+        SetupSessionIssuance();
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(returnUrl: "/join?token=invite-token"),
+            Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeTrue();
+        result.IsAccessDenied.Should().BeFalse();
+        _memberInviteService.Verify(
+            s => s.AcceptInviteAsync("invite-token", subject.Id, tenantId),
+            Times.Once,
+            "the acceptance is bounded by the tenant the callback resolved to, not by the token");
+    }
+
+    /// <summary>
+    /// The token is the whole of the authorization, so a refusal from the invite service — expired,
+    /// revoked, exhausted, or minted for another tenant — leaves the login exactly as denied as it
+    /// was before.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CompleteLoginAsync_whenTheJoinLinkInviteIsRefused_deniesWithoutIssuingSession()
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _memberInviteService
+            .Setup(s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .ReturnsAsync(new AcceptMemberInviteResult(false, "invalid_token", "Invite not found or has been revoked."));
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(returnUrl: "/join?token=someone-elses-token"),
+            Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.Success.Should().BeFalse();
+        result.IsAccessDenied.Should().BeTrue();
+        result.Tokens.Should().BeNull();
+
+        _sessionService.Verify(
+            s => s.IssueSessionAsync(It.IsAny<Guid>(), It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <summary>
+    /// Only the join link carries an invite; every other return URL leaves the membership gate as
+    /// the sole answer, so an ordinary login cannot reach the invite path at all.
+    /// </summary>
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("/")]
+    [InlineData("/reports?token=invite-token")]
+    [InlineData("/joinery?token=invite-token")]
+    [InlineData("/join")]
+    public async Task CompleteLoginAsync_whenTheReturnUrlIsNotAJoinLink_neverConsultsTheInvite(string returnUrl)
+    {
+        var subject = SetupResolvedSubject();
+        var tenantId = Guid.NewGuid();
+        _tenantMemberService
+            .Setup(t => t.IsMemberAsync(subject.Id, tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await _service.CompleteLoginAsync(
+            LoginState(returnUrl: returnUrl), Provider(), Claims(), tenantId, ipAddress: null, userAgent: null);
+
+        result.IsAccessDenied.Should().BeTrue();
+        _memberInviteService.VerifyNoOtherCalls();
     }
 
     [Fact]

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Moq;
+using Nocturne.API.Authorization;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -27,6 +28,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 {
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IMemberInviteService> _inviteService = new();
+    private readonly Mock<ITenantMemberService> _tenantMemberService = new();
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _callerSubjectId = Guid.CreateVersion7();
 
@@ -62,6 +64,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             _inviteService.Object,
             Mock.Of<ITenantService>(),
             Mock.Of<ITenantRoleService>(),
+            _tenantMemberService.Object,
             tenantAccessor.Object,
             _dbContext)
         {
@@ -406,6 +409,169 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 
         result.Should().BeOfType<NotFoundResult>();
         _inviteService.Verify(s => s.RevokeInviteAsync(inviteId, _tenantId), Times.Once);
+    }
+
+    /// <summary>An invite as the tenant-bounded lookup returns it.</summary>
+    private MemberInviteInfo Invite() => new(
+        Guid.CreateVersion7(),
+        _tenantId,
+        "Chris",
+        "Chris",
+        [],
+        [TenantPermissions.GlucoseRead],
+        "Dr. Smith",
+        false,
+        DateTime.UtcNow.AddDays(7),
+        null,
+        0,
+        true,
+        false,
+        false,
+        DateTime.UtcNow,
+        []);
+
+    /// <summary>
+    /// The invitee's browser resolves the tenant by host, and the invite belongs to exactly one
+    /// tenant. Looking a token up unbounded would let tenant A's link be redeemed on tenant B.
+    /// </summary>
+    [Fact]
+    public async Task GetInviteInfo_scopesTheLookupToTheRequestTenant()
+    {
+        _inviteService.Setup(s => s.GetInviteByTokenAsync("tok", _tenantId)).ReturnsAsync(Invite());
+
+        var controller = BuildController();
+
+        var result = await controller.GetInviteInfo("tok", CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        _inviteService.Verify(s => s.GetInviteByTokenAsync("tok", _tenantId), Times.Once);
+    }
+
+    /// <summary>
+    /// The join page decides between "accept" and "register" from this. Session cookies are
+    /// domain-wide, so an invitee who already follows another patient on the instance arrives
+    /// signed in — and the general session state reports them unauthenticated here, because they
+    /// are not a member of the tenant they are being invited to.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GetInviteInfo_reportsTheSignedInViewer(bool alreadyMember)
+    {
+        _inviteService.Setup(s => s.GetInviteByTokenAsync("tok", _tenantId)).ReturnsAsync(Invite());
+        _tenantMemberService
+            .Setup(s => s.IsMemberAsync(_callerSubjectId, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(alreadyMember);
+
+        var controller = BuildController();
+
+        var result = await controller.GetInviteInfo("tok", CancellationToken.None);
+
+        var info = result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<MemberInviteInfo>().Subject;
+        info.Viewer.Should().NotBeNull();
+        info.Viewer!.SubjectId.Should().Be(_callerSubjectId);
+        info.Viewer.IsMember.Should().Be(alreadyMember);
+    }
+
+    /// <summary>
+    /// The invitee with no account at all is the case that already worked; the page must still
+    /// offer them registration.
+    /// </summary>
+    [Fact]
+    public async Task GetInviteInfo_withoutASubject_reportsNoViewer()
+    {
+        _inviteService.Setup(s => s.GetInviteByTokenAsync("tok", _tenantId)).ReturnsAsync(Invite());
+
+        var controller = BuildController();
+        controller.HttpContext.Items["AuthContext"] = AuthContext.Unauthenticated();
+
+        var result = await controller.GetInviteInfo("tok", CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<MemberInviteInfo>().Which.Viewer.Should().BeNull();
+        _tenantMemberService.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// The acceptance writes a membership, so it is bounded by the tenant the request resolved to
+    /// rather than by the tenant the token names.
+    /// </summary>
+    [Fact]
+    public async Task AcceptInvite_scopesTheAcceptanceToTheRequestTenant()
+    {
+        _inviteService
+            .Setup(s => s.AcceptInviteAsync("tok", _callerSubjectId, _tenantId))
+            .ReturnsAsync(new AcceptMemberInviteResult(true, MembershipId: Guid.CreateVersion7()));
+
+        var controller = BuildController();
+
+        var result = await controller.AcceptInvite("tok");
+
+        result.Should().BeOfType<OkObjectResult>();
+        _inviteService.Verify(s => s.AcceptInviteAsync("tok", _callerSubjectId, _tenantId), Times.Once);
+    }
+
+    /// <summary>
+    /// The reason is written for the invitee and the generated client only surfaces the problem
+    /// detail of a 400, so a refusal that hides it reads as "Request rejected".
+    /// </summary>
+    [Fact]
+    public async Task AcceptInvite_surfacesTheRefusalReason()
+    {
+        _inviteService
+            .Setup(s => s.AcceptInviteAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .ReturnsAsync(new AcceptMemberInviteResult(
+                false, "already_member", "You are already a member of this tenant."));
+
+        var controller = BuildController();
+
+        var result = await controller.AcceptInvite("tok");
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        problem.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be("You are already a member of this tenant.");
+    }
+
+    /// <summary>
+    /// <see cref="InviteTokenAuthorizedAttribute"/> suspends the tenant-membership requirement for
+    /// the action it marks, and an exempted endpoint carries no permission gate of its own — the
+    /// invite token is the only thing authorizing the caller. Pin the exact set: a third endpoint
+    /// acquiring the marker is a non-member gaining a capability, and would be invisible in review.
+    /// </summary>
+    [Fact]
+    public void OnlyTheJoinEndpointsCarryTheInviteTokenExemption()
+    {
+        var marked = typeof(MemberInviteController).Assembly.GetTypes()
+            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            .Where(m => m.GetCustomAttribute<InviteTokenAuthorizedAttribute>(inherit: true) != null)
+            .Select(m => $"{m.DeclaringType!.Name}.{m.Name}")
+            .OrderBy(n => n)
+            .ToList();
+
+        marked.Should().Equal(
+            $"{nameof(MemberInviteController)}.{nameof(MemberInviteController.AcceptInvite)}",
+            $"{nameof(MemberInviteController)}.{nameof(MemberInviteController.GetInviteInfo)}");
+    }
+
+    /// <summary>
+    /// The exemption is keyed on the <c>{token}</c> route value, so a marked action whose route
+    /// does not carry one can never be exempted — and would silently 401 every invitee.
+    /// </summary>
+    [Fact]
+    public void EveryExemptedEndpointTakesTheTokenInItsRoute()
+    {
+        var routesWithoutToken = typeof(MemberInviteController).Assembly.GetTypes()
+            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            .Where(m => m.GetCustomAttribute<InviteTokenAuthorizedAttribute>(inherit: true) != null)
+            .Where(m => !m.GetCustomAttributes<HttpMethodAttribute>().Any(
+                a => a.Template?.Contains(
+                    $"{{{InviteTokenAuthorizedAttribute.TokenRouteValue}}}", StringComparison.Ordinal) == true))
+            .Select(m => $"{m.DeclaringType!.Name}.{m.Name}")
+            .ToList();
+
+        routesWithoutToken.Should().BeEmpty();
     }
 
     public void Dispose() => _dbContext.Dispose();

@@ -40,6 +40,7 @@ public class OidcAuthServiceLinkTests
             _refreshTokenService.Object,
             _httpFactory.Object,
             _tenantMemberService.Object,
+            new Mock<IMemberInviteService>().Object,
             new EphemeralDataProtectionProvider(),
             options,
             _configuration.Object,
