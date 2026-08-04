@@ -46,12 +46,16 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
         if (eventData.Context is not NocturneDbContext context)
             return new ValueTask<InterceptionResult<int>>(result);
 
-        // HTTP requests: resolve from the request's DI scope via HttpContext.
-        // Background services: fall back to the context-level AuditContext property
-        // which services populate directly when creating scopes.
-        var auditContext = _httpContextAccessor.HttpContext?.RequestServices
-            .GetService(typeof(IAuditContext)) as IAuditContext
-            ?? context.AuditContext;
+        // The context-level property wins: it is the audit context the writer attached to this
+        // context (ITenantDbContextFactory stamps its own DI scope's instance, background services
+        // set it directly), so a save made in a child scope is attributed by that scope rather
+        // than by the enclosing request. Reading the request scope first attributed a child
+        // scope's system-attributed connector writes to whoever triggered the sync.
+        // The scoped-context registration leaves the property unset, so an HTTP request falls
+        // back to the request scope's instance.
+        var auditContext = context.AuditContext
+            ?? _httpContextAccessor.HttpContext?.RequestServices
+                .GetService(typeof(IAuditContext)) as IAuditContext;
 
         var auditEntries = new List<MutationAuditLogEntity>();
         var now = DateTime.UtcNow;
@@ -74,7 +78,7 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
             if (entry.State == EntityState.Modified && entry.Entity is ISoftDeletable)
             {
                 if (action == "delete")
-                    entry.Property("DeletedByUser").CurrentValue = auditContext?.AuthType != null;
+                    entry.Property("DeletedByUser").CurrentValue = !auditContext.IsSystemMutation();
                 else if (action == "restore")
                     entry.Property("DeletedByUser").CurrentValue = false;
             }
@@ -83,8 +87,11 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
             // automated data ingestion (CGM readings, temp basals, etc.) whose provenance is
             // already captured on the records themselves (data_source), so they are not recorded
             // here — auditing them grew this table to 36GB / ~1.8M rows-per-day in production.
+            // A null context counts as system: an HTTP request always resolves a scoped context,
+            // so no context at all means an unattributed background save, whose audit row would
+            // carry a null actor, auth type and endpoint.
             // The soft-delete/dedup maintenance above still runs for these mutations.
-            if (auditContext?.IsSystem == true)
+            if (auditContext.IsSystemMutation())
                 continue;
 
             var audit = new MutationAuditLogEntity

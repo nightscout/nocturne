@@ -4,8 +4,10 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Nocturne.API.Services.Audit;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Infrastructure.Data;
@@ -430,6 +432,9 @@ internal class MigrationJob
         _serviceProvider = serviceProvider;
     }
 
+    /// <summary>Audit endpoint recorded for migration-owned writes.</summary>
+    private const string AuditEndpoint = "service:migration";
+
     /// <summary>
     /// Creates a DI scope for migration work and propagates the owning tenant's context into it,
     /// so that tenant-scoped services (NocturneDbContext, decomposers, repositories) resolve and
@@ -449,7 +454,32 @@ internal class MigrationJob
             // task could write under a stale pooled tenant. Mirrors ConnectorBackgroundService.
             scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = _tenantContext.TenantId;
         }
-        return scope;
+
+        // Attribute the imported records to the migration rather than to a human actor. A backfill
+        // writes one row per historical treatment/entry, and without this every one of them also
+        // appends a mutation_audit_log row. The property covers writes made on this scope's own
+        // context; the pushed scope covers the contexts ITenantDbContextFactory creates for the V4
+        // repositories and decomposers. Mirrors ConnectorBackgroundService.
+        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().AuditContext =
+            SystemAuditContext.ForService(AuditEndpoint);
+        return new SystemAttributedScope(
+            scope,
+            SystemAuditScope.Push(scope.ServiceProvider.GetRequiredService<IAuditContext>()));
+    }
+
+    /// <summary>
+    /// A DI scope whose ambient <see cref="IAuditContext"/> stays system-attributed for the
+    /// scope's lifetime. Disposing releases the audit attribution, then the scope.
+    /// </summary>
+    private sealed class SystemAttributedScope(IServiceScope inner, IDisposable auditScope) : IServiceScope
+    {
+        public IServiceProvider ServiceProvider => inner.ServiceProvider;
+
+        public void Dispose()
+        {
+            auditScope.Dispose();
+            inner.Dispose();
+        }
     }
 
     public MigrationJobStatus GetStatus() =>

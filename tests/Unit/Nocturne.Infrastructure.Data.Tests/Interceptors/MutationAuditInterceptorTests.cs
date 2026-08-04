@@ -5,6 +5,7 @@ using System.Linq.Expressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data.Interceptors;
 
@@ -125,11 +126,48 @@ public class MutationAuditInterceptorTests : IDisposable
         context.SaveChanges();
     }
 
-    private TestNocturneDbContext CreateContext()
+    /// <summary>
+    /// A save with no audit context at all is treated as an unattributed background save and is
+    /// not audited, so tests that assert an audit row need an actor. Tests covering the
+    /// system/unattributed paths pass their own context (or null) explicitly.
+    /// </summary>
+    private TestNocturneDbContext CreateContext() => CreateContext(new StubAuditContext
+    {
+        SubjectId = Guid.CreateVersion7(),
+        SubjectName = "tester",
+        AuthType = "SessionCookie",
+        Endpoint = "POST /api/v4/treatments"
+    });
+
+    private TestNocturneDbContext CreateContext(IAuditContext? auditContext)
     {
         var context = new TestNocturneDbContext(_contextOptions);
         context.TenantId = _tenantId;
+        context.AuditContext = auditContext;
         return context;
+    }
+
+    /// <summary>An accessor exposing an HTTP request whose DI scope is <paramref name="services"/>.</summary>
+    private static IHttpContextAccessor AccessorFor(IServiceProvider services)
+    {
+        var httpContext = new Mock<HttpContext>();
+        httpContext.Setup(x => x.RequestServices).Returns(services);
+
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.Setup(x => x.HttpContext).Returns(httpContext.Object);
+        return accessor.Object;
+    }
+
+    private sealed class StubAuditContext : IAuditContext
+    {
+        public Guid? SubjectId { get; init; }
+        public string? SubjectName { get; init; }
+        public string? AuthType { get; init; }
+        public string? IpAddress { get; init; }
+        public Guid? TokenId { get; init; }
+        public string? CorrelationId { get; init; }
+        public string? Endpoint { get; init; }
+        public bool IsSystem { get; init; }
     }
 
     public void Dispose()
@@ -166,6 +204,9 @@ public class MutationAuditInterceptorTests : IDisposable
         log.EntityType.Should().Be("TestAuditable");
         log.EntityId.Should().Be(entity.Id);
         log.TenantId.Should().Be(_tenantId);
+        log.AuthType.Should().Be("SessionCookie");
+        log.SubjectName.Should().Be("tester");
+        log.Endpoint.Should().Be("POST /api/v4/treatments");
     }
 
     [Fact]
@@ -379,8 +420,11 @@ public class MutationAuditInterceptorTests : IDisposable
     }
 
     [Fact]
-    public async Task SoftDelete_SystemNoAuth_LeavesDeletedByUserFalse()
+    public async Task SoftDelete_NullAuditContext_MaintainsDeletedByUser_ButProducesNoAuditRecord()
     {
+        // No AuditContext and null HttpContext: an unattributed background save. The audit row
+        // would carry a null actor, auth type and endpoint, so it is skipped — but the dedup flag
+        // maintenance still has to run or connector resync semantics change.
         using var context = CreateContext();
         var entity = new TestAuditableEntity
         {
@@ -392,14 +436,93 @@ public class MutationAuditInterceptorTests : IDisposable
         context.TestAuditables.Add(entity);
         await context.SaveChangesAsync();
 
-        // No AuditContext and null HttpContext -> AuthType null -> system-attributed delete.
-        using var context2 = CreateContext();
+        using var context2 = CreateContext(auditContext: null);
         var tracked = await context2.TestAuditables.FindAsync(entity.Id);
         tracked!.DeletedAt = DateTime.UtcNow;
 
         await InvokeSavingChanges(context2);
 
         ((bool)context2.Entry(tracked).Property("DeletedByUser").CurrentValue!).Should().BeFalse();
+        context2.ChangeTracker.Entries<MutationAuditLogEntity>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_NullAuditContext_ProducesNoAuditRecord()
+    {
+        // Regression guard for the ~350k rows/week of all-null audit rows written by background
+        // jobs (Nightscout migration/backfill) that never populate an audit context.
+        using var context = CreateContext(auditContext: null);
+        var entity = new TestAuditableEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            Name = "BackgroundBackfill",
+            Value = 1
+        };
+
+        context.TestAuditables.Add(entity);
+
+        await InvokeSavingChanges(context);
+
+        context.ChangeTracker.Entries<MutationAuditLogEntity>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ContextAuditContext_TakesPrecedenceOverRequestScope()
+    {
+        // A connector sync triggered over HTTP runs in a child DI scope whose audit context the
+        // publishers push into system attribution. Resolving the request scope's context instead
+        // audited the connector's imports as the user who clicked sync.
+        var requestScopeContext = new StubAuditContext { AuthType = "SessionCookie", SubjectName = "clicker" };
+        var services = new ServiceCollection()
+            .AddSingleton<IAuditContext>(requestScopeContext)
+            .BuildServiceProvider();
+
+        var interceptor = new MutationAuditInterceptor(AccessorFor(services));
+
+        using var context = CreateContext(SystemAuditContext.ForService("connector:nightscout"));
+        context.TestAuditables.Add(new TestAuditableEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            Name = "ConnectorImport"
+        });
+
+        await InvokeSavingChanges(context, interceptor);
+
+        context.ChangeTracker.Entries<MutationAuditLogEntity>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RequestScope_UsedWhenContextCarriesNoAuditContext()
+    {
+        // The scoped NocturneDbContext registration never stamps the property, so an ordinary
+        // HTTP request must still be attributed from the request scope.
+        var services = new ServiceCollection()
+            .AddSingleton<IAuditContext>(new StubAuditContext
+            {
+                AuthType = "SessionCookie",
+                SubjectName = "clicker",
+                Endpoint = "POST /api/v4/treatments"
+            })
+            .BuildServiceProvider();
+
+        var interceptor = new MutationAuditInterceptor(AccessorFor(services));
+
+        using var context = CreateContext(auditContext: null);
+        context.TestAuditables.Add(new TestAuditableEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            Name = "UserWrite"
+        });
+
+        await InvokeSavingChanges(context, interceptor);
+
+        var log = context.ChangeTracker.Entries<MutationAuditLogEntity>()
+            .Select(e => e.Entity).Single();
+        log.AuthType.Should().Be("SessionCookie");
+        log.SubjectName.Should().Be("clicker");
     }
 
     [Fact]
@@ -647,7 +770,9 @@ public class MutationAuditInterceptorTests : IDisposable
     /// Invokes the interceptor's SavingChangesAsync in the same way EF Core would,
     /// without actually saving to the database (we only need to inspect the ChangeTracker).
     /// </summary>
-    private async Task InvokeSavingChanges(DbContext context)
+    private Task InvokeSavingChanges(DbContext context) => InvokeSavingChanges(context, _interceptor);
+
+    private static async Task InvokeSavingChanges(DbContext context, MutationAuditInterceptor interceptor)
     {
         context.ChangeTracker.DetectChanges();
 
@@ -663,6 +788,6 @@ public class MutationAuditInterceptorTests : IDisposable
             (def, data) => "test",
             context);
 
-        await _interceptor.SavingChangesAsync(eventData, default);
+        await interceptor.SavingChangesAsync(eventData, default);
     }
 }

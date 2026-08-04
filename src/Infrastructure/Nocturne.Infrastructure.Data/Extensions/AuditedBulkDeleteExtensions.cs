@@ -42,54 +42,18 @@ public static class AuditedBulkDeleteExtensions
                 return 0;
             }
 
-            var now = DateTime.UtcNow;
-            var entityTypeName = typeof(T).Name.Replace("Entity", "");
-
-            var auditEntries = affectedRecords.Select(record =>
-            {
-                var entry = context.Entry(record);
-                var snapshot = new Dictionary<string, object?>();
-
-                foreach (var prop in entry.Properties)
-                {
-                    if (prop.Metadata.IsPrimaryKey())
-                        continue;
-
-                    var property = typeof(T).GetProperty(prop.Metadata.Name,
-                        BindingFlags.Public | BindingFlags.Instance);
-
-                    if (property?.GetCustomAttribute<AuditIgnoredAttribute>() is not null)
-                        continue;
-
-                    var isRedacted = property?.GetCustomAttribute<AuditRedactedAttribute>() is not null;
-                    snapshot[prop.Metadata.Name] = isRedacted ? "[redacted]" : prop.CurrentValue;
-                }
-
-                return new MutationAuditLogEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = context.TenantId,
-                    EntityType = entityTypeName,
-                    EntityId = (Guid)entry.Property("Id").CurrentValue!,
-                    Action = "delete",
-                    ChangesJson = JsonSerializer.Serialize(snapshot, JsonOptions),
-                    SubjectId = auditContext?.SubjectId,
-                    AuthType = auditContext?.AuthType,
-                    IpAddress = auditContext?.IpAddress,
-                    TokenId = auditContext?.TokenId,
-                    CorrelationId = auditContext?.CorrelationId,
-                    Endpoint = auditContext?.Endpoint,
-                    CreatedAt = now
-                };
-            }).ToList();
+            var auditEntries = BuildDeleteAuditEntries(context, affectedRecords, auditContext);
 
             // Detach the loaded entities so they don't interfere with the bulk delete
             foreach (var record in affectedRecords)
                 context.Entry(record).State = EntityState.Detached;
 
             // Write audit entries
-            context.Set<MutationAuditLogEntity>().AddRange(auditEntries);
-            await context.SaveChangesAsync(ct);
+            if (auditEntries.Count > 0)
+            {
+                context.Set<MutationAuditLogEntity>().AddRange(auditEntries);
+                await context.SaveChangesAsync(ct);
+            }
 
             // Execute bulk delete
             var deletedCount = await query.ExecuteDeleteAsync(ct);
@@ -153,58 +117,24 @@ public static class AuditedBulkDeleteExtensions
             }
 
             var now = DateTime.UtcNow;
-            var entityTypeName = typeof(T).Name.Replace("Entity", "");
-
-            var auditEntries = affectedRecords.Select(record =>
-            {
-                var entry = context.Entry(record);
-                var snapshot = new Dictionary<string, object?>();
-
-                foreach (var prop in entry.Properties)
-                {
-                    if (prop.Metadata.IsPrimaryKey())
-                        continue;
-
-                    var property = typeof(T).GetProperty(prop.Metadata.Name,
-                        BindingFlags.Public | BindingFlags.Instance);
-
-                    if (property?.GetCustomAttribute<AuditIgnoredAttribute>() is not null)
-                        continue;
-
-                    var isRedacted = property?.GetCustomAttribute<AuditRedactedAttribute>() is not null;
-                    snapshot[prop.Metadata.Name] = isRedacted ? "[redacted]" : prop.CurrentValue;
-                }
-
-                return new MutationAuditLogEntity
-                {
-                    Id = Guid.CreateVersion7(),
-                    TenantId = context.TenantId,
-                    EntityType = entityTypeName,
-                    EntityId = (Guid)entry.Property("Id").CurrentValue!,
-                    Action = "delete",
-                    ChangesJson = JsonSerializer.Serialize(snapshot, JsonOptions),
-                    SubjectId = auditContext?.SubjectId,
-                    AuthType = auditContext?.AuthType,
-                    IpAddress = auditContext?.IpAddress,
-                    TokenId = auditContext?.TokenId,
-                    CorrelationId = auditContext?.CorrelationId,
-                    Endpoint = auditContext?.Endpoint,
-                    CreatedAt = now
-                };
-            }).ToList();
+            var auditEntries = BuildDeleteAuditEntries(context, affectedRecords, auditContext);
 
             // Detach the loaded entities so they don't interfere with the bulk update
             foreach (var record in affectedRecords)
                 context.Entry(record).State = EntityState.Detached;
 
             // Write audit entries
-            context.Set<MutationAuditLogEntity>().AddRange(auditEntries);
-            await context.SaveChangesAsync(ct);
+            if (auditEntries.Count > 0)
+            {
+                context.Set<MutationAuditLogEntity>().AddRange(auditEntries);
+                await context.SaveChangesAsync(ct);
+            }
 
             // Execute bulk soft delete, carrying the dedup attribution flag in the same
             // update: a user-initiated delete blocks resync re-creation, a system sweep
-            // (no auth context) leaves the row re-creatable.
-            var isUserDelete = auditContext?.AuthType != null;
+            // (no auth context) leaves the row re-creatable. This runs whether or not audit
+            // rows were written.
+            var isUserDelete = !auditContext.IsSystemMutation();
             await query.ExecuteUpdateAsync(
                 s => s
                     .SetProperty(e => e.DeletedAt, now)
@@ -213,6 +143,63 @@ public static class AuditedBulkDeleteExtensions
             await transaction.CommitAsync(ct);
             return affectedRecords;
         });
+    }
+
+    /// <summary>
+    /// Builds one "delete" audit row per affected record, snapshotting its current values.
+    /// Returns an empty list for system/unattributed mutations: these helpers write audit rows
+    /// themselves rather than through <c>MutationAuditInterceptor</c>, so they have to apply the
+    /// same skip — a connector's reconcile sweep is high-volume and has no human actor, and
+    /// recording it added ~77k actorless rows a week to <c>mutation_audit_log</c> in production.
+    /// </summary>
+    private static List<MutationAuditLogEntity> BuildDeleteAuditEntries<T>(
+        NocturneDbContext context,
+        List<T> affectedRecords,
+        IAuditContext? auditContext) where T : class, IAuditable
+    {
+        if (auditContext.IsSystemMutation())
+            return [];
+
+        var now = DateTime.UtcNow;
+        var entityTypeName = typeof(T).Name.Replace("Entity", "");
+
+        return affectedRecords.Select(record =>
+        {
+            var entry = context.Entry(record);
+            var snapshot = new Dictionary<string, object?>();
+
+            foreach (var prop in entry.Properties)
+            {
+                if (prop.Metadata.IsPrimaryKey())
+                    continue;
+
+                var property = typeof(T).GetProperty(prop.Metadata.Name,
+                    BindingFlags.Public | BindingFlags.Instance);
+
+                if (property?.GetCustomAttribute<AuditIgnoredAttribute>() is not null)
+                    continue;
+
+                var isRedacted = property?.GetCustomAttribute<AuditRedactedAttribute>() is not null;
+                snapshot[prop.Metadata.Name] = isRedacted ? "[redacted]" : prop.CurrentValue;
+            }
+
+            return new MutationAuditLogEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = context.TenantId,
+                EntityType = entityTypeName,
+                EntityId = (Guid)entry.Property("Id").CurrentValue!,
+                Action = "delete",
+                ChangesJson = JsonSerializer.Serialize(snapshot, JsonOptions),
+                SubjectId = auditContext?.SubjectId,
+                AuthType = auditContext?.AuthType,
+                IpAddress = auditContext?.IpAddress,
+                TokenId = auditContext?.TokenId,
+                CorrelationId = auditContext?.CorrelationId,
+                Endpoint = auditContext?.Endpoint,
+                CreatedAt = now
+            };
+        }).ToList();
     }
 
     /// <summary>
