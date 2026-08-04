@@ -9,6 +9,15 @@ namespace Nocturne.Core.Contracts.Multitenancy;
 public interface IMemberInviteService
 {
     /// <summary>
+    /// Path of the join page an invite URL points at. Also read back when a login started from
+    /// that page, so the minted link and the link that is recognized cannot drift apart.
+    /// </summary>
+    public const string JoinPath = "/join";
+
+    /// <summary>Query parameter carrying the invite token on <see cref="JoinPath"/>.</summary>
+    public const string TokenQueryParameter = "token";
+
+    /// <summary>
     /// Creates a new invite link that grants the specified roles and permissions when accepted.
     /// </summary>
     /// <param name="tenantId">The tenant the invite joins.</param>
@@ -44,11 +53,27 @@ public interface IMemberInviteService
         bool limitTo24Hours = false,
         string? baseUrl = null);
 
-    /// <summary>Retrieves invite details by token, or null if the token is invalid or expired.</summary>
-    Task<MemberInviteInfo?> GetInviteByTokenAsync(string token);
+    /// <summary>
+    /// Retrieves invite details by token, or null when no invite of <paramref name="tenantId"/>
+    /// carries that token.
+    /// </summary>
+    /// <param name="token">The opaque token from the invite URL.</param>
+    /// <param name="tenantId">
+    /// The tenant the request resolved to. An invite is only ever presentable on the tenant it was
+    /// minted for: the join page, the anonymous passkey signup and the accept endpoint all run on
+    /// the tenant host, and each acts on the tenant they resolved rather than the one named by the
+    /// token.
+    /// </param>
+    Task<MemberInviteInfo?> GetInviteByTokenAsync(string token, Guid tenantId);
 
     /// <summary>Accepts an invite and adds the subject as a member of the tenant.</summary>
-    Task<AcceptMemberInviteResult> AcceptInviteAsync(string token, Guid acceptingSubjectId);
+    /// <param name="token">The opaque token from the invite URL.</param>
+    /// <param name="acceptingSubjectId">The subject joining the tenant.</param>
+    /// <param name="tenantId">
+    /// The tenant the request resolved to; an invite belonging to any other tenant is refused as
+    /// <c>invalid_token</c>.
+    /// </param>
+    Task<AcceptMemberInviteResult> AcceptInviteAsync(string token, Guid acceptingSubjectId, Guid tenantId);
 
     /// <summary>Returns all invites for the specified tenant, including usage history.</summary>
     Task<List<MemberInviteInfo>> GetInvitesForTenantAsync(Guid tenantId);
@@ -89,7 +114,20 @@ public record MemberInviteInfo(
     bool IsExpired,
     bool IsRevoked,
     DateTime CreatedAt,
-    List<InviteUsageInfo> UsedBy);
+    List<InviteUsageInfo> UsedBy,
+    InviteViewer? Viewer = null);
+
+/// <summary>
+/// Where the caller of <see cref="IMemberInviteService.GetInviteByTokenAsync"/> stands relative to
+/// the invite. Null on the management listing, whose caller is the tenant, not the invitee.
+/// </summary>
+/// <param name="SubjectId">The signed-in caller's subject, or null when nobody is signed in.</param>
+/// <param name="Name">The signed-in caller's display name.</param>
+/// <param name="IsMember">Whether that subject already belongs to the invite's tenant.</param>
+public record InviteViewer(
+    Guid? SubjectId,
+    string? Name,
+    bool IsMember);
 
 /// <summary>
 /// Records a single usage of an invite: which subject accepted it and when.

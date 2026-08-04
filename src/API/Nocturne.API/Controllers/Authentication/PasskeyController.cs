@@ -977,12 +977,13 @@ public class PasskeyController : ControllerBase
             return Problem(detail: "Token, username, and display name are required", statusCode: 400, title: "Bad Request");
         }
 
-        // Validate the invite
-        var invite = await memberInviteService.GetInviteByTokenAsync(request.Token);
+        var tenantId = _tenantAccessor.TenantId;
+
+        // Validate the invite against the tenant this request resolved to; a token minted for
+        // another tenant must not mint a subject here.
+        var invite = await memberInviteService.GetInviteByTokenAsync(request.Token, tenantId);
         if (invite == null || !invite.IsValid)
             return NotFound();
-
-        var tenantId = _tenantAccessor.TenantId;
 
         var username = request.Username.Trim().ToLowerInvariant();
         var displayName = request.DisplayName.Trim();
@@ -1070,7 +1071,8 @@ public class PasskeyController : ControllerBase
                 expectedSubjectId: enrollingSubjectId.Value);
 
             // Accept the invite
-            var acceptResult = await memberInviteService.AcceptInviteAsync(request.Token, credResult.SubjectId);
+            var acceptResult = await memberInviteService.AcceptInviteAsync(
+                request.Token, credResult.SubjectId, tenantId);
             if (!acceptResult.Success)
             {
                 return Problem(detail: acceptResult.ErrorDescription ?? "Failed to accept invite", statusCode: 400, title: "Invite Error");

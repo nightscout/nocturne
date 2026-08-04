@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Authorization;
 using Nocturne.API.Middleware.Handlers;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -215,10 +216,17 @@ public class AuthenticationMiddleware
 
                 if (!isMember)
                 {
-                    _logger.LogWarning(
-                        "Subject {SubjectId} is not a member of tenant {TenantId}",
-                        resolvedAuth.SubjectId, resolvedAuth.TenantId);
-                    SetUnauthenticated(context);
+                    // An invite-token-authorized endpoint is how a non-member joins, so reducing
+                    // the request to anonymous there leaves the accept path reachable only by
+                    // people who are already members. Identity only, and only when the route's
+                    // token is a live invite of this tenant.
+                    if (!await TryKeepIdentityForInviteAsync(context, resolvedAuth))
+                    {
+                        _logger.LogWarning(
+                            "Subject {SubjectId} is not a member of tenant {TenantId}",
+                            resolvedAuth.SubjectId, resolvedAuth.TenantId);
+                        SetUnauthenticated(context);
+                    }
                 }
             }
         }
@@ -364,6 +372,77 @@ public class AuthenticationMiddleware
         }
 
         return AuthContext.Unauthenticated();
+    }
+
+    /// <summary>
+    /// For a subject who authenticated but is not a member of the resolved tenant, keep the
+    /// identity — and only the identity — when the request targets an endpoint marked
+    /// <see cref="InviteTokenAuthorizedAttribute"/> and its <c>{token}</c> route value names a
+    /// currently valid invite of that same tenant.
+    /// </summary>
+    /// <param name="context">The current HTTP context.</param>
+    /// <param name="resolvedAuth">The authenticated context that failed the membership check.</param>
+    /// <returns><c>true</c> when the identity was kept; <c>false</c> to reject as usual.</returns>
+    /// <remarks>
+    /// The invite token is the whole of the authorization here, so it is validated before anything
+    /// is kept: the lookup is bounded by the resolved tenant, and the invite must not be expired,
+    /// revoked or exhausted. What survives is a subject id and a display name — no permissions, no
+    /// roles, no scopes and an empty <see cref="PermissionTrie"/> — so every gated endpoint still
+    /// refuses the caller, and the marked endpoints authorize on the invite itself.
+    /// </remarks>
+    private async Task<bool> TryKeepIdentityForInviteAsync(HttpContext context, AuthContext resolvedAuth)
+    {
+        var endpoint = context.GetEndpoint();
+        if (endpoint?.Metadata.GetMetadata<InviteTokenAuthorizedAttribute>() == null)
+            return false;
+
+        if (!context.Request.RouteValues.TryGetValue(
+                InviteTokenAuthorizedAttribute.TokenRouteValue, out var routeValue)
+            || routeValue is not string token
+            || string.IsNullOrEmpty(token))
+        {
+            return false;
+        }
+
+        var inviteService = context.RequestServices.GetRequiredService<IMemberInviteService>();
+        var invite = await inviteService.GetInviteByTokenAsync(token, resolvedAuth.TenantId!.Value);
+        if (invite is not { IsValid: true })
+            return false;
+
+        var identityOnly = new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = resolvedAuth.AuthType,
+            SubjectId = resolvedAuth.SubjectId,
+            TenantId = resolvedAuth.TenantId,
+            SubjectName = resolvedAuth.SubjectName,
+            Email = resolvedAuth.Email,
+        };
+
+        context.Items["AuthContext"] = identityOnly;
+        context.Items["PermissionTrie"] = new PermissionTrie();
+        context.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>();
+        context.Items["AuthenticationContext"] = MapToLegacyContext(identityOnly);
+
+        // The principal built earlier carries the subject's roles, its platform-admin role and a
+        // claim per permission. [Authorize] reads the principal, so it is replaced rather than
+        // reused: the marked endpoints need only to know who is asking.
+        context.User = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                [
+                    new System.Security.Claims.Claim(
+                        System.Security.Claims.ClaimTypes.NameIdentifier,
+                        identityOnly.SubjectId?.ToString() ?? ""),
+                    new System.Security.Claims.Claim(
+                        System.Security.Claims.ClaimTypes.Name, identityOnly.SubjectName ?? ""),
+                ],
+                "NocturneInvite"));
+
+        _logger.LogInformation(
+            "MemberInviteAudit: {Event} invite_id={InviteId} tenant_id={TenantId} subject_id={SubjectId}",
+            "invite_identity_kept", invite.Id, resolvedAuth.TenantId, resolvedAuth.SubjectId);
+
+        return true;
     }
 
     /// <summary>

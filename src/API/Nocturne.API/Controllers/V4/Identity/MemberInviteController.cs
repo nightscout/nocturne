@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -29,6 +30,7 @@ public class MemberInviteController : ControllerBase
     private readonly IMemberInviteService _memberInviteService;
     private readonly ITenantService _tenantService;
     private readonly ITenantRoleService _tenantRoleService;
+    private readonly ITenantMemberService _tenantMemberService;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly NocturneDbContext _dbContext;
 
@@ -38,18 +40,21 @@ public class MemberInviteController : ControllerBase
     /// <param name="memberInviteService">Service for invite token lifecycle management.</param>
     /// <param name="tenantService">Service for tenant membership operations.</param>
     /// <param name="tenantRoleService">Service for member role assignment.</param>
+    /// <param name="tenantMemberService">Service for membership lookups.</param>
     /// <param name="tenantAccessor">Accessor for the current request tenant context.</param>
     /// <param name="dbContext">Database context for direct entity access.</param>
     public MemberInviteController(
         IMemberInviteService memberInviteService,
         ITenantService tenantService,
         ITenantRoleService tenantRoleService,
+        ITenantMemberService tenantMemberService,
         ITenantAccessor tenantAccessor,
         NocturneDbContext dbContext)
     {
         _memberInviteService = memberInviteService;
         _tenantService = tenantService;
         _tenantRoleService = tenantRoleService;
+        _tenantMemberService = tenantMemberService;
         _tenantAccessor = tenantAccessor;
         _dbContext = dbContext;
     }
@@ -145,27 +150,49 @@ public class MemberInviteController : ControllerBase
     }
 
     /// <summary>
-    /// Get invite info for the accept page (anonymous).
+    /// Get invite info for the accept page, along with where the caller stands relative to it.
     /// </summary>
+    /// <remarks>
+    /// Anonymous, because the invitee may have no account yet. A caller who does arrive signed in
+    /// is reported in <see cref="MemberInviteInfo.Viewer"/> so the join page can offer acceptance
+    /// instead of a second registration — including when they are signed in as a member of some
+    /// other tenant on this instance, whose session cookie is domain-wide.
+    /// </remarks>
     [HttpGet("{token}/info")]
     [AllowAnonymous]
+    [InviteTokenAuthorized]
     [RemoteQuery]
     [ProducesResponseType(typeof(MemberInviteInfo), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetInviteInfo(string token)
+    public async Task<IActionResult> GetInviteInfo(string token, CancellationToken ct)
     {
-        var invite = await _memberInviteService.GetInviteByTokenAsync(token);
+        var tenantId = _tenantAccessor.TenantId;
+        var invite = await _memberInviteService.GetInviteByTokenAsync(token, tenantId);
         if (invite == null)
             return NotFound();
 
-        return Ok(invite);
+        var subjectId = HttpContext.GetSubjectId();
+        if (subjectId == null)
+            return Ok(invite);
+
+        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var isMember = await _tenantMemberService.IsMemberAsync(subjectId.Value, tenantId, ct);
+
+        return Ok(invite with { Viewer = new InviteViewer(subjectId, authContext?.SubjectName, isMember) });
     }
 
     /// <summary>
     /// Accept an invite and join the tenant.
     /// </summary>
+    /// <remarks>
+    /// The caller must be signed in as some subject, but need not already belong to this tenant —
+    /// that is the point of an invite. <see cref="InviteTokenAuthorizedAttribute"/> is what lets a
+    /// non-member reach this action at all, and the token is re-validated against the resolved
+    /// tenant by the service before any membership is written.
+    /// </remarks>
     [HttpPost("{token}/accept")]
     [Authorize]
+    [InviteTokenAuthorized]
     [RemoteCommand]
     [ProducesResponseType(typeof(AcceptMemberInviteResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -175,7 +202,8 @@ public class MemberInviteController : ControllerBase
         if (subjectId == null)
             return Unauthorized();
 
-        var result = await _memberInviteService.AcceptInviteAsync(token, subjectId.Value);
+        var result = await _memberInviteService.AcceptInviteAsync(
+            token, subjectId.Value, _tenantAccessor.TenantId);
 
         if (!result.Success)
             return BadRequest(result);

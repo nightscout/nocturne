@@ -94,7 +94,8 @@ public class MemberInviteService : IMemberInviteService
         // The configured base URL is the instance apex, which in a multi-tenant deployment serves a
         // different site entirely — only the caller knows the host the invite was minted on.
         var origin = (baseUrl ?? _configuration[ServiceNames.ConfigKeys.BaseUrl])?.TrimEnd('/') ?? "";
-        var inviteUrl = $"{origin}/join?token={token}";
+        var inviteUrl =
+            $"{origin}{IMemberInviteService.JoinPath}?{IMemberInviteService.TokenQueryParameter}={token}";
 
         return new MemberInviteResult(
             entity.Id,
@@ -104,7 +105,7 @@ public class MemberInviteService : IMemberInviteService
     }
 
     /// <inheritdoc />
-    public async Task<MemberInviteInfo?> GetInviteByTokenAsync(string token)
+    public async Task<MemberInviteInfo?> GetInviteByTokenAsync(string token, Guid tenantId)
     {
         if (string.IsNullOrEmpty(token))
             return null;
@@ -114,7 +115,7 @@ public class MemberInviteService : IMemberInviteService
         var entity = await _dbContext.MemberInvites
             .Include(i => i.Tenant)
             .Include(i => i.CreatedBy)
-            .Where(i => i.TokenHash == tokenHash)
+            .Where(i => i.TokenHash == tokenHash && i.TenantId == tenantId)
             .FirstOrDefaultAsync();
 
         if (entity == null)
@@ -124,16 +125,20 @@ public class MemberInviteService : IMemberInviteService
     }
 
     /// <inheritdoc />
-    public async Task<AcceptMemberInviteResult> AcceptInviteAsync(string token, Guid acceptingSubjectId)
+    public async Task<AcceptMemberInviteResult> AcceptInviteAsync(
+        string token, Guid acceptingSubjectId, Guid tenantId)
     {
         if (string.IsNullOrEmpty(token))
             return new AcceptMemberInviteResult(false, "invalid_token", "Invite token is required.");
 
         var tokenHash = _jwtService.HashRefreshToken(token);
 
+        // Bounded by the tenant the request resolved to, not by the one the token names. The token
+        // is the only thing authorizing the join, so a token minted for another tenant must read as
+        // unknown here rather than as an invite that happens to point elsewhere.
         var entity = await _dbContext.MemberInvites
             .Include(i => i.Tenant)
-            .Where(i => i.TokenHash == tokenHash)
+            .Where(i => i.TokenHash == tokenHash && i.TenantId == tenantId)
             .FirstOrDefaultAsync();
 
         if (entity == null)
