@@ -22,7 +22,6 @@
     inviteComplete,
   } from "$lib/api/generated/passkeys.generated.remote";
   import {
-    getAuthState,
     getOidcProviders,
     setAuthCookies,
   } from "$routes/(unauthenticated)/auth/auth.remote";
@@ -33,20 +32,25 @@
     describePasskeyError,
     parseCeremonyOptions,
   } from "$lib/components/auth/passkey-errors";
-  import { FormError } from "$lib/forms";
+  import { FormError, describeSubmitError } from "$lib/forms";
 
   // ── URL params ────────────────────────────────────────────────────
   const token = $derived(page.url.searchParams.get("token") ?? "");
 
   // ── Remote data ───────────────────────────────────────────────────
-  const authStateQuery = getAuthState();
   const inviteInfoQuery = $derived(token ? getInviteInfo(token) : undefined);
   const oidcQuery = getOidcProviders();
 
-  const isAuthenticated = $derived(authStateQuery.current?.isAuthenticated ?? false);
   const inviteInfo = $derived(inviteInfoQuery?.current);
   const oidc = $derived(oidcQuery.current);
   const hasOidc = $derived(oidc?.enabled && (oidc?.providers?.length ?? 0) > 0);
+
+  // Who is looking at this invite. The session cookie is domain-wide, so someone who follows
+  // another patient on this instance arrives here already signed in; the backend reports that
+  // against the invite rather than against tenant membership, which they do not yet have.
+  const viewer = $derived(inviteInfo?.viewer);
+  const isSignedIn = $derived(Boolean(viewer?.subjectId));
+  const isAlreadyMember = $derived(viewer?.isMember ?? false);
 
   // ── Invite validity ───────────────────────────────────────────────
   const inviteError = $derived.by(() => {
@@ -68,16 +72,14 @@
     isAccepting = true;
     acceptError = null;
     try {
-      const result = await acceptInvite(token);
-      if (result.success) {
-        await goto("/", { replaceState: true });
-      } else {
-        acceptError = result.errorDescription ?? "Failed to accept invite.";
-      }
+      await acceptInvite(token);
+      await goto("/", { replaceState: true });
     } catch (err) {
       console.error("Accepting the invite failed:", err);
-      acceptError =
-        "We couldn't add you to this instance. Please try again in a moment.";
+      acceptError = describeSubmitError(
+        err,
+        "We couldn't add you to this instance. Please try again in a moment."
+      );
     } finally {
       isAccepting = false;
     }
@@ -202,8 +204,28 @@
           continueLabel="Continue to Nocturne"
         />
       </Card.Content>
-    {:else if isAuthenticated}
-      <!-- Authenticated — just accept the invite -->
+    {:else if isAlreadyMember}
+      <!-- Signed in and already a member of this site -->
+      <Card.Header class="space-y-1 text-center">
+        <div
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
+        >
+          <Check class="h-6 w-6 text-primary" />
+        </div>
+        <Card.Title class="text-2xl font-bold">You're Already In</Card.Title>
+        <Card.Description>
+          You already have access to
+          <strong>{inviteInfo.tenantName ?? "this site"}</strong>.
+        </Card.Description>
+      </Card.Header>
+
+      <Card.Content>
+        <Button class="w-full" size="lg" onclick={goHome}>
+          Continue to Nocturne
+        </Button>
+      </Card.Content>
+    {:else if isSignedIn}
+      <!-- Signed in as someone who is not a member yet — just accept the invite -->
       <Card.Header class="space-y-1 text-center">
         <div
           class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
@@ -217,7 +239,10 @@
           {:else}
             You've been invited to join
           {/if}
-          <strong>{inviteInfo.tenantName ?? "a site"}</strong>.
+          <strong>{inviteInfo.tenantName ?? "a site"}</strong>
+          {#if viewer?.name}
+            as <strong>{viewer.name}</strong>
+          {/if}.
         </Card.Description>
       </Card.Header>
 

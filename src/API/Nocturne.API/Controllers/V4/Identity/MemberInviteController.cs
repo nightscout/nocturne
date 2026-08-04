@@ -205,8 +205,11 @@ public class MemberInviteController : ControllerBase
         var result = await _memberInviteService.AcceptInviteAsync(
             token, subjectId.Value, _tenantAccessor.TenantId);
 
+        // The refusal reason is written for the invitee — "You are already a member of this
+        // tenant", "This invite has expired" — so it goes in the problem detail, which is the
+        // only part of a 400 body the generated client surfaces.
         if (!result.Success)
-            return BadRequest(result);
+            return Problem(detail: result.ErrorDescription, statusCode: 400, title: "Bad Request");
 
         return Ok(result);
     }
