@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Auth;
 using Nocturne.Infrastructure.Data;
@@ -68,6 +69,13 @@ public class MemberInviteController : ControllerBase
         if (subjectId == null)
             return Unauthorized();
 
+        // The clamp is an access boundary enforced in RLS via app.share_full_history, so a
+        // clamped member minting an unclamped invite would widen past their own ceiling by
+        // handing the wider access to someone else. Lifting an existing member's clamp already
+        // requires members.manage and is refused for self-edits.
+        var authContext = HttpContext.Items["AuthContext"] as AuthContext;
+        var limitTo24Hours = request.LimitTo24Hours || authContext?.LimitTo24Hours == true;
+
         try
         {
             var result = await _memberInviteService.CreateInviteAsync(
@@ -79,7 +87,7 @@ public class MemberInviteController : ControllerBase
                 request.Label,
                 request.ExpiresInDays,
                 request.MaxUses,
-                request.LimitTo24Hours);
+                limitTo24Hours);
 
             return StatusCode(StatusCodes.Status201Created, result);
         }

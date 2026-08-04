@@ -218,6 +218,44 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     }
 
     /// <summary>
+    /// A member clamped to 24 hours cannot hand out unclamped access: the clamp is enforced in RLS
+    /// and lifting it on an existing membership already needs members.manage.
+    /// </summary>
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, true, true)]
+    [InlineData(false, false, false)]
+    public async Task CreateInvite_clampsTheInviteWhenTheCallerIsClamped(
+        bool callerClamped, bool requested, bool expected)
+    {
+        _inviteService
+            .Setup(s => s.CreateInviteAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+                It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>()))
+            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
+
+        var controller = BuildController(TenantPermissions.MembersInvite);
+        controller.HttpContext.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true,
+            SubjectId = _callerSubjectId,
+            TenantId = _tenantId,
+            LimitTo24Hours = callerClamped,
+        };
+
+        var invite = ClinicianInvite(Guid.CreateVersion7());
+        invite.LimitTo24Hours = requested;
+
+        await controller.CreateInvite(invite);
+
+        _inviteService.Verify(s => s.CreateInviteAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
+            It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), expected),
+            Times.Once);
+    }
+
+    /// <summary>
     /// members.manage governs editing existing memberships; it does not imply the right to mint a
     /// new invite. Keeping the two atoms distinct is what makes the members page's own gate honest.
     /// </summary>
