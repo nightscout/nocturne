@@ -191,7 +191,7 @@
               id="read-retention"
               type="number"
               min="1"
-              placeholder="Unlimited"
+              placeholder="Platform default"
               bind:value={readRetentionDays}
             />
           </div>
@@ -201,7 +201,7 @@
               id="mutation-retention"
               type="number"
               min="1"
-              placeholder="Unlimited"
+              placeholder="Platform default"
               bind:value={mutationRetentionDays}
             />
           </div>
