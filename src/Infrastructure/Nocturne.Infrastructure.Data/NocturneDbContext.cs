@@ -2993,11 +2993,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         {
             entity.Property(e => e.Id).HasValueGenerator<GuidV7ValueGenerator>();
 
-            entity.HasOne(e => e.Tenant)
-                .WithMany()
-                .HasForeignKey(e => e.TenantId)
-                .OnDelete(DeleteBehavior.Cascade);
-
+            // The tenant relationship is configured centrally for every ITenantScoped entity by
+            // ConfigureTenantCascadeDeletes, which binds the Tenant navigation.
             entity.HasOne(e => e.CreatedBy)
                 .WithMany()
                 .HasForeignKey(e => e.CreatedBySubjectId)
@@ -3473,16 +3470,26 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// Adds FK constraints with ON DELETE CASCADE from every ITenantScoped entity's
     /// TenantId column to the tenants table. This ensures tenant deletion cascades to
     /// all tenant-scoped data instead of silently orphaning rows.
+    /// An entity that also exposes a <c>Tenant</c> reference has that navigation bound to this
+    /// relationship; configured without it, EF treats the navigation as a second relationship and
+    /// gives it a shadow foreign key of its own.
     /// </summary>
     private static void ConfigureTenantCascadeDeletes(ModelBuilder modelBuilder)
     {
+        // The conventional name of the tenant reference on the entities that expose one.
+        const string TenantNavigation = "Tenant";
+
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
             if (!typeof(ITenantScoped).IsAssignableFrom(entityType.ClrType))
                 continue;
 
+            var navigation = entityType.ClrType.GetProperty(TenantNavigation)?.PropertyType == typeof(TenantEntity)
+                ? TenantNavigation
+                : null;
+
             modelBuilder.Entity(entityType.ClrType)
-                .HasOne(typeof(TenantEntity))
+                .HasOne(typeof(TenantEntity), navigation)
                 .WithMany()
                 .HasForeignKey(nameof(ITenantScoped.TenantId))
                 .OnDelete(DeleteBehavior.Cascade);

@@ -47,6 +47,10 @@ public class MemberInviteServiceTests : IDisposable
 
         _dbContext = new NocturneDbContext(_dbOptions);
         _dbContext.Database.EnsureCreated();
+        // member_invites is tenant-scoped, so the context carries the tenant the request resolved
+        // to. In the app TenantResolutionMiddleware pins it before any handler runs; here it stands
+        // in for that pin, and without it every read below is filtered to nothing.
+        _dbContext.TenantId = _tenantId;
 
         _jwtService = new Mock<IJwtService>();
         _jwtService.Setup(j => j.GenerateRefreshToken()).Returns(FakeToken);
@@ -484,6 +488,42 @@ public class MemberInviteServiceTests : IDisposable
 
         var invite = await _dbContext.MemberInvites.FirstAsync();
         invite.UseCount.Should().Be(1);
+    }
+
+    /// <summary>
+    /// The tenant bound each call site writes by hand is now also a global query filter, so a
+    /// query that forgets it still cannot reach another tenant's invite. SQLite enforces no
+    /// PostgreSQL policy, so this pins the EF filter only; that the database refuses the same read
+    /// is covered by the RLS integration tests, which assert every <c>ITenantScoped</c> table has
+    /// RLS enabled, forced and policied.
+    /// </summary>
+    [Fact]
+    public async Task MemberInvites_ofAnotherTenant_areNotReachableWithoutATenantPredicate()
+    {
+        var otherTenantId = Guid.CreateVersion7();
+        _dbContext.Tenants.Add(new TenantEntity
+        {
+            Id = otherTenantId,
+            Slug = "other",
+            DisplayName = "Other Tenant",
+        });
+        _dbContext.MemberInvites.Add(new MemberInviteEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = otherTenantId,
+            CreatedBySubjectId = _creatorSubjectId,
+            TokenHash = "hash-minted-for-the-other-tenant",
+            RoleIds = [],
+            DirectPermissions = [TenantPermissions.GlucoseRead],
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
+        });
+        await _dbContext.SaveChangesAsync();
+
+        // No tenant predicate: the filter is the only thing bounding this read.
+        (await _dbContext.MemberInvites.ToListAsync()).Should().BeEmpty();
+
+        (await _dbContext.MemberInvites.IgnoreQueryFilters().ToListAsync())
+            .Should().ContainSingle("the row is present — it is the tenant filter that hides it");
     }
 
     [Fact]
