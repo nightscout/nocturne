@@ -99,7 +99,10 @@ public class MemberInviteController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
+            // Title as well as detail: openapi-remote-codegen 0.2.0 resolves a ProblemDetails to
+            // `title` first, so a reason carried only in the detail reaches the creator as the
+            // literal "Bad Request".
+            return Problem(detail: ex.Message, statusCode: 400, title: ex.Message);
         }
     }
 
@@ -133,6 +136,11 @@ public class MemberInviteController : ControllerBase
     }
 
     /// <inheritdoc cref="ITenantService.RemoveMemberAsync"/>
+    /// <remarks>
+    /// Keyed by subject, unlike the sibling <c>members/{id}</c> routes below, which take the
+    /// membership id. Removal is the one operation whose caller — the cloud billing service as well
+    /// as the member list — knows the subject rather than the membership.
+    /// </remarks>
     [HttpDelete("members/{subjectId:guid}")]
     [RemoteCommand(Invalidates = ["GetMembers"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -146,7 +154,10 @@ public class MemberInviteController : ControllerBase
         var result = await _tenantService.RemoveMemberAsync(_tenantAccessor.TenantId, subjectId, ct);
         return result.Ok
             ? NoContent()
-            : Problem(detail: result.ErrorDescription, statusCode: 400, title: "Bad Request");
+            // "Cannot remove the last owner of a tenant" has to reach the member list, and the
+            // generated client resolves `title` before `detail`.
+            : Problem(
+                detail: result.ErrorDescription, statusCode: 400, title: result.ErrorDescription);
     }
 
     /// <summary>

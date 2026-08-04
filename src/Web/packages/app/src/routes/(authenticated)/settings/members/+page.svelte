@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { messageFrom } from "$lib/utils";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import * as Card from "$lib/components/ui/card";
@@ -113,11 +114,6 @@
   let expandedMember = $state<string | null>(null);
   let isSavingMember = $state(false);
   let isRevokingInvite = $state<string | null>(null);
-
-  /** Surface a server-provided message when present, else a generic fallback. */
-  function messageFrom(e: unknown, fallback: string): string {
-    return (e as { body?: { message?: string } })?.body?.message ?? fallback;
-  }
 
   // Visible members — system subjects (e.g. Public) are managed via the
   // public access card above, not as removable/editable cards.

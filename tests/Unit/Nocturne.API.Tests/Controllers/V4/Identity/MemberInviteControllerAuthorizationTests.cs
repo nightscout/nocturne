@@ -28,6 +28,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 {
     private readonly NocturneDbContext _dbContext;
     private readonly Mock<IMemberInviteService> _inviteService = new();
+    private readonly Mock<ITenantService> _tenantService = new();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
     private readonly Guid _tenantId = Guid.CreateVersion7();
     private readonly Guid _callerSubjectId = Guid.CreateVersion7();
@@ -62,7 +63,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 
         return new MemberInviteController(
             _inviteService.Object,
-            Mock.Of<ITenantService>(),
+            _tenantService.Object,
             Mock.Of<ITenantRoleService>(),
             _tenantMemberService.Object,
             tenantAccessor.Object,
@@ -125,6 +126,62 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status201Created);
+    }
+
+    /// <summary>
+    /// Removal is destructive and newly reachable by a tenant rather than only a platform admin,
+    /// so the permission gate is pinned in both directions.
+    /// </summary>
+    [Fact]
+    public async Task RemoveMember_withoutMembersManage_isForbidden()
+    {
+        var controller = BuildController(TenantPermissions.MembersInvite);
+
+        var result = await controller.RemoveMember(Guid.CreateVersion7(), CancellationToken.None);
+
+        result.Should().BeOfType<ForbidResult>();
+        _tenantService.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task RemoveMember_withMembersManage_removesFromTheRequestTenant()
+    {
+        var subjectId = Guid.CreateVersion7();
+        _tenantService
+            .Setup(s => s.RemoveMemberAsync(_tenantId, subjectId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MemberRemovalResult(true));
+
+        var controller = BuildController(TenantPermissions.MembersManage);
+
+        var result = await controller.RemoveMember(subjectId, CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+        _tenantService.Verify(
+            s => s.RemoveMemberAsync(_tenantId, subjectId, It.IsAny<CancellationToken>()),
+            Times.Once,
+            "the tenant comes from the request, not from the caller");
+    }
+
+    /// <summary>
+    /// A tenant that removes its last owner locks itself out of a live site, so the refusal has to
+    /// reach the member list rather than arrive as a bare status phrase.
+    /// </summary>
+    [Fact]
+    public async Task RemoveMember_whenRefused_surfacesTheReason()
+    {
+        _tenantService
+            .Setup(s => s.RemoveMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MemberRemovalResult(false, "Cannot remove the last owner of a tenant"));
+
+        var controller = BuildController(TenantPermissions.MembersManage);
+
+        var result = await controller.RemoveMember(Guid.CreateVersion7(), CancellationToken.None);
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
+        details.Title.Should().Be("Cannot remove the last owner of a tenant");
+        details.Detail.Should().Be("Cannot remove the last owner of a tenant");
     }
 
     /// <summary>
@@ -336,8 +393,10 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     }
 
     /// <summary>
-    /// The service reports a refused grant as <see cref="ArgumentException"/>; the reason has to
-    /// reach the caller, because the invite card renders whatever detail comes back.
+    /// The service reports a refused grant — and an out-of-range expiry — as
+    /// <see cref="ArgumentException"/>. The reason has to reach the creator, and the generated
+    /// client resolves a ProblemDetails to <c>title</c> before <c>detail</c>, so carrying it only
+    /// in the detail would render the branch's own reported symptom: a bare failure message.
     /// </summary>
     [Fact]
     public async Task CreateInvite_surfacesTheServiceRefusalReason()
@@ -354,8 +413,9 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
 
         var problem = result.Should().BeOfType<ObjectResult>().Subject;
         problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-        problem.Value.Should().BeOfType<ProblemDetails>()
-            .Which.Detail.Should().Be("One or more role IDs do not belong to this tenant.");
+        var details = problem.Value.Should().BeOfType<ProblemDetails>().Subject;
+        details.Title.Should().Be("One or more role IDs do not belong to this tenant.");
+        details.Detail.Should().Be("One or more role IDs do not belong to this tenant.");
     }
 
     [Fact]

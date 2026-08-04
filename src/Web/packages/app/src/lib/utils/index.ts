@@ -150,6 +150,16 @@ export function timeAgo(
   }
 }
 
+/**
+ * Surface a server-provided message when present, else a generic fallback.
+ *
+ * The generated client resolves a ProblemDetails to `title` before `detail`, so endpoints whose
+ * refusal is written for the user carry the reason in both.
+ */
+export function messageFrom(e: unknown, fallback: string): string {
+  return (e as { body?: { message?: string } })?.body?.message ?? fallback;
+}
+
 // Re-export UI utilities from shared package
 export {
   cn,

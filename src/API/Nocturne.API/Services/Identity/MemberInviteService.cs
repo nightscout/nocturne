@@ -185,6 +185,11 @@ public class MemberInviteService : IMemberInviteService
         // on a value read earlier in the request; two concurrent accepts of a single-use invite —
         // the default the UI mints — would both pass it and both join. Only a row that is still
         // under its cap matches here, so the loser claims nothing and is refused.
+        //
+        // The claim commits on its own and the membership is written on a separate context, so a
+        // failure in between burns the use without joining anyone: a single-use invite then reads
+        // as exhausted and the owner has to mint another. That is the direction to fail in — the
+        // alternative admits the double join this guards against.
         var claimed = await _dbContext.MemberInvites
             .Where(i => i.Id == entity.Id && (i.MaxUses == null || i.UseCount < i.MaxUses))
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.UseCount, i => i.UseCount + 1));
