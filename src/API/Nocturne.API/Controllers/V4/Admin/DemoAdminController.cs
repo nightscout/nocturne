@@ -144,9 +144,9 @@ public class DemoAdminController : ControllerBase
         db.TenantId = tenant.Id;
 
         var deleted = 0L;
-        deleted += await db.SensorGlucose.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.MeterGlucose.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.Calibrations.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
+        deleted += await db.SensorGlucose.Where(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.MeterGlucose.Where(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.Calibrations.Where(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
 
         return Ok(new DemoDeleteResultDto(deleted));
     }
@@ -168,13 +168,13 @@ public class DemoAdminController : ControllerBase
         db.TenantId = tenant.Id;
 
         var deleted = 0L;
-        deleted += await db.Boluses.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.CarbIntakes.Where(c => c.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.BGChecks.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.Notes.Where(n => n.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.DeviceEvents.Where(de => de.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.BolusCalculations.Where(bc => bc.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.TempBasals.Where(t => t.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
+        deleted += await db.Boluses.Where(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.CarbIntakes.Where(c => c.DataSource == DataSources.DemoService || (c.DataSource == null && c.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.BGChecks.Where(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.Notes.Where(n => n.DataSource == DataSources.DemoService || (n.DataSource == null && n.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.DeviceEvents.Where(de => de.DataSource == DataSources.DemoService || (de.DataSource == null && de.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.BolusCalculations.Where(bc => bc.DataSource == DataSources.DemoService || (bc.DataSource == null && bc.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.TempBasals.Where(t => t.DataSource == DataSources.DemoService || (t.DataSource == null && t.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
         deleted += await db.StateSpans.Where(s => s.Source == DataSources.DemoService).ExecuteDeleteAsync(ct);
         deleted += await db.ApsSnapshots.Where(a => a.Device == DataSources.DemoService).ExecuteDeleteAsync(ct);
 
@@ -200,26 +200,26 @@ public class DemoAdminController : ControllerBase
         var deleted = 0L;
 
         // Entries
-        deleted += await db.SensorGlucose.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.MeterGlucose.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.Calibrations.Where(e => e.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
+        deleted += await db.SensorGlucose.Where(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.MeterGlucose.Where(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.Calibrations.Where(e => e.DataSource == DataSources.DemoService || (e.DataSource == null && e.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
 
         // Treatments
-        deleted += await db.Boluses.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.CarbIntakes.Where(c => c.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.BGChecks.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.Notes.Where(n => n.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.DeviceEvents.Where(de => de.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.BolusCalculations.Where(bc => bc.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.TempBasals.Where(t => t.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
+        deleted += await db.Boluses.Where(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.CarbIntakes.Where(c => c.DataSource == DataSources.DemoService || (c.DataSource == null && c.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.BGChecks.Where(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.Notes.Where(n => n.DataSource == DataSources.DemoService || (n.DataSource == null && n.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.DeviceEvents.Where(de => de.DataSource == DataSources.DemoService || (de.DataSource == null && de.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.BolusCalculations.Where(bc => bc.DataSource == DataSources.DemoService || (bc.DataSource == null && bc.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.TempBasals.Where(t => t.DataSource == DataSources.DemoService || (t.DataSource == null && t.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
         deleted += await db.StateSpans.Where(s => s.Source == DataSources.DemoService).ExecuteDeleteAsync(ct);
         deleted += await db.ApsSnapshots.Where(a => a.Device == DataSources.DemoService).ExecuteDeleteAsync(ct);
 
         // Seed-extras data (sleep stages/samples cascade from their session).
         // Tracker definitions and alert rules are configuration, not data —
         // seed-extras re-upserts them, so only their instances/history go.
-        deleted += await db.HeartRates.Where(h => h.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
-        deleted += await db.StepCounts.Where(s => s.DataSource == DataSources.DemoService).ExecuteDeleteAsync(ct);
+        deleted += await db.HeartRates.Where(h => h.DataSource == DataSources.DemoService || (h.DataSource == null && h.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
+        deleted += await db.StepCounts.Where(s => s.DataSource == DataSources.DemoService || (s.DataSource == null && s.Device == DataSources.DemoService)).ExecuteDeleteAsync(ct);
         deleted += await db.SleepSessions.Where(s => s.SourceApp == DataSources.DemoService).ExecuteDeleteAsync(ct);
         deleted += await db.TrackerInstances.ExecuteDeleteAsync(ct);
         deleted += await db.AlertInstances.ExecuteDeleteAsync(ct);

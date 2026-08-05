@@ -777,48 +777,48 @@ public class DataSourceService : IDataSourceService
 
         // Glucose
         var sensorGlucoseCount = await _context
-            .SensorGlucose.Where(sg => sg.DataSource == deviceId)
+            .SensorGlucose.Where(sg => sg.DataSource == deviceId || (sg.DataSource == null && sg.Device == deviceId))
             .LongCountAsync(cancellationToken);
         if (sensorGlucoseCount > 0) counts[nameof(SyncDataType.Glucose)] = sensorGlucoseCount;
 
         var meterGlucoseCount = await _context
-            .MeterGlucose.Where(mg => mg.DataSource == deviceId)
+            .MeterGlucose.Where(mg => mg.DataSource == deviceId || (mg.DataSource == null && mg.Device == deviceId))
             .LongCountAsync(cancellationToken);
         if (meterGlucoseCount > 0) counts[nameof(SyncDataType.ManualBG)] = meterGlucoseCount;
 
         var calibrationsCount = await _context
-            .Calibrations.Where(c => c.DataSource == deviceId)
+            .Calibrations.Where(c => c.DataSource == deviceId || (c.DataSource == null && c.Device == deviceId))
             .LongCountAsync(cancellationToken);
         if (calibrationsCount > 0) counts[nameof(SyncDataType.Calibrations)] = calibrationsCount;
 
         // Treatments
         var bolusCount = await _context
-            .Boluses.Where(b => b.DataSource == deviceId)
+            .Boluses.Where(b => b.DataSource == deviceId || (b.DataSource == null && b.Device == deviceId))
             .LongCountAsync(cancellationToken);
         if (bolusCount > 0) counts[nameof(SyncDataType.Boluses)] = bolusCount;
 
         var carbIntakeCount = await _context
-            .CarbIntakes.Where(c => c.DataSource == deviceId)
+            .CarbIntakes.Where(c => c.DataSource == deviceId || (c.DataSource == null && c.Device == deviceId))
             .LongCountAsync(cancellationToken);
         if (carbIntakeCount > 0) counts[nameof(SyncDataType.CarbIntake)] = carbIntakeCount;
 
         var bgChecksCount = await _context
-            .BGChecks.Where(b => b.DataSource == deviceId)
+            .BGChecks.Where(b => b.DataSource == deviceId || (b.DataSource == null && b.Device == deviceId))
             .LongCountAsync(cancellationToken);
         if (bgChecksCount > 0) counts[nameof(SyncDataType.BGChecks)] = bgChecksCount;
 
         var bolusCalcCount = await _context
-            .BolusCalculations.Where(bc => bc.DataSource == deviceId)
+            .BolusCalculations.Where(bc => bc.DataSource == deviceId || (bc.DataSource == null && bc.Device == deviceId))
             .LongCountAsync(cancellationToken);
         if (bolusCalcCount > 0) counts[nameof(SyncDataType.BolusCalculations)] = bolusCalcCount;
 
         var notesCount = await _context
-            .Notes.Where(n => n.DataSource == deviceId)
+            .Notes.Where(n => n.DataSource == deviceId || (n.DataSource == null && n.Device == deviceId))
             .LongCountAsync(cancellationToken);
         if (notesCount > 0) counts[nameof(SyncDataType.Notes)] = notesCount;
 
         var deviceEventsCount = await _context
-            .DeviceEvents.Where(de => de.DataSource == deviceId)
+            .DeviceEvents.Where(de => de.DataSource == deviceId || (de.DataSource == null && de.Device == deviceId))
             .LongCountAsync(cancellationToken);
         if (deviceEventsCount > 0) counts[nameof(SyncDataType.DeviceEvents)] = deviceEventsCount;
 
@@ -933,13 +933,13 @@ public class DataSourceService : IDataSourceService
 
         // Auditable + soft-deletable treatments: audited soft-delete, user-attributed.
         var bolusesDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.Boluses.Where(b => b.DataSource == deviceId), _auditContext, cancellationToken);
+            _context.Boluses.Where(b => b.DataSource == deviceId || (b.DataSource == null && b.Device == deviceId)), _auditContext, cancellationToken);
         var carbIntakesDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.CarbIntakes.Where(c => c.DataSource == deviceId), _auditContext, cancellationToken);
+            _context.CarbIntakes.Where(c => c.DataSource == deviceId || (c.DataSource == null && c.Device == deviceId)), _auditContext, cancellationToken);
         var bolusCalcsDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.BolusCalculations.Where(bc => bc.DataSource == deviceId), _auditContext, cancellationToken);
+            _context.BolusCalculations.Where(bc => bc.DataSource == deviceId || (bc.DataSource == null && bc.Device == deviceId)), _auditContext, cancellationToken);
         var deviceEventsDeleted = await _context.AuditedSoftDeleteAsync(
-            _context.DeviceEvents.Where(de => de.DataSource == deviceId), _auditContext, cancellationToken);
+            _context.DeviceEvents.Where(de => de.DataSource == deviceId || (de.DataSource == null && de.Device == deviceId)), _auditContext, cancellationToken);
 
         // StateSpan is auditable but not soft-deletable: audited hard delete.
         var stateSpansDeleted = await _context.AuditedExecuteDeleteAsync(
@@ -947,9 +947,9 @@ public class DataSourceService : IDataSourceService
 
         // Soft-deletable but not auditable: soft-delete without an audit row.
         var bgChecksDeleted = await _context.SoftDeleteAsync(
-            _context.BGChecks.Where(b => b.DataSource == deviceId), cancellationToken);
+            _context.BGChecks.Where(b => b.DataSource == deviceId || (b.DataSource == null && b.Device == deviceId)), cancellationToken);
         var notesDeleted = await _context.SoftDeleteAsync(
-            _context.Notes.Where(n => n.DataSource == deviceId), cancellationToken);
+            _context.Notes.Where(n => n.DataSource == deviceId || (n.DataSource == null && n.Device == deviceId)), cancellationToken);
         var deviceStatusDeleted = await _context.SoftDeleteAsync(
             _context.ApsSnapshots.Where(ds => ds.Device == deviceId), cancellationToken);
 
@@ -1076,13 +1076,13 @@ public class DataSourceService : IDataSourceService
             );
 
             // Delete V4 treatment records by data source
-            var treatmentsDeleted = await _context.Boluses.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.CarbIntakes.Where(c => c.DataSource == DataSources.DemoService).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.BGChecks.Where(b => b.DataSource == DataSources.DemoService).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.Notes.Where(n => n.DataSource == DataSources.DemoService).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.DeviceEvents.Where(de => de.DataSource == DataSources.DemoService).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.BolusCalculations.Where(bc => bc.DataSource == DataSources.DemoService).ExecuteDeleteAsync(cancellationToken);
-            treatmentsDeleted += await _context.TempBasals.Where(t => t.DataSource == DataSources.DemoService).ExecuteDeleteAsync(cancellationToken);
+            var treatmentsDeleted = await _context.Boluses.Where(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
+            treatmentsDeleted += await _context.CarbIntakes.Where(c => c.DataSource == DataSources.DemoService || (c.DataSource == null && c.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
+            treatmentsDeleted += await _context.BGChecks.Where(b => b.DataSource == DataSources.DemoService || (b.DataSource == null && b.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
+            treatmentsDeleted += await _context.Notes.Where(n => n.DataSource == DataSources.DemoService || (n.DataSource == null && n.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
+            treatmentsDeleted += await _context.DeviceEvents.Where(de => de.DataSource == DataSources.DemoService || (de.DataSource == null && de.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
+            treatmentsDeleted += await _context.BolusCalculations.Where(bc => bc.DataSource == DataSources.DemoService || (bc.DataSource == null && bc.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
+            treatmentsDeleted += await _context.TempBasals.Where(t => t.DataSource == DataSources.DemoService || (t.DataSource == null && t.Device == DataSources.DemoService)).ExecuteDeleteAsync(cancellationToken);
             treatmentsDeleted += await _context.StateSpans.Where(s => s.Source == DataSources.DemoService).ExecuteDeleteAsync(cancellationToken);
 
             // Delete APS snapshots - demo data uses the demo-service device
@@ -1131,7 +1131,7 @@ public class DataSourceService : IDataSourceService
 
         // Query V4 sensor glucose stats
         var sgStats = await _context
-            .SensorGlucose.Where(sg => sg.DataSource == dataSource)
+            .SensorGlucose.Where(sg => sg.DataSource == dataSource || (sg.DataSource == null && sg.Device == dataSource))
             .GroupBy(_ => 1)
             .Select(g => new
             {
@@ -1157,56 +1157,56 @@ public class DataSourceService : IDataSourceService
 
         // Query V4 table counts for per-type breakdown
         var meterGlucoseTotal = await _context
-            .MeterGlucose.Where(mg => mg.DataSource == dataSource)
+            .MeterGlucose.Where(mg => mg.DataSource == dataSource || (mg.DataSource == null && mg.Device == dataSource))
             .LongCountAsync(cancellationToken);
         var meterGlucose24h = meterGlucoseTotal > 0
             ? await _context.MeterGlucose
-                .Where(mg => mg.DataSource == dataSource && mg.Timestamp >= oneDayAgoDate)
+                .Where(mg => (mg.DataSource == dataSource || (mg.DataSource == null && mg.Device == dataSource)) && mg.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
         var bolusesTotal = await _context
-            .Boluses.Where(b => b.DataSource == dataSource)
+            .Boluses.Where(b => b.DataSource == dataSource || (b.DataSource == null && b.Device == dataSource))
             .LongCountAsync(cancellationToken);
         var boluses24h = bolusesTotal > 0
             ? await _context.Boluses
-                .Where(b => b.DataSource == dataSource && b.Timestamp >= oneDayAgoDate)
+                .Where(b => (b.DataSource == dataSource || (b.DataSource == null && b.Device == dataSource)) && b.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
         var carbIntakesTotal = await _context
-            .CarbIntakes.Where(c => c.DataSource == dataSource)
+            .CarbIntakes.Where(c => c.DataSource == dataSource || (c.DataSource == null && c.Device == dataSource))
             .LongCountAsync(cancellationToken);
         var carbIntakes24h = carbIntakesTotal > 0
             ? await _context.CarbIntakes
-                .Where(c => c.DataSource == dataSource && c.Timestamp >= oneDayAgoDate)
+                .Where(c => (c.DataSource == dataSource || (c.DataSource == null && c.Device == dataSource)) && c.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
         var bolusCalcsTotal = await _context
-            .BolusCalculations.Where(bc => bc.DataSource == dataSource)
+            .BolusCalculations.Where(bc => bc.DataSource == dataSource || (bc.DataSource == null && bc.Device == dataSource))
             .LongCountAsync(cancellationToken);
         var bolusCalcs24h = bolusCalcsTotal > 0
             ? await _context.BolusCalculations
-                .Where(bc => bc.DataSource == dataSource && bc.Timestamp >= oneDayAgoDate)
+                .Where(bc => (bc.DataSource == dataSource || (bc.DataSource == null && bc.Device == dataSource)) && bc.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
         var notesTotal = await _context
-            .Notes.Where(n => n.DataSource == dataSource)
+            .Notes.Where(n => n.DataSource == dataSource || (n.DataSource == null && n.Device == dataSource))
             .LongCountAsync(cancellationToken);
         var notes24h = notesTotal > 0
             ? await _context.Notes
-                .Where(n => n.DataSource == dataSource && n.Timestamp >= oneDayAgoDate)
+                .Where(n => (n.DataSource == dataSource || (n.DataSource == null && n.Device == dataSource)) && n.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
         var deviceEventsTotal = await _context
-            .DeviceEvents.Where(de => de.DataSource == dataSource)
+            .DeviceEvents.Where(de => de.DataSource == dataSource || (de.DataSource == null && de.Device == dataSource))
             .LongCountAsync(cancellationToken);
         var deviceEvents24h = deviceEventsTotal > 0
             ? await _context.DeviceEvents
-                .Where(de => de.DataSource == dataSource && de.Timestamp >= oneDayAgoDate)
+                .Where(de => (de.DataSource == dataSource || (de.DataSource == null && de.Device == dataSource)) && de.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
